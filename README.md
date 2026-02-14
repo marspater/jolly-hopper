@@ -54,6 +54,12 @@ It’s about the motivation of knowing my work truly helped someone and made the
 ### 🏆 The "First 5" Wall of Fame
 To show my gratitude, the **first 5 sponsors** of any amount will be **permanently featured** in the "About" section of the Macabolic app. Your name will be part of the app's history forever!
 
+1. [**Iman Montajabi**](https://github.com/ImanMontajabi) 🌟 (Our first ever sponsor!)
+2. _Your name here?_
+3. _Your name here?_
+4. _Your name here?_
+5. _Your name here?_
+
 [👉 Become a Sponsor on GitHub](https://github.com/sponsors/alinuxpengui)
 
 ---
