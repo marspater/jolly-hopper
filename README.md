@@ -132,6 +132,8 @@ xattr -cr /Applications/Macabolic.app
 3. Click **"Load Temporary Add-on..."**.
 4. Select the `manifest.json` file inside the unzipped folder.
 
+> 💡 **Usage:** Once installed, simply **right-click** on any video link or the page itself on supported sites (like YouTube) and select **"Download with Macabolic"** to start downloading immediately.
+
 ---
 
 ## Build Requirements 🛠️
