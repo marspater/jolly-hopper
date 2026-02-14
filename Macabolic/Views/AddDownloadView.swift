@@ -147,16 +147,22 @@ struct AddDownloadView: View {
         }
         .frame(width: 600, height: 750)
         .onAppear {
-            customPresets = CustomPreset.loadAll()
+            let loadedPresets = CustomPreset.loadAll()
+            self.customPresets = loadedPresets
             
-            if let customPresetId = UUID(uuidString: selectedCustomPresetIdString),
-               let customPreset = customPresets.first(where: { $0.id == customPresetId }) {
+            // 1. Try to load from Custom Preset first
+            if !selectedCustomPresetIdString.isEmpty,
+               let customPresetId = UUID(uuidString: selectedCustomPresetIdString),
+               let customPreset = loadedPresets.first(where: { $0.id == customPresetId }) {
+                
+                fileType = customPreset.fileType
                 videoResolution = customPreset.videoResolution
                 selectedCodec = customPreset.videoCodec.rawValue
                 selectedAudioCodec = customPreset.audioCodec.rawValue
                 isVideoTab = customPreset.fileType.isVideo
                 selectedPresetName = customPreset.name
                 downloadSubtitles = customPreset.downloadSubtitles ?? false
+                additionalArguments = customPreset.additionalArguments ?? ""
                 
                 let rawLang = customPreset.subtitleLanguage ?? ""
                 if rawLang.hasPrefix("embed:") {
@@ -169,7 +175,10 @@ struct AddDownloadView: View {
                 
                 sponsorBlock = customPreset.sponsorBlock ?? false
                 splitChapters = customPreset.splitChapters ?? false
-            } else if let preset = DownloadPreset(rawValue: selectedPreset) {
+                
+            } 
+            // 2. Fallback to Standard Preset
+            else if let preset = DownloadPreset(rawValue: selectedPreset) {
                 fileType = preset.fileType
                 videoResolution = preset.videoResolution
                 selectedCodec = preset.videoCodec.rawValue
@@ -180,8 +189,14 @@ struct AddDownloadView: View {
                 downloadSubtitles = false
                 embedSubtitles = false
                 presetSubtitleLanguage = ""
+                additionalArguments = defaultAdditionalArguments
+            }
+            // 3. Last fallback (should not happen normally)
+            else {
+                additionalArguments = defaultAdditionalArguments
             }
             
+            // Handle Clipboard and External URLs
             if let clipboardString = NSPasteboard.general.string(forType: .string),
                clipboardString.hasPrefix("http") {
                 urlInput = clipboardString
@@ -190,10 +205,6 @@ struct AddDownloadView: View {
             if !appState.urlToDownload.isEmpty {
                 urlInput = appState.urlToDownload
                 appState.urlToDownload = ""
-            }
-            
-            if additionalArguments.isEmpty {
-                additionalArguments = defaultAdditionalArguments
             }
         }
         .onChange(of: urlInput) { newValue in
@@ -215,6 +226,19 @@ struct AddDownloadView: View {
             }
         } message: {
             Text(languageService.s("file_exists_message"))
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification)) { _ in
+            let newPresets = CustomPreset.loadAll()
+            if newPresets != self.customPresets {
+                self.customPresets = newPresets
+                
+                // If the currently selected custom preset was updated, re-apply its values
+                if let customPresetId = UUID(uuidString: selectedCustomPresetIdString),
+                   let customPreset = newPresets.first(where: { $0.id == customPresetId }) {
+                    applyCustomPreset(customPreset)
+                    selectedPresetName = customPreset.name
+                }
+            }
         }
     }
     
@@ -392,6 +416,8 @@ struct AddDownloadView: View {
                     Section(languageService.s("download_presets")) {
                         ForEach(DownloadPreset.allCases) { preset in
                             Button {
+                                selectedPreset = preset.rawValue
+                                selectedCustomPresetIdString = ""
                                 applyPreset(preset)
                                 selectedPresetName = preset.title(lang: languageService)
                             } label: {
@@ -402,7 +428,7 @@ struct AddDownloadView: View {
                                             .font(.caption)
                                             .foregroundColor(.secondary)
                                     }
-                                    if selectedPresetName == preset.title(lang: languageService) {
+                                    if selectedPreset == preset.rawValue {
                                         Spacer()
                                         Image(systemName: "checkmark")
                                     }
@@ -416,12 +442,14 @@ struct AddDownloadView: View {
                         Section(languageService.s("custom_presets")) {
                             ForEach(customPresets) { preset in
                                 Button {
+                                    selectedPreset = ""
+                                    selectedCustomPresetIdString = preset.id.uuidString
                                     applyCustomPreset(preset)
                                     selectedPresetName = preset.name
                                 } label: {
                                     HStack {
                                         Text(preset.name)
-                                        if selectedPresetName == preset.name {
+                                        if selectedCustomPresetIdString == preset.id.uuidString {
                                             Spacer()
                                             Image(systemName: "checkmark")
                                         }
@@ -534,6 +562,7 @@ struct AddDownloadView: View {
         embedSubtitles = false
         selectedSubtitleLangs.removeAll()
         presetSubtitleLanguage = ""
+        additionalArguments = defaultAdditionalArguments
     }
     
     private func applyCustomPreset(_ preset: CustomPreset) {

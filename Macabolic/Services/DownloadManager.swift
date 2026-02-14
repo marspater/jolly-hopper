@@ -49,6 +49,8 @@ class DownloadManager: ObservableObject {
         self.languageService = languageService
 
         await ytdlpService.setupBinaries()
+        // Wait a bit for version to be populated if needed, or better, fetch it explicitly
+        await ytdlpService.getVersion()
         ytdlpVersion = ytdlpService.version
         
 
@@ -59,12 +61,12 @@ class DownloadManager: ObservableObject {
             showDisclaimer = true
         }
 
-        let currentVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "2.1.1"
-        let lastSeenVersion = userDefaults.string(forKey: "lastSeenVersion") ?? "0.0.0"
+        let currentVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "3.0.0"
+        let lastSeenVersion = userDefaults.string(forKey: "lastSeenVersion_v3") ?? "0.0.0"
         
         if currentVersion != lastSeenVersion {
             showWhatsNew = true
-            userDefaults.set(currentVersion, forKey: "lastSeenVersion")
+            userDefaults.set(currentVersion, forKey: "lastSeenVersion_v3")
         }
     }
     
@@ -90,6 +92,69 @@ class DownloadManager: ObservableObject {
         for url in urls {
             addDownload(url: url, options: options)
         }
+    }
+    
+    func menuDownload(url: String, type: String, quality: String) {
+        // Get default save folder
+        let defaultPath = userDefaults.string(forKey: "defaultSaveFolder") ?? ""
+        let folder = defaultPath.isEmpty ? 
+            FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first! :
+            URL(fileURLWithPath: defaultPath)
+            
+        let options = DownloadOptions(
+            saveFolder: folder,
+            fileType: type == "video" ? .mp4 : .m4a,
+            videoFormat: nil,
+            audioFormat: nil,
+            videoResolution: type == "video" ? (quality == "best" ? .best : (quality == "1080" ? .r1080p : .r720p)) : .worst,
+            audioQuality: .best,
+            downloadSubtitles: false,
+            subtitleLanguages: ["en", "tr"],
+            subtitleFormat: .srt,
+            embedSubtitles: false,
+            downloadThumbnail: true,
+            embedThumbnail: true,
+            embedMetadata: true,
+            splitChapters: false,
+            sponsorBlock: true,
+            timeFrameStart: nil,
+            timeFrameEnd: nil,
+            customFilename: nil,
+            videoCodec: type == "video" ? .auto : .none,
+            audioCodec: .auto,
+            forceOverwrite: false,
+            additionalArguments: nil
+        )
+        addDownload(url: url, options: options)
+    }
+    
+    func quickDownload(url: String) {
+        let preset = DownloadPreset.maxCompatibility
+        
+        // Get default save folder from AppStorage
+        let defaultPath = userDefaults.string(forKey: "defaultSaveFolder") ?? ""
+        let saveFolderURL: URL
+        if !defaultPath.isEmpty {
+            saveFolderURL = URL(fileURLWithPath: defaultPath)
+        } else {
+            saveFolderURL = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first!
+        }
+        
+        let options = DownloadOptions(
+            saveFolder: saveFolderURL,
+            fileType: preset.fileType,
+            downloadSubtitles: false,
+            subtitleLanguages: ["tr", "en"],
+            subtitleFormat: .srt,
+            embedSubtitles: false,
+            downloadThumbnail: false,
+            embedThumbnail: true,
+            embedMetadata: true,
+            splitChapters: false,
+            sponsorBlock: false,
+            forceOverwrite: false
+        )
+        addDownload(url: url, options: options)
     }
     
 
@@ -119,7 +184,12 @@ class DownloadManager: ObservableObject {
                 options: download.options,
                 onProcessCreated: { [weak self] process in
                     Task { @MainActor in
-                        self?.activeProcesses[download.id] = process
+                        guard let self = self else { return }
+                        // If the download finished before this Task ran, don't add it
+                        if let d = self.downloads.first(where: { $0.id == download.id }),
+                           d.status == .downloading || d.status == .fetching || d.status == .processing {
+                            self.activeProcesses[download.id] = process
+                        }
                     }
                 },
                 onProgress: { progress, speed, eta in
@@ -142,6 +212,11 @@ class DownloadManager: ObservableObject {
 
             addToHistory(download)
             
+            // Send notification
+            if let lang = languageService {
+                NotificationService.shared.sendDownloadCompleted(filename: download.title.isEmpty ? download.url : download.title, languageService: lang)
+            }
+            
         } catch let error as YtdlpError {
             download.status = .failed
             objectWillChange.send()
@@ -156,6 +231,10 @@ class DownloadManager: ObservableObject {
                 default:
                     download.errorMessage = error.localizedDescription
                 }
+                
+                // Send notification for failure
+                NotificationService.shared.sendDownloadFailed(filename: download.title.isEmpty ? download.url : download.title, languageService: lang)
+                
             } else {
                 download.errorMessage = error.localizedDescription
             }
@@ -164,6 +243,11 @@ class DownloadManager: ObservableObject {
             download.status = .failed
             objectWillChange.send()
             download.errorMessage = error.localizedDescription
+            
+            if let lang = languageService {
+                NotificationService.shared.sendDownloadFailed(filename: download.title.isEmpty ? download.url : download.title, languageService: lang)
+            }
+            
             addToHistory(download)
         }
     }

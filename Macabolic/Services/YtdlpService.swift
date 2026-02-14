@@ -34,10 +34,6 @@ class YtdlpService: ObservableObject {
         if let bundledPath = Bundle.main.url(forResource: "yt-dlp", withExtension: nil) {
             ytdlpPath = bundledPath
             isAvailable = true
-
-            Task {
-                await getVersion()
-            }
             return
         }
         
@@ -48,10 +44,6 @@ class YtdlpService: ObservableObject {
         if FileManager.default.fileExists(atPath: ytdlpInSupport.path) {
             ytdlpPath = ytdlpInSupport
             isAvailable = true
-
-            Task {
-                await getVersion()
-            }
             return
         }
         
@@ -375,9 +367,8 @@ class YtdlpService: ObservableObject {
         }
         
         if let additionalArgs = options.additionalArguments, !additionalArgs.isEmpty {
-            // Basic space splitting for additional arguments
-            let customArgs = additionalArgs.components(separatedBy: .whitespaces)
-                .filter { !$0.isEmpty }
+            // Robust parsing of additional arguments that respects quotes
+            let customArgs = splitArguments(additionalArgs)
             args.append(contentsOf: customArgs)
         }
 
@@ -586,31 +577,15 @@ class YtdlpService: ObservableObject {
             
             onProcessCreated(process)
             
+            let synchronizationQueue = DispatchQueue(label: "com.macabolic.download.sync")
             var outputPath = ""
+            var errorOutput = ""
             
-
             outputPipe.fileHandleForReading.readabilityHandler = { handle in
                 let data = handle.availableData
                 guard !data.isEmpty, let line = String(data: data, encoding: .utf8) else { return }
                 
-                DispatchQueue.main.async {
-                    onOutput(line)
-                    
-
-                    if line.contains("%") {
-                        let components = line.trimmingCharacters(in: .whitespacesAndNewlines)
-                            .components(separatedBy: .whitespaces)
-                            .filter { !$0.isEmpty }
-                        
-                        if let percentStr = components.first,
-                           let percent = Double(percentStr.replacingOccurrences(of: "%", with: "")) {
-                            let speed = components.count > 1 ? components[1] : nil
-                            let eta = components.count > 2 ? components[2] : nil
-                            onProgress(percent / 100.0, speed, eta)
-                        }
-                    }
-                    
-
+                synchronizationQueue.async {
                     if line.contains("[download] Destination:") {
                         let parts = line.components(separatedBy: "[download] Destination: ")
                         if parts.count > 1 {
@@ -635,15 +610,34 @@ class YtdlpService: ObservableObject {
                         }
                     }
                 }
+                
+                DispatchQueue.main.async {
+                    onOutput(line)
+                    
+                    if line.contains("%") {
+                        let components = line.trimmingCharacters(in: .whitespacesAndNewlines)
+                            .components(separatedBy: .whitespaces)
+                            .filter { !$0.isEmpty }
+                        
+                        if let percentStr = components.first,
+                           let percent = Double(percentStr.replacingOccurrences(of: "%", with: "")) {
+                            let speed = components.count > 1 ? components[1] : nil
+                            let eta = components.count > 2 ? components[2] : nil
+                            onProgress(percent / 100.0, speed, eta)
+                        }
+                    }
+                }
             }
             
-
-            var errorOutput = ""
             errorPipe.fileHandleForReading.readabilityHandler = { handle in
                 let data = handle.availableData
                 guard !data.isEmpty, let line = String(data: data, encoding: .utf8) else { return }
-                DispatchQueue.main.async {
+                
+                synchronizationQueue.async {
                     errorOutput += line
+                }
+                
+                DispatchQueue.main.async {
                     onOutput("[ERROR] \(line)")
                 }
             }
@@ -652,20 +646,22 @@ class YtdlpService: ObservableObject {
                 outputPipe.fileHandleForReading.readabilityHandler = nil
                 errorPipe.fileHandleForReading.readabilityHandler = nil
                 
-                if proc.terminationStatus == 0 {
-                    continuation.resume(returning: outputPath)
-                } else {
-                    if errorOutput.contains("429") || errorOutput.contains("Too Many Requests") {
-                        continuation.resume(throwing: YtdlpError.tooManyRequests)
-                    } else if errorOutput.contains("subtitle") || errorOutput.contains("caption") {
-                        continuation.resume(throwing: YtdlpError.subtitleError(errorOutput))
+                synchronizationQueue.async {
+                    if proc.terminationStatus == 0 {
+                        continuation.resume(returning: outputPath)
                     } else {
-                        let cleanError = errorOutput.components(separatedBy: "\n")
-                            .filter { $0.contains("ERROR:") }
-                            .last?
-                            .replacingOccurrences(of: "ERROR: ", with: "")
-                            ?? errorOutput
-                        continuation.resume(throwing: YtdlpError.downloadFailed(cleanError))
+                        if errorOutput.contains("429") || errorOutput.contains("Too Many Requests") {
+                            continuation.resume(throwing: YtdlpError.tooManyRequests)
+                        } else if errorOutput.contains("subtitle") || errorOutput.contains("caption") {
+                            continuation.resume(throwing: YtdlpError.subtitleError(errorOutput))
+                        } else {
+                            let cleanError = errorOutput.components(separatedBy: "\n")
+                                .filter { $0.contains("ERROR:") }
+                                .last?
+                                .replacingOccurrences(of: "ERROR: ", with: "")
+                                ?? errorOutput
+                            continuation.resume(throwing: YtdlpError.downloadFailed(cleanError))
+                        }
                     }
                 }
             }
@@ -681,6 +677,43 @@ class YtdlpService: ObservableObject {
     private func getAppSupportDirectory() -> URL {
         let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
         return appSupport.appendingPathComponent("Macabolic")
+    }
+
+    private func splitArguments(_ input: String) -> [String] {
+        var result: [String] = []
+        var current: String = ""
+        var inQuotes: Bool = false
+        var quoteChar: Character? = nil
+        
+        var iterator = input.makeIterator()
+        while let char = iterator.next() {
+            if char == "\"" || char == "'" {
+                if inQuotes {
+                    if char == quoteChar {
+                        inQuotes = false
+                        quoteChar = nil
+                    } else {
+                        current.append(char)
+                    }
+                } else {
+                    inQuotes = true
+                    quoteChar = char
+                }
+            } else if char.isWhitespace && !inQuotes {
+                if !current.isEmpty {
+                    result.append(current)
+                    current = ""
+                }
+            } else {
+                current.append(char)
+            }
+        }
+        
+        if !current.isEmpty {
+            result.append(current)
+        }
+        
+        return result
     }
 }
 

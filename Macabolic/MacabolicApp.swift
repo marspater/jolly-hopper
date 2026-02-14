@@ -6,8 +6,17 @@ struct MacabolicApp: App {
     @StateObject private var appState = AppState()
     @StateObject private var languageService = LanguageService()
     @StateObject private var updateChecker = UpdateChecker()
+    @AppStorage("startInBackground") private var startInBackground: Bool = false
+    @State private var hasAppliedBackgroundMode = false
+    
+    init() {
+    }
     
     var body: some Scene {
+        // This runs on every body evaluation — guaranteed to fire even without a visible window
+        let _ = setupMenuBarIfNeeded()
+        let _ = applyBackgroundModeIfNeeded()
+        
         WindowGroup {
             ContentView()
                 .environmentObject(downloadManager)
@@ -17,7 +26,12 @@ struct MacabolicApp: App {
                 .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in
                     downloadManager.stopAllDownloads()
                 }
+                .onOpenURL { url in
+                    handleIncomingURL(url)
+                }
+                .handlesExternalEvents(preferring: ["*"], allowing: ["*"])
         }
+        .handlesExternalEvents(matching: ["*"])
         .commands {
             CommandGroup(replacing: .newItem) {
                 Button(languageService.s("new_download") + "...") {
@@ -42,6 +56,50 @@ struct MacabolicApp: App {
                 .environmentObject(updateChecker)
         }
         #endif
+    }
+    
+    private func setupMenuBarIfNeeded() {
+        // MenuBarManager.setup() has its own idempotency guard (if statusItem != nil { return })
+        MenuBarManager.shared.setup(languageService: languageService, downloadManager: downloadManager)
+    }
+    
+    private func applyBackgroundModeIfNeeded() {
+        guard !hasAppliedBackgroundMode else { return }
+        DispatchQueue.main.async {
+            hasAppliedBackgroundMode = true
+            if startInBackground {
+                // Hide dock icon — app runs as menu bar only
+                NSApp.setActivationPolicy(.accessory)
+                // Close any auto-opened windows
+                for window in NSApp.windows {
+                    if window.canBecomeMain {
+                        window.close()
+                    }
+                }
+            }
+        }
+    }
+    
+    private func handleIncomingURL(_ url: URL) {
+        guard url.scheme == "macabolic" else { return }
+        
+        // Restore dock icon when opening from URL scheme (browser extension, etc.)
+        NSApp.setActivationPolicy(.regular)
+        NSApp.activate(ignoringOtherApps: true)
+        
+        let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+        let queryItems = components?.queryItems
+        let videoUrl = queryItems?.first(where: { $0.name == "url" })?.value
+        
+        guard let videoUrl = videoUrl, !videoUrl.isEmpty else { return }
+        
+        if url.host == "download" {
+            appState.urlToDownload = videoUrl
+            appState.showAddDownloadSheet = true
+        } else if url.host == "fast-download" {
+            downloadManager.quickDownload(url: videoUrl)
+            appState.selectedNavItem = .downloading
+        }
     }
 }
 
@@ -82,7 +140,7 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
     }
 
     private var currentVersion: String {
-        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "2.4.1"
+        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "3.0.0"
     }
     private let repoOwner = "alinuxpengui"
     private let repoName = "Macabolic"
@@ -378,8 +436,9 @@ class LanguageService: ObservableObject {
             "additional_arguments_hint": "Örn: --limit-rate 5M --restrict-filenames",
             "additional_arguments_help": "Tüm komutları görmek için [resmi dokümantasyona](https://github.com/yt-dlp/yt-dlp#usage-and-options) bakabilirsiniz.",
             "no_subtitles": "Altyazı bulunamadı",
-            "whats_new_title": "Macabolic v2.4.1 - Yenilikler 🚀",
-            "whats_new_message": "⚠️ ÖNEMLİ DUYURU: Uygulamanın çekirdeğinde macOS 12 Monterey desteği sağlamak için önemli yapısal değişiklikler yapıldı. Beklenmeyen bir davranışla karşılaşırsanız, önceki kararlı sürüme dönmek için lütfen Ayarlar -> Genel -> Tüm Sürümler'e gidin.\n\n✨ Yeni Özellikler\n• Profesyonel Kullanıcı Kontrolü: yt-dlp'ye doğrudan özel komutlar göndermek için 'Ek Komutlar' alanı eklendi.\n• Gelişmiş Özel Ayarlar: SponsorBlock (reklam atlama) ve Bölümlere Ayırma ayarlarını artık doğrudan özel şablonlarınıza kaydedebilirsiniz.\n• Zengin Video Verisi: Video açıklamaları, yükleme tarihleri ve bölüm işaretleri artık varsayılan olarak indirmelerinize otomatik gömülür.\n• Gelişmiş Altyazılar: Dil joker karakterleri (örn. en.*) için destek eklendi ve ön ayarlı altyazı ayarlarının doğru uygulanmadığı bir mantık hatası düzeltildi.\n• Topluluk Takdiri: Neonapple'a inanılmaz geri bildirimleri ve katkıları için \"Hakkında\" sekmesine özel bir teşekkür bölümü eklendi.\n\n🛠 Altyapı & Performans\n• macOS Monterey Desteği: Macabolic artık macOS 12 Monterey ve sonraki sürümlerle tam uyumludur.\n• Akıllı Dosya Temizliği: Video ID takibi kullanılarak geliştirilen geçici dosya temizleme mantığı ile artık .part veya .ytdl dosyası kalıntısı kalmayacak.\n• Gelişmiş Hata Ayıklama: Tam yt-dlp komutu artık her indirmenin başında günlüğe kaydediliyor, böylece sorunları gidermek kolaylaşıyor.\n• Hibrit Navigasyon Sistemi: Farklı macOS sürümlerinde akıcı performans sağlamak için yeni, esnek bir navigasyon mimarisi uygulandı.\n• Kod Optimizasyonu: Ayarlar mimarisi daha iyi kararlılık, daha hızlı performans ve daha güvenilir derlemeler için modüler hale getirildi.",
+            "whats_new_title": "Macabolic v3.0.0 - Yenilikler 🚀",
+            "whats_new_message": "Projemizin ilk sponsorluğunu İman Montajabi'den aldık! Sizlerin de desteğini görmekten çok memnun oluruz. 😊\n\n✨ Yeni Özellikler (Beta):\n• Menü Barı Uygulaması: İndirmelerinizi doğrudan menü çubuğundan yönetin.\n• Chrome & Firefox Eklentisi: Tarayıcınızdan tek tıkla indirme başlatın.\n• Bildirim Desteği: İndirmeler bittiğinde anında haberdar olun.\n• Otomatik Başlatma: Mac'iniz açıldığında Macabolic hazır olsun.\n\n🔧 Diğer Önemli Değişiklikler:\n• Preset sorunları giderildi.\n• Sosyal medyada paylaşma özelliği eklendi.",
+            "sponsor": "Sponsor",
             "paste_from_clipboard": "Panodan Yapıştır",
             "fetch_info": "Bilgi Al",
             "quality": "Kalite",
@@ -508,7 +567,32 @@ class LanguageService: ObservableObject {
             "subtitle_output": "Altyazı Çıktısı",
             "subtitle_external": "Ayrı Dosya",
             "subtitle_embedded": "Gömülü",
-            "h264_preset_info": "H.264 codec seçildi. Maksimum kalite 1080p ile sınırlıdır."
+            "h264_preset_info": "H.264 codec seçildi. Maksimum kalite 1080p ile sınırlıdır.",
+            "first_sponsor": "İlk Sponsor",
+            "future_sponsor": "Gelecek Sponsor",
+            "future_sponsor_desc": "2. olmak ister misiniz?",
+            "first_support_received": "İlk destek geldi!",
+            "share_on_social": "Sosyal Medyada Paylaş",
+            "share_msg_x": "#Macabolic ile videoları zahmetsizce indirin! 🚀 macOS üzerindeki en iyi yerel deneyim. https://github.com/alinuxpengui/Macabolic",
+            "share_msg_mastodon": "#Macabolic ile videoları zahmetsizce indirin! 🚀 macOS üzerindeki en iyi yerel deneyim. https://github.com/alinuxpengui/Macabolic",
+            "share_msg_bluesky": "#Macabolic ile videoları zahmetsizce indirin! 🚀 macOS üzerindeki en iyi yerel deneyim. https://github.com/alinuxpengui/Macabolic",
+            "share_msg_threads": "#Macabolic ile videoları zahmetsizce indirin! 🚀 macOS üzerindeki en iyi yerel deneyim. https://github.com/alinuxpengui/Macabolic",
+            "download_completed_title": "İndirme Tamamlandı",
+            "download_completed_body": "%@ başarıyla indirildi.",
+            "download_failed_title": "İndirme Hatası",
+            "download_failed_body": "%@ indirilirken bir hata oluştu.",
+            "launch_at_login": "Sistem açılışında otomatik başlat",
+            "start_in_background": "Arka planda başlat",
+            "start_in_background_desc": "Açılışta yalnızca menü çubuğu ikonu görünür, Dock'ta gözükmez",
+            "quit": "Çıkış",
+            "open_macabolic": "Macabolic'i Aç",
+            "show_main_window": "Ana Pencereyi Göster",
+            "preset": "Preset",
+            "standard": "Standart",
+            "custom": "Özel",
+            "notifications": "Bildirimler",
+            "show_menubar_icon": "Menü Çubuğu Simgesini Göster",
+            "test_notification": "Test Bildirimi Gönder"
         ],
         .english: [
             "home": "Home",
@@ -585,8 +669,9 @@ class LanguageService: ObservableObject {
             "additional_arguments": "Additional Arguments (Command Line)",
             "additional_arguments_hint": "e.g. --limit-rate 5M --restrict-filenames",
             "additional_arguments_help": "Check the [official documentation](https://github.com/yt-dlp/yt-dlp#usage-and-options) for all available commands.",
-            "whats_new_title": "Macabolic v2.4.1 - What's New? 🚀",
-            "whats_new_message": "⚠️ IMPORTANT NOTICE: Significant structural changes have been made to the application's core to support macOS 12 Monterey. If you experience any unexpected behavior, please go to Settings -> General -> All Versions to downgrade to a previous stable release.\n\n✨ New Features\n• Power User Control: Added an 'Additional Arguments' field to pass custom commands directly to yt-dlp, with a link to official documentation.\n• Advanced Custom Presets: You can now save SponsorBlock (skip ads) and Split Chapters settings directly into your custom presets.\n• Rich Video Metadata: Video descriptions, upload dates, and chapter markers are now automatically embedded into your downloads by default.\n• Enhanced Subtitles: Added support for language wildcards (e.g., en.*) and fixed a logic error where preset subtitle settings were not being applied correctly.\n• Community Recognition: A special thanks section has been added to the \"About\" tab to honor Neonapple for their incredible feedback and contributions.\n\n🛠 Infrastructure & Performance\n• macOS Monterey Support: Macabolic is now fully compatible with macOS 12 Monterey and later versions.\n• Smarter File Cleanup: Improved temporary file removal logic using Video ID tracking, ensuring no .part or .ytdl files are left behind.\n• Advanced Debugging: The full yt-dlp command is now logged at the start of every download, making it easier to troubleshoot issues.\n• Hybrid Navigation System: A new, flexible navigation architecture has been implemented to ensure smooth performance across different macOS versions.\n• Code Optimization: The settings architecture has been modularized for better stability, faster performance, and more reliable builds.",
+            "whats_new_title": "Macabolic v3.0.0 - What's New? 🚀",
+            "whats_new_message": "We received our first project sponsorship from Iman Montajabi! We would be very happy to see your support as well. 😊\n\n✨ New Features (Beta):\n• Menu Bar App: Manage your downloads directly from the menu bar.\n• Chrome & Firefox Extension: Start downloads with one click from your browser.\n• Notification Support: Get notified instantly when downloads are finished.\n• Auto-launch: Macabolic is ready when your Mac starts.\n\n🔧 Other Important Changes:\n• Preset issues resolved.\n• Share on social media feature added.",
+            "sponsor": "Sponsor",
             "paste_from_clipboard": "Paste from Clipboard",
             "fetch_info": "Get Video Information",
             "quality": "Quality",
@@ -715,7 +800,32 @@ class LanguageService: ObservableObject {
             "subtitle_output": "Subtitle Output",
             "subtitle_external": "Separate File",
             "subtitle_embedded": "Embedded",
-            "h264_preset_info": "H.264 codec selected. Maximum quality is limited to 1080p."
+            "h264_preset_info": "H.264 codec selected. Maximum quality is limited to 1080p.",
+            "first_sponsor": "First Sponsor",
+            "future_sponsor": "Future Sponsor",
+            "future_sponsor_desc": "Will you be the 2nd?",
+            "first_support_received": "First support received!",
+            "share_on_social": "Share on Social",
+            "share_msg_x": "Downloading videos effortlessly with #Macabolic! 🚀 Best native experience on macOS. https://github.com/alinuxpengui/Macabolic",
+            "share_msg_mastodon": "Downloading videos effortlessly with #Macabolic! 🚀 Best native experience on macOS. https://github.com/alinuxpengui/Macabolic",
+            "share_msg_bluesky": "Downloading videos effortlessly with #Macabolic! 🚀 Best native experience on macOS. https://github.com/alinuxpengui/Macabolic",
+            "share_msg_threads": "Downloading videos effortlessly with #Macabolic! 🚀 Best native experience on macOS. https://github.com/alinuxpengui/Macabolic",
+            "download_completed_title": "Download Completed",
+            "download_completed_body": "%@ has been downloaded successfully.",
+            "download_failed_title": "Download Failed",
+            "download_failed_body": "An error occurred while downloading %@.",
+            "launch_at_login": "Launch at login",
+            "start_in_background": "Start in background",
+            "start_in_background_desc": "Only show the menu bar icon at launch, hide from Dock",
+            "quit": "Quit",
+            "open_macabolic": "Open Macabolic",
+            "show_main_window": "Show Main Window",
+            "preset": "Preset",
+            "standard": "Standard",
+            "custom": "Custom",
+            "notifications": "Notifications",
+            "show_menubar_icon": "Show Menu Bar Icon",
+            "test_notification": "Send Test Notification"
         ]
     ]
 }

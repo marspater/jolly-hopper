@@ -1,0 +1,14 @@
+{
+    "extension_name": {
+        "message": "Macabolic"
+    },
+    "extension_description": {
+        "message": "Videoları Macabolic ile indir"
+    },
+    "context_download": {
+        "message": "Macabolic ile İndir"
+    },
+    "context_fast_download": {
+        "message": "Hızlı İndir (En Uyumlu)"
+    }
+}
