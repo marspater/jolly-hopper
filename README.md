@@ -121,14 +121,16 @@ xattr -cr /Applications/Macabolic.app
 ### Option 3: Browser Extensions 🌐
 
 #### Chrome / Brave / Edge:
-1. Go to `chrome://extensions/`
-2. Enable **"Developer mode"** (top right).
-3. Click **"Load unpacked"** and select the `MacabolicExtension_Chrome` folder from this repository.
+1. **Download:** [MacabolicExtension_Chrome.zip](https://github.com/alinuxpengui/Macabolic/releases/download/v3.0.0/MacabolicExtension_Chrome.zip) and unzip it.
+2. Go to `chrome://extensions/`
+3. Enable **"Developer mode"** (top right).
+4. Click **"Load unpacked"** and select the unzipped folder.
 
 #### Firefox:
-1. Go to `about:debugging#/runtime/this-firefox`
-2. Click **"Load Temporary Add-on..."**.
-3. Select the `manifest.json` file inside the `MacabolicExtension_Firefox` folder.
+1. **Download:** [MacabolicExtension_Firefox.zip](https://github.com/alinuxpengui/Macabolic/releases/download/v3.0.0/MacabolicExtension_Firefox.zip) and unzip it.
+2. Go to `about:debugging#/runtime/this-firefox`
+3. Click **"Load Temporary Add-on..."**.
+4. Select the `manifest.json` file inside the unzipped folder.
 
 ---
 
