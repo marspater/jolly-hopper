@@ -74,7 +74,7 @@ Here is what I'm planning to bring to Macabolic in the near future:
 - [x] ~~**Notification Support:** Get notified instantly when downloads are finished.~~ ✅ (Completed in v3.0.0)
 - [x] ~~**Browser Extensions:** One-click download directly from Chrome and Firefox.~~ ✅ (Completed in v3.0.0)
 - [x] ~~**Menu Bar Integration:** Manage ind downloads from your menu bar.~~ ✅ (Completed in v3.0.0)
-- [ ] **Official Apple Notarization:** Removing the "Unidentified Developer" warning for a professional experience.
+- [ ] **Official Apple Notarization:** Removing the "Unidentified Developer" warning for a professional experience. (Waiting for the project to reach 1,000+ stars and a larger user base).
 - [ ] **Custom Post-Processing:** More tools to trim, convert, and manage your downloaded files.
 
 ---
