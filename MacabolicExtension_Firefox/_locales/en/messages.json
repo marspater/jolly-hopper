@@ -1,0 +1,14 @@
+{
+    "extension_name": {
+        "message": "Macabolic"
+    },
+    "extension_description": {
+        "message": "Download videos with Macabolic"
+    },
+    "context_download": {
+        "message": "Download with Macabolic"
+    },
+    "context_fast_download": {
+        "message": "Fast Download (Most Compatible)"
+    }
+}

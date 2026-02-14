@@ -16,7 +16,7 @@ enum Language: String, CaseIterable, Identifiable {
 
 class LanguageService: ObservableObject {
     @AppStorage("selectedLanguage") var selectedLanguage: Language = .english
-    @AppStorage("isFirstLaunch") var isFirstLaunch: Bool = true
+    @AppStorage("isFirstLaunch_v3") var isFirstLaunch: Bool = true
     
     
     func s(_ key: String) -> String {
@@ -93,13 +93,8 @@ class LanguageService: ObservableObject {
             "update_available_title": "Yeni Güncelleme Mevcut!",
             "update_available_message": "Macabolic'in yeni sürümü (v%@) hazır. Şimdi indirmek ister misiniz?",
             "later": "Daha Sonra",
-            "whats_new_title": "Macabolic v2.3.0 - Yenilikler",
-            "whats_new_message": "• 🗄️ Gelişmiş Geçmiş Yönetimi: Tamamlanan ve hatalı indirmeler artık ayrı listelerde tutuluyor ve uygulama kapatılsa bile kalıcı olarak saklanıyor.\n• 📂 Yenilenen Navigasyon: Kenar çubuğu 'İndirmeler' ve 'Geçmiş' olarak iki ana bölüme ayrılarak kullanım kolaylığı sağlandı.\n• 🔄 Otomatik Güncelleme: İndirme durumları ve sayıları artık anlık olarak kendiliğinden güncelleniyor.\n• 🔃 Yeniden İndir: Tamamlanan veya durdurulan videoları tek tıkla tekrar indirme listesine ekleme özelliği eklendi.\n• 🍪 Akıllı Yönlendirme: Hız limiti (429) hatalarında kullanıcılar doğrudan Çerez ayarlarına yönlendirilerek çözüm odaklı rehberlik sağlandı.",
-            "app_up_to_date": "Uygulama zaten güncel",
-            "downloading_update": "Güncelleme indiriliyor...",
-            "installing_update": "Güncelleme kuruluyor ve yeniden başlatılıyor...",
-            "update_failed": "Güncelleme başarısız oldu!",
-            "restart_to_install": "Yeniden Başlat ve Kur",
+            "whats_new_title": "Macabolic v3.0.0 - Yenilikler 🚀",
+            "whats_new_message": "Projemizin ilk sponsorluğunu İman'dan aldık! Sizlerin de desteğini görmekten çok memnun oluruz. 😊\n\n✨ Yeni Özellikler (Beta):\n• Menü Barı Uygulaması: İndirmelerinizi doğrudan menü çubuğundan yönetin.\n• Chrome & Firefox Eklentisi: Tarayıcınızdan tek tıkla indirme başlatın.\n• Bildirim Desteği: İndirmeler bittiğinde anında haberdar olun.\n• Otomatik Başlatma: Mac'iniz açıldığında Macabolic hazır olsun.\n\n🔧 Diğer Önemli Değişiklikler:\n• Preset sorunları giderildi.\n• Sosyal medyada paylaşma özelliği eklendi.",
             "latest": "En son",
             "original_project": "Orijinal Proje",
             "view_license": "Lisansı Görüntüle",
@@ -196,7 +191,24 @@ class LanguageService: ObservableObject {
             "subtitle_output": "Altyazı Çıktısı",
             "subtitle_external": "Ayrı Dosya",
             "subtitle_embedded": "Gömülü",
-            "h264_preset_info": "H.264 codec seçildi. Maksimum kalite 1080p ile sınırlıdır."
+            "h264_preset_info": "H.264 codec seçildi. Maksimum kalite 1080p ile sınırlıdır.",
+            "download_completed_title": "İndirme Tamamlandı",
+            "download_completed_body": "%@ başarıyla indirildi.",
+            "download_failed_title": "İndirme Hatası",
+            "download_failed_body": "%@ indirilirken bir hata oluştu.",
+            "launch_at_login": "Sistem açılışında otomatik başlat",
+            "start_in_background": "Arka planda başlat",
+            "start_in_background_desc": "Açılışta yalnızca menü çubuğu ikonu görünür, Dock'ta gözükmez",
+            "quit": "Çıkış",
+            "open_macabolic": "Macabolic'i Aç",
+            "show_main_window": "Ana Pencereyi Göster",
+            "preset": "Preset",
+            "standard": "Standart",
+            "custom": "Özel",
+            "notifications": "Bildirimler",
+            "show_menubar_icon": "Menü Çubuğu Simgesini Göster",
+            "first_sponsor": "İlk Sponsor",
+            "test_notification": "Test Bildirimi Gönder"
         ],
         .english: [
             "home": "Home",
@@ -267,11 +279,6 @@ class LanguageService: ObservableObject {
             "update_available_title": "New Update Available!",
             "update_available_message": "A new version of Macabolic (v%@) is ready. Would you like to download it now?",
             "later": "Later",
-            "app_up_to_date": "App is up to date",
-            "downloading_update": "Downloading update...",
-            "installing_update": "Installing update & restarting...",
-            "update_failed": "Update failed!",
-            "restart_to_install": "Restart and Install",
             "latest": "Latest",
             "original_project": "Original Project",
             "view_license": "View License",
@@ -320,8 +327,8 @@ class LanguageService: ObservableObject {
             "fix_signin_error": "Fix in Settings",
             "safari_warning": "Note: For Safari cookies, you must grant 'Full Disk Access' to Macabolic in System Settings > Privacy & Security. Using a browser other than Safari (Chrome, Brave, etc.) will be much easier.",
             "open_system_settings": "Open System Settings",
-            "whats_new_title": "Macabolic v2.3.0 - What's New",
-            "whats_new_message": "• 🗄️ Advanced History: Completed and failed downloads are now categorized separately and persist across app sessions.\n• 📂 Reorganized Navigation: The sidebar is now split into 'Downloading' and 'History' sections for better organization.\n• 🔄 Real-time Updates: Download statuses and counts now update automatically without manual navigation.\n• 🔃 Re-download Support: Easily add completed or failed items back to the download list with a single click.\n• 🍪 Smart Error Guidance: 429 errors now directly guide users to Browser Cookie settings for a quick fix.",
+            "whats_new_title": "Macabolic v3.0.0 - What's New? 🚀",
+            "whats_new_message": "We received our first project sponsorship from Iman! We would be very happy to see your support as well. 😊\n\n✨ New Features (Beta):\n• Menu Bar App: Manage your downloads directly from the menu bar.\n• Chrome & Firefox Extension: Start downloads with one click from your browser.\n• Notification Support: Get notified instantly when downloads are finished.\n• Auto-launch: Macabolic is ready when your Mac starts.\n\n🔧 Other Important Changes:\n• Preset issues resolved.\n• Share on social media feature added.",
             "video_codec": "Video Codec",
             "additional_arguments": "Additional Arguments (Command Line)",
             "additional_arguments_hint": "e.g. --limit-rate 5M --restrict-filenames",
@@ -354,7 +361,24 @@ class LanguageService: ObservableObject {
             "subtitle_output": "Subtitle Output",
             "subtitle_external": "Separate File",
             "subtitle_embedded": "Embedded",
-            "h264_preset_info": "H.264 codec selected. Maximum quality is limited to 1080p."
+            "h264_preset_info": "H.264 codec selected. Maximum quality is limited to 1080p.",
+            "download_completed_title": "Download Completed",
+            "download_completed_body": "%@ has been downloaded successfully.",
+            "download_failed_title": "Download Failed",
+            "download_failed_body": "An error occurred while downloading %@.",
+            "launch_at_login": "Launch at login",
+            "start_in_background": "Start in background",
+            "start_in_background_desc": "Only show the menu bar icon at launch, hide from Dock",
+            "quit": "Quit",
+            "open_macabolic": "Open Macabolic",
+            "show_main_window": "Show Main Window",
+            "preset": "Preset",
+            "standard": "Standard",
+            "custom": "Custom",
+            "notifications": "Notifications",
+            "show_menubar_icon": "Show Menu Bar Icon",
+            "first_sponsor": "First Sponsor",
+            "test_notification": "Send Test Notification"
         ]
     ]
 }

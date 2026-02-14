@@ -15,9 +15,13 @@ struct PreferencesView: View {
     @AppStorage("sponsorBlock") private var sponsorBlock: Bool = false
     @AppStorage("browserForCookies") private var browserForCookies: String = "none"
     @AppStorage("defaultAdditionalArguments") private var defaultAdditionalArguments: String = ""
+    @AppStorage("showNotifications") private var showNotifications: Bool = true
+    @AppStorage("showMenuBarIcon") private var showMenuBarIcon: Bool = true
+    @AppStorage("startInBackground") private var startInBackground: Bool = false
     
     @EnvironmentObject var languageService: LanguageService
     @EnvironmentObject var updateChecker: UpdateChecker
+    @EnvironmentObject var downloadManager: DownloadManager
     @State private var isUpdatingYtdlp = false
     @State private var ytdlpUpdateMessage: String?
     @State private var selectedReleaseId: Int? = nil
@@ -171,11 +175,42 @@ struct PreferencesView: View {
             themeSection
             languageSection
             saveFolderSection
+            launchAtLoginSection
             appUpdatesSection
             allVersionsSection
         }
         .macabolicFormStyle()
         .padding()
+    }
+
+    private var launchAtLoginSection: some View {
+        Section(languageService.s("other")) {
+            Toggle(languageService.s("launch_at_login"), isOn: Binding(
+                get: { LoginItemHelper.shared.isEnabled },
+                set: { LoginItemHelper.shared.setEnabled($0) }
+            ))
+            
+            if LoginItemHelper.shared.isEnabled {
+                VStack(alignment: .leading, spacing: 2) {
+                    Toggle(languageService.s("start_in_background"), isOn: $startInBackground)
+                    Text(languageService.s("start_in_background_desc"))
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                .padding(.leading, 20)
+            }
+            
+            Toggle(languageService.s("notifications"), isOn: $showNotifications)
+            if showNotifications {
+                Button(languageService.s("test_notification")) {
+                    NotificationService.shared.sendDownloadCompleted(filename: "Macabolic Test", languageService: languageService)
+                }
+                .buttonStyle(.link)
+                .controlSize(.small)
+            }
+            
+            Toggle(languageService.s("show_menubar_icon"), isOn: $showMenuBarIcon)
+        }
     }
 
     private var themeSection: some View {
@@ -654,6 +689,7 @@ struct PreferencesView: View {
         defaultAudioCodec = preset.audioCodec.rawValue
         defaultVideoResolution = preset.videoResolution.rawValue
         defaultFileType = preset.fileType.rawValue.lowercased()
+        defaultAdditionalArguments = ""
     }
     
     private func applyCustomPreset(_ preset: CustomPreset) {
@@ -661,7 +697,7 @@ struct PreferencesView: View {
         defaultAudioCodec = preset.audioCodec.rawValue
         defaultVideoResolution = preset.videoResolution.rawValue
         defaultFileType = preset.fileType.rawValue.lowercased()
-        defaultAdditionalArguments = preset.additionalArguments ?? ""
+        // Do not overwrite global defaultAdditionalArguments with preset-specific ones
     }
     
     private func createCustomPreset() {
@@ -712,6 +748,7 @@ struct PreferencesView: View {
         defaultVideoResolution = "r1080p"
         defaultVideoCodec = "h264"
         defaultAudioCodec = "aac"
+        defaultAdditionalArguments = ""
     }
     
 
@@ -732,7 +769,15 @@ struct PreferencesView: View {
     private var ytdlpUpdateSection: some View {
         Section(languageService.s("ytdlp_update")) {
             HStack {
-                Text("yt-dlp")
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("yt-dlp")
+                        .fontWeight(.medium)
+                    if let version = downloadManager.ytdlpVersion {
+                        Text("\(languageService.s("version")): \(version)")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                }
                 Spacer()
                 if isUpdatingYtdlp {
                     ProgressView()
@@ -795,15 +840,15 @@ struct PreferencesView: View {
     private var aboutTab: some View {
         ScrollView {
             VStack(spacing: 16) {
-                Image(systemName: "arrow.down.circle.fill")
-                    .font(.system(size: 60))
-                    .foregroundStyle(.linearGradient(colors: [.blue, .purple], startPoint: .topLeading, endPoint: .bottomTrailing))
+                Image(nsImage: NSApp.applicationIconImage)
+                    .resizable()
+                    .frame(width: 80, height: 80)
                 
                 Text("Macabolic")
                     .font(.title)
                     .fontWeight(.bold)
                 
-                Text(languageService.s("version") + " \(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "2.0.0")")
+                Text(languageService.s("version") + " \(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "3.0.0")")
                     .font(.subheadline)
                     .foregroundColor(.secondary)
                 
@@ -845,6 +890,13 @@ struct PreferencesView: View {
                             Text(languageService.s("special_thanks") + ":")
                             Spacer()
                             Link("Neonapple", destination: URL(string: "https://github.com/Neonapple")!)
+                                .font(.caption)
+                        }
+                        
+                        HStack {
+                            Text(languageService.s("first_sponsor") + ":")
+                            Spacer()
+                            Link("Iman Montajabi", destination: URL(string: "https://github.com/ImanMontajabi")!)
                                 .font(.caption)
                         }
                     }
