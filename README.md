@@ -2,12 +2,10 @@
 
 A modern, fast, and beautiful video downloader for macOS. Powered by `yt-dlp`.
 
-> ⚠️ **Note:** This project is currently under **active development**. You may encounter bugs or incomplete features. If you find any issues, please [open an issue](https://github.com/alinuxpengui/Macabolic/issues) so we can fix them!
-
 <div align="center">
   <img src="Macabolic/Resources/Assets.xcassets/AppIcon.appiconset/icon_128x128.png" width="128" />
   <p>
-    <a href="https://github.com/alinuxpengui/Macabolic/releases/latest/download/Macabolic-v2.4.0.dmg">
+    <a href="https://github.com/alinuxpengui/Macabolic/releases/latest/download/Macabolic-v3.0.0.dmg">
       <img src="https://img.shields.io/badge/Download-macOS-blue?style=for-the-badge&logo=apple&logoColor=white" alt="Download Macabolic for macOS" />
     </a>
     <a href="https://github.com/alinuxpengui/homebrew-macabolic">
@@ -67,8 +65,10 @@ Here is what I'm planning to bring to Macabolic in the near future:
 - [x] ~~**Browser Cookies Support:** Use cookies from your browser to bypass YouTube's bot detection and access age-restricted or private content.~~ ✅ (Completed in v2.2.0)
 - [x] ~~**Advanced Codec Default Settings & Presets:** Save and manage custom download presets with preferred codecs, resolutions, and audio quality settings.~~ ✅ (Completed in v2.2.0)
 - [x] ~~**Persistent History & Re-download:** Categorized completed/failed downloads that persist across sessions and easy re-downloading.~~ ✅ (Completed in v2.3.0)
+- [x] ~~**Notification Support:** Get notified instantly when downloads are finished.~~ ✅ (Completed in v3.0.0)
+- [x] ~~**Browser Extensions:** One-click download directly from Chrome and Firefox.~~ ✅ (Completed in v3.0.0)
+- [x] ~~**Menu Bar Integration:** Manage ind downloads from your menu bar.~~ ✅ (Completed in v3.0.0)
 - [ ] **Official Apple Notarization:** Removing the "Unidentified Developer" warning for a professional experience.
-- [ ] **Browser Extensions:** One-click download directly from Safari, Chrome, and Firefox.
 - [ ] **Custom Post-Processing:** More tools to trim, convert, and manage your downloaded files.
 
 ---
@@ -76,6 +76,9 @@ Here is what I'm planning to bring to Macabolic in the near future:
 ## Features ✨
 
 - **Native macOS Experience:** Built with SwiftUI for a seamless look and feel.
+- **Menu Bar App:** Manage your downloads directly from the menu bar. 🆕
+- **Browser Extensions:** Start downloads with one click from Chrome and Firefox. 🆕
+- **Native Notifications:** Instant updates when downloads are finished. 🆕
 - **Vast Site Support:** Downloads from YouTube, Vimeo, Twitter, and [thousands more](https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md).
 - **Multiple Formats:** Support for MP4, WebM, MP3, Opus, FLAC, and WAV.
 - **High Quality:** Up to 4K (2160p) resolution support.
@@ -98,10 +101,24 @@ brew install --cask macabolic
 
 ### Option 2: Manual Download
 
-- **Download:** Download the latest `Macabolic.dmg` from the [Releases](https://github.com/alinuxpengui/Macabolic/releases) page.
+- **Download:** Download the latest `Macabolic-v3.0.0.dmg` from the [Releases](https://github.com/alinuxpengui/Macabolic/releases) page.
 - **Install:** Open the DMG file and drag **Macabolic** to your `Applications` folder.
 - **First Launch:** Since the app is not notarized, you may need to right-click the app and select **Open**, or go to `System Settings > Privacy & Security` and click **Open Anyway**.
 - **Initial Setup:** When the app opens, you will be greeted by a **Legal Disclaimer**. Please read and confirm it. Go to **Preferences (⌘,)** to set your **Language** and **Default Save Folder**.
+
+### Option 3: Browser Extensions 🌐
+
+#### Chrome / Brave / Edge:
+1. Go to `chrome://extensions/`
+2. Enable **"Developer mode"** (top right).
+3. Click **"Load unpacked"** and select the `MacabolicExtension_Chrome` folder from this repository.
+
+#### Firefox:
+1. Go to `about:debugging#/runtime/this-firefox`
+2. Click **"Load Temporary Add-on..."**.
+3. Select the `manifest.json` file inside the `MacabolicExtension_Firefox` folder.
+
+---
 
 ## Build Requirements 🛠️
 
