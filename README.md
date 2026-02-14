@@ -138,7 +138,7 @@ xattr -cr /Applications/Macabolic.app
 
 ## Build Requirements 🛠️
 
-- macOS 13.0 or later (Ventura+)
+- macOS 12.0 or later (Monterey+)
 - Xcode 14.0 or later
 - Swift 5.7+
 
