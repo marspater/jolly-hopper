@@ -97,13 +97,19 @@ Here is what I'm planning to bring to Macabolic in the near future:
 ```bash
 brew tap alinuxpengui/macabolic
 brew install --cask macabolic
+xattr -cr /Applications/Macabolic.app
 ```
 
 ### Option 2: Manual Download
 
 - **Download:** Download the latest `Macabolic-v3.0.0.dmg` from the [Releases](https://github.com/alinuxpengui/Macabolic/releases) page.
 - **Install:** Open the DMG file and drag **Macabolic** to your `Applications` folder.
-- **First Launch:** Since the app is not notarized, you may need to right-click the app and select **Open**, or go to `System Settings > Privacy & Security` and click **Open Anyway**.
+- **First Launch:** Since the app is not notarized, you have two options to open it:
+  - **Terminal Way:** Run the following command to remove the quarantine flag:
+```bash
+xattr -cr /Applications/Macabolic.app
+```
+  - **Other Way:** Right-click the app in your Applications folder and select Open, or go to System Settings > Privacy & Security and click Open Anyway.
 - **Initial Setup:** When the app opens, you will be greeted by a **Legal Disclaimer**. Please read and confirm it. Go to **Preferences (⌘,)** to set your **Language** and **Default Save Folder**.
 
 ### Option 3: Browser Extensions 🌐
