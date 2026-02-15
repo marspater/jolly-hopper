@@ -13,16 +13,16 @@ struct MacabolicApp: App {
     }
     
     var body: some Scene {
-        // This runs on every body evaluation — guaranteed to fire even without a visible window
-        let _ = setupMenuBarIfNeeded()
-        let _ = applyBackgroundModeIfNeeded()
-        
         WindowGroup {
             ContentView()
                 .environmentObject(downloadManager)
                 .environmentObject(appState)
                 .environmentObject(languageService)
                 .environmentObject(updateChecker)
+                .onAppear {
+                    setupMenuBarIfNeeded()
+                    applyBackgroundModeIfNeeded()
+                }
                 .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in
                     downloadManager.stopAllDownloads()
                 }
@@ -436,9 +436,11 @@ class LanguageService: ObservableObject {
             "additional_arguments_hint": "Örn: --limit-rate 5M --restrict-filenames",
             "additional_arguments_help": "Tüm komutları görmek için [resmi dokümantasyona](https://github.com/yt-dlp/yt-dlp#usage-and-options) bakabilirsiniz.",
             "no_subtitles": "Altyazı bulunamadı",
-            "whats_new_title": "Macabolic v3.0.0 - Yenilikler 🚀",
-            "whats_new_message": "Projemizin ilk sponsorluğunu İman Montajabi'den aldık! Sizlerin de desteğini görmekten çok memnun oluruz. 😊\n\n✨ Yeni Özellikler (Beta):\n• Menü Barı Uygulaması: İndirmelerinizi doğrudan menü çubuğundan yönetin.\n• Chrome & Firefox Eklentisi: Tarayıcınızdan tek tıkla indirme başlatın.\n• Bildirim Desteği: İndirmeler bittiğinde anında haberdar olun.\n• Otomatik Başlatma: Mac'iniz açıldığında Macabolic hazır olsun.\n\n🔧 Diğer Önemli Değişiklikler:\n• Preset sorunları giderildi.\n• Sosyal medyada paylaşma özelliği eklendi.",
-            "sponsor": "Sponsor",
+            "whats_new_title": "Macabolic v3.1.0 - Yenilikler 🚀",
+            "whats_new_message": "✨ Yeni Özellikler (Beta):\n• Menü Barı Uygulaması: İndirmelerinizi doğrudan menü çubuğundan yönetin.\n• Chrome & Firefox Eklentisi: Tarayıcınızdan tek tıkla indirme başlatın.\n• Bildirim Desteği: İndirmeler bittiğinde anında haberdar olun.\n• Otomatik Başlatma: Mac'iniz açıldığında Macabolic hazır olsun.\n\n🔧 Diğer Önemli Değişiklikler:\n• UI İyileştirmeleri: Ana sayfa düzeni ve tam ekran deneyimi büyük ekranlar için optimize edildi.\n• Yerelleştirme Düzeltmeleri: Klasör seçim sayfalarındaki hardcoded \"Seç\" butonu düzeltildi.\n• Sponsorlar & Topluluk: Sponsor listesi güncellendi ve sabit \"GitHub'da Yıldızla\" butonu eklendi. Iman Montajabi ve Semmelstulle'ye teşekkürler.\n• Preset sorunları giderildi.\n• Sosyal medyada paylaşma özelliği eklendi.",
+            "star_github": "GitHub'da Yıldızla",
+            "special_thanks_sidebar": "Özel destekleri için",
+            "for_support": "teşekkür ederiz.",
             "paste_from_clipboard": "Panodan Yapıştır",
             "fetch_info": "Bilgi Al",
             "quality": "Kalite",
@@ -503,7 +505,7 @@ class LanguageService: ObservableObject {
             "codec_warning": "Not: 1080p üzeri çözünürlükler için lütfen AV1 veya VP9 codec'ini seçin.",
             "clear": "Temizle",
             "format": "Format",
-            "support_btn": "Macabolic'i Destekleyin",
+            "support_btn": "Destek Ol",
             "res_best": "En İyi",
             "res_worst": "En Düşük",
             "app_up_to_date": "Uygulama güncel",
@@ -568,9 +570,9 @@ class LanguageService: ObservableObject {
             "subtitle_external": "Ayrı Dosya",
             "subtitle_embedded": "Gömülü",
             "h264_preset_info": "H.264 codec seçildi. Maksimum kalite 1080p ile sınırlıdır.",
-            "first_sponsor": "İlk Sponsor",
-            "future_sponsor": "Gelecek Sponsor",
-            "future_sponsor_desc": "2. olmak ister misiniz?",
+            "first_sponsor": "Sponsorlar",
+            "future_sponsor": "Sponsorlar",
+            "future_sponsor_desc": "Desteğiniz için teşekkürler!",
             "first_support_received": "İlk destek geldi!",
             "share_on_social": "Sosyal Medyada Paylaş",
             "share_msg_x": "#Macabolic ile videoları zahmetsizce indirin! 🚀 macOS üzerindeki en iyi yerel deneyim. https://github.com/alinuxpengui/Macabolic",
@@ -669,8 +671,8 @@ class LanguageService: ObservableObject {
             "additional_arguments": "Additional Arguments (Command Line)",
             "additional_arguments_hint": "e.g. --limit-rate 5M --restrict-filenames",
             "additional_arguments_help": "Check the [official documentation](https://github.com/yt-dlp/yt-dlp#usage-and-options) for all available commands.",
-            "whats_new_title": "Macabolic v3.0.0 - What's New? 🚀",
-            "whats_new_message": "We received our first project sponsorship from Iman Montajabi! We would be very happy to see your support as well. 😊\n\n✨ New Features (Beta):\n• Menu Bar App: Manage your downloads directly from the menu bar.\n• Chrome & Firefox Extension: Start downloads with one click from your browser.\n• Notification Support: Get notified instantly when downloads are finished.\n• Auto-launch: Macabolic is ready when your Mac starts.\n\n🔧 Other Important Changes:\n• Preset issues resolved.\n• Share on social media feature added.",
+            "whats_new_title": "Macabolic v3.1.0 - What's New? 🚀",
+            "whats_new_message": "✨ New Features (Beta):\n• Menu Bar App: Manage your downloads directly from the menu bar.\n• Chrome & Firefox Extension: Start downloads with one click from your browser.\n• Notification Support: Get notified instantly when downloads are finished.\n• Auto-launch: Macabolic is ready when your Mac starts.\n\n🔧 Other Important Changes:\n• UI Improvements: Optimized home view layout and full-screen experience for large displays.\n• Localization Fixes: Fixed hardcoded \"Select\" button in folder selection sheets.\n• Sponsors & Community: Updated sponsor list and added a static \"Star on GitHub\" button. Thanks for the Iman Montajabi and Semmelstulle.\n• Preset issues resolved.\n• Share on social media feature added.",
             "sponsor": "Sponsor",
             "paste_from_clipboard": "Paste from Clipboard",
             "fetch_info": "Get Video Information",
@@ -801,11 +803,14 @@ class LanguageService: ObservableObject {
             "subtitle_external": "Separate File",
             "subtitle_embedded": "Embedded",
             "h264_preset_info": "H.264 codec selected. Maximum quality is limited to 1080p.",
-            "first_sponsor": "First Sponsor",
-            "future_sponsor": "Future Sponsor",
-            "future_sponsor_desc": "Will you be the 2nd?",
+            "first_sponsor": "Sponsors",
+            "future_sponsor": "Sponsors",
+            "future_sponsor_desc": "Thanks for your support!",
             "first_support_received": "First support received!",
             "share_on_social": "Share on Social",
+            "star_github": "Star on GitHub",
+            "special_thanks_sidebar": "Special thanks to",
+            "for_support": "for their support.",
             "share_msg_x": "Downloading videos effortlessly with #Macabolic! 🚀 Best native experience on macOS. https://github.com/alinuxpengui/Macabolic",
             "share_msg_mastodon": "Downloading videos effortlessly with #Macabolic! 🚀 Best native experience on macOS. https://github.com/alinuxpengui/Macabolic",
             "share_msg_bluesky": "Downloading videos effortlessly with #Macabolic! 🚀 Best native experience on macOS. https://github.com/alinuxpengui/Macabolic",
