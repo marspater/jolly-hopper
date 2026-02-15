@@ -848,7 +848,7 @@ struct PreferencesView: View {
                     .font(.title)
                     .fontWeight(.bold)
                 
-                Text(languageService.s("version") + " \(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "3.0.0")")
+                Text(languageService.s("version") + " \(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "3.1.0")")
                     .font(.subheadline)
                     .foregroundColor(.secondary)
                 
@@ -896,8 +896,12 @@ struct PreferencesView: View {
                         HStack {
                             Text(languageService.s("first_sponsor") + ":")
                             Spacer()
-                            Link("Iman Montajabi", destination: URL(string: "https://github.com/ImanMontajabi")!)
-                                .font(.caption)
+                            VStack(alignment: .trailing, spacing: 4) {
+                                Link("Iman Montajabi", destination: URL(string: "https://github.com/ImanMontajabi")!)
+                                    .font(.caption)
+                                Link("Semmelstulle", destination: URL(string: "https://github.com/Semmelstulle")!)
+                                    .font(.caption)
+                            }
                         }
                     }
                     .padding(.vertical, 4)
@@ -955,7 +959,7 @@ struct PreferencesView: View {
         panel.canChooseFiles = false
         panel.allowsMultipleSelection = false
         panel.canCreateDirectories = true
-        panel.prompt = "Seç"
+        panel.prompt = languageService.s("save")
         
         if panel.runModal() == .OK, let url = panel.url {
             defaultSaveFolder = url.path

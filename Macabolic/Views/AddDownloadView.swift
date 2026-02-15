@@ -926,7 +926,7 @@ struct AddDownloadView: View {
         panel.canChooseFiles = false
         panel.allowsMultipleSelection = false
         panel.canCreateDirectories = true
-        panel.prompt = "Seç"
+        panel.prompt = languageService.s("save")
         if panel.runModal() == .OK, let url = panel.url { saveFolder = url }
     }
     

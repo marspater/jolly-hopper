@@ -5,7 +5,7 @@ A modern, fast, and beautiful video downloader for macOS. Powered by `yt-dlp`.
 <div align="center">
   <img src="Macabolic/Resources/Assets.xcassets/AppIcon.appiconset/icon_128x128.png" width="128" />
   <p>
-    <a href="https://github.com/alinuxpengui/Macabolic/releases/latest/download/Macabolic-v3.0.0.dmg">
+    <a href="https://github.com/alinuxpengui/Macabolic/releases/latest/download/Macabolic-v3.1.0.dmg">
       <img src="https://img.shields.io/badge/Download-macOS-blue?style=for-the-badge&logo=apple&logoColor=white" alt="Download Macabolic for macOS" />
     </a>
     <a href="https://github.com/alinuxpengui/homebrew-macabolic">
@@ -49,18 +49,14 @@ Macabolic is a native macOS frontend for the powerful [yt-dlp](https://github.co
 
 ## Support My Journey ❤️
 
-It’s about the motivation of knowing my work truly helped someone and made their life a little easier. Your support is what keeps me building and improving these tools for everyone.
+**Note on Sponsorships:**  
+Direct financial support via GitHub Sponsors is currently disabled due to local tax and regulatory complexities. While I truly appreciate the generosity of everyone who wanted to contribute, the best way to support Macabolic right now is by **starring the repository**, reporting bugs, or sharing the project with the community. Thank you for understanding! 🙏
 
 ### 🏆 The "First 5" Wall of Fame
 To show my gratitude, the **first 5 sponsors** of any amount will be **permanently featured** in the "About" section of the Macabolic app. Your name will be part of the app's history forever!
 
 1. [**Iman Montajabi**](https://github.com/ImanMontajabi) 🌟 (Our first ever sponsor!)
-2. _Your name here?_
-3. _Your name here?_
-4. _Your name here?_
-5. _Your name here?_
-
-[👉 Become a Sponsor on GitHub](https://github.com/sponsors/alinuxpengui)
+2. [**Semmelstulle**](https://github.com/Semmelstulle) 🌟
 
 ---
 

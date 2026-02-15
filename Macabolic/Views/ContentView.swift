@@ -32,9 +32,13 @@ struct ContentView: View {
         }
         .sheet(isPresented: $showPreferences) {
             PreferencesView()
+                .environmentObject(downloadManager)
+                .environmentObject(languageService)
+                .environmentObject(updateChecker)
         }
         .sheet(isPresented: $languageService.isFirstLaunch) {
             WelcomeView()
+                .environmentObject(languageService)
                 .interactiveDismissDisabled()
         }
         .task {
@@ -61,23 +65,6 @@ struct ContentView: View {
             Button(languageService.s("later"), role: .cancel) { }
         } message: {
             Text(String(format: languageService.s("update_available_message"), updateChecker.latestVersion ?? ""))
-        }
-        .alert(languageService.s("legal_disclaimer_title"), isPresented: $downloadManager.showDisclaimer) {
-            Button(languageService.s("close")) {
-                downloadManager.acknowledgeDisclaimer()
-            }
-        } message: {
-            Text(languageService.s("legal_disclaimer_message"))
-        }
-        .alert(languageService.s("whats_new_title"), isPresented: $downloadManager.showWhatsNew) {
-            Button(languageService.s("support_btn")) {
-                if let url = URL(string: "https://github.com/sponsors/alinuxpengui") {
-                    NSWorkspace.shared.open(url)
-                }
-            }
-            Button(languageService.s("ok")) { }
-        } message: {
-            Text(languageService.s("whats_new_message"))
         }
         .frame(minWidth: 900, minHeight: 600)
     }
@@ -109,6 +96,8 @@ struct SidebarView: View {
         .macabolicSidebarWidth()
         .safeAreaInset(edge: .bottom) {
             VStack(spacing: 8) {
+                SpecialThanksView()
+                
                 SponsorView()
                 
                 SocialShareView()
@@ -218,67 +207,106 @@ struct HomeView: View {
     @EnvironmentObject var languageService: LanguageService
     
     var body: some View {
-        VStack(spacing: 24) {
-            Spacer()
-            
-            ZStack {
-                Circle()
-                    .fill(.linearGradient(colors: [.blue, .purple], startPoint: .topLeading, endPoint: .bottomTrailing))
-                    .frame(width: 80, height: 80)
-                
-                Image(systemName: "arrow.down")
-                    .font(.system(size: 40, weight: .bold))
-                    .foregroundColor(.white)
-            }
-            
-            Text("Macabolic")
-                .font(.largeTitle)
-                .fontWeight(.bold)
-            
-            Text(LocalizedStringKey(languageService.s("url_placeholder")))
-                .font(.title3)
-                .foregroundColor(.secondary)
-            
-            Button {
-                appState.showAddDownloadSheet = true
-            } label: {
-                Label(languageService.s("new_download"), systemImage: "plus.circle.fill")
-                    .font(.headline)
-                    .padding(.horizontal, 24)
-                    .padding(.vertical, 12)
-            }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
-            .keyboardShortcut("n", modifiers: .command)
-            
-            HStack(spacing: 20) {
-                StatCard(title: languageService.s("stat_downloading"), count: downloadManager.downloadingCount, color: .blue) {
-                    appState.selectedNavItem = .downloading
+        GeometryReader { geometry in
+            ScrollView {
+                VStack(spacing: 0) {
+                    Spacer(minLength: 40)
+                    
+                    VStack(spacing: 40) {
+                        // Logo & Title Section
+                        VStack(spacing: 24) {
+                            ZStack {
+                                Circle()
+                                    .fill(.linearGradient(colors: [.blue, .purple], startPoint: .topLeading, endPoint: .bottomTrailing))
+                                    .frame(width: 100, height: 100)
+                                    .shadow(color: .purple.opacity(0.3), radius: 15)
+                                
+                                Image(systemName: "arrow.down")
+                                    .font(.system(size: 50, weight: .bold))
+                                    .foregroundColor(.white)
+                            }
+                            
+                            VStack(spacing: 8) {
+                                Text("Macabolic")
+                                    .font(.system(size: 48, weight: .black))
+                                
+                                Text(LocalizedStringKey(languageService.s("url_placeholder")))
+                                    .font(.title3)
+                                    .foregroundColor(.secondary)
+                                    .multilineTextAlignment(.center)
+                                    .padding(.horizontal)
+                            }
+                        }
+                        
+                        // Action Button
+                        Button {
+                            appState.showAddDownloadSheet = true
+                        } label: {
+                            Label(languageService.s("new_download"), systemImage: "plus.circle.fill")
+                                .font(.headline)
+                                .padding(.horizontal, 32)
+                                .padding(.vertical, 16)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.large)
+                        .keyboardShortcut("n", modifiers: .command)
+                        
+                        // Stats Grid
+                        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 16), count: 4), spacing: 16) {
+                            StatCard(title: languageService.s("stat_downloading"), count: downloadManager.downloadingCount, color: .blue) {
+                                appState.selectedNavItem = .downloading
+                            }
+                            StatCard(title: languageService.s("stat_queued"), count: downloadManager.queuedCount, color: .orange) {
+                                appState.selectedNavItem = .queued
+                            }
+                            StatCard(title: languageService.s("stat_completed"), count: downloadManager.completedCount, color: .green) {
+                                appState.selectedNavItem = .completed
+                            }
+                            StatCard(title: languageService.s("stat_failed"), count: downloadManager.failedCount, color: .red) {
+                                appState.selectedNavItem = .failed
+                            }
+                        }
+                        .padding(.horizontal, 40)
+                        .frame(maxWidth: 800)
+                    }
+                    .frame(maxWidth: 800)
+                    
+                    Spacer(minLength: 40)
+                    
+                    // Version info footer
+                    if let version = downloadManager.ytdlpVersion {
+                        HStack(spacing: 6) {
+                            Image(systemName: "terminal.fill")
+                                .font(.system(size: 10))
+                            Text("yt-dlp \(version)")
+                                .font(.system(size: 11, weight: .medium, design: .monospaced))
+                        }
+                        .foregroundColor(.secondary.opacity(0.8))
+                        .padding(.bottom, 20)
+                    }
                 }
-                StatCard(title: languageService.s("stat_queued"), count: downloadManager.queuedCount, color: .orange) {
-                    appState.selectedNavItem = .queued
-                }
-                StatCard(title: languageService.s("stat_completed"), count: downloadManager.completedCount, color: .green) {
-                    appState.selectedNavItem = .completed
-                }
-                StatCard(title: languageService.s("stat_failed"), count: downloadManager.failedCount, color: .red) {
-                    appState.selectedNavItem = .failed
-                }
-            }
-            .padding(.top, 20)
-            
-            Spacer()
-            
-            if let version = downloadManager.ytdlpVersion {
-                HStack {
-                    Image(systemName: "terminal")
-                    Text("yt-dlp \(version)")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
+                .frame(minWidth: geometry.size.width)
+                .frame(minHeight: geometry.size.height)
             }
         }
-        .padding()
+        .background(Color(NSColor.windowBackgroundColor))
+        .alert(languageService.s("legal_disclaimer_title"), isPresented: $downloadManager.showDisclaimer) {
+            Button(languageService.s("close")) {
+                downloadManager.acknowledgeDisclaimer()
+            }
+        } message: {
+            Text(languageService.s("legal_disclaimer_message"))
+        }
+        .alert(languageService.s("whats_new_title"), isPresented: $downloadManager.showWhatsNew) {
+            Button(languageService.s("star_github")) {
+                if let url = URL(string: "https://github.com/alinuxpengui/Macabolic") {
+                    NSWorkspace.shared.open(url)
+                }
+            }
+            Button(languageService.s("ok")) { }
+        } message: {
+            Text(languageService.s("whats_new_message"))
+        }
     }
 }
 
@@ -297,10 +325,15 @@ struct StatCard: View {
                     .foregroundColor(color)
                 Text(title)
                     .font(.caption)
+                    .fontWeight(.medium)
                     .foregroundColor(.secondary)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2)
             }
-            .frame(width: 100)
-            .padding()
+            .frame(maxWidth: .infinity)
+            .frame(height: 100)
+            .padding(.vertical, 8)
+            .padding(.horizontal, 4)
             .background(color.opacity(0.1))
             .cornerRadius(12)
             .overlay(
@@ -315,186 +348,38 @@ struct StatCard: View {
 struct SponsorView: View {
     @EnvironmentObject var languageService: LanguageService
     @State private var isHovered = false
-    @State private var glowOpacity = 0.5
-    @State private var tributeState = 0 // 0: First Sponsor, 1: Who's next?
-    
-    let sponsorName = "Iman Montajabi"
-    let sponsorURL = "https://github.com/ImanMontajabi"
-    let timer = Timer.publish(every: 3, on: .main, in: .common).autoconnect()
     
     var body: some View {
-        ZStack(alignment: .trailing) {
-            ZStack {
-                // Support Macabolic (Default State)
-                Link(destination: URL(string: "https://github.com/sponsors/alinuxpengui")!) {
-                    HStack {
-                        Image(systemName: "heart.fill")
-                            .foregroundColor(.red)
-                        Text(languageService.s("support_btn"))
-                            .font(.system(size: 13, weight: .medium))
-                        Spacer()
-                    }
-                    .padding(.horizontal, 12)
-                }
-                .buttonStyle(.plain)
-                .offset(y: isHovered ? -44 : 0)
-                .opacity(isHovered ? 0 : 1)
-                
-                // Sponsor Tribute (Hover State)
-                ZStack {
-                    if tributeState == 0 {
-                        sponsorTributeContent
-                            .transition(.asymmetric(insertion: .move(edge: .bottom), removal: .move(edge: .top)).combined(with: .opacity))
-                    } else {
-                        whoIsNextContent
-                            .transition(.asymmetric(insertion: .move(edge: .bottom), removal: .move(edge: .top)).combined(with: .opacity))
-                    }
-                }
-                .offset(y: isHovered ? 0 : 44)
-                .opacity(isHovered ? 1 : 0)
+        Button {
+            if let url = URL(string: "https://github.com/alinuxpengui/Macabolic") {
+                NSWorkspace.shared.open(url)
             }
-            .clipShape(RoundedRectangle(cornerRadius: 10))
-            .frame(height: 38)
-            .background(
-                RoundedRectangle(cornerRadius: 10)
-                    .fill(isHovered ? (tributeState == 0 ? Color.yellow.opacity(0.1) : Color.blue.opacity(0.1)) : Color.red.opacity(0.1))
-            )
-            .onHover { hovering in
-                withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-                    isHovered = hovering
-                    if !hovering { tributeState = 0 }
-                }
-            }
-            .onReceive(timer) { _ in
-                if isHovered {
-                    withAnimation(.easeInOut(duration: 0.6)) {
-                        tributeState = tributeState == 0 ? 1 : 0
-                    }
-                }
-            }
-            
-            // Glowing Badge
-            if !isHovered {
-                HStack(spacing: 4) {
-                    Text("First support received!")
-                        .font(.system(size: 8, weight: .bold))
-                        .foregroundColor(.orange)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(Color.orange.opacity(0.15))
-                        .cornerRadius(4)
-                        .shadow(radius: 2)
-
-                    ZStack {
-                        Circle()
-                            .fill(Color.orange)
-                            .frame(width: 18, height: 18)
-                            .blur(radius: 4)
-                            .opacity(glowOpacity)
-                            .onAppear {
-                                withAnimation(.easeInOut(duration: 1.0).repeatForever(autoreverses: true)) {
-                                    glowOpacity = 1.0
-                                }
-                            }
-                        
-                        Circle()
-                            .fill(.linearGradient(colors: [.orange, .red], startPoint: .top, endPoint: .bottom))
-                            .frame(width: 16, height: 16)
-                        
-                        Text("1")
-                            .font(.system(size: 10, weight: .black))
-                            .foregroundColor(.white)
-                    }
-                }
-                .offset(y: -24)
-                .transition(.scale.combined(with: .opacity))
-                .allowsHitTesting(false)
-            }
-        }
-        .padding(.horizontal, 8)
-    }
-    
-    private var sponsorTributeContent: some View {
-        Link(destination: URL(string: sponsorURL)!) {
+        } label: {
             HStack {
-                Image(systemName: "crown.fill")
+                Image(systemName: "star.fill")
                     .foregroundColor(.yellow)
-                VStack(alignment: .leading, spacing: 0) {
-                    Text(languageService.s("first_sponsor"))
-                        .font(.system(size: 8, weight: .black))
-                        .foregroundColor(.yellow)
-                    Text(sponsorName)
-                        .font(.system(size: 11, weight: .bold))
-                        .lineLimit(1)
-                }
+                    .font(.system(size: 14, weight: .semibold))
+                Text(languageService.s("star_github"))
+                    .font(.system(size: 12, weight: .bold))
                 Spacer()
                 Image(systemName: "arrow.up.right")
                     .font(.system(size: 10))
                     .foregroundColor(.secondary)
             }
             .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .background(
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(isHovered ? Color.yellow.opacity(0.2) : Color.yellow.opacity(0.1))
+            )
         }
         .buttonStyle(.plain)
-    }
-    
-    private var whoIsNextContent: some View {
-        Link(destination: URL(string: "https://github.com/sponsors/alinuxpengui")!) {
-            HStack {
-                Image(systemName: "person.badge.plus.fill")
-                    .foregroundColor(.blue)
-                VStack(alignment: .leading, spacing: 0) {
-                    Text(languageService.s("future_sponsor"))
-                        .font(.system(size: 8, weight: .black))
-                        .foregroundColor(.blue)
-                    Text(languageService.s("future_sponsor_desc"))
-                        .font(.system(size: 11, weight: .bold))
-                        .lineLimit(1)
-                }
-                Spacer()
-                Image(systemName: "heart.circle.fill")
-                    .font(.system(size: 14))
-                    .foregroundColor(.red)
-            }
-            .padding(.horizontal, 12)
-        }
-        .buttonStyle(.plain)
-    }
-    
-    private var firstSponsorBadge: some View {
-        HStack(spacing: 4) {
-            Text(languageService.s("first_support_received"))
-                .font(.system(size: 8, weight: .bold))
-                .foregroundColor(.orange)
-                .padding(.horizontal, 6)
-                .padding(.vertical, 2)
-                .background(Color.orange.opacity(0.15))
-                .cornerRadius(4)
-                .shadow(radius: 2)
-
-            ZStack {
-                Circle()
-                    .fill(Color.orange)
-                    .frame(width: 18, height: 18)
-                    .blur(radius: 4)
-                    .opacity(glowOpacity)
-                    .onAppear {
-                        withAnimation(.easeInOut(duration: 1.0).repeatForever(autoreverses: true)) {
-                            glowOpacity = 1.0
-                        }
-                    }
-                
-                Circle()
-                    .fill(.linearGradient(colors: [.orange, .red], startPoint: .top, endPoint: .bottom))
-                    .frame(width: 16, height: 16)
-                
-                Text("1")
-                    .font(.system(size: 10, weight: .black))
-                    .foregroundColor(.white)
+        .padding(.horizontal, 8)
+        .onHover { hovering in
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                isHovered = hovering
             }
         }
-        .offset(y: -24)
-        .transition(.scale.combined(with: .opacity))
-        .allowsHitTesting(false)
     }
 }
 
@@ -618,5 +503,29 @@ struct VisualEffectView: NSViewRepresentable {
     func updateNSView(_ nsView: NSVisualEffectView, context: Context) {
         nsView.material = material
         nsView.blendingMode = blendingMode
+    }
+}
+
+struct SpecialThanksView: View {
+    @EnvironmentObject var languageService: LanguageService
+    
+    var body: some View {
+        VStack(spacing: 2) {
+            Text(languageService.s("special_thanks_sidebar"))
+                .font(.system(size: 9, weight: .medium))
+                .foregroundColor(.secondary)
+            
+            HStack(spacing: 4) {
+                Link("Iman Montajabi", destination: URL(string: "https://github.com/ImanMontajabi")!)
+                Text("&")
+                Link("Semmelstulle", destination: URL(string: "https://github.com/Semmelstulle")!)
+            }
+            .font(.system(size: 9, weight: .bold))
+            
+            Text(languageService.s("for_support"))
+                .font(.system(size: 9, weight: .medium))
+                .foregroundColor(.secondary)
+        }
+        .padding(.bottom, 4)
     }
 }

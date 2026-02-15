@@ -57,11 +57,11 @@ class DownloadManager: ObservableObject {
         loadHistory()
         
 
-        if !userDefaults.bool(forKey: "disclaimerAcknowledged") {
+        if !userDefaults.bool(forKey: "disclaimerAcknowledged") && !languageService.isFirstLaunch {
             showDisclaimer = true
         }
 
-        let currentVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "3.0.0"
+        let currentVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "3.1.0"
         let lastSeenVersion = userDefaults.string(forKey: "lastSeenVersion_v3") ?? "0.0.0"
         
         if currentVersion != lastSeenVersion {
