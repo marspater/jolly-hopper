@@ -419,7 +419,8 @@ class YtdlpService: ObservableObject {
         
         let outputTemplate: String
         if let customFilename = options.customFilename, !customFilename.isEmpty {
-            outputTemplate = options.saveFolder.appendingPathComponent("\(customFilename).%(ext)s").path
+            let safeName = sanitizeFilename(customFilename)
+            outputTemplate = options.saveFolder.appendingPathComponent("\(safeName).%(ext)s").path
         } else {
             outputTemplate = options.saveFolder.appendingPathComponent("%(title)s.%(ext)s").path
         }
@@ -926,12 +927,21 @@ class YtdlpService: ObservableObject {
         return nil
     }
 
+    private func sanitizeFilename(_ filename: String) -> String {
+        let invalidCharacters = CharacterSet(charactersIn: "/\\?%*|\"<>:")
+        let components = filename.components(separatedBy: invalidCharacters)
+        let cleaned = components.joined(separator: "_")
+        let trimmed = cleaned.replacingOccurrences(of: "..", with: "").trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? "download" : trimmed
+    }
+
     private func createTempCookiesFile(url: String, cookieName: String, cookieValue: String) -> URL? {
-        let tempCookiesURL = FileManager.default.temporaryDirectory.appendingPathComponent("macabolic_cookies_\(UUID().uuidString).txt")
+        let tempCookiesURL = FileManager.default.temporaryDirectory.appendingPathComponent("velox_cookies_\(UUID().uuidString).txt")
         let host = URL(string: url)?.host ?? ""
         let cookieContent = "# Netscape HTTP Cookie File\n\(host)\tFALSE\t/\tFALSE\t2783382923\t\(cookieName)\t\(cookieValue)\n"
         do {
             try cookieContent.write(to: tempCookiesURL, atomically: true, encoding: .utf8)
+            try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: tempCookiesURL.path)
             return tempCookiesURL
         } catch {
             print("Error writing cookies file: \(error)")
