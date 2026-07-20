@@ -317,6 +317,8 @@ enum NavigationItem: String, CaseIterable, Identifiable {
         case .completed: return "checkmark.circle"
         case .failed: return "exclamationmark.circle"
         }
+    }
+}
 
 struct WelcomeView: View {
     @EnvironmentObject var languageService: LanguageService
