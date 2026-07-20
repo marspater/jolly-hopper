@@ -24,11 +24,11 @@ struct ContentView: View {
                 }
             }
         }
-        .sheet(isPresented: $appState.showAddDownloadSheet) {
-            AddDownloadView()
-                .environmentObject(downloadManager)
-                .environmentObject(appState)
-                .environmentObject(languageService)
+        .onChange(of: appState.showAddDownloadSheet) { newValue in
+            if newValue {
+                AddDownloadWindowManager.shared.showAddDownloadWindow(downloadManager: downloadManager, appState: appState, languageService: languageService)
+                appState.showAddDownloadSheet = false
+            }
         }
         .sheet(isPresented: $showPreferences) {
             PreferencesView()
@@ -316,6 +316,7 @@ struct StatCard: View {
     let count: Int
     let color: Color
     let action: () -> Void
+    @State private var isHovered = false
     
     var body: some View {
         Button(action: action) {
@@ -323,25 +324,39 @@ struct StatCard: View {
                 Text("\(count)")
                     .font(.system(size: 36, weight: .bold, design: .rounded))
                     .foregroundColor(color)
+                    .shadow(color: color.opacity(0.4), radius: isHovered ? 8 : 2)
                 Text(title)
                     .font(.caption)
-                    .fontWeight(.medium)
+                    .fontWeight(.semibold)
                     .foregroundColor(.secondary)
                     .multilineTextAlignment(.center)
                     .lineLimit(2)
             }
             .frame(maxWidth: .infinity)
-            .frame(height: 100)
+            .frame(height: 105)
             .padding(.vertical, 8)
             .padding(.horizontal, 4)
-            .background(color.opacity(0.1))
-            .cornerRadius(12)
+            .background(.ultraThinMaterial)
+            .cornerRadius(16)
             .overlay(
-                RoundedRectangle(cornerRadius: 12)
-                    .stroke(color.opacity(0.2), lineWidth: 1)
+                RoundedRectangle(cornerRadius: 16)
+                    .stroke(
+                        LinearGradient(
+                            colors: [color.opacity(isHovered ? 0.6 : 0.25), Color.white.opacity(0.1)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        lineWidth: 1.5
+                    )
             )
+            .shadow(color: color.opacity(isHovered ? 0.25 : 0.08), radius: isHovered ? 12 : 6, x: 0, y: isHovered ? 6 : 3)
+            .scaleEffect(isHovered ? 1.03 : 1.0)
+            .animation(.spring(response: 0.35, dampingFraction: 0.75), value: isHovered)
         }
         .buttonStyle(.plain)
+        .onHover { hovering in
+            isHovered = hovering
+        }
     }
 }
 
