@@ -165,8 +165,6 @@ class LanguageService: ObservableObject {
         "safari_warning": "Note: For Safari cookies, you must grant 'Full Disk Access' to Macabolic in System Settings > Privacy & Security. Using a browser other than Safari (Chrome, Brave, etc.) will be much easier.",
         "open_system_settings": "Open System Settings",
         "video_codec": "Video Codec",
-        "additional_arguments_hint": "e.g. --limit-rate 5M --restrict-filenames",
-        "additional_arguments_help": "Check the [official documentation](https://github.com/yt-dlp/yt-dlp#usage-and-options) for all available commands.",
         "audio_codec": "Audio Codec",
         "codec_auto": "Auto (Best Available)",
         "codec_settings": "Codec Settings",
