@@ -35,7 +35,7 @@ struct MacabolicApp: App {
         .commands {
             CommandGroup(replacing: .newItem) {
                 Button(languageService.s("new_download") + "...") {
-                    appState.showAddDownloadSheet = true
+                    AddDownloadWindowManager.shared.showAddDownloadWindow(downloadManager: downloadManager, appState: appState, languageService: languageService)
                 }
                 .keyboardShortcut("n", modifiers: .command)
             }
