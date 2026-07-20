@@ -321,7 +321,7 @@ class YtdlpService: ObservableObject {
         
         let decoder = JSONDecoder()
         
-        var info = try decoder.decode(MediaInfo.self, from: data)
+        let info = try decoder.decode(MediaInfo.self, from: data)
         
         return MediaInfo(
             id: info.id,
@@ -663,25 +663,23 @@ class YtdlpService: ObservableObject {
             process.environment = env
             
 
-            var outputData = Data()
+            let outputBuffer = ThreadSafeDataBuffer()
             pipe.fileHandleForReading.readabilityHandler = { handle in
                 let data = handle.availableData
                 if !data.isEmpty {
-                    outputData.append(data)
+                    outputBuffer.append(data)
                 }
             }
             
             process.terminationHandler = { proc in
-
                 pipe.fileHandleForReading.readabilityHandler = nil
                 
-
                 let remainingData = pipe.fileHandleForReading.readDataToEndOfFile()
                 if !remainingData.isEmpty {
-                    outputData.append(remainingData)
+                    outputBuffer.append(remainingData)
                 }
                 
-                let output = String(data: outputData, encoding: .utf8) ?? ""
+                let output = outputBuffer.getString()
                 
                 if proc.terminationStatus == 0 {
                     continuation.resume(returning: output)
@@ -729,37 +727,33 @@ class YtdlpService: ObservableObject {
             
             onProcessCreated(process)
             
-            let synchronizationQueue = DispatchQueue(label: "com.macabolic.download.sync")
-            var outputPath = ""
-            var errorOutput = ""
+            let outputState = ThreadSafeOutputState()
             
             outputPipe.fileHandleForReading.readabilityHandler = { handle in
                 let data = handle.availableData
                 guard !data.isEmpty, let line = String(data: data, encoding: .utf8) else { return }
                 
-                synchronizationQueue.async {
-                    if line.contains("[download] Destination:") {
-                        let parts = line.components(separatedBy: "[download] Destination: ")
-                        if parts.count > 1 {
-                            outputPath = parts[1].trimmingCharacters(in: .whitespacesAndNewlines)
+                if line.contains("[download] Destination:") {
+                    let parts = line.components(separatedBy: "[download] Destination: ")
+                    if parts.count > 1 {
+                        outputState.setOutputPath(parts[1].trimmingCharacters(in: .whitespacesAndNewlines))
+                    }
+                }
+                
+                if line.contains("has already been downloaded") {
+                    let parts = line.components(separatedBy: "[download] ")
+                    if parts.count > 1 {
+                        let pathPart = parts[1].components(separatedBy: " has already been downloaded")
+                        if !pathPart.isEmpty {
+                            outputState.setOutputPath(pathPart[0].trimmingCharacters(in: .whitespacesAndNewlines))
                         }
                     }
-                    
-                    if line.contains("has already been downloaded") {
-                        let parts = line.components(separatedBy: "[download] ")
-                        if parts.count > 1 {
-                            let pathPart = parts[1].components(separatedBy: " has already been downloaded")
-                            if !pathPart.isEmpty {
-                                outputPath = pathPart[0].trimmingCharacters(in: .whitespacesAndNewlines)
-                            }
-                        }
-                    }
-                    
-                    if line.contains("[Merger] Merging formats into") {
-                        let parts = line.components(separatedBy: "\"")
-                        if parts.count > 1 {
-                            outputPath = parts[1]
-                        }
+                }
+                
+                if line.contains("[Merger] Merging formats into") {
+                    let parts = line.components(separatedBy: "\"")
+                    if parts.count > 1 {
+                        outputState.setOutputPath(parts[1])
                     }
                 }
                 
@@ -785,9 +779,7 @@ class YtdlpService: ObservableObject {
                 let data = handle.availableData
                 guard !data.isEmpty, let line = String(data: data, encoding: .utf8) else { return }
                 
-                synchronizationQueue.async {
-                    errorOutput += line
-                }
+                outputState.appendError(line)
                 
                 DispatchQueue.main.async {
                     onOutput("[ERROR] \(line)")
@@ -798,24 +790,25 @@ class YtdlpService: ObservableObject {
                 outputPipe.fileHandleForReading.readabilityHandler = nil
                 errorPipe.fileHandleForReading.readabilityHandler = nil
                 
-                synchronizationQueue.async {
-                    if proc.terminationStatus == 0 {
-                        continuation.resume(returning: outputPath)
+                let currentOutputPath = outputState.getOutputPath()
+                let errorOutput = outputState.getErrorText()
+                
+                if proc.terminationStatus == 0 {
+                    continuation.resume(returning: currentOutputPath)
+                } else {
+                    if errorOutput.contains("Cloudflare") || (errorOutput.contains("403") && errorOutput.contains("anti-bot")) {
+                        continuation.resume(throwing: YtdlpError.cloudflareBlocked)
+                    } else if errorOutput.contains("429") || errorOutput.contains("Too Many Requests") {
+                        continuation.resume(throwing: YtdlpError.tooManyRequests)
+                    } else if errorOutput.contains("subtitle") || errorOutput.contains("caption") {
+                        continuation.resume(throwing: YtdlpError.subtitleError(errorOutput))
                     } else {
-                        if errorOutput.contains("Cloudflare") || (errorOutput.contains("403") && errorOutput.contains("anti-bot")) {
-                            continuation.resume(throwing: YtdlpError.cloudflareBlocked)
-                        } else if errorOutput.contains("429") || errorOutput.contains("Too Many Requests") {
-                            continuation.resume(throwing: YtdlpError.tooManyRequests)
-                        } else if errorOutput.contains("subtitle") || errorOutput.contains("caption") {
-                            continuation.resume(throwing: YtdlpError.subtitleError(errorOutput))
-                        } else {
-                            let cleanError = errorOutput.components(separatedBy: "\n")
-                                .filter { $0.contains("ERROR:") }
-                                .last?
-                                .replacingOccurrences(of: "ERROR: ", with: "")
-                                ?? errorOutput
-                            continuation.resume(throwing: YtdlpError.downloadFailed(cleanError))
-                        }
+                        let cleanError = errorOutput.components(separatedBy: "\n")
+                            .filter { $0.contains("ERROR:") }
+                            .last?
+                            .replacingOccurrences(of: "ERROR: ", with: "")
+                            ?? errorOutput
+                        continuation.resume(throwing: YtdlpError.downloadFailed(cleanError))
                     }
                 }
             }
@@ -978,5 +971,52 @@ enum YtdlpError: LocalizedError {
         case .cloudflareBlocked:
             return "Blocked by Cloudflare anti-bot protection. Please select your browser as cookie source in Settings > Advanced and try again."
         }
+    }
+}
+
+final class ThreadSafeDataBuffer: @unchecked Sendable {
+    private var data = Data()
+    private let lock = NSLock()
+    
+    func append(_ newBytes: Data) {
+        lock.lock()
+        data.append(newBytes)
+        lock.unlock()
+    }
+    
+    func getString() -> String {
+        lock.lock()
+        defer { lock.unlock() }
+        return String(data: data, encoding: .utf8) ?? ""
+    }
+}
+
+final class ThreadSafeOutputState: @unchecked Sendable {
+    private var path: String = ""
+    private var errorText: String = ""
+    private let lock = NSLock()
+    
+    func setOutputPath(_ newPath: String) {
+        lock.lock()
+        path = newPath
+        lock.unlock()
+    }
+    
+    func getOutputPath() -> String {
+        lock.lock()
+        defer { lock.unlock() }
+        return path
+    }
+    
+    func appendError(_ text: String) {
+        lock.lock()
+        errorText += text
+        lock.unlock()
+    }
+    
+    func getErrorText() -> String {
+        lock.lock()
+        defer { lock.unlock() }
+        return errorText
     }
 }
