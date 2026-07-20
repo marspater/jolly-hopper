@@ -1,11 +1,13 @@
 import SwiftUI
+#if os(macOS)
+import AppKit
+#endif
 
 struct ContentView: View {
     @EnvironmentObject var downloadManager: DownloadManager
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var languageService: LanguageService
     @EnvironmentObject var updateChecker: UpdateChecker
-    @State private var showPreferences = false
     @State private var showUpdateAlert = false
     @AppStorage("showMenuBarIcon") private var showMenuBarIcon: Bool = true
     
@@ -13,13 +15,13 @@ struct ContentView: View {
         Group {
             if #available(macOS 13.0, *) {
                 NavigationSplitView {
-                    SidebarView(showPreferences: $showPreferences)
+                    SidebarView()
                 } detail: {
                     DetailView()
                 }
             } else {
                 NavigationView {
-                    SidebarView(showPreferences: $showPreferences)
+                    SidebarView()
                     DetailView()
                 }
             }
@@ -29,12 +31,6 @@ struct ContentView: View {
                 AddDownloadWindowManager.shared.showAddDownloadWindow(downloadManager: downloadManager, appState: appState, languageService: languageService)
                 appState.showAddDownloadSheet = false
             }
-        }
-        .sheet(isPresented: $showPreferences) {
-            PreferencesView()
-                .environmentObject(downloadManager)
-                .environmentObject(languageService)
-                .environmentObject(updateChecker)
         }
         .sheet(isPresented: $languageService.isFirstLaunch) {
             WelcomeView()
@@ -60,7 +56,7 @@ struct ContentView: View {
         }
         .alert(languageService.s("update_available_title"), isPresented: $showUpdateAlert) {
             Button(languageService.s("update_now")) {
-                showPreferences = true
+                showNativeSettingsWindow()
             }
             Button(languageService.s("later"), role: .cancel) { }
         } message: {
@@ -70,11 +66,17 @@ struct ContentView: View {
     }
 }
 
+#if os(macOS)
+@MainActor
+private func showNativeSettingsWindow() {
+    NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+}
+#endif
+
 struct SidebarView: View {
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var downloadManager: DownloadManager
     @EnvironmentObject var languageService: LanguageService
-    @Binding var showPreferences: Bool
     
     var body: some View {
         List {
@@ -103,7 +105,7 @@ struct SidebarView: View {
                 SocialShareView()
 
                 Button {
-                    showPreferences = true
+                    showNativeSettingsWindow()
                 } label: {
                     HStack {
                         Image(systemName: "gear")
