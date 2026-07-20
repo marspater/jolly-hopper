@@ -1,0 +1,14 @@
+{
+    "extension_name": {
+        "message": "Siphon"
+    },
+    "extension_description": {
+        "message": "Videoları Siphon ile indir"
+    },
+    "context_download": {
+        "message": "Siphon ile İndir"
+    },
+    "context_fast_download": {
+        "message": "Hızlı İndir (En Uyumlu)"
+    }
+}
