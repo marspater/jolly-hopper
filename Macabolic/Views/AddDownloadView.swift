@@ -899,6 +899,7 @@ struct AddDownloadView: View {
             }
         }
         appState.selectedNavItem = .downloading
+        AddDownloadWindowManager.shared.closeWindow()
         dismiss()
     }
     
