@@ -24,6 +24,7 @@
 		E0001023 /* MenuBarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000023; };
 		E0001024 /* LoggerService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000024; };
 		E0001025 /* AddDownloadWindowManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000025; };
+		E0001026 /* LanguageService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000026; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -46,6 +47,7 @@
 		E0000023 /* MenuBarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarView.swift; sourceTree = "<group>"; };
 		E0000024 /* LoggerService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoggerService.swift; sourceTree = "<group>"; };
 		E0000025 /* AddDownloadWindowManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddDownloadWindowManager.swift; sourceTree = "<group>"; };
+		E0000026 /* LanguageService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LanguageService.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -105,6 +107,8 @@
 				E0000021 /* LoginItemHelper.swift */,
 				E0000022 /* MenuBarManager.swift */,
 				E0000024 /* LoggerService.swift */,
+				E0000025 /* AddDownloadWindowManager.swift */,
+				E0000026 /* LanguageService.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -237,6 +241,7 @@
 				E0001023 /* MenuBarView.swift in Sources */,
 				E0001024 /* LoggerService.swift in Sources */,
 				E0001025 /* AddDownloadWindowManager.swift in Sources */,
+				E0001026 /* LanguageService.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
