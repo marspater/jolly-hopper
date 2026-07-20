@@ -145,7 +145,7 @@ struct AddDownloadView: View {
             Divider()
             footer
         }
-        .frame(minWidth: 560, idealWidth: 640, maxWidth: 900, minHeight: 480, idealHeight: 640, maxHeight: 900)
+        .frame(minWidth: 680, idealWidth: 760, maxWidth: 1000, minHeight: 560, idealHeight: 700, maxHeight: 1000)
         .background(VisualEffectView(material: .sidebar, blendingMode: .behindWindow).ignoresSafeArea())
         .onAppear {
             let loadedPresets = CustomPreset.loadAll()
@@ -268,7 +268,7 @@ struct AddDownloadView: View {
             Text(languageService.s("video_url"))
                 .font(.headline)
             
-            HStack {
+            HStack(alignment: .firstTextBaseline, spacing: 10) {
                 TextField(languageService.s("url_hint"), text: $urlInput)
                     .textFieldStyle(.roundedBorder)
                     .onSubmit {
@@ -482,7 +482,7 @@ struct AddDownloadView: View {
                 if isVideo { fileType = .mp4 } else { fileType = .mp3 }
             }
             
-            HStack(spacing: 24) {
+            HStack(alignment: .firstTextBaseline, spacing: 24) {
                 Picker(languageService.s("file_type"), selection: $fileType) {
                     if isVideoTab { ForEach(MediaFileType.videoTypes) { type in Text(type.rawValue).tag(type) } }
                     else { ForEach(MediaFileType.audioTypes) { type in Text(type.rawValue).tag(type) } }
@@ -509,7 +509,7 @@ struct AddDownloadView: View {
             }
             
             if isVideoTab {
-                HStack(spacing: 24) {
+                HStack(alignment: .firstTextBaseline, spacing: 24) {
                     Picker(languageService.s("video_codec"), selection: $selectedCodec) {
                         Text(languageService.s("codec_auto")).tag("auto")
                         ForEach(availableCodecs) { codec in
@@ -530,10 +530,12 @@ struct AddDownloadView: View {
             }
             
             if isVideoTab && selectedCodec == "h264" {
-                HStack {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
                     Image(systemName: "info.circle.fill")
                         .foregroundColor(.blue)
                     Text(languageService.s("h264_preset_info"))
+                        .multilineTextAlignment(.leading)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .font(.caption)
                 .foregroundColor(.secondary)
@@ -541,9 +543,11 @@ struct AddDownloadView: View {
             }
             
             if isVideoTab && selectedCodec != "h264" && (videoResolution == .r1440p || videoResolution == .r2160p || videoResolution == .best) {
-                HStack {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
                     Image(systemName: "info.circle")
                     Text(languageService.s("codec_warning"))
+                        .multilineTextAlignment(.leading)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .font(.caption)
                 .foregroundColor(.secondary)
@@ -598,7 +602,7 @@ struct AddDownloadView: View {
     private var saveSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text(languageService.s("save_folder")).font(.headline)
-            HStack {
+            HStack(alignment: .firstTextBaseline, spacing: 10) {
                 TextField(languageService.s("save_folder"), text: .constant(saveFolder.path)).textFieldStyle(.roundedBorder).disabled(true)
                 Button(languageService.s("select")) { selectFolder() }
             }
@@ -704,14 +708,27 @@ struct AddDownloadView: View {
                 Text(.init(languageService.s("additional_arguments_help")))
                     .font(.caption)
                     .foregroundColor(.secondary)
+                    .multilineTextAlignment(.leading)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
         .padding(.top, 8)
     }
 
     private func errorSection(_ error: String) -> some View {
-        HStack { Image(systemName: "exclamationmark.triangle.fill").foregroundColor(.red); Text(error).foregroundColor(.red) }
-        .padding().background(Color.red.opacity(0.1)).cornerRadius(8)
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundColor(.red)
+            Text(error)
+                .foregroundColor(.red)
+                .multilineTextAlignment(.leading)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(.horizontal, 18)
+        .padding(.vertical, 14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.red.opacity(0.1))
+        .cornerRadius(8)
     }
 
     private var footer: some View {
