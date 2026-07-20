@@ -58,6 +58,13 @@ struct ContentView: View {
         .onChange(of: showMenuBarIcon) { newValue in
             MenuBarManager.shared.setVisible(newValue)
         }
+        .alert(item: $downloadManager.ytdlpUpdateMessage) { status in
+            Alert(
+                title: Text(status.title),
+                message: Text(status.message),
+                dismissButton: .default(Text(languageService.s("ok")))
+            )
+        }
         .alert(languageService.s("update_available_title"), isPresented: $showUpdateAlert) {
             Button(languageService.s("update_now")) {
                 showPreferences = true

@@ -42,9 +42,10 @@ struct VeloXApp: App {
             CommandGroup(after: .appSettings) {
                 Button(languageService.s("ytdlp_update")) {
                     Task {
-                        await downloadManager.ytdlpService.updateYtdlp()
+                        await downloadManager.updateYtdlp()
                     }
                 }
+                .disabled(downloadManager.isUpdatingYtdlp)
             }
         }
         
