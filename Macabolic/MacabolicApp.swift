@@ -207,7 +207,7 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
         downloadTask.resume()
     }
     
-    nonisolated func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didWriteData bytesWritten: Int64, totalBytesWritten: Int64, totalBytesExpectedToWrite totalBytesExpectedToWrite: Int64) {
+    nonisolated func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didWriteData bytesWritten: Int64, totalBytesWritten: Int64, totalBytesExpectedToWrite: Int64) {
         Task { @MainActor in
             updateProgress = Double(totalBytesWritten) / Double(totalBytesExpectedToWrite)
         }
