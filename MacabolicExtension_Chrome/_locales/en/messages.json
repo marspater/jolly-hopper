@@ -1,14 +1,14 @@
 {
     "extension_name": {
-        "message": "Macabolic"
+        "message": "Siphon Extension"
     },
     "extension_description": {
-        "message": "Download videos with Macabolic"
+        "message": "Download videos with Siphon"
     },
     "context_download": {
-        "message": "Download with Macabolic"
+        "message": "Download with Siphon"
     },
     "context_fast_download": {
-        "message": "Fast Download (Most Compatible)"
+        "message": "Fast Download with Siphon"
     }
 }

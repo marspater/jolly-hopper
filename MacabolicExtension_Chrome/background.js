@@ -1,12 +1,12 @@
 chrome.runtime.onInstalled.addListener(() => {
     chrome.contextMenus.create({
-        id: "download-macabolic",
+        id: "download-siphon",
         title: chrome.i18n.getMessage("context_download"),
         contexts: ["link", "video", "page"]
     });
 
     chrome.contextMenus.create({
-        id: "fast-download-macabolic",
+        id: "fast-download-siphon",
         title: chrome.i18n.getMessage("context_fast_download"),
         contexts: ["link", "video"]
     });
@@ -17,16 +17,14 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
     if (!url) return;
 
     let host = "";
-    if (info.menuItemId === "download-macabolic") {
+    if (info.menuItemId === "download-siphon") {
         host = "download";
-    } else if (info.menuItemId === "fast-download-macabolic") {
+    } else if (info.menuItemId === "fast-download-siphon") {
         host = "fast-download";
     }
 
     if (host) {
-        const deepLink = `macabolic://${host}?url=${encodeURIComponent(url)}`;
-
-        // Daha güvenilir tetikleme: Mevcut sekmeyi güncellemek (sayfa değişmez, protokol tetiklenir)
+        const deepLink = `siphon://${host}?url=${encodeURIComponent(url)}`;
         chrome.tabs.update(tab.id, { url: deepLink });
     }
 });

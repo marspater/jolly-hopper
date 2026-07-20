@@ -82,3 +82,7 @@ dmg_stage/
 # Release Artifacts
 RELEASE_NOTES.md
 SOCIAL_MEDIA.md
+
+# Xcode DerivedData
+DerivedData/
+

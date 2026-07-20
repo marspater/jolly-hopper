@@ -61,7 +61,7 @@ class DownloadManager: ObservableObject {
             showDisclaimer = true
         }
 
-        let currentVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "3.1.0"
+        let currentVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "4.0.0"
         let lastSeenVersion = userDefaults.string(forKey: "lastSeenVersion_v3") ?? "0.0.0"
         
         if currentVersion != lastSeenVersion {
@@ -179,6 +179,7 @@ class DownloadManager: ObservableObject {
             objectWillChange.send()
             
 
+            LoggerService.shared.log("Starting download for URL: \(download.url)", level: .info)
             let outputPath = try await ytdlpService.download(
                 url: download.url,
                 options: download.options,
@@ -209,6 +210,7 @@ class DownloadManager: ObservableObject {
             download.progress = 1.0
             objectWillChange.send()
             
+            LoggerService.shared.log("Download completed successfully: \(download.title.isEmpty ? download.url : download.title)", level: .info)
 
             addToHistory(download)
             
@@ -224,25 +226,34 @@ class DownloadManager: ObservableObject {
                 switch error {
                 case .tooManyRequests:
                     download.errorMessage = lang.s("too_many_requests")
+                case .cloudflareBlocked:
+                    download.errorMessage = "Blocked by Cloudflare anti-bot protection. Please select your browser as cookie source in Settings > Advanced and try again."
                 case .subtitleError(let details):
                     download.errorMessage = String(format: lang.s("subtitle_download_failed"), details)
                 case .downloadFailed(let reason):
-                    download.errorMessage = String(format: lang.s("download_failed_error"), reason)
+                    if reason.contains("Cloudflare") || reason.contains("403") {
+                        download.errorMessage = "Blocked by Cloudflare. Please select your browser as cookie source in Settings > Advanced and try again."
+                    } else {
+                        download.errorMessage = String(format: lang.s("download_failed_error"), reason)
+                    }
                 default:
                     download.errorMessage = error.localizedDescription
                 }
                 
+                LoggerService.shared.log("Download failed (\(download.url)): \(download.errorMessage ?? error.localizedDescription)", level: .error)
                 // Send notification for failure
                 NotificationService.shared.sendDownloadFailed(filename: download.title.isEmpty ? download.url : download.title, languageService: lang)
                 
             } else {
                 download.errorMessage = error.localizedDescription
+                LoggerService.shared.log("Download failed (\(download.url)): \(error.localizedDescription)", level: .error)
             }
             addToHistory(download)
         } catch {
             download.status = .failed
             objectWillChange.send()
             download.errorMessage = error.localizedDescription
+            LoggerService.shared.log("Download failed with error (\(download.url)): \(error.localizedDescription)", level: .error)
             
             if let lang = languageService {
                 NotificationService.shared.sendDownloadFailed(filename: download.title.isEmpty ? download.url : download.title, languageService: lang)
