@@ -3,7 +3,7 @@ import UserNotifications
 
 class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     static let shared = NotificationService()
-    
+
     private var notificationCenter: UNUserNotificationCenter? {
         guard Bundle.main.bundleIdentifier != nil else {
             print("⚠️ Notifications unavailable: no bundle identifier")
@@ -11,7 +11,7 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         }
         return UNUserNotificationCenter.current()
     }
-    
+
     private override init() {
         super.init()
         // Set ourselves as the delegate so notifications show even when app is in foreground
@@ -19,7 +19,7 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
             center.delegate = self
         }
     }
-    
+
     // This delegate method allows notifications to be shown even when the app is in the foreground
     func userNotificationCenter(
         _ center: UNUserNotificationCenter,
@@ -29,7 +29,7 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         // Show banner and play sound even when app is active
         completionHandler([.banner, .sound])
     }
-    
+
     func requestPermission() {
         guard let center = notificationCenter else { return }
         center.requestAuthorization(options: [.alert, .sound, .badge]) { granted, error in
@@ -42,19 +42,19 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
             }
         }
     }
-    
+
     func sendDownloadCompleted(filename: String, languageService: LanguageService) {
         guard UserDefaults.standard.object(forKey: "showNotifications") as? Bool ?? true else {
             print("⚠️ Notifications disabled by user setting")
             return
         }
         guard let center = notificationCenter else { return }
-        
+
         let content = UNMutableNotificationContent()
         content.title = languageService.s("download_completed_title")
         content.body = String(format: languageService.s("download_completed_body"), filename)
         content.sound = .default
-        
+
         let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
         center.add(request) { error in
             if let error = error {
@@ -64,19 +64,19 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
             }
         }
     }
-    
+
     func sendDownloadFailed(filename: String, languageService: LanguageService) {
         guard UserDefaults.standard.object(forKey: "showNotifications") as? Bool ?? true else {
             print("⚠️ Notifications disabled by user setting")
             return
         }
         guard let center = notificationCenter else { return }
-        
+
         let content = UNMutableNotificationContent()
         content.title = languageService.s("download_failed_title")
         content.body = String(format: languageService.s("download_failed_body"), filename)
         content.sound = .default
-        
+
         let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
         center.add(request) { error in
             if let error = error {
@@ -86,4 +86,32 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
             }
         }
     }
+    func sendYtdlpUpdateSucceeded(version: String) {
+        sendYtdlpUpdateNotification(title: "yt-dlp Updated", body: "Installed yt-dlp version \(version).")
+    }
+
+    func sendYtdlpUpdateFailed(reason: String) {
+        sendYtdlpUpdateNotification(title: "yt-dlp Update Failed", body: reason)
+    }
+
+    private func sendYtdlpUpdateNotification(title: String, body: String) {
+        guard UserDefaults.standard.object(forKey: "showNotifications") as? Bool ?? true else {
+            print("⚠️ Notifications disabled by user setting")
+            return
+        }
+        guard let center = notificationCenter else { return }
+
+        let content = UNMutableNotificationContent()
+        content.title = title
+        content.body = body
+        content.sound = .default
+
+        let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
+        center.add(request) { error in
+            if let error = error {
+                print("❌ yt-dlp update notification send error: \(error.localizedDescription)")
+            }
+        }
+    }
+
 }
