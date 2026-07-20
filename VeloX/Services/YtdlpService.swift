@@ -12,6 +12,7 @@ class YtdlpService: ObservableObject {
     
     private var ytdlpPath: URL?
     private var ffmpegPath: URL?
+    private var ffprobePath: URL?
     private let localVersion = "1.5.5"
     private let bundledYtdlpName = "yt-dlp_macos"
     
@@ -117,33 +118,111 @@ class YtdlpService: ObservableObject {
         let appSupport = getAppSupportDirectory()
         let ffmpegInSupport = appSupport.appendingPathComponent("ffmpeg")
         let ffprobeInSupport = appSupport.appendingPathComponent("ffprobe")
-        
-        let systemFfmpegPaths = [
-            "/opt/homebrew/bin/ffmpeg",
-            "/usr/local/bin/ffmpeg",
-            "/usr/bin/ffmpeg"
+
+        ffmpegPath = nil
+        ffprobePath = nil
+
+        let bundledFfmpeg = Bundle.main.url(forResource: "ffmpeg", withExtension: nil)
+        let bundledFfprobe = Bundle.main.url(forResource: "ffprobe", withExtension: nil)
+        if let bundledFfmpeg,
+           let bundledFfprobe,
+           await validateFfmpegPair(ffmpeg: bundledFfmpeg, ffprobe: bundledFfprobe, context: "bundled") {
+            setFfmpegPaths(ffmpeg: bundledFfmpeg, ffprobe: bundledFfprobe, source: "bundled")
+            return
+        } else if bundledFfmpeg != nil || bundledFfprobe != nil {
+            LoggerService.shared.log("Bundled FFmpeg/FFprobe pair is incomplete or invalid; repairing app-support binaries.", level: .warning)
+            await repairAppSupportFfmpegPair(ffmpeg: ffmpegInSupport, ffprobe: ffprobeInSupport)
+        }
+
+        if await validateFfmpegPair(ffmpeg: ffmpegInSupport, ffprobe: ffprobeInSupport, context: "app-support") {
+            setFfmpegPaths(ffmpeg: ffmpegInSupport, ffprobe: ffprobeInSupport, source: "app-support")
+            return
+        }
+
+        await repairAppSupportFfmpegPair(ffmpeg: ffmpegInSupport, ffprobe: ffprobeInSupport)
+        if await validateFfmpegPair(ffmpeg: ffmpegInSupport, ffprobe: ffprobeInSupport, context: "app-support repaired") {
+            setFfmpegPaths(ffmpeg: ffmpegInSupport, ffprobe: ffprobeInSupport, source: "app-support repaired")
+            return
+        }
+
+        let systemDirectories = [
+            "/opt/homebrew/bin",
+            "/usr/local/bin",
+            "/usr/bin"
         ]
-        
-        var foundSystemPath: URL? = nil
-        for path in systemFfmpegPaths {
-            if FileManager.default.fileExists(atPath: path) {
-                foundSystemPath = URL(fileURLWithPath: path)
-                break
+
+        for directory in systemDirectories {
+            let ffmpeg = URL(fileURLWithPath: directory).appendingPathComponent("ffmpeg")
+            let ffprobe = URL(fileURLWithPath: directory).appendingPathComponent("ffprobe")
+            if await validateFfmpegPair(ffmpeg: ffmpeg, ffprobe: ffprobe, context: "system") {
+                setFfmpegPaths(ffmpeg: ffmpeg, ffprobe: ffprobe, source: "system")
+                return
             }
         }
-        
-        if FileManager.default.fileExists(atPath: ffmpegInSupport.path) {
-            ffmpegPath = ffmpegInSupport
-        } else if let sysFfmpeg = foundSystemPath {
-            ffmpegPath = sysFfmpeg
+
+        LoggerService.shared.log("FFmpeg installation failed. Attempted path: \(appSupport.path)", level: .error)
+    }
+
+    private func repairAppSupportFfmpegPair(ffmpeg: URL, ffprobe: URL) async {
+        if !isExecutableBinary(at: ffmpeg) || !isExecutableBinary(at: ffprobe) {
+            LoggerService.shared.log("Downloading or repairing FFmpeg and FFprobe in \(ffmpeg.deletingLastPathComponent().path)", level: .info)
+            await downloadFfmpeg()
+            await downloadFfprobe()
         }
-        
-        if ffmpegPath == nil || !FileManager.default.fileExists(atPath: ffprobeInSupport.path) {
-            if foundSystemPath == nil {
-                await downloadFfmpeg()
-                await downloadFfprobe()
-            }
+    }
+
+    private func isExecutableBinary(at url: URL) -> Bool {
+        FileManager.default.fileExists(atPath: url.path) && FileManager.default.isExecutableFile(atPath: url.path)
+    }
+
+    private func validateBinary(_ url: URL, name: String, context: String) async -> Bool {
+        guard isExecutableBinary(at: url) else {
+            LoggerService.shared.log("\(name) at \(url.path) is missing or not executable for \(context).", level: .warning)
+            return false
         }
+
+        do {
+            _ = try await runCommandAsync([url.path, "-version"])
+            LoggerService.shared.log("Validated \(name) at \(url.path) for \(context).", level: .info)
+            return true
+        } catch {
+            LoggerService.shared.log("Failed to validate \(name) at \(url.path) for \(context): \(error.localizedDescription)", level: .error)
+            return false
+        }
+    }
+
+    private func validateFfmpegPair(ffmpeg: URL, ffprobe: URL, context: String) async -> Bool {
+        let ffmpegValid = await validateBinary(ffmpeg, name: "FFmpeg", context: context)
+        let ffprobeValid = await validateBinary(ffprobe, name: "FFprobe", context: context)
+        return ffmpegValid && ffprobeValid
+    }
+
+    private func setFfmpegPaths(ffmpeg: URL, ffprobe: URL, source: String) {
+        ffmpegPath = ffmpeg
+        ffprobePath = ffprobe
+        LoggerService.shared.log("Selected \(source) FFmpeg path: \(ffmpeg.path)", level: .info)
+        LoggerService.shared.log("Selected \(source) FFprobe path: \(ffprobe.path)", level: .info)
+    }
+
+    private func validatedFfmpegLocationForYtdlp() async throws -> URL {
+        if let ffmpeg = ffmpegPath,
+           let ffprobe = ffprobePath,
+           await validateFfmpegPair(ffmpeg: ffmpeg, ffprobe: ffprobe, context: "yt-dlp") {
+            setFfmpegPaths(ffmpeg: ffmpeg, ffprobe: ffprobe, source: "yt-dlp")
+            return ffmpeg
+        }
+
+        await findFfmpeg()
+
+        guard let ffmpeg = ffmpegPath,
+              let ffprobe = ffprobePath,
+              await validateFfmpegPair(ffmpeg: ffmpeg, ffprobe: ffprobe, context: "yt-dlp") else {
+            let attemptedPath = getAppSupportDirectory().path
+            throw YtdlpError.ffmpegInstallationFailed(attemptedPath)
+        }
+
+        setFfmpegPaths(ffmpeg: ffmpeg, ffprobe: ffprobe, source: "yt-dlp")
+        return ffmpeg
     }
 
     func downloadFfmpeg() async {
@@ -170,8 +249,10 @@ class YtdlpService: ObservableObject {
             
             if FileManager.default.fileExists(atPath: ffmpegDest.path) {
                 try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: ffmpegDest.path)
-                ffmpegPath = ffmpegDest
-                LoggerService.shared.log("FFmpeg updated and verified.", level: .info)
+                if await validateBinary(ffmpegDest, name: "FFmpeg", context: "download") {
+                    ffmpegPath = ffmpegDest
+                    LoggerService.shared.log("FFmpeg downloaded and validated at \(ffmpegDest.path).", level: .info)
+                }
             }
             try? FileManager.default.removeItem(at: destinationZip)
         } catch {
@@ -203,7 +284,10 @@ class YtdlpService: ObservableObject {
             
             if FileManager.default.fileExists(atPath: ffprobeDest.path) {
                 try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: ffprobeDest.path)
-                LoggerService.shared.log("FFprobe updated and verified.", level: .info)
+                if await validateBinary(ffprobeDest, name: "FFprobe", context: "download") {
+                    ffprobePath = ffprobeDest
+                    LoggerService.shared.log("FFprobe downloaded and validated at \(ffprobeDest.path).", level: .info)
+                }
             }
             try? FileManager.default.removeItem(at: destinationZip)
         } catch {
@@ -409,19 +493,11 @@ class YtdlpService: ObservableObject {
         var args = [path.path]
         args.append("--no-playlist")
         
-        if ffmpegPath == nil || !FileManager.default.fileExists(atPath: ffmpegPath?.path ?? "") {
-            await findFfmpeg()
-        }
-        
-        if let ffmpeg = ffmpegPath, FileManager.default.fileExists(atPath: ffmpeg.path) {
-            args.append(contentsOf: ["--ffmpeg-location", ffmpeg.path])
-        } else if FileManager.default.fileExists(atPath: "/opt/homebrew/bin/ffmpeg") {
-            args.append(contentsOf: ["--ffmpeg-location", "/opt/homebrew/bin/ffmpeg"])
-        } else if FileManager.default.fileExists(atPath: "/usr/local/bin/ffmpeg") {
-            args.append(contentsOf: ["--ffmpeg-location", "/usr/local/bin/ffmpeg"])
-        } else {
-            let appSupport = getAppSupportDirectory()
-            args.append(contentsOf: ["--ffmpeg-location", appSupport.path])
+        let ffmpeg = try await validatedFfmpegLocationForYtdlp()
+        args.append(contentsOf: ["--ffmpeg-location", ffmpeg.path])
+        LoggerService.shared.log("Passing FFmpeg location to yt-dlp: \(ffmpeg.path)", level: .info)
+        if let ffprobe = ffprobePath {
+            LoggerService.shared.log("Validated FFprobe available for yt-dlp: \(ffprobe.path)", level: .info)
         }
         args.append(contentsOf: ["--paths", "temp:/tmp"])
         
@@ -961,6 +1037,7 @@ enum YtdlpError: LocalizedError {
     case tooManyRequests
     case subtitleError(String)
     case cloudflareBlocked
+    case ffmpegInstallationFailed(String)
     
     var errorDescription: String? {
         switch self {
@@ -978,6 +1055,8 @@ enum YtdlpError: LocalizedError {
             return "Subtitle error: \(output)"
         case .cloudflareBlocked:
             return "Blocked by Cloudflare anti-bot protection. Please select your browser as cookie source in Settings > Advanced and try again."
+        case .ffmpegInstallationFailed(let path):
+            return "FFmpeg installation failed. Please try updating dependencies again. Attempted path: \(path)"
         }
     }
 }
