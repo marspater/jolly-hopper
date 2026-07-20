@@ -717,6 +717,7 @@ class YtdlpService: ObservableObject {
         onOutput: @escaping (String) -> Void
     ) async throws -> String {
         return try await withCheckedThrowingContinuation { continuation in
+            // Keep a single Process instance so callers can cancel the configured download process.
             let process = Process()
             let outputPipe = Pipe()
             let errorPipe = Pipe()
