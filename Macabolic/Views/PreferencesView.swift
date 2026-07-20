@@ -28,6 +28,8 @@ struct PreferencesView: View {
     @State private var showLanguageChangeAlert = false
     @State private var previousLanguage: Language? = nil
     @State private var installedBrowsers: [SupportedBrowser] = []
+    @StateObject private var logger = LoggerService.shared
+    @State private var showDebugLogsSheet = false
     @State private var customPresets: [CustomPreset] = []
     @State private var showCreatePresetSheet = false
     @State private var newPresetName = ""
@@ -173,7 +175,6 @@ struct PreferencesView: View {
     private var generalTab: some View {
         Form {
             themeSection
-            languageSection
             saveFolderSection
             launchAtLoginSection
             appUpdatesSection
@@ -224,20 +225,10 @@ struct PreferencesView: View {
         }
     }
 
-    private var languageSection: some View {
-        Section(languageService.s("language")) {
-            Picker(languageService.s("language"), selection: $languageService.selectedLanguage) {
-                ForEach(Language.allCases) { lang in
-                    Text(lang.displayName).tag(lang)
-                }
-            }
-        }
-    }
-
     private var saveFolderSection: some View {
         Section(languageService.s("save_folder")) {
             HStack {
-                TextField(languageService.s("save_folder"), text: .constant(defaultSaveFolder.isEmpty ? (languageService.selectedLanguage == .turkish ? "İndirilenler" : "Downloads") : defaultSaveFolder))
+                TextField(languageService.s("save_folder"), text: .constant(defaultSaveFolder.isEmpty ? "Downloads" : defaultSaveFolder))
                     .textFieldStyle(.roundedBorder)
                     .disabled(true)
                 
@@ -761,9 +752,75 @@ struct PreferencesView: View {
             
             ytdlpUpdateSection
             browserCookiesSection
+            debugLogsSection
         }
         .macabolicFormStyle()
         .padding()
+        .sheet(isPresented: $showDebugLogsSheet) {
+            debugLogsSheet
+        }
+    }
+
+    private var debugLogsSection: some View {
+        Section("Debugging & Logs") {
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Application & Download Logs")
+                        .fontWeight(.medium)
+                    Text("View or export debug logs to report issues.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                Spacer()
+                Button("View Debug Logs") {
+                    showDebugLogsSheet = true
+                }
+            }
+        }
+    }
+    
+    private var debugLogsSheet: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("Debug Logs")
+                    .font(.headline)
+                Spacer()
+                Button("Close") {
+                    showDebugLogsSheet = false
+                }
+                .keyboardShortcut(.cancelAction)
+            }
+            
+            ScrollView {
+                Text(logger.logs.joined(separator: "\n").isEmpty ? "No logs available." : logger.logs.joined(separator: "\n"))
+                    .font(.system(.caption, design: .monospaced))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .textSelection(.enabled)
+                    .padding(8)
+            }
+            .background(Color(NSColor.textBackgroundColor))
+            .cornerRadius(6)
+            
+            HStack {
+                Button("Copy All") {
+                    let pasteboard = NSPasteboard.general
+                    pasteboard.clearContents()
+                    pasteboard.setString(logger.logs.joined(separator: "\n"), forType: .string)
+                }
+                
+                Button("Clear Logs") {
+                    logger.clearLogs()
+                }
+                
+                Spacer()
+                
+                Button("Show in Finder") {
+                    NSWorkspace.shared.activateFileViewerSelecting([logger.exportLogs()])
+                }
+            }
+        }
+        .padding()
+        .frame(width: 650, height: 450)
     }
 
     private var ytdlpUpdateSection: some View {
@@ -844,11 +901,11 @@ struct PreferencesView: View {
                     .resizable()
                     .frame(width: 80, height: 80)
                 
-                Text("Macabolic")
+                Text("VeloX Pro")
                     .font(.title)
                     .fontWeight(.bold)
                 
-                Text(languageService.s("version") + " \(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "3.1.0")")
+                Text(languageService.s("version") + " \(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "4.0.0")")
                     .font(.subheadline)
                     .foregroundColor(.secondary)
                 
@@ -865,15 +922,9 @@ struct PreferencesView: View {
                 GroupBox(languageService.s("credits")) {
                     VStack(alignment: .leading, spacing: 8) {
                         HStack {
-                            Text(languageService.s("original_project") + ":")
+                            Text("Project Owner:")
                             Spacer()
-                            Link("Parabolic by Nickvision", destination: URL(string: "https://github.com/NickvisionApps/Parabolic")!)
-                                .font(.caption)
-                        }
-                        HStack {
-                            Text(languageService.s("macos_port") + ":")
-                            Spacer()
-                            Text("alinuxpengui")
+                            Text("marspater")
                                 .font(.caption)
                         }
                         HStack {
@@ -881,27 +932,6 @@ struct PreferencesView: View {
                             Spacer()
                             Link("yt-dlp", destination: URL(string: "https://github.com/yt-dlp/yt-dlp")!)
                                 .font(.caption)
-                        }
-                        
-                        Divider()
-                            .padding(.vertical, 4)
-                        
-                        HStack {
-                            Text(languageService.s("special_thanks") + ":")
-                            Spacer()
-                            Link("Neonapple", destination: URL(string: "https://github.com/Neonapple")!)
-                                .font(.caption)
-                        }
-                        
-                        HStack {
-                            Text(languageService.s("first_sponsor") + ":")
-                            Spacer()
-                            VStack(alignment: .trailing, spacing: 4) {
-                                Link("Iman Montajabi", destination: URL(string: "https://github.com/ImanMontajabi")!)
-                                    .font(.caption)
-                                Link("Semmelstulle", destination: URL(string: "https://github.com/Semmelstulle")!)
-                                    .font(.caption)
-                            }
                         }
                     }
                     .padding(.vertical, 4)
@@ -934,7 +964,7 @@ struct PreferencesView: View {
                 .padding(.horizontal, 20)
                 
                 HStack(spacing: 16) {
-                    Link(destination: URL(string: "https://github.com/alinuxpengui/Macabolic")!) {
+                    Link(destination: URL(string: "https://github.com/marspater/jolly-hopper")!) {
                         Label("GitHub", systemImage: "link")
                     }
                     Link(destination: URL(string: "https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md")!) {
@@ -943,7 +973,7 @@ struct PreferencesView: View {
                 }
                 .font(.caption)
                 
-                Text("© 2026 alinuxpengui")
+                Text("© 2026 marspater")
                     .font(.caption2)
                     .foregroundColor(.secondary)
             }

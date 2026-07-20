@@ -1,4 +1,6 @@
 import Foundation
+import JavaScriptCore
+
 
 
 @MainActor
@@ -56,47 +58,91 @@ class YtdlpService: ObservableObject {
 
     func downloadYtdlp() async {
         isUpdating = true
-        updateProgress = 0
+        updateProgress = 0.1
         
         let downloadURL = URL(string: "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_macos")!
         let appSupport = getAppSupportDirectory()
         let destination = appSupport.appendingPathComponent("yt-dlp")
+        let tempDestination = appSupport.appendingPathComponent("yt-dlp.tmp_\(UUID().uuidString)")
+        
+        LoggerService.shared.log("Safely updating yt-dlp binary from \(downloadURL)", level: .info)
         
         do {
             try FileManager.default.createDirectory(at: appSupport, withIntermediateDirectories: true)
-            let (tempURL, _) = try await URLSession.shared.download(from: downloadURL)
-            if FileManager.default.fileExists(atPath: destination.path) {
-                try FileManager.default.removeItem(at: destination)
-            }
-            try FileManager.default.moveItem(at: tempURL, to: destination)
-            try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: destination.path)
+            let (downloadedTempURL, _) = try await URLSession.shared.download(from: downloadURL)
             
-            ytdlpPath = destination
-            isAvailable = true
-            await getVersion()
+            if FileManager.default.fileExists(atPath: tempDestination.path) {
+                try FileManager.default.removeItem(at: tempDestination)
+            }
+            try FileManager.default.moveItem(at: downloadedTempURL, to: tempDestination)
+            try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: tempDestination.path)
+            
+            // Verify binary execution before replacing target
+            let testProcess = Process()
+            testProcess.executableURL = tempDestination
+            testProcess.arguments = ["--version"]
+            let pipe = Pipe()
+            testProcess.standardOutput = pipe
+            testProcess.standardError = pipe
+            
+            try testProcess.run()
+            testProcess.waitUntilExit()
+            
+            if testProcess.terminationStatus == 0 {
+                if FileManager.default.fileExists(atPath: destination.path) {
+                    try FileManager.default.removeItem(at: destination)
+                }
+                try FileManager.default.moveItem(at: tempDestination, to: destination)
+                ytdlpPath = destination
+                isAvailable = true
+                await getVersion()
+                LoggerService.shared.log("yt-dlp updated successfully to version \(version ?? "unknown")", level: .info)
+            } else {
+                let errData = pipe.fileHandleForReading.readDataToEndOfFile()
+                let errStr = String(data: errData, encoding: .utf8) ?? ""
+                LoggerService.shared.log("yt-dlp update validation failed: \(errStr)", level: .error)
+                try? FileManager.default.removeItem(at: tempDestination)
+            }
         } catch {
-            print("yt-dlp indirme hatası: \(error)")
-            isAvailable = false
+            LoggerService.shared.log("Failed to update yt-dlp: \(error.localizedDescription)", level: .error)
+            try? FileManager.default.removeItem(at: tempDestination)
+            isAvailable = FileManager.default.fileExists(atPath: destination.path)
         }
         
+        updateProgress = 1.0
         isUpdating = false
     }
-
-
 
     func findFfmpeg() async {
         let appSupport = getAppSupportDirectory()
         let ffmpegInSupport = appSupport.appendingPathComponent("ffmpeg")
         let ffprobeInSupport = appSupport.appendingPathComponent("ffprobe")
         
-        if FileManager.default.fileExists(atPath: ffmpegInSupport.path) {
-            ffmpegPath = ffmpegInSupport
+        let systemFfmpegPaths = [
+            "/opt/homebrew/bin/ffmpeg",
+            "/usr/local/bin/ffmpeg",
+            "/usr/bin/ffmpeg"
+        ]
+        
+        var foundSystemPath: URL? = nil
+        for path in systemFfmpegPaths {
+            if FileManager.default.fileExists(atPath: path) {
+                foundSystemPath = URL(fileURLWithPath: path)
+                break
+            }
         }
         
-        if !FileManager.default.fileExists(atPath: ffmpegInSupport.path) || 
-           !FileManager.default.fileExists(atPath: ffprobeInSupport.path) {
-            await downloadFfmpeg()
-            await downloadFfprobe()
+        if FileManager.default.fileExists(atPath: ffmpegInSupport.path) {
+            ffmpegPath = ffmpegInSupport
+        } else if let sysFfmpeg = foundSystemPath {
+            ffmpegPath = sysFfmpeg
+        }
+        
+        if ffmpegPath == nil || !FileManager.default.fileExists(atPath: ffprobeInSupport.path) {
+            if foundSystemPath == nil {
+                await downloadFfmpeg()
+                await downloadFfprobe()
+            }
         }
     }
 
@@ -105,6 +151,8 @@ class YtdlpService: ObservableObject {
         let appSupport = getAppSupportDirectory()
         let destinationZip = appSupport.appendingPathComponent("ffmpeg.zip")
         let ffmpegDest = appSupport.appendingPathComponent("ffmpeg")
+        
+        LoggerService.shared.log("Safely updating FFmpeg from \(ffmpegURL)", level: .info)
         
         do {
             try FileManager.default.createDirectory(at: appSupport, withIntermediateDirectories: true)
@@ -123,10 +171,11 @@ class YtdlpService: ObservableObject {
             if FileManager.default.fileExists(atPath: ffmpegDest.path) {
                 try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: ffmpegDest.path)
                 ffmpegPath = ffmpegDest
+                LoggerService.shared.log("FFmpeg updated and verified.", level: .info)
             }
             try? FileManager.default.removeItem(at: destinationZip)
         } catch {
-            print("FFmpeg indirme hatası: \(error)")
+            LoggerService.shared.log("Failed to download FFmpeg: \(error.localizedDescription)", level: .error)
         }
     }
 
@@ -135,6 +184,8 @@ class YtdlpService: ObservableObject {
         let appSupport = getAppSupportDirectory()
         let destinationZip = appSupport.appendingPathComponent("ffprobe.zip")
         let ffprobeDest = appSupport.appendingPathComponent("ffprobe")
+        
+        LoggerService.shared.log("Safely updating FFprobe from \(ffprobeURL)", level: .info)
         
         do {
             try FileManager.default.createDirectory(at: appSupport, withIntermediateDirectories: true)
@@ -152,11 +203,18 @@ class YtdlpService: ObservableObject {
             
             if FileManager.default.fileExists(atPath: ffprobeDest.path) {
                 try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: ffprobeDest.path)
+                LoggerService.shared.log("FFprobe updated and verified.", level: .info)
             }
             try? FileManager.default.removeItem(at: destinationZip)
         } catch {
-            print("FFprobe indirme hatası: \(error)")
+            LoggerService.shared.log("Failed to download FFprobe: \(error.localizedDescription)", level: .error)
         }
+    }
+    
+    func updateAllDependencies() async {
+        await downloadYtdlp()
+        await downloadFfmpeg()
+        await downloadFfprobe()
     }
     
 
@@ -205,8 +263,24 @@ class YtdlpService: ObservableObject {
         
         appendCookieArgs(to: &args)
 
+        // Handle Sucuri bypass
+        var tempCookieFile: URL? = nil
+        if let sucuriCookie = await resolveSucuriCookie(for: url) {
+            if let tempFile = createTempCookiesFile(url: url, cookieName: sucuriCookie.name, cookieValue: sucuriCookie.value) {
+                tempCookieFile = tempFile
+                args.append(contentsOf: ["--cookies", tempFile.path])
+                args.append(contentsOf: ["--user-agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"])
+            }
+        }
         
+        appendSiteSpecificArgs(for: url, to: &args)
         args.append(url)
+        
+        defer {
+            if let fileURL = tempCookieFile {
+                try? FileManager.default.removeItem(at: fileURL)
+            }
+        }
         
         let output = try await runCommand(args)
         guard let data = output.data(using: .utf8) else { throw YtdlpError.parseError }
@@ -223,8 +297,24 @@ class YtdlpService: ObservableObject {
         
         appendCookieArgs(to: &args)
 
+        // Handle Sucuri bypass
+        var tempCookieFile: URL? = nil
+        if let sucuriCookie = await resolveSucuriCookie(for: url) {
+            if let tempFile = createTempCookiesFile(url: url, cookieName: sucuriCookie.name, cookieValue: sucuriCookie.value) {
+                tempCookieFile = tempFile
+                args.append(contentsOf: ["--cookies", tempFile.path])
+                args.append(contentsOf: ["--user-agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"])
+            }
+        }
         
+        args.append(contentsOf: ["--extractor-args", "generic:impersonate"])
         args.append(url)
+        
+        defer {
+            if let fileURL = tempCookieFile {
+                try? FileManager.default.removeItem(at: fileURL)
+            }
+        }
         
         let output = try await runCommand(args)
         guard let data = output.data(using: .utf8) else { throw YtdlpError.parseError }
@@ -232,7 +322,6 @@ class YtdlpService: ObservableObject {
         let decoder = JSONDecoder()
         
         var info = try decoder.decode(MediaInfo.self, from: data)
-        
         
         return MediaInfo(
             id: info.id,
@@ -269,8 +358,24 @@ class YtdlpService: ObservableObject {
         
         appendCookieArgs(to: &args)
 
+        // Handle Sucuri bypass
+        var tempCookieFile: URL? = nil
+        if let sucuriCookie = await resolveSucuriCookie(for: url) {
+            if let tempFile = createTempCookiesFile(url: url, cookieName: sucuriCookie.name, cookieValue: sucuriCookie.value) {
+                tempCookieFile = tempFile
+                args.append(contentsOf: ["--cookies", tempFile.path])
+                args.append(contentsOf: ["--user-agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"])
+            }
+        }
         
+        args.append(contentsOf: ["--extractor-args", "generic:impersonate"])
         args.append(url)
+        
+        defer {
+            if let fileURL = tempCookieFile {
+                try? FileManager.default.removeItem(at: fileURL)
+            }
+        }
         
         let output = try await runCommand(args)
         
@@ -304,8 +409,12 @@ class YtdlpService: ObservableObject {
         var args = [path.path]
         args.append("--no-playlist")
         
-        let appSupport = getAppSupportDirectory()
-        args.append(contentsOf: ["--ffmpeg-location", appSupport.path])
+        if let ffmpegLoc = ffmpegPath?.deletingLastPathComponent().path {
+            args.append(contentsOf: ["--ffmpeg-location", ffmpegLoc])
+        } else {
+            let appSupport = getAppSupportDirectory()
+            args.append(contentsOf: ["--ffmpeg-location", appSupport.path])
+        }
         args.append(contentsOf: ["--paths", "temp:/tmp"])
         
         let outputTemplate: String
@@ -316,10 +425,8 @@ class YtdlpService: ObservableObject {
         }
         args.append(contentsOf: ["-o", outputTemplate])
         
-
         args.append(contentsOf: buildFormatArgs(options: options))
         
-
         if options.downloadSubtitles && !options.subtitleLanguages.isEmpty {
             let subFormat = options.subtitleFormat?.ytdlpValue ?? "srt"
             args.append(contentsOf: ["--sub-format", "\(subFormat)/best"])
@@ -335,7 +442,6 @@ class YtdlpService: ObservableObject {
             }
         }
         
-
         if options.downloadThumbnail {
             args.append("--write-thumbnail")
         }
@@ -343,8 +449,6 @@ class YtdlpService: ObservableObject {
             args.append("--embed-thumbnail")
         }
         
-
-        // Neonapple feedback: Always embed metadata and chapters
         args.append("--embed-metadata")
         args.append("--embed-chapters")
         
@@ -352,12 +456,10 @@ class YtdlpService: ObservableObject {
             args.append("--split-chapters")
         }
         
-
         if options.sponsorBlock {
             args.append(contentsOf: ["--sponsorblock-remove", "all"])
         }
         
-
         if let start = options.timeFrameStart, let end = options.timeFrameEnd {
             args.append(contentsOf: ["--download-sections", "*\(start)-\(end)"])
         }
@@ -367,16 +469,23 @@ class YtdlpService: ObservableObject {
         }
         
         if let additionalArgs = options.additionalArguments, !additionalArgs.isEmpty {
-            // Robust parsing of additional arguments that respects quotes
             let customArgs = splitArguments(additionalArgs)
             args.append(contentsOf: customArgs)
         }
 
-
-        
         appendCookieArgs(to: &args)
 
+        // Handle Sucuri bypass
+        var tempCookieFile: URL? = nil
+        if let sucuriCookie = await resolveSucuriCookie(for: url) {
+            if let tempFile = createTempCookiesFile(url: url, cookieName: sucuriCookie.name, cookieValue: sucuriCookie.value) {
+                tempCookieFile = tempFile
+                args.append(contentsOf: ["--cookies", tempFile.path])
+                args.append(contentsOf: ["--user-agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"])
+            }
+        }
         
+        appendSiteSpecificArgs(for: url, to: &args)
 
         args.append("--newline")
         args.append("--progress-template")
@@ -384,9 +493,17 @@ class YtdlpService: ObservableObject {
         
         args.append(url)
         
-        // Neonapple feedback: Log the full command for debugging
         let fullCommand = args.map { $0.contains(" ") ? "\"\($0)\"" : $0 }.joined(separator: " ")
         onOutput("[COMMAND] \(fullCommand)\n")
+        Task { @MainActor in
+            LoggerService.shared.log(fullCommand, level: .command)
+        }
+        
+        defer {
+            if let fileURL = tempCookieFile {
+                try? FileManager.default.removeItem(at: fileURL)
+            }
+        }
         
         let outputPath = try await runDownloadProcess(
             args: args,
@@ -489,6 +606,40 @@ class YtdlpService: ObservableObject {
         let browser = UserDefaults.standard.string(forKey: "browserForCookies") ?? "none"
         if browser != "none" {
             args.append(contentsOf: ["--cookies-from-browser", browser])
+        }
+    }
+    
+    private func appendSiteSpecificArgs(for url: String, to args: inout [String]) {
+        let lowerUrl = url.lowercased()
+        
+        // Common modern browser headers & Cloudflare extraction options
+        let defaultUA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+        let secChUa = "\"Chromium\";v=\"124\", \"Google Chrome\";v=\"124\", \"Not-A.Brand\";v=\"99\""
+        
+        // Anti-bot flags for Cloudflare & rate limits
+        args.append(contentsOf: ["--user-agent", defaultUA])
+        args.append(contentsOf: ["--add-header", "Sec-Ch-Ua:\(secChUa)"])
+        args.append(contentsOf: ["--add-header", "Sec-Ch-Ua-Mobile:?0"])
+        args.append(contentsOf: ["--add-header", "Sec-Ch-Ua-Platform:\"macOS\""])
+        args.append(contentsOf: ["--add-header", "Accept-Language:en-US,en;q=0.9"])
+        
+        // Retries and socket timeouts
+        args.append(contentsOf: ["--retries", "10"])
+        args.append(contentsOf: ["--fragment-retries", "10"])
+        args.append(contentsOf: ["--socket-timeout", "15"])
+
+        if lowerUrl.contains("boyfriendtv.com") {
+            args.append(contentsOf: ["--add-header", "Referer:https://www.boyfriendtv.com/"])
+            args.append(contentsOf: ["--extractor-args", "generic:impersonate"])
+            args.append(contentsOf: ["--concurrent-fragments", "5"])
+        } else if lowerUrl.contains("justthegays.com") {
+            args.append(contentsOf: ["--add-header", "Referer:https://justthegays.com/"])
+            args.append(contentsOf: ["--extractor-args", "generic:impersonate"])
+        } else if lowerUrl.contains(".m3u8") || lowerUrl.contains(".mpd") {
+            args.append(contentsOf: ["--hls-use-mpegts"])
+            args.append(contentsOf: ["--concurrent-fragments", "5"])
+        } else {
+            args.append(contentsOf: ["--extractor-args", "generic:impersonate"])
         }
     }
 
@@ -650,7 +801,9 @@ class YtdlpService: ObservableObject {
                     if proc.terminationStatus == 0 {
                         continuation.resume(returning: outputPath)
                     } else {
-                        if errorOutput.contains("429") || errorOutput.contains("Too Many Requests") {
+                        if errorOutput.contains("Cloudflare") || (errorOutput.contains("403") && errorOutput.contains("anti-bot")) {
+                            continuation.resume(throwing: YtdlpError.cloudflareBlocked)
+                        } else if errorOutput.contains("429") || errorOutput.contains("Too Many Requests") {
                             continuation.resume(throwing: YtdlpError.tooManyRequests)
                         } else if errorOutput.contains("subtitle") || errorOutput.contains("caption") {
                             continuation.resume(throwing: YtdlpError.subtitleError(errorOutput))
@@ -676,7 +829,14 @@ class YtdlpService: ObservableObject {
     
     private func getAppSupportDirectory() -> URL {
         let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-        return appSupport.appendingPathComponent("Macabolic")
+        let veloxDir = appSupport.appendingPathComponent("VeloX")
+        let legacyDir = appSupport.appendingPathComponent("Macabolic")
+        
+        if !FileManager.default.fileExists(atPath: veloxDir.path) && FileManager.default.fileExists(atPath: legacyDir.path) {
+            try? FileManager.default.moveItem(at: legacyDir, to: veloxDir)
+        }
+        
+        return veloxDir
     }
 
     private func splitArguments(_ input: String) -> [String] {
@@ -715,6 +875,69 @@ class YtdlpService: ObservableObject {
         
         return result
     }
+
+    private func resolveSucuriCookie(for urlString: String) async -> (name: String, value: String)? {
+        guard let url = URL(string: urlString) else { return nil }
+        var request = URLRequest(url: url)
+        request.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36", forHTTPHeaderField: "User-Agent")
+        
+        do {
+            let (data, _) = try await URLSession.shared.data(for: request)
+            guard let htmlText = String(data: data, encoding: .utf8) else { return nil }
+            
+            if htmlText.contains("sucuri_cloudproxy_js") {
+                let pattern = "S\\s*=\\s*'([^']+)'"
+                let regex = try NSRegularExpression(pattern: pattern, options: [])
+                let nsRange = NSRange(htmlText.startIndex..<htmlText.endIndex, in: htmlText)
+                if let match = regex.firstMatch(in: htmlText, options: [], range: nsRange),
+                   let range = Range(match.range(at: 1), in: htmlText) {
+                    let b64Str = String(htmlText[range])
+                    if let decodedData = Data(base64Encoded: b64Str),
+                       let jsCode = String(data: decodedData, encoding: .utf8) {
+                        
+                        let context = JSContext()
+                        let docObj = JSValue(newObjectIn: context)
+                        context?.setObject(docObj, forKeyedSubscript: "document" as NSString)
+                        docObj?.setValue("", forProperty: "cookie")
+                        
+                        let locObj = JSValue(newObjectIn: context)
+                        context?.setObject(locObj, forKeyedSubscript: "location" as NSString)
+                        locObj?.setValue({ }, forProperty: "reload")
+                        
+                        context?.evaluateScript(jsCode)
+                        
+                        if let cookieVal = docObj?.forProperty("cookie")?.toString(), !cookieVal.isEmpty {
+                            let cookieParts = cookieVal.components(separatedBy: ";")
+                            if let firstPart = cookieParts.first {
+                                let nvParts = firstPart.components(separatedBy: "=")
+                                if nvParts.count == 2 {
+                                    let cookieName = nvParts[0].trimmingCharacters(in: .whitespaces)
+                                    let cookieValue = nvParts[1].trimmingCharacters(in: .whitespaces)
+                                    return (cookieName, cookieValue)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        } catch {
+            print("Error resolving Sucuri cookie: \(error)")
+        }
+        return nil
+    }
+
+    private func createTempCookiesFile(url: String, cookieName: String, cookieValue: String) -> URL? {
+        let tempCookiesURL = FileManager.default.temporaryDirectory.appendingPathComponent("macabolic_cookies_\(UUID().uuidString).txt")
+        let host = URL(string: url)?.host ?? ""
+        let cookieContent = "# Netscape HTTP Cookie File\n\(host)\tFALSE\t/\tFALSE\t2783382923\t\(cookieName)\t\(cookieValue)\n"
+        do {
+            try cookieContent.write(to: tempCookiesURL, atomically: true, encoding: .utf8)
+            return tempCookiesURL
+        } catch {
+            print("Error writing cookies file: \(error)")
+            return nil
+        }
+    }
 }
 
 
@@ -726,6 +949,7 @@ enum YtdlpError: LocalizedError {
     case downloadFailed(String)
     case tooManyRequests
     case subtitleError(String)
+    case cloudflareBlocked
     
     var errorDescription: String? {
         switch self {
@@ -741,6 +965,8 @@ enum YtdlpError: LocalizedError {
             return "429: Too Many Requests"
         case .subtitleError(let output):
             return "Subtitle error: \(output)"
+        case .cloudflareBlocked:
+            return "Blocked by Cloudflare anti-bot protection. Please select your browser as cookie source in Settings > Advanced and try again."
         }
     }
 }

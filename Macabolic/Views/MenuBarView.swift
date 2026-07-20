@@ -48,7 +48,7 @@ struct MenuBarView: View {
                 .resizable()
                 .frame(width: 28, height: 28)
             
-            Text("Macabolic")
+            Text("VeloX Pro")
                 .font(.system(size: 18, weight: .bold))
             
             Spacer()
@@ -58,13 +58,10 @@ struct MenuBarView: View {
                 // Restore dock icon when showing main window
                 NSApp.setActivationPolicy(.regular)
                 NSApp.activate(ignoringOtherApps: true)
-                // If the app has no window, we might need to show it via AppDelegate/App methods
                 if let window = NSApp.windows.first(where: { $0.isVisible && $0.className != "NSStatusBarWindow" }) {
                     window.makeKeyAndOrderFront(nil)
                 } else {
-                    // This is a bit tricky in SwiftUI without a reference to the window group, 
-                    // but usually openURL with macabolic:// triggers it.
-                    if let url = URL(string: "macabolic://show") {
+                    if let url = URL(string: "velox://show") {
                         NSWorkspace.shared.open(url)
                     }
                 }

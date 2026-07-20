@@ -227,7 +227,7 @@ struct HomeView: View {
                             }
                             
                             VStack(spacing: 8) {
-                                Text("Macabolic")
+                                Text("VeloX Pro")
                                     .font(.system(size: 48, weight: .black))
                                 
                                 Text(LocalizedStringKey(languageService.s("url_placeholder")))
@@ -299,11 +299,11 @@ struct HomeView: View {
         }
         .alert(languageService.s("whats_new_title"), isPresented: $downloadManager.showWhatsNew) {
             Button(languageService.s("star_github")) {
-                if let url = URL(string: "https://github.com/alinuxpengui/Macabolic") {
+                if let url = URL(string: "https://github.com/marspater/jolly-hopper") {
                     NSWorkspace.shared.open(url)
                 }
             }
-            Button(languageService.s("ok")) { }
+            Button("OK") { }
         } message: {
             Text(languageService.s("whats_new_message"))
         }
@@ -351,7 +351,7 @@ struct SponsorView: View {
     
     var body: some View {
         Button {
-            if let url = URL(string: "https://github.com/alinuxpengui/Macabolic") {
+            if let url = URL(string: "https://github.com/marspater/jolly-hopper") {
                 NSWorkspace.shared.open(url)
             }
         } label: {

@@ -1,14 +1,14 @@
 {
     "extension_name": {
-        "message": "Macabolic"
+        "message": "VeloX Pro Extension"
     },
     "extension_description": {
-        "message": "Download videos with Macabolic"
+        "message": "Download videos with VeloX Pro"
     },
     "context_download": {
-        "message": "Download with Macabolic"
+        "message": "Download with VeloX Pro"
     },
     "context_fast_download": {
-        "message": "Fast Download (Most Compatible)"
+        "message": "Fast Download with VeloX Pro"
     }
 }
