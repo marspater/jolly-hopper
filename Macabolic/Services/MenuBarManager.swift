@@ -32,7 +32,7 @@ class MenuBarManager: NSObject {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         
         if let button = statusItem?.button {
-            button.image = NSImage(systemSymbolName: "arrow.down.circle.fill", accessibilityDescription: "Macabolic")
+            button.image = NSImage(systemSymbolName: "arrow.down.circle.fill", accessibilityDescription: "VeloX Pro")
             button.action = #selector(togglePopover)
             button.target = self
         }

@@ -22,6 +22,7 @@
 		E0001021 /* LoginItemHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000021; };
 		E0001022 /* MenuBarManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000022; };
 		E0001023 /* MenuBarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000023; };
+		E0001024 /* LoggerService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000024; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -38,11 +39,11 @@
 		E0000012 /* Macabolic.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Macabolic.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		E0000013 /* Macabolic.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Macabolic.entitlements; sourceTree = "<group>"; };
 		E0000015 /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/InfoPlist.strings; sourceTree = "<group>"; };
-		E0000016 /* tr */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = tr; path = tr.lproj/InfoPlist.strings; sourceTree = "<group>"; };
 		E0000020 /* NotificationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationService.swift; sourceTree = "<group>"; };
 		E0000021 /* LoginItemHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginItemHelper.swift; sourceTree = "<group>"; };
 		E0000022 /* MenuBarManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarManager.swift; sourceTree = "<group>"; };
 		E0000023 /* MenuBarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarView.swift; sourceTree = "<group>"; };
+		E0000024 /* LoggerService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoggerService.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -101,6 +102,7 @@
 				E0000020 /* NotificationService.swift */,
 				E0000021 /* LoginItemHelper.swift */,
 				E0000022 /* MenuBarManager.swift */,
+				E0000024 /* LoggerService.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -231,6 +233,7 @@
 				E0001021 /* LoginItemHelper.swift in Sources */,
 				E0001022 /* MenuBarManager.swift in Sources */,
 				E0001023 /* MenuBarView.swift in Sources */,
+				E0001024 /* LoggerService.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -377,15 +380,15 @@
 						);
 					},
 				);
-				INFOPLIST_KEY_CFBundleDisplayName = Macabolic;
+				INFOPLIST_KEY_CFBundleDisplayName = "VeloX Pro";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
-				INFOPLIST_KEY_NSHumanReadableCopyright = "alinuxpengui • bytemeowster";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright © 2026 marspater. All rights reserved.";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 3.1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.bytemeowster.macabolic;
+				MARKETING_VERSION = 4.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.marspater.velox;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
@@ -410,19 +413,20 @@
 				INFOPLIST_KEY_CFBundleURLTypes = (
 					{
 						CFBundleURLSchemes = (
+							velox,
 							macabolic,
 						);
 					},
 				);
-				INFOPLIST_KEY_CFBundleDisplayName = Macabolic;
+				INFOPLIST_KEY_CFBundleDisplayName = "VeloX Pro";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
-				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright © 2026 bytemeowster";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright © 2026 marspater. All rights reserved.";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 3.1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.bytemeowster.macabolic;
+				MARKETING_VERSION = 4.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.marspater.velox;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;

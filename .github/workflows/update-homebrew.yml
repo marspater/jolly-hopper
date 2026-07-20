@@ -6,9 +6,9 @@ on:
   workflow_dispatch:
     inputs:
       tag_name:
-        description: 'Tag name to update (e.g. v2.4.1)'
+        description: 'Tag name to update (e.g. v4.0.0)'
         required: true
-        default: 'v2.4.1'
+        default: 'v4.0.0'
 
 jobs:
   update-tap:
@@ -17,9 +17,7 @@ jobs:
       - name: Extract version from tag
         id: version
         run: |
-          # Use input tag if available, otherwise use ref name
           TAG_NAME="${{ github.event.inputs.tag_name || github.ref_name }}"
-          # Remove 'v' prefix from tag name
           VERSION="${TAG_NAME#v}"
           echo "tag_name=$TAG_NAME" >> $GITHUB_OUTPUT
           echo "version=$VERSION" >> $GITHUB_OUTPUT
@@ -27,41 +25,34 @@ jobs:
       - name: Get release asset info
         id: asset
         run: |
-          # Get the DMG asset URL and download it to calculate SHA256
           TAG_NAME="${{ steps.version.outputs.tag_name }}"
-          ASSET_URL="https://github.com/alinuxpengui/Macabolic/releases/download/${TAG_NAME}/Macabolic-${TAG_NAME}.dmg"
+          ASSET_URL="https://github.com/marspater/jolly-hopper/releases/download/${TAG_NAME}/VeloX-${TAG_NAME}.dmg"
           
-          # Download and calculate SHA256
-          curl -sL "$ASSET_URL" -o macabolic.dmg
-          SHA256=$(sha256sum macabolic.dmg | cut -d' ' -f1)
+          curl -sL "$ASSET_URL" -o velox.dmg
+          SHA256=$(sha256sum velox.dmg | cut -d' ' -f1)
           echo "sha256=$SHA256" >> $GITHUB_OUTPUT
 
       - name: Checkout Homebrew Tap
         uses: actions/checkout@v4
         with:
-          repository: alinuxpengui/homebrew-macabolic
+          repository: marspater/homebrew-velox
           token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
           path: homebrew-tap
 
       - name: Update Cask formula
         run: |
           cd homebrew-tap
-          
-          # Update version
-          sed -i 's/version "[^"]*"/version "${{ steps.version.outputs.version }}"/' Casks/macabolic.rb
-          
-          # Update SHA256
-          sed -i 's/sha256 "[^"]*"/sha256 "${{ steps.asset.outputs.sha256 }}"/' Casks/macabolic.rb
+          sed -i 's/version "[^"]*"/version "${{ steps.version.outputs.version }}"/' Casks/velox-pro.rb
+          sed -i 's/sha256 "[^"]*"/sha256 "${{ steps.asset.outputs.sha256 }}"/' Casks/velox-pro.rb
 
       - name: Commit and push changes
         run: |
           cd homebrew-tap
           git config user.name "GitHub Actions Bot"
           git config user.email "actions@github.com"
-          git add Casks/macabolic.rb
-          # Only commit and push if there are changes
+          git add Casks/velox-pro.rb
           if ! git diff --cached --quiet; then
-            git commit -m "Update Macabolic to v${{ steps.version.outputs.version }}"
+            git commit -m "Update VeloX Pro to v${{ steps.version.outputs.version }}"
             git push
           else
             echo "No changes to commit"

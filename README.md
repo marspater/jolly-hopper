@@ -1,162 +1,62 @@
-# Macabolic 🚀
+# VeloX Pro ⚡️
 
-A modern, fast, and beautiful video downloader for macOS. Powered by `yt-dlp`.
+A high-performance, native macOS media extractor & downloader powered by `yt-dlp` and `FFmpeg`. Engineered with advanced anti-bot bypass mechanisms for Cloudflare and protected sites.
 
 <div align="center">
   <img src="Macabolic/Resources/Assets.xcassets/AppIcon.appiconset/icon_128x128.png" width="128" />
   <p>
-    <a href="https://github.com/alinuxpengui/Macabolic/releases/latest/download/Macabolic-v3.1.0.dmg">
-      <img src="https://img.shields.io/badge/Download-macOS-blue?style=for-the-badge&logo=apple&logoColor=white" alt="Download Macabolic for macOS" />
+    <a href="https://github.com/marspater/jolly-hopper/releases/latest">
+      <img src="https://img.shields.io/badge/Download-macOS-blue?style=for-the-badge&logo=apple&logoColor=white" alt="Download VeloX Pro for macOS" />
     </a>
-    <a href="https://github.com/alinuxpengui/homebrew-macabolic">
-      <img src="https://img.shields.io/badge/Homebrew-tap-FBB040?style=for-the-badge&logo=homebrew&logoColor=white" alt="Install via Homebrew" />
-    </a>
-    <a href="https://github.com/alinuxpengui/Macabolic/releases">
-      <img src="https://img.shields.io/github/downloads/alinuxpengui/Macabolic/total?style=for-the-badge&color=818cf8" alt="Total Downloads" />
-    </a>
-  </p>
-  <p>
-    <a href="https://mastodon.social/@macabolic_app">
-      <img src="https://img.shields.io/badge/Follow-Mastodon-2b90d9?style=for-the-badge&logo=mastodon&logoColor=white" alt="Follow on Mastodon" />
-    </a>
-    <a href="https://bsky.app/profile/macabolicapp.bsky.social">
-      <img src="https://img.shields.io/badge/Follow-Bluesky-0085ff?style=for-the-badge&logo=bluesky&logoColor=white" alt="Follow on Bluesky" />
-    </a>
-    <a href="https://x.com/macabolic_app">
-      <img src="https://img.shields.io/badge/Follow-X-black?style=for-the-badge&logo=x&logoColor=white" alt="Follow on X" />
+    <a href="https://github.com/marspater/jolly-hopper">
+      <img src="https://img.shields.io/badge/Repository-jolly--hopper-818cf8?style=for-the-badge&logo=github&logoColor=white" alt="GitHub Repository" />
     </a>
   </p>
 </div>
 
-Macabolic is a native macOS frontend for the powerful [yt-dlp](https://github.com/yt-dlp/yt-dlp) command-line tool. It allows you to download videos and audio from YouTube and thousands of other supported sites with ease.
-
-## Screenshots 📸
-
-<div align="center">
-  <table>
-    <tr>
-      <td width="50%"><img src="docs/screenshots/1.png" alt="Main Dashboard - Overview of all downloads" /></td>
-      <td width="50%"><img src="docs/screenshots/2.png" alt="Smart Download - Custom settings and options" /></td>
-    </tr>
-    <tr>
-      <td width="50%"><img src="docs/screenshots/3.png" alt="Advanced Preferences - Global application settings" /></td>
-      <td width="50%"><img src="docs/screenshots/4.png" alt="Custom Presets - Create and manage your own templates" /></td>
-    </tr>
-  </table>
-</div>
+VeloX Pro is a native macOS application built with Swift and SwiftUI. It provides an intuitive, powerful interface over `yt-dlp`, optimized for high speeds, multi-threaded fragment processing, and seamless anti-bot challenge solving.
 
 ---
 
-## Support My Journey ❤️
+## Key Features ⚡️
 
-**Note on Sponsorships:**  
-Direct financial support via GitHub Sponsors is currently disabled due to local tax and regulatory complexities. While I truly appreciate the generosity of everyone who wanted to contribute, the best way to support Macabolic right now is by **starring the repository**, reporting bugs, or sharing the project with the community. Thank you for understanding! 🙏
-
-### 🏆 The "First 5" Wall of Fame
-To show my gratitude, the **first 5 sponsors** of any amount will be **permanently featured** in the "About" section of the Macabolic app. Your name will be part of the app's history forever!
-
-1. [**Iman Montajabi**](https://github.com/ImanMontajabi) 🌟 (Our first ever sponsor!)
-2. [**Semmelstulle**](https://github.com/Semmelstulle) 🌟
-
----
-
-## Roadmap 🗺️
-
-Here is what I'm planning to bring to Macabolic in the near future:
-
-- [x] ~~**Browser Cookies Support:** Use cookies from your browser to bypass YouTube's bot detection and access age-restricted or private content.~~ ✅ (Completed in v2.2.0)
-- [x] ~~**Advanced Codec Default Settings & Presets:** Save and manage custom download presets with preferred codecs, resolutions, and audio quality settings.~~ ✅ (Completed in v2.2.0)
-- [x] ~~**Persistent History & Re-download:** Categorized completed/failed downloads that persist across sessions and easy re-downloading.~~ ✅ (Completed in v2.3.0)
-- [x] ~~**Notification Support:** Get notified instantly when downloads are finished.~~ ✅ (Completed in v3.0.0)
-- [x] ~~**Browser Extensions:** One-click download directly from Chrome and Firefox.~~ ✅ (Completed in v3.0.0)
-- [x] ~~**Menu Bar Integration:** Manage ind downloads from your menu bar.~~ ✅ (Completed in v3.0.0)
-- [ ] **Official Apple Notarization:** Removing the "Unidentified Developer" warning for a professional experience. (Waiting for the project to reach 1,000+ stars and a larger user base).
-- [ ] **Custom Post-Processing:** More tools to trim, convert, and manage your downloaded files.
+- **Advanced Anti-Bot Bypasses**: Automatic impersonation and full Chrome 124 Client Hints header emulation for Cloudflare-protected sites (e.g. BoyfriendTV, JustTheGays).
+- **Atomic Dependency Engine**: Safe, atomic, and self-testing updates for `yt-dlp`, `FFmpeg`, and `FFprobe`.
+- **Persistent Debug Logging**: In-app live log viewer and export (`~/Library/Application Support/VeloX/velox_debug.log`).
+- **macOS 27 SDK Ready**: Built for modern macOS 12+ with futuristic compatibility for upcoming macOS versions.
+- **Native macOS Interface**: Built with pure SwiftUI for a crisp dark/light native UI experience.
+- **Menu Bar App & Browser Extensions**: Launch downloads directly from your browser (Chrome & Firefox) or menu bar popover.
+- **Format & Codec Customization**: Smart presets, 4K/8K resolution support, audio extraction (MP3, FLAC, WAV, Opus), and SponsorBlock integration.
 
 ---
-
-## Features ✨
-
-- **Native macOS Experience:** Built with SwiftUI for a seamless look and feel.
-- **Menu Bar App:** Manage your downloads directly from the menu bar. 🆕
-- **Browser Extensions:** Start downloads with one click from Chrome and Firefox. 🆕
-- **Native Notifications:** Instant updates when downloads are finished. 🆕
-- **Vast Site Support:** Downloads from YouTube, Vimeo, Twitter, and [thousands more](https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md).
-- **Multiple Formats:** Support for MP4, WebM, MP3, Opus, FLAC, and WAV.
-- **High Quality:** Up to 4K (2160p) resolution support.
-- **Smart Features:**
-  - Embed subtitles, metadata, and thumbnails into your files.
-  - **SponsorBlock** integration to automatically skip sponsors and intros.
-  - Playlist downloading support.
-  - Concurrent download management.
-- **Multi-language:** Supports English and Turkish (automatically detects system language).
-- **Auto-Update:** Self-manages `yt-dlp` updates to ensure maximum compatibility.
 
 ## Installation 🚀
 
-### Option 1: Homebrew (Recommended)
-
+### Manual Download
+1. Download the latest release `.dmg` from the [Releases](https://github.com/marspater/jolly-hopper/releases) page.
+2. Drag **VeloX Pro** into your `/Applications` folder.
+3. If prompted by macOS Gatekeeper:
 ```bash
-brew tap alinuxpengui/macabolic
-brew install --cask macabolic
-xattr -cr /Applications/Macabolic.app
+xattr -cr /Applications/"VeloX Pro.app"
 ```
 
-### Option 2: Manual Download
-
-- **Download:** Download the latest `Macabolic-v3.0.0.dmg` from the [Releases](https://github.com/alinuxpengui/Macabolic/releases) page.
-- **Install:** Open the DMG file and drag **Macabolic** to your `Applications` folder.
-- **First Launch:** Since the app is not notarized, you have two options to open it:
-  - **Terminal Way:** Run the following command to remove the quarantine flag:
-```bash
-xattr -cr /Applications/Macabolic.app
-```
-  - **Other Way:** Right-click the app in your Applications folder and select Open, or go to System Settings > Privacy & Security and click Open Anyway.
-- **Initial Setup:** When the app opens, you will be greeted by a **Legal Disclaimer**. Please read and confirm it. Go to **Preferences (⌘,)** to set your **Language** and **Default Save Folder**.
-
-### Option 3: Browser Extensions 🌐
-
-#### Chrome / Brave / Edge:
-1. **Download:** [MacabolicExtension_Chrome.zip](https://github.com/alinuxpengui/Macabolic/releases/download/v3.0.0/MacabolicExtension_Chrome.zip) and unzip it.
-2. Go to `chrome://extensions/`
-3. Enable **"Developer mode"** (top right).
-4. Click **"Load unpacked"** and select the unzipped folder.
-
-#### Firefox:
-1. **Download:** [MacabolicExtension_Firefox.zip](https://github.com/alinuxpengui/Macabolic/releases/download/v3.0.0/MacabolicExtension_Firefox.zip) and unzip it.
-2. Go to `about:debugging#/runtime/this-firefox`
-3. Click **"Load Temporary Add-on..."**.
-4. Select the `manifest.json` file inside the unzipped folder.
-
-> 💡 **Usage:** Once installed, simply **right-click** on any video link or the page itself on supported sites (like YouTube) and select **"Download with Macabolic"** to start downloading immediately.
+### Browser Extensions 🌐
+- **Chrome / Brave / Edge**: Load `MacabolicExtension_Chrome` via `chrome://extensions` (Developer Mode > Load Unpacked).
+- **Firefox**: Load `MacabolicExtension_Firefox` via `about:debugging#/runtime/this-firefox`.
 
 ---
 
-## Build Requirements 🛠️
+## Technical Architecture 🛠️
 
-- macOS 12.0 or later (Monterey+)
-- Xcode 14.0 or later
-- Swift 5.7+
+- **Framework**: Swift 5.0, SwiftUI, AppKit
+- **Core Engine**: `yt-dlp` + `FFmpeg` / `FFprobe`
+- **Challenge Solvers**: `JavaScriptCore` runtime for Sucuri / JS cookie solving
+- **Target OS**: macOS 12.0+ (Monterey through macOS 27)
 
-## Credits ❤️
-
-- **Parabolic by Nickvision:** This project is a macOS-native port based on the original [Parabolic](https://github.com/NickvisionApps/Parabolic) application.
-- **yt-dlp:** The core engine that makes video downloading possible.
-
-## Legal Disclaimer ⚖️
-
-This tool is intended solely for personal use and educational or research purposes.
-Videos on YouTube and other sites may be subject to DMCA protection. The authors of Parabolic/Macabolic do not endorse, and are not responsible for, the use of this application in means that will violate these laws.
-Downloading videos from YouTube may violate their Terms of Service unless the video has an explicit download button or the content is licensed in a way that permits downloading.
-By using this app, you assume full responsibility for any content you download and how you use it. The developer does not condone or support any misuse of this tool to infringe upon copyrights or violate platform rules.
+---
 
 ## License ⚖️
 
 This project is licensed under the **GNU General Public License v3.0**. See the [LICENSE](LICENSE) file for details.
 
----
-**Maintained by [alinuxpengui](https://github.com/alinuxpengui)**
-
-## Star History
-
-[![Star History Chart](https://api.star-history.com/svg?repos=alinuxpengui/Macabolic&type=date&legend=top-left)](https://www.star-history.com/#alinuxpengui/Macabolic&type=date&legend=top-left)
+Maintained by **[marspater](https://github.com/marspater)**
