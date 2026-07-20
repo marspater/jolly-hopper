@@ -90,8 +90,6 @@ class LanguageService: ObservableObject {
         "whats_new_title": "VeloX Pro v4.0.0 - What's New? 🚀",
         "whats_new_message": "✨ New Features:\n• Cloudflare & Anti-Bot Bypasses: Seamlessly download from challenged sites like BoyfriendTV and JustTheGays.\n• macOS 27 Compatibility: Full support and optimization for the upcoming macOS 27 SDK.\n• Menu Bar App: Manage your downloads directly from the menu bar.\n• Chrome & Firefox Extension: Start downloads with one click from your browser.\n• Notification Support: Get notified instantly when downloads are finished.\n• Auto-launch: VeloX Pro is ready when your Mac starts.\n\n🔧 Other Important Changes:\n• Stability & Security: Secure handling and automated cleanup of temporary cookie files.\n• UI Improvements: Optimized home view layout and full-screen experience for large displays.",
         "star_github": "Star on GitHub",
-        "special_thanks_sidebar": "Special thanks to",
-        "for_support": "for their support.",
         "latest": "Latest",
         "original_project": "Original Project",
         "view_license": "View License",
