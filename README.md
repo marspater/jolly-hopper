@@ -3,7 +3,7 @@
 A high-performance, native macOS media extractor & downloader powered by `yt-dlp` and `FFmpeg`. Engineered with advanced anti-bot bypass mechanisms for Cloudflare and protected sites.
 
 <div align="center">
-  <img src="Macabolic/Resources/Assets.xcassets/AppIcon.appiconset/icon_128x128.png" width="128" />
+  <img src="VeloX/Resources/Assets.xcassets/AppIcon.appiconset/icon_128x128.png" width="128" />
   <p>
     <a href="https://github.com/marspater/jolly-hopper/releases/latest">
       <img src="https://img.shields.io/badge/Download-macOS-blue?style=for-the-badge&logo=apple&logoColor=white" alt="Download VeloX Pro for macOS" />
@@ -25,7 +25,7 @@ VeloX Pro is a native macOS application built with Swift and SwiftUI. It provide
 - **Persistent Debug Logging**: In-app live log viewer and export (`~/Library/Application Support/VeloX/velox_debug.log`).
 - **macOS 27 SDK Ready**: Built for modern macOS 12+ with futuristic compatibility for upcoming macOS versions.
 - **Native macOS Interface**: Built with pure SwiftUI for a crisp dark/light native UI experience.
-- **Menu Bar App & Browser Extensions**: Launch downloads directly from your browser (Chrome & Firefox) or menu bar popover.
+- **Menu Bar App & Browser Extensions**: Launch downloads directly from your browser (Chrome, Safari & Firefox) or menu bar popover.
 - **Format & Codec Customization**: Smart presets, 4K/8K resolution support, audio extraction (MP3, FLAC, WAV, Opus), and SponsorBlock integration.
 
 ---
@@ -41,8 +41,9 @@ xattr -cr /Applications/"VeloX Pro.app"
 ```
 
 ### Browser Extensions 🌐
-- **Chrome / Brave / Edge**: Load `MacabolicExtension_Chrome` via `chrome://extensions` (Developer Mode > Load Unpacked).
-- **Firefox**: Load `MacabolicExtension_Firefox` via `about:debugging#/runtime/this-firefox`.
+- **Chrome / Brave / Edge**: Load `VeloXExtension_Chrome` via `chrome://extensions` (Developer Mode > Load Unpacked).
+- **Safari**: Load `VeloXExtension_Safari` in Safari.
+- **Firefox**: Load `VeloXExtension_Firefox` via `about:debugging#/runtime/this-firefox`.
 
 ---
 

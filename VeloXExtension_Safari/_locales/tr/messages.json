@@ -1,0 +1,14 @@
+{
+    "appName": {
+        "message": "VeloX Pro"
+    },
+    "appDesc": {
+        "message": "Videoları VeloX Pro ile indir"
+    },
+    "downloadContext": {
+        "message": "VeloX Pro ile İndir"
+    },
+    "context_fast_download": {
+        "message": "Hızlı İndir (En Uyumlu)"
+    }
+}
