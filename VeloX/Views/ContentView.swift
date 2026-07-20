@@ -100,8 +100,6 @@ struct SidebarView: View {
                 
                 SponsorView()
                 
-                SocialShareView()
-
                 Button {
                     showPreferences = true
                 } label: {
@@ -388,110 +386,6 @@ struct SponsorView: View {
                 isHovered = hovering
             }
         }
-    }
-}
-
-struct SocialShareView: View {
-    @EnvironmentObject var languageService: LanguageService
-    @State private var isHovered = false
-    
-    var body: some View {
-        VStack(spacing: 0) {
-            // Popup Panel (Vertical List)
-            ZStack {
-                if isHovered {
-                    VStack(alignment: .leading, spacing: 2) {
-                        socialButton(title: "X (Twitter)", platform: .x)
-                        socialButton(title: "Mastodon", platform: .mastodon)
-                        socialButton(title: "Bluesky", platform: .bluesky)
-                        socialButton(title: "Threads", platform: .threads)
-                    }
-                    .padding(6)
-                    .background(VisualEffectView(material: .hudWindow, blendingMode: .withinWindow))
-                    .cornerRadius(12)
-                    .shadow(color: Color.black.opacity(0.3), radius: 8, y: 4)
-                    .transition(.asymmetric(insertion: .scale(scale: 0.95).combined(with: .opacity), removal: .opacity))
-                    .padding(.bottom, 8)
-                }
-            }
-            .frame(height: isHovered ? 140 : 0, alignment: .bottom)
-            
-            // Main Button
-            Button {
-            } label: {
-                HStack {
-                    Image(systemName: "square.and.arrow.up")
-                        .font(.system(size: 14, weight: .semibold))
-                    Text(languageService.s("share_on_social"))
-                        .font(.system(size: 12, weight: .bold))
-                    Spacer()
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 10)
-                .background(
-                    RoundedRectangle(cornerRadius: 10)
-                        .fill(isHovered ? Color.blue.opacity(0.2) : Color.blue.opacity(0.1))
-                )
-            }
-            .buttonStyle(.plain)
-        }
-        .padding(.horizontal, 8)
-        .contentShape(Rectangle())
-        .onHover { hovering in
-            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                isHovered = hovering
-            }
-        }
-    }
-    
-    enum Platform {
-        case x, mastodon, bluesky, threads
-        
-        var baseUrl: String {
-            switch self {
-            case .x: return "https://x.com/intent/tweet?text="
-            case .mastodon: return "https://mastodonshare.com/?text="
-            case .bluesky: return "https://bsky.app/intent/compose?text="
-            case .threads: return "https://www.threads.net/intent/post?text="
-            }
-        }
-        
-        func message(for service: LanguageService) -> String {
-            return service.s("share_msg_x") // Use the unified message
-        }
-    }
-    
-    @ViewBuilder
-    private func socialButton(title: String, platform: Platform) -> some View {
-        Button {
-            let encodedMsg = platform.message(for: languageService).addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
-            if let url = URL(string: platform.baseUrl + encodedMsg) {
-                NSWorkspace.shared.open(url)
-            }
-        } label: {
-            HStack {
-                Text(title)
-                    .font(.system(size: 12, weight: .medium))
-                Spacer()
-                Image(systemName: "arrow.up.right")
-                    .font(.system(size: 10))
-                    .foregroundColor(.secondary)
-            }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-            .contentShape(Rectangle())
-            .background(Color.primary.opacity(0.001)) // Make entire row clickable
-        }
-        .buttonStyle(SocialListItemStyle())
-    }
-}
-
-struct SocialListItemStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .background(configuration.isPressed ? Color.blue.opacity(0.2) : (configuration.isPressed ? Color.blue.opacity(0.1) : Color.clear))
-            .cornerRadius(6)
-            .animation(.easeOut(duration: 0.1), value: configuration.isPressed)
     }
 }
 
