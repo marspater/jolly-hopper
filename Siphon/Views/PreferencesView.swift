@@ -285,7 +285,7 @@ struct PreferencesView: View {
         VStack(alignment: .trailing, spacing: 8) {
             if updateChecker.isDownloading {
                 HStack {
-                    ProgressView(value: updateChecker.updateProgress)
+                    ProgressView(value: max(0, min(1, updateChecker.updateProgress)))
                         .controlSize(.small)
                     Text(languageService.s("downloading_update"))
                         .font(.caption)

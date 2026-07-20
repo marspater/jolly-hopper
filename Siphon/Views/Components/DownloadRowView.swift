@@ -79,10 +79,11 @@ struct DownloadRowView: View {
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text(download.title == "___FETCHING___" ? languageService.s("fetching") : download.title)
-                        .font(.headline)
-                        .lineLimit(1)
+                        .font(.system(size: 14, weight: .semibold))
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
                     
-                    HStack {
+                    HStack(spacing: 8) {
                         statusBadge
                         
                         if let duration = download.duration {
@@ -103,7 +104,8 @@ struct DownloadRowView: View {
                             Text(error)
                                 .font(.caption)
                                 .foregroundColor(.red)
-                                .lineLimit(2)
+                                .lineLimit(4)
+                                .fixedSize(horizontal: false, vertical: true)
                             
                             if error.contains("Sign in to confirm you're not a bot") {
                                 Button(languageService.s("fix_signin_error")) {
@@ -116,19 +118,17 @@ struct DownloadRowView: View {
                     }
                 }
                 
-                Spacer()
+                Spacer(minLength: 8)
                 
-
                 actionButtons
             }
             
-
             if download.status == .downloading || download.status == .processing {
-                ProgressView(value: download.progress)
+                ProgressView(value: max(0, min(1, download.progress)))
                     .progressViewStyle(.linear)
             }
         }
-        .padding()
+        .padding(12)
         .background(Color(NSColor.controlBackgroundColor))
         .cornerRadius(12)
         .onHover { hovering in
@@ -154,7 +154,9 @@ struct DownloadRowView: View {
             }
         }
         .frame(width: 120, height: 68)
-        .clipShape(RoundedRectangle(cornerRadius: 6))
+        .contentShape(Rectangle())
+        .clipped()
+        .clipShape(RoundedRectangle(cornerRadius: 8))
     }
     
     private var thumbnailPlaceholder: some View {

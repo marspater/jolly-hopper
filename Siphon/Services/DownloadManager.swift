@@ -194,7 +194,7 @@ class DownloadManager: ObservableObject {
                     }
                 },
                 onProgress: { progress, speed, eta in
-                    download.progress = progress
+                    download.progress = max(0, min(1, progress))
                     download.speed = speed
                     download.eta = eta
                 },

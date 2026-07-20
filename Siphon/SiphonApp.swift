@@ -149,7 +149,11 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
     func fetchAllReleases() async {
         let url = URL(string: "https://api.github.com/repos/\(repoOwner)/\(repoName)/releases")!
         do {
-            let (data, _) = try await URLSession.shared.data(from: url)
+            let (data, response) = try await URLSession.shared.data(from: url)
+            guard let httpResponse = response as? HTTPURLResponse,
+                  httpResponse.statusCode == 200 else {
+                return
+            }
             let releases = try JSONDecoder().decode([GitHubRelease].self, from: data)
             DispatchQueue.main.async {
                 self.availableReleases = releases.filter { $0.tagName != "v1.0.0" }
@@ -209,7 +213,11 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
     
     nonisolated func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didWriteData bytesWritten: Int64, totalBytesWritten: Int64, totalBytesExpectedToWrite: Int64) {
         Task { @MainActor in
-            updateProgress = Double(totalBytesWritten) / Double(totalBytesExpectedToWrite)
+            if totalBytesExpectedToWrite > 0 {
+                updateProgress = max(0, min(1, Double(totalBytesWritten) / Double(totalBytesExpectedToWrite)))
+            } else {
+                updateProgress = 0
+            }
         }
     }
     

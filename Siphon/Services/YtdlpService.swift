@@ -409,8 +409,16 @@ class YtdlpService: ObservableObject {
         var args = [path.path]
         args.append("--no-playlist")
         
-        if let ffmpegLoc = ffmpegPath?.deletingLastPathComponent().path {
-            args.append(contentsOf: ["--ffmpeg-location", ffmpegLoc])
+        if ffmpegPath == nil || !FileManager.default.fileExists(atPath: ffmpegPath?.path ?? "") {
+            await findFfmpeg()
+        }
+        
+        if let ffmpeg = ffmpegPath, FileManager.default.fileExists(atPath: ffmpeg.path) {
+            args.append(contentsOf: ["--ffmpeg-location", ffmpeg.path])
+        } else if FileManager.default.fileExists(atPath: "/opt/homebrew/bin/ffmpeg") {
+            args.append(contentsOf: ["--ffmpeg-location", "/opt/homebrew/bin/ffmpeg"])
+        } else if FileManager.default.fileExists(atPath: "/usr/local/bin/ffmpeg") {
+            args.append(contentsOf: ["--ffmpeg-location", "/usr/local/bin/ffmpeg"])
         } else {
             let appSupport = getAppSupportDirectory()
             args.append(contentsOf: ["--ffmpeg-location", appSupport.path])
@@ -659,7 +667,7 @@ class YtdlpService: ObservableObject {
             var env = ProcessInfo.processInfo.environment
             let appSupport = getAppSupportDirectory()
             let currentPath = env["PATH"] ?? ""
-            env["PATH"] = "\(appSupport.path):\(currentPath)"
+            env["PATH"] = "\(appSupport.path):/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:\(currentPath)"
             process.environment = env
             
 
@@ -722,7 +730,7 @@ class YtdlpService: ObservableObject {
             var env = ProcessInfo.processInfo.environment
             let appSupport = getAppSupportDirectory()
             let currentPath = env["PATH"] ?? ""
-            env["PATH"] = "\(appSupport.path):\(currentPath)"
+            env["PATH"] = "\(appSupport.path):/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:\(currentPath)"
             process.environment = env
             
             onProcessCreated(process)
