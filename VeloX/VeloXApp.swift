@@ -115,30 +115,6 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
     @Published var isInstalling = false
     @Published var needsRestart = false
     
-    @Published var availableReleases: [GitHubRelease] = []
-    
-    struct GitHubRelease: Codable, Identifiable {
-        let id: Int
-        let tagName: String
-        let assets: [GitHubAsset]
-        var idString: String { tagName.replacingOccurrences(of: "v", with: "") }
-        
-        enum CodingKeys: String, CodingKey {
-            case id
-            case tagName = "tag_name"
-            case assets
-        }
-    }
-
-    struct GitHubAsset: Codable {
-        let name: String
-        let browserDownloadURL: String
-        enum CodingKeys: String, CodingKey {
-            case name
-            case browserDownloadURL = "browser_download_url"
-        }
-    }
-
     private var currentVersion: String {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "4.0.0"
     }
@@ -146,22 +122,6 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
     private let repoName = "jolly-hopper"
     private var downloadURL: URL?
     
-    func fetchAllReleases() async {
-        let url = URL(string: "https://api.github.com/repos/\(repoOwner)/\(repoName)/releases")!
-        do {
-            let (data, response) = try await URLSession.shared.data(from: url)
-            guard let httpResponse = response as? HTTPURLResponse,
-                  httpResponse.statusCode == 200 else {
-                return
-            }
-            let releases = try JSONDecoder().decode([GitHubRelease].self, from: data)
-            DispatchQueue.main.async {
-                self.availableReleases = releases.filter { $0.tagName != "v1.0.0" }
-            }
-        } catch {
-            print("Releases fetch error: \(error)")
-        }
-    }
     func checkForUpdates() async {
         isChecking = true
         let url = URL(string: "https://api.github.com/repos/\(repoOwner)/\(repoName)/releases/latest")!
@@ -193,14 +153,6 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
         isChecking = false
     }
     
-    func installSpecificRelease(_ release: GitHubRelease) async {
-        guard let dlpAsset = release.assets.first(where: { $0.name.hasSuffix(".dmg") }),
-              let url = URL(string: dlpAsset.browserDownloadURL) else { return }
-        
-        downloadURL = url
-        await downloadAndInstallUpdate()
-    }
-
     func downloadAndInstallUpdate() async {
         guard let url = downloadURL else { return }
         isDownloading = true
