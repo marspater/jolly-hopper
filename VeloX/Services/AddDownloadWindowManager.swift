@@ -33,19 +33,9 @@ final class AddDownloadWindowManager: NSObject, NSWindowDelegate {
         window.title = "Add New Download"
         window.titlebarAppearsTransparent = true
         window.titleVisibility = .hidden
+        window.minSize = NSSize(width: 560, height: 480)
         window.contentViewController = hostingController
         window.delegate = self
-        
-        // Liquid glass backdrop
-        let visualEffectView = NSVisualEffectView(frame: window.contentView?.bounds ?? .zero)
-        visualEffectView.autoresizingMask = [.width, .height]
-        visualEffectView.blendingMode = .behindWindow
-        visualEffectView.material = .sidebar
-        visualEffectView.state = .active
-        
-        if let contentView = window.contentView {
-            contentView.addSubview(visualEffectView, positioned: .below, relativeTo: nil)
-        }
         
         let controller = NSWindowController(window: window)
         self.windowController = controller
