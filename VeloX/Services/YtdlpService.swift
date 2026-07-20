@@ -435,6 +435,7 @@ class YtdlpService: ObservableObject {
         args.append(contentsOf: ["-o", outputTemplate])
         
         args.append(contentsOf: buildFormatArgs(options: options))
+        let codecFallbackWarnings = codecFallbackOutputWarnings(options: options)
         
         if options.downloadSubtitles && !options.subtitleLanguages.isEmpty {
             let subFormat = options.subtitleFormat?.ytdlpValue ?? "srt"
@@ -503,6 +504,9 @@ class YtdlpService: ObservableObject {
         args.append(url)
         
         let fullCommand = args.map { $0.contains(" ") ? "\"\($0)\"" : $0 }.joined(separator: " ")
+        for warning in codecFallbackWarnings {
+            onOutput("\(warning)\n")
+        }
         onOutput("[COMMAND] \(fullCommand)\n")
         Task { @MainActor in
             LoggerService.shared.log(fullCommand, level: .command)
@@ -555,62 +559,110 @@ class YtdlpService: ObservableObject {
     
     private func buildFormatArgs(options: DownloadOptions) -> [String] {
         var args: [String] = []
-        
+
         if options.fileType.isVideo {
-            var videoBase = ""
-            if let resolution = options.videoResolution {
-                videoBase = resolution.ytdlpValue
-            } else {
-                videoBase = "bestvideo"
-            }
-            
-            var formatStr = ""
-            
-            // Build video codec filter
+            let videoBase = buildVideoSelector(for: options.videoResolution)
+            let bestVideoBase = buildVideoSelector(for: options.videoResolution, ignoreWorst: true)
             let videoCodecFilter = options.videoCodec?.ytdlpFilter ?? ""
             let audioCodecFilter = options.audioCodec?.ytdlpFilter ?? ""
-            
-            if !videoCodecFilter.isEmpty || !audioCodecFilter.isEmpty {
-                // User selected specific codec(s)
-                let audioBase = audioCodecFilter.isEmpty ? "bestaudio" : "bestaudio\(audioCodecFilter)"
-                
-                if !videoCodecFilter.isEmpty {
-                    formatStr = "\(videoBase)\(videoCodecFilter)+\(audioBase)"
-                    formatStr += "/\(videoBase)+\(audioBase)"
-                    formatStr += "/\(videoBase)+bestaudio"
-                } else {
-                    formatStr = "\(videoBase)+\(audioBase)"
-                    formatStr += "/\(videoBase)+bestaudio"
-                }
-            } else {
-                formatStr = "\(videoBase)+bestaudio"
+
+            let requestedVideo = "\(videoBase)\(videoCodecFilter)"
+            let requestedAudio = "bestaudio\(audioCodecFilter)"
+            let bestVideo = videoCodecFilter.isEmpty ? requestedVideo : bestVideoBase
+            let bestAudio = "bestaudio"
+
+            // Fallback order is intentionally explicit:
+            // 1. requested video codec + requested audio codec
+            // 2. requested video codec + best audio
+            // 3. best video + requested audio
+            // 4. best video + best audio
+            // 5. best combined format
+            let formatSelectors = [
+                "\(requestedVideo)+\(requestedAudio)",
+                "\(requestedVideo)+\(bestAudio)",
+                "\(bestVideo)+\(requestedAudio)",
+                "\(bestVideo)+\(bestAudio)",
+                "best"
+            ]
+
+            args.append(contentsOf: ["-f", formatSelectors.joined(separator: "/")])
+            args.append(contentsOf: ["-S", "res,fps,hdr:12,vbr,abr,filesize"])
+
+            if let mergeOutputFormat = compatibleMergeOutputFormat(for: options) {
+                args.append(contentsOf: ["--merge-output-format", mergeOutputFormat])
             }
-            
-            formatStr += "/best"
-            
-            args.append(contentsOf: ["-f", formatStr])
-            args.append(contentsOf: ["--merge-output-format", options.fileType.fileExtension])
         } else {
             // Audio-only download
             var audioFormat = "ba"
-            
+
             if let audioCodec = options.audioCodec, let filter = audioCodec.ytdlpFilter {
                 audioFormat = "ba\(filter)/ba"  // Preferred codec with fallback
             }
-            
+
             args.append(contentsOf: ["-f", "\(audioFormat)/best"])
             args.append(contentsOf: ["-x", "--audio-format", options.fileType.fileExtension])
-            
+
             if let quality = options.audioQuality {
                 args.append(contentsOf: ["--audio-quality", quality.ytdlpValue])
             } else {
                 args.append(contentsOf: ["--audio-quality", "0"]) // Best quality by default
             }
         }
-        
+
         return args
     }
-    
+
+    private func buildVideoSelector(for resolution: VideoResolution?, ignoreWorst: Bool = false) -> String {
+        guard let resolution else { return "bestvideo" }
+
+        switch resolution {
+        case .best:
+            return "bestvideo"
+        case .r2160p, .r1440p, .r1080p, .r720p, .r480p, .r360p, .r240p:
+            return resolution.ytdlpValue
+        case .worst:
+            return ignoreWorst ? "bestvideo" : "worstvideo"
+        }
+    }
+
+    private func compatibleMergeOutputFormat(for options: DownloadOptions) -> String? {
+        guard options.fileType.isVideo else { return nil }
+
+        let requestedVideoCodec = options.videoCodec ?? .auto
+        let requestedAudioCodec = options.audioCodec ?? .auto
+
+        switch options.fileType {
+        case .mkv:
+            return "mkv"
+        case .webm:
+            if requestedVideoCodec == .h264 || requestedVideoCodec == .h265 || requestedAudioCodec == .aac || requestedAudioCodec == .mp3 || requestedAudioCodec == .flac {
+                return "mkv"
+            }
+            return "webm"
+        case .mp4:
+            if requestedVideoCodec == .vp9 || requestedVideoCodec == .av1 || requestedAudioCodec == .opus || requestedAudioCodec == .flac {
+                return "mkv"
+            }
+            return "mp4"
+        default:
+            return nil
+        }
+    }
+
+    private func codecFallbackOutputWarnings(options: DownloadOptions) -> [String] {
+        var warnings: [String] = []
+
+        if let videoCodec = options.videoCodec, videoCodec != .auto {
+            warnings.append("[VeloX] WARNING: Requested video codec \(videoCodec.rawValue) will fall back to the best available video codec if no matching format is available.")
+        }
+
+        if let audioCodec = options.audioCodec, audioCodec != .auto {
+            warnings.append("[VeloX] WARNING: Requested audio codec \(audioCodec.rawValue) will fall back to the best available audio codec if no matching format is available.")
+        }
+
+        return warnings
+    }
+
     private func appendCookieArgs(to args: inout [String]) {
         let browser = UserDefaults.standard.string(forKey: "browserForCookies") ?? "none"
         if browser != "none" {
