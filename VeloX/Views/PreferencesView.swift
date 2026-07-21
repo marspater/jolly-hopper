@@ -59,45 +59,29 @@ struct PreferencesView: View {
     @Environment(\.dismiss) var dismiss
     
     var body: some View {
-        ZStack(alignment: .topLeading) {
-            VStack(spacing: 0) {
-
-                Spacer()
-                    .frame(height: 44)
-                
-                TabView {
-                    generalTab
-                        .tabItem {
-                            Label(languageService.s("general"), systemImage: "gear")
-                        }
-                    
-                    downloadTab
-                        .tabItem {
-                            Label(languageService.s("download"), systemImage: "arrow.down.circle")
-                        }
-                    
-                    advancedTab
-                        .tabItem {
-                            Label(languageService.s("advanced"), systemImage: "wrench.and.screwdriver")
-                        }
-                    
-                    aboutTab
-                        .tabItem {
-                            Label(languageService.s("about"), systemImage: "info.circle")
-                        }
+        TabView {
+            generalTab
+                .tabItem {
+                    Label(languageService.s("general"), systemImage: "gear")
                 }
-            }
             
-
-            Button {
-                dismiss()
-            } label: {
-                CloseButton()
-            }
-            .buttonStyle(.plain)
-            .padding(16)
+            downloadTab
+                .tabItem {
+                    Label(languageService.s("download"), systemImage: "arrow.down.circle")
+                }
+            
+            advancedTab
+                .tabItem {
+                    Label(languageService.s("advanced"), systemImage: "wrench.and.screwdriver")
+                }
+            
+            aboutTab
+                .tabItem {
+                    Label(languageService.s("about"), systemImage: "info.circle")
+                }
         }
-        .frame(width: 550, height: 450)
+        .padding(12)
+        .frame(minWidth: 580, idealWidth: 620, minHeight: 500, idealHeight: 560)
         .onChange(of: theme) { newValue in
             applyTheme(newValue)
         }
@@ -872,93 +856,145 @@ struct PreferencesView: View {
     
     private var aboutTab: some View {
         ScrollView {
-            VStack(spacing: 16) {
-                Image(nsImage: NSApp.applicationIconImage)
-                    .resizable()
-                    .frame(width: 80, height: 80)
-                
-                Text("VeloX Pro")
-                    .font(.title)
-                    .fontWeight(.bold)
-                
-                Text(languageService.s("version") + " \(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "4.0.0")")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-                
-                Text(languageService.s("app_desc"))
-                    .font(.body)
-                    .foregroundColor(.secondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 20)
-                
-                Divider()
-                    .padding(.horizontal, 40)
-                
+            VStack(spacing: 20) {
+                // Header section with glowing icon
+                VStack(spacing: 12) {
+                    ZStack {
+                        Circle()
+                            .fill(.linearGradient(colors: [.blue, .purple], startPoint: .topLeading, endPoint: .bottomTrailing))
+                            .frame(width: 72, height: 72)
+                            .shadow(color: .purple.opacity(0.3), radius: 10)
+                        
+                        Image(nsImage: NSApp.applicationIconImage)
+                            .resizable()
+                            .frame(width: 64, height: 64)
+                    }
+                    
+                    VStack(spacing: 4) {
+                        Text("VeloX Pro")
+                            .font(.system(size: 24, weight: .bold))
+                        
+                        Text(languageService.s("version") + " \(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "4.0.0")")
+                            .font(.caption)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 3)
+                            .background(Color.blue.opacity(0.15))
+                            .foregroundColor(.blue)
+                            .clipShape(Capsule())
+                    }
+                    
+                    Text(languageService.s("app_desc"))
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 24)
+                }
+                .padding(.top, 8)
 
-                GroupBox(languageService.s("credits")) {
-                    VStack(alignment: .leading, spacing: 8) {
-                        HStack {
-                            Text("Project Owner:")
-                            Spacer()
-                            Text("marspater")
-                                .font(.caption)
-                        }
-                        HStack {
-                            Text(languageService.s("video_downloading") + ":")
-                            Spacer()
-                            Link("yt-dlp", destination: URL(string: "https://github.com/yt-dlp/yt-dlp")!)
-                                .font(.caption)
-                        }
+                // Legal Disclaimer Card
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "exclamationmark.shield.fill")
+                            .foregroundColor(.orange)
+                        Text(languageService.s("legal_disclaimer_title"))
+                            .font(.system(size: 13, weight: .bold))
                     }
-                    .padding(.vertical, 4)
+                    
+                    Text(languageService.s("legal_disclaimer_message"))
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .lineSpacing(3)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
-                .padding(.horizontal, 20)
-                
+                .padding(14)
+                .background(.ultraThinMaterial)
+                .cornerRadius(12)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12)
+                        .stroke(Color.orange.opacity(0.3), lineWidth: 1)
+                )
 
-                GroupBox(languageService.s("legal_disclaimer_title")) {
-                    VStack(alignment: .leading) {
-                        Text(languageService.s("legal_disclaimer_message"))
-                            .font(.caption)
+                // Credits & Details Card
+                VStack(alignment: .leading, spacing: 10) {
+                    Text(languageService.s("credits"))
+                        .font(.system(size: 13, weight: .bold))
+                    
+                    HStack {
+                        Text("Maintainer")
                             .foregroundColor(.secondary)
-                            .multilineTextAlignment(.leading)
-                            .fixedSize(horizontal: false, vertical: true)
-                            .frame(maxWidth: .infinity, alignment: .leading)
+                        Spacer()
+                        Text("marspater")
+                            .font(.system(size: 13, weight: .medium))
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.vertical, 4)
-                }
-                .padding(.horizontal, 20)
-                
-                GroupBox(languageService.s("license")) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("GNU General Public License v3.0")
-                            .font(.caption)
-                            .fontWeight(.semibold)
-                        Text(languageService.s("license_desc"))
-                            .font(.caption2)
+                    .font(.caption)
+                    
+                    Divider()
+                    
+                    HStack {
+                        Text(languageService.s("video_downloading"))
                             .foregroundColor(.secondary)
-                        Link(languageService.s("view_license"), destination: URL(string: "https://www.gnu.org/licenses/gpl-3.0.html")!)
-                            .font(.caption)
+                        Spacer()
+                        Link("yt-dlp", destination: URL(string: "https://github.com/yt-dlp/yt-dlp")!)
+                            .font(.system(size: 13, weight: .medium))
                     }
-                    .padding(.vertical, 4)
+                    .font(.caption)
                 }
-                .padding(.horizontal, 20)
-                
+                .padding(14)
+                .background(.ultraThinMaterial)
+                .cornerRadius(12)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12)
+                        .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+                )
+
+                // License Card
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(languageService.s("license"))
+                        .font(.system(size: 13, weight: .bold))
+                    Text("GNU General Public License v3.0")
+                        .font(.caption)
+                        .fontWeight(.semibold)
+                    Text(languageService.s("license_desc"))
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                    Link(languageService.s("view_license"), destination: URL(string: "https://www.gnu.org/licenses/gpl-3.0.html")!)
+                        .font(.caption)
+                }
+                .padding(14)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(.ultraThinMaterial)
+                .cornerRadius(12)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12)
+                        .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+                )
+
+                // Quick links
                 HStack(spacing: 16) {
                     Link(destination: URL(string: "https://github.com/marspater/jolly-hopper")!) {
                         Label("GitHub", systemImage: "link")
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 8)
+                            .background(Color.blue.opacity(0.1))
+                            .cornerRadius(8)
                     }
                     Link(destination: URL(string: "https://github.com/marspater/jolly-hopper/blob/main/SUPPORTED_SITES.md")!) {
                         Label(languageService.s("supported_sites"), systemImage: "globe")
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 8)
+                            .background(Color.purple.opacity(0.1))
+                            .cornerRadius(8)
                     }
                 }
                 .font(.caption)
-                
-                Text("© 2026 marspater")
+                .padding(.top, 4)
+
+                Text("© 2026 marspater • All rights reserved")
                     .font(.caption2)
                     .foregroundColor(.secondary)
+                    .padding(.bottom, 12)
             }
-            .padding()
+            .padding(.horizontal, 16)
         }
     }
     

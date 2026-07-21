@@ -15,7 +15,10 @@ class LanguageService: ObservableObject {
     @AppStorage("isFirstLaunch_v3") var isFirstLaunch: Bool = true
     
     func s(_ key: String) -> String {
-        return translations[key] ?? key
+        if let translated = translations[key] {
+            return translated
+        }
+        return key.replacingOccurrences(of: "_", with: " ").capitalized
     }
     
     private let translations: [String: String] = [
@@ -204,6 +207,16 @@ class LanguageService: ObservableObject {
         "preset": "Preset",
         "standard": "Standard",
         "custom": "Custom",
+        "custom_presets": "Custom Presets",
+        "no_custom_presets": "No Custom Presets",
+        "create_preset": "Create Preset",
+        "new_preset": "New Preset",
+        "edit_preset": "Edit Preset",
+        "delete_preset": "Delete Preset",
+        "preset_name": "Preset Name",
+        "legal_disclaimer_title": "Legal Disclaimer",
+        "legal_disclaimer_message": "VeloX Pro is provided for personal, fair-use, and educational media downloading purposes only. Users are solely responsible for compliance with applicable copyright laws, licenses, and terms of service.",
+        "ok": "OK",
         "notifications": "Notifications",
         "show_menubar_icon": "Show Menu Bar Icon",
         "first_sponsor": "First Sponsor",
