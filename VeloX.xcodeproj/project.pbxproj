@@ -7,28 +7,28 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		E0001001 /* VeloXApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000001; };
-		E0001002 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000002; };
-		E0001003 /* Download.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000003; };
-		E0001004 /* YtdlpService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000004; };
-		E0001005 /* DownloadManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000005; };
-		E0001006 /* AddDownloadView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000006; };
-		E0001007 /* DownloadRowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000007; };
-		E0001009 /* PreferencesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000009; };
-		E0001010 /* KeyringView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000010; };
-		E0001011 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = E0000011; };
-		E0001012 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = E0000014; };
-		E0001020 /* NotificationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000020; };
-		E0001021 /* LoginItemHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000021; };
-		E0001022 /* MenuBarManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000022; };
-		E0001023 /* MenuBarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000023; };
-		E0001024 /* LoggerService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000024; };
-		E0001025 /* AddDownloadWindowManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000025; };
-		E0001026 /* LanguageService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000026; };
-		E0001029 /* PreferencesWindowManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000029; };
-		E0001027 /* Credits.rtf in Resources */ = {isa = PBXBuildFile; fileRef = E0000027; };
-		E0001030 /* AppIcon.icns in Resources */ = {isa = PBXBuildFile; fileRef = E0000030; };
-		E0001028 /* View+Compatibility.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000028; };
+		E0001001 /* VeloXApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000001 /* VeloXApp.swift */; };
+		E0001002 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000002 /* ContentView.swift */; };
+		E0001003 /* Download.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000003 /* Download.swift */; };
+		E0001004 /* YtdlpService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000004 /* YtdlpService.swift */; };
+		E0001005 /* DownloadManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000005 /* DownloadManager.swift */; };
+		E0001006 /* AddDownloadView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000006 /* AddDownloadView.swift */; };
+		E0001007 /* DownloadRowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000007 /* DownloadRowView.swift */; };
+		E0001009 /* PreferencesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000009 /* PreferencesView.swift */; };
+		E0001010 /* KeyringView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000010 /* KeyringView.swift */; };
+		E0001011 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = E0000011 /* Assets.xcassets */; };
+		E0001012 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = E0000014 /* InfoPlist.strings */; };
+		E0001020 /* NotificationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000020 /* NotificationService.swift */; };
+		E0001021 /* LoginItemHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000021 /* LoginItemHelper.swift */; };
+		E0001022 /* MenuBarManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000022 /* MenuBarManager.swift */; };
+		E0001023 /* MenuBarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000023 /* MenuBarView.swift */; };
+		E0001024 /* LoggerService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000024 /* LoggerService.swift */; };
+		E0001025 /* AddDownloadWindowManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000025 /* AddDownloadWindowManager.swift */; };
+		E0001026 /* LanguageService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000026 /* LanguageService.swift */; };
+		E0001027 /* Credits.rtf in Resources */ = {isa = PBXBuildFile; fileRef = E0000027 /* Credits.rtf */; };
+		E0001028 /* View+Compatibility.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000028 /* View+Compatibility.swift */; };
+		E0001029 /* PreferencesWindowManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000029 /* PreferencesWindowManager.swift */; };
+		E0001030 /* AppIcon.icns in Resources */ = {isa = PBXBuildFile; fileRef = E0000030 /* AppIcon.icns */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -52,10 +52,10 @@
 		E0000024 /* LoggerService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoggerService.swift; sourceTree = "<group>"; };
 		E0000025 /* AddDownloadWindowManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddDownloadWindowManager.swift; sourceTree = "<group>"; };
 		E0000026 /* LanguageService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LanguageService.swift; sourceTree = "<group>"; };
-		E0000029 /* PreferencesWindowManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreferencesWindowManager.swift; sourceTree = "<group>"; };
 		E0000027 /* Credits.rtf */ = {isa = PBXFileReference; lastKnownFileType = text.rtf; path = Credits.rtf; sourceTree = "<group>"; };
-		E0000030 /* AppIcon.icns */ = {isa = PBXFileReference; lastKnownFileType = image.icns; path = AppIcon.icns; sourceTree = "<group>"; };
 		E0000028 /* View+Compatibility.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "View+Compatibility.swift"; sourceTree = "<group>"; };
+		E0000029 /* PreferencesWindowManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreferencesWindowManager.swift; sourceTree = "<group>"; };
+		E0000030 /* AppIcon.icns */ = {isa = PBXFileReference; lastKnownFileType = image.icns; path = AppIcon.icns; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -72,12 +72,12 @@
 		E0003001 = {
 			isa = PBXGroup;
 			children = (
-				E0003002 /* VeloX Pro */,
+				E0003002 /* VeloX */,
 				E0003003 /* Products */,
 			);
 			sourceTree = "<group>";
 		};
-		E0003002 /* VeloX Pro */ = {
+		E0003002 /* VeloX */ = {
 			isa = PBXGroup;
 			children = (
 				E0000001 /* VeloXApp.swift */,
@@ -146,14 +146,6 @@
 			path = Resources;
 			sourceTree = "<group>";
 		};
-		E0003009 /* Extensions */ = {
-			isa = PBXGroup;
-			children = (
-				E0000028 /* View+Compatibility.swift */,
-			);
-			path = Extensions;
-			sourceTree = "<group>";
-		};
 		E0003008 /* Components */ = {
 			isa = PBXGroup;
 			children = (
@@ -162,19 +154,15 @@
 			path = Components;
 			sourceTree = "<group>";
 		};
-/* End PBXGroup section */
-
-/* Begin PBXVariantGroup section */
-		E0000014 /* InfoPlist.strings */ = {
-			isa = PBXVariantGroup;
+		E0003009 /* Extensions */ = {
+			isa = PBXGroup;
 			children = (
-				E0000015 /* en */,
-				E0000016 /* tr */,
+				E0000028 /* View+Compatibility.swift */,
 			);
-			name = InfoPlist.strings;
+			path = Extensions;
 			sourceTree = "<group>";
 		};
-/* End PBXVariantGroup section */
+/* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
 		E0004001 /* VeloX Pro */ = {
@@ -202,20 +190,19 @@
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
 				LastSwiftUpdateCheck = 1500;
-				LastUpgradeCheck = 1500;
+				LastUpgradeCheck = 2700;
 				TargetAttributes = {
 					E0004001 = {
 						CreatedOnToolsVersion = 15.0;
 					};
 				};
 			};
-			buildConfigurationList = E0005001 /* Build configuration list for PBXProject "VeloX Pro" */;
+			buildConfigurationList = E0005001 /* Build configuration list for PBXProject "VeloX" */;
 			compatibilityVersion = "Xcode 14.0";
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
 				en,
-				tr,
 				Base,
 			);
 			mainGroup = E0003001;
@@ -270,12 +257,24 @@
 		};
 /* End PBXSourcesBuildPhase section */
 
+/* Begin PBXVariantGroup section */
+		E0000014 /* InfoPlist.strings */ = {
+			isa = PBXVariantGroup;
+			children = (
+				E0000015 /* en */,
+			);
+			name = InfoPlist.strings;
+			sourceTree = "<group>";
+		};
+/* End PBXVariantGroup section */
+
 /* Begin XCBuildConfiguration section */
 		E0007001 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_LOCALIZABILITY_NONLOCALIZED = YES;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
@@ -305,6 +304,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
+				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
@@ -328,6 +328,7 @@
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = macosx;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 			};
@@ -337,7 +338,9 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
+				ARCHS = "$(ARCHS_STANDARD)";
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_LOCALIZABILITY_NONLOCALIZED = YES;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
@@ -367,6 +370,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
+				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
@@ -382,10 +386,10 @@
 				MACOSX_DEPLOYMENT_TARGET = 12.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
-				SDKROOT = macosx;
-				SWIFT_COMPILATION_MODE = wholemodule;
-				ARCHS = "$(ARCHS_STANDARD)";
 				ONLY_ACTIVE_ARCH = NO;
+				SDKROOT = macosx;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_COMPILATION_MODE = wholemodule;
 			};
 			name = Release;
 		};
@@ -398,26 +402,22 @@
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_ASSET_PATHS = "";
 				DEVELOPMENT_TEAM = "";
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = VeloX/Info.plist;
-				INFOPLIST_KEY_CFBundleURLTypes = (
-					{
-						CFBundleURLSchemes = (
-							macabolic,
-						);
-					},
-				);
 				INFOPLIST_KEY_CFBundleDisplayName = "VeloX Pro";
+				INFOPLIST_KEY_CFBundleURLTypes = "{\n    CFBundleURLSchemes =     (\n        macabolic\n    );\n}";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright © 2026 marspater. All rights reserved.";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
+				MACOSX_DEPLOYMENT_TARGET = "$(RECOMMENDED_MACOSX_DEPLOYMENT_TARGET)";
 				MARKETING_VERSION = 4.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.marspater.velox;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -429,47 +429,42 @@
 		E0007004 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ARCHS = "$(ARCHS_STANDARD)";
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = VeloX/VeloX.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_ASSET_PATHS = "";
 				DEVELOPMENT_TEAM = "";
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = VeloX/Info.plist;
-				INFOPLIST_KEY_CFBundleURLTypes = (
-					{
-						CFBundleURLSchemes = (
-							velox,
-							macabolic,
-						);
-					},
-				);
 				INFOPLIST_KEY_CFBundleDisplayName = "VeloX Pro";
+				INFOPLIST_KEY_CFBundleURLTypes = "{\n    CFBundleURLSchemes =     (\n        velox,\n        macabolic\n    );\n}";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright © 2026 marspater. All rights reserved.";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
+				MACOSX_DEPLOYMENT_TARGET = "$(RECOMMENDED_MACOSX_DEPLOYMENT_TARGET)";
 				MARKETING_VERSION = 4.0.0;
+				ONLY_ACTIVE_ARCH = NO;
 				PRODUCT_BUNDLE_IDENTIFIER = com.marspater.velox;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
-				ARCHS = "$(ARCHS_STANDARD)";
-				ONLY_ACTIVE_ARCH = NO;
 			};
 			name = Release;
 		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		E0005001 /* Build configuration list for PBXProject "VeloX Pro" */ = {
+		E0005001 /* Build configuration list for PBXProject "VeloX" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				E0007001 /* Debug */,
