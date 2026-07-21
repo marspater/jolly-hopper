@@ -258,10 +258,14 @@ class DownloadManager: ObservableObject {
                     download.errorMessage = lang.s("too_many_requests")
                 case .cloudflareBlocked:
                     download.errorMessage = "Blocked by Cloudflare anti-bot protection. Please select your browser as cookie source in Settings > Advanced and try again."
+                case .boyfriendTVNeedsBrowserCookies:
+                    download.errorMessage = "boyfriend.tv often requires signed-in browser cookies. Open Settings > Advanced > Browser Cookies, choose your browser, then try again."
                 case .subtitleError(let details):
                     download.errorMessage = String(format: lang.s("subtitle_download_failed"), details)
                 case .downloadFailed(let reason):
-                    if reason.contains("Cloudflare") || reason.contains("403") {
+                    if download.url.lowercased().contains("boyfriendtv.com") {
+                        download.errorMessage = "boyfriend.tv often requires signed-in browser cookies. Open Settings > Advanced > Browser Cookies, choose your browser, then try again."
+                    } else if reason.contains("Cloudflare") || reason.contains("403") {
                         download.errorMessage = "Blocked by Cloudflare. Please select your browser as cookie source in Settings > Advanced and try again."
                     } else {
                         download.errorMessage = String(format: lang.s("download_failed_error"), reason)

@@ -338,32 +338,35 @@ class YtdlpService: ObservableObject {
         guard let path = ytdlpPath else {
             throw YtdlpError.notFound
         }
-
+        
+        let normalizedURL = normalizeURLForYtdlp(url)
         do {
-             return try await fetchSingleVideoInfo(path: path.path, url: url)
+             return try await fetchSingleVideoInfo(path: path.path, url: normalizedURL)
         } catch {
-            if url.contains("list=") || url.contains("/playlist") {
-                 return try await fetchPlaylistSummaryInfo(path: path.path, url: url)
+            if normalizedURL.contains("list=") || normalizedURL.contains("/playlist") {
+                 return try await fetchPlaylistSummaryInfo(path: path.path, url: normalizedURL)
             }
-            throw error // Playlist değilse orijinal hatayı fırlat
+            throw mapSiteSpecificError(error, url: normalizedURL)
         }
     }
 
-    private func fetchSingleVideoInfo(path: String, url: String) async throws -> MediaInfo {
+    private func fetchSingleVideoInfo(path: String, url: String, forceBrowserCookies: Bool = false) async throws -> MediaInfo {
         var args = [
             path,
             "--dump-json",
             "--no-playlist",
             "--no-warnings"
         ]
-
-        appendCookieArgs(to: &args)
+        
+        let usingBrowserCookies = appendCookieArgs(to: &args, force: forceBrowserCookies)
+        logCookieUsage(for: url, usingBrowserCookies: usingBrowserCookies)
 
         // Handle Sucuri bypass
         var tempCookieFile: URL? = nil
         if let sucuriCookie = await resolveSucuriCookie(for: url) {
             if let tempFile = createTempCookiesFile(url: url, cookieName: sucuriCookie.name, cookieValue: sucuriCookie.value) {
                 tempCookieFile = tempFile
+                LoggerService.shared.log("Using temporary Sucuri cookie file for \(hostForLog(url)) (cookie values not logged)", level: .info)
                 args.append(contentsOf: ["--cookies", tempFile.path])
                 args.append(contentsOf: ["--user-agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"])
             }
@@ -377,10 +380,18 @@ class YtdlpService: ObservableObject {
                 try? FileManager.default.removeItem(at: fileURL)
             }
         }
-
-        let output = try await runCommand(args)
-        guard let data = output.data(using: .utf8) else { throw YtdlpError.parseError }
-        return try JSONDecoder().decode(MediaInfo.self, from: data)
+        
+        do {
+            let output = try await runCommand(args)
+            guard let data = output.data(using: .utf8) else { throw YtdlpError.parseError }
+            return try JSONDecoder().decode(MediaInfo.self, from: data)
+        } catch {
+            if shouldRetryWithBrowserCookies(error: error, url: url, usingBrowserCookies: usingBrowserCookies, forceBrowserCookies: forceBrowserCookies) {
+                LoggerService.shared.log("Retrying boyfriend.tv metadata with configured browser cookies", level: .info)
+                return try await fetchSingleVideoInfo(path: path, url: url, forceBrowserCookies: true)
+            }
+            throw mapSiteSpecificError(error, url: url)
+        }
     }
 
     private func fetchPlaylistSummaryInfo(path: String, url: String) async throws -> MediaInfo {
@@ -390,14 +401,16 @@ class YtdlpService: ObservableObject {
             "--flat-playlist",
             "--no-warnings"
         ]
-
-        appendCookieArgs(to: &args)
+        
+        let usingBrowserCookies = appendCookieArgs(to: &args)
+        logCookieUsage(for: url, usingBrowserCookies: usingBrowserCookies)
 
         // Handle Sucuri bypass
         var tempCookieFile: URL? = nil
         if let sucuriCookie = await resolveSucuriCookie(for: url) {
             if let tempFile = createTempCookiesFile(url: url, cookieName: sucuriCookie.name, cookieValue: sucuriCookie.value) {
                 tempCookieFile = tempFile
+                LoggerService.shared.log("Using temporary Sucuri cookie file for \(hostForLog(url)) (cookie values not logged)", level: .info)
                 args.append(contentsOf: ["--cookies", tempFile.path])
                 args.append(contentsOf: ["--user-agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"])
             }
@@ -451,14 +464,15 @@ class YtdlpService: ObservableObject {
             "--flat-playlist",
             "--no-warnings"
         ]
-
-        appendCookieArgs(to: &args)
+        let usingBrowserCookies = appendCookieArgs(to: &args)
+        logCookieUsage(for: url, usingBrowserCookies: usingBrowserCookies)
 
         // Handle Sucuri bypass
         var tempCookieFile: URL? = nil
         if let sucuriCookie = await resolveSucuriCookie(for: url) {
             if let tempFile = createTempCookiesFile(url: url, cookieName: sucuriCookie.name, cookieValue: sucuriCookie.value) {
                 tempCookieFile = tempFile
+                LoggerService.shared.log("Using temporary Sucuri cookie file for \(hostForLog(url)) (cookie values not logged)", level: .info)
                 args.append(contentsOf: ["--cookies", tempFile.path])
                 args.append(contentsOf: ["--user-agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"])
             }
@@ -501,7 +515,12 @@ class YtdlpService: ObservableObject {
         guard let path = ytdlpPath else {
             throw YtdlpError.notFound
         }
+<<<<<<< HEAD
 
+=======
+        
+        let normalizedURL = normalizeURLForYtdlp(url)
+>>>>>>> origin/codex/update-ytdlpservice-and-downloadmanager
         var args = [path.path]
         if ffmpegPath == nil || !FileManager.default.fileExists(atPath: ffmpegPath?.path ?? "") {
             await findFfmpeg()
@@ -580,26 +599,39 @@ class YtdlpService: ObservableObject {
             args.append(contentsOf: customArgs)
         }
 
-        appendCookieArgs(to: &args)
+        let usingBrowserCookies = appendCookieArgs(to: &args)
+        logCookieUsage(for: normalizedURL, usingBrowserCookies: usingBrowserCookies)
 
         // Handle Sucuri bypass
         var tempCookieFile: URL? = nil
-        if let sucuriCookie = await resolveSucuriCookie(for: url) {
-            if let tempFile = createTempCookiesFile(url: url, cookieName: sucuriCookie.name, cookieValue: sucuriCookie.value) {
+        if let sucuriCookie = await resolveSucuriCookie(for: normalizedURL) {
+            if let tempFile = createTempCookiesFile(url: normalizedURL, cookieName: sucuriCookie.name, cookieValue: sucuriCookie.value) {
                 tempCookieFile = tempFile
+                LoggerService.shared.log("Using temporary Sucuri cookie file for \(hostForLog(normalizedURL)) (cookie values not logged)", level: .info)
                 args.append(contentsOf: ["--cookies", tempFile.path])
                 args.append(contentsOf: ["--user-agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"])
             }
         }
+<<<<<<< HEAD
 
         appendSiteSpecificArgs(for: url, to: &args)
+=======
+        
+        appendSiteSpecificArgs(for: normalizedURL, to: &args)
+>>>>>>> origin/codex/update-ytdlpservice-and-downloadmanager
 
         args.append("--newline")
         args.append("--progress-template")
         args.append("%(progress._percent_str)s %(progress._speed_str)s %(progress._eta_str)s")
+<<<<<<< HEAD
 
         args.append(url)
 
+=======
+        
+        args.append(normalizedURL)
+        
+>>>>>>> origin/codex/update-ytdlpservice-and-downloadmanager
         let fullCommand = args.map { $0.contains(" ") ? "\"\($0)\"" : $0 }.joined(separator: " ")
         for warning in codecFallbackWarnings {
             onOutput("\(warning)\n")
@@ -614,15 +646,37 @@ class YtdlpService: ObservableObject {
                 try? FileManager.default.removeItem(at: fileURL)
             }
         }
+<<<<<<< HEAD
 
-        let outputPath = try await runDownloadProcess(
-            args: args,
-            saveFolder: options.saveFolder,
-            onProcessCreated: onProcessCreated,
-            onProgress: onProgress,
-            onOutput: onOutput
-        )
+        let outputPath: String
+        do {
+            outputPath = try await runDownloadProcess(
+                args: args,
+                saveFolder: options.saveFolder,
+                onProcessCreated: onProcessCreated,
+                onProgress: onProgress,
+                onOutput: onOutput
+            )
+        } catch {
+            throw mapSiteSpecificError(error, url: url)
+        }
 
+=======
+        
+        let outputPath: String
+        do {
+            outputPath = try await runDownloadProcess(
+                args: args,
+                saveFolder: options.saveFolder,
+                onProcessCreated: onProcessCreated,
+                onProgress: onProgress,
+                onOutput: onOutput
+            )
+        } catch {
+            throw mapSiteSpecificError(error, url: normalizedURL)
+        }
+        
+>>>>>>> origin/codex/update-ytdlpservice-and-downloadmanager
         if options.embedSubtitles && options.downloadSubtitles {
             cleanupSubtitleFiles(for: outputPath, in: options.saveFolder)
         }
@@ -708,6 +762,7 @@ class YtdlpService: ObservableObject {
 
         return args
     }
+<<<<<<< HEAD
 
     private func buildVideoSelector(for resolution: VideoResolution?, ignoreWorst: Bool = false) -> String {
         guard let resolution else { return "bestvideo" }
@@ -765,9 +820,66 @@ class YtdlpService: ObservableObject {
     private func appendCookieArgs(to args: inout [String]) {
         let browser = UserDefaults.standard.string(forKey: "browserForCookies") ?? "none"
         if browser != "none" {
+=======
+    
+    private func appendCookieArgs(to args: inout [String], force: Bool = false) -> Bool {
+        guard let browser = configuredBrowserCookieSource() else { return false }
+        if force || !args.contains("--cookies-from-browser") {
+>>>>>>> origin/codex/update-ytdlpservice-and-downloadmanager
             args.append(contentsOf: ["--cookies-from-browser", browser])
         }
+        return true
     }
+
+    private func configuredBrowserCookieSource() -> String? {
+        let browser = UserDefaults.standard.string(forKey: "browserForCookies") ?? "none"
+        return browser == "none" ? nil : browser
+    }
+
+    private func logCookieUsage(for url: String, usingBrowserCookies: Bool) {
+        LoggerService.shared.log("yt-dlp request for \(hostForLog(url)) using browser cookies: \(usingBrowserCookies ? "yes" : "no")", level: .info)
+    }
+
+    private func hostForLog(_ url: String) -> String {
+        URL(string: url)?.host ?? "unknown host"
+    }
+<<<<<<< HEAD
+=======
+    
+    private func isBoyfriendTVURL(_ url: String) -> Bool {
+        URL(string: url)?.host?.lowercased().contains("boyfriendtv.com") == true || url.lowercased().contains("boyfriendtv.com")
+    }
+
+    private func normalizeURLForYtdlp(_ urlString: String) -> String {
+        guard var components = URLComponents(string: urlString) else { return urlString }
+        if let nested = components.queryItems?.first(where: { ["url", "u", "redirect", "target"].contains($0.name.lowercased()) })?.value,
+           nested.lowercased().contains("boyfriendtv.com") {
+            return normalizeURLForYtdlp(nested)
+        }
+        guard let host = components.host?.lowercased(), host.contains("boyfriendtv.com") else { return urlString }
+        components.scheme = "https"
+        components.host = "www.boyfriendtv.com"
+        let trackingPrefixes = ["utm_"]
+        let trackingNames = Set(["fbclid", "gclid", "dclid", "msclkid", "igshid", "mc_cid", "mc_eid", "ref", "source"])
+        components.queryItems = components.queryItems?.filter { item in
+            let name = item.name.lowercased()
+            return !trackingNames.contains(name) && !trackingPrefixes.contains { name.hasPrefix($0) }
+        }
+        if components.queryItems?.isEmpty == true { components.queryItems = nil }
+        return components.string ?? urlString
+    }
+
+    private func shouldRetryWithBrowserCookies(error _: Error, url: String, usingBrowserCookies: Bool, forceBrowserCookies: Bool) -> Bool {
+        isBoyfriendTVURL(url) && !usingBrowserCookies && !forceBrowserCookies && configuredBrowserCookieSource() != nil
+    }
+
+    private func mapSiteSpecificError(_ error: Error, url: String) -> Error {
+        if isBoyfriendTVURL(url), configuredBrowserCookieSource() == nil {
+            return YtdlpError.boyfriendTVNeedsBrowserCookies
+        }
+        return error
+    }
+>>>>>>> origin/codex/update-ytdlpservice-and-downloadmanager
 
     private func appendSiteSpecificArgs(for url: String, to args: inout [String]) {
         let lowerUrl = url.lowercased()
@@ -789,6 +901,9 @@ class YtdlpService: ObservableObject {
         args.append(contentsOf: ["--socket-timeout", "15"])
 
         if lowerUrl.contains("boyfriendtv.com") {
+            args.append(contentsOf: ["--user-agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"])
+            args.append(contentsOf: ["--add-header", "Origin:https://www.boyfriendtv.com"])
+            args.append(contentsOf: ["--add-header", "Accept:text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7"])
             args.append(contentsOf: ["--add-header", "Referer:https://www.boyfriendtv.com/"])
             args.append(contentsOf: ["--extractor-args", "generic:impersonate"])
             args.append(contentsOf: ["--concurrent-fragments", "5"])
@@ -1114,6 +1229,7 @@ enum YtdlpError: LocalizedError {
     case subtitleError(String)
     case cloudflareBlocked
     case ffmpegInstallationFailed(String)
+    case boyfriendTVNeedsBrowserCookies
 
     var errorDescription: String? {
         switch self {
@@ -1133,6 +1249,8 @@ enum YtdlpError: LocalizedError {
             return "Blocked by Cloudflare anti-bot protection. Please select your browser as cookie source in Settings > Advanced and try again."
         case .ffmpegInstallationFailed(let path):
             return "FFmpeg installation failed. Please try updating dependencies again. Attempted path: \(path)"
+        case .boyfriendTVNeedsBrowserCookies:
+            return "boyfriend.tv often requires signed-in browser cookies. Open Settings > Advanced > Browser Cookies, choose your browser, then try again."
         }
     }
 }
