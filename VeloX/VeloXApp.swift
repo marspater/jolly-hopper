@@ -77,6 +77,9 @@ struct VeloXApp: App {
                         window.close()
                     }
                 }
+            } else {
+                // Ensure Dock icon is visible
+                NSApp.setActivationPolicy(.regular)
             }
         }
     }
