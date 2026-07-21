@@ -69,15 +69,16 @@ struct DownloadRowView: View {
     
     @State private var isHovering = false
     @State private var showLog = false
+    @State private var isCopiedLog = false
     
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 12) {
+            HStack(spacing: 14) {
 
                 thumbnailView
                 
 
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: 5) {
                     Text(download.title == "___FETCHING___" ? languageService.s("fetching") : download.title)
                         .font(.system(size: 14, weight: .semibold))
                         .lineLimit(2)
@@ -109,7 +110,11 @@ struct DownloadRowView: View {
                             
                             if error.contains("Sign in to confirm you're not a bot") {
                                 Button(languageService.s("fix_signin_error")) {
-                                    NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+                                    PreferencesWindowManager.shared.showPreferencesWindow(
+                                        languageService: languageService,
+                                        updateChecker: UpdateChecker(),
+                                        downloadManager: downloadManager
+                                    )
                                 }
                                 .buttonStyle(.borderedProminent)
                                 .controlSize(.mini)
@@ -126,11 +131,19 @@ struct DownloadRowView: View {
             if download.status == .downloading || download.status == .processing {
                 ProgressView(value: max(0, min(1, download.progress)))
                     .progressViewStyle(.linear)
+                    .animation(.easeInOut(duration: 0.25), value: download.progress)
             }
         }
-        .padding(12)
-        .background(Color(NSColor.controlBackgroundColor))
-        .cornerRadius(12)
+        .padding(14)
+        .background(.ultraThinMaterial)
+        .cornerRadius(14)
+        .overlay(
+            RoundedRectangle(cornerRadius: 14)
+                .stroke(isHovering ? Color.accentColor.opacity(0.4) : Color.primary.opacity(0.06), lineWidth: 1)
+        )
+        .shadow(color: Color.black.opacity(isHovering ? 0.08 : 0.02), radius: isHovering ? 8 : 4, y: 2)
+        .scaleEffect(isHovering ? 1.006 : 1.0)
+        .animation(.spring(response: 0.3, dampingFraction: 0.75), value: isHovering)
         .onHover { hovering in
             isHovering = hovering
         }
@@ -161,26 +174,27 @@ struct DownloadRowView: View {
     
     private var thumbnailPlaceholder: some View {
         Rectangle()
-            .fill(Color.gray.opacity(0.2))
+            .fill(Color.gray.opacity(0.15))
             .overlay {
-                Image(systemName: "play.rectangle")
-                    .foregroundColor(.gray)
+                Image(systemName: "play.rectangle.fill")
+                    .font(.system(size: 24))
+                    .foregroundColor(.secondary.opacity(0.6))
             }
     }
     
     private var statusBadge: some View {
-        HStack(spacing: 4) {
+        HStack(spacing: 5) {
             switch download.status {
             case .downloading:
                 ProgressView()
-                    .scaleEffect(0.5)
+                    .scaleEffect(0.55)
                     .frame(width: 12, height: 12)
             case .fetching:
                 ProgressView()
-                    .scaleEffect(0.5)
+                    .scaleEffect(0.55)
                     .frame(width: 12, height: 12)
             case .processing:
-                Image(systemName: "gearshape.2")
+                Image(systemName: "gearshape.2.fill")
                     .font(.caption2)
             case .completed:
                 Image(systemName: "checkmark.circle.fill")
@@ -195,7 +209,7 @@ struct DownloadRowView: View {
                     .foregroundColor(.gray)
                     .font(.caption2)
             case .queued:
-                Image(systemName: "clock")
+                Image(systemName: "clock.fill")
                     .foregroundColor(.orange)
                     .font(.caption2)
             case .paused:
@@ -205,8 +219,34 @@ struct DownloadRowView: View {
             }
             
             Text(download.status.title(lang: languageService))
-                .font(.caption)
-                .foregroundColor(.secondary)
+                .font(.system(size: 11, weight: .semibold))
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 3)
+        .background(badgeBackgroundColor)
+        .foregroundColor(badgeForegroundColor)
+        .clipShape(Capsule())
+    }
+
+    private var badgeBackgroundColor: Color {
+        switch download.status {
+        case .downloading, .fetching: return Color.blue.opacity(0.15)
+        case .completed: return Color.green.opacity(0.15)
+        case .failed: return Color.red.opacity(0.15)
+        case .queued: return Color.orange.opacity(0.15)
+        case .paused: return Color.yellow.opacity(0.15)
+        default: return Color.gray.opacity(0.15)
+        }
+    }
+
+    private var badgeForegroundColor: Color {
+        switch download.status {
+        case .downloading, .fetching: return .blue
+        case .completed: return .green
+        case .failed: return .red
+        case .queued: return .orange
+        case .paused: return .yellow
+        default: return .secondary
         }
     }
     
@@ -218,9 +258,11 @@ struct DownloadRowView: View {
                         downloadManager.openFile(path)
                     }
                 } label: {
-                    Image(systemName: "play.circle")
+                    Image(systemName: "play.circle.fill")
+                        .font(.system(size: 18))
                 }
-                .buttonStyle(.borderless)
+                .buttonStyle(.plain)
+                .foregroundColor(.blue)
                 .help(languageService.s("play"))
                 
                 Button {
@@ -228,9 +270,11 @@ struct DownloadRowView: View {
                         downloadManager.showInFinder(path)
                     }
                 } label: {
-                    Image(systemName: "folder")
+                    Image(systemName: "folder.fill")
+                        .font(.system(size: 16))
                 }
-                .buttonStyle(.borderless)
+                .buttonStyle(.plain)
+                .foregroundColor(.secondary)
                 .help(languageService.s("finder"))
                 
                 Button {
@@ -238,8 +282,10 @@ struct DownloadRowView: View {
                     appState.showAddDownloadSheet = true
                 } label: {
                     Image(systemName: "arrow.down.circle")
+                        .font(.system(size: 16))
                 }
-                .buttonStyle(.borderless)
+                .buttonStyle(.plain)
+                .foregroundColor(.secondary)
                 .help(languageService.s("redownload"))
             }
             
@@ -247,9 +293,11 @@ struct DownloadRowView: View {
                 Button {
                     downloadManager.retryDownload(download)
                 } label: {
-                    Image(systemName: "arrow.clockwise.circle")
+                    Image(systemName: "arrow.clockwise.circle.fill")
+                        .font(.system(size: 18))
                 }
-                .buttonStyle(.borderless)
+                .buttonStyle(.plain)
+                .foregroundColor(.orange)
                 .help(languageService.s("retry"))
                 
                 Button {
@@ -257,8 +305,10 @@ struct DownloadRowView: View {
                     appState.showAddDownloadSheet = true
                 } label: {
                     Image(systemName: "arrow.down.circle")
+                        .font(.system(size: 16))
                 }
-                .buttonStyle(.borderless)
+                .buttonStyle(.plain)
+                .foregroundColor(.secondary)
                 .help(languageService.s("redownload"))
             }
             
@@ -266,9 +316,11 @@ struct DownloadRowView: View {
                 Button {
                     downloadManager.stopDownload(download)
                 } label: {
-                    Image(systemName: "stop.circle")
+                    Image(systemName: "stop.circle.fill")
+                        .font(.system(size: 18))
                 }
-                .buttonStyle(.borderless)
+                .buttonStyle(.plain)
+                .foregroundColor(.red)
                 .help(languageService.s("stop"))
             }
             
@@ -276,8 +328,10 @@ struct DownloadRowView: View {
                 showLog = true
             } label: {
                 Image(systemName: "doc.text")
+                    .font(.system(size: 16))
             }
-            .buttonStyle(.borderless)
+            .buttonStyle(.plain)
+            .foregroundColor(.secondary)
             .help(languageService.s("log"))
             
             if download.status == .completed || download.status == .failed || download.status == .stopped {
@@ -285,8 +339,10 @@ struct DownloadRowView: View {
                     downloadManager.removeDownload(download)
                 } label: {
                     Image(systemName: "xmark.circle")
+                        .font(.system(size: 16))
                 }
-                .buttonStyle(.borderless)
+                .buttonStyle(.plain)
+                .foregroundColor(.secondary.opacity(0.7))
                 .help(languageService.s("remove"))
             }
         }
@@ -298,21 +354,40 @@ struct DownloadRowView: View {
                 Text(languageService.s("download_log"))
                     .font(.headline)
                 Spacer()
+                
+                Button {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(download.log, forType: .string)
+                    isCopiedLog = true
+                    Task {
+                        try? await Task.sleep(nanoseconds: 2 * 1_000_000_000)
+                        isCopiedLog = false
+                    }
+                } label: {
+                    Label(isCopiedLog ? "Copied!" : "Copy Log", systemImage: isCopiedLog ? "checkmark" : "doc.on.doc")
+                        .font(.caption)
+                }
+                .buttonStyle(.bordered)
+                
                 Button(languageService.s("close")) {
                     showLog = false
                 }
+                .buttonStyle(.borderedProminent)
             }
-            .padding()
+            .padding(14)
+            .background(.ultraThinMaterial)
             
             Divider()
             
             ScrollView {
                 Text(download.log.isEmpty ? languageService.s("no_log") : download.log)
                     .font(.system(.caption, design: .monospaced))
+                    .foregroundColor(.primary.opacity(0.9))
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding()
+                    .padding(14)
             }
+            .background(Color.black.opacity(0.2))
         }
-        .frame(width: 600, height: 400)
+        .frame(width: 620, height: 420)
     }
 }

@@ -134,7 +134,11 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
                let assets = json["assets"] as? [[String: Any]] {
                 
                 latestVersion = tagName.replacingOccurrences(of: "v", with: "")
-                hasUpdate = (latestVersion ?? currentVersion) != currentVersion
+                if let latest = latestVersion {
+                    hasUpdate = latest.compare(currentVersion, options: .numeric) == .orderedDescending
+                } else {
+                    hasUpdate = false
+                }
                 
                 if let dlpAsset = assets.first(where: { ($0["name"] as? String)?.hasSuffix(".dmg") == true }),
                    let downloadUrlStr = dlpAsset["browser_download_url"] as? String {

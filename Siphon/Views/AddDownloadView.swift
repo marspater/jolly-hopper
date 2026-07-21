@@ -150,7 +150,7 @@ struct AddDownloadView: View {
             footer
         }
         .frame(minWidth: 680, idealWidth: 760, maxWidth: 1000, minHeight: 560, idealHeight: 700, maxHeight: 1000)
-        .background(VisualEffectView(material: .sidebar, blendingMode: .behindWindow).ignoresSafeArea())
+        .background(.ultraThinMaterial)
         .onAppear {
             let loadedPresets = CustomPreset.loadAll()
             self.customPresets = loadedPresets
