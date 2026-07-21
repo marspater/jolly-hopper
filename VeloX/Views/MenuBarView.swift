@@ -29,7 +29,7 @@ struct MenuBarView: View {
         }
         .padding()
         .frame(width: 320)
-        .background(VisualEffectView(material: .menu, blendingMode: .behindWindow).ignoresSafeArea())
+        .background(.ultraThinMaterial)
         .onChange(of: selectedType) { newValue in
             if newValue == "audio" {
                 selectedPreset = "audio_only"
