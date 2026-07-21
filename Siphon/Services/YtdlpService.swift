@@ -177,9 +177,14 @@ class YtdlpService: ObservableObject {
     }
 
     func downloadFfmpeg() async {
-        let ffmpegURL = URL(string: "https://evermeet.cx/ffmpeg/get/zip")!
+        #if arch(arm64)
+        let ffmpegURL = URL(string: "https://github.com/eugeneware/ffmpeg-static/releases/download/b6.1.1/ffmpeg-darwin-arm64.gz")!
+        #else
+        let ffmpegURL = URL(string: "https://github.com/eugeneware/ffmpeg-static/releases/download/b6.1.1/ffmpeg-darwin-x64.gz")!
+        #endif
+        
         let appSupport = getAppSupportDirectory()
-        let destinationZip = appSupport.appendingPathComponent("ffmpeg.zip")
+        let destinationGz = appSupport.appendingPathComponent("ffmpeg.gz")
         let ffmpegDest = appSupport.appendingPathComponent("ffmpeg")
 
         LoggerService.shared.log("Safely updating FFmpeg from \(ffmpegURL)", level: .info)
@@ -187,34 +192,51 @@ class YtdlpService: ObservableObject {
         do {
             try FileManager.default.createDirectory(at: appSupport, withIntermediateDirectories: true)
             let (tempURL, _) = try await URLSession.shared.download(from: ffmpegURL)
-            if FileManager.default.fileExists(atPath: destinationZip.path) {
-                try FileManager.default.removeItem(at: destinationZip)
+            if FileManager.default.fileExists(atPath: destinationGz.path) {
+                try FileManager.default.removeItem(at: destinationGz)
             }
-            try FileManager.default.moveItem(at: tempURL, to: destinationZip)
+            try FileManager.default.moveItem(at: tempURL, to: destinationGz)
 
-            let unzipProcess = Process()
-            unzipProcess.executableURL = URL(fileURLWithPath: "/usr/bin/unzip")
-            unzipProcess.arguments = ["-o", destinationZip.path, "-d", appSupport.path]
-            try unzipProcess.run()
-            unzipProcess.waitUntilExit()
+            if FileManager.default.fileExists(atPath: ffmpegDest.path) {
+                try? FileManager.default.removeItem(at: ffmpegDest)
+            }
+
+            let gzipProcess = Process()
+            gzipProcess.executableURL = URL(fileURLWithPath: "/usr/bin/gzip")
+            gzipProcess.arguments = ["-d", "-f", destinationGz.path]
+            try gzipProcess.run()
+            gzipProcess.waitUntilExit()
 
             if FileManager.default.fileExists(atPath: ffmpegDest.path) {
                 try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: ffmpegDest.path)
+                
+                // Strip quarantine attribute if present
+                let xattrProcess = Process()
+                xattrProcess.executableURL = URL(fileURLWithPath: "/usr/bin/xattr")
+                xattrProcess.arguments = ["-c", ffmpegDest.path]
+                try? xattrProcess.run()
+                xattrProcess.waitUntilExit()
+
                 if await validateBinary(ffmpegDest, name: "FFmpeg", context: "download") {
                     ffmpegPath = ffmpegDest
                     LoggerService.shared.log("FFmpeg downloaded and validated at \(ffmpegDest.path).", level: .info)
                 }
             }
-            try? FileManager.default.removeItem(at: destinationZip)
+            try? FileManager.default.removeItem(at: destinationGz)
         } catch {
             LoggerService.shared.log("Failed to download FFmpeg: \(error.localizedDescription)", level: .error)
         }
     }
 
     func downloadFfprobe() async {
-        let ffprobeURL = URL(string: "https://evermeet.cx/ffmpeg/get/ffprobe/zip")!
+        #if arch(arm64)
+        let ffprobeURL = URL(string: "https://github.com/eugeneware/ffmpeg-static/releases/download/b6.1.1/ffprobe-darwin-arm64.gz")!
+        #else
+        let ffprobeURL = URL(string: "https://github.com/eugeneware/ffmpeg-static/releases/download/b6.1.1/ffprobe-darwin-x64.gz")!
+        #endif
+        
         let appSupport = getAppSupportDirectory()
-        let destinationZip = appSupport.appendingPathComponent("ffprobe.zip")
+        let destinationGz = appSupport.appendingPathComponent("ffprobe.gz")
         let ffprobeDest = appSupport.appendingPathComponent("ffprobe")
 
         LoggerService.shared.log("Safely updating FFprobe from \(ffprobeURL)", level: .info)
@@ -222,25 +244,37 @@ class YtdlpService: ObservableObject {
         do {
             try FileManager.default.createDirectory(at: appSupport, withIntermediateDirectories: true)
             let (tempURL, _) = try await URLSession.shared.download(from: ffprobeURL)
-            if FileManager.default.fileExists(atPath: destinationZip.path) {
-                try FileManager.default.removeItem(at: destinationZip)
+            if FileManager.default.fileExists(atPath: destinationGz.path) {
+                try FileManager.default.removeItem(at: destinationGz)
             }
-            try FileManager.default.moveItem(at: tempURL, to: destinationZip)
+            try FileManager.default.moveItem(at: tempURL, to: destinationGz)
 
-            let unzipProcess = Process()
-            unzipProcess.executableURL = URL(fileURLWithPath: "/usr/bin/unzip")
-            unzipProcess.arguments = ["-o", destinationZip.path, "-d", appSupport.path]
-            try unzipProcess.run()
-            unzipProcess.waitUntilExit()
+            if FileManager.default.fileExists(atPath: ffprobeDest.path) {
+                try? FileManager.default.removeItem(at: ffprobeDest)
+            }
+
+            let gzipProcess = Process()
+            gzipProcess.executableURL = URL(fileURLWithPath: "/usr/bin/gzip")
+            gzipProcess.arguments = ["-d", "-f", destinationGz.path]
+            try gzipProcess.run()
+            gzipProcess.waitUntilExit()
 
             if FileManager.default.fileExists(atPath: ffprobeDest.path) {
                 try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: ffprobeDest.path)
+                
+                // Strip quarantine attribute if present
+                let xattrProcess = Process()
+                xattrProcess.executableURL = URL(fileURLWithPath: "/usr/bin/xattr")
+                xattrProcess.arguments = ["-c", ffprobeDest.path]
+                try? xattrProcess.run()
+                xattrProcess.waitUntilExit()
+
                 if await validateBinary(ffprobeDest, name: "FFprobe", context: "download") {
                     ffprobePath = ffprobeDest
                     LoggerService.shared.log("FFprobe downloaded and validated at \(ffprobeDest.path).", level: .info)
                 }
             }
-            try? FileManager.default.removeItem(at: destinationZip)
+            try? FileManager.default.removeItem(at: destinationGz)
         } catch {
             LoggerService.shared.log("Failed to download FFprobe: \(error.localizedDescription)", level: .error)
         }
