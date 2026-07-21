@@ -385,6 +385,42 @@ class YtdlpService: ObservableObject {
     }
 
     private func fetchSingleVideoInfo(path: String, url: String, forceBrowserCookies: Bool = false) async throws -> MediaInfo {
+        if isBoyfriendTVURL(url) {
+            if let btvMedia = await resolveBoyfriendTVMediaInfo(url: url) {
+                var btvArgs = [
+                    path,
+                    "--dump-json",
+                    "--no-playlist",
+                    "--no-warnings"
+                ]
+                appendSiteSpecificArgs(for: btvMedia.embedURL, to: &btvArgs)
+                btvArgs.append(btvMedia.streamURL)
+                
+                if let output = try? await runCommand(btvArgs),
+                   let data = output.data(using: .utf8),
+                   let parsedInfo = try? JSONDecoder().decode(MediaInfo.self, from: data) {
+                    return MediaInfo(
+                        id: url,
+                        title: btvMedia.title,
+                        description: parsedInfo.description,
+                        thumbnail: parsedInfo.thumbnail,
+                        duration: parsedInfo.duration,
+                        uploader: "BoyfriendTV",
+                        uploadDate: parsedInfo.uploadDate,
+                        viewCount: parsedInfo.viewCount,
+                        likeCount: parsedInfo.likeCount,
+                        formats: parsedInfo.formats,
+                        subtitles: parsedInfo.subtitles,
+                        automaticCaptions: parsedInfo.automaticCaptions,
+                        chapters: parsedInfo.chapters,
+                        playlist: nil,
+                        playlistIndex: nil,
+                        playlistCount: nil
+                    )
+                }
+            }
+        }
+
         var args = [
             path,
             "--dump-json",
@@ -550,6 +586,15 @@ class YtdlpService: ObservableObject {
             throw YtdlpError.notFound
         }
         let normalizedURL = normalizeURLForYtdlp(url)
+        var targetURL = normalizedURL
+        var btvTitle: String? = nil
+        if isBoyfriendTVURL(url) {
+            if let btvMedia = await resolveBoyfriendTVMediaInfo(url: url) {
+                targetURL = btvMedia.streamURL
+                btvTitle = btvMedia.title
+            }
+        }
+
         var args = [path.path]
         if ffmpegPath == nil || !FileManager.default.fileExists(atPath: ffmpegPath?.path ?? "") {
             await findFfmpeg()
@@ -572,7 +617,7 @@ class YtdlpService: ObservableObject {
         args.append(contentsOf: ["--paths", "temp:/tmp"])
 
         let outputTemplate: String
-        if let customFilename = options.customFilename, !customFilename.isEmpty {
+        if let customFilename = options.customFilename ?? btvTitle, !customFilename.isEmpty {
             let safeName = sanitizeFilename(customFilename)
             outputTemplate = options.saveFolder.appendingPathComponent("\(safeName).%(ext)s").path
         } else {
@@ -642,13 +687,13 @@ class YtdlpService: ObservableObject {
             }
         }
         
-        appendSiteSpecificArgs(for: normalizedURL, to: &args)
+        appendSiteSpecificArgs(for: targetURL, to: &args)
 
         args.append("--newline")
         args.append("--progress-template")
         args.append("%(progress._percent_str)s %(progress._speed_str)s %(progress._eta_str)s")
         
-        args.append(normalizedURL)
+        args.append(targetURL)
         
         let fullCommand = args.map { $0.contains(" ") ? "\"\($0)\"" : $0 }.joined(separator: " ")
         for warning in codecFallbackWarnings {
@@ -837,18 +882,79 @@ class YtdlpService: ObservableObject {
     }
     
     private func isBoyfriendTVURL(_ url: String) -> Bool {
-        URL(string: url)?.host?.lowercased().contains("boyfriendtv.com") == true || url.lowercased().contains("boyfriendtv.com")
+        let lower = url.lowercased()
+        return lower.contains("boyfriend.tv") || lower.contains("boyfriendtv.com")
+    }
+
+    struct BoyfriendTVExtractedMedia {
+        let streamURL: String
+        let embedURL: String
+        let title: String
+    }
+
+    private func resolveBoyfriendTVMediaInfo(url: String) async -> BoyfriendTVExtractedMedia? {
+        guard let pageURL = URL(string: url) else { return nil }
+        var request = URLRequest(url: pageURL)
+        request.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36", forHTTPHeaderField: "User-Agent")
+        request.setValue("https://www.boyfriend.tv/", forHTTPHeaderField: "Referer")
+        
+        guard let (data, response) = try? await URLSession.shared.data(for: request),
+              let httpResponse = response as? HTTPURLResponse,
+              httpResponse.statusCode == 200,
+              let html = String(data: data, encoding: .utf8) else {
+            return nil
+        }
+        
+        var title = "BoyfriendTV Video"
+        if let titleRange = html.range(of: "<title>(.*?)</title>", options: .regularExpression) {
+            let rawTitle = String(html[titleRange])
+                .replacingOccurrences(of: "<title>", with: "")
+                .replacingOccurrences(of: "</title>", with: "")
+                .replacingOccurrences(of: "boyfriend.tv - ", with: "")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if !rawTitle.isEmpty {
+                title = rawTitle
+            }
+        }
+        
+        var embedUrl: String = url
+        if let embedRange = html.range(of: "\"embedUrl\"\\s*:\\s*\"([^\"]+)\"", options: .regularExpression) {
+            let rawEmbed = String(html[embedRange])
+            if let firstColon = rawEmbed.firstIndex(of: ":"),
+               let startQuote = rawEmbed[firstColon...].firstIndex(of: "\"") {
+                let val = String(rawEmbed[startQuote...])
+                    .replacingOccurrences(of: "\"", with: "")
+                    .replacingOccurrences(of: "\\/", with: "/")
+                if val.hasPrefix("http") {
+                    embedUrl = val
+                }
+            }
+        }
+        
+        if let hlsRange = html.range(of: "\"hlsAuto\"\\s*:\\s*\"([^\"]+)\"", options: .regularExpression) {
+            let rawHls = String(html[hlsRange])
+            if let firstColon = rawHls.firstIndex(of: ":"),
+               let startQuote = rawHls[firstColon...].firstIndex(of: "\"") {
+                let streamUrl = String(rawHls[startQuote...])
+                    .replacingOccurrences(of: "\"", with: "")
+                    .replacingOccurrences(of: "\\/", with: "/")
+                if streamUrl.hasPrefix("http") {
+                    return BoyfriendTVExtractedMedia(streamURL: streamUrl, embedURL: embedUrl, title: title)
+                }
+            }
+        }
+        
+        return nil
     }
 
     private func normalizeURLForYtdlp(_ urlString: String) -> String {
         guard var components = URLComponents(string: urlString) else { return urlString }
         if let nested = components.queryItems?.first(where: { ["url", "u", "redirect", "target"].contains($0.name.lowercased()) })?.value,
-           nested.lowercased().contains("boyfriendtv.com") {
+           isBoyfriendTVURL(nested) {
             return normalizeURLForYtdlp(nested)
         }
-        guard let host = components.host?.lowercased(), host.contains("boyfriendtv.com") else { return urlString }
+        guard let host = components.host?.lowercased(), isBoyfriendTVURL(host) else { return urlString }
         components.scheme = "https"
-        components.host = "www.boyfriendtv.com"
         let trackingPrefixes = ["utm_"]
         let trackingNames = Set(["fbclid", "gclid", "dclid", "msclkid", "igshid", "mc_cid", "mc_eid", "ref", "source"])
         components.queryItems = components.queryItems?.filter { item in
@@ -889,12 +995,13 @@ class YtdlpService: ObservableObject {
         args.append(contentsOf: ["--fragment-retries", "10"])
         args.append(contentsOf: ["--socket-timeout", "15"])
 
-        if lowerUrl.contains("boyfriendtv.com") {
+        if lowerUrl.contains("boyfriend.tv") || lowerUrl.contains("boyfriendtv.com") || lowerUrl.contains("cdn.boyfriend.tv") {
             args.append(contentsOf: ["--user-agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"])
-            args.append(contentsOf: ["--add-header", "Origin:https://www.boyfriendtv.com"])
-            args.append(contentsOf: ["--add-header", "Accept:text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7"])
-            args.append(contentsOf: ["--add-header", "Referer:https://www.boyfriendtv.com/"])
-            args.append(contentsOf: ["--extractor-args", "generic:impersonate"])
+            args.append(contentsOf: ["--add-header", "Origin:https://www.boyfriend.tv"])
+            args.append(contentsOf: ["--add-header", "Accept:*/*"])
+            let referer = lowerUrl.contains("/embed/") ? url : "https://www.boyfriend.tv/"
+            args.append(contentsOf: ["--add-header", "Referer:\(referer)"])
+            args.append(contentsOf: ["--hls-use-mpegts"])
             args.append(contentsOf: ["--concurrent-fragments", "5"])
         } else if lowerUrl.contains("justthegays.com") {
             args.append(contentsOf: ["--add-header", "Referer:https://justthegays.com/"])
