@@ -217,87 +217,87 @@ struct HomeView: View {
     @EnvironmentObject var languageService: LanguageService
     
     var body: some View {
-        GeometryReader { geometry in
-            ScrollView {
-                VStack(spacing: 0) {
-                    Spacer(minLength: 40)
-                    
-                    VStack(spacing: 40) {
-                        // Logo & Title Section
-                        VStack(spacing: 24) {
-                            ZStack {
-                                Circle()
-                                    .fill(.linearGradient(colors: [.blue, .purple], startPoint: .topLeading, endPoint: .bottomTrailing))
-                                    .frame(width: 100, height: 100)
-                                    .shadow(color: .purple.opacity(0.3), radius: 15)
-                                
-                                Image(systemName: "arrow.down")
-                                    .font(.system(size: 50, weight: .bold))
-                                    .foregroundColor(.white)
-                            }
-                            
-                            VStack(spacing: 8) {
-                                Text("VeloX Pro")
-                                    .font(.system(size: 48, weight: .black))
-                                
-                                Text(LocalizedStringKey(languageService.s("url_placeholder")))
-                                    .font(.title3)
-                                    .foregroundColor(.secondary)
-                                    .multilineTextAlignment(.center)
-                                    .padding(.horizontal)
-                            }
-                        }
+        ScrollView {
+            VStack(spacing: 36) {
+                Spacer(minLength: 20)
+                
+                // Logo & Title Section
+                VStack(spacing: 20) {
+                    ZStack {
+                        Circle()
+                            .fill(.linearGradient(colors: [.blue, .purple], startPoint: .topLeading, endPoint: .bottomTrailing))
+                            .frame(width: 96, height: 96)
+                            .shadow(color: .purple.opacity(0.35), radius: 16, x: 0, y: 8)
                         
-                        // Action Button
-                        Button {
-                            appState.showAddDownloadSheet = true
-                        } label: {
-                            Label(languageService.s("new_download"), systemImage: "plus.circle.fill")
-                                .font(.headline)
-                                .padding(.horizontal, 32)
-                                .padding(.vertical, 16)
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .controlSize(.large)
-                        .keyboardShortcut("n", modifiers: .command)
-                        
-                        // Stats Grid
-                        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 16), count: 4), spacing: 16) {
-                            StatCard(title: languageService.s("stat_downloading"), count: downloadManager.downloadingCount, color: .blue) {
-                                appState.selectedNavItem = .downloading
-                            }
-                            StatCard(title: languageService.s("stat_queued"), count: downloadManager.queuedCount, color: .orange) {
-                                appState.selectedNavItem = .queued
-                            }
-                            StatCard(title: languageService.s("stat_completed"), count: downloadManager.completedCount, color: .green) {
-                                appState.selectedNavItem = .completed
-                            }
-                            StatCard(title: languageService.s("stat_failed"), count: downloadManager.failedCount, color: .red) {
-                                appState.selectedNavItem = .failed
-                            }
-                        }
-                        .padding(.horizontal, 40)
-                        .frame(maxWidth: 800)
+                        Image(nsImage: NSApp.applicationIconImage)
+                            .resizable()
+                            .frame(width: 80, height: 80)
                     }
-                    .frame(maxWidth: 800)
                     
-                    Spacer(minLength: 40)
-                    
-                    // Version info footer
-                    if let version = downloadManager.ytdlpVersion {
-                        HStack(spacing: 6) {
-                            Image(systemName: "terminal.fill")
-                                .font(.system(size: 10))
-                            Text("yt-dlp \(version)")
-                                .font(.system(size: 11, weight: .medium, design: .monospaced))
-                        }
-                        .foregroundColor(.secondary.opacity(0.8))
-                        .padding(.bottom, 20)
+                    VStack(spacing: 8) {
+                        Text("VeloX Pro")
+                            .font(.system(size: 42, weight: .black, design: .rounded))
+                        
+                        Text(LocalizedStringKey(languageService.s("url_placeholder")))
+                            .font(.title3)
+                            .foregroundColor(.secondary)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 24)
                     }
                 }
-                .frame(minWidth: geometry.size.width)
-                .frame(minHeight: geometry.size.height)
+                
+                // Action Button
+                Button {
+                    appState.showAddDownloadSheet = true
+                } label: {
+                    HStack(spacing: 10) {
+                        Image(systemName: "plus.circle.fill")
+                            .font(.title3)
+                        Text(languageService.s("new_download"))
+                            .font(.headline)
+                    }
+                    .padding(.horizontal, 32)
+                    .padding(.vertical, 14)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+                .keyboardShortcut("n", modifiers: .command)
+                .shadow(color: .blue.opacity(0.3), radius: 10, y: 4)
+                
+                // Stats Grid
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 16), count: 4), spacing: 16) {
+                    StatCard(title: languageService.s("stat_downloading"), count: downloadManager.downloadingCount, color: .blue) {
+                        appState.selectedNavItem = .downloading
+                    }
+                    StatCard(title: languageService.s("stat_queued"), count: downloadManager.queuedCount, color: .orange) {
+                        appState.selectedNavItem = .queued
+                    }
+                    StatCard(title: languageService.s("stat_completed"), count: downloadManager.completedCount, color: .green) {
+                        appState.selectedNavItem = .completed
+                    }
+                    StatCard(title: languageService.s("stat_failed"), count: downloadManager.failedCount, color: .red) {
+                        appState.selectedNavItem = .failed
+                    }
+                }
+                .padding(.horizontal, 32)
+                .frame(maxWidth: 850)
+                
+                Spacer(minLength: 20)
+                
+                // Version info footer
+                if let version = downloadManager.ytdlpVersion {
+                    HStack(spacing: 6) {
+                        Image(systemName: "terminal.fill")
+                            .font(.system(size: 10))
+                        Text("yt-dlp \(version)")
+                            .font(.system(size: 11, weight: .medium, design: .monospaced))
+                    }
+                    .foregroundColor(.secondary.opacity(0.8))
+                    .padding(.bottom, 16)
+                }
             }
+            .frame(maxWidth: .infinity, minHeight: 520)
+            .padding(.vertical, 20)
         }
         .background(Color(NSColor.windowBackgroundColor))
         .alert(languageService.s("whats_new_title"), isPresented: $downloadManager.showWhatsNew) {
@@ -325,9 +325,9 @@ struct StatCard: View {
         Button(action: action) {
             VStack(spacing: 8) {
                 Text("\(count)")
-                    .font(.system(size: 36, weight: .bold, design: .rounded))
+                    .font(.system(size: 34, weight: .bold, design: .rounded))
                     .foregroundColor(color)
-                    .shadow(color: color.opacity(0.4), radius: isHovered ? 8 : 2)
+                    .shadow(color: color.opacity(isHovered ? 0.5 : 0.2), radius: isHovered ? 8 : 2)
                 Text(title)
                     .font(.caption)
                     .fontWeight(.semibold)
@@ -336,7 +336,7 @@ struct StatCard: View {
                     .lineLimit(2)
             }
             .frame(maxWidth: .infinity)
-            .frame(height: 105)
+            .frame(height: 100)
             .padding(.vertical, 8)
             .padding(.horizontal, 4)
             .background(.ultraThinMaterial)
@@ -352,7 +352,7 @@ struct StatCard: View {
                         lineWidth: 1.5
                     )
             )
-            .shadow(color: color.opacity(isHovered ? 0.25 : 0.08), radius: isHovered ? 12 : 6, x: 0, y: isHovered ? 6 : 3)
+            .shadow(color: color.opacity(isHovered ? 0.25 : 0.08), radius: isHovered ? 12 : 4, x: 0, y: isHovered ? 6 : 2)
             .scaleEffect(isHovered ? 1.03 : 1.0)
             .animation(.spring(response: 0.35, dampingFraction: 0.75), value: isHovered)
         }
@@ -376,7 +376,7 @@ struct SponsorView: View {
             HStack {
                 Image(systemName: "star.fill")
                     .foregroundColor(.yellow)
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(.system(size: 13, weight: .semibold))
                 Text(languageService.s("star_github"))
                     .font(.system(size: 12, weight: .bold))
                 Spacer()
@@ -385,7 +385,7 @@ struct SponsorView: View {
                     .foregroundColor(.secondary)
             }
             .padding(.horizontal, 12)
-            .padding(.vertical, 10)
+            .padding(.vertical, 8)
             .background(
                 RoundedRectangle(cornerRadius: 10)
                     .fill(isHovered ? Color.yellow.opacity(0.2) : Color.yellow.opacity(0.1))
@@ -398,24 +398,5 @@ struct SponsorView: View {
                 isHovered = hovering
             }
         }
-    }
-}
-
-// Helper for blurred background
-struct VisualEffectView: NSViewRepresentable {
-    let material: NSVisualEffectView.Material
-    let blendingMode: NSVisualEffectView.BlendingMode
-    
-    func makeNSView(context: Context) -> NSVisualEffectView {
-        let view = NSVisualEffectView()
-        view.material = material
-        view.blendingMode = blendingMode
-        view.state = .active
-        return view
-    }
-    
-    func updateNSView(_ nsView: NSVisualEffectView, context: Context) {
-        nsView.material = material
-        nsView.blendingMode = blendingMode
     }
 }
