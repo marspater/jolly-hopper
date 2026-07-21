@@ -23,6 +23,7 @@ class DownloadManager: ObservableObject {
     private let userDefaults = UserDefaults.standard
     private var activeProcesses: [UUID: Process] = [:]
     private var languageService: LanguageService?
+    private var failedDownloadsMap: [UUID: Download] = [:]
 
     init() {
         ytdlpService.$isUpdating
@@ -195,7 +196,7 @@ class DownloadManager: ObservableObject {
             try? await Task.sleep(nanoseconds: 500_000_000)
         }
 
-        download.status = .fetching
+        updateStatus(for: download, to: .fetching)
         objectWillChange.send()
 
         do {
@@ -205,7 +206,7 @@ class DownloadManager: ObservableObject {
             download.title = info.title
             download.duration = info.durationString
             download.thumbnailURL = info.thumbnailURL
-            download.status = .downloading
+            updateStatus(for: download, to: .downloading)
             objectWillChange.send()
 
 
@@ -236,7 +237,7 @@ class DownloadManager: ObservableObject {
             activeProcesses.removeValue(forKey: download.id)
 
             download.filePath = outputPath
-            download.status = .completed
+            updateStatus(for: download, to: .completed)
             download.progress = 1.0
             objectWillChange.send()
 
@@ -250,7 +251,7 @@ class DownloadManager: ObservableObject {
             }
 
         } catch let error as YtdlpError {
-            download.status = .failed
+            updateStatus(for: download, to: .failed)
             objectWillChange.send()
             if let lang = languageService {
                 switch error {
@@ -284,7 +285,7 @@ class DownloadManager: ObservableObject {
             }
             addToHistory(download)
         } catch {
-            download.status = .failed
+            updateStatus(for: download, to: .failed)
             objectWillChange.send()
             download.errorMessage = error.localizedDescription
             LoggerService.shared.log("Download failed with error (\(download.url)): \(error.localizedDescription)", level: .error)
@@ -305,14 +306,14 @@ class DownloadManager: ObservableObject {
             process.terminate()
             activeProcesses.removeValue(forKey: download.id)
         }
-        download.status = .stopped
+        updateStatus(for: download, to: .stopped)
         objectWillChange.send()
         addToHistory(download)
     }
 
 
     func retryDownload(_ download: Download) {
-        download.status = .queued
+        updateStatus(for: download, to: .queued)
         download.progress = 0
         objectWillChange.send()
         download.errorMessage = nil
@@ -329,14 +330,14 @@ class DownloadManager: ObservableObject {
             stopDownload(download)
         }
         for download in queuedDownloads {
-            download.status = .stopped
+            updateStatus(for: download, to: .stopped)
         }
         objectWillChange.send()
     }
 
 
     func retryFailedDownloads() {
-        for download in downloads where download.status == .failed {
+        for download in failedDownloadsMap.values {
             retryDownload(download)
         }
     }
@@ -369,6 +370,7 @@ class DownloadManager: ObservableObject {
         }
 
         downloads.removeAll { $0.id == download.id }
+        failedDownloadsMap.removeValue(forKey: download.id)
         history.removeAll { $0.id == download.id }
         saveHistory()
     }
@@ -432,6 +434,12 @@ class DownloadManager: ObservableObject {
             // Restore as Download objects for UI, reversing so newest is at the top
             let restored = decoded.reversed().map { $0.toDownload() }
             downloads.append(contentsOf: restored)
+
+            for download in restored {
+                if download.status == .failed {
+                    failedDownloadsMap[download.id] = download
+                }
+            }
         }
     }
 
@@ -475,6 +483,15 @@ class DownloadManager: ObservableObject {
 
     func showInFinder(_ path: URL) {
         NSWorkspace.shared.activateFileViewerSelecting([path])
+    }
+
+    private func updateStatus(for download: Download, to status: DownloadStatus) {
+        download.status = status
+        if status == .failed {
+            failedDownloadsMap[download.id] = download
+        } else {
+            failedDownloadsMap.removeValue(forKey: download.id)
+        }
     }
 }
 
