@@ -515,12 +515,7 @@ class YtdlpService: ObservableObject {
         guard let path = ytdlpPath else {
             throw YtdlpError.notFound
         }
-<<<<<<< HEAD
-
-=======
-        
         let normalizedURL = normalizeURLForYtdlp(url)
->>>>>>> origin/codex/update-ytdlpservice-and-downloadmanager
         var args = [path.path]
         if ffmpegPath == nil || !FileManager.default.fileExists(atPath: ffmpegPath?.path ?? "") {
             await findFfmpeg()
@@ -612,26 +607,15 @@ class YtdlpService: ObservableObject {
                 args.append(contentsOf: ["--user-agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"])
             }
         }
-<<<<<<< HEAD
-
-        appendSiteSpecificArgs(for: url, to: &args)
-=======
         
         appendSiteSpecificArgs(for: normalizedURL, to: &args)
->>>>>>> origin/codex/update-ytdlpservice-and-downloadmanager
 
         args.append("--newline")
         args.append("--progress-template")
         args.append("%(progress._percent_str)s %(progress._speed_str)s %(progress._eta_str)s")
-<<<<<<< HEAD
-
-        args.append(url)
-
-=======
         
         args.append(normalizedURL)
         
->>>>>>> origin/codex/update-ytdlpservice-and-downloadmanager
         let fullCommand = args.map { $0.contains(" ") ? "\"\($0)\"" : $0 }.joined(separator: " ")
         for warning in codecFallbackWarnings {
             onOutput("\(warning)\n")
@@ -646,22 +630,6 @@ class YtdlpService: ObservableObject {
                 try? FileManager.default.removeItem(at: fileURL)
             }
         }
-<<<<<<< HEAD
-
-        let outputPath: String
-        do {
-            outputPath = try await runDownloadProcess(
-                args: args,
-                saveFolder: options.saveFolder,
-                onProcessCreated: onProcessCreated,
-                onProgress: onProgress,
-                onOutput: onOutput
-            )
-        } catch {
-            throw mapSiteSpecificError(error, url: url)
-        }
-
-=======
         
         let outputPath: String
         do {
@@ -676,7 +644,6 @@ class YtdlpService: ObservableObject {
             throw mapSiteSpecificError(error, url: normalizedURL)
         }
         
->>>>>>> origin/codex/update-ytdlpservice-and-downloadmanager
         if options.embedSubtitles && options.downloadSubtitles {
             cleanupSubtitleFiles(for: outputPath, in: options.saveFolder)
         }
@@ -762,7 +729,6 @@ class YtdlpService: ObservableObject {
 
         return args
     }
-<<<<<<< HEAD
 
     private func buildVideoSelector(for resolution: VideoResolution?, ignoreWorst: Bool = false) -> String {
         guard let resolution else { return "bestvideo" }
@@ -815,17 +781,9 @@ class YtdlpService: ObservableObject {
         return warnings
     }
 
-=======
->>>>>>> origin/codex/update-update-coordination-and-notification-handling
-    private func appendCookieArgs(to args: inout [String]) {
-        let browser = UserDefaults.standard.string(forKey: "browserForCookies") ?? "none"
-        if browser != "none" {
-=======
-    
     private func appendCookieArgs(to args: inout [String], force: Bool = false) -> Bool {
         guard let browser = configuredBrowserCookieSource() else { return false }
         if force || !args.contains("--cookies-from-browser") {
->>>>>>> origin/codex/update-ytdlpservice-and-downloadmanager
             args.append(contentsOf: ["--cookies-from-browser", browser])
         }
         return true
@@ -843,8 +801,6 @@ class YtdlpService: ObservableObject {
     private func hostForLog(_ url: String) -> String {
         URL(string: url)?.host ?? "unknown host"
     }
-<<<<<<< HEAD
-=======
     
     private func isBoyfriendTVURL(_ url: String) -> Bool {
         URL(string: url)?.host?.lowercased().contains("boyfriendtv.com") == true || url.lowercased().contains("boyfriendtv.com")
@@ -879,7 +835,6 @@ class YtdlpService: ObservableObject {
         }
         return error
     }
->>>>>>> origin/codex/update-ytdlpservice-and-downloadmanager
 
     private func appendSiteSpecificArgs(for url: String, to args: inout [String]) {
         let lowerUrl = url.lowercased()
