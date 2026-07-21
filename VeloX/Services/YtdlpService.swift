@@ -9,28 +9,28 @@ class YtdlpService: ObservableObject {
     @Published var version: String?
     @Published var isUpdating: Bool = false
     @Published var updateProgress: Double = 0
-    
+
     private var ytdlpPath: URL?
     private var ffmpegPath: URL?
     private var ffprobePath: URL?
     private let localVersion = "1.5.5"
     private let bundledYtdlpName = "yt-dlp_macos"
-    
+
     init() {
         Task {
             await setupBinaries()
         }
     }
-    
 
-    
+
+
     func setupBinaries() async {
         await findYtdlp()
         await findFfmpeg()
     }
-    
 
-    
+
+
 
     func findYtdlp() async {
 
@@ -39,79 +39,30 @@ class YtdlpService: ObservableObject {
             isAvailable = true
             return
         }
-        
+
 
         let appSupport = getAppSupportDirectory()
         let ytdlpInSupport = appSupport.appendingPathComponent("yt-dlp")
-        
+
         if FileManager.default.fileExists(atPath: ytdlpInSupport.path) {
             ytdlpPath = ytdlpInSupport
             isAvailable = true
             return
         }
-        
+
 
         await downloadYtdlp()
     }
-    
 
-    
+
+
 
     func downloadYtdlp() async {
-        isUpdating = true
-        updateProgress = 0.1
-        
-        let downloadURL = URL(string: "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_macos")!
-        let appSupport = getAppSupportDirectory()
-        let destination = appSupport.appendingPathComponent("yt-dlp")
-        let tempDestination = appSupport.appendingPathComponent("yt-dlp.tmp_\(UUID().uuidString)")
-        
-        LoggerService.shared.log("Safely updating yt-dlp binary from \(downloadURL)", level: .info)
-        
         do {
-            try FileManager.default.createDirectory(at: appSupport, withIntermediateDirectories: true)
-            let (downloadedTempURL, _) = try await URLSession.shared.download(from: downloadURL)
-            
-            if FileManager.default.fileExists(atPath: tempDestination.path) {
-                try FileManager.default.removeItem(at: tempDestination)
-            }
-            try FileManager.default.moveItem(at: downloadedTempURL, to: tempDestination)
-            try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: tempDestination.path)
-            
-            // Verify binary execution before replacing target
-            let testProcess = Process()
-            testProcess.executableURL = tempDestination
-            testProcess.arguments = ["--version"]
-            let pipe = Pipe()
-            testProcess.standardOutput = pipe
-            testProcess.standardError = pipe
-            
-            try testProcess.run()
-            testProcess.waitUntilExit()
-            
-            if testProcess.terminationStatus == 0 {
-                if FileManager.default.fileExists(atPath: destination.path) {
-                    try FileManager.default.removeItem(at: destination)
-                }
-                try FileManager.default.moveItem(at: tempDestination, to: destination)
-                ytdlpPath = destination
-                isAvailable = true
-                await getVersion()
-                LoggerService.shared.log("yt-dlp updated successfully to version \(version ?? "unknown")", level: .info)
-            } else {
-                let errData = pipe.fileHandleForReading.readDataToEndOfFile()
-                let errStr = String(data: errData, encoding: .utf8) ?? ""
-                LoggerService.shared.log("yt-dlp update validation failed: \(errStr)", level: .error)
-                try? FileManager.default.removeItem(at: tempDestination)
-            }
+            _ = try await updateYtdlp()
         } catch {
             LoggerService.shared.log("Failed to update yt-dlp: \(error.localizedDescription)", level: .error)
-            try? FileManager.default.removeItem(at: tempDestination)
-            isAvailable = FileManager.default.fileExists(atPath: destination.path)
         }
-        
-        updateProgress = 1.0
-        isUpdating = false
     }
 
     func findFfmpeg() async {
@@ -230,9 +181,9 @@ class YtdlpService: ObservableObject {
         let appSupport = getAppSupportDirectory()
         let destinationZip = appSupport.appendingPathComponent("ffmpeg.zip")
         let ffmpegDest = appSupport.appendingPathComponent("ffmpeg")
-        
+
         LoggerService.shared.log("Safely updating FFmpeg from \(ffmpegURL)", level: .info)
-        
+
         do {
             try FileManager.default.createDirectory(at: appSupport, withIntermediateDirectories: true)
             let (tempURL, _) = try await URLSession.shared.download(from: ffmpegURL)
@@ -240,13 +191,13 @@ class YtdlpService: ObservableObject {
                 try FileManager.default.removeItem(at: destinationZip)
             }
             try FileManager.default.moveItem(at: tempURL, to: destinationZip)
-            
+
             let unzipProcess = Process()
             unzipProcess.executableURL = URL(fileURLWithPath: "/usr/bin/unzip")
             unzipProcess.arguments = ["-o", destinationZip.path, "-d", appSupport.path]
             try unzipProcess.run()
             unzipProcess.waitUntilExit()
-            
+
             if FileManager.default.fileExists(atPath: ffmpegDest.path) {
                 try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: ffmpegDest.path)
                 if await validateBinary(ffmpegDest, name: "FFmpeg", context: "download") {
@@ -265,9 +216,9 @@ class YtdlpService: ObservableObject {
         let appSupport = getAppSupportDirectory()
         let destinationZip = appSupport.appendingPathComponent("ffprobe.zip")
         let ffprobeDest = appSupport.appendingPathComponent("ffprobe")
-        
+
         LoggerService.shared.log("Safely updating FFprobe from \(ffprobeURL)", level: .info)
-        
+
         do {
             try FileManager.default.createDirectory(at: appSupport, withIntermediateDirectories: true)
             let (tempURL, _) = try await URLSession.shared.download(from: ffprobeURL)
@@ -275,13 +226,13 @@ class YtdlpService: ObservableObject {
                 try FileManager.default.removeItem(at: destinationZip)
             }
             try FileManager.default.moveItem(at: tempURL, to: destinationZip)
-            
+
             let unzipProcess = Process()
             unzipProcess.executableURL = URL(fileURLWithPath: "/usr/bin/unzip")
             unzipProcess.arguments = ["-o", destinationZip.path, "-d", appSupport.path]
             try unzipProcess.run()
             unzipProcess.waitUntilExit()
-            
+
             if FileManager.default.fileExists(atPath: ffprobeDest.path) {
                 try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: ffprobeDest.path)
                 if await validateBinary(ffprobeDest, name: "FFprobe", context: "download") {
@@ -294,23 +245,84 @@ class YtdlpService: ObservableObject {
             LoggerService.shared.log("Failed to download FFprobe: \(error.localizedDescription)", level: .error)
         }
     }
-    
+
     func updateAllDependencies() async {
         await downloadYtdlp()
         await downloadFfmpeg()
         await downloadFfprobe()
     }
-    
 
-    func updateYtdlp() async {
-        await downloadYtdlp()
+
+    func updateYtdlp() async throws -> String {
+        guard !isUpdating else {
+            throw YtdlpUpdateError.alreadyInProgress
+        }
+        isUpdating = true
+        updateProgress = 0.1
+        defer {
+            updateProgress = 1.0
+            isUpdating = false
+        }
+
+        let downloadURL = URL(string: "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_macos")!
+        let appSupport = getAppSupportDirectory()
+        let destination = appSupport.appendingPathComponent("yt-dlp")
+        let tempDestination = appSupport.appendingPathComponent("yt-dlp.tmp_\(UUID().uuidString)")
+
+        LoggerService.shared.log("Safely updating yt-dlp binary from \(downloadURL)", level: .info)
+
+        do {
+            try FileManager.default.createDirectory(at: appSupport, withIntermediateDirectories: true)
+            let (downloadedTempURL, _) = try await URLSession.shared.download(from: downloadURL)
+            updateProgress = 0.65
+
+            if FileManager.default.fileExists(atPath: tempDestination.path) {
+                try FileManager.default.removeItem(at: tempDestination)
+            }
+            try FileManager.default.moveItem(at: downloadedTempURL, to: tempDestination)
+            try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: tempDestination.path)
+
+            let testProcess = Process()
+            testProcess.executableURL = tempDestination
+            testProcess.arguments = ["--version"]
+            let pipe = Pipe()
+            testProcess.standardOutput = pipe
+            testProcess.standardError = pipe
+
+            try testProcess.run()
+            testProcess.waitUntilExit()
+
+            guard testProcess.terminationStatus == 0 else {
+                let errData = pipe.fileHandleForReading.readDataToEndOfFile()
+                let errStr = String(data: errData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                try? FileManager.default.removeItem(at: tempDestination)
+                throw YtdlpUpdateError.validationFailed(errStr.isEmpty ? "yt-dlp exited with status \(testProcess.terminationStatus)" : errStr)
+            }
+
+            if FileManager.default.fileExists(atPath: destination.path) {
+                try FileManager.default.removeItem(at: destination)
+            }
+            try FileManager.default.moveItem(at: tempDestination, to: destination)
+            ytdlpPath = destination
+            isAvailable = true
+            updateProgress = 0.9
+            await getVersion()
+            let installedVersion = version ?? "unknown"
+            LoggerService.shared.log("yt-dlp updated successfully to version \(installedVersion)", level: .info)
+            return installedVersion
+        } catch {
+            try? FileManager.default.removeItem(at: tempDestination)
+            isAvailable = FileManager.default.fileExists(atPath: destination.path)
+            LoggerService.shared.log("Failed to update yt-dlp: \(error.localizedDescription)", level: .error)
+            throw error
+        }
     }
-    
 
-    
+
+
     func getVersion() async {
         guard let path = ytdlpPath else { return }
-        
+
         do {
             let output = try await runCommandAsync([path.path, "--version"])
             version = output.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -318,15 +330,15 @@ class YtdlpService: ObservableObject {
             print("Versiyon alınamadı: \(error)")
         }
     }
-    
 
-    
+
+
 
     func fetchInfo(url: String) async throws -> MediaInfo {
         guard let path = ytdlpPath else {
             throw YtdlpError.notFound
         }
-        
+
         do {
              return try await fetchSingleVideoInfo(path: path.path, url: url)
         } catch {
@@ -336,7 +348,7 @@ class YtdlpService: ObservableObject {
             throw error // Playlist değilse orijinal hatayı fırlat
         }
     }
-    
+
     private func fetchSingleVideoInfo(path: String, url: String) async throws -> MediaInfo {
         var args = [
             path,
@@ -344,7 +356,7 @@ class YtdlpService: ObservableObject {
             "--no-playlist",
             "--no-warnings"
         ]
-        
+
         appendCookieArgs(to: &args)
 
         // Handle Sucuri bypass
@@ -356,16 +368,16 @@ class YtdlpService: ObservableObject {
                 args.append(contentsOf: ["--user-agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"])
             }
         }
-        
+
         appendSiteSpecificArgs(for: url, to: &args)
         args.append(url)
-        
+
         defer {
             if let fileURL = tempCookieFile {
                 try? FileManager.default.removeItem(at: fileURL)
             }
         }
-        
+
         let output = try await runCommand(args)
         guard let data = output.data(using: .utf8) else { throw YtdlpError.parseError }
         return try JSONDecoder().decode(MediaInfo.self, from: data)
@@ -378,7 +390,7 @@ class YtdlpService: ObservableObject {
             "--flat-playlist",
             "--no-warnings"
         ]
-        
+
         appendCookieArgs(to: &args)
 
         // Handle Sucuri bypass
@@ -390,23 +402,23 @@ class YtdlpService: ObservableObject {
                 args.append(contentsOf: ["--user-agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"])
             }
         }
-        
+
         args.append(contentsOf: ["--extractor-args", "generic:impersonate"])
         args.append(url)
-        
+
         defer {
             if let fileURL = tempCookieFile {
                 try? FileManager.default.removeItem(at: fileURL)
             }
         }
-        
+
         let output = try await runCommand(args)
         guard let data = output.data(using: .utf8) else { throw YtdlpError.parseError }
-        
+
         let decoder = JSONDecoder()
-        
+
         let info = try decoder.decode(MediaInfo.self, from: data)
-        
+
         return MediaInfo(
             id: info.id,
             title: info.title,
@@ -426,20 +438,20 @@ class YtdlpService: ObservableObject {
             playlistCount: info.playlistCount ?? info.viewCount // Bazen viewCount yerine entry count gelebilir
         )
     }
-    
+
 
     func fetchPlaylistInfo(url: String) async throws -> [MediaInfo] {
         guard let path = ytdlpPath else {
             throw YtdlpError.notFound
         }
-        
+
         var args = [
             path.path,
             "--dump-json",
             "--flat-playlist",
             "--no-warnings"
         ]
-        
+
         appendCookieArgs(to: &args)
 
         // Handle Sucuri bypass
@@ -451,33 +463,33 @@ class YtdlpService: ObservableObject {
                 args.append(contentsOf: ["--user-agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"])
             }
         }
-        
+
         args.append(contentsOf: ["--extractor-args", "generic:impersonate"])
         args.append(url)
-        
+
         defer {
             if let fileURL = tempCookieFile {
                 try? FileManager.default.removeItem(at: fileURL)
             }
         }
-        
+
         let output = try await runCommand(args)
-        
+
         var results: [MediaInfo] = []
         let decoder = JSONDecoder()
-        
+
         for line in output.components(separatedBy: "\n") where !line.isEmpty {
             if let data = line.data(using: .utf8),
                let info = try? decoder.decode(MediaInfo.self, from: data) {
                 results.append(info)
             }
         }
-        
+
         return results
     }
-    
 
-    
+
+
 
     func download(
         url: String,
@@ -489,18 +501,28 @@ class YtdlpService: ObservableObject {
         guard let path = ytdlpPath else {
             throw YtdlpError.notFound
         }
-        
+
         var args = [path.path]
-        args.append("--no-playlist")
-        
-        let ffmpeg = try await validatedFfmpegLocationForYtdlp()
-        args.append(contentsOf: ["--ffmpeg-location", ffmpeg.path])
-        LoggerService.shared.log("Passing FFmpeg location to yt-dlp: \(ffmpeg.path)", level: .info)
-        if let ffprobe = ffprobePath {
-            LoggerService.shared.log("Validated FFprobe available for yt-dlp: \(ffprobe.path)", level: .info)
+        if ffmpegPath == nil || !FileManager.default.fileExists(atPath: ffmpegPath?.path ?? "") {
+            await findFfmpeg()
         }
-        args.append(contentsOf: ["--paths", "temp:/tmp"])
         
+        let appSupport = getAppSupportDirectory()
+        let ffmpegDir: String
+        if let loc = ffmpegPath?.deletingLastPathComponent().path, FileManager.default.fileExists(atPath: loc + "/ffmpeg") {
+            ffmpegDir = loc
+        } else if FileManager.default.fileExists(atPath: appSupport.appendingPathComponent("ffmpeg").path) {
+            ffmpegDir = appSupport.path
+        } else if FileManager.default.fileExists(atPath: "/opt/homebrew/bin/ffmpeg") {
+            ffmpegDir = "/opt/homebrew/bin"
+        } else if FileManager.default.fileExists(atPath: "/usr/local/bin/ffmpeg") {
+            ffmpegDir = "/usr/local/bin"
+        } else {
+            ffmpegDir = appSupport.path
+        }
+        args.append(contentsOf: ["--ffmpeg-location", ffmpegDir])
+        args.append(contentsOf: ["--paths", "temp:/tmp"])
+
         let outputTemplate: String
         if let customFilename = options.customFilename, !customFilename.isEmpty {
             let safeName = sanitizeFilename(customFilename)
@@ -509,51 +531,50 @@ class YtdlpService: ObservableObject {
             outputTemplate = options.saveFolder.appendingPathComponent("%(title)s.%(ext)s").path
         }
         args.append(contentsOf: ["-o", outputTemplate])
-        
+
         args.append(contentsOf: buildFormatArgs(options: options))
         let codecFallbackWarnings = codecFallbackOutputWarnings(options: options)
-        
         if options.downloadSubtitles && !options.subtitleLanguages.isEmpty {
             let subFormat = options.subtitleFormat?.ytdlpValue ?? "srt"
             args.append(contentsOf: ["--sub-format", "\(subFormat)/best"])
             let langList = options.subtitleLanguages.joined(separator: ",")
             args.append(contentsOf: ["--sub-langs", langList])
-            
+
             args.append("--write-subs")
             args.append("--write-auto-subs")
-            
+
             if options.embedSubtitles && options.fileType.isVideo {
                 args.append("--embed-subs")
                 args.append(contentsOf: ["--convert-subs", subFormat])
             }
         }
-        
+
         if options.downloadThumbnail {
             args.append("--write-thumbnail")
         }
         if options.embedThumbnail {
             args.append("--embed-thumbnail")
         }
-        
+
         args.append("--embed-metadata")
         args.append("--embed-chapters")
-        
+
         if options.splitChapters {
             args.append("--split-chapters")
         }
-        
+
         if options.sponsorBlock {
             args.append(contentsOf: ["--sponsorblock-remove", "all"])
         }
-        
+
         if let start = options.timeFrameStart, let end = options.timeFrameEnd {
             args.append(contentsOf: ["--download-sections", "*\(start)-\(end)"])
         }
-        
+
         if options.forceOverwrite == true {
             args.append("--force-overwrites")
         }
-        
+
         if let additionalArgs = options.additionalArguments, !additionalArgs.isEmpty {
             let customArgs = splitArguments(additionalArgs)
             args.append(contentsOf: customArgs)
@@ -570,15 +591,15 @@ class YtdlpService: ObservableObject {
                 args.append(contentsOf: ["--user-agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"])
             }
         }
-        
+
         appendSiteSpecificArgs(for: url, to: &args)
 
         args.append("--newline")
         args.append("--progress-template")
         args.append("%(progress._percent_str)s %(progress._speed_str)s %(progress._eta_str)s")
-        
+
         args.append(url)
-        
+
         let fullCommand = args.map { $0.contains(" ") ? "\"\($0)\"" : $0 }.joined(separator: " ")
         for warning in codecFallbackWarnings {
             onOutput("\(warning)\n")
@@ -587,13 +608,13 @@ class YtdlpService: ObservableObject {
         Task { @MainActor in
             LoggerService.shared.log(fullCommand, level: .command)
         }
-        
+
         defer {
             if let fileURL = tempCookieFile {
                 try? FileManager.default.removeItem(at: fileURL)
             }
         }
-        
+
         let outputPath = try await runDownloadProcess(
             args: args,
             saveFolder: options.saveFolder,
@@ -601,27 +622,27 @@ class YtdlpService: ObservableObject {
             onProgress: onProgress,
             onOutput: onOutput
         )
-        
+
         if options.embedSubtitles && options.downloadSubtitles {
             cleanupSubtitleFiles(for: outputPath, in: options.saveFolder)
         }
-        
+
         return URL(fileURLWithPath: outputPath, relativeTo: options.saveFolder).absoluteURL
     }
-    
+
     private func cleanupSubtitleFiles(for videoPath: String, in folder: URL) {
         let fileManager = FileManager.default
         let videoURL = URL(fileURLWithPath: videoPath)
         let videoNameWithoutExt = videoURL.deletingPathExtension().lastPathComponent
-        
+
         let subtitleExtensions = ["srt", "vtt", "ass", "sub", "ssa"]
-        
+
         do {
             let contents = try fileManager.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)
             for file in contents {
                 let fileName = file.deletingPathExtension().lastPathComponent
                 let fileExt = file.pathExtension.lowercased()
-                
+
                 if subtitleExtensions.contains(fileExt) && fileName.hasPrefix(videoNameWithoutExt) {
                     try? fileManager.removeItem(at: file)
                 }
@@ -630,9 +651,9 @@ class YtdlpService: ObservableObject {
             print("Error cleaning up subtitle files: \(error)")
         }
     }
-    
 
-    
+
+
     private func buildFormatArgs(options: DownloadOptions) -> [String] {
         var args: [String] = []
 
@@ -739,27 +760,29 @@ class YtdlpService: ObservableObject {
         return warnings
     }
 
+=======
+>>>>>>> origin/codex/update-update-coordination-and-notification-handling
     private func appendCookieArgs(to args: inout [String]) {
         let browser = UserDefaults.standard.string(forKey: "browserForCookies") ?? "none"
         if browser != "none" {
             args.append(contentsOf: ["--cookies-from-browser", browser])
         }
     }
-    
+
     private func appendSiteSpecificArgs(for url: String, to args: inout [String]) {
         let lowerUrl = url.lowercased()
-        
+
         // Common modern browser headers & Cloudflare extraction options
         let defaultUA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
         let secChUa = "\"Chromium\";v=\"124\", \"Google Chrome\";v=\"124\", \"Not-A.Brand\";v=\"99\""
-        
+
         // Anti-bot flags for Cloudflare & rate limits
         args.append(contentsOf: ["--user-agent", defaultUA])
         args.append(contentsOf: ["--add-header", "Sec-Ch-Ua:\(secChUa)"])
         args.append(contentsOf: ["--add-header", "Sec-Ch-Ua-Mobile:?0"])
         args.append(contentsOf: ["--add-header", "Sec-Ch-Ua-Platform:\"macOS\""])
         args.append(contentsOf: ["--add-header", "Accept-Language:en-US,en;q=0.9"])
-        
+
         // Retries and socket timeouts
         args.append(contentsOf: ["--retries", "10"])
         args.append(contentsOf: ["--fragment-retries", "10"])
@@ -780,24 +803,24 @@ class YtdlpService: ObservableObject {
         }
     }
 
-    
+
 
     private func runCommandAsync(_ args: [String]) async throws -> String {
         return try await withCheckedThrowingContinuation { continuation in
             let process = Process()
             let pipe = Pipe()
-            
+
             process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
             process.arguments = args
             process.standardOutput = pipe
             process.standardError = pipe
-            
+
             var env = ProcessInfo.processInfo.environment
             let appSupport = getAppSupportDirectory()
             let currentPath = env["PATH"] ?? ""
             env["PATH"] = "\(appSupport.path):/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:\(currentPath)"
             process.environment = env
-            
+
 
             let outputBuffer = ThreadSafeDataBuffer()
             pipe.fileHandleForReading.readabilityHandler = { handle in
@@ -806,24 +829,24 @@ class YtdlpService: ObservableObject {
                     outputBuffer.append(data)
                 }
             }
-            
+
             process.terminationHandler = { proc in
                 pipe.fileHandleForReading.readabilityHandler = nil
-                
+
                 let remainingData = pipe.fileHandleForReading.readDataToEndOfFile()
                 if !remainingData.isEmpty {
                     outputBuffer.append(remainingData)
                 }
-                
+
                 let output = outputBuffer.getString()
-                
+
                 if proc.terminationStatus == 0 {
                     continuation.resume(returning: output)
                 } else {
                     continuation.resume(throwing: YtdlpError.commandFailed(output))
                 }
             }
-            
+
             do {
                 try process.run()
             } catch {
@@ -832,11 +855,11 @@ class YtdlpService: ObservableObject {
             }
         }
     }
-    
+
     private func runCommand(_ args: [String]) async throws -> String {
         return try await runCommandAsync(args)
     }
-    
+
     private func runDownloadProcess(
         args: [String],
         saveFolder: URL,
@@ -849,34 +872,34 @@ class YtdlpService: ObservableObject {
             let process = Process()
             let outputPipe = Pipe()
             let errorPipe = Pipe()
-            
+
             process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
             process.arguments = args
             process.currentDirectoryURL = saveFolder
             process.standardOutput = outputPipe
             process.standardError = errorPipe
-            
+
             var env = ProcessInfo.processInfo.environment
             let appSupport = getAppSupportDirectory()
             let currentPath = env["PATH"] ?? ""
             env["PATH"] = "\(appSupport.path):/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:\(currentPath)"
             process.environment = env
-            
+
             onProcessCreated(process)
-            
+
             let outputState = ThreadSafeOutputState()
-            
+
             outputPipe.fileHandleForReading.readabilityHandler = { handle in
                 let data = handle.availableData
                 guard !data.isEmpty, let line = String(data: data, encoding: .utf8) else { return }
-                
+
                 if line.contains("[download] Destination:") {
                     let parts = line.components(separatedBy: "[download] Destination: ")
                     if parts.count > 1 {
                         outputState.setOutputPath(parts[1].trimmingCharacters(in: .whitespacesAndNewlines))
                     }
                 }
-                
+
                 if line.contains("has already been downloaded") {
                     let parts = line.components(separatedBy: "[download] ")
                     if parts.count > 1 {
@@ -886,22 +909,22 @@ class YtdlpService: ObservableObject {
                         }
                     }
                 }
-                
+
                 if line.contains("[Merger] Merging formats into") {
                     let parts = line.components(separatedBy: "\"")
                     if parts.count > 1 {
                         outputState.setOutputPath(parts[1])
                     }
                 }
-                
+
                 DispatchQueue.main.async {
                     onOutput(line)
-                    
+
                     if line.contains("%") {
                         let components = line.trimmingCharacters(in: .whitespacesAndNewlines)
                             .components(separatedBy: .whitespaces)
                             .filter { !$0.isEmpty }
-                        
+
                         if let percentStr = components.first,
                            let percent = Double(percentStr.replacingOccurrences(of: "%", with: "")) {
                             let speed = components.count > 1 ? components[1] : nil
@@ -911,25 +934,25 @@ class YtdlpService: ObservableObject {
                     }
                 }
             }
-            
+
             errorPipe.fileHandleForReading.readabilityHandler = { handle in
                 let data = handle.availableData
                 guard !data.isEmpty, let line = String(data: data, encoding: .utf8) else { return }
-                
+
                 outputState.appendError(line)
-                
+
                 DispatchQueue.main.async {
                     onOutput("[ERROR] \(line)")
                 }
             }
-            
+
             process.terminationHandler = { proc in
                 outputPipe.fileHandleForReading.readabilityHandler = nil
                 errorPipe.fileHandleForReading.readabilityHandler = nil
-                
+
                 let currentOutputPath = outputState.getOutputPath()
                 let errorOutput = outputState.getErrorText()
-                
+
                 if proc.terminationStatus == 0 {
                     continuation.resume(returning: currentOutputPath)
                 } else {
@@ -949,7 +972,7 @@ class YtdlpService: ObservableObject {
                     }
                 }
             }
-            
+
             do {
                 try process.run()
             } catch {
@@ -957,16 +980,16 @@ class YtdlpService: ObservableObject {
             }
         }
     }
-    
+
     private func getAppSupportDirectory() -> URL {
         let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
         let veloxDir = appSupport.appendingPathComponent("VeloX")
         let legacyDir = appSupport.appendingPathComponent("Macabolic")
-        
+
         if !FileManager.default.fileExists(atPath: veloxDir.path) && FileManager.default.fileExists(atPath: legacyDir.path) {
             try? FileManager.default.moveItem(at: legacyDir, to: veloxDir)
         }
-        
+
         return veloxDir
     }
 
@@ -975,7 +998,7 @@ class YtdlpService: ObservableObject {
         var current: String = ""
         var inQuotes: Bool = false
         var quoteChar: Character? = nil
-        
+
         var iterator = input.makeIterator()
         while let char = iterator.next() {
             if char == "\"" || char == "'" {
@@ -999,11 +1022,11 @@ class YtdlpService: ObservableObject {
                 current.append(char)
             }
         }
-        
+
         if !current.isEmpty {
             result.append(current)
         }
-        
+
         return result
     }
 
@@ -1011,11 +1034,11 @@ class YtdlpService: ObservableObject {
         guard let url = URL(string: urlString) else { return nil }
         var request = URLRequest(url: url)
         request.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36", forHTTPHeaderField: "User-Agent")
-        
+
         do {
             let (data, _) = try await URLSession.shared.data(for: request)
             guard let htmlText = String(data: data, encoding: .utf8) else { return nil }
-            
+
             if htmlText.contains("sucuri_cloudproxy_js") {
                 let pattern = "S\\s*=\\s*'([^']+)'"
                 let regex = try NSRegularExpression(pattern: pattern, options: [])
@@ -1025,18 +1048,18 @@ class YtdlpService: ObservableObject {
                     let b64Str = String(htmlText[range])
                     if let decodedData = Data(base64Encoded: b64Str),
                        let jsCode = String(data: decodedData, encoding: .utf8) {
-                        
+
                         let context = JSContext()
                         let docObj = JSValue(newObjectIn: context)
                         context?.setObject(docObj, forKeyedSubscript: "document" as NSString)
                         docObj?.setValue("", forProperty: "cookie")
-                        
+
                         let locObj = JSValue(newObjectIn: context)
                         context?.setObject(locObj, forKeyedSubscript: "location" as NSString)
                         locObj?.setValue({ }, forProperty: "reload")
-                        
+
                         context?.evaluateScript(jsCode)
-                        
+
                         if let cookieVal = docObj?.forProperty("cookie")?.toString(), !cookieVal.isEmpty {
                             let cookieParts = cookieVal.components(separatedBy: ";")
                             if let firstPart = cookieParts.first {
@@ -1091,7 +1114,7 @@ enum YtdlpError: LocalizedError {
     case subtitleError(String)
     case cloudflareBlocked
     case ffmpegInstallationFailed(String)
-    
+
     var errorDescription: String? {
         switch self {
         case .notFound:
@@ -1117,13 +1140,13 @@ enum YtdlpError: LocalizedError {
 final class ThreadSafeDataBuffer: @unchecked Sendable {
     private var data = Data()
     private let lock = NSLock()
-    
+
     func append(_ newBytes: Data) {
         lock.lock()
         data.append(newBytes)
         lock.unlock()
     }
-    
+
     func getString() -> String {
         lock.lock()
         defer { lock.unlock() }
@@ -1135,28 +1158,43 @@ final class ThreadSafeOutputState: @unchecked Sendable {
     private var path: String = ""
     private var errorText: String = ""
     private let lock = NSLock()
-    
+
     func setOutputPath(_ newPath: String) {
         lock.lock()
         path = newPath
         lock.unlock()
     }
-    
+
     func getOutputPath() -> String {
         lock.lock()
         defer { lock.unlock() }
         return path
     }
-    
+
     func appendError(_ text: String) {
         lock.lock()
         errorText += text
         lock.unlock()
     }
-    
+
     func getErrorText() -> String {
         lock.lock()
         defer { lock.unlock() }
         return errorText
+    }
+}
+
+
+enum YtdlpUpdateError: LocalizedError {
+    case alreadyInProgress
+    case validationFailed(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .alreadyInProgress:
+            return "A yt-dlp update is already in progress."
+        case .validationFailed(let reason):
+            return "yt-dlp validation failed: \(reason)"
+        }
     }
 }
