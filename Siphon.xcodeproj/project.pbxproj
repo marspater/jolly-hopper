@@ -27,6 +27,7 @@
 		E0001026 /* LanguageService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000026; };
 		E0001029 /* PreferencesWindowManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000029; };
 		E0001027 /* Credits.rtf in Resources */ = {isa = PBXBuildFile; fileRef = E0000027; };
+		E0001030 /* AppIcon.icns in Resources */ = {isa = PBXBuildFile; fileRef = E0000030; };
 		E0001028 /* View+Compatibility.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000028; };
 /* End PBXBuildFile section */
 
@@ -53,6 +54,7 @@
 		E0000026 /* LanguageService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LanguageService.swift; sourceTree = "<group>"; };
 		E0000029 /* PreferencesWindowManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreferencesWindowManager.swift; sourceTree = "<group>"; };
 		E0000027 /* Credits.rtf */ = {isa = PBXFileReference; lastKnownFileType = text.rtf; path = Credits.rtf; sourceTree = "<group>"; };
+		E0000030 /* AppIcon.icns */ = {isa = PBXFileReference; lastKnownFileType = image.icns; path = AppIcon.icns; sourceTree = "<group>"; };
 		E0000028 /* View+Compatibility.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "View+Compatibility.swift"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -140,6 +142,7 @@
 				E0000011 /* Assets.xcassets */,
 				E0000014 /* InfoPlist.strings */,
 				E0000027 /* Credits.rtf */,
+				E0000030 /* AppIcon.icns */,
 			);
 			path = Resources;
 			sourceTree = "<group>";
@@ -234,6 +237,7 @@
 				E0001011 /* Assets.xcassets in Resources */,
 				E0001012 /* InfoPlist.strings in Resources */,
 				E0001027 /* Credits.rtf in Resources */,
+				E0001030 /* AppIcon.icns in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
