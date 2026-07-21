@@ -84,6 +84,7 @@ struct SidebarView: View {
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var downloadManager: DownloadManager
     @EnvironmentObject var languageService: LanguageService
+    @EnvironmentObject var updateChecker: UpdateChecker
     
     var body: some View {
         List {
@@ -108,7 +109,11 @@ struct SidebarView: View {
                 SponsorView()
                 
                 Button {
-                    showNativeSettingsWindow()
+                    PreferencesWindowManager.shared.showPreferencesWindow(
+                        languageService: languageService,
+                        updateChecker: updateChecker,
+                        downloadManager: downloadManager
+                    )
                 } label: {
                     HStack {
                         Image(systemName: "gear")
