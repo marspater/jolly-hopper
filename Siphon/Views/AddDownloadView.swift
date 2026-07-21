@@ -520,7 +520,7 @@ struct AddDownloadView: View {
                         }
                     }
                     .pickerStyle(.menu)
-                    .frame(minWidth: 200, alignment: .leading)
+                    .frame(minWidth: 220, alignment: .leading)
 
                     Picker(languageService.s("audio_codec"), selection: $selectedAudioCodec) {
                         ForEach(AudioCodec.allCases) { codec in
@@ -528,7 +528,7 @@ struct AddDownloadView: View {
                         }
                     }
                     .pickerStyle(.menu)
-                    .frame(minWidth: 200, alignment: .leading)
+                    .frame(minWidth: 220, alignment: .leading)
                 }
             }
 
