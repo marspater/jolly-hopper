@@ -142,7 +142,6 @@
 				E0000011 /* Assets.xcassets */,
 				E0000014 /* InfoPlist.strings */,
 				E0000027 /* Credits.rtf */,
-				E0000030 /* AppIcon.icns */,
 			);
 			path = Resources;
 			sourceTree = "<group>";
