@@ -77,6 +77,9 @@ struct SiphonApp: App {
                         window.close()
                     }
                 }
+            } else {
+                // Ensure Dock icon is visible
+                NSApp.setActivationPolicy(.regular)
             }
         }
     }
