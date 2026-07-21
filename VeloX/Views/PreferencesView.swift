@@ -22,8 +22,7 @@ struct PreferencesView: View {
     @EnvironmentObject var languageService: LanguageService
     @EnvironmentObject var updateChecker: UpdateChecker
     @EnvironmentObject var downloadManager: DownloadManager
-    @State private var isUpdatingYtdlp = false
-    @State private var ytdlpUpdateMessage: String?
+    @State private var selectedReleaseId: Int? = nil
     @State private var showLanguageChangeAlert = false
     @State private var previousLanguage: Language? = nil
     @State private var installedBrowsers: [SupportedBrowser] = []
@@ -806,12 +805,19 @@ struct PreferencesView: View {
                     }
                 }
                 Spacer()
-                if isUpdatingYtdlp {
-                    ProgressView()
-                        .scaleEffect(0.7)
-                } else if let message = ytdlpUpdateMessage {
+                if downloadManager.isUpdatingYtdlp {
+                    VStack(alignment: .trailing, spacing: 4) {
+                        ProgressView(value: max(0, min(1, downloadManager.ytdlpUpdateProgress)))
+                            .frame(width: 120)
+                        Text("\(Int(downloadManager.ytdlpUpdateProgress * 100))%")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                    }
+                } else if let message = downloadManager.ytdlpUpdateMessage?.message {
                     Text(message)
                         .font(.caption)
+                        .foregroundColor(.secondary)
+                        .lineLimit(2)
                 } else {
                     Button(languageService.s("update_now")) {
                         updateYtdlp()
@@ -972,37 +978,8 @@ struct PreferencesView: View {
     }
     
     private func updateYtdlp() {
-        isUpdatingYtdlp = true
-        ytdlpUpdateMessage = nil
-        
         Task {
-            let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-            let macabolicDir = appSupport.appendingPathComponent("Macabolic")
-            let destination = macabolicDir.appendingPathComponent("yt-dlp")
-            
-            do {
-                try FileManager.default.createDirectory(at: macabolicDir, withIntermediateDirectories: true)
-                
-                let downloadURL = URL(string: "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_macos")!
-                let (tempURL, _) = try await URLSession.shared.download(from: downloadURL)
-                
-                if FileManager.default.fileExists(atPath: destination.path) {
-                    try FileManager.default.removeItem(at: destination)
-                }
-                
-                try FileManager.default.moveItem(at: tempURL, to: destination)
-                try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: destination.path)
-                
-                await MainActor.run {
-                    ytdlpUpdateMessage = languageService.s("update_complete")
-                    isUpdatingYtdlp = false
-                }
-            } catch {
-                await MainActor.run {
-                    ytdlpUpdateMessage = languageService.s("update_error") + " \(error.localizedDescription)"
-                    isUpdatingYtdlp = false
-                }
-            }
+            await downloadManager.updateYtdlp()
         }
     }
 }
