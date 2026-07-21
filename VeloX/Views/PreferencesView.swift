@@ -940,11 +940,16 @@ struct PreferencesView: View {
                 
 
                 GroupBox(languageService.s("legal_disclaimer_title")) {
-                    Text(languageService.s("legal_disclaimer_message"))
-                        .font(.caption2)
-                        .foregroundColor(.secondary)
-                        .multilineTextAlignment(.leading)
-                        .padding(.vertical, 4)
+                    VStack(alignment: .leading) {
+                        Text(languageService.s("legal_disclaimer_message"))
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                            .multilineTextAlignment(.leading)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.vertical, 4)
                 }
                 .padding(.horizontal, 20)
                 
