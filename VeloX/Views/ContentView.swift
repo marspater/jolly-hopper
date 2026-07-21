@@ -96,8 +96,6 @@ struct SidebarView: View {
         .veloxSidebarWidth()
         .safeAreaInset(edge: .bottom) {
             VStack(spacing: 8) {
-                SpecialThanksView()
-                
                 SponsorView()
                 
                 SocialShareView()
@@ -511,29 +509,5 @@ struct VisualEffectView: NSViewRepresentable {
     func updateNSView(_ nsView: NSVisualEffectView, context: Context) {
         nsView.material = material
         nsView.blendingMode = blendingMode
-    }
-}
-
-struct SpecialThanksView: View {
-    @EnvironmentObject var languageService: LanguageService
-    
-    var body: some View {
-        VStack(spacing: 2) {
-            Text(languageService.s("special_thanks_sidebar"))
-                .font(.system(size: 9, weight: .medium))
-                .foregroundColor(.secondary)
-            
-            HStack(spacing: 4) {
-                Link("Iman Montajabi", destination: URL(string: "https://github.com/ImanMontajabi")!)
-                Text("&")
-                Link("Semmelstulle", destination: URL(string: "https://github.com/Semmelstulle")!)
-            }
-            .font(.system(size: 9, weight: .bold))
-            
-            Text(languageService.s("for_support"))
-                .font(.system(size: 9, weight: .medium))
-                .foregroundColor(.secondary)
-        }
-        .padding(.bottom, 4)
     }
 }
