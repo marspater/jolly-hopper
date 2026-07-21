@@ -24,7 +24,6 @@ struct PreferencesView: View {
     @EnvironmentObject var downloadManager: DownloadManager
     @State private var isUpdatingYtdlp = false
     @State private var ytdlpUpdateMessage: String?
-    @State private var selectedReleaseId: Int? = nil
     @State private var showLanguageChangeAlert = false
     @State private var previousLanguage: Language? = nil
     @State private var installedBrowsers: [SupportedBrowser] = []
@@ -114,9 +113,6 @@ struct PreferencesView: View {
             previousLanguage = languageService.selectedLanguage
             installedBrowsers = BrowserUtils.shared.getInstalledBrowsers()
             customPresets = CustomPreset.loadAll()
-            Task {
-                await updateChecker.fetchAllReleases()
-            }
         }
         .sheet(isPresented: $showCreatePresetSheet) {
             createPresetSheet
@@ -178,7 +174,6 @@ struct PreferencesView: View {
             saveFolderSection
             launchAtLoginSection
             appUpdatesSection
-            allVersionsSection
         }
         .veloxFormStyle()
         .padding()
@@ -310,31 +305,6 @@ struct PreferencesView: View {
         }
     }
 
-    private var allVersionsSection: some View {
-        Section(languageService.s("all_versions")) {
-            VStack(alignment: .leading, spacing: 12) {
-                Picker(languageService.s("select_version"), selection: $selectedReleaseId) {
-                    Text(languageService.s("select")).tag(nil as Int?)
-                    ForEach(updateChecker.availableReleases) { release in
-                        Text(release.tagName).tag(release.id as Int?)
-                    }
-                }
-                
-                if let selectedId = selectedReleaseId,
-                   let release = updateChecker.availableReleases.first(where: { $0.id == selectedId }) {
-                    HStack {
-                        Spacer()
-                        Button(languageService.s("install")) {
-                            Task {
-                                await updateChecker.installSpecificRelease(release)
-                            }
-                        }
-                        .buttonStyle(.borderedProminent)
-                    }
-                }
-            }
-        }
-    }
     
 
     
