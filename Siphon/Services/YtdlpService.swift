@@ -735,16 +735,22 @@ class YtdlpService: ObservableObject {
         let videoURL = URL(fileURLWithPath: videoPath)
         let videoNameWithoutExt = videoURL.deletingPathExtension().lastPathComponent
 
-        let subtitleExtensions = ["srt", "vtt", "ass", "sub", "ssa"]
+        // ⚡ Bolt: Converted array to Set for O(1) lookups
+        let subtitleExtensions: Set<String> = ["srt", "vtt", "ass", "sub", "ssa"]
 
         do {
             let contents = try fileManager.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)
             for file in contents {
-                let fileName = file.deletingPathExtension().lastPathComponent
                 let fileExt = file.pathExtension.lowercased()
 
-                if subtitleExtensions.contains(fileExt) && fileName.hasPrefix(videoNameWithoutExt) {
-                    try? fileManager.removeItem(at: file)
+                // ⚡ Bolt: Defer expensive string manipulations (deletingPathExtension/lastPathComponent)
+                // until after checking the file extension. This avoids overhead for the 99% of non-subtitle
+                // files in a large Downloads folder. Impact: O(n) string ops -> O(k) where k is # of subtitles.
+                if subtitleExtensions.contains(fileExt) {
+                    let fileName = file.deletingPathExtension().lastPathComponent
+                    if fileName.hasPrefix(videoNameWithoutExt) {
+                        try? fileManager.removeItem(at: file)
+                    }
                 }
             }
         } catch {
