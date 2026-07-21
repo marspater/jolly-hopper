@@ -967,7 +967,7 @@ struct PreferencesView: View {
                     Link(destination: URL(string: "https://github.com/marspater/jolly-hopper")!) {
                         Label("GitHub", systemImage: "link")
                     }
-                    Link(destination: URL(string: "https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md")!) {
+                    Link(destination: URL(string: "https://github.com/marspater/jolly-hopper/blob/main/SUPPORTED_SITES.md")!) {
                         Label(languageService.s("supported_sites"), systemImage: "globe")
                     }
                 }
