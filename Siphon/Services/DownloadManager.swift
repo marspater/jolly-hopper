@@ -429,8 +429,8 @@ class DownloadManager: ObservableObject {
         if let data = userDefaults.data(forKey: "downloadHistory"),
            let decoded = try? JSONDecoder().decode([HistoricDownload].self, from: data) {
             history = decoded
-            // Restore as Download objects for UI
-            let restored = decoded.map { $0.toDownload() }
+            // Restore as Download objects for UI, reversing so newest is at the top
+            let restored = decoded.reversed().map { $0.toDownload() }
             downloads.append(contentsOf: restored)
         }
     }
@@ -445,11 +445,13 @@ class DownloadManager: ObservableObject {
         let historic = HistoricDownload(download: download)
 
         // Remove existing if any (upsert)
-        history.removeAll { $0.id == download.id }
-        history.insert(historic, at: 0)
+        if let index = history.firstIndex(where: { $0.id == download.id }) {
+            history.remove(at: index)
+        }
+        history.append(historic)
 
         if history.count > 500 { // Increased limit for better user experience
-            history = Array(history.prefix(500))
+            history.removeFirst(history.count - 500)
         }
 
         saveHistory()
