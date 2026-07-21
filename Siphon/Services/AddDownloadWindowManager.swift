@@ -22,7 +22,7 @@ final class AddDownloadWindowManager: NSObject, NSWindowDelegate {
         let hostingController = NSHostingController(rootView: addDownloadView)
         
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 620, height: 480),
+            contentRect: NSRect(x: 0, y: 0, width: 760, height: 620),
             styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
             backing: .buffered,
             defer: false
@@ -33,7 +33,7 @@ final class AddDownloadWindowManager: NSObject, NSWindowDelegate {
         window.title = "Add New Download"
         window.titlebarAppearsTransparent = true
         window.titleVisibility = .hidden
-        window.minSize = NSSize(width: 560, height: 480)
+        window.minSize = NSSize(width: 680, height: 560)
         window.contentViewController = hostingController
         window.delegate = self
         
