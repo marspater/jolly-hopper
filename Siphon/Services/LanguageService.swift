@@ -111,7 +111,6 @@ class LanguageService: ObservableObject {
         "download_subtitles": "Download Subtitles",
         "subtitles_selected": "%d languages selected",
         "languages": "Languages:",
-        "all_versions": "All Versions",
         "macos_port": "macOS Port",
         "video_downloading": "Video Downloading",
         "embed_video": "Embed in video",
