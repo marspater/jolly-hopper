@@ -299,7 +299,7 @@ struct HomeView: View {
             .frame(maxWidth: .infinity, minHeight: 520)
             .padding(.vertical, 20)
         }
-        .background(Color(NSColor.windowBackgroundColor))
+        .background(.ultraThinMaterial)
         .alert(languageService.s("whats_new_title"), isPresented: $downloadManager.showWhatsNew) {
             Button(languageService.s("star_github")) {
                 if let url = URL(string: "https://github.com/marspater/jolly-hopper") {

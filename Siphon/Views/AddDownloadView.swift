@@ -254,15 +254,6 @@ struct AddDownloadView: View {
                 .fontWeight(.semibold)
 
             Spacer()
-
-            Button {
-                dismiss()
-            } label: {
-                Image(systemName: "xmark.circle.fill")
-                    .font(.title2)
-                    .foregroundColor(.secondary)
-            }
-            .buttonStyle(.plain)
         }
         .padding()
     }

@@ -28,13 +28,25 @@ final class AddDownloadWindowManager: NSObject, NSWindowDelegate {
             defer: false
         )
         
-        window.center()
-        window.isReleasedWhenClosed = false
-        window.title = "Add New Download"
+        window.isOpaque = false
+        window.backgroundColor = .clear
         window.titlebarAppearsTransparent = true
         window.titleVisibility = .hidden
+        window.center()
+        window.isReleasedWhenClosed = false
         window.minSize = NSSize(width: 680, height: 560)
-        window.contentViewController = hostingController
+        
+        let visualEffectView = NSVisualEffectView(frame: NSRect(x: 0, y: 0, width: 760, height: 620))
+        visualEffectView.blendingMode = .behindWindow
+        visualEffectView.material = .hudWindow
+        visualEffectView.state = .active
+        visualEffectView.autoresizingMask = [.width, .height]
+        
+        hostingController.view.frame = visualEffectView.bounds
+        hostingController.view.autoresizingMask = [.width, .height]
+        
+        visualEffectView.addSubview(hostingController.view)
+        window.contentView = visualEffectView
         window.delegate = self
         
         let controller = NSWindowController(window: window)
