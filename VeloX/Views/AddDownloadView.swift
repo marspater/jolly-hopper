@@ -905,12 +905,22 @@ struct AddDownloadView: View {
             let filename = customFilename.isEmpty ? (mediaInfo?.title ?? "") : customFilename
             if !filename.isEmpty {
                 let potentialPath = saveFolder.appendingPathComponent("\(filename).\(fileType.fileExtension)")
-                if FileManager.default.fileExists(atPath: potentialPath.path) {
-                    existingFilePath = potentialPath.path
-                    pendingDownloadOptions = options
-                    showFileExistsAlert = true
-                    return
+                let pathString = potentialPath.path
+
+                Task {
+                    let fileExists = await Task.detached {
+                        FileManager.default.fileExists(atPath: pathString)
+                    }.value
+
+                    if fileExists {
+                        existingFilePath = pathString
+                        pendingDownloadOptions = options
+                        showFileExistsAlert = true
+                    } else {
+                        proceedWithDownload(options: options, forceOverwrite: false)
+                    }
                 }
+                return
             }
         }
 
@@ -938,21 +948,31 @@ struct AddDownloadView: View {
     }
 
     private func downloadWithUniqueFilename() {
-        guard var options = pendingDownloadOptions else { return }
+        guard let options = pendingDownloadOptions else { return }
 
         let originalFilename = customFilename.isEmpty ? (mediaInfo?.title ?? "video") : customFilename
-        var counter = 1
-        var newFilename = "\(originalFilename) (\(counter))"
-        var potentialPath = saveFolder.appendingPathComponent("\(newFilename).\(fileType.fileExtension)")
+        let currentFolder = saveFolder
+        let extensionString = fileType.fileExtension
 
-        while FileManager.default.fileExists(atPath: potentialPath.path) {
-            counter += 1
-            newFilename = "\(originalFilename) (\(counter))"
-            potentialPath = saveFolder.appendingPathComponent("\(newFilename).\(fileType.fileExtension)")
+        Task {
+            let uniqueFilename = await Task.detached {
+                var counter = 1
+                var newFilename = "\(originalFilename) (\(counter))"
+                var potentialPath = currentFolder.appendingPathComponent("\(newFilename).\(extensionString)")
+
+                while FileManager.default.fileExists(atPath: potentialPath.path) {
+                    counter += 1
+                    newFilename = "\(originalFilename) (\(counter))"
+                    potentialPath = currentFolder.appendingPathComponent("\(newFilename).\(extensionString)")
+                }
+
+                return newFilename
+            }.value
+
+            var finalOptions = options
+            finalOptions.customFilename = uniqueFilename
+            proceedWithDownload(options: finalOptions, forceOverwrite: false)
         }
-
-        options.customFilename = newFilename
-        proceedWithDownload(options: options, forceOverwrite: false)
     }
 
     private func selectFolder() {
