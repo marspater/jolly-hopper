@@ -10,3 +10,6 @@
 ## 2025-01-28 - Detached Tasks for Synchronous I/O in SwiftUI
 **Learning:** Performing synchronous file I/O operations (`FileManager.default.fileExists`) directly inside SwiftUI views (`@MainActor`) blocks the main thread. When moving these to `Task.detached`, state variables must be extracted locally before entering the detached closure to prevent capturing UI-bound properties asynchronously, avoiding concurrency errors.
 **Action:** When offloading synchronous APIs to background threads in Swift, copy necessary values to immutable local variables first, then use `Task.detached` to perform the work, returning the result to the parent MainActor task.
+## 2026-07-22 - MainActor Usage for Shared Services
+**Learning:** When interacting with an `@MainActor` shared service like `LoggerService`, dispatching from inside an asynchronous API closure (e.g. `requestAuthorization`) requires jumping back to the `MainActor`. A helper function with `Task { @MainActor in }` can seamlessly handle this internally to avoid repetitive dispatch code.
+**Action:** Use centralized helper methods to handle repetitive `@MainActor` dispatch when calling UI-bound singletons from background closures.
