@@ -198,16 +198,18 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
         let script = """
         (
             exec > /tmp/velox_update.log 2>&1
+            DMG_PATH="$1"
+            APP_PATH="$2"
             echo "Starting update..."
             sleep 3
             MOUNT_POINT="/tmp/VeloXUpdate_$(date +%s)"
             mkdir -p "$MOUNT_POINT"
-            hdiutil mount "\(dmgPath)" -mountpoint "$MOUNT_POINT" -quiet
+            hdiutil mount "$DMG_PATH" -mountpoint "$MOUNT_POINT" -quiet
             
             if [ -d "$MOUNT_POINT/VeloX Pro.app" ]; then
                 echo "Found new app, replacing..."
-                rm -rf "\(appPath)"
-                ditto "$MOUNT_POINT/VeloX Pro.app" "\(appPath)"
+                rm -rf "$APP_PATH"
+                ditto "$MOUNT_POINT/VeloX Pro.app" "$APP_PATH"
                 hdiutil unmount "$MOUNT_POINT" -quiet
                 rm -rf "$MOUNT_POINT"
                 echo "Update files replaced. Waiting for app to restart."
@@ -221,7 +223,7 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
         
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/bash")
-        process.arguments = ["-c", script]
+        process.arguments = ["-c", script, "bash", dmgPath, appPath]
         
         do {
             try process.run()
