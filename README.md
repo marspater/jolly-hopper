@@ -1,6 +1,6 @@
 # VeloX Pro ⚡️
 
-A high-performance, native macOS media extractor & downloader powered by `yt-dlp` and `FFmpeg`. Engineered with advanced anti-bot bypass mechanisms for Cloudflare, BoyfriendTV, GayForFans, YouTube, and 1,000+ protected video streaming sites.
+A high-performance, native macOS media extractor & downloader powered by `yt-dlp` and `FFmpeg`. Engineered with advanced anti-bot bypass mechanisms for Cloudflare, YouTube, and 1,000+ protected video streaming sites.
 
 <div align="center">
   <img src="assets/app_screenshot.png" alt="VeloX Pro Interface" width="880" style="border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.3);" />
@@ -23,7 +23,7 @@ A high-performance, native macOS media extractor & downloader powered by `yt-dlp
 
 - 💧 **Translucent macOS Glassmorphism**: Engineered using native Apple SwiftUI materials and AppKit window translucency for a sleek macOS experience.
 - ⚡ **Advanced Anti-Bot Bypasses**: Native header impersonation, Chrome 124 Client Hints emulation, and cookie session synchronization for Cloudflare and protected sites.
-- 🎯 **Deep Provider Resolvers**: Built-in specialized stream extraction for BoyfriendTV, GayForFans, YouTube Playlists, TikTok, X (Twitter), Instagram, and Twitch.
+- 🎯 **Deep Provider Resolvers**: Built-in specialized stream extraction for YouTube, Playlists, TikTok, X (Twitter), Instagram, Twitch, and 1,000+ video platforms.
 - 🚀 **Atomic Dependency Engine**: Safe, self-testing background updates for `yt-dlp` and native Apple Silicon (`arm64`) + Intel (`x86_64`) `FFmpeg` / `FFprobe` 6.0 binaries.
 - 🛠 **Custom Quality Presets & Codec Control**: Full control over H.264, VP9, AV1, AAC, Opus, MP3, FLAC extraction, resolution scaling (up to 8K), and SponsorBlock segment skipping.
 - 🌐 **Browser Extensions & Menu Bar Companion**: 1-click downloading directly from Safari, Chrome, and Firefox, plus a lightweight macOS status bar popover.
