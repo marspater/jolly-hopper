@@ -456,7 +456,7 @@ struct CustomPreset: Codable, Identifiable, Equatable {
     }
     
     static func loadAll() -> [CustomPreset] {
-        guard let data = UserDefaults.standard.data(forKey: "customPresets") else {
+        guard let data = UserDefaults.standard.data(forKey: UserDefaultsKeys.customPresets) else {
             return []
         }
         do {
@@ -470,7 +470,7 @@ struct CustomPreset: Codable, Identifiable, Equatable {
     
     static func saveAll(_ presets: [CustomPreset]) {
         if let data = try? JSONEncoder().encode(presets) {
-            UserDefaults.standard.set(data, forKey: "customPresets")
+            UserDefaults.standard.set(data, forKey: UserDefaultsKeys.customPresets)
         }
     }
 }
