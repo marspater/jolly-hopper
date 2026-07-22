@@ -2,22 +2,22 @@ import SwiftUI
 import AppKit
 
 struct PreferencesView: View {
-    @AppStorage("theme") private var theme: String = "system"
-    @AppStorage("defaultSaveFolder") private var defaultSaveFolder: String = ""
-    @AppStorage("maxConcurrentDownloads") private var maxConcurrentDownloads: Int = 3
-    @AppStorage("embedThumbnail") private var embedThumbnail: Bool = true
-    @AppStorage("embedMetadata") private var embedMetadata: Bool = true
-    @AppStorage("defaultFileType") private var defaultFileType: String = "mp4"
-    @AppStorage("defaultVideoResolution") private var defaultVideoResolution: String = "r1080p"
-    @AppStorage("defaultVideoCodec") private var defaultVideoCodec: String = "h264"
-    @AppStorage("defaultAudioCodec") private var defaultAudioCodec: String = "aac"
-    @AppStorage("selectedPreset") private var selectedPreset: String = "max_compatibility"
-    @AppStorage("sponsorBlock") private var sponsorBlock: Bool = false
-    @AppStorage("browserForCookies") private var browserForCookies: String = "none"
-    @AppStorage("defaultAdditionalArguments") private var defaultAdditionalArguments: String = ""
-    @AppStorage("showNotifications") private var showNotifications: Bool = true
-    @AppStorage("showMenuBarIcon") private var showMenuBarIcon: Bool = true
-    @AppStorage("startInBackground") private var startInBackground: Bool = false
+    @AppStorage(UserDefaultsKeys.theme) private var theme: String = "system"
+    @AppStorage(UserDefaultsKeys.defaultSaveFolder) private var defaultSaveFolder: String = ""
+    @AppStorage(UserDefaultsKeys.maxConcurrentDownloads) private var maxConcurrentDownloads: Int = 3
+    @AppStorage(UserDefaultsKeys.embedThumbnail) private var embedThumbnail: Bool = true
+    @AppStorage(UserDefaultsKeys.embedMetadata) private var embedMetadata: Bool = true
+    @AppStorage(UserDefaultsKeys.defaultFileType) private var defaultFileType: String = "mp4"
+    @AppStorage(UserDefaultsKeys.defaultVideoResolution) private var defaultVideoResolution: String = "r1080p"
+    @AppStorage(UserDefaultsKeys.defaultVideoCodec) private var defaultVideoCodec: String = "h264"
+    @AppStorage(UserDefaultsKeys.defaultAudioCodec) private var defaultAudioCodec: String = "aac"
+    @AppStorage(UserDefaultsKeys.selectedPreset) private var selectedPreset: String = "max_compatibility"
+    @AppStorage(UserDefaultsKeys.sponsorBlock) private var sponsorBlock: Bool = false
+    @AppStorage(UserDefaultsKeys.browserForCookies) private var browserForCookies: String = "none"
+    @AppStorage(UserDefaultsKeys.defaultAdditionalArguments) private var defaultAdditionalArguments: String = ""
+    @AppStorage(UserDefaultsKeys.showNotifications) private var showNotifications: Bool = true
+    @AppStorage(UserDefaultsKeys.showMenuBarIcon) private var showMenuBarIcon: Bool = true
+    @AppStorage(UserDefaultsKeys.startInBackground) private var startInBackground: Bool = false
     
     @EnvironmentObject var languageService: LanguageService
     @EnvironmentObject var updateChecker: UpdateChecker
@@ -31,7 +31,7 @@ struct PreferencesView: View {
     @State private var customPresets: [CustomPreset] = []
     @State private var showCreatePresetSheet = false
     @State private var newPresetName = ""
-    @AppStorage("selectedCustomPresetId") private var selectedCustomPresetIdString: String = ""
+    @AppStorage(UserDefaultsKeys.selectedCustomPresetId) private var selectedCustomPresetIdString: String = ""
     
     // Preset form state
     @State private var presetFileType: MediaFileType = .mp4

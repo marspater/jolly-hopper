@@ -38,7 +38,7 @@ class MenuBarManager: NSObject {
         }
         
         // Show by default (if key not set, show the icon)
-        let showIcon = UserDefaults.standard.object(forKey: "showMenuBarIcon") as? Bool ?? true
+        let showIcon = UserDefaults.standard.object(forKey: UserDefaultsKeys.showMenuBarIcon) as? Bool ?? true
         if !showIcon {
             statusItem?.isVisible = false
         }

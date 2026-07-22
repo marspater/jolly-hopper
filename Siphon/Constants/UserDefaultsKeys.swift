@@ -1,0 +1,26 @@
+import Foundation
+
+enum UserDefaultsKeys {
+    static let showMenuBarIcon = "showMenuBarIcon"
+    static let showNotifications = "showNotifications"
+    static let disclaimerAcknowledged = "disclaimerAcknowledged"
+    static let customPresets = "customPresets"
+    static let defaultSaveFolder = "defaultSaveFolder"
+    static let lastSeenVersion = "lastSeenVersion_v3"
+    static let downloadHistory = "downloadHistory"
+    static let browserForCookies = "browserForCookies"
+    static let launchAtLogin = "launchAtLogin"
+    static let theme = "theme"
+    static let maxConcurrentDownloads = "maxConcurrentDownloads"
+    static let embedThumbnail = "embedThumbnail"
+    static let embedMetadata = "embedMetadata"
+    static let defaultFileType = "defaultFileType"
+    static let defaultVideoResolution = "defaultVideoResolution"
+    static let defaultVideoCodec = "defaultVideoCodec"
+    static let defaultAudioCodec = "defaultAudioCodec"
+    static let selectedPreset = "selectedPreset"
+    static let sponsorBlock = "sponsorBlock"
+    static let defaultAdditionalArguments = "defaultAdditionalArguments"
+    static let startInBackground = "startInBackground"
+    static let selectedCustomPresetId = "selectedCustomPresetId"
+}
