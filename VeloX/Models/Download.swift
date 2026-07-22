@@ -1,5 +1,5 @@
 import Foundation
-
+import os
 
 @MainActor
 class Download: ObservableObject, Identifiable {
@@ -419,6 +419,8 @@ enum DownloadPreset: String, Codable, CaseIterable, Identifiable {
 
 
 struct CustomPreset: Codable, Identifiable, Equatable {
+    private static let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "com.velox", category: "CustomPreset")
+
     let id: UUID
     var name: String
     var videoCodec: VideoCodec
@@ -460,7 +462,7 @@ struct CustomPreset: Codable, Identifiable, Equatable {
         do {
             return try JSONDecoder().decode([CustomPreset].self, from: data)
         } catch {
-            print("Failed to decode custom presets: \(error)")
+            logger.error("Failed to decode custom presets: \(error.localizedDescription)")
             // If data is corrupted or incompatible, we return empty list to prevent crash
             return []
         }
