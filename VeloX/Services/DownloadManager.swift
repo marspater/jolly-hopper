@@ -66,21 +66,21 @@ class DownloadManager: ObservableObject {
         loadHistory()
 
 
-        if !userDefaults.bool(forKey: "disclaimerAcknowledged") && !languageService.isFirstLaunch {
+        if !userDefaults.bool(forKey: UserDefaultsKeys.disclaimerAcknowledged) && !languageService.isFirstLaunch {
             showDisclaimer = true
         }
 
         let currentVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "4.0.0"
-        let lastSeenVersion = userDefaults.string(forKey: "lastSeenVersion_v3") ?? "0.0.0"
+        let lastSeenVersion = userDefaults.string(forKey: UserDefaultsKeys.lastSeenVersion) ?? "0.0.0"
 
         if currentVersion != lastSeenVersion {
             showWhatsNew = true
-            userDefaults.set(currentVersion, forKey: "lastSeenVersion_v3")
+            userDefaults.set(currentVersion, forKey: UserDefaultsKeys.lastSeenVersion)
         }
     }
 
     func acknowledgeDisclaimer() {
-        userDefaults.set(true, forKey: "disclaimerAcknowledged")
+        userDefaults.set(true, forKey: UserDefaultsKeys.disclaimerAcknowledged)
         showDisclaimer = false
     }
 
@@ -126,7 +126,7 @@ class DownloadManager: ObservableObject {
 
     func menuDownload(url: String, type: String, quality: String) {
         // Get default save folder
-        let defaultPath = userDefaults.string(forKey: "defaultSaveFolder") ?? ""
+        let defaultPath = userDefaults.string(forKey: UserDefaultsKeys.defaultSaveFolder) ?? ""
         let folder = defaultPath.isEmpty ?
             FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first! :
             URL(fileURLWithPath: defaultPath)
@@ -162,7 +162,7 @@ class DownloadManager: ObservableObject {
         let preset = DownloadPreset.maxCompatibility
 
         // Get default save folder from AppStorage
-        let defaultPath = userDefaults.string(forKey: "defaultSaveFolder") ?? ""
+        let defaultPath = userDefaults.string(forKey: UserDefaultsKeys.defaultSaveFolder) ?? ""
         let saveFolderURL: URL
         if !defaultPath.isEmpty {
             saveFolderURL = URL(fileURLWithPath: defaultPath)
@@ -426,7 +426,7 @@ class DownloadManager: ObservableObject {
 
 
     private func loadHistory() {
-        if let data = userDefaults.data(forKey: "downloadHistory"),
+        if let data = userDefaults.data(forKey: UserDefaultsKeys.downloadHistory),
            let decoded = try? JSONDecoder().decode([HistoricDownload].self, from: data) {
             history = decoded
             // Restore as Download objects for UI, reversing so newest is at the top
@@ -437,7 +437,7 @@ class DownloadManager: ObservableObject {
 
     private func saveHistory() {
         if let encoded = try? JSONEncoder().encode(history) {
-            userDefaults.set(encoded, forKey: "downloadHistory")
+            userDefaults.set(encoded, forKey: UserDefaultsKeys.downloadHistory)
         }
     }
 

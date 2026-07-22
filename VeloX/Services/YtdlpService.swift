@@ -875,7 +875,7 @@ class YtdlpService: ObservableObject {
     }
 
     private func configuredBrowserCookieSource() -> String? {
-        let browser = UserDefaults.standard.string(forKey: "browserForCookies") ?? "none"
+        let browser = UserDefaults.standard.string(forKey: UserDefaultsKeys.browserForCookies) ?? "none"
         return browser == "none" ? nil : browser
     }
 

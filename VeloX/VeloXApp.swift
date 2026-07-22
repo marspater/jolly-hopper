@@ -322,7 +322,7 @@ struct WelcomeView: View {
             .padding(.horizontal, 40)
             
             Button {
-                UserDefaults.standard.set(true, forKey: "disclaimerAcknowledged")
+                UserDefaults.standard.set(true, forKey: UserDefaultsKeys.disclaimerAcknowledged)
                 languageService.isFirstLaunch = false
                 dismiss()
             } label: {
