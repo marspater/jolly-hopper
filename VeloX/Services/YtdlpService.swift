@@ -1,5 +1,4 @@
 import Foundation
-import JavaScriptCore
 
 
 
@@ -1286,27 +1285,32 @@ class YtdlpService: ObservableObject {
                     if let decodedData = Data(base64Encoded: b64Str),
                        let jsCode = String(data: decodedData, encoding: .utf8) {
 
-                        let context = JSContext()
-                        let docObj = JSValue(newObjectIn: context)
-                        context?.setObject(docObj, forKeyedSubscript: "document" as NSString)
-                        docObj?.setValue("", forProperty: "cookie")
+                        var cookieName = ""
+                        var cookieValue = ""
 
-                        let locObj = JSValue(newObjectIn: context)
-                        context?.setObject(locObj, forKeyedSubscript: "location" as NSString)
-                        locObj?.setValue({ }, forProperty: "reload")
+                        let strPattern = "\"(.*?)\"|'(.*?)'"
+                        if let strRegex = try? NSRegularExpression(pattern: strPattern, options: []) {
+                            let jsRange = NSRange(jsCode.startIndex..<jsCode.endIndex, in: jsCode)
+                            let matches = strRegex.matches(in: jsCode, options: [], range: jsRange)
 
-                        context?.evaluateScript(jsCode)
+                            for match in matches {
+                                var matchedStr = ""
+                                if let range1 = Range(match.range(at: 1), in: jsCode) {
+                                    matchedStr = String(jsCode[range1])
+                                } else if let range2 = Range(match.range(at: 2), in: jsCode) {
+                                    matchedStr = String(jsCode[range2])
+                                }
 
-                        if let cookieVal = docObj?.forProperty("cookie")?.toString(), !cookieVal.isEmpty {
-                            let cookieParts = cookieVal.components(separatedBy: ";")
-                            if let firstPart = cookieParts.first {
-                                let nvParts = firstPart.components(separatedBy: "=")
-                                if nvParts.count == 2 {
-                                    let cookieName = nvParts[0].trimmingCharacters(in: .whitespaces)
-                                    let cookieValue = nvParts[1].trimmingCharacters(in: .whitespaces)
-                                    return (cookieName, cookieValue)
+                                if matchedStr.hasPrefix("sucuri_cloudproxy_uuid_") {
+                                    cookieName = matchedStr.replacingOccurrences(of: "=", with: "")
+                                } else if !matchedStr.hasPrefix(";") && !matchedStr.contains("path=") && !matchedStr.contains("max-age=") && !matchedStr.contains("domain=") && !matchedStr.isEmpty && matchedStr != "reload" && matchedStr != "location" && matchedStr != "cookie" && matchedStr != "document" && matchedStr != "href" {
+                                    cookieValue += matchedStr
                                 }
                             }
+                        }
+
+                        if !cookieName.isEmpty && !cookieValue.isEmpty {
+                            return (cookieName, cookieValue)
                         }
                     }
                 }
