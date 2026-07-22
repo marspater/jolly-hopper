@@ -353,26 +353,30 @@ class DownloadManager: ObservableObject {
     }
 
     func clearDownloads(_ items: [Download]) {
+        if items.isEmpty { return }
+
+        let itemIds = Set(items.map { $0.id })
+
         for item in items {
-            removeDownload(item)
+            stopDownload(item)
+
+            // Asenkron temizlik: Prosesin tamamen durması ve dosya kilitlerinin kalkması için kısa bir süre bekle
+            let downloadCopy = item
+            Task {
+                try? await Task.sleep(nanoseconds: 200_000_000) // 200ms bekle
+                cleanupTemporaryFiles(for: downloadCopy)
+            }
+            failedDownloadsMap.removeValue(forKey: item.id)
         }
+
+        downloads.removeAll { itemIds.contains($0.id) }
+        history.removeAll { itemIds.contains($0.id) }
+        saveHistory()
     }
 
 
     func removeDownload(_ download: Download) {
-        stopDownload(download)
-
-        // Asenkron temizlik: Prosesin tamamen durması ve dosya kilitlerinin kalkması için kısa bir süre bekle
-        let downloadCopy = download
-        Task {
-            try? await Task.sleep(nanoseconds: 200_000_000) // 200ms bekle
-            cleanupTemporaryFiles(for: downloadCopy)
-        }
-
-        downloads.removeAll { $0.id == download.id }
-        failedDownloadsMap.removeValue(forKey: download.id)
-        history.removeAll { $0.id == download.id }
-        saveHistory()
+        clearDownloads([download])
     }
 
     private func cleanupTemporaryFiles(for download: Download) {
