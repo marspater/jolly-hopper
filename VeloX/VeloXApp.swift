@@ -10,6 +10,7 @@ struct VeloXApp: App {
     @State private var hasAppliedBackgroundMode = false
     
     init() {
+        PreferencesView.applyStoredTheme()
     }
     
     var body: some Scene {
@@ -20,6 +21,7 @@ struct VeloXApp: App {
                 .environmentObject(languageService)
                 .environmentObject(updateChecker)
                 .onAppear {
+                    PreferencesView.applyStoredTheme()
                     setupMenuBarIfNeeded()
                     applyBackgroundModeIfNeeded()
                 }
@@ -33,6 +35,16 @@ struct VeloXApp: App {
         }
         .handlesExternalEvents(matching: ["*"])
         .commands {
+            CommandGroup(replacing: .appInfo) {
+                Button(String(format: languageService.s("about_app"), "VeloX Pro")) {
+                    PreferencesWindowManager.shared.showPreferencesWindow(
+                        languageService: languageService,
+                        updateChecker: updateChecker,
+                        downloadManager: downloadManager,
+                        initialTab: .about
+                    )
+                }
+            }
             CommandGroup(replacing: .newItem) {
                 Button(languageService.s("new_download") + "...") {
                     AddDownloadWindowManager.shared.showAddDownloadWindow(downloadManager: downloadManager, appState: appState, languageService: languageService)

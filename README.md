@@ -1,9 +1,9 @@
 # VeloX Pro ⚡️
 
-A high-performance, native macOS media extractor & downloader powered by `yt-dlp` and `FFmpeg`. Engineered with advanced anti-bot bypass mechanisms for Cloudflare and protected sites.
+A high-performance, native macOS media extractor & downloader powered by `yt-dlp` and `FFmpeg`. Engineered with advanced anti-bot bypass mechanisms for Cloudflare, BoyfriendTV, GayForFans, YouTube, and 1,000+ protected video streaming sites.
 
 <div align="center">
-  <img src="VeloX/Resources/Assets.xcassets/AppIcon.appiconset/icon_128x128.png" width="128" />
+  <img src="assets/app_screenshot.png" alt="VeloX Pro Interface" width="880" style="border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.3);" />
   <p>
     <a href="https://github.com/marspater/jolly-hopper/releases/latest">
       <img src="https://img.shields.io/badge/Download-macOS-blue?style=for-the-badge&logo=apple&logoColor=white" alt="Download VeloX Pro for macOS" />
@@ -11,53 +11,55 @@ A high-performance, native macOS media extractor & downloader powered by `yt-dlp
     <a href="https://github.com/marspater/jolly-hopper">
       <img src="https://img.shields.io/badge/Repository-jolly--hopper-818cf8?style=for-the-badge&logo=github&logoColor=white" alt="GitHub Repository" />
     </a>
+    <a href="https://github.com/marspater/jolly-hopper/blob/main/SUPPORTED_SITES.md">
+      <img src="https://img.shields.io/badge/Supported--Sites-1000%2B-green?style=for-the-badge&logo=globe&logoColor=white" alt="Supported Sites" />
+    </a>
   </p>
 </div>
 
-VeloX Pro is a native macOS application built with Swift and SwiftUI. It provides an intuitive, powerful interface over `yt-dlp`, optimized for high speeds, multi-threaded fragment processing, and seamless anti-bot challenge solving.
+---
+
+## ✨ Highlights & Features
+
+- 💧 **Translucent macOS Glassmorphism**: Engineered using native Apple SwiftUI materials and AppKit window translucency for a sleek macOS experience.
+- ⚡ **Advanced Anti-Bot Bypasses**: Native header impersonation, Chrome 124 Client Hints emulation, and cookie session synchronization for Cloudflare and protected sites.
+- 🎯 **Deep Provider Resolvers**: Built-in specialized stream extraction for BoyfriendTV, GayForFans, YouTube Playlists, TikTok, X (Twitter), Instagram, and Twitch.
+- 🚀 **Atomic Dependency Engine**: Safe, self-testing background updates for `yt-dlp` and native Apple Silicon (`arm64`) + Intel (`x86_64`) `FFmpeg` / `FFprobe` 6.0 binaries.
+- 🛠 **Custom Quality Presets & Codec Control**: Full control over H.264, VP9, AV1, AAC, Opus, MP3, FLAC extraction, resolution scaling (up to 8K), and SponsorBlock segment skipping.
+- 🌐 **Browser Extensions & Menu Bar Companion**: 1-click downloading directly from Safari, Chrome, and Firefox, plus a lightweight macOS status bar popover.
 
 ---
 
-## Key Features ⚡️
+## 💻 Installation
 
-- **Advanced Anti-Bot Bypasses**: Automatic impersonation and full Chrome 124 Client Hints header emulation for Cloudflare-protected sites (e.g. BoyfriendTV, JustTheGays).
-- **Atomic Dependency Engine**: Safe, atomic, and self-testing updates for `yt-dlp`, `FFmpeg`, and `FFprobe`.
-- **Persistent Debug Logging**: In-app live log viewer and export (`~/Library/Application Support/VeloX/velox_debug.log`).
-- **macOS 27 SDK Ready**: Built for modern macOS 12+ with futuristic compatibility for upcoming macOS versions.
-- **Native macOS Interface**: Built with pure SwiftUI for a crisp dark/light native UI experience.
-- **Menu Bar App & Browser Extensions**: Launch downloads directly from your browser (Chrome, Safari & Firefox) or menu bar popover.
-- **Format & Codec Customization**: Smart presets, 4K/8K resolution support, audio extraction (MP3, FLAC, WAV, Opus), and SponsorBlock integration.
-
----
-
-## Installation 🚀
-
-### Manual Download
-1. Download the latest release `.dmg` from the [Releases](https://github.com/marspater/jolly-hopper/releases) page.
-2. Drag **VeloX Pro** into your `/Applications` folder.
-3. If prompted by macOS Gatekeeper:
+### Manual Installation
+1. Download the latest `.dmg` release from the [Releases](https://github.com/marspater/jolly-hopper/releases) page.
+2. Drag **VeloX Pro** into your `/Applications` directory.
+3. If macOS Gatekeeper alerts on first open:
 ```bash
 xattr -cr /Applications/"VeloX Pro.app"
 ```
 
 ### Browser Extensions 🌐
-- **Chrome / Brave / Edge**: Load `VeloXExtension_Chrome` via `chrome://extensions` (Developer Mode > Load Unpacked).
-- **Safari**: Load `VeloXExtension_Safari` in Safari.
-- **Firefox**: Load `VeloXExtension_Firefox` via `about:debugging#/runtime/this-firefox`.
+Integrate VeloX Pro directly into your favorite web browser for 1-click video downloads:
+- **Chrome / Brave / Edge**: Navigate to `chrome://extensions`, enable **Developer Mode**, and click **Load Unpacked** pointing to `VeloXExtension_Chrome`.
+- **Safari**: Enable the extension in Safari Preferences > Extensions.
+- **Firefox**: Load `VeloXExtension_Firefox` in `about:debugging#/runtime/this-firefox`.
 
 ---
 
-## Technical Architecture 🛠️
+## 🛠️ Technical Stack & Architecture
 
-- **Framework**: Swift 5.0, SwiftUI, AppKit
-- **Core Engine**: `yt-dlp` + `FFmpeg` / `FFprobe`
-- **Challenge Solvers**: `JavaScriptCore` runtime for Sucuri / JS cookie solving
-- **Target OS**: macOS 12.0+ (Monterey through macOS 27)
+- **Language**: Swift 5.0, SwiftUI, AppKit
+- **Extraction Engine**: Custom `yt-dlp` process coordinator
+- **Media Transcoder**: Native `FFmpeg` & `FFprobe` 6.0 (`arm64` / `x86_64`)
+- **Logging & Diagnostics**: Centralized structured `LoggerService` & os_log tracing
+- **Target OS**: macOS 12.0 (Monterey) through macOS 27+
 
 ---
 
-## License ⚖️
+## ⚖️ License
 
-This project is licensed under the **GNU General Public License v3.0**. See the [LICENSE](LICENSE) file for details.
+Distributed under the **GNU General Public License v3.0**. See [LICENSE](LICENSE) for details.
 
-Maintained by **[marspater](https://github.com/marspater)**
+Developed & Maintained by **[marspater](https://github.com/marspater)**

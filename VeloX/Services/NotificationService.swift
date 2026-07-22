@@ -92,6 +92,28 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
             }
         }
     }
+
+    func sendDownloadStopped(filename: String, languageService: LanguageService) {
+        guard UserDefaults.standard.object(forKey: UserDefaultsKeys.showNotifications) as? Bool ?? true else {
+            logMessage("Notifications disabled by user setting", level: .warning)
+            return
+        }
+        guard let center = notificationCenter else { return }
+
+        let content = UNMutableNotificationContent()
+        content.title = languageService.s("download_stopped_title")
+        content.body = String(format: languageService.s("download_stopped_body"), filename)
+        content.sound = .default
+
+        let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
+        center.add(request) { [weak self] error in
+            if let error = error {
+                self?.logMessage("Notification send error: \(error.localizedDescription)", level: .error)
+            } else {
+                self?.logMessage("Notification sent (stopped): \(filename)", level: .info)
+            }
+        }
+    }
     func sendYtdlpUpdateSucceeded(version: String) {
         sendYtdlpUpdateNotification(title: "yt-dlp Updated", body: "Installed yt-dlp version \(version).")
     }
