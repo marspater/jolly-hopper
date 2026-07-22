@@ -68,34 +68,48 @@ struct PreferencesView: View {
     
     @Environment(\.dismiss) var dismiss
     
+    @Namespace private var tabNamespace
+
     var body: some View {
-        TabView(selection: $selectedTab) {
-            generalTab
-                .tag(PreferenceTab.general)
-                .tabItem {
-                    Label(languageService.s("general"), systemImage: "gear")
+        VStack(spacing: 0) {
+            // Fluid Glass Segmented Tab Bar
+            HStack(spacing: 4) {
+                tabSegment(.general, title: languageService.s("general"), icon: "gearshape.fill")
+                tabSegment(.download, title: languageService.s("download"), icon: "arrow.down.circle.fill")
+                tabSegment(.advanced, title: languageService.s("advanced"), icon: "wrench.and.screwdriver.fill")
+                tabSegment(.about, title: languageService.s("about"), icon: "info.circle.fill")
+            }
+            .padding(4)
+            .background(Color.primary.opacity(0.06))
+            .clipShape(Capsule())
+            .overlay(
+                Capsule()
+                    .stroke(Color.primary.opacity(0.12), lineWidth: 1)
+            )
+            .padding(.top, 14)
+            .padding(.bottom, 12)
+
+            Divider()
+
+            // Active Tab Content View
+            Group {
+                switch selectedTab {
+                case .general:
+                    generalTab
+                case .download:
+                    downloadTab
+                case .advanced:
+                    advancedTab
+                case .about:
+                    aboutTab
                 }
-            
-            downloadTab
-                .tag(PreferenceTab.download)
-                .tabItem {
-                    Label(languageService.s("download"), systemImage: "arrow.down.circle")
-                }
-            
-            advancedTab
-                .tag(PreferenceTab.advanced)
-                .tabItem {
-                    Label(languageService.s("advanced"), systemImage: "wrench.and.screwdriver")
-                }
-            
-            aboutTab
-                .tag(PreferenceTab.about)
-                .tabItem {
-                    Label(languageService.s("about"), systemImage: "info.circle")
-                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .transition(.opacity.combined(with: .scale(scale: 0.99)))
         }
-        .padding(12)
-        .frame(minWidth: 580, idealWidth: 640, minHeight: 500, idealHeight: 580)
+        .padding(.horizontal, 16)
+        .padding(.bottom, 16)
+        .frame(minWidth: 620, idealWidth: 680, minHeight: 520, idealHeight: 600)
         .background(.ultraThinMaterial)
         .onChange(of: theme) { newValue in
             applyTheme(newValue)
@@ -130,27 +144,42 @@ struct PreferencesView: View {
             Text(languageService.s("language_changed_message"))
         }
     }
-    
-
-    struct CloseButton: View {
-        @State private var isHovering = false
-        
-        var body: some View {
-            Circle()
-                .fill(Color.red)
-                .frame(width: 12, height: 12)
-                .overlay(
-                    Image(systemName: "xmark")
-                        .font(.system(size: 8, weight: .bold))
-                        .foregroundColor(.black.opacity(0.5))
-                        .opacity(isHovering ? 1 : 0)
-                )
-                .onHover { hovering in
-                    isHovering = hovering
+    @ViewBuilder
+    private func tabSegment(_ tab: PreferenceTab, title: String, icon: String) -> some View {
+        Button {
+            withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
+                selectedTab = tab
+            }
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: icon)
+                    .font(.system(size: 12, weight: .semibold))
+                Text(title)
+                    .font(.system(size: 12, weight: .semibold))
+            }
+            .foregroundColor(selectedTab == tab ? .white : .secondary)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 7)
+            .background {
+                if selectedTab == tab {
+                    Capsule()
+                        .fill(
+                            LinearGradient(
+                                colors: [
+                                    Color(.displayP3, red: 0.15, green: 0.55, blue: 1.0, opacity: 0.95),
+                                    Color(.displayP3, red: 0.55, green: 0.25, blue: 0.95, opacity: 0.95)
+                                ],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
+                        )
+                        .matchedGeometryEffect(id: "activeTabBubble", in: tabNamespace)
+                        .shadow(color: Color(.displayP3, red: 0.2, green: 0.4, blue: 1.0, opacity: 0.45), radius: 8, y: 2)
                 }
+            }
         }
+        .buttonStyle(.plain)
     }
-    
 
     
     static func applyTheme(_ theme: String) {

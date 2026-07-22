@@ -9,16 +9,18 @@ struct ContentView: View {
     @EnvironmentObject var languageService: LanguageService
     @EnvironmentObject var updateChecker: UpdateChecker
     @State private var showUpdateAlert = false
+    @State private var columnVisibility: NavigationSplitViewVisibility = .automatic
     @AppStorage("showMenuBarIcon") private var showMenuBarIcon: Bool = true
     
     var body: some View {
         Group {
             if #available(macOS 13.0, *) {
-                NavigationSplitView {
+                NavigationSplitView(columnVisibility: $columnVisibility) {
                     SidebarView()
                 } detail: {
                     DetailView()
                 }
+                .navigationSplitViewStyle(.balanced)
             } else {
                 NavigationView {
                     SidebarView()
@@ -26,6 +28,7 @@ struct ContentView: View {
                 }
             }
         }
+        .animation(.spring(response: 0.35, dampingFraction: 0.8), value: columnVisibility)
         .onChange(of: appState.showAddDownloadSheet) { newValue in
             if newValue {
                 AddDownloadWindowManager.shared.showAddDownloadWindow(downloadManager: downloadManager, appState: appState, languageService: languageService)
@@ -266,16 +269,16 @@ struct HomeView: View {
                 
                 // Stats Grid
                 LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 16), count: 4), spacing: 16) {
-                    StatCard(title: languageService.s("stat_downloading"), count: downloadManager.downloadingCount, color: .blue) {
+                    StatCard(title: languageService.s("stat_downloading"), count: downloadManager.downloadingCount, color: Color(.displayP3, red: 0.15, green: 0.55, blue: 1.0)) {
                         appState.selectedNavItem = .downloading
                     }
-                    StatCard(title: languageService.s("stat_queued"), count: downloadManager.queuedCount, color: .orange) {
+                    StatCard(title: languageService.s("stat_queued"), count: downloadManager.queuedCount, color: Color(.displayP3, red: 1.0, green: 0.55, blue: 0.1)) {
                         appState.selectedNavItem = .queued
                     }
-                    StatCard(title: languageService.s("stat_completed"), count: downloadManager.completedCount, color: .green) {
+                    StatCard(title: languageService.s("stat_completed"), count: downloadManager.completedCount, color: Color(.displayP3, red: 0.15, green: 0.85, blue: 0.45)) {
                         appState.selectedNavItem = .completed
                     }
-                    StatCard(title: languageService.s("stat_failed"), count: downloadManager.failedCount, color: .red) {
+                    StatCard(title: languageService.s("stat_failed"), count: downloadManager.failedCount, color: Color(.displayP3, red: 1.0, green: 0.28, blue: 0.38)) {
                         appState.selectedNavItem = .failed
                     }
                 }
