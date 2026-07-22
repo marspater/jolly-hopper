@@ -265,14 +265,12 @@ class DownloadManager: ObservableObject {
                 case .cloudflareBlocked:
                     download.errorMessage = "Blocked by Cloudflare anti-bot protection. Please select your browser as cookie source in Settings > Advanced and try again."
                 case .boyfriendTVNeedsBrowserCookies:
-                    download.errorMessage = "boyfriend.tv often requires signed-in browser cookies. Open Settings > Advanced > Browser Cookies, choose your browser, then try again."
+                    download.errorMessage = "This site requires signed-in browser cookies. Open Settings > Advanced > Browser Cookies, choose your browser, then try again."
                 case .subtitleError(let details):
                     download.errorMessage = String(format: lang.s("subtitle_download_failed"), details)
                 case .downloadFailed(let reason):
-                    if download.url.lowercased().contains("boyfriendtv.com") {
-                        download.errorMessage = "boyfriend.tv often requires signed-in browser cookies. Open Settings > Advanced > Browser Cookies, choose your browser, then try again."
-                    } else if reason.contains("Cloudflare") || reason.contains("403") {
-                        download.errorMessage = "Blocked by Cloudflare. Please select your browser as cookie source in Settings > Advanced and try again."
+                    if reason.contains("Cloudflare") || reason.contains("403") {
+                        download.errorMessage = "Blocked by anti-bot protection. Please select your browser as cookie source in Settings > Advanced and try again."
                     } else {
                         download.errorMessage = String(format: lang.s("download_failed_error"), reason)
                     }
@@ -319,6 +317,13 @@ class DownloadManager: ObservableObject {
         }
         objectWillChange.send()
         addToHistory(download)
+
+        let downloadCopy = download
+        Task {
+            try? await Task.sleep(nanoseconds: 300_000_000)
+            cleanupTemporaryFiles(for: downloadCopy)
+        }
+
         if let lang = languageService {
             NotificationService.shared.sendDownloadStopped(filename: download.title.isEmpty ? download.url : download.title, languageService: lang)
         }
@@ -373,10 +378,9 @@ class DownloadManager: ObservableObject {
         for item in items {
             stopDownload(item)
 
-            // Asenkron temizlik: Prosesin tamamen durması ve dosya kilitlerinin kalkması için kısa bir süre bekle
             let downloadCopy = item
             Task {
-                try? await Task.sleep(nanoseconds: 200_000_000) // 200ms bekle
+                try? await Task.sleep(nanoseconds: 200_000_000)
                 cleanupTemporaryFiles(for: downloadCopy)
             }
             failedDownloadsMap.removeValue(forKey: item.id)
@@ -396,13 +400,11 @@ class DownloadManager: ObservableObject {
         let fileManager = FileManager.default
         let folder = download.options.saveFolder
 
-        // yt-dlp sanitization: Replace invalid characters with underscore
         let sanitize: (String) -> String = { input in
             let invalidChars = CharacterSet(charactersIn: "\\/:*?\"<>|")
             return input.components(separatedBy: invalidChars).joined(separator: "_")
         }
 
-        // Extract video ID from URL if possible (common for YouTube)
         let videoId: String? = {
             if let url = URL(string: download.url),
                let components = URLComponents(url: url, resolvingAgainstBaseURL: false) {
@@ -416,25 +418,35 @@ class DownloadManager: ObservableObject {
 
         do {
             let contents = try fileManager.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)
-            let tempExtensions = [".part", ".ytdl", ".webp", ".jpg", ".temp", ".vtt", ".srt", ".ass", ".f1", ".f2", ".f3"]
 
             for file in contents {
                 let fileName = file.lastPathComponent
 
-                // Kontrol kriterleri:
-                // 1. Prefix eşleşmesi (Orijinal veya Sanitize edilmiş başlık)
-                let matchesPrefix = fileName.hasPrefix(rawBaseName) || fileName.hasPrefix(sanitizedBaseName)
-
-                // 2. ID eşleşmesi (Yt-dlp genellikle dosya adının sonuna [ID] ekler)
-                let matchesId = videoId != nil && fileName.contains(videoId!)
+                let matchesPrefix = (!rawBaseName.isEmpty && fileName.hasPrefix(rawBaseName)) || (!sanitizedBaseName.isEmpty && fileName.hasPrefix(sanitizedBaseName))
+                let matchesId = videoId != nil && !videoId!.isEmpty && fileName.contains(videoId!)
 
                 if matchesPrefix || matchesId {
-                    let isTemp = tempExtensions.contains { ext in
-                        fileName.lowercased().hasSuffix(ext)
-                    }
+                    let lower = fileName.lowercased()
+                    let isTemp = lower.contains(".part") ||
+                                 lower.contains(".ytdl") ||
+                                 lower.contains(".temp") ||
+                                 lower.contains(".tmp") ||
+                                 lower.hasSuffix(".webp") ||
+                                 lower.hasSuffix(".jpg") ||
+                                 lower.hasSuffix(".vtt") ||
+                                 lower.hasSuffix(".srt") ||
+                                 lower.hasSuffix(".ass") ||
+                                 (lower.range(of: #"\.f\d+"#, options: .regularExpression) != nil)
+
                     if isTemp {
                         try? fileManager.removeItem(at: file)
                     }
+                }
+            }
+
+            if download.status == .stopped, let filePath = download.filePath {
+                if fileManager.fileExists(atPath: filePath.path) {
+                    try? fileManager.removeItem(at: filePath)
                 }
             }
         } catch {
