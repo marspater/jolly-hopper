@@ -10,11 +10,15 @@ class YtdlpService: ObservableObject {
     @Published var isUpdating: Bool = false
     @Published var updateProgress: Double = 0
 
-    private var ytdlpPath: URL?
-    private var ffmpegPath: URL?
-    private var ffprobePath: URL?
+    var ytdlpPath: URL?
+    var ffmpegPath: URL?
+    var ffprobePath: URL?
     private let localVersion = "1.5.5"
     private let bundledYtdlpName = "yt-dlp_macos"
+
+    #if DEBUG
+    var mockCommandRunner: (([String]) async throws -> String)?
+    #endif
 
     init() {
         Task {
@@ -1023,6 +1027,11 @@ class YtdlpService: ObservableObject {
 
 
     private func runCommandAsync(_ args: [String]) async throws -> String {
+        #if DEBUG
+        if let mock = mockCommandRunner {
+            return try await mock(args)
+        }
+        #endif
         return try await withCheckedThrowingContinuation { continuation in
             let process = Process()
             let pipe = Pipe()
