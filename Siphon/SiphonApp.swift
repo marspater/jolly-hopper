@@ -131,7 +131,7 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
     @Published var needsRestart = false
     
     private var currentVersion: String {
-        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "4.0.0"
+        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "4.1.0"
     }
     private let repoOwner = "marspater"
     private let repoName = "jolly-hopper"
