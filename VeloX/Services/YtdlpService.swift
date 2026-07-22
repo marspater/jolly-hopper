@@ -670,6 +670,26 @@ class YtdlpService: ObservableObject {
 
         if let additionalArgs = options.additionalArguments, !additionalArgs.isEmpty {
             let customArgs = splitArguments(additionalArgs)
+
+            let blockedFlags = [
+                "--exec",
+                "--exec-before-download",
+                "--config-location",
+                "--config-locations",
+                "--downloader",
+                "--downloader-args",
+                "--external-downloader",
+                "--external-downloader-args"
+            ]
+
+            for arg in customArgs {
+                for blockedFlag in blockedFlags {
+                    if arg == blockedFlag || arg.hasPrefix("\(blockedFlag)=") {
+                        throw YtdlpError.securityViolation("Blocked argument '\(blockedFlag)' is not allowed for security reasons.")
+                    }
+                }
+            }
+
             args.append(contentsOf: customArgs)
         }
 
@@ -1332,6 +1352,7 @@ enum YtdlpError: LocalizedError {
     case cloudflareBlocked
     case ffmpegInstallationFailed(String)
     case boyfriendTVNeedsBrowserCookies
+    case securityViolation(String)
 
     var errorDescription: String? {
         switch self {
@@ -1353,6 +1374,8 @@ enum YtdlpError: LocalizedError {
             return "FFmpeg installation failed. Please try updating dependencies again. Attempted path: \(path)"
         case .boyfriendTVNeedsBrowserCookies:
             return "boyfriend.tv often requires signed-in browser cookies. Open Settings > Advanced > Browser Cookies, choose your browser, then try again."
+        case .securityViolation(let message):
+            return "Security violation: \(message)"
         }
     }
 }
