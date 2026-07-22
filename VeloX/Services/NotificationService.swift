@@ -4,9 +4,15 @@ import UserNotifications
 class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     static let shared = NotificationService()
 
+    private func logMessage(_ message: String, level: LoggerService.LogLevel) {
+        Task { @MainActor in
+            LoggerService.shared.log(message, level: level)
+        }
+    }
+
     private var notificationCenter: UNUserNotificationCenter? {
         guard Bundle.main.bundleIdentifier != nil else {
-            print("⚠️ Notifications unavailable: no bundle identifier")
+            logMessage("Notifications unavailable: no bundle identifier", level: .warning)
             return nil
         }
         return UNUserNotificationCenter.current()
@@ -32,20 +38,20 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
 
     func requestPermission() {
         guard let center = notificationCenter else { return }
-        center.requestAuthorization(options: [.alert, .sound, .badge]) { granted, error in
+        center.requestAuthorization(options: [.alert, .sound, .badge]) { [weak self] granted, error in
             if granted {
-                print("✅ Notification permission granted.")
+                self?.logMessage("Notification permission granted.", level: .info)
             } else if let error = error {
-                print("❌ Notification permission error: \(error.localizedDescription)")
+                self?.logMessage("Notification permission error: \(error.localizedDescription)", level: .error)
             } else {
-                print("⚠️ Notification permission denied by user.")
+                self?.logMessage("Notification permission denied by user.", level: .warning)
             }
         }
     }
 
     func sendDownloadCompleted(filename: String, languageService: LanguageService) {
         guard UserDefaults.standard.object(forKey: "showNotifications") as? Bool ?? true else {
-            print("⚠️ Notifications disabled by user setting")
+            logMessage("Notifications disabled by user setting", level: .warning)
             return
         }
         guard let center = notificationCenter else { return }
@@ -56,18 +62,18 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         content.sound = .default
 
         let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
-        center.add(request) { error in
+        center.add(request) { [weak self] error in
             if let error = error {
-                print("❌ Notification send error: \(error.localizedDescription)")
+                self?.logMessage("Notification send error: \(error.localizedDescription)", level: .error)
             } else {
-                print("✅ Notification sent: \(filename)")
+                self?.logMessage("Notification sent: \(filename)", level: .info)
             }
         }
     }
 
     func sendDownloadFailed(filename: String, languageService: LanguageService) {
         guard UserDefaults.standard.object(forKey: "showNotifications") as? Bool ?? true else {
-            print("⚠️ Notifications disabled by user setting")
+            logMessage("Notifications disabled by user setting", level: .warning)
             return
         }
         guard let center = notificationCenter else { return }
@@ -78,11 +84,11 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         content.sound = .default
 
         let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
-        center.add(request) { error in
+        center.add(request) { [weak self] error in
             if let error = error {
-                print("❌ Notification send error: \(error.localizedDescription)")
+                self?.logMessage("Notification send error: \(error.localizedDescription)", level: .error)
             } else {
-                print("✅ Notification sent (failed): \(filename)")
+                self?.logMessage("Notification sent (failed): \(filename)", level: .info)
             }
         }
     }
@@ -96,7 +102,7 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
 
     private func sendYtdlpUpdateNotification(title: String, body: String) {
         guard UserDefaults.standard.object(forKey: "showNotifications") as? Bool ?? true else {
-            print("⚠️ Notifications disabled by user setting")
+            logMessage("Notifications disabled by user setting", level: .warning)
             return
         }
         guard let center = notificationCenter else { return }
@@ -107,9 +113,9 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         content.sound = .default
 
         let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
-        center.add(request) { error in
+        center.add(request) { [weak self] error in
             if let error = error {
-                print("❌ yt-dlp update notification send error: \(error.localizedDescription)")
+                self?.logMessage("yt-dlp update notification send error: \(error.localizedDescription)", level: .error)
             }
         }
     }
