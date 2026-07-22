@@ -251,6 +251,11 @@ class DownloadManager: ObservableObject {
             }
 
         } catch let error as YtdlpError {
+            if download.status == .stopped {
+                LoggerService.shared.log("Download stopped by user (\(download.url))", level: .info)
+                addToHistory(download)
+                return
+            }
             updateStatus(for: download, to: .failed)
             objectWillChange.send()
             if let lang = languageService {
@@ -285,6 +290,11 @@ class DownloadManager: ObservableObject {
             }
             addToHistory(download)
         } catch {
+            if download.status == .stopped {
+                LoggerService.shared.log("Download stopped by user (\(download.url))", level: .info)
+                addToHistory(download)
+                return
+            }
             updateStatus(for: download, to: .failed)
             objectWillChange.send()
             download.errorMessage = error.localizedDescription
@@ -302,13 +312,16 @@ class DownloadManager: ObservableObject {
 
 
     func stopDownload(_ download: Download) {
+        updateStatus(for: download, to: .stopped)
         if let process = activeProcesses[download.id] {
             process.terminate()
             activeProcesses.removeValue(forKey: download.id)
         }
-        updateStatus(for: download, to: .stopped)
         objectWillChange.send()
         addToHistory(download)
+        if let lang = languageService {
+            NotificationService.shared.sendDownloadStopped(filename: download.title.isEmpty ? download.url : download.title, languageService: lang)
+        }
     }
 
 

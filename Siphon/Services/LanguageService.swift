@@ -38,6 +38,8 @@ class LanguageService: ObservableObject {
         "empty_failed": "No failed downloads",
         "download_failed_error": "Download failed: %@",
         "subtitle_download_failed": "Subtitle download failed: %@",
+        "download_stopped_title": "Download Stopped",
+        "download_stopped_body": "Download of '%@' was stopped.",
         "too_many_requests": "Too many requests (429). Please select a browser in Settings > Advanced.",
         "preferences": "Preferences",
         "general": "General",

@@ -56,32 +56,47 @@ struct PreferencesView: View {
         return VideoResolution.allCases
     }
     
+    enum PreferenceTab: Int, Hashable {
+        case general, download, advanced, about
+    }
+
+    @State private var selectedTab: PreferenceTab
+
+    init(initialTab: PreferenceTab = .general) {
+        _selectedTab = State(initialValue: initialTab)
+    }
+    
     @Environment(\.dismiss) var dismiss
     
     var body: some View {
-        TabView {
+        TabView(selection: $selectedTab) {
             generalTab
+                .tag(PreferenceTab.general)
                 .tabItem {
                     Label(languageService.s("general"), systemImage: "gear")
                 }
             
             downloadTab
+                .tag(PreferenceTab.download)
                 .tabItem {
                     Label(languageService.s("download"), systemImage: "arrow.down.circle")
                 }
             
             advancedTab
+                .tag(PreferenceTab.advanced)
                 .tabItem {
                     Label(languageService.s("advanced"), systemImage: "wrench.and.screwdriver")
                 }
             
             aboutTab
+                .tag(PreferenceTab.about)
                 .tabItem {
                     Label(languageService.s("about"), systemImage: "info.circle")
                 }
         }
         .padding(12)
-        .frame(minWidth: 580, idealWidth: 620, minHeight: 500, idealHeight: 560)
+        .frame(minWidth: 580, idealWidth: 640, minHeight: 500, idealHeight: 580)
+        .background(.ultraThinMaterial)
         .onChange(of: theme) { newValue in
             applyTheme(newValue)
         }
@@ -138,7 +153,7 @@ struct PreferencesView: View {
     
 
     
-    private func applyTheme(_ theme: String) {
+    static func applyTheme(_ theme: String) {
         switch theme {
         case "light":
             NSApp.appearance = NSAppearance(named: .aqua)
@@ -147,6 +162,15 @@ struct PreferencesView: View {
         default:
             NSApp.appearance = nil
         }
+    }
+
+    static func applyStoredTheme() {
+        let theme = UserDefaults.standard.string(forKey: UserDefaultsKeys.theme) ?? "system"
+        applyTheme(theme)
+    }
+
+    private func applyTheme(_ theme: String) {
+        Self.applyTheme(theme)
     }
     
 
