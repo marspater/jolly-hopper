@@ -92,7 +92,7 @@ class LanguageService: ObservableObject {
         "update_available_title": "New Update Available!",
         "update_available_message": "A new version of VeloX Pro (v%@) is ready. Would you like to download it now?",
         "later": "Later",
-        "whats_new_title": "VeloX Pro v4.0.0 - What's New? 🚀",
+        "whats_new_title": "VeloX Pro v4.1.0 - What's New? 🚀",
         "whats_new_message": "✨ New Features:\n• Cloudflare & Anti-Bot Bypasses: Seamlessly download from protected video platforms.\n• macOS 27 Compatibility: Full support and optimization for the upcoming macOS 27 SDK.\n• Menu Bar App: Manage your downloads directly from the menu bar.\n• Chrome & Firefox Extension: Start downloads with one click from your browser.\n• Notification Support: Get notified instantly when downloads are finished.\n• Auto-launch: VeloX Pro is ready when your Mac starts.\n\n🔧 Other Important Changes:\n• Stability & Security: Secure handling and automated cleanup of temporary cookie files.\n• UI Improvements: Optimized home view layout and full-screen experience for large displays.",
         "star_github": "Star on GitHub",
         "latest": "Latest",

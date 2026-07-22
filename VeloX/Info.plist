@@ -4,8 +4,10 @@
 <dict>
 	<key>CFBundleIconFile</key>
 	<string>AppIcon</string>
-	<key>CFBundleIdentifier</key>
-	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundleShortVersionString</key>
+	<string>4.1.0</string>
+	<key>CFBundleVersion</key>
+	<string>42</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>

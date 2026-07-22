@@ -259,25 +259,56 @@ struct PreferencesView: View {
 
     private var saveFolderSection: some View {
         Section(languageService.s("save_folder")) {
-            HStack {
-                TextField(languageService.s("save_folder"), text: .constant(defaultSaveFolder.isEmpty ? "Downloads" : defaultSaveFolder))
-                    .textFieldStyle(.roundedBorder)
-                    .disabled(true)
-                
-                Button(languageService.s("select")) {
-                    selectFolder()
-                }
-                
-                if !defaultSaveFolder.isEmpty {
-                    Button {
-                        defaultSaveFolder = ""
-                    } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .foregroundColor(.secondary)
+            HStack(spacing: 12) {
+                HStack(spacing: 8) {
+                    Image(systemName: "folder.fill")
+                        .foregroundColor(Color(.displayP3, red: 0.15, green: 0.55, blue: 1.0))
+                        .font(.system(size: 14))
+
+                    Text(defaultSaveFolder.isEmpty ? "~/Downloads" : defaultSaveFolder)
+                        .font(.system(size: 12, weight: .medium, design: .monospaced))
+                        .foregroundColor(.primary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    
+                    Spacer(minLength: 4)
+
+                    if !defaultSaveFolder.isEmpty {
+                        Button {
+                            defaultSaveFolder = ""
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.system(size: 14))
+                                .foregroundColor(.secondary)
+                        }
+                        .buttonStyle(.plain)
+                        .help("Reset to default Downloads folder")
                     }
-                    .buttonStyle(.plain)
                 }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(Color.primary.opacity(0.05))
+                .cornerRadius(10)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10)
+                        .stroke(Color.primary.opacity(0.1), lineWidth: 1)
+                )
+
+                Button {
+                    selectFolder()
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "folder.badge.plus")
+                        Text(languageService.s("select"))
+                    }
+                    .font(.system(size: 12, weight: .semibold))
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(Color(.displayP3, red: 0.15, green: 0.55, blue: 1.0))
             }
+            .padding(.vertical, 2)
         }
     }
 
@@ -928,7 +959,7 @@ struct PreferencesView: View {
                         Text("VeloX Pro")
                             .font(.system(size: 24, weight: .bold))
                         
-                        Text(languageService.s("version") + " \(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "4.0.0")")
+                        Text(languageService.s("version") + " \(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "4.1.0")")
                             .font(.caption)
                             .padding(.horizontal, 10)
                             .padding(.vertical, 3)
