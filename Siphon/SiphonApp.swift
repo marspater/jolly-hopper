@@ -10,7 +10,6 @@ struct SiphonApp: App {
     @State private var hasAppliedBackgroundMode = false
     
     init() {
-        PreferencesView.applyStoredTheme()
     }
     
     var body: some Scene {

@@ -154,13 +154,14 @@ struct PreferencesView: View {
 
     
     static func applyTheme(_ theme: String) {
+        guard let app = NSApp else { return }
         switch theme {
         case "light":
-            NSApp.appearance = NSAppearance(named: .aqua)
+            app.appearance = NSAppearance(named: .aqua)
         case "dark":
-            NSApp.appearance = NSAppearance(named: .darkAqua)
+            app.appearance = NSAppearance(named: .darkAqua)
         default:
-            NSApp.appearance = nil
+            app.appearance = nil
         }
     }
 
