@@ -425,7 +425,7 @@ class DownloadManager: ObservableObject {
                 }
             }
         } catch {
-            print("Error cleaning up files: \(error)")
+            LoggerService.shared.log("Error cleaning up files: \(error)", level: .error)
         }
     }
 
