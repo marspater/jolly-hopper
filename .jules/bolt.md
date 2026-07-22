@@ -7,3 +7,6 @@
 ## 2024-07-21 - Optimizing O(N) Iteration for Specific State Filtering
 **Learning:** Iterating over a large array to find elements in a specific state (e.g. `.failed`) is O(N) and can be slow. Maintaining a separate dictionary or set for elements in that state reduces iteration to O(K) where K is the number of items in that state.
 **Action:** When filtering objects by state frequently, consider maintaining a separate collection (like a dictionary map) specifically for the state, keeping it updated when states change.
+## 2025-01-28 - Detached Tasks for Synchronous I/O in SwiftUI
+**Learning:** Performing synchronous file I/O operations (`FileManager.default.fileExists`) directly inside SwiftUI views (`@MainActor`) blocks the main thread. When moving these to `Task.detached`, state variables must be extracted locally before entering the detached closure to prevent capturing UI-bound properties asynchronously, avoiding concurrency errors.
+**Action:** When offloading synchronous APIs to background threads in Swift, copy necessary values to immutable local variables first, then use `Task.detached` to perform the work, returning the result to the parent MainActor task.
