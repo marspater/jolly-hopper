@@ -44,7 +44,7 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     }
 
     func sendDownloadCompleted(filename: String, languageService: LanguageService) {
-        guard UserDefaults.standard.object(forKey: "showNotifications") as? Bool ?? true else {
+        guard UserDefaults.standard.object(forKey: UserDefaultsKeys.showNotifications) as? Bool ?? true else {
             print("⚠️ Notifications disabled by user setting")
             return
         }
@@ -66,7 +66,7 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     }
 
     func sendDownloadFailed(filename: String, languageService: LanguageService) {
-        guard UserDefaults.standard.object(forKey: "showNotifications") as? Bool ?? true else {
+        guard UserDefaults.standard.object(forKey: UserDefaultsKeys.showNotifications) as? Bool ?? true else {
             print("⚠️ Notifications disabled by user setting")
             return
         }
@@ -95,7 +95,7 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     }
 
     private func sendYtdlpUpdateNotification(title: String, body: String) {
-        guard UserDefaults.standard.object(forKey: "showNotifications") as? Bool ?? true else {
+        guard UserDefaults.standard.object(forKey: UserDefaultsKeys.showNotifications) as? Bool ?? true else {
             print("⚠️ Notifications disabled by user setting")
             return
         }

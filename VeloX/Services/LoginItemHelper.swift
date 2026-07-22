@@ -13,7 +13,7 @@ class LoginItemHelper {
         } else {
             // Fallback for older macOS versions if needed, but SMAppService is preferred for 13+
             // For 12.0 we would normally use SMLoginItemSetEnabled which is deprecated
-            return UserDefaults.standard.bool(forKey: "launchAtLogin")
+            return UserDefaults.standard.bool(forKey: UserDefaultsKeys.launchAtLogin)
         }
     }
     
@@ -30,6 +30,6 @@ class LoginItemHelper {
             }
         }
         
-        UserDefaults.standard.set(enabled, forKey: "launchAtLogin")
+        UserDefaults.standard.set(enabled, forKey: UserDefaultsKeys.launchAtLogin)
     }
 }
