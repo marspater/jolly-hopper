@@ -105,7 +105,7 @@ struct PreferencesView: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .transition(.opacity.combined(with: .scale(scale: 0.99)))
+            .transition(.opacity)
         }
         .padding(.horizontal, 16)
         .padding(.bottom, 16)
@@ -918,21 +918,39 @@ struct PreferencesView: View {
         }
     }
 
+    private var hasFullDiskAccess: Bool {
+        let cookiesPath = NSHomeDirectory() + "/Library/Containers/com.apple.Safari/Data/Library/Cookies/Cookies.binarycookies"
+        let bookmarksPath = NSHomeDirectory() + "/Library/Safari/Bookmarks.plist"
+        return FileManager.default.isReadableFile(atPath: cookiesPath) || FileManager.default.isReadableFile(atPath: bookmarksPath)
+    }
+
     private var safariWarningView: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(languageService.s("safari_warning"))
-                .font(.caption)
-                .foregroundColor(.orange)
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            
-            Button(languageService.s("open_system_settings")) {
-                if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles") {
-                    NSWorkspace.shared.open(url)
+            if hasFullDiskAccess {
+                HStack(spacing: 6) {
+                    Image(systemName: "checkmark.seal.fill")
+                        .foregroundColor(.green)
+                    Text("Full Disk Access: Granted")
+                        .font(.caption)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.green)
                 }
+            } else {
+                Text(languageService.s("safari_warning"))
+                    .font(.caption)
+                    .foregroundColor(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                
+                Button(languageService.s("open_system_settings")) {
+                    if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles") {
+                        NSWorkspace.shared.open(url)
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(.orange)
+                .controlSize(.small)
             }
-            .buttonStyle(.bordered)
-            .controlSize(.small)
         }
         .padding(.top, 4)
     }

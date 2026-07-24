@@ -137,6 +137,8 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
     private let repoName = "jolly-hopper"
     private var downloadURL: URL?
     
+    @Published var releasePageURL: URL? = URL(string: "https://github.com/marspater/jolly-hopper/releases/latest")
+    
     func checkForUpdates() async {
         isChecking = true
         let url = URL(string: "https://api.github.com/repos/\(repoOwner)/\(repoName)/releases/latest")!
@@ -144,8 +146,7 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
         do {
             let (data, _) = try await URLSession.shared.data(from: url)
             if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-               let tagName = json["tag_name"] as? String,
-               let assets = json["assets"] as? [[String: Any]] {
+               let tagName = json["tag_name"] as? String {
                 
                 latestVersion = tagName.replacingOccurrences(of: "v", with: "")
                 if let latest = latestVersion {
@@ -154,9 +155,17 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
                     hasUpdate = false
                 }
                 
-                if let dlpAsset = assets.first(where: { ($0["name"] as? String)?.hasSuffix(".dmg") == true }),
-                   let downloadUrlStr = dlpAsset["browser_download_url"] as? String {
-                    downloadURL = URL(string: downloadUrlStr)
+                if let htmlUrlStr = json["html_url"] as? String, let htmlUrl = URL(string: htmlUrlStr) {
+                    releasePageURL = htmlUrl
+                }
+                
+                if let assets = json["assets"] as? [[String: Any]] {
+                    if let dlpAsset = assets.first(where: {
+                        let name = ($0["name"] as? String)?.lowercased() ?? ""
+                        return name.hasSuffix(".dmg") || name.hasSuffix(".zip") || name.hasSuffix(".app.zip") || name.hasSuffix(".tar.gz")
+                    }), let downloadUrlStr = dlpAsset["browser_download_url"] as? String {
+                        downloadURL = URL(string: downloadUrlStr)
+                    }
                 }
                 
                 if !hasUpdate {
@@ -173,7 +182,12 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
     }
     
     func downloadAndInstallUpdate() async {
-        guard let url = downloadURL else { return }
+        guard let url = downloadURL else {
+            if let pageURL = releasePageURL {
+                NSWorkspace.shared.open(pageURL)
+            }
+            return
+        }
         isDownloading = true
         updateProgress = 0
         
@@ -193,53 +207,64 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
     }
     
     nonisolated func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {
-        let tempDmg = FileManager.default.temporaryDirectory.appendingPathComponent("VeloX_Update.dmg")
-        try? FileManager.default.removeItem(at: tempDmg)
-        try? FileManager.default.moveItem(at: location, to: tempDmg)
+        let tempUpdate = FileManager.default.temporaryDirectory.appendingPathComponent("VeloX_Update_Package")
+        try? FileManager.default.removeItem(at: tempUpdate)
+        try? FileManager.default.moveItem(at: location, to: tempUpdate)
         
         Task { @MainActor in
             isDownloading = false
             isInstalling = true
-            installUpdate(dmgPath: tempDmg.path)
+            installUpdate(packagePath: tempUpdate.path)
         }
     }
     
-    private func installUpdate(dmgPath: String) {
+    private func installUpdate(packagePath: String) {
         let appPath = Bundle.main.bundlePath
         let script = """
         (
             exec > /tmp/velox_update.log 2>&1
-            DMG_PATH="$1"
+            PKG_PATH="$1"
             APP_PATH="$2"
-            echo "Starting update..."
-            sleep 3
-            MOUNT_POINT="/tmp/VeloXUpdate_$(date +%s)"
-            mkdir -p "$MOUNT_POINT"
-            hdiutil mount "$DMG_PATH" -mountpoint "$MOUNT_POINT" -quiet
+            echo "Starting update installation..."
+            sleep 2
             
-            if [ -d "$MOUNT_POINT/VeloX Pro.app" ]; then
-                echo "Found new app, replacing..."
-                rm -rf "$APP_PATH"
-                ditto "$MOUNT_POINT/VeloX Pro.app" "$APP_PATH"
-                hdiutil unmount "$MOUNT_POINT" -quiet
-                rm -rf "$MOUNT_POINT"
-                echo "Update files replaced. Waiting for app to restart."
+            WORK_DIR="/tmp/VeloXUpdate_$(date +%s)"
+            mkdir -p "$WORK_DIR"
+            
+            if file "$PKG_PATH" | grep -q "Zip archive"; then
+                echo "Unzipping update..."
+                /usr/bin/unzip -q "$PKG_PATH" -d "$WORK_DIR"
             else
-                echo "New app not found in DMG!"
-                hdiutil unmount "$MOUNT_POINT" -quiet
-                rm -rf "$MOUNT_POINT"
+                echo "Mounting DMG update..."
+                hdiutil mount "$PKG_PATH" -mountpoint "$WORK_DIR" -quiet
+            fi
+            
+            NEW_APP="$(find "$WORK_DIR" -maxdepth 2 -name "*.app" | head -n 1)"
+            
+            if [ -n "$NEW_APP" ] && [ -d "$NEW_APP" ]; then
+                echo "Found updated app at $NEW_APP. Replacing $APP_PATH..."
+                rm -rf "$APP_PATH"
+                ditto "$NEW_APP" "$APP_PATH"
+                hdiutil unmount "$WORK_DIR" -quiet 2>/dev/null || true
+                rm -rf "$WORK_DIR"
+                echo "Update succeeded. Relaunching..."
+                open "$APP_PATH"
+            else
+                echo "No valid .app found in package."
+                hdiutil unmount "$WORK_DIR" -quiet 2>/dev/null || true
+                rm -rf "$WORK_DIR"
             fi
         ) & disown
         """
         
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/bash")
-        process.arguments = ["-c", script, "bash", dmgPath, appPath]
+        process.arguments = ["-c", script, "bash", packagePath, appPath]
         
         do {
             try process.run()
             
-            DispatchQueue.main.asyncAfter(deadline: .now() + 8) {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
                 self.isInstalling = false
                 self.needsRestart = true
             }

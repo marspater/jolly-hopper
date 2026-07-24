@@ -63,19 +63,12 @@ struct ContentView: View {
     
     @ViewBuilder
     private var mainLayout: some View {
-        if #available(macOS 13.0, *) {
-            NavigationSplitView(columnVisibility: $columnVisibility) {
-                SidebarView()
-            } detail: {
-                DetailView()
-            }
-            .navigationSplitViewStyle(.balanced)
-        } else {
-            NavigationView {
-                SidebarView()
-                DetailView()
-            }
+        NavigationSplitView(columnVisibility: $columnVisibility) {
+            SidebarView()
+        } detail: {
+            DetailView()
         }
+        .navigationSplitViewStyle(.balanced)
     }
 }
 

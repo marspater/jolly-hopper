@@ -733,6 +733,11 @@ class YtdlpService: ObservableObject {
             }
         }
         
+        #if arch(arm64)
+        // Enable Apple Silicon (M1-M5) VideoToolbox Hardware Acceleration
+        args.append(contentsOf: ["--postprocessor-args", "ffmpeg:-hwaccel videotoolbox"])
+        #endif
+
         let outputPath: String
         do {
             outputPath = try await runDownloadProcess(
@@ -742,6 +747,21 @@ class YtdlpService: ObservableObject {
                 onProgress: onProgress,
                 onOutput: onOutput
             )
+        } catch let error as YtdlpError {
+            if case .commandFailed(let output) = error, isCookiePermissionError(output), args.contains("--cookies-from-browser") {
+                LoggerService.shared.log("Cookie permission denied by macOS TCC. Retrying download automatically without browser cookies...", level: .warning)
+                onOutput("[VeloX Warning] macOS TCC permission denied reading browser cookies. Retrying download without browser cookies...\n")
+                let cleanArgs = stripCookieArgs(from: args)
+                outputPath = try await runDownloadProcess(
+                    args: cleanArgs,
+                    saveFolder: options.saveFolder,
+                    onProcessCreated: onProcessCreated,
+                    onProgress: onProgress,
+                    onOutput: onOutput
+                )
+            } else {
+                throw error
+            }
         } catch {
             throw mapSiteSpecificError(error, url: normalizedURL)
         }
@@ -1101,8 +1121,33 @@ class YtdlpService: ObservableObject {
         }
     }
 
+    private func isCookiePermissionError(_ errorOutput: String) -> Bool {
+        let lower = errorOutput.lowercased()
+        return lower.contains("operation not permitted") || lower.contains("cookies.binarycookies") || lower.contains("errno 1")
+    }
+
+    private func stripCookieArgs(from args: [String]) -> [String] {
+        var cleanArgs = args
+        if let idx = cleanArgs.firstIndex(of: "--cookies-from-browser") {
+            cleanArgs.remove(at: idx)
+            if idx < cleanArgs.count {
+                cleanArgs.remove(at: idx)
+            }
+        }
+        return cleanArgs
+    }
+
     private func runCommand(_ args: [String]) async throws -> String {
-        return try await runCommandAsync(args)
+        do {
+            return try await runCommandAsync(args)
+        } catch let error as YtdlpError {
+            if case .commandFailed(let output) = error, isCookiePermissionError(output), args.contains("--cookies-from-browser") {
+                LoggerService.shared.log("Cookie permission denied by macOS TCC. Automatically retrying command without browser cookies...", level: .warning)
+                let cleanArgs = stripCookieArgs(from: args)
+                return try await runCommandAsync(cleanArgs)
+            }
+            throw error
+        }
     }
 
     private func runDownloadProcess(

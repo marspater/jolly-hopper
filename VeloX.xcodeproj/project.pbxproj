@@ -25,7 +25,6 @@
 		E0001024 /* LoggerService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000024 /* LoggerService.swift */; };
 		E0001025 /* AddDownloadWindowManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000025 /* AddDownloadWindowManager.swift */; };
 		E0001026 /* LanguageService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000026 /* LanguageService.swift */; };
-		E0001027 /* Credits.rtf in Resources */ = {isa = PBXBuildFile; fileRef = E0000027 /* Credits.rtf */; };
 		E0001028 /* View+Compatibility.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000028 /* View+Compatibility.swift */; };
 		E0001029 /* PreferencesWindowManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000029 /* PreferencesWindowManager.swift */; };
 		E0001030 /* AppIcon.icns in Resources */ = {isa = PBXBuildFile; fileRef = E0000030 /* AppIcon.icns */; };
@@ -53,7 +52,6 @@
 		E0000024 /* LoggerService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoggerService.swift; sourceTree = "<group>"; };
 		E0000025 /* AddDownloadWindowManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddDownloadWindowManager.swift; sourceTree = "<group>"; };
 		E0000026 /* LanguageService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LanguageService.swift; sourceTree = "<group>"; };
-		E0000027 /* Credits.rtf */ = {isa = PBXFileReference; lastKnownFileType = text.rtf; path = Credits.rtf; sourceTree = "<group>"; };
 		E0000028 /* View+Compatibility.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "View+Compatibility.swift"; sourceTree = "<group>"; };
 		E0000029 /* PreferencesWindowManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreferencesWindowManager.swift; sourceTree = "<group>"; };
 		E0000030 /* AppIcon.icns */ = {isa = PBXFileReference; lastKnownFileType = image.icns; path = AppIcon.icns; sourceTree = "<group>"; };
@@ -71,11 +69,20 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		44F4CAC630137C7400207052 /* Recovered References */ = {
+			isa = PBXGroup;
+			children = (
+				E0000030 /* AppIcon.icns */,
+			);
+			name = "Recovered References";
+			sourceTree = "<group>";
+		};
 		E0003001 = {
 			isa = PBXGroup;
 			children = (
 				E0003002 /* VeloX */,
 				E0003003 /* Products */,
+				44F4CAC630137C7400207052 /* Recovered References */,
 			);
 			sourceTree = "<group>";
 		};
@@ -144,7 +151,6 @@
 			children = (
 				E0000011 /* Assets.xcassets */,
 				E0000014 /* InfoPlist.strings */,
-				E0000027 /* Credits.rtf */,
 			);
 			path = Resources;
 			sourceTree = "<group>";
@@ -233,7 +239,6 @@
 			files = (
 				E0001011 /* Assets.xcassets in Resources */,
 				E0001012 /* InfoPlist.strings in Resources */,
-				E0001027 /* Credits.rtf in Resources */,
 				E0001030 /* AppIcon.icns in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -335,7 +340,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				MACOSX_DEPLOYMENT_TARGET = 12.0;
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
@@ -395,7 +400,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				MACOSX_DEPLOYMENT_TARGET = 12.0;
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = NO;
