@@ -188,8 +188,7 @@ struct DownloadRowView: View {
             case .fetching:
                 StatusSpinnerView()
             case .processing:
-                Image(systemName: "gearshape.2.fill")
-                    .font(.caption2)
+                StatusSpinnerView()
             case .completed:
                 Image(systemName: "checkmark.circle.fill")
                     .foregroundColor(.green)

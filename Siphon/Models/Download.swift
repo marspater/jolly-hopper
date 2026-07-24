@@ -272,11 +272,11 @@ enum VideoCodec: String, Codable, CaseIterable, Identifiable {
     
     func title(lang: LanguageService) -> String {
         switch self {
-        case .auto: return lang.s("codec_auto")
+        case .auto: return "Auto (Keep Source Codec)"
         case .h264: return "H.264 (AVC)"
         case .h265: return "H.265 (HEVC)"
         case .vp9: return "VP9"
-        case .av1: return "AV1"
+        case .av1: return "AV1 (Auto-Convert AVC → Best Quality/Size)"
         }
     }
     
