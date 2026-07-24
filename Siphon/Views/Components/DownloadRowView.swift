@@ -129,9 +129,7 @@ struct DownloadRowView: View {
             }
             
             if download.status == .downloading || download.status == .processing {
-                ProgressView(value: max(0, min(1, download.progress)))
-                    .progressViewStyle(.linear)
-                    .animation(.easeInOut(duration: 0.25), value: download.progress)
+                LinearProgressBar(value: max(0, min(1, download.progress)))
             }
         }
         .padding(14)
@@ -186,13 +184,9 @@ struct DownloadRowView: View {
         HStack(spacing: 5) {
             switch download.status {
             case .downloading:
-                ProgressView()
-                    .controlSize(.mini)
-                    .frame(width: 12, height: 12)
+                StatusSpinnerView()
             case .fetching:
-                ProgressView()
-                    .controlSize(.mini)
-                    .frame(width: 12, height: 12)
+                StatusSpinnerView()
             case .processing:
                 Image(systemName: "gearshape.2.fill")
                     .font(.caption2)
@@ -397,5 +391,40 @@ struct DownloadRowView: View {
             .background(Color.black.opacity(0.2))
         }
         .frame(width: 620, height: 420)
+    }
+}
+
+struct StatusSpinnerView: View {
+    @State private var isRotating = 0.0
+
+    var body: some View {
+        Circle()
+            .trim(from: 0, to: 0.7)
+            .stroke(Color.accentColor, style: StrokeStyle(lineWidth: 1.8, lineCap: .round))
+            .frame(width: 12, height: 12)
+            .rotationEffect(.degrees(isRotating))
+            .onAppear {
+                withAnimation(.linear(duration: 0.9).repeatForever(autoreverses: false)) {
+                    isRotating = 360
+                }
+            }
+    }
+}
+
+struct LinearProgressBar: View {
+    let value: Double
+
+    var body: some View {
+        GeometryReader { geometry in
+            ZStack(alignment: .leading) {
+                Capsule()
+                    .fill(Color.primary.opacity(0.1))
+                Capsule()
+                    .fill(Color(.displayP3, red: 0.15, green: 0.55, blue: 1.0))
+                    .frame(width: max(0, min(geometry.size.width, geometry.size.width * CGFloat(value))))
+            }
+        }
+        .frame(height: 4)
+        .clipShape(Capsule())
     }
 }
