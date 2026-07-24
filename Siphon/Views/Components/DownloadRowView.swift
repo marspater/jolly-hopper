@@ -264,6 +264,7 @@ struct DownloadRowView: View {
                 .buttonStyle(.plain)
                 .foregroundColor(.blue)
                 .help(languageService.s("play"))
+                .accessibilityLabel(languageService.s("play"))
                 
                 Button {
                     if let path = download.filePath {
@@ -276,6 +277,7 @@ struct DownloadRowView: View {
                 .buttonStyle(.plain)
                 .foregroundColor(.secondary)
                 .help(languageService.s("finder"))
+                .accessibilityLabel(languageService.s("finder"))
                 
                 Button {
                     appState.urlToDownload = download.url
@@ -287,6 +289,7 @@ struct DownloadRowView: View {
                 .buttonStyle(.plain)
                 .foregroundColor(.secondary)
                 .help(languageService.s("redownload"))
+                .accessibilityLabel(languageService.s("redownload"))
             }
             
             if download.status == .failed || download.status == .stopped {
@@ -299,6 +302,7 @@ struct DownloadRowView: View {
                 .buttonStyle(.plain)
                 .foregroundColor(.orange)
                 .help(languageService.s("retry"))
+                .accessibilityLabel(languageService.s("retry"))
                 
                 Button {
                     appState.urlToDownload = download.url
@@ -310,6 +314,7 @@ struct DownloadRowView: View {
                 .buttonStyle(.plain)
                 .foregroundColor(.secondary)
                 .help(languageService.s("redownload"))
+                .accessibilityLabel(languageService.s("redownload"))
             }
             
             if showStop && (download.status == .downloading || download.status == .queued) {
@@ -322,6 +327,7 @@ struct DownloadRowView: View {
                 .buttonStyle(.plain)
                 .foregroundColor(.red)
                 .help(languageService.s("stop"))
+                .accessibilityLabel(languageService.s("stop"))
             }
             
             Button {
@@ -333,6 +339,7 @@ struct DownloadRowView: View {
             .buttonStyle(.plain)
             .foregroundColor(.secondary)
             .help(languageService.s("log"))
+            .accessibilityLabel(languageService.s("log"))
             
             if download.status == .completed || download.status == .failed || download.status == .stopped {
                 Button {
@@ -344,6 +351,7 @@ struct DownloadRowView: View {
                 .buttonStyle(.plain)
                 .foregroundColor(.secondary.opacity(0.7))
                 .help(languageService.s("remove"))
+                .accessibilityLabel(languageService.s("remove"))
             }
         }
     }
