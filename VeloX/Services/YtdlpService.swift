@@ -406,7 +406,7 @@ class YtdlpService: ObservableObject {
                         id: url,
                         title: btvMedia.title,
                         description: parsedInfo.description,
-                        thumbnail: parsedInfo.thumbnail,
+                        thumbnail: parsedInfo.thumbnail ?? btvMedia.thumbnailURL,
                         duration: parsedInfo.duration,
                         uploader: "BoyfriendTV",
                         uploadDate: parsedInfo.uploadDate,
@@ -421,6 +421,25 @@ class YtdlpService: ObservableObject {
                         playlistCount: nil
                     )
                 }
+
+                return MediaInfo(
+                    id: url,
+                    title: btvMedia.title,
+                    description: nil,
+                    thumbnail: btvMedia.thumbnailURL,
+                    duration: nil,
+                    uploader: "BoyfriendTV",
+                    uploadDate: nil,
+                    viewCount: nil,
+                    likeCount: nil,
+                    formats: nil,
+                    subtitles: nil,
+                    automaticCaptions: nil,
+                    chapters: nil,
+                    playlist: nil,
+                    playlistIndex: nil,
+                    playlistCount: nil
+                )
             }
         }
 
@@ -837,6 +856,29 @@ class YtdlpService: ObservableObject {
             if let mergeOutputFormat = compatibleMergeOutputFormat(for: options) {
                 args.append(contentsOf: ["--merge-output-format", mergeOutputFormat])
             }
+
+            if let codec = options.videoCodec, codec != .auto {
+                switch codec {
+                case .av1:
+                    args.append(contentsOf: ["--recode-video", "mkv", "--postprocessor-args", "VideoConvertor:-c:v libsvtav1 -preset 8 -crf 28"])
+                case .h265:
+                    #if arch(arm64)
+                    args.append(contentsOf: ["--recode-video", "mp4", "--postprocessor-args", "VideoConvertor:-c:v hevc_videotoolbox"])
+                    #else
+                    args.append(contentsOf: ["--recode-video", "mp4", "--postprocessor-args", "VideoConvertor:-c:v libx265"])
+                    #endif
+                case .vp9:
+                    args.append(contentsOf: ["--recode-video", "webm", "--postprocessor-args", "VideoConvertor:-c:v libvpx-vp9"])
+                case .h264:
+                    #if arch(arm64)
+                    args.append(contentsOf: ["--recode-video", "mp4", "--postprocessor-args", "VideoConvertor:-c:v h264_videotoolbox"])
+                    #else
+                    args.append(contentsOf: ["--recode-video", "mp4", "--postprocessor-args", "VideoConvertor:-c:v libx264"])
+                    #endif
+                case .auto:
+                    break
+                }
+            }
         } else {
             // Audio-only download
             var audioFormat = "ba"
@@ -939,6 +981,7 @@ class YtdlpService: ObservableObject {
         let streamURL: String
         let embedURL: String
         let title: String
+        let thumbnailURL: String?
     }
 
     private func resolveBoyfriendTVMediaInfo(url: String) async -> BoyfriendTVExtractedMedia? {
@@ -979,6 +1022,22 @@ class YtdlpService: ObservableObject {
                 }
             }
         }
+
+        var thumbnailUrl: String? = nil
+        if let posterRange = html.range(of: "property=\"og:image\"\\s+content=\"([^\"]+)\"", options: .regularExpression) ??
+                              html.range(of: "\"thumbnailUrl\"\\s*:\\s*\"([^\"]+)\"", options: .regularExpression) ??
+                              html.range(of: "poster=\"([^\"]+)\"", options: .regularExpression) {
+            let rawPoster = String(html[posterRange])
+            if let firstHttp = rawPoster.range(of: "http") {
+                let candidate = String(rawPoster[firstHttp.lowerBound...])
+                    .replacingOccurrences(of: "\"", with: "")
+                    .replacingOccurrences(of: "\\/", with: "/")
+                    .components(separatedBy: " ").first ?? ""
+                if candidate.hasPrefix("http") {
+                    thumbnailUrl = candidate
+                }
+            }
+        }
         
         if let hlsRange = html.range(of: "\"hlsAuto\"\\s*:\\s*\"([^\"]+)\"", options: .regularExpression) {
             let rawHls = String(html[hlsRange])
@@ -988,7 +1047,7 @@ class YtdlpService: ObservableObject {
                     .replacingOccurrences(of: "\"", with: "")
                     .replacingOccurrences(of: "\\/", with: "/")
                 if streamUrl.hasPrefix("http") {
-                    return BoyfriendTVExtractedMedia(streamURL: streamUrl, embedURL: embedUrl, title: title)
+                    return BoyfriendTVExtractedMedia(streamURL: streamUrl, embedURL: embedUrl, title: title, thumbnailURL: thumbnailUrl)
                 }
             }
         }
