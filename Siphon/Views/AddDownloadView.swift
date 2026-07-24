@@ -212,7 +212,7 @@ struct AddDownloadView: View {
                 appState.urlToDownload = ""
             }
         }
-        .onChange(of: urlInput) { newValue in
+        .onChange(of: urlInput) { _, newValue in
             if newValue.hasPrefix("http") && mediaInfo == nil && !isLoading {
                 fetchInfo()
             }
@@ -284,8 +284,7 @@ struct AddDownloadView: View {
                 } label: {
                     if isLoading {
                         ProgressView()
-                            .scaleEffect(0.7)
-                            .frame(width: 20)
+                            .controlSize(.small)
                     } else {
                         Image(systemName: "arrow.right.circle.fill")
                     }
@@ -336,7 +335,7 @@ struct AddDownloadView: View {
             }
             Spacer()
             if isLoadingPlaylist {
-                ProgressView().scaleEffect(0.7)
+                ProgressView().controlSize(.small)
             } else {
                 Button(languageService.s("load_playlist")) { loadPlaylist() }.buttonStyle(.bordered)
             }
@@ -473,7 +472,7 @@ struct AddDownloadView: View {
                 Text(languageService.s("audio")).tag(false)
             }
             .pickerStyle(.segmented)
-            .onChange(of: isVideoTab) { isVideo in
+            .onChange(of: isVideoTab) { _, isVideo in
                 if isVideo { fileType = .mp4 } else { fileType = .mp3 }
             }
 
@@ -490,7 +489,7 @@ struct AddDownloadView: View {
                         ForEach(filteredResolutions) { res in Text(res.title(lang: languageService)).tag(res) }
                     }
                     .pickerStyle(.menu).frame(minWidth: 220, alignment: .leading)
-                    .onChange(of: selectedCodec) { newCodec in
+                    .onChange(of: selectedCodec) { _, newCodec in
                         if newCodec == "h264" && (videoResolution == .r1440p || videoResolution == .r2160p || videoResolution == .best) {
                             videoResolution = .r1080p
                         }

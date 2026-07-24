@@ -13,50 +13,36 @@ struct ContentView: View {
     @AppStorage("showMenuBarIcon") private var showMenuBarIcon: Bool = true
     
     var body: some View {
-        Group {
-            if #available(macOS 13.0, *) {
-                NavigationSplitView(columnVisibility: $columnVisibility) {
-                    SidebarView()
-                } detail: {
-                    DetailView()
-                }
-                .navigationSplitViewStyle(.balanced)
-            } else {
-                NavigationView {
-                    SidebarView()
-                    DetailView()
+        mainLayout
+            .animation(.spring(response: 0.35, dampingFraction: 0.8), value: columnVisibility)
+            .onChange(of: appState.showAddDownloadSheet) { _, newValue in
+                if newValue {
+                    AddDownloadWindowManager.shared.showAddDownloadWindow(downloadManager: downloadManager, appState: appState, languageService: languageService)
+                    appState.showAddDownloadSheet = false
                 }
             }
-        }
-        .animation(.spring(response: 0.35, dampingFraction: 0.8), value: columnVisibility)
-        .onChange(of: appState.showAddDownloadSheet) { newValue in
-            if newValue {
-                AddDownloadWindowManager.shared.showAddDownloadWindow(downloadManager: downloadManager, appState: appState, languageService: languageService)
-                appState.showAddDownloadSheet = false
+            .sheet(isPresented: $languageService.isFirstLaunch) {
+                WelcomeView()
+                    .environmentObject(languageService)
+                    .interactiveDismissDisabled()
             }
-        }
-        .sheet(isPresented: $languageService.isFirstLaunch) {
-            WelcomeView()
-                .environmentObject(languageService)
-                .interactiveDismissDisabled()
-        }
-        .task {
-            await MainActor.run {
-                NotificationService.shared.requestPermission()
+            .task {
+                await MainActor.run {
+                    NotificationService.shared.requestPermission()
+                }
+                
+                await downloadManager.initialize(languageService: languageService)
+                await updateChecker.checkForUpdates()
+                if updateChecker.hasUpdate {
+                    showUpdateAlert = true
+                }
             }
-            
-            await downloadManager.initialize(languageService: languageService)
-            await updateChecker.checkForUpdates()
-            if updateChecker.hasUpdate {
-                showUpdateAlert = true
+            .onChange(of: languageService.selectedLanguage) { _, _ in
+                MenuBarManager.shared.updateMenu()
             }
-        }
-        .onChange(of: languageService.selectedLanguage) { _ in
-            MenuBarManager.shared.updateMenu()
-        }
-        .onChange(of: showMenuBarIcon) { newValue in
-            MenuBarManager.shared.setVisible(newValue)
-        }
+            .onChange(of: showMenuBarIcon) { _, newValue in
+                MenuBarManager.shared.setVisible(newValue)
+            }
         .alert(item: $downloadManager.ytdlpUpdateMessage) { status in
             Alert(
                 title: Text(status.title),
@@ -73,6 +59,23 @@ struct ContentView: View {
             Text(String(format: languageService.s("update_available_message"), updateChecker.latestVersion ?? ""))
         }
         .frame(minWidth: 900, minHeight: 600)
+    }
+    
+    @ViewBuilder
+    private var mainLayout: some View {
+        if #available(macOS 13.0, *) {
+            NavigationSplitView(columnVisibility: $columnVisibility) {
+                SidebarView()
+            } detail: {
+                DetailView()
+            }
+            .navigationSplitViewStyle(.balanced)
+        } else {
+            NavigationView {
+                SidebarView()
+                DetailView()
+            }
+        }
     }
 }
 

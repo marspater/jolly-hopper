@@ -187,11 +187,11 @@ struct DownloadRowView: View {
             switch download.status {
             case .downloading:
                 ProgressView()
-                    .scaleEffect(0.55)
+                    .controlSize(.mini)
                     .frame(width: 12, height: 12)
             case .fetching:
                 ProgressView()
-                    .scaleEffect(0.55)
+                    .controlSize(.mini)
                     .frame(width: 12, height: 12)
             case .processing:
                 Image(systemName: "gearshape.2.fill")

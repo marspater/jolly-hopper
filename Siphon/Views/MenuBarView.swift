@@ -30,7 +30,7 @@ struct MenuBarView: View {
         .padding()
         .frame(width: 320)
         .background(.ultraThinMaterial)
-        .onChange(of: selectedType) { newValue in
+        .onChange(of: selectedType) { _, newValue in
             if newValue == "audio" {
                 selectedPreset = "audio_only"
             } else {

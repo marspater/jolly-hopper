@@ -111,10 +111,10 @@ struct PreferencesView: View {
         .padding(.bottom, 16)
         .frame(minWidth: 620, idealWidth: 680, minHeight: 520, idealHeight: 600)
         .background(.ultraThinMaterial)
-        .onChange(of: theme) { newValue in
+        .onChange(of: theme) { _, newValue in
             applyTheme(newValue)
         }
-        .onChange(of: languageService.selectedLanguage) { newValue in
+        .onChange(of: languageService.selectedLanguage) { _, newValue in
             if previousLanguage != nil && previousLanguage != newValue {
                 showLanguageChangeAlert = true
             }
@@ -408,7 +408,7 @@ struct PreferencesView: View {
             }
             .pickerStyle(.radioGroup)
             .labelsHidden()
-            .onChange(of: selectedPreset) { newValue in
+            .onChange(of: selectedPreset) { _, newValue in
                 if let preset = DownloadPreset(rawValue: newValue) {
                     selectedCustomPresetIdString = ""
                     applyPreset(preset)

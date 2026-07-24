@@ -35,18 +35,7 @@ final class PreferencesWindowManager: NSObject, NSWindowDelegate {
         window.isReleasedWhenClosed = false
         window.title = languageService.s("preferences")
         window.minSize = NSSize(width: 580, height: 500)
-        
-        let visualEffectView = NSVisualEffectView(frame: NSRect(x: 0, y: 0, width: 640, height: 580))
-        visualEffectView.blendingMode = .behindWindow
-        visualEffectView.material = .hudWindow
-        visualEffectView.state = .active
-        visualEffectView.autoresizingMask = [.width, .height]
-        
-        hostingController.view.frame = visualEffectView.bounds
-        hostingController.view.autoresizingMask = [.width, .height]
-        
-        visualEffectView.addSubview(hostingController.view)
-        window.contentView = visualEffectView
+        window.contentViewController = hostingController
         window.delegate = self
         
         let controller = NSWindowController(window: window)
