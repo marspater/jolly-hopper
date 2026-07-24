@@ -767,7 +767,15 @@ class YtdlpService: ObservableObject {
                 onOutput: onOutput
             )
         } catch let error as YtdlpError {
-            if case .commandFailed(let output) = error, isCookiePermissionError(output), args.contains("--cookies-from-browser") {
+            let errText: String
+            switch error {
+            case .commandFailed(let msg), .downloadFailed(let msg):
+                errText = msg
+            default:
+                errText = ""
+            }
+
+            if !errText.isEmpty, isCookiePermissionError(errText), args.contains("--cookies-from-browser") {
                 LoggerService.shared.log("Cookie permission denied by macOS TCC. Retrying download automatically without browser cookies...", level: .warning)
                 onOutput("[VeloX Warning] macOS TCC permission denied reading browser cookies. Retrying download without browser cookies...\n")
                 let cleanArgs = stripCookieArgs(from: args)
@@ -779,7 +787,7 @@ class YtdlpService: ObservableObject {
                     onOutput: onOutput
                 )
             } else {
-                throw error
+                throw mapSiteSpecificError(error, url: normalizedURL)
             }
         } catch {
             throw mapSiteSpecificError(error, url: normalizedURL)
@@ -1280,6 +1288,8 @@ class YtdlpService: ObservableObject {
                             let eta = components.count > 2 ? components[2] : nil
                             onProgress(percent / 100.0, speed, eta)
                         }
+                    } else if line.contains("[VideoConvertor]") || line.contains("[ffmpeg]") || line.contains("Converting video") {
+                        onProgress(0.98, "Encoding to AV1...", "Re-encoding")
                     }
                 }
             }

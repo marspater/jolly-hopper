@@ -71,6 +71,19 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         }
     }
 
+    func sendEncodingCompleted(filename: String, codec: String, languageService: LanguageService) {
+        guard UserDefaults.standard.object(forKey: UserDefaultsKeys.showNotifications) as? Bool ?? true else { return }
+        guard let center = notificationCenter else { return }
+
+        let content = UNMutableNotificationContent()
+        content.title = "⚡ Video Conversion Complete"
+        content.body = "\(filename) was successfully converted to \(codec) codec."
+        content.sound = .default
+
+        let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
+        center.add(request)
+    }
+
     func sendDownloadFailed(filename: String, languageService: LanguageService) {
         guard UserDefaults.standard.object(forKey: UserDefaultsKeys.showNotifications) as? Bool ?? true else {
             logMessage("Notifications disabled by user setting", level: .warning)
