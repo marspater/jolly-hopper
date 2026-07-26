@@ -278,6 +278,7 @@ struct AddDownloadView: View {
                     Image(systemName: "doc.on.clipboard")
                 }
                 .help(languageService.s("paste_from_clipboard"))
+                .accessibilityLabel(languageService.s("paste_from_clipboard"))
 
                 Button {
                     fetchInfo()
@@ -291,6 +292,7 @@ struct AddDownloadView: View {
                 }
                 .disabled(urlInput.isEmpty || isLoading)
                 .help(languageService.s("fetch_info"))
+                .accessibilityLabel(languageService.s("fetch_info"))
             }
         }
     }
