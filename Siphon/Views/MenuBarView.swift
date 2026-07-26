@@ -71,6 +71,7 @@ struct MenuBarView: View {
             }
             .buttonStyle(.plain)
             .help(languageService.s("show_main_window"))
+            .accessibilityLabel(languageService.s("show_main_window"))
         }
     }
     
@@ -88,6 +89,7 @@ struct MenuBarView: View {
             }
             .buttonStyle(.bordered)
             .help(languageService.s("paste_from_clipboard"))
+            .accessibilityLabel(languageService.s("paste_from_clipboard"))
         }
     }
     
