@@ -283,6 +283,7 @@ struct PreferencesView: View {
                         }
                         .buttonStyle(.plain)
                         .help("Reset to default Downloads folder")
+                        .accessibilityLabel("Reset to default Downloads folder")
                     }
                 }
                 .padding(.horizontal, 12)
