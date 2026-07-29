@@ -13,3 +13,6 @@
 ## 2026-07-22 - MainActor Usage for Shared Services
 **Learning:** When interacting with an `@MainActor` shared service like `LoggerService`, dispatching from inside an asynchronous API closure (e.g. `requestAuthorization`) requires jumping back to the `MainActor`. A helper function with `Task { @MainActor in }` can seamlessly handle this internally to avoid repetitive dispatch code.
 **Action:** Use centralized helper methods to handle repetitive `@MainActor` dispatch when calling UI-bound singletons from background closures.
+## 2024-09-02 - Batching Side Effects in Loops
+**Learning:** Calling `objectWillChange.send()` and synchronous I/O like `saveHistory()` inside loops during bulk operations (like "Stop All" or "Clear Completed") causes unnecessary UI re-renders and thread blocking on macOS apps using `ObservableObject`.
+**Action:** When implementing bulk operations on `@Published` collections, pass flags (like `shouldSaveHistory: Bool = true`) to inner loop functions to bypass side-effects, then trigger the broadcast and save exactly once at the end of the batch method.
