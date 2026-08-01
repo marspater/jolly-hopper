@@ -471,6 +471,8 @@ struct PreferencesView: View {
                         .foregroundColor(.blue)
                 }
                 .buttonStyle(.borderless)
+                .help(languageService.s("edit_preset"))
+                .accessibilityLabel(languageService.s("edit_preset"))
                 
                 Button {
                     deleteCustomPreset(preset)
@@ -479,6 +481,8 @@ struct PreferencesView: View {
                         .foregroundColor(.red)
                 }
                 .buttonStyle(.borderless)
+                .help(languageService.s("delete_preset"))
+                .accessibilityLabel(languageService.s("delete_preset"))
             }
         }
         .padding(.vertical, 4)
