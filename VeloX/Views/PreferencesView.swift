@@ -282,8 +282,8 @@ struct PreferencesView: View {
                                 .foregroundColor(.secondary)
                         }
                         .buttonStyle(.plain)
-                        .help("Reset to default Downloads folder")
-                        .accessibilityLabel("Reset to default Downloads folder")
+                        .help(languageService.s("reset_save_folder"))
+                        .accessibilityLabel(languageService.s("reset_save_folder"))
                     }
                 }
                 .padding(.horizontal, 12)

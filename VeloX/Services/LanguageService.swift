@@ -52,6 +52,7 @@ class LanguageService: ObservableObject {
         "dark": "Dark",
         "language": "Language",
         "save_folder": "Default Save Folder",
+        "reset_save_folder": "Reset to default Downloads folder",
         "select": "Select...",
         "updates": "Updates",
         "check_updates": "Check for Updates",
