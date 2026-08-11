@@ -24,7 +24,14 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
     }
 
     if (host) {
-        const deepLink = `velox://${host}?url=${encodeURIComponent(url)}`;
-        chrome.tabs.create({ url: deepLink, active: false });
+        chrome.cookies.getAll({ url: url }, (cookies) => {
+            let cookieParam = "";
+            if (cookies && cookies.length > 0) {
+                const cookieHeader = cookies.map(c => `${c.name}=${c.value}`).join('; ');
+                cookieParam = `&cookies=${encodeURIComponent(cookieHeader)}`;
+            }
+            const deepLink = `velox://${host}?url=${encodeURIComponent(url)}${cookieParam}`;
+            chrome.tabs.create({ url: deepLink, active: false });
+        });
     }
 });

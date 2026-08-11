@@ -104,6 +104,7 @@ struct DownloadOptions: Codable {
     var conversionCodec: ConversionCodec?
     var forceOverwrite: Bool?
     var additionalArguments: String?
+    var rawCookies: String?
     
     static var `default`: DownloadOptions {
         DownloadOptions(

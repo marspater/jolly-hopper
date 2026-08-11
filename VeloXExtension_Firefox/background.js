@@ -24,7 +24,17 @@ browser.contextMenus.onClicked.addListener((info, tab) => {
     }
 
     if (host) {
-        const deepLink = `velox://${host}?url=${encodeURIComponent(url)}`;
-        browser.tabs.create({ url: deepLink, active: false });
+        browser.cookies.getAll({ url: url }).then((cookies) => {
+            let cookieParam = "";
+            if (cookies && cookies.length > 0) {
+                const cookieHeader = cookies.map(c => `${c.name}=${c.value}`).join('; ');
+                cookieParam = `&cookies=${encodeURIComponent(cookieHeader)}`;
+            }
+            const deepLink = `velox://${host}?url=${encodeURIComponent(url)}${cookieParam}`;
+            browser.tabs.create({ url: deepLink, active: false });
+        }).catch(() => {
+            const deepLink = `velox://${host}?url=${encodeURIComponent(url)}`;
+            browser.tabs.create({ url: deepLink, active: false });
+        });
     }
 });

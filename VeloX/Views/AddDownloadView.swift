@@ -940,6 +940,10 @@ struct AddDownloadView: View {
     private func proceedWithDownload(options: DownloadOptions, forceOverwrite: Bool) {
         var finalOptions = options
         finalOptions.forceOverwrite = forceOverwrite
+        if let rawCookies = appState.rawCookiesToDownload, !rawCookies.isEmpty {
+            finalOptions.rawCookies = rawCookies
+            appState.rawCookiesToDownload = nil
+        }
 
         if downloadMode == .single {
             downloadManager.addDownload(url: urlInput, options: finalOptions)

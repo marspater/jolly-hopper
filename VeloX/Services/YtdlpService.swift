@@ -696,11 +696,19 @@ class YtdlpService: ObservableObject {
             args.append(contentsOf: customArgs)
         }
 
-        let usingBrowserCookies = appendCookieArgs(to: &args)
-        logCookieUsage(for: normalizedURL, usingBrowserCookies: usingBrowserCookies)
+        var tempCookieFile: URL? = nil
+        if let rawCookies = options.rawCookies, !rawCookies.isEmpty {
+            if let tempFile = createTempCookiesFileFromHeader(url: targetURL, cookieHeader: rawCookies) {
+                tempCookieFile = tempFile
+                LoggerService.shared.log("Using session cookies passed from browser extension for \(hostForLog(targetURL))", level: .info)
+                args.append(contentsOf: ["--cookies", tempFile.path])
+            }
+        } else {
+            let usingBrowserCookies = appendCookieArgs(to: &args)
+            logCookieUsage(for: normalizedURL, usingBrowserCookies: usingBrowserCookies)
+        }
 
         // Handle Sucuri bypass
-        var tempCookieFile: URL? = nil
         if let sucuriCookie = await resolveSucuriCookie(for: normalizedURL) {
             if let tempFile = createTempCookiesFile(url: normalizedURL, cookieName: sucuriCookie.name, cookieValue: sucuriCookie.value) {
                 tempCookieFile = tempFile
@@ -1718,6 +1726,36 @@ class YtdlpService: ObservableObject {
             return tempCookiesURL
         } catch {
             print("Error writing cookies file: \(error)")
+            return nil
+        }
+    }
+
+    private func createTempCookiesFileFromHeader(url: String, cookieHeader: String) -> URL? {
+        guard let host = URL(string: url)?.host, !host.isEmpty else { return nil }
+        let domain = host.hasPrefix(".") ? host : ".\(host)"
+        let tempCookiesURL = FileManager.default.temporaryDirectory.appendingPathComponent("velox_header_cookies_\(UUID().uuidString).txt")
+        
+        var lines = ["# Netscape HTTP Cookie File"]
+        let pairs = cookieHeader.components(separatedBy: ";")
+        let expiry = Int(Date().addingTimeInterval(86400 * 30).timeIntervalSince1970)
+        
+        for pair in pairs {
+            let parts = pair.trimmingCharacters(in: .whitespacesAndNewlines).components(separatedBy: "=")
+            if parts.count >= 2 {
+                let key = parts[0].trimmingCharacters(in: .whitespacesAndNewlines)
+                let value = parts.dropFirst().joined(separator: "=").trimmingCharacters(in: .whitespacesAndNewlines)
+                if !key.isEmpty {
+                    lines.append("\(domain)\tTRUE\t/\tFALSE\t\(expiry)\t\(key)\t\(value)")
+                }
+            }
+        }
+        
+        let content = lines.joined(separator: "\n") + "\n"
+        do {
+            try content.write(to: tempCookiesURL, atomically: true, encoding: .utf8)
+            try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: tempCookiesURL.path)
+            return tempCookiesURL
+        } catch {
             return nil
         }
     }

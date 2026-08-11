@@ -105,15 +105,17 @@ struct VeloXApp: App {
         let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
         let queryItems = components?.queryItems
         let videoUrl = queryItems?.first(where: { $0.name == "url" })?.value
+        let rawCookies = queryItems?.first(where: { $0.name == "cookies" })?.value
         
         guard let rawVideoUrl = videoUrl?.trimmingCharacters(in: .whitespacesAndNewlines), !rawVideoUrl.isEmpty,
               let targetURL = URL(string: rawVideoUrl), targetURL.scheme == "http" || targetURL.scheme == "https" else { return }
         
         if url.host == "download" {
             appState.urlToDownload = rawVideoUrl
+            appState.rawCookiesToDownload = rawCookies
             appState.showAddDownloadSheet = true
         } else if url.host == "fast-download" {
-            downloadManager.quickDownload(url: rawVideoUrl)
+            downloadManager.quickDownload(url: rawVideoUrl, rawCookies: rawCookies)
             appState.selectedNavItem = .downloading
         }
         
@@ -301,6 +303,7 @@ class AppState: ObservableObject {
     @Published var showAddDownloadSheet = false
     @Published var selectedNavItem: NavigationItem = .home
     @Published var urlToDownload: String = ""
+    @Published var rawCookiesToDownload: String? = nil
 }
 
 enum NavigationItem: String, CaseIterable, Identifiable {
