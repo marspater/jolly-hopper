@@ -309,14 +309,16 @@ class DownloadManager: ObservableObject {
 
 
 
-    func stopDownload(_ download: Download) {
+    func stopDownload(_ download: Download, skipSaveAndBroadcast: Bool = false) {
         updateStatus(for: download, to: .stopped)
         if let process = activeProcesses[download.id] {
             process.terminate()
             activeProcesses.removeValue(forKey: download.id)
         }
-        objectWillChange.send()
-        addToHistory(download)
+        if !skipSaveAndBroadcast {
+            objectWillChange.send()
+        }
+        addToHistory(download, skipSave: skipSaveAndBroadcast)
 
         let downloadCopy = download
         Task {
@@ -344,13 +346,15 @@ class DownloadManager: ObservableObject {
 
 
     func stopAllDownloads() {
+        // Bolt Performance Optimization: Avoid synchronous disk I/O and redundant UI broadcasts inside loops by batching operations
         for download in downloadingDownloads {
-            stopDownload(download)
+            stopDownload(download, skipSaveAndBroadcast: true)
         }
         for download in queuedDownloads {
             updateStatus(for: download, to: .stopped)
         }
         objectWillChange.send()
+        saveHistory()
     }
 
 
@@ -375,8 +379,9 @@ class DownloadManager: ObservableObject {
 
         let itemIds = Set(items.map { $0.id })
 
+        // Bolt Performance Optimization: Batch array mutations and broadcast once
         for item in items {
-            stopDownload(item)
+            stopDownload(item, skipSaveAndBroadcast: true)
 
             let downloadCopy = item
             Task {
@@ -388,6 +393,7 @@ class DownloadManager: ObservableObject {
 
         downloads.removeAll { itemIds.contains($0.id) }
         history.removeAll { itemIds.contains($0.id) }
+        objectWillChange.send()
         saveHistory()
     }
 
@@ -478,7 +484,7 @@ class DownloadManager: ObservableObject {
         }
     }
 
-    private func addToHistory(_ download: Download) {
+    private func addToHistory(_ download: Download, skipSave: Bool = false) {
         let historic = HistoricDownload(download: download)
 
         // Remove existing if any (upsert)
@@ -491,7 +497,9 @@ class DownloadManager: ObservableObject {
             history.removeFirst(history.count - 500)
         }
 
-        saveHistory()
+        if !skipSave {
+            saveHistory()
+        }
     }
 
     func clearHistory() {

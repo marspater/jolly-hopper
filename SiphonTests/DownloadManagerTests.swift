@@ -26,4 +26,6 @@ final class DownloadManagerTests: XCTestCase {
         XCTAssertEqual(addedDownload.url, testUrl, "The added download URL should match the provided URL")
         XCTAssertEqual(addedDownload.status, .queued, "The added download should have .queued status initially")
     }
+
+
 }
