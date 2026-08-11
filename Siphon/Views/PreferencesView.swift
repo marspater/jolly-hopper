@@ -26,7 +26,7 @@ struct PreferencesView: View {
     @State private var showLanguageChangeAlert = false
     @State private var previousLanguage: Language? = nil
     @State private var installedBrowsers: [SupportedBrowser] = []
-    @StateObject private var logger = LoggerService.shared
+    @ObservedObject private var logger = LoggerService.shared
     @State private var showDebugLogsSheet = false
     @State private var customPresets: [CustomPreset] = []
     @State private var showCreatePresetSheet = false
@@ -147,9 +147,7 @@ struct PreferencesView: View {
     @ViewBuilder
     private func tabSegment(_ tab: PreferenceTab, title: String, icon: String) -> some View {
         Button {
-            withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
-                selectedTab = tab
-            }
+            selectedTab = tab
         } label: {
             HStack(spacing: 6) {
                 Image(systemName: icon)
@@ -471,6 +469,8 @@ struct PreferencesView: View {
                         .foregroundColor(.blue)
                 }
                 .buttonStyle(.borderless)
+                .help(languageService.s("edit_preset"))
+                .accessibilityLabel(languageService.s("edit_preset"))
                 
                 Button {
                     deleteCustomPreset(preset)
@@ -479,6 +479,8 @@ struct PreferencesView: View {
                         .foregroundColor(.red)
                 }
                 .buttonStyle(.borderless)
+                .help(languageService.s("delete_preset"))
+                .accessibilityLabel(languageService.s("delete_preset"))
             }
         }
         .padding(.vertical, 4)
@@ -830,15 +832,10 @@ struct PreferencesView: View {
                 .keyboardShortcut(.cancelAction)
             }
             
-            ScrollView {
-                Text(logger.logs.joined(separator: "\n").isEmpty ? "No logs available." : logger.logs.joined(separator: "\n"))
-                    .font(.system(.caption, design: .monospaced))
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .textSelection(.enabled)
-                    .padding(8)
-            }
-            .background(Color(NSColor.textBackgroundColor))
-            .cornerRadius(6)
+            ReadOnlyLogView(text: logger.logs.joined(separator: "\n").isEmpty ? "No logs available." : logger.logs.joined(separator: "\n"))
+                .padding(4)
+                .background(Color(NSColor.textBackgroundColor))
+                .cornerRadius(6)
             
             HStack {
                 Button("Copy All") {

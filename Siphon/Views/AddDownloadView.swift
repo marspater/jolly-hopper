@@ -5,7 +5,7 @@ struct AddDownloadView: View {
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var languageService: LanguageService
     @Environment(\.dismiss) private var dismiss
-    @AppStorage("selectedPreset") private var selectedPreset: String = "max_compatibility"
+    @AppStorage("selectedPreset") private var selectedPreset: String = "best_quality"
     @AppStorage("selectedCustomPresetId") private var selectedCustomPresetIdString: String = ""
     @AppStorage("defaultAdditionalArguments") private var defaultAdditionalArguments: String = ""
 
@@ -17,13 +17,14 @@ struct AddDownloadView: View {
 
     @State private var saveFolder: URL = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first!
     @State private var fileType: MediaFileType = .mp4
-    @State private var videoResolution: VideoResolution = .r1080p
+    @State private var videoResolution: VideoResolution = .best
     @State private var audioQuality: AudioQuality = .best
     @State private var customFilename: String = ""
     @State private var isVideoTab: Bool = true
     @State private var availableCodecs: [CodecOption] = []
-    @State private var selectedCodec: String = "h264"
-    @State private var selectedAudioCodec: String = "aac"
+    @State private var selectedCodec: String = "auto"
+    @State private var selectedConversionCodec: String = "none"
+    @State private var selectedAudioCodec: String = "auto"
     @State private var customPresets: [CustomPreset] = []
     @State private var selectedPresetName: String? = nil
     @State private var presetSubtitleLanguage: String = ""
@@ -163,6 +164,7 @@ struct AddDownloadView: View {
                 fileType = customPreset.fileType
                 videoResolution = customPreset.videoResolution
                 selectedCodec = customPreset.videoCodec.rawValue
+                selectedConversionCodec = "none"
                 selectedAudioCodec = customPreset.audioCodec.rawValue
                 isVideoTab = customPreset.fileType.isVideo
                 selectedPresetName = customPreset.name
@@ -187,6 +189,7 @@ struct AddDownloadView: View {
                 fileType = preset.fileType
                 videoResolution = preset.videoResolution
                 selectedCodec = preset.videoCodec.rawValue
+                selectedConversionCodec = "none"
                 selectedAudioCodec = preset.audioCodec.rawValue
                 isVideoTab = preset.fileType.isVideo
                 selectedPresetName = preset.title(lang: languageService)
@@ -522,6 +525,16 @@ struct AddDownloadView: View {
                     .pickerStyle(.menu)
                     .frame(minWidth: 220, alignment: .leading)
                 }
+
+                HStack(alignment: .firstTextBaseline, spacing: 24) {
+                    Picker("Post-Processing", selection: $selectedConversionCodec) {
+                        ForEach(ConversionCodec.allCases) { codec in
+                            Text(codec.title(lang: languageService)).tag(codec.rawValue)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    .frame(minWidth: 220, alignment: .leading)
+                }
             }
 
             if isVideoTab && selectedCodec == "h264" {
@@ -569,7 +582,9 @@ struct AddDownloadView: View {
 
     private func applyPreset(_ preset: DownloadPreset, preserveSelectedCodec: Bool = true) {
         let currentCodec = selectedCodec
+        let currentConversion = selectedConversionCodec
         selectedCodec = preserveSelectedCodec ? currentCodec : preset.videoCodec.rawValue
+        selectedConversionCodec = preserveSelectedCodec ? currentConversion : "none"
         selectedAudioCodec = preset.audioCodec.rawValue
         videoResolution = preset.videoResolution
         fileType = preset.fileType
@@ -584,7 +599,9 @@ struct AddDownloadView: View {
 
     private func applyCustomPreset(_ preset: CustomPreset, preserveSelectedCodec: Bool = true) {
         let currentCodec = selectedCodec
+        let currentConversion = selectedConversionCodec
         selectedCodec = preserveSelectedCodec ? currentCodec : preset.videoCodec.rawValue
+        selectedConversionCodec = preserveSelectedCodec ? currentConversion : "none"
         selectedAudioCodec = preset.audioCodec.rawValue
         videoResolution = preset.videoResolution
         fileType = preset.fileType
@@ -865,7 +882,7 @@ struct AddDownloadView: View {
 
     private func startDownload() {
         let videoCodecEnum = isVideoTab ? VideoCodec(rawValue: selectedCodec) : nil
-
+        let conversionCodecEnum = isVideoTab ? ConversionCodec(rawValue: selectedConversionCodec) : nil
         let audioCodecEnum: AudioCodec? = {
             if !isVideoTab || selectedAudioCodec == "auto" {
                 return nil
@@ -890,6 +907,7 @@ struct AddDownloadView: View {
             customFilename: customFilename.isEmpty ? nil : customFilename,
             videoCodec: videoCodecEnum,
             audioCodec: audioCodecEnum,
+            conversionCodec: conversionCodecEnum,
             additionalArguments: additionalArguments.isEmpty ? nil : additionalArguments
         )
 

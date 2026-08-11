@@ -20,9 +20,15 @@ class LoggerService: ObservableObject {
     }
     
     private func loadInitialLogs() {
-        if let content = try? String(contentsOf: logFileURL, encoding: .utf8) {
+        let fileURL = logFileURL
+        let maxEntries = maxLogEntries
+        Task.detached {
+            guard let content = try? String(contentsOf: fileURL, encoding: .utf8) else { return }
             let lines = content.components(separatedBy: .newlines).filter { !$0.isEmpty }
-            self.logs = Array(lines.suffix(maxLogEntries))
+            let initialLogs = Array(lines.suffix(maxEntries))
+            await MainActor.run {
+                self.logs = initialLogs
+            }
         }
     }
     
@@ -45,6 +51,11 @@ class LoggerService: ObservableObject {
         guard let data = string.data(using: .utf8) else { return }
         
         if FileManager.default.fileExists(atPath: logFileURL.path) {
+            if let attrs = try? FileManager.default.attributesOfItem(atPath: logFileURL.path),
+               let size = attrs[.size] as? Int64, size > 2 * 1024 * 1024 {
+                // If log file exceeds 2MB, prune it to the last maxLogEntries lines
+                trimLogFile()
+            }
             if let fileHandle = try? FileHandle(forWritingTo: logFileURL) {
                 fileHandle.seekToEndOfFile()
                 fileHandle.write(data)
@@ -53,6 +64,13 @@ class LoggerService: ObservableObject {
         } else {
             try? data.write(to: logFileURL, options: .atomic)
         }
+    }
+    
+    private func trimLogFile() {
+        guard let content = try? String(contentsOf: logFileURL, encoding: .utf8) else { return }
+        let lines = content.components(separatedBy: .newlines).filter { !$0.isEmpty }
+        let trimmed = lines.suffix(maxLogEntries).joined(separator: "\n") + "\n"
+        try? trimmed.write(to: logFileURL, atomically: true, encoding: .utf8)
     }
     
     func clearLogs() {
