@@ -13,3 +13,6 @@
 ## 2026-07-22 - MainActor Usage for Shared Services
 **Learning:** When interacting with an `@MainActor` shared service like `LoggerService`, dispatching from inside an asynchronous API closure (e.g. `requestAuthorization`) requires jumping back to the `MainActor`. A helper function with `Task { @MainActor in }` can seamlessly handle this internally to avoid repetitive dispatch code.
 **Action:** Use centralized helper methods to handle repetitive `@MainActor` dispatch when calling UI-bound singletons from background closures.
+## 2024-07-21 - Avoiding redundant broadcasts during array mutation
+**Learning:** In SwiftUI applications using `ObservableObject`, triggering `objectWillChange.send()` inside a loop that mutates an array causes redundant, performance-killing UI updates for every iteration.
+**Action:** When mutating arrays (like clearing or stopping multiple items), pass a `skipBroadcast` flag to bypass the per-item UI update and call `objectWillChange.send()` exactly once after the loop completes.
