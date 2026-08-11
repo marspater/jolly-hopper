@@ -861,7 +861,7 @@ class YtdlpService: ObservableObject {
             ]
 
             args.append(contentsOf: ["-f", formatSelectors.joined(separator: "/")])
-            args.append(contentsOf: ["-S", "res,fps,hdr:12,vbr,abr,filesize"])
+            args.append(contentsOf: ["-S", "quality,res,fps,hdr:12,vbr,abr,filesize"])
 
             var finalMergeFormat = compatibleMergeOutputFormat(for: options)
 
@@ -1263,8 +1263,11 @@ class YtdlpService: ObservableObject {
             args.append(contentsOf: ["--add-header", "Referer:\(referer)"])
             args.append(contentsOf: ["--hls-use-mpegts"])
             args.append(contentsOf: ["--concurrent-fragments", "5"])
-        } else if lowerUrl.contains("justthegays.com") {
+        } else if lowerUrl.contains("justthegays.com") || lowerUrl.contains("justthegays.tv") {
             args.append(contentsOf: ["--add-header", "Referer:https://justthegays.com/"])
+            args.append(contentsOf: ["--extractor-args", "generic:impersonate"])
+        } else if lowerUrl.contains("thisvid.com") {
+            args.append(contentsOf: ["--add-header", "Referer:https://thisvid.com/"])
             args.append(contentsOf: ["--extractor-args", "generic:impersonate"])
         } else if lowerUrl.contains(".m3u8") || lowerUrl.contains(".mpd") {
             args.append(contentsOf: ["--hls-use-mpegts"])

@@ -255,13 +255,13 @@ enum VideoResolution: String, Codable, CaseIterable, Identifiable {
     var ytdlpValue: String {
         switch self {
         case .best: return "bestvideo"
-        case .r2160p: return "bestvideo[height<=2160]"
-        case .r1440p: return "bestvideo[height<=1440]"
-        case .r1080p: return "bestvideo[height<=1080]"
-        case .r720p: return "bestvideo[height<=720]"
-        case .r480p: return "bestvideo[height<=480]"
-        case .r360p: return "bestvideo[height<=360]"
-        case .r240p: return "bestvideo[height<=240]"
+        case .r2160p: return "bestvideo[height<=?2160]"
+        case .r1440p: return "bestvideo[height<=?1440]"
+        case .r1080p: return "bestvideo[height<=?1080]"
+        case .r720p: return "bestvideo[height<=?720]"
+        case .r480p: return "bestvideo[height<=?480]"
+        case .r360p: return "bestvideo[height<=?360]"
+        case .r240p: return "bestvideo[height<=?240]"
         case .worst: return "worstvideo"
         }
     }
