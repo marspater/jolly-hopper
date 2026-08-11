@@ -985,7 +985,7 @@ class YtdlpService: ObservableObject {
     }
 
     private func configuredBrowserCookieSource() -> String? {
-        let browser = UserDefaults.standard.string(forKey: UserDefaultsKeys.browserForCookies) ?? "none"
+        let browser = UserDefaults.standard.string(forKey: UserDefaultsKeys.browserForCookies) ?? "safari"
         return browser == "none" ? nil : browser
     }
 
@@ -1250,10 +1250,14 @@ class YtdlpService: ObservableObject {
         args.append(contentsOf: ["--add-header", "Accept-Language:en-US,en;q=0.9"])
         args.append(contentsOf: ["--extractor-args", "generic:impersonate"])
 
-        // Retries and socket timeouts
+        // Retries, socket timeouts & performance optimization flags
         args.append(contentsOf: ["--retries", "10"])
         args.append(contentsOf: ["--fragment-retries", "10"])
         args.append(contentsOf: ["--socket-timeout", "15"])
+        args.append(contentsOf: ["--buffer-size", "1M"])
+        args.append(contentsOf: ["--http-chunk-size", "10M"])
+        args.append(contentsOf: ["--concurrent-fragments", "5"])
+        args.append("--no-mtime")
 
         if lowerUrl.contains("boyfriend.tv") || lowerUrl.contains("boyfriendtv.com") || lowerUrl.contains("cdn.boyfriend.tv") {
             args.append(contentsOf: ["--user-agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"])
