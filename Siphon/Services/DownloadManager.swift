@@ -159,7 +159,7 @@ class DownloadManager: ObservableObject {
         addDownload(url: url, options: options)
     }
 
-    func quickDownload(url: String) {
+    func quickDownload(url: String, rawCookies: String? = nil) {
         let preset = DownloadPreset.maxCompatibility
 
         // Get default save folder from AppStorage
@@ -171,7 +171,7 @@ class DownloadManager: ObservableObject {
             saveFolderURL = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first!
         }
 
-        let options = DownloadOptions(
+        var options = DownloadOptions(
             saveFolder: saveFolderURL,
             fileType: preset.fileType,
             downloadSubtitles: false,
@@ -185,6 +185,7 @@ class DownloadManager: ObservableObject {
             sponsorBlock: false,
             forceOverwrite: false
         )
+        options.rawCookies = rawCookies
         addDownload(url: url, options: options)
     }
 
