@@ -13,42 +13,43 @@ struct ContentView: View {
     @AppStorage("showMenuBarIcon") private var showMenuBarIcon: Bool = true
     
     var body: some View {
-        mainLayout
-            .animation(.spring(response: 0.35, dampingFraction: 0.8), value: columnVisibility)
-            .onChange(of: appState.showAddDownloadSheet) { _, newValue in
-                if newValue {
-                    AddDownloadWindowManager.shared.showAddDownloadWindow(downloadManager: downloadManager, appState: appState, languageService: languageService)
-                    appState.showAddDownloadSheet = false
+        ZStack {
+            mainLayout
+                .onChange(of: appState.showAddDownloadSheet) { _, newValue in
+                    if newValue {
+                        AddDownloadWindowManager.shared.showAddDownloadWindow(downloadManager: downloadManager, appState: appState, languageService: languageService)
+                        appState.showAddDownloadSheet = false
+                    }
                 }
-            }
-            .sheet(isPresented: $languageService.isFirstLaunch) {
-                WelcomeView()
-                    .environmentObject(languageService)
-                    .interactiveDismissDisabled()
-            }
-            .task {
-                await MainActor.run {
-                    NotificationService.shared.requestPermission()
+                .sheet(isPresented: $languageService.isFirstLaunch) {
+                    WelcomeView()
+                        .environmentObject(languageService)
+                        .interactiveDismissDisabled()
                 }
-                
-                await downloadManager.initialize(languageService: languageService)
-                await updateChecker.checkForUpdates()
-                if updateChecker.hasUpdate {
-                    showUpdateAlert = true
+                .task {
+                    await MainActor.run {
+                        NotificationService.shared.requestPermission()
+                    }
+                    
+                    await downloadManager.initialize(languageService: languageService)
+                    await updateChecker.checkForUpdates()
+                    if updateChecker.hasUpdate {
+                        showUpdateAlert = true
+                    }
                 }
-            }
-            .onChange(of: languageService.selectedLanguage) { _, _ in
-                MenuBarManager.shared.updateMenu()
-            }
-            .onChange(of: showMenuBarIcon) { _, newValue in
-                MenuBarManager.shared.setVisible(newValue)
-            }
-        .alert(item: $downloadManager.ytdlpUpdateMessage) { status in
-            Alert(
-                title: Text(status.title),
-                message: Text(status.message),
-                dismissButton: .default(Text(languageService.s("ok")))
-            )
+                .onChange(of: languageService.selectedLanguage) { _, _ in
+                    MenuBarManager.shared.updateMenu()
+                }
+                .onChange(of: showMenuBarIcon) { _, newValue in
+                    MenuBarManager.shared.setVisible(newValue)
+                }
+                .alert(item: $downloadManager.ytdlpUpdateMessage) { status in
+                    Alert(
+                        title: Text(status.title),
+                        message: Text(status.message),
+                        dismissButton: .default(Text(languageService.s("ok")))
+                    )
+                }
         }
         .alert(languageService.s("update_available_title"), isPresented: $showUpdateAlert) {
             Button(languageService.s("update_now")) {

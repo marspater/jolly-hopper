@@ -209,6 +209,10 @@ struct DownloadRowView: View {
                 Image(systemName: "pause.circle.fill")
                     .foregroundColor(.yellow)
                     .font(.caption2)
+            case .fileExists:
+                Image(systemName: "exclamationmark.circle.fill")
+                    .foregroundColor(.orange)
+                    .font(.caption2)
             }
             
             Text(download.status.title(lang: languageService))
@@ -310,6 +314,30 @@ struct DownloadRowView: View {
                 .accessibilityLabel(languageService.s("redownload"))
             }
             
+            if download.status == .fileExists {
+                Button {
+                    downloadManager.resumeWithOverwrite(download)
+                } label: {
+                    Image(systemName: "square.and.arrow.down.on.square.fill")
+                        .font(.system(size: 16))
+                }
+                .buttonStyle(.plain)
+                .foregroundColor(.orange)
+                .help(languageService.s("overwrite"))
+                .accessibilityLabel(languageService.s("overwrite"))
+                
+                Button {
+                    downloadManager.resumeWithNewName(download)
+                } label: {
+                    Image(systemName: "plus.square.on.square.fill")
+                        .font(.system(size: 16))
+                }
+                .buttonStyle(.plain)
+                .foregroundColor(.blue)
+                .help(languageService.s("download_new_name"))
+                .accessibilityLabel(languageService.s("download_new_name"))
+            }
+            
             if showStop && (download.status == .downloading || download.status == .queued) {
                 Button {
                     downloadManager.stopDownload(download)
@@ -380,14 +408,9 @@ struct DownloadRowView: View {
             
             Divider()
             
-            ScrollView {
-                Text(download.log.isEmpty ? languageService.s("no_log") : download.log)
-                    .font(.system(.caption, design: .monospaced))
-                    .foregroundColor(.primary.opacity(0.9))
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(14)
-            }
-            .background(Color.black.opacity(0.2))
+            ReadOnlyLogView(text: download.log.isEmpty ? languageService.s("no_log") : download.log)
+                .padding(8)
+                .background(Color.black.opacity(0.2))
         }
         .frame(width: 620, height: 420)
     }
@@ -403,6 +426,7 @@ struct StatusSpinnerView: View {
             .frame(width: 12, height: 12)
             .rotationEffect(.degrees(isRotating))
             .onAppear {
+                isRotating = 0
                 withAnimation(.linear(duration: 0.9).repeatForever(autoreverses: false)) {
                     isRotating = 360
                 }
@@ -413,6 +437,11 @@ struct StatusSpinnerView: View {
 struct LinearProgressBar: View {
     let value: Double
 
+    // Bug #3 fix: Guard against NaN to prevent SwiftUI layout crash
+    private var safeValue: Double {
+        value.isNaN ? 0 : max(0, min(1, value))
+    }
+
     var body: some View {
         GeometryReader { geometry in
             ZStack(alignment: .leading) {
@@ -420,7 +449,7 @@ struct LinearProgressBar: View {
                     .fill(Color.primary.opacity(0.1))
                 Capsule()
                     .fill(Color(.displayP3, red: 0.15, green: 0.55, blue: 1.0))
-                    .frame(width: max(0, min(geometry.size.width, geometry.size.width * CGFloat(value))))
+                    .frame(width: max(0, geometry.size.width * CGFloat(safeValue)))
             }
         }
         .frame(height: 4)

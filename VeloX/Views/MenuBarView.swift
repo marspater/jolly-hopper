@@ -8,9 +8,8 @@ struct MenuBarView: View {
     @State private var selectedPreset: String = "max_compatibility"
     @AppStorage("customPresets") private var customPresetsData: Data = Data()
     
-    private var customPresets: [CustomPreset] {
-        CustomPreset.loadAll()
-    }
+    // Bug #11 fix: Use State to prevent heavy computation in View body
+    @State private var customPresets: [CustomPreset] = []
     
     var body: some View {
         VStack(spacing: 16) {
@@ -30,6 +29,12 @@ struct MenuBarView: View {
         .padding()
         .frame(width: 320)
         .background(.ultraThinMaterial)
+        .onAppear {
+            customPresets = CustomPreset.loadAll()
+        }
+        .onChange(of: customPresetsData) { _, _ in
+            customPresets = CustomPreset.loadAll()
+        }
         .onChange(of: selectedType) { _, newValue in
             if newValue == "audio" {
                 selectedPreset = "audio_only"
@@ -157,7 +162,7 @@ struct MenuBarView: View {
                         subtitleLanguages: [preset.subtitleLanguage ?? "en"],
                         subtitleFormat: preset.subtitleFormat ?? .srt,
                         embedSubtitles: preset.downloadSubtitles ?? false,
-                        downloadThumbnail: true,
+                        downloadThumbnail: false,
                         embedThumbnail: true,
                         embedMetadata: true,
                         splitChapters: preset.splitChapters ?? false,
@@ -183,7 +188,7 @@ struct MenuBarView: View {
                     subtitleLanguages: ["en", "tr"],
                     subtitleFormat: .srt,
                     embedSubtitles: false,
-                    downloadThumbnail: true,
+                    downloadThumbnail: false,
                     embedThumbnail: true,
                     embedMetadata: true,
                     splitChapters: false,

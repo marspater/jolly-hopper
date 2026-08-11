@@ -5,7 +5,8 @@ import os
 class Download: ObservableObject, Identifiable {
     let id: UUID
     let url: String
-    let options: DownloadOptions
+    let createdAt: Date
+    var options: DownloadOptions
     
     @Published var title: String
     @Published var duration: String?
@@ -26,9 +27,10 @@ class Download: ObservableObject, Identifiable {
         return "\(percentage)%"
     }
     
-    init(url: String, options: DownloadOptions, title: String = "___FETCHING___", id: UUID = UUID()) {
+    init(url: String, options: DownloadOptions, title: String = "___FETCHING___", id: UUID = UUID(), createdAt: Date = Date()) {
         self.id = id
         self.url = url
+        self.createdAt = createdAt
         self.options = options
         self.title = title
         self.status = .queued
@@ -46,6 +48,7 @@ enum DownloadStatus: String, Codable {
     case failed = "Hata"
     case stopped = "Durduruldu"
     case paused = "Duraklatıldı"
+    case fileExists = "Dosya Mevcut"
     
     func title(lang: LanguageService) -> String {
         switch self {
@@ -57,6 +60,7 @@ enum DownloadStatus: String, Codable {
         case .failed: return lang.s("failed")
         case .stopped: return lang.s("stopped")
         case .paused: return lang.s("paused")
+        case .fileExists: return lang.s("file_exists_status")
         }
     }
     
@@ -70,6 +74,7 @@ enum DownloadStatus: String, Codable {
         case .completed: return "green"
         case .failed: return "red"
         case .stopped: return "gray"
+        case .fileExists: return "orange"
         }
     }
 }
@@ -96,6 +101,7 @@ struct DownloadOptions: Codable {
     var customFilename: String?
     var videoCodec: VideoCodec?
     var audioCodec: AudioCodec?
+    var conversionCodec: ConversionCodec?
     var forceOverwrite: Bool?
     var additionalArguments: String?
     
@@ -112,6 +118,7 @@ struct DownloadOptions: Codable {
             embedMetadata: true,
             splitChapters: false,
             sponsorBlock: false,
+            conversionCodec: ConversionCodec.none,
             forceOverwrite: false,
             additionalArguments: nil
         )
@@ -272,11 +279,11 @@ enum VideoCodec: String, Codable, CaseIterable, Identifiable {
     
     func title(lang: LanguageService) -> String {
         switch self {
-        case .auto: return "Auto (Keep Source Codec)"
+        case .auto: return "Best Available"
         case .h264: return "H.264 (AVC)"
         case .h265: return "H.265 (HEVC)"
         case .vp9: return "VP9"
-        case .av1: return "AV1 (Auto-Convert AVC → Best Quality/Size)"
+        case .av1: return "AV1"
         }
     }
     
@@ -297,6 +304,27 @@ enum VideoCodec: String, Codable, CaseIterable, Identifiable {
         case .vp9: return "Good for 1440p+, wide support"
         case .av1: return "Best compression, requires modern hardware"
         case .auto: return nil
+        }
+    }
+}
+
+
+enum ConversionCodec: String, Codable, CaseIterable, Identifiable {
+    case none = "none"
+    case h264 = "h264"
+    case h265 = "h265"
+    case vp9 = "vp9"
+    case av1 = "av1"
+    
+    var id: String { rawValue }
+    
+    func title(lang: LanguageService) -> String {
+        switch self {
+        case .none: return "None (Do not convert)"
+        case .h264: return "Convert to H.264"
+        case .h265: return "Convert to HEVC"
+        case .vp9: return "Convert to VP9"
+        case .av1: return "Convert to AV1"
         }
     }
 }
@@ -382,7 +410,7 @@ enum DownloadPreset: String, Codable, CaseIterable, Identifiable {
     
     var videoCodec: VideoCodec {
         switch self {
-        case .bestQuality: return .av1
+        case .bestQuality: return .auto
         case .maxCompatibility: return .h264
         case .smallestSize: return .av1
         case .audioOnly: return .auto
@@ -391,7 +419,7 @@ enum DownloadPreset: String, Codable, CaseIterable, Identifiable {
     
     var audioCodec: AudioCodec {
         switch self {
-        case .bestQuality: return .opus
+        case .bestQuality: return .auto
         case .maxCompatibility: return .aac
         case .smallestSize: return .opus
         case .audioOnly: return .aac
@@ -602,7 +630,7 @@ struct HistoricDownload: Codable, Identifiable {
         self.url = download.url
         self.title = download.title
         self.filePath = download.filePath?.path
-        self.downloadDate = Date()
+        self.downloadDate = download.createdAt
         self.fileType = download.options.fileType
         self.status = download.status
         self.thumbnailURL = download.thumbnailURL

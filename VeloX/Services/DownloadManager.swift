@@ -143,7 +143,7 @@ class DownloadManager: ObservableObject {
             subtitleLanguages: ["en", "tr"],
             subtitleFormat: .srt,
             embedSubtitles: false,
-            downloadThumbnail: true,
+            downloadThumbnail: false,
             embedThumbnail: true,
             embedMetadata: true,
             splitChapters: false,
@@ -196,6 +196,9 @@ class DownloadManager: ObservableObject {
             try? await Task.sleep(nanoseconds: 500_000_000)
         }
 
+        // Bug #2 fix: If user cancelled while queued, don't proceed
+        guard download.status == .queued else { return }
+
         updateStatus(for: download, to: .fetching)
         objectWillChange.send()
 
@@ -203,37 +206,71 @@ class DownloadManager: ObservableObject {
 
             let info = try await ytdlpService.fetchInfo(url: download.url)
 
+            // Bug #5 fix: If user cancelled during fetchInfo, don't proceed
+            guard download.status == .fetching else { return }
+
             download.title = info.title
             download.duration = info.durationString
-            download.thumbnailURL = info.thumbnailURL
+            let sanitize: (String) -> String = { input in
+                let invalidChars = CharacterSet(charactersIn: "\\/:*?\"<>|")
+                return input.components(separatedBy: invalidChars).joined(separator: "_")
+            }
+            let rawBaseName = download.options.customFilename ?? download.title
+            let sanitizedBaseName = sanitize(rawBaseName)
+            
+            let folderPath = download.options.saveFolder
+            let fileExists = await Task.detached {
+                if let contents = try? FileManager.default.contentsOfDirectory(at: folderPath, includingPropertiesForKeys: nil) {
+                    let matches = contents.filter { $0.lastPathComponent.hasPrefix(sanitizedBaseName + ".") && !$0.lastPathComponent.hasSuffix(".part") }
+                    return !matches.isEmpty
+                }
+                return false
+            }.value
+
+            if fileExists && download.options.forceOverwrite != true {
+                updateStatus(for: download, to: .fileExists)
+                objectWillChange.send()
+                return // Pause here. The UI will show a button to resume with forceOverwrite = true or add a number.
+            }
+
             updateStatus(for: download, to: .downloading)
             objectWillChange.send()
-
 
             LoggerService.shared.log("Starting download for URL: \(download.url)", level: .info)
             let outputPath = try await ytdlpService.download(
                 url: download.url,
                 options: download.options,
                 onProcessCreated: { [weak self] process in
+                    // Bug #6 fix: Always register process immediately, then check if already cancelled
                     Task { @MainActor in
                         guard let self = self else { return }
-                        // If the download finished before this Task ran, don't add it
-                        if let d = self.downloads.first(where: { $0.id == download.id }),
-                           d.status == .downloading || d.status == .fetching || d.status == .processing {
-                            self.activeProcesses[download.id] = process
+                        self.activeProcesses[download.id] = process
+                        // If download was stopped while we were setting up, kill the process immediately
+                        if download.status == .stopped {
+                            process.terminate()
+                            self.activeProcesses.removeValue(forKey: download.id)
                         }
                     }
                 },
                 onProgress: { progress, speed, eta in
-                    download.progress = max(0, min(1, progress))
-                    download.speed = speed
-                    download.eta = eta
+                    // Bug #3 fix: Guard against NaN progress values
+                    // Bug #4 fix: Dispatch to main actor for @Published property writes
+                    let safeProgress = progress.isNaN ? 0 : max(0, min(1, progress))
+                    DispatchQueue.main.async {
+                        download.progress = safeProgress
+                        download.speed = speed
+                        download.eta = eta
+                    }
                 },
                 onOutput: { line in
-                    download.log += line + "\n"
+                    // Bug #4 fix: Dispatch to main actor for @Published property writes
+                    DispatchQueue.main.async {
+                        download.log += line + "\n"
+                    }
                 }
             )
 
+            // Bug #7 fix: Always clean up process reference (moved from only success path)
             activeProcesses.removeValue(forKey: download.id)
 
             download.filePath = outputPath
@@ -251,6 +288,9 @@ class DownloadManager: ObservableObject {
             }
 
         } catch let error as YtdlpError {
+            // Bug #7 fix: Always clean up process reference on error
+            activeProcesses.removeValue(forKey: download.id)
+
             if download.status == .stopped {
                 LoggerService.shared.log("Download stopped by user (\(download.url))", level: .info)
                 addToHistory(download)
@@ -288,6 +328,9 @@ class DownloadManager: ObservableObject {
             }
             addToHistory(download)
         } catch {
+            // Bug #7 fix: Always clean up process reference on error
+            activeProcesses.removeValue(forKey: download.id)
+
             if download.status == .stopped {
                 LoggerService.shared.log("Download stopped by user (\(download.url))", level: .info)
                 addToHistory(download)
@@ -309,7 +352,11 @@ class DownloadManager: ObservableObject {
 
 
 
-    func stopDownload(_ download: Download, skipSaveAndBroadcast: Bool = false) {
+    func stopDownload(_ download: Download, suppressNotification: Bool = false, skipSaveAndBroadcast: Bool = false) {
+        let previousStatus = download.status
+        guard previousStatus == .downloading || previousStatus == .fetching || previousStatus == .processing || previousStatus == .queued else {
+            return
+        }
         updateStatus(for: download, to: .stopped)
         if let process = activeProcesses[download.id] {
             process.terminate()
@@ -326,8 +373,10 @@ class DownloadManager: ObservableObject {
             cleanupTemporaryFiles(for: downloadCopy)
         }
 
-        if let lang = languageService {
-            NotificationService.shared.sendDownloadStopped(filename: download.title.isEmpty ? download.url : download.title, languageService: lang)
+        if !suppressNotification {
+            if let lang = languageService {
+                NotificationService.shared.sendDownloadStopped(filename: download.title.isEmpty ? download.url : download.title, languageService: lang)
+            }
         }
     }
 
@@ -345,10 +394,26 @@ class DownloadManager: ObservableObject {
     }
 
 
+    func resumeWithOverwrite(_ download: Download) {
+        download.options.forceOverwrite = true
+        Task {
+            await processDownload(download)
+        }
+    }
+    
+    func resumeWithNewName(_ download: Download) {
+        let uniqueSuffix = " (\(Int(Date().timeIntervalSince1970) % 10000))"
+        let base = download.options.customFilename ?? download.title
+        download.options.customFilename = "\(base)\(uniqueSuffix)"
+        Task {
+            await processDownload(download)
+        }
+    }
+    
     func stopAllDownloads() {
         // Bolt Performance Optimization: Avoid synchronous disk I/O and redundant UI broadcasts inside loops by batching operations
         for download in downloadingDownloads {
-            stopDownload(download, skipSaveAndBroadcast: true)
+            stopDownload(download, suppressNotification: false, skipSaveAndBroadcast: true)
         }
         for download in queuedDownloads {
             updateStatus(for: download, to: .stopped)
@@ -381,12 +446,8 @@ class DownloadManager: ObservableObject {
 
         // Bolt Performance Optimization: Batch array mutations and broadcast once
         for item in items {
-            stopDownload(item, skipSaveAndBroadcast: true)
-
-            let downloadCopy = item
-            Task {
-                try? await Task.sleep(nanoseconds: 200_000_000)
-                cleanupTemporaryFiles(for: downloadCopy)
+            if item.status == .downloading || item.status == .fetching || item.status == .processing || item.status == .queued {
+                stopDownload(item, suppressNotification: true, skipSaveAndBroadcast: true)
             }
             failedDownloadsMap.removeValue(forKey: item.id)
         }
@@ -403,60 +464,63 @@ class DownloadManager: ObservableObject {
     }
 
     private func cleanupTemporaryFiles(for download: Download) {
-        let fileManager = FileManager.default
+        guard download.status == .stopped || download.status == .failed else { return }
+
         let folder = download.options.saveFolder
+        let title = download.title
+        let rawBaseName = download.options.customFilename ?? title
+        let urlString = download.url
 
-        let sanitize: (String) -> String = { input in
-            let invalidChars = CharacterSet(charactersIn: "\\/:*?\"<>|")
-            return input.components(separatedBy: invalidChars).joined(separator: "_")
-        }
-
-        let videoId: String? = {
-            if let url = URL(string: download.url),
-               let components = URLComponents(url: url, resolvingAgainstBaseURL: false) {
-                return components.queryItems?.first(where: { $0.name == "v" })?.value ?? url.lastPathComponent
+        Task.detached {
+            let fileManager = FileManager.default
+            
+            let sanitize: (String) -> String = { input in
+                let invalidChars = CharacterSet(charactersIn: "\\/:*?\"<>|")
+                return input.components(separatedBy: invalidChars).joined(separator: "_")
             }
-            return nil
-        }()
 
-        let rawBaseName = download.options.customFilename ?? download.title
-        let sanitizedBaseName = sanitize(rawBaseName)
+            let videoId: String? = {
+                if let url = URL(string: urlString),
+                   let components = URLComponents(url: url, resolvingAgainstBaseURL: false) {
+                    return components.queryItems?.first(where: { $0.name == "v" })?.value ?? url.lastPathComponent
+                }
+                return nil
+            }()
 
-        do {
-            let contents = try fileManager.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)
+            let sanitizedBaseName = sanitize(rawBaseName)
 
-            for file in contents {
-                let fileName = file.lastPathComponent
+            do {
+                let contents = try fileManager.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)
+                
+                for file in contents {
+                    let fileName = file.lastPathComponent
 
-                let matchesPrefix = (!rawBaseName.isEmpty && fileName.hasPrefix(rawBaseName)) || (!sanitizedBaseName.isEmpty && fileName.hasPrefix(sanitizedBaseName))
-                let matchesId = videoId != nil && !videoId!.isEmpty && fileName.contains(videoId!)
+                    let matchesPrefix = (!rawBaseName.isEmpty && fileName.hasPrefix(rawBaseName)) || (!sanitizedBaseName.isEmpty && fileName.hasPrefix(sanitizedBaseName))
+                    let matchesId: Bool
+                    if let vid = videoId, !vid.isEmpty {
+                        matchesId = fileName.contains(vid)
+                    } else {
+                        matchesId = false
+                    }
 
-                if matchesPrefix || matchesId {
-                    let lower = fileName.lowercased()
-                    let isTemp = lower.contains(".part") ||
-                                 lower.contains(".ytdl") ||
-                                 lower.contains(".temp") ||
-                                 lower.contains(".tmp") ||
-                                 lower.hasSuffix(".webp") ||
-                                 lower.hasSuffix(".jpg") ||
-                                 lower.hasSuffix(".vtt") ||
-                                 lower.hasSuffix(".srt") ||
-                                 lower.hasSuffix(".ass") ||
-                                 (lower.range(of: #"\.f\d+"#, options: .regularExpression) != nil)
+                    if matchesPrefix || matchesId {
+                        let lower = fileName.lowercased()
+                        let isTemp = lower.contains(".part") ||
+                                     lower.contains(".ytdl") ||
+                                     lower.contains(".temp") ||
+                                     lower.contains(".tmp") ||
+                                     (lower.range(of: #"\.f\d+\."#, options: .regularExpression) != nil)
 
-                    if isTemp {
-                        try? fileManager.removeItem(at: file)
+                        if isTemp {
+                            try? fileManager.removeItem(at: file)
+                        }
                     }
                 }
-            }
-
-            if download.status == .stopped, let filePath = download.filePath {
-                if fileManager.fileExists(atPath: filePath.path) {
-                    try? fileManager.removeItem(at: filePath)
+            } catch {
+                await MainActor.run {
+                    LoggerService.shared.log("Error cleaning up files: \(error)", level: .error)
                 }
             }
-        } catch {
-            LoggerService.shared.log("Error cleaning up files: \(error)", level: .error)
         }
     }
 
@@ -471,8 +535,15 @@ class DownloadManager: ObservableObject {
             downloads.append(contentsOf: restored)
 
             for download in restored {
-                if download.status == .failed {
+                // Bug #8 fix: Mark any "active" status as stopped on relaunch
+                // (no backend process exists for them anymore)
+                switch download.status {
+                case .downloading, .fetching, .processing, .queued:
+                    download.status = .stopped
+                case .failed:
                     failedDownloadsMap[download.id] = download
+                default:
+                    break
                 }
             }
         }
