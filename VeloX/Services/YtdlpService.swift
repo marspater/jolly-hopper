@@ -450,7 +450,13 @@ class YtdlpService: ObservableObject {
         do {
             let output = try await runCommand(args)
             guard let data = output.data(using: .utf8) else { throw YtdlpError.parseError }
-            return try JSONDecoder().decode(MediaInfo.self, from: data)
+            do {
+                return try JSONDecoder().decode(MediaInfo.self, from: data)
+            } catch {
+                throw YtdlpError.parseError
+            }
+        } catch let err as YtdlpError {
+            throw err
         } catch {
             if shouldRetryWithBrowserCookies(error: error, url: url, usingBrowserCookies: usingBrowserCookies, forceBrowserCookies: forceBrowserCookies) {
                 LoggerService.shared.log("Retrying boyfriend.tv metadata with configured browser cookies", level: .info)

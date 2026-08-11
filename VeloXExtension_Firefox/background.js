@@ -25,6 +25,6 @@ browser.contextMenus.onClicked.addListener((info, tab) => {
 
     if (host) {
         const deepLink = `velox://${host}?url=${encodeURIComponent(url)}`;
-        browser.tabs.update(tab.id, { url: deepLink });
+        browser.tabs.create({ url: deepLink, active: false });
     }
 });

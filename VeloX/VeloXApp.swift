@@ -106,14 +106,21 @@ struct VeloXApp: App {
         let queryItems = components?.queryItems
         let videoUrl = queryItems?.first(where: { $0.name == "url" })?.value
         
-        guard let videoUrl = videoUrl, !videoUrl.isEmpty else { return }
+        guard let rawVideoUrl = videoUrl?.trimmingCharacters(in: .whitespacesAndNewlines), !rawVideoUrl.isEmpty,
+              let targetURL = URL(string: rawVideoUrl), targetURL.scheme == "http" || targetURL.scheme == "https" else { return }
         
         if url.host == "download" {
-            appState.urlToDownload = videoUrl
+            appState.urlToDownload = rawVideoUrl
             appState.showAddDownloadSheet = true
         } else if url.host == "fast-download" {
-            downloadManager.quickDownload(url: videoUrl)
+            downloadManager.quickDownload(url: rawVideoUrl)
             appState.selectedNavItem = .downloading
+        }
+        
+        for window in NSApp.windows {
+            if window.canBecomeMain {
+                window.makeKeyAndOrderFront(nil)
+            }
         }
     }
 }
