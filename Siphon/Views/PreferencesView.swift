@@ -13,7 +13,7 @@ struct PreferencesView: View {
     @AppStorage(UserDefaultsKeys.defaultAudioCodec) private var defaultAudioCodec: String = "aac"
     @AppStorage(UserDefaultsKeys.selectedPreset) private var selectedPreset: String = "max_compatibility"
     @AppStorage(UserDefaultsKeys.sponsorBlock) private var sponsorBlock: Bool = false
-    @AppStorage(UserDefaultsKeys.browserForCookies) private var browserForCookies: String = "none"
+    @AppStorage(UserDefaultsKeys.browserForCookies) private var browserForCookies: String = "safari"
     @AppStorage(UserDefaultsKeys.defaultAdditionalArguments) private var defaultAdditionalArguments: String = ""
     @AppStorage(UserDefaultsKeys.showNotifications) private var showNotifications: Bool = true
     @AppStorage(UserDefaultsKeys.showMenuBarIcon) private var showMenuBarIcon: Bool = true
