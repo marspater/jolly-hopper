@@ -542,7 +542,10 @@ struct MediaInfo: Codable {
     
     var thumbnailURL: URL? {
         if let thumbnail = thumbnail, !thumbnail.isEmpty {
-            return URL(string: thumbnail)
+            let lower = thumbnail.lowercased()
+            if lower.hasPrefix("http://") || lower.hasPrefix("https://") {
+                return URL(string: thumbnail)
+            }
         }
         
         if id.count == 11 {
