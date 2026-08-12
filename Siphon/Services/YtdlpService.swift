@@ -1522,8 +1522,20 @@ class YtdlpService: ObservableObject {
                             let eta = components.count > 2 ? components[2] : nil
                             onProgress(percent / 100.0, speed, eta)
                         }
-                    } else if line.contains("[VideoConvertor]") || line.contains("[ffmpeg]") || line.contains("Converting video") || line.contains("[ThumbnailsConvertor]") || line.contains("[EmbedSubtitle]") || line.contains("[Metadata]") {
-                        onProgress(0.99, "Post-processing...", "Please wait")
+                    } else if line.contains("[EmbedThumbnail]") {
+                        onProgress(0.99, "Embedding thumbnail...", "Finalizing file")
+                    } else if line.contains("[Metadata]") {
+                        onProgress(0.99, "Adding metadata...", "Finalizing file")
+                    } else if line.contains("[Merger]") {
+                        onProgress(0.99, "Merging video & audio...", "Please wait")
+                    } else if line.contains("[VideoConvertor]") || line.contains("Converting video") {
+                        onProgress(0.99, "Converting video...", "Please wait")
+                    } else if line.contains("[ThumbnailsConvertor]") {
+                        onProgress(0.99, "Preparing thumbnail...", "Please wait")
+                    } else if line.contains("[EmbedSubtitle]") {
+                        onProgress(0.99, "Embedding subtitles...", "Please wait")
+                    } else if line.contains("[ffmpeg]") {
+                        onProgress(0.99, "Processing media...", "Please wait")
                     }
                 }
             }
