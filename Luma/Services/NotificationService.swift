@@ -20,20 +20,22 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
 
     private override init() {
         super.init()
-        // Set ourselves as the delegate so notifications show even when app is in foreground
         if let center = notificationCenter {
             center.delegate = self
         }
     }
 
-    // This delegate method allows notifications to be shown even when the app is in the foreground
+    // Foreground notification presentation handler for macOS
     func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         willPresent notification: UNNotification,
         withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
     ) {
-        // Show banner and play sound even when app is active
-        completionHandler([.banner, .sound])
+        if #available(macOS 11.0, *) {
+            completionHandler([.banner, .sound, .list, .badge])
+        } else {
+            completionHandler([.alert, .sound, .badge])
+        }
     }
 
     func requestPermission() {
@@ -49,90 +51,88 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         }
     }
 
-    func sendDownloadCompleted(filename: String, languageService: LanguageService) {
+    private func sendNotification(content: UNMutableNotificationContent, identifier: String = UUID().uuidString, logName: String) {
         guard UserDefaults.standard.object(forKey: UserDefaultsKeys.showNotifications) as? Bool ?? true else {
             logMessage("Notifications disabled by user setting", level: .warning)
             return
         }
         guard let center = notificationCenter else { return }
 
-        let content = UNMutableNotificationContent()
-        content.title = languageService.s("download_completed_title")
-        content.body = String(format: languageService.s("download_completed_body"), filename)
-        content.sound = .default
-
-        let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
-        center.add(request) { [weak self] error in
-            if let error = error {
-                self?.logMessage("Notification send error: \(error.localizedDescription)", level: .error)
-            } else {
-                self?.logMessage("Notification sent: \(filename)", level: .info)
+        center.getNotificationSettings { [weak self] settings in
+            guard let self = self else { return }
+            switch settings.authorizationStatus {
+            case .notDetermined:
+                self.logMessage("Notification permission not determined. Requesting permission now...", level: .info)
+                center.requestAuthorization(options: [.alert, .sound, .badge]) { granted, error in
+                    if granted {
+                        self.logMessage("Notification permission granted upon request. Posting notification...", level: .info)
+                        self.postNotificationRequest(center: center, content: content, identifier: identifier, logName: logName)
+                    } else {
+                        self.logMessage("Notification permission denied by user upon request.", level: .warning)
+                    }
+                }
+            case .authorized, .provisional:
+                self.postNotificationRequest(center: center, content: content, identifier: identifier, logName: logName)
+            case .denied:
+                self.logMessage("Notification permission is denied in macOS Settings for Luma Pro.", level: .warning)
+            @unknown default:
+                self.postNotificationRequest(center: center, content: content, identifier: identifier, logName: logName)
             }
         }
     }
 
-    func sendEncodingCompleted(filename: String, codec: String, languageService: LanguageService) {
-        guard UserDefaults.standard.object(forKey: UserDefaultsKeys.showNotifications) as? Bool ?? true else { return }
-        guard let center = notificationCenter else { return }
+    private func postNotificationRequest(center: UNUserNotificationCenter, content: UNMutableNotificationContent, identifier: String, logName: String) {
+        if #available(macOS 12.0, *) {
+            content.interruptionLevel = .timeSensitive
+        }
+        content.sound = .default
+        let request = UNNotificationRequest(identifier: identifier, content: content, trigger: nil)
+        center.add(request) { [weak self] error in
+            if let error = error {
+                self?.logMessage("Notification send error (\(logName)): \(error.localizedDescription)", level: .error)
+            } else {
+                self?.logMessage("Notification posted: \(logName)", level: .info)
+            }
+        }
+    }
 
+    func sendDownloadCompleted(filename: String, languageService: LanguageService? = nil) {
+        Task { @MainActor in
+            let lang = languageService ?? LanguageService()
+            let content = UNMutableNotificationContent()
+            content.title = lang.s("download_completed_title")
+            content.body = String(format: lang.s("download_completed_body"), filename)
+            self.sendNotification(content: content, logName: "Completed: \(filename)")
+        }
+    }
+
+    func sendEncodingCompleted(filename: String, codec: String, languageService: LanguageService? = nil) {
         let content = UNMutableNotificationContent()
         content.title = "⚡ Video Conversion Complete"
         content.body = "\(filename) was successfully converted to \(codec) codec."
-        content.sound = .default
+        sendNotification(content: content, logName: "Conversion: \(filename)")
+    }
 
-        let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
-        center.add(request) { [weak self] error in
-            if let error = error {
-                self?.logMessage("Encoding notification send error: \(error.localizedDescription)", level: .error)
-            } else {
-                self?.logMessage("Encoding notification sent: \(filename)", level: .info)
-            }
+    func sendDownloadFailed(filename: String, languageService: LanguageService? = nil) {
+        Task { @MainActor in
+            let lang = languageService ?? LanguageService()
+            let content = UNMutableNotificationContent()
+            content.title = lang.s("download_failed_title")
+            content.body = String(format: lang.s("download_failed_body"), filename)
+            self.sendNotification(content: content, logName: "Failed: \(filename)")
         }
     }
 
-    func sendDownloadFailed(filename: String, languageService: LanguageService) {
-        guard UserDefaults.standard.object(forKey: UserDefaultsKeys.showNotifications) as? Bool ?? true else {
-            logMessage("Notifications disabled by user setting", level: .warning)
-            return
-        }
-        guard let center = notificationCenter else { return }
-
-        let content = UNMutableNotificationContent()
-        content.title = languageService.s("download_failed_title")
-        content.body = String(format: languageService.s("download_failed_body"), filename)
-        content.sound = .default
-
-        let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
-        center.add(request) { [weak self] error in
-            if let error = error {
-                self?.logMessage("Notification send error: \(error.localizedDescription)", level: .error)
-            } else {
-                self?.logMessage("Notification sent (failed): \(filename)", level: .info)
-            }
+    func sendDownloadStopped(filename: String, languageService: LanguageService? = nil) {
+        Task { @MainActor in
+            let lang = languageService ?? LanguageService()
+            let content = UNMutableNotificationContent()
+            content.title = lang.s("download_stopped_title")
+            content.body = String(format: lang.s("download_stopped_body"), filename)
+            self.sendNotification(content: content, logName: "Stopped: \(filename)")
         }
     }
 
-    func sendDownloadStopped(filename: String, languageService: LanguageService) {
-        guard UserDefaults.standard.object(forKey: UserDefaultsKeys.showNotifications) as? Bool ?? true else {
-            logMessage("Notifications disabled by user setting", level: .warning)
-            return
-        }
-        guard let center = notificationCenter else { return }
-
-        let content = UNMutableNotificationContent()
-        content.title = languageService.s("download_stopped_title")
-        content.body = String(format: languageService.s("download_stopped_body"), filename)
-        content.sound = .default
-
-        let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
-        center.add(request) { [weak self] error in
-            if let error = error {
-                self?.logMessage("Notification send error: \(error.localizedDescription)", level: .error)
-            } else {
-                self?.logMessage("Notification sent (stopped): \(filename)", level: .info)
-            }
-        }
-    }
     func sendYtdlpUpdateSucceeded(version: String) {
         sendYtdlpUpdateNotification(title: "yt-dlp Updated", body: "Installed yt-dlp version \(version).")
     }
@@ -142,23 +142,9 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     }
 
     private func sendYtdlpUpdateNotification(title: String, body: String) {
-        guard UserDefaults.standard.object(forKey: UserDefaultsKeys.showNotifications) as? Bool ?? true else {
-            logMessage("Notifications disabled by user setting", level: .warning)
-            return
-        }
-        guard let center = notificationCenter else { return }
-
         let content = UNMutableNotificationContent()
         content.title = title
         content.body = body
-        content.sound = .default
-
-        let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
-        center.add(request) { [weak self] error in
-            if let error = error {
-                self?.logMessage("yt-dlp update notification send error: \(error.localizedDescription)", level: .error)
-            }
-        }
+        sendNotification(content: content, logName: title)
     }
-
 }
