@@ -1,0 +1,624 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		E0001001 /* LumaApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000001 /* LumaApp.swift */; };
+		E0001002 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000002 /* ContentView.swift */; };
+		E0001003 /* Download.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000003 /* Download.swift */; };
+		E0001004 /* YtdlpService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000004 /* YtdlpService.swift */; };
+		E0001005 /* DownloadManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000005 /* DownloadManager.swift */; };
+		E0001006 /* AddDownloadView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000006 /* AddDownloadView.swift */; };
+		E0001007 /* DownloadRowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000007 /* DownloadRowView.swift */; };
+		E0001009 /* PreferencesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000009 /* PreferencesView.swift */; };
+		E0001010 /* KeyringView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000010 /* KeyringView.swift */; };
+		E0001011 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = E0000011 /* Assets.xcassets */; };
+		E0001012 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = E0000014 /* InfoPlist.strings */; };
+		E0001020 /* NotificationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000020 /* NotificationService.swift */; };
+		E0001021 /* LoginItemHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000021 /* LoginItemHelper.swift */; };
+		E0001022 /* MenuBarManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000022 /* MenuBarManager.swift */; };
+		E0001023 /* MenuBarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000023 /* MenuBarView.swift */; };
+		E0001024 /* LoggerService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000024 /* LoggerService.swift */; };
+		E0001025 /* AddDownloadWindowManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000025 /* AddDownloadWindowManager.swift */; };
+		E0001026 /* LanguageService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000026 /* LanguageService.swift */; };
+		E0001028 /* View+Compatibility.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000028 /* View+Compatibility.swift */; };
+		E0001029 /* PreferencesWindowManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000029 /* PreferencesWindowManager.swift */; };
+		E0001030 /* AppIcon.icns in Resources */ = {isa = PBXBuildFile; fileRef = E0000030 /* AppIcon.icns */; };
+		E0001031 /* UserDefaultsKeys.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000031 /* UserDefaultsKeys.swift */; };
+		E0001032 /* ReadOnlyLogView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000032 /* ReadOnlyLogView.swift */; };
+		E0001040 /* DownloadManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000040 /* DownloadManagerTests.swift */; };
+		E0001041 /* MediaInfoTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000041 /* MediaInfoTests.swift */; };
+		E0001042 /* YtdlpServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000042 /* YtdlpServiceTests.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		E0000001 /* LumaApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LumaApp.swift; sourceTree = "<group>"; };
+		E0000002 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		E0000003 /* Download.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Download.swift; sourceTree = "<group>"; };
+		E0000004 /* YtdlpService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YtdlpService.swift; sourceTree = "<group>"; };
+		E0000005 /* DownloadManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DownloadManager.swift; sourceTree = "<group>"; };
+		E0000006 /* AddDownloadView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddDownloadView.swift; sourceTree = "<group>"; };
+		E0000007 /* DownloadRowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DownloadRowView.swift; sourceTree = "<group>"; };
+		E0000009 /* PreferencesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreferencesView.swift; sourceTree = "<group>"; };
+		E0000010 /* KeyringView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyringView.swift; sourceTree = "<group>"; };
+		E0000011 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		E0000012 /* Luma Pro.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Luma Pro.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		E0000013 /* Luma.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Luma.entitlements; sourceTree = "<group>"; };
+		E0000015 /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/InfoPlist.strings; sourceTree = "<group>"; };
+		E0000020 /* NotificationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationService.swift; sourceTree = "<group>"; };
+		E0000021 /* LoginItemHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginItemHelper.swift; sourceTree = "<group>"; };
+		E0000022 /* MenuBarManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarManager.swift; sourceTree = "<group>"; };
+		E0000023 /* MenuBarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarView.swift; sourceTree = "<group>"; };
+		E0000024 /* LoggerService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoggerService.swift; sourceTree = "<group>"; };
+		E0000025 /* AddDownloadWindowManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddDownloadWindowManager.swift; sourceTree = "<group>"; };
+		E0000026 /* LanguageService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LanguageService.swift; sourceTree = "<group>"; };
+		E0000028 /* View+Compatibility.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "View+Compatibility.swift"; sourceTree = "<group>"; };
+		E0000029 /* PreferencesWindowManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreferencesWindowManager.swift; sourceTree = "<group>"; };
+		E0000030 /* AppIcon.icns */ = {isa = PBXFileReference; lastKnownFileType = image.icns; path = AppIcon.icns; sourceTree = "<group>"; };
+		E0000031 /* UserDefaultsKeys.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserDefaultsKeys.swift; sourceTree = "<group>"; };
+		E0000032 /* ReadOnlyLogView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReadOnlyLogView.swift; sourceTree = "<group>"; };
+		E0000040 /* DownloadManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DownloadManagerTests.swift; sourceTree = "<group>"; };
+		E0000041 /* MediaInfoTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaInfoTests.swift; sourceTree = "<group>"; };
+		E0000042 /* YtdlpServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YtdlpServiceTests.swift; sourceTree = "<group>"; };
+		E0000043 /* LumaTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = LumaTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		E0002001 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		44F4CAC630137C7400207052 /* Recovered References */ = {
+			isa = PBXGroup;
+			children = (
+				E0000030 /* AppIcon.icns */,
+			);
+			name = "Recovered References";
+			sourceTree = "<group>";
+		};
+		E0003001 = {
+			isa = PBXGroup;
+			children = (
+				E0003002 /* Luma */,
+				E0003020 /* LumaTests */,
+				E0003003 /* Products */,
+				44F4CAC630137C7400207052 /* Recovered References */,
+			);
+			sourceTree = "<group>";
+		};
+		E0003002 /* Luma */ = {
+			isa = PBXGroup;
+			children = (
+				E0000001 /* LumaApp.swift */,
+				E0003004 /* Models */,
+				E0003005 /* Services */,
+				E0003006 /* Views */,
+				E0003007 /* Resources */,
+				E0003009 /* Extensions */,
+				E0003010 /* Constants */,
+				E0000013 /* Luma.entitlements */,
+			);
+			path = Luma;
+			sourceTree = "<group>";
+		};
+		E0003020 /* LumaTests */ = {
+			isa = PBXGroup;
+			children = (
+				E0000040 /* DownloadManagerTests.swift */,
+				E0000041 /* MediaInfoTests.swift */,
+				E0000042 /* YtdlpServiceTests.swift */,
+			);
+			path = LumaTests;
+			sourceTree = "<group>";
+		};
+		E0003003 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				E0000012 /* Luma Pro.app */,
+				E0000043 /* LumaTests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		E0003004 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				E0000003 /* Download.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		E0003005 /* Services */ = {
+			isa = PBXGroup;
+			children = (
+				E0000004 /* YtdlpService.swift */,
+				E0000005 /* DownloadManager.swift */,
+				E0000020 /* NotificationService.swift */,
+				E0000021 /* LoginItemHelper.swift */,
+				E0000022 /* MenuBarManager.swift */,
+				E0000024 /* LoggerService.swift */,
+				E0000025 /* AddDownloadWindowManager.swift */,
+				E0000026 /* LanguageService.swift */,
+				E0000029 /* PreferencesWindowManager.swift */,
+			);
+			path = Services;
+			sourceTree = "<group>";
+		};
+		E0003006 /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				E0000002 /* ContentView.swift */,
+				E0000006 /* AddDownloadView.swift */,
+				E0000009 /* PreferencesView.swift */,
+				E0000010 /* KeyringView.swift */,
+				E0000023 /* MenuBarView.swift */,
+				E0003008 /* Components */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+		E0003007 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				E0000011 /* Assets.xcassets */,
+				E0000014 /* InfoPlist.strings */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
+		E0003008 /* Components */ = {
+			isa = PBXGroup;
+			children = (
+				E0000007 /* DownloadRowView.swift */,
+				E0000032 /* ReadOnlyLogView.swift */,
+			);
+			path = Components;
+			sourceTree = "<group>";
+		};
+		E0003009 /* Extensions */ = {
+			isa = PBXGroup;
+			children = (
+				E0000028 /* View+Compatibility.swift */,
+			);
+			path = Extensions;
+			sourceTree = "<group>";
+		};
+		E0003010 /* Constants */ = {
+			isa = PBXGroup;
+			children = (
+				E0000031 /* UserDefaultsKeys.swift */,
+			);
+			path = Constants;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		E0004001 /* Luma Pro */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = E0005003 /* Build configuration list for PBXNativeTarget "Luma Pro" */;
+			buildPhases = (
+				E0004002 /* Sources */,
+				E0002001 /* Frameworks */,
+				E0004003 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = "Luma Pro";
+			productName = "Luma Pro";
+			productReference = E0000012 /* Luma Pro.app */;
+			productType = "com.apple.product-type.application";
+		};
+		E0004010 /* LumaTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = E0005004 /* Build configuration list for PBXNativeTarget "LumaTests" */;
+			buildPhases = (
+				E0004011 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				E0008001 /* PBXTargetDependency */,
+			);
+			name = LumaTests;
+			productName = LumaTests;
+			productReference = E0000043 /* LumaTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		E0006001 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1500;
+				LastUpgradeCheck = 2700;
+				TargetAttributes = {
+					E0004001 = {
+						CreatedOnToolsVersion = 15.0;
+					};
+					E0004010 = {
+						CreatedOnToolsVersion = 15.0;
+						TestTargetID = E0004001;
+					};
+				};
+			};
+			buildConfigurationList = E0005001 /* Build configuration list for PBXProject "Luma" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = E0003001;
+			productRefGroup = E0003003 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				E0004001 /* Luma Pro */,
+				E0004010 /* LumaTests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		E0004003 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E0001011 /* Assets.xcassets in Resources */,
+				E0001012 /* InfoPlist.strings in Resources */,
+				E0001030 /* AppIcon.icns in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		E0004002 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E0001003 /* Download.swift in Sources */,
+				E0001028 /* View+Compatibility.swift in Sources */,
+				E0001001 /* LumaApp.swift in Sources */,
+				E0001002 /* ContentView.swift in Sources */,
+				E0001004 /* YtdlpService.swift in Sources */,
+				E0001005 /* DownloadManager.swift in Sources */,
+				E0001006 /* AddDownloadView.swift in Sources */,
+				E0001007 /* DownloadRowView.swift in Sources */,
+				E0001009 /* PreferencesView.swift in Sources */,
+				E0001010 /* KeyringView.swift in Sources */,
+				E0001020 /* NotificationService.swift in Sources */,
+				E0001021 /* LoginItemHelper.swift in Sources */,
+				E0001022 /* MenuBarManager.swift in Sources */,
+				E0001023 /* MenuBarView.swift in Sources */,
+				E0001024 /* LoggerService.swift in Sources */,
+				E0001025 /* AddDownloadWindowManager.swift in Sources */,
+				E0001026 /* LanguageService.swift in Sources */,
+				E0001029 /* PreferencesWindowManager.swift in Sources */,
+				E0001031 /* UserDefaultsKeys.swift in Sources */,
+				E0001032 /* ReadOnlyLogView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E0004011 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E0001040 /* DownloadManagerTests.swift in Sources */,
+				E0001041 /* MediaInfoTests.swift in Sources */,
+				E0001042 /* YtdlpServiceTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		E0008001 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = E0004001 /* Luma Pro */;
+			targetProxy = E0008002 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin PBXContainerItemProxy section */
+		E0008002 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = E0006001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = E0004001;
+			remoteInfo = "Luma Pro";
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXVariantGroup section */
+		E0000014 /* InfoPlist.strings */ = {
+			isa = PBXVariantGroup;
+			children = (
+				E0000015 /* en */,
+			);
+			name = InfoPlist.strings;
+			sourceTree = "<group>";
+		};
+/* End PBXVariantGroup section */
+
+/* Begin XCBuildConfiguration section */
+		E0007001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_LOCALIZABILITY_NONLOCALIZED = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEAD_CODE_STRIPPING = YES;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = macosx;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		E0007002 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ARCHS = "$(ARCHS_STANDARD)";
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_LOCALIZABILITY_NONLOCALIZED = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEAD_CODE_STRIPPING = YES;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = NO;
+				SDKROOT = macosx;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_COMPILATION_MODE = wholemodule;
+			};
+			name = Release;
+		};
+		E0007003 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Luma/Luma.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				DEVELOPMENT_ASSET_PATHS = "";
+				DEVELOPMENT_TEAM = "";
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Luma/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Luma Pro";
+				INFOPLIST_KEY_CFBundleURLTypes = "{\n    CFBundleURLSchemes =     (\n        macabolic\n    );\n}";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright © 2026 marspater. All rights reserved.";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = "$(RECOMMENDED_MACOSX_DEPLOYMENT_TARGET)";
+				MARKETING_VERSION = 4.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.marspater.luma;
+				PRODUCT_MODULE_NAME = Luma;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		E0007004 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ARCHS = "$(ARCHS_STANDARD)";
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Luma/Luma.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				DEVELOPMENT_ASSET_PATHS = "";
+				DEVELOPMENT_TEAM = "";
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Luma/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Luma Pro";
+				INFOPLIST_KEY_CFBundleURLTypes = "{\n    CFBundleURLSchemes =     (\n        luma,\n        macabolic\n    );\n}";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright © 2026 marspater. All rights reserved.";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = "$(RECOMMENDED_MACOSX_DEPLOYMENT_TARGET)";
+				MARKETING_VERSION = 4.1.0;
+				ONLY_ACTIVE_ARCH = NO;
+				PRODUCT_BUNDLE_IDENTIFIER = com.marspater.luma;
+				PRODUCT_MODULE_NAME = Luma;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		E0007005 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.marspater.luma.LumaTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Luma Pro.app/Contents/MacOS/Luma Pro";
+			};
+			name = Debug;
+		};
+		E0007006 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.marspater.luma.LumaTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Luma Pro.app/Contents/MacOS/Luma Pro";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		E0005001 /* Build configuration list for PBXProject "Luma" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E0007001 /* Debug */,
+				E0007002 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		E0005003 /* Build configuration list for PBXNativeTarget "Luma Pro" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E0007003 /* Debug */,
+				E0007004 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		E0005004 /* Build configuration list for PBXNativeTarget "LumaTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E0007005 /* Debug */,
+				E0007006 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = E0006001 /* Project object */;
+}

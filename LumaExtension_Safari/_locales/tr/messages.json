@@ -1,0 +1,14 @@
+{
+    "appName": {
+        "message": "Luma Pro"
+    },
+    "appDesc": {
+        "message": "Videoları Luma Pro ile indir"
+    },
+    "downloadContext": {
+        "message": "Luma Pro ile İndir"
+    },
+    "context_fast_download": {
+        "message": "Hızlı İndir (En Uyumlu)"
+    }
+}

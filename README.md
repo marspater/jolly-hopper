@@ -1,12 +1,12 @@
-# VeloX Pro ⚡️
+# Luma Pro ⚡️
 
 A high-performance, native macOS media extractor & downloader powered by `yt-dlp` and `FFmpeg`. Engineered with advanced anti-bot bypass mechanisms for Cloudflare, YouTube, and 1,000+ protected video streaming sites.
 
 <div align="center">
-  <img src="assets/app_screenshot.png" alt="VeloX Pro Interface" width="880" style="border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.3);" />
+  <img src="assets/app_screenshot.png" alt="Luma Pro Interface" width="880" style="border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.3);" />
   <p>
     <a href="https://github.com/marspater/jolly-hopper/releases/latest">
-      <img src="https://img.shields.io/badge/Download-macOS-blue?style=for-the-badge&logo=apple&logoColor=white" alt="Download VeloX Pro for macOS" />
+      <img src="https://img.shields.io/badge/Download-macOS-blue?style=for-the-badge&logo=apple&logoColor=white" alt="Download Luma Pro for macOS" />
     </a>
     <a href="https://github.com/marspater/jolly-hopper">
       <img src="https://img.shields.io/badge/Repository-jolly--hopper-818cf8?style=for-the-badge&logo=github&logoColor=white" alt="GitHub Repository" />
@@ -34,17 +34,17 @@ A high-performance, native macOS media extractor & downloader powered by `yt-dlp
 
 ### Manual Installation
 1. Download the latest `.dmg` release from the [Releases](https://github.com/marspater/jolly-hopper/releases) page.
-2. Drag **VeloX Pro** into your `/Applications` directory.
+2. Drag **Luma Pro** into your `/Applications` directory.
 3. If macOS Gatekeeper alerts on first open:
 ```bash
-xattr -cr /Applications/"VeloX Pro.app"
+xattr -cr /Applications/"Luma Pro.app"
 ```
 
 ### Browser Extensions 🌐
-Integrate VeloX Pro directly into your favorite web browser for 1-click video downloads:
-- **Chrome / Brave / Edge**: Navigate to `chrome://extensions`, enable **Developer Mode**, and click **Load Unpacked** pointing to `VeloXExtension_Chrome`.
+Integrate Luma Pro directly into your favorite web browser for 1-click video downloads:
+- **Chrome / Brave / Edge**: Navigate to `chrome://extensions`, enable **Developer Mode**, and click **Load Unpacked** pointing to `LumaExtension_Chrome`.
 - **Safari**: Enable the extension in Safari Preferences > Extensions.
-- **Firefox**: Load `VeloXExtension_Firefox` in `about:debugging#/runtime/this-firefox`.
+- **Firefox**: Load `LumaExtension_Firefox` in `about:debugging#/runtime/this-firefox`.
 
 ---
 

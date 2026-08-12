@@ -1,0 +1,14 @@
+{
+    "extension_name": {
+        "message": "Luma Pro Extension"
+    },
+    "extension_description": {
+        "message": "Download videos with Luma Pro"
+    },
+    "context_download": {
+        "message": "Download with Luma Pro"
+    },
+    "context_fast_download": {
+        "message": "Fast Download with Luma Pro"
+    }
+}
