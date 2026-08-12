@@ -12,6 +12,7 @@ class YtdlpService: ObservableObject {
     var ytdlpPath: URL?
     var ffmpegPath: URL?
     var ffprobePath: URL?
+    var aria2cPath: URL?
     private let localVersion = "1.5.5"
     private let bundledYtdlpName = "yt-dlp_macos"
 
@@ -30,6 +31,7 @@ class YtdlpService: ObservableObject {
     func setupBinaries() async {
         await findYtdlp()
         await findFfmpeg()
+        await findAria2c()
     }
 
 
@@ -115,6 +117,32 @@ class YtdlpService: ObservableObject {
         }
 
         LoggerService.shared.log("FFmpeg installation failed. Attempted path: \(appSupport.path)", level: .error)
+    }
+
+    func findAria2c() async {
+        let appSupport = getAppSupportDirectory()
+        let aria2cInSupport = appSupport.appendingPathComponent("aria2c")
+        if isExecutableBinary(at: aria2cInSupport) {
+            aria2cPath = aria2cInSupport
+            LoggerService.shared.log("Selected app-support aria2c path: \(aria2cInSupport.path)", level: .info)
+            return
+        }
+
+        if let bundledAria2c = Bundle.main.url(forResource: "aria2c", withExtension: nil), isExecutableBinary(at: bundledAria2c) {
+            aria2cPath = bundledAria2c
+            LoggerService.shared.log("Selected bundled aria2c path: \(bundledAria2c.path)", level: .info)
+            return
+        }
+
+        let systemDirectories = ["/opt/homebrew/bin", "/usr/local/bin", "/usr/bin"]
+        for directory in systemDirectories {
+            let aria2c = URL(fileURLWithPath: directory).appendingPathComponent("aria2c")
+            if isExecutableBinary(at: aria2c) {
+                aria2cPath = aria2c
+                LoggerService.shared.log("Selected system aria2c path: \(aria2c.path)", level: .info)
+                return
+            }
+        }
     }
 
     private func repairAppSupportFfmpegPair(ffmpeg: URL, ffprobe: URL) async {
@@ -1263,9 +1291,13 @@ class YtdlpService: ObservableObject {
         args.append(contentsOf: ["--fragment-retries", "10"])
         args.append(contentsOf: ["--socket-timeout", "15"])
         args.append(contentsOf: ["--buffer-size", "1M"])
-        args.append(contentsOf: ["--http-chunk-size", "10M"])
         args.append(contentsOf: ["--concurrent-fragments", "5"])
         args.append("--no-mtime")
+
+        if let aria2c = aria2cPath {
+            args.append(contentsOf: ["--downloader", aria2c.path])
+            args.append(contentsOf: ["--downloader-args", "aria2c:-x 16 -s 16 -k 1M -j 16 --min-split-size=1M"])
+        }
 
         if lowerUrl.contains("boyfriend.tv") || lowerUrl.contains("boyfriendtv.com") || lowerUrl.contains("cdn.boyfriend.tv") {
             args.append(contentsOf: ["--user-agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"])
