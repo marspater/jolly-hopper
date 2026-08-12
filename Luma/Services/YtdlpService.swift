@@ -386,7 +386,11 @@ class YtdlpService: ObservableObject {
              return try await fetchSingleVideoInfo(path: path.path, url: normalizedURL)
         } catch {
             if normalizedURL.contains("list=") || normalizedURL.contains("/playlist") {
-                 return try await fetchPlaylistSummaryInfo(path: path.path, url: normalizedURL)
+                do {
+                    return try await fetchPlaylistSummaryInfo(path: path.path, url: normalizedURL)
+                } catch {
+                    throw mapSiteSpecificError(error, url: normalizedURL)
+                }
             }
             throw mapSiteSpecificError(error, url: normalizedURL)
         }
@@ -484,6 +488,7 @@ class YtdlpService: ObservableObject {
             do {
                 return try JSONDecoder().decode(MediaInfo.self, from: data)
             } catch {
+                LoggerService.shared.log("Failed to decode MediaInfo JSON: \(error)", level: .error)
                 throw YtdlpError.parseError
             }
         } catch let err as YtdlpError {
@@ -727,10 +732,10 @@ class YtdlpService: ObservableObject {
             args.append(contentsOf: customArgs)
         }
 
-        var tempCookieFile: URL? = nil
+        var tempCookieFiles: [URL] = []
         if let rawCookies = options.rawCookies, !rawCookies.isEmpty {
             if let tempFile = createTempCookiesFileFromHeader(url: targetURL, cookieHeader: rawCookies) {
-                tempCookieFile = tempFile
+                tempCookieFiles.append(tempFile)
                 LoggerService.shared.log("Using session cookies passed from browser extension for \(hostForLog(targetURL))", level: .info)
                 args.append(contentsOf: ["--cookies", tempFile.path])
             }
@@ -742,7 +747,7 @@ class YtdlpService: ObservableObject {
         // Handle Sucuri bypass
         if let sucuriCookie = await resolveSucuriCookie(for: normalizedURL) {
             if let tempFile = createTempCookiesFile(url: normalizedURL, cookieName: sucuriCookie.name, cookieValue: sucuriCookie.value) {
-                tempCookieFile = tempFile
+                tempCookieFiles.append(tempFile)
                 LoggerService.shared.log("Using temporary Sucuri cookie file for \(hostForLog(normalizedURL)) (cookie values not logged)", level: .info)
                 args.append(contentsOf: ["--cookies", tempFile.path])
                 args.append(contentsOf: ["--user-agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"])
@@ -767,7 +772,7 @@ class YtdlpService: ObservableObject {
         }
 
         defer {
-            if let fileURL = tempCookieFile {
+            for fileURL in tempCookieFiles {
                 try? FileManager.default.removeItem(at: fileURL)
             }
         }
@@ -1662,6 +1667,10 @@ class YtdlpService: ObservableObject {
     private func fetchHTMLWithBrowserCookies(url: String, browser: String) async -> String? {
         guard let path = ytdlpPath?.path else { return nil }
         let cookiePath = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + "_cookies.txt").path
+        defer {
+            try? FileManager.default.removeItem(atPath: cookiePath)
+        }
+
         let ytdlpArgs = ["--cookies-from-browser", browser, "--cookies", cookiePath, "--skip-download", url]
         
         // This will create the cookies file, even if it eventually fails with "Unsupported URL"
@@ -1674,15 +1683,14 @@ class YtdlpService: ObservableObject {
             "-sL",
             "--cookie", cookiePath,
             "-A", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15",
+            "--",
             url
         ]
         
         do {
             let output = try await runCommandAsync(curlArgs)
-            try? FileManager.default.removeItem(atPath: cookiePath)
             return output
         } catch {
-            try? FileManager.default.removeItem(atPath: cookiePath)
             return nil
         }
     }

@@ -10,11 +10,12 @@ enum Language: String, CaseIterable, Identifiable {
     }
 }
 
+@MainActor
 class LanguageService: ObservableObject {
     @AppStorage("selectedLanguage") var selectedLanguage: Language = .english
     @AppStorage("isFirstLaunch_v3") var isFirstLaunch: Bool = true
     
-    func s(_ key: String) -> String {
+    nonisolated func s(_ key: String) -> String {
         if let translated = translations[key] {
             return translated
         }
@@ -22,6 +23,7 @@ class LanguageService: ObservableObject {
     }
     
     private let translations: [String: String] = [
+        "about_app": "About Luma Pro",
         "home": "Home",
         "downloading": "Downloading",
         "queued": "Queued",
@@ -205,7 +207,7 @@ class LanguageService: ObservableObject {
         "start_in_background": "Start in background",
         "start_in_background_desc": "On login, only the menu bar icon will be shown, not in Dock",
         "quit": "Quit",
-        "open_macabolic": "Open Luma Pro",
+        "open_app": "Open Luma Pro",
         "show_main_window": "Show Main Window",
         "preset": "Preset",
         "standard": "Standard",

@@ -8,9 +8,16 @@ class LoggerService: ObservableObject {
     @Published var logs: [String] = []
     private let logFileURL: URL
     private let maxLogEntries = 1000
+    private let fileQueue = DispatchQueue(label: "com.luma.loggerQueue", qos: .utility)
+    
+    private static let dateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
+        return formatter
+    }()
     
     private init() {
-        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+        let appSupport = (FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first ?? URL(fileURLWithPath: NSHomeDirectory() + "/Library/Application Support"))
             .appendingPathComponent("Luma")
         
         try? FileManager.default.createDirectory(at: appSupport, withIntermediateDirectories: true)
@@ -33,10 +40,7 @@ class LoggerService: ObservableObject {
     }
     
     func log(_ message: String, level: LogLevel = .info) {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
-        let timestamp = formatter.string(from: Date())
-        
+        let timestamp = Self.dateFormatter.string(from: Date())
         let entry = "[\(timestamp)] [\(level.rawValue)] \(message)"
         
         logs.append(entry)
@@ -44,17 +48,20 @@ class LoggerService: ObservableObject {
             logs.removeFirst(logs.count - maxLogEntries)
         }
         
-        appendToLogFile(entry + "\n")
+        let fileURL = logFileURL
+        let maxEntries = maxLogEntries
+        fileQueue.async {
+            Self.appendToLogFile(entry + "\n", at: fileURL, maxEntries: maxEntries)
+        }
     }
     
-    private func appendToLogFile(_ string: String) {
+    private static func appendToLogFile(_ string: String, at logFileURL: URL, maxEntries: Int) {
         guard let data = string.data(using: .utf8) else { return }
         
         if FileManager.default.fileExists(atPath: logFileURL.path) {
             if let attrs = try? FileManager.default.attributesOfItem(atPath: logFileURL.path),
                let size = attrs[.size] as? Int64, size > 2 * 1024 * 1024 {
-                // If log file exceeds 2MB, prune it to the last maxLogEntries lines
-                trimLogFile()
+                trimLogFile(at: logFileURL, maxEntries: maxEntries)
             }
             if let fileHandle = try? FileHandle(forWritingTo: logFileURL) {
                 fileHandle.seekToEndOfFile()
@@ -66,16 +73,19 @@ class LoggerService: ObservableObject {
         }
     }
     
-    private func trimLogFile() {
+    private static func trimLogFile(at logFileURL: URL, maxEntries: Int) {
         guard let content = try? String(contentsOf: logFileURL, encoding: .utf8) else { return }
         let lines = content.components(separatedBy: .newlines).filter { !$0.isEmpty }
-        let trimmed = lines.suffix(maxLogEntries).joined(separator: "\n") + "\n"
+        let trimmed = lines.suffix(maxEntries).joined(separator: "\n") + "\n"
         try? trimmed.write(to: logFileURL, atomically: true, encoding: .utf8)
     }
     
     func clearLogs() {
         logs.removeAll()
-        try? "".write(to: logFileURL, atomically: true, encoding: .utf8)
+        let fileURL = logFileURL
+        fileQueue.async {
+            try? "".write(to: fileURL, atomically: true, encoding: .utf8)
+        }
         log("Logs cleared", level: .info)
     }
     

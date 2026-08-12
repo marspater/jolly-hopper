@@ -15,7 +15,6 @@
 		E0001006 /* AddDownloadView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000006 /* AddDownloadView.swift */; };
 		E0001007 /* DownloadRowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000007 /* DownloadRowView.swift */; };
 		E0001009 /* PreferencesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000009 /* PreferencesView.swift */; };
-		E0001010 /* KeyringView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000010 /* KeyringView.swift */; };
 		E0001011 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = E0000011 /* Assets.xcassets */; };
 		E0001012 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = E0000014 /* InfoPlist.strings */; };
 		E0001020 /* NotificationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000020 /* NotificationService.swift */; };
@@ -44,7 +43,6 @@
 		E0000006 /* AddDownloadView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddDownloadView.swift; sourceTree = "<group>"; };
 		E0000007 /* DownloadRowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DownloadRowView.swift; sourceTree = "<group>"; };
 		E0000009 /* PreferencesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreferencesView.swift; sourceTree = "<group>"; };
-		E0000010 /* KeyringView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyringView.swift; sourceTree = "<group>"; };
 		E0000011 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		E0000012 /* Luma Pro.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Luma Pro.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		E0000013 /* Luma.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Luma.entitlements; sourceTree = "<group>"; };
@@ -160,7 +158,6 @@
 				E0000002 /* ContentView.swift */,
 				E0000006 /* AddDownloadView.swift */,
 				E0000009 /* PreferencesView.swift */,
-				E0000010 /* KeyringView.swift */,
 				E0000023 /* MenuBarView.swift */,
 				E0003008 /* Components */,
 			);
@@ -302,7 +299,6 @@
 				E0001006 /* AddDownloadView.swift in Sources */,
 				E0001007 /* DownloadRowView.swift in Sources */,
 				E0001009 /* PreferencesView.swift in Sources */,
-				E0001010 /* KeyringView.swift in Sources */,
 				E0001020 /* NotificationService.swift in Sources */,
 				E0001021 /* LoginItemHelper.swift in Sources */,
 				E0001022 /* MenuBarManager.swift in Sources */,

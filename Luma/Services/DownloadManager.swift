@@ -383,6 +383,7 @@ class DownloadManager: ObservableObject {
 
 
     func retryDownload(_ download: Download) {
+        guard download.status == .failed || download.status == .stopped || download.status == .fileExists else { return }
         updateStatus(for: download, to: .queued)
         download.progress = 0
         objectWillChange.send()
@@ -397,6 +398,8 @@ class DownloadManager: ObservableObject {
 
     func resumeWithOverwrite(_ download: Download) {
         download.options.forceOverwrite = true
+        updateStatus(for: download, to: .queued)
+        objectWillChange.send()
         Task {
             await processDownload(download)
         }
@@ -406,6 +409,8 @@ class DownloadManager: ObservableObject {
         let uniqueSuffix = " (\(Int(Date().timeIntervalSince1970) % 10000))"
         let base = download.options.customFilename ?? download.title
         download.options.customFilename = "\(base)\(uniqueSuffix)"
+        updateStatus(for: download, to: .queued)
+        objectWillChange.send()
         Task {
             await processDownload(download)
         }
@@ -432,7 +437,10 @@ class DownloadManager: ObservableObject {
 
 
     func clearQueuedDownloads() {
-        downloads.removeAll { $0.status == .queued }
+        for download in queuedDownloads {
+            updateStatus(for: download, to: .stopped)
+        }
+        downloads.removeAll { $0.status == .stopped }
     }
 
 

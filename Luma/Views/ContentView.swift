@@ -175,11 +175,7 @@ struct SidebarView: View {
 extension View {
     @ViewBuilder
     func lumaSidebarWidth() -> some View {
-        if #available(macOS 13.0, *) {
-            self.navigationSplitViewColumnWidth(min: 200, ideal: 220)
-        } else {
-            self.frame(minWidth: 200, idealWidth: 220, maxWidth: 300)
-        }
+        self.navigationSplitViewColumnWidth(min: 200, ideal: 220)
     }
 }
 
@@ -238,7 +234,7 @@ struct HomeView: View {
                         Text("Luma Pro")
                             .font(.system(size: 42, weight: .black, design: .rounded))
                         
-                        Text(LocalizedStringKey(languageService.s("url_placeholder")))
+                        Text(languageService.s("url_placeholder"))
                             .font(.title3)
                             .foregroundColor(.secondary)
                             .multilineTextAlignment(.center)
@@ -306,7 +302,7 @@ struct HomeView: View {
                     NSWorkspace.shared.open(url)
                 }
             }
-            Button("OK") { }
+            Button(languageService.s("ok")) { }
         } message: {
             Text(languageService.s("whats_new_message"))
         }
