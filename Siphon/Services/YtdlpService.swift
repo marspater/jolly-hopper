@@ -1605,14 +1605,14 @@ class YtdlpService: ObservableObject {
 
     private func getAppSupportDirectory() -> URL {
         let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Library/Application Support")
-        let formerDir = appSupport.appendingPathComponent("Siphon")
+        let previousDir = appSupport.appendingPathComponent("Siphon")
         let legacyDir = appSupport.appendingPathComponent("Macabolic")
 
-        if !FileManager.default.fileExists(atPath: formerDir.path) && FileManager.default.fileExists(atPath: legacyDir.path) {
-            try? FileManager.default.moveItem(at: legacyDir, to: formerDir)
+        if !FileManager.default.fileExists(atPath: previousDir.path) && FileManager.default.fileExists(atPath: legacyDir.path) {
+            try? FileManager.default.moveItem(at: legacyDir, to: previousDir)
         }
 
-        return formerDir
+        return previousDir
     }
 
     private func splitArguments(_ input: String) -> [String] {
