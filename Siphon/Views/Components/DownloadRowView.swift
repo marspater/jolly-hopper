@@ -1,4 +1,6 @@
 import SwiftUI
+import QuickLookThumbnailing
+import AVFoundation
 
 struct DownloadListView: View {
     let downloads: [Download]
@@ -37,8 +39,9 @@ struct DownloadListView: View {
                             Button {
                                 downloadManager.clearDownloads(downloads)
                             } label: {
-                                Label(languageService.s("clear"), systemImage: "trash")
+                                Label(languageService.s("clear_history"), systemImage: "trash")
                             }
+                            .help(languageService.s("clear_history_help"))
                         }
                     }
                 }
@@ -154,13 +157,24 @@ struct DownloadRowView: View {
     private var thumbnailView: some View {
         Group {
             if let url = download.thumbnailURL {
-                AsyncImage(url: url) { image in
-                    image
-                        .resizable()
-                        .aspectRatio(contentMode: .fill)
-                } placeholder: {
-                    thumbnailPlaceholder
+                AsyncImage(url: url) { phase in
+                    switch phase {
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .aspectRatio(contentMode: .fill)
+                    case .failure, .empty:
+                        if let filePath = download.filePath, FileManager.default.fileExists(atPath: filePath.path) {
+                            FileThumbnailView(fileURL: filePath)
+                        } else {
+                            thumbnailPlaceholder
+                        }
+                    @unknown default:
+                        thumbnailPlaceholder
+                    }
                 }
+            } else if let filePath = download.filePath, FileManager.default.fileExists(atPath: filePath.path) {
+                FileThumbnailView(fileURL: filePath)
             } else {
                 thumbnailPlaceholder
             }
@@ -180,6 +194,55 @@ struct DownloadRowView: View {
                     .foregroundColor(.secondary.opacity(0.6))
             }
     }
+
+struct FileThumbnailView: View {
+    let fileURL: URL
+    @State private var thumbnailImage: NSImage? = nil
+
+    var body: some View {
+        Group {
+            if let image = thumbnailImage {
+                Image(nsImage: image)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+            } else {
+                Rectangle()
+                    .fill(Color.gray.opacity(0.15))
+                    .overlay {
+                        Image(systemName: "play.rectangle.fill")
+                            .font(.system(size: 24))
+                            .foregroundColor(.secondary.opacity(0.6))
+                    }
+            }
+        }
+        .task {
+            await generateThumbnail()
+        }
+    }
+
+    private func generateThumbnail() async {
+        guard FileManager.default.fileExists(atPath: fileURL.path) else { return }
+
+        let request = QLThumbnailGenerator.Request(fileAt: fileURL, size: CGSize(width: 240, height: 136), scale: 2.0, representationTypes: .thumbnail)
+        if let representation = try? await QLThumbnailGenerator.shared.generateBestRepresentation(for: request) {
+            await MainActor.run {
+                self.thumbnailImage = representation.nsImage
+            }
+            return
+        }
+
+        let asset = AVURLAsset(url: fileURL)
+        let generator = AVAssetImageGenerator(asset: asset)
+        generator.appliesPreferredTrackTransform = true
+        let time = CMTime(seconds: 1, preferredTimescale: 60)
+        if let cgImage = try? generator.copyCGImage(at: time, actualTime: nil) {
+            let nsImage = NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
+            await MainActor.run {
+                self.thumbnailImage = nsImage
+            }
+        }
+    }
+}
     
     private var statusBadge: some View {
         HStack(spacing: 5) {

@@ -127,6 +127,7 @@ class LanguageService: ObservableObject {
         "cancel": "Cancel",
         "download_btn": "Download",
         "clear_history": "Clear History",
+        "clear_history_help": "Clear download history list (downloaded files will not be deleted)",
         "history_empty": "Download history is empty",
         "history_desc": "Completed downloads will appear here",
         "search_history": "Search history...",
