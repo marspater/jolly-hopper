@@ -212,6 +212,7 @@ class DownloadManager: ObservableObject {
 
             download.title = info.title
             download.duration = info.durationString
+            download.thumbnailURL = info.thumbnailURL
             let sanitize: (String) -> String = { input in
                 let invalidChars = CharacterSet(charactersIn: "\\/:*?\"<>|")
                 return input.components(separatedBy: invalidChars).joined(separator: "_")
