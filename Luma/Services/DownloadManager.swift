@@ -45,7 +45,7 @@ class DownloadManager: ObservableObject {
     }
 
     var failedDownloads: [Download] {
-        downloads.filter { $0.status == .failed || $0.status == .stopped }
+        downloads.filter { $0.status == .failed || $0.status == .stopped || $0.status == .fileExists }
     }
 
     var downloadingCount: Int { downloadingDownloads.count }

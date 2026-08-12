@@ -13,6 +13,9 @@ class YtdlpService: ObservableObject {
     var ffmpegPath: URL?
     var ffprobePath: URL?
     var aria2cPath: URL?
+    /// Tracks whether macOS TCC has denied cookie access this session.
+    /// Once set, we skip --cookies-from-browser entirely to avoid 7s retry delays.
+    private var tccCookieDenied: Bool = false
     private let localVersion = "1.5.5"
     private let bundledYtdlpName = "yt-dlp_macos"
 
@@ -789,6 +792,7 @@ class YtdlpService: ObservableObject {
 
             if !errText.isEmpty, isCookiePermissionError(errText), args.contains("--cookies-from-browser") {
                 LoggerService.shared.log("Cookie permission denied by macOS TCC. Retrying download automatically without browser cookies...", level: .warning)
+                tccCookieDenied = true
                 onOutput("[Luma Warning] macOS TCC permission denied reading browser cookies. Retrying download without browser cookies...\n")
                 let cleanArgs = stripCookieArgs(from: args)
                 outputPath = try await runDownloadProcess(
@@ -1013,6 +1017,7 @@ class YtdlpService: ObservableObject {
     }
 
     private func appendCookieArgs(to args: inout [String], force: Bool = false) -> Bool {
+        if tccCookieDenied { return false }
         guard let browser = configuredBrowserCookieSource() else { return false }
         if force || !args.contains("--cookies-from-browser") {
             args.append(contentsOf: ["--cookies-from-browser", browser])
@@ -1309,15 +1314,11 @@ class YtdlpService: ObservableObject {
             args.append(contentsOf: ["--concurrent-fragments", "5"])
         } else if lowerUrl.contains("justthegays.com") || lowerUrl.contains("justthegays.tv") {
             args.append(contentsOf: ["--add-header", "Referer:https://justthegays.com/"])
-            args.append(contentsOf: ["--extractor-args", "generic:impersonate"])
         } else if lowerUrl.contains("thisvid.com") {
             args.append(contentsOf: ["--add-header", "Referer:https://thisvid.com/"])
-            args.append(contentsOf: ["--extractor-args", "generic:impersonate"])
         } else if lowerUrl.contains(".m3u8") || lowerUrl.contains(".mpd") {
             args.append(contentsOf: ["--hls-use-mpegts"])
             args.append(contentsOf: ["--concurrent-fragments", "5"])
-        } else {
-            args.append(contentsOf: ["--extractor-args", "generic:impersonate"])
         }
     }
 
@@ -1401,6 +1402,7 @@ class YtdlpService: ObservableObject {
         } catch let error as YtdlpError {
             if case .commandFailed(let output) = error, isCookiePermissionError(output), args.contains("--cookies-from-browser") {
                 LoggerService.shared.log("Cookie permission denied by macOS TCC. Automatically retrying command without browser cookies...", level: .warning)
+                tccCookieDenied = true
                 let cleanArgs = stripCookieArgs(from: args)
                 return try await runCommandAsync(cleanArgs)
             }
