@@ -756,6 +756,8 @@ class YtdlpService: ObservableObject {
         
         appendSiteSpecificArgs(for: targetURL, to: &args)
 
+        args.append("--batch")
+        args.append("--no-color")
         args.append("--newline")
         args.append("--progress-template")
         args.append("%(progress._percent_str)s %(progress._speed_str)s %(progress._eta_str)s")
@@ -1433,7 +1435,7 @@ class YtdlpService: ObservableObject {
             process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
             process.arguments = args
             process.currentDirectoryURL = saveFolder
-            process.standardInput = inputPipe
+            process.standardInput = FileHandle.nullDevice
             process.standardOutput = outputPipe
             process.standardError = errorPipe
 
@@ -1447,10 +1449,7 @@ class YtdlpService: ObservableObject {
 
             let outputState = ThreadSafeOutputState()
 
-            outputPipe.fileHandleForReading.readabilityHandler = { handle in
-                let data = handle.availableData
-                guard !data.isEmpty, let line = String(data: data, encoding: .utf8) else { return }
-
+            let processOutputLine: (String) -> Void = { line in
                 if line.contains("[download] Destination:") {
                     let parts = line.components(separatedBy: "[download] Destination: ")
                     if parts.count > 1 {
@@ -1505,6 +1504,14 @@ class YtdlpService: ObservableObject {
                 }
             }
 
+            outputPipe.fileHandleForReading.readabilityHandler = { handle in
+                let data = handle.availableData
+                guard !data.isEmpty, let text = String(data: data, encoding: .utf8) else { return }
+                for line in text.components(separatedBy: .newlines) where !line.isEmpty {
+                    processOutputLine(line)
+                }
+            }
+
             errorPipe.fileHandleForReading.readabilityHandler = { handle in
                 let data = handle.availableData
                 guard !data.isEmpty, let line = String(data: data, encoding: .utf8) else { return }
@@ -1519,6 +1526,19 @@ class YtdlpService: ObservableObject {
             process.terminationHandler = { proc in
                 outputPipe.fileHandleForReading.readabilityHandler = nil
                 errorPipe.fileHandleForReading.readabilityHandler = nil
+
+                let remainingOutput = outputPipe.fileHandleForReading.readDataToEndOfFile()
+                if !remainingOutput.isEmpty, let text = String(data: remainingOutput, encoding: .utf8) {
+                    for line in text.components(separatedBy: .newlines) where !line.isEmpty {
+                        processOutputLine(line)
+                    }
+                }
+
+                let remainingError = errorPipe.fileHandleForReading.readDataToEndOfFile()
+                if !remainingError.isEmpty, let text = String(data: remainingError, encoding: .utf8) {
+                    outputState.appendError(text)
+                    DispatchQueue.main.async { onOutput("[ERROR] \(text)") }
+                }
 
                 var currentOutputPath = outputState.getOutputPath()
                 let fm = FileManager.default
