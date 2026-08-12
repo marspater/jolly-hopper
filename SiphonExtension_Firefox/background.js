@@ -24,7 +24,13 @@ browser.contextMenus.onClicked.addListener((info, tab) => {
     }
 
     if (host) {
-        browser.cookies.getAll({ url: url }).then((cookies) => {
+        let domain = "";
+        try {
+            domain = new URL(url).hostname.replace(/^www\./, "");
+        } catch (e) {}
+
+        const cookieQuery = domain ? { domain: domain } : { url: url };
+        browser.cookies.getAll(cookieQuery).then((cookies) => {
             let cookieParam = "";
             if (cookies && cookies.length > 0) {
                 const cookieHeader = cookies.map(c => `${c.name}=${c.value}`).join('; ');
