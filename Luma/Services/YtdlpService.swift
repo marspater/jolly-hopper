@@ -1449,12 +1449,27 @@ class YtdlpService: ObservableObject {
 
             let outputState = ThreadSafeOutputState()
 
+            let isMediaFilePath: (String) -> Bool = { path in
+                let ext = (path as NSString).pathExtension.lowercased()
+                let nonMediaExtensions: Set<String> = [
+                    "jpg", "jpeg", "png", "webp", "gif", "bmp", "tiff",
+                    "vtt", "srt", "ass", "lrc",
+                    "json", "part", "ytdl", "description", "txt", "info"
+                ]
+                return !ext.isEmpty && !nonMediaExtensions.contains(ext)
+            }
+
             let processOutputLine: (String) -> Void = { line in
+                if line.contains("[info] Writing video thumbnail") || line.contains("[info] Writing video subtitle") || line.contains("[info] Writing video description") {
+                    DispatchQueue.main.async { onOutput(line) }
+                    return
+                }
+
                 if line.contains("[download] Destination:") {
                     let parts = line.components(separatedBy: "[download] Destination: ")
                     if parts.count > 1 {
                         let path = parts[1].trimmingCharacters(in: .whitespacesAndNewlines)
-                        if !path.hasSuffix(".part") {
+                        if isMediaFilePath(path) {
                             outputState.setOutputPath(path)
                         }
                     }
@@ -1465,7 +1480,10 @@ class YtdlpService: ObservableObject {
                     if parts.count > 1 {
                         let pathPart = parts[1].components(separatedBy: " has already been downloaded")
                         if !pathPart.isEmpty {
-                            outputState.setOutputPath(pathPart[0].trimmingCharacters(in: .whitespacesAndNewlines))
+                            let path = pathPart[0].trimmingCharacters(in: .whitespacesAndNewlines)
+                            if isMediaFilePath(path) {
+                                outputState.setOutputPath(path)
+                            }
                         }
                     }
                 }
@@ -1473,14 +1491,20 @@ class YtdlpService: ObservableObject {
                 if line.contains("[Merger] Merging formats into") {
                     let parts = line.components(separatedBy: "\"")
                     if parts.count > 1 {
-                        outputState.setOutputPath(parts[1])
+                        let path = parts[1].trimmingCharacters(in: .whitespacesAndNewlines)
+                        if isMediaFilePath(path) {
+                            outputState.setOutputPath(path)
+                        }
                     }
                 }
 
                 if line.contains(" to \"") {
                     let parts = line.components(separatedBy: " to \"")
                     if let target = parts.last?.components(separatedBy: "\"").first, !target.isEmpty {
-                        outputState.setOutputPath(target.trimmingCharacters(in: .whitespacesAndNewlines))
+                        let path = target.trimmingCharacters(in: .whitespacesAndNewlines)
+                        if isMediaFilePath(path) {
+                            outputState.setOutputPath(path)
+                        }
                     }
                 }
 
@@ -1547,29 +1571,29 @@ class YtdlpService: ObservableObject {
 
                 if !currentOutputPath.isEmpty {
                     let rawURL = currentOutputPath.hasPrefix("/") ? URL(fileURLWithPath: currentOutputPath) : saveFolder.appendingPathComponent(currentOutputPath)
-                    if fm.fileExists(atPath: rawURL.path) {
+                    if fm.fileExists(atPath: rawURL.path) && isMediaFilePath(rawURL.path) {
                         finalURL = rawURL
                     } else {
                         // Search saveFolder for a file with matching base name (e.g. .mkv instead of .mp4)
                         let baseName = rawURL.deletingPathExtension().lastPathComponent
                         if let files = try? fm.contentsOfDirectory(at: saveFolder, includingPropertiesForKeys: [.contentModificationDateKey]) {
-                            if let match = files.first(where: { $0.deletingPathExtension().lastPathComponent == baseName && fm.fileExists(atPath: $0.path) }) {
+                            if let match = files.first(where: { $0.deletingPathExtension().lastPathComponent == baseName && fm.fileExists(atPath: $0.path) && isMediaFilePath($0.path) }) {
                                 finalURL = match
                             }
                         }
                     }
                 }
 
-                // Fallback: If finalURL is still missing or points to a non-existent file, find the most recent file in saveFolder created in the last 2 minutes
-                if finalURL == nil || !fm.fileExists(atPath: finalURL!.path) {
+                // Fallback: If finalURL is still missing or points to a non-existent/non-media file, find the most recent media file in saveFolder
+                if finalURL == nil || !fm.fileExists(atPath: finalURL!.path) || !isMediaFilePath(finalURL!.path) {
                     if let files = try? fm.contentsOfDirectory(at: saveFolder, includingPropertiesForKeys: [.contentModificationDateKey, .isRegularFileKey]) {
                         let recentFiles = files.compactMap { url -> (URL, Date)? in
                             guard let values = try? url.resourceValues(forKeys: [.contentModificationDateKey, .isRegularFileKey]),
                                   values.isRegularFile == true,
                                   !url.lastPathComponent.hasPrefix("."),
-                                  !url.pathExtension.hasSuffix("part"),
+                                  isMediaFilePath(url.path),
                                   let modDate = values.contentModificationDate,
-                                  Date().timeIntervalSince(modDate) < 120 else { return nil }
+                                  Date().timeIntervalSince(modDate) < 300 else { return nil }
                             return (url, modDate)
                         }.sorted(by: { $1.1 < $0.1 })
                         
