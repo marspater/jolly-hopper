@@ -686,6 +686,7 @@ class YtdlpService: ObservableObject {
         }
         if options.embedThumbnail {
             args.append("--embed-thumbnail")
+            args.append(contentsOf: ["--convert-thumbnails", "jpg"])
         }
 
         args.append("--embed-metadata")
@@ -756,7 +757,6 @@ class YtdlpService: ObservableObject {
         
         appendSiteSpecificArgs(for: targetURL, to: &args)
 
-        args.append("--batch")
         args.append("--no-color")
         args.append("--newline")
         args.append("--progress-template")
