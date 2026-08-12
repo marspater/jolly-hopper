@@ -156,7 +156,7 @@ struct DownloadRowView: View {
     
     private var thumbnailView: some View {
         Group {
-            if let url = download.thumbnailURL {
+            if let url = download.thumbnailURL, let scheme = url.scheme?.lowercased(), (scheme == "http" || scheme == "https") {
                 AsyncImage(url: url) { phase in
                     switch phase {
                     case .success(let image):

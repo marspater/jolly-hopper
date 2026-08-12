@@ -653,6 +653,7 @@ class YtdlpService: ObservableObject {
         }
         args.append(contentsOf: ["--ffmpeg-location", ffmpegDir])
         args.append(contentsOf: ["--paths", "temp:/tmp"])
+        args.append("--no-playlist")
 
         let outputTemplate: String
         if let customFilename = options.customFilename ?? btvTitle, !customFilename.isEmpty {
