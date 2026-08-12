@@ -65,6 +65,7 @@ struct DownloadRowView: View {
     @EnvironmentObject var downloadManager: DownloadManager
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var languageService: LanguageService
+    @EnvironmentObject var updateChecker: UpdateChecker
     let showStop: Bool
     
     @State private var isHovering = false
@@ -79,7 +80,7 @@ struct DownloadRowView: View {
                 
 
                 VStack(alignment: .leading, spacing: 5) {
-                    Text(download.title == "___FETCHING___" ? languageService.s("fetching") : download.title)
+                    Text(download.status == .fetching ? languageService.s("fetching") : download.title)
                         .font(.system(size: 14, weight: .semibold))
                         .lineLimit(2)
                         .fixedSize(horizontal: false, vertical: true)
@@ -112,7 +113,7 @@ struct DownloadRowView: View {
                                 Button(languageService.s("fix_signin_error")) {
                                     PreferencesWindowManager.shared.showPreferencesWindow(
                                         languageService: languageService,
-                                        updateChecker: UpdateChecker(),
+                                        updateChecker: updateChecker,
                                         downloadManager: downloadManager
                                     )
                                 }

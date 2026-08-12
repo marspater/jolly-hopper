@@ -107,11 +107,12 @@ struct DownloadOptions: Codable {
     var rawCookies: String?
     
     static var `default`: DownloadOptions {
-        DownloadOptions(
-            saveFolder: FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first!,
+        let saveFolderURL = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first ?? URL(fileURLWithPath: NSHomeDirectory() + "/Downloads")
+        return DownloadOptions(
+            saveFolder: saveFolderURL,
             fileType: .mp4,
             downloadSubtitles: false,
-            subtitleLanguages: ["tr", "en"],
+            subtitleLanguages: ["en"],
             subtitleFormat: .srt,
             embedSubtitles: false,
             downloadThumbnail: false,
@@ -196,14 +197,14 @@ struct VideoFormat: Codable, Identifiable, Hashable {
     let id: String
     let ext: String
     let resolution: String?
-    let fps: Int?
+    let fps: Double?
     let vcodec: String?
     let filesize: Int64?
     
     var displayName: String {
         var parts: [String] = []
         if let res = resolution { parts.append(res) }
-        if let fps = fps { parts.append("\(fps)fps") }
+        if let fps = fps { parts.append("\(Int(fps))fps") }
         if let codec = vcodec { parts.append(codec) }
         return parts.isEmpty ? id : parts.joined(separator: " • ")
     }

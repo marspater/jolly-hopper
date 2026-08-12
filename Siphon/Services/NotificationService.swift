@@ -81,7 +81,13 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         content.sound = .default
 
         let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
-        center.add(request)
+        center.add(request) { [weak self] error in
+            if let error = error {
+                self?.logMessage("Encoding notification send error: \(error.localizedDescription)", level: .error)
+            } else {
+                self?.logMessage("Encoding notification sent: \(filename)", level: .info)
+            }
+        }
     }
 
     func sendDownloadFailed(filename: String, languageService: LanguageService) {

@@ -764,7 +764,10 @@ struct AddDownloadView: View {
     private var footer: some View {
         HStack {
             Spacer()
-            Button(languageService.s("cancel")) { dismiss() }.keyboardShortcut(.escape)
+            Button(languageService.s("cancel")) {
+                AddDownloadWindowManager.shared.closeWindow()
+                dismiss()
+            }.keyboardShortcut(.escape)
 
             let downloadTitle = downloadMode == .playlist ?
                 String(format: languageService.s("download_selected"), selectedPlaylistIds.count) :
