@@ -285,9 +285,8 @@ class DownloadManager: ObservableObject {
             addToHistory(download)
 
             // Send notification
-            if let lang = languageService {
-                NotificationService.shared.sendDownloadCompleted(filename: download.title.isEmpty ? download.url : download.title, languageService: lang)
-            }
+            let lang = languageService ?? LanguageService()
+            NotificationService.shared.sendDownloadCompleted(filename: download.title.isEmpty ? download.url : download.title, languageService: lang)
 
         } catch let error as YtdlpError {
             // Bug #7 fix: Always clean up process reference on error
@@ -300,34 +299,30 @@ class DownloadManager: ObservableObject {
             }
             updateStatus(for: download, to: .failed)
             objectWillChange.send()
-            if let lang = languageService {
-                switch error {
-                case .tooManyRequests:
-                    download.errorMessage = lang.s("too_many_requests")
-                case .cloudflareBlocked:
-                    download.errorMessage = "Blocked by Cloudflare anti-bot protection. Please select your browser as cookie source in Settings > Advanced and try again."
-                case .boyfriendTVNeedsBrowserCookies:
-                    download.errorMessage = "This site requires signed-in browser cookies. Open Settings > Advanced > Browser Cookies, choose your browser, then try again."
-                case .subtitleError(let details):
-                    download.errorMessage = String(format: lang.s("subtitle_download_failed"), details)
-                case .downloadFailed(let reason):
-                    if reason.contains("Cloudflare") || reason.contains("403") {
-                        download.errorMessage = "Blocked by anti-bot protection. Please select your browser as cookie source in Settings > Advanced and try again."
-                    } else {
-                        download.errorMessage = String(format: lang.s("download_failed_error"), reason)
-                    }
-                default:
-                    download.errorMessage = error.localizedDescription
+
+            let lang = languageService ?? LanguageService()
+            switch error {
+            case .tooManyRequests:
+                download.errorMessage = lang.s("too_many_requests")
+            case .cloudflareBlocked:
+                download.errorMessage = "Blocked by Cloudflare anti-bot protection. Please select your browser as cookie source in Settings > Advanced and try again."
+            case .boyfriendTVNeedsBrowserCookies:
+                download.errorMessage = "This site requires signed-in browser cookies. Open Settings > Advanced > Browser Cookies, choose your browser, then try again."
+            case .subtitleError(let details):
+                download.errorMessage = String(format: lang.s("subtitle_download_failed"), details)
+            case .downloadFailed(let reason):
+                if reason.contains("Cloudflare") || reason.contains("403") {
+                    download.errorMessage = "Blocked by anti-bot protection. Please select your browser as cookie source in Settings > Advanced and try again."
+                } else {
+                    download.errorMessage = String(format: lang.s("download_failed_error"), reason)
                 }
-
-                LoggerService.shared.log("Download failed (\(download.url)): \(download.errorMessage ?? error.localizedDescription)", level: .error)
-                // Send notification for failure
-                NotificationService.shared.sendDownloadFailed(filename: download.title.isEmpty ? download.url : download.title, languageService: lang)
-
-            } else {
+            default:
                 download.errorMessage = error.localizedDescription
-                LoggerService.shared.log("Download failed (\(download.url)): \(error.localizedDescription)", level: .error)
             }
+
+            LoggerService.shared.log("Download failed (\(download.url)): \(download.errorMessage ?? error.localizedDescription)", level: .error)
+            // Send notification for failure
+            NotificationService.shared.sendDownloadFailed(filename: download.title.isEmpty ? download.url : download.title, languageService: lang)
             addToHistory(download)
         } catch {
             // Bug #7 fix: Always clean up process reference on error
@@ -343,9 +338,8 @@ class DownloadManager: ObservableObject {
             download.errorMessage = error.localizedDescription
             LoggerService.shared.log("Download failed with error (\(download.url)): \(error.localizedDescription)", level: .error)
 
-            if let lang = languageService {
-                NotificationService.shared.sendDownloadFailed(filename: download.title.isEmpty ? download.url : download.title, languageService: lang)
-            }
+            let lang = languageService ?? LanguageService()
+            NotificationService.shared.sendDownloadFailed(filename: download.title.isEmpty ? download.url : download.title, languageService: lang)
 
             addToHistory(download)
         }
@@ -376,9 +370,8 @@ class DownloadManager: ObservableObject {
         }
 
         if !suppressNotification {
-            if let lang = languageService {
-                NotificationService.shared.sendDownloadStopped(filename: download.title.isEmpty ? download.url : download.title, languageService: lang)
-            }
+            let lang = languageService ?? LanguageService()
+            NotificationService.shared.sendDownloadStopped(filename: download.title.isEmpty ? download.url : download.title, languageService: lang)
         }
     }
 
