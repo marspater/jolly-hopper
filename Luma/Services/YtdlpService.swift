@@ -905,11 +905,12 @@ class YtdlpService: ObservableObject {
                 "\(requestedVideo)+\(bestAudio)",
                 "\(bestVideo)+\(requestedAudio)",
                 "\(bestVideo)+\(bestAudio)",
+                "bestvideo*+bestaudio/best*",
                 "best"
             ]
 
             args.append(contentsOf: ["-f", formatSelectors.joined(separator: "/")])
-            args.append(contentsOf: ["-S", "quality,res,fps,hdr:12,vbr,abr,filesize"])
+            args.append(contentsOf: ["-S", "res,fps,hdr:12,vbr,abr,quality,filesize"])
 
             var finalMergeFormat = compatibleMergeOutputFormat(for: options)
 
