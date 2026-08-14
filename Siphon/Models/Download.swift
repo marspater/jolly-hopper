@@ -267,6 +267,20 @@ enum VideoResolution: String, Codable, CaseIterable, Identifiable {
         case .worst: return "worstvideo"
         }
     }
+    
+    var ytdlpCombinedValue: String {
+        switch self {
+        case .best: return "best*"
+        case .r2160p: return "best*[height<=?2160]"
+        case .r1440p: return "best*[height<=?1440]"
+        case .r1080p: return "best*[height<=?1080]"
+        case .r720p: return "best*[height<=?720]"
+        case .r480p: return "best*[height<=?480]"
+        case .r360p: return "best*[height<=?360]"
+        case .r240p: return "best*[height<=?240]"
+        case .worst: return "worst*"
+        }
+    }
 }
 
 

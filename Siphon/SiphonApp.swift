@@ -10,6 +10,7 @@ struct SiphonApp: App {
     @State private var hasAppliedBackgroundMode = false
     
     init() {
+        NotificationService.shared.setup()
     }
     
     var body: some Scene {
