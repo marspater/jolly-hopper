@@ -1,12 +1,12 @@
 chrome.runtime.onInstalled.addListener(() => {
     chrome.contextMenus.create({
-        id: "download-luma",
+        id: "download-siphon",
         title: chrome.i18n.getMessage("context_download"),
         contexts: ["link", "video", "page"]
     });
 
     chrome.contextMenus.create({
-        id: "fast-download-luma",
+        id: "fast-download-siphon",
         title: chrome.i18n.getMessage("context_fast_download"),
         contexts: ["link", "video"]
     });
@@ -17,9 +17,9 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
     if (!url) return;
 
     let host = "";
-    if (info.menuItemId === "download-luma") {
+    if (info.menuItemId === "download-siphon") {
         host = "download";
-    } else if (info.menuItemId === "fast-download-luma") {
+    } else if (info.menuItemId === "fast-download-siphon") {
         host = "fast-download";
     }
 
