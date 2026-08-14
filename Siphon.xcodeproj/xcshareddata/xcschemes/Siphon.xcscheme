@@ -17,7 +17,7 @@
                BlueprintIdentifier = "E0004001"
                BuildableName = "Siphon.app"
                BlueprintName = "Siphon"
-               ReferencedContainer = "container:Luma.xcodeproj">
+               ReferencedContainer = "container:Siphon.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
       </BuildActionEntries>
@@ -33,9 +33,9 @@
              <BuildableReference
                 BuildableIdentifier = "primary"
                 BlueprintIdentifier = "E0004010"
-                BuildableName = "LumaTests.xctest"
-                BlueprintName = "LumaTests"
-                ReferencedContainer = "container:Luma.xcodeproj">
+                BuildableName = "SiphonTests.xctest"
+                BlueprintName = "SiphonTests"
+                ReferencedContainer = "container:Siphon.xcodeproj">
              </BuildableReference>
           </TestableReference>
        </Testables>
@@ -57,7 +57,7 @@
             BlueprintIdentifier = "E0004001"
             BuildableName = "Siphon.app"
             BlueprintName = "Siphon"
-            ReferencedContainer = "container:Luma.xcodeproj">
+            ReferencedContainer = "container:Siphon.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </LaunchAction>
@@ -74,7 +74,7 @@
             BlueprintIdentifier = "E0004001"
             BuildableName = "Siphon.app"
             BlueprintName = "Siphon"
-            ReferencedContainer = "container:Luma.xcodeproj">
+            ReferencedContainer = "container:Siphon.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </ProfileAction>

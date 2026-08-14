@@ -124,7 +124,7 @@ struct SidebarView: View {
             }
         }
         .listStyle(.sidebar)
-        .lumaSidebarWidth()
+        .siphonSidebarWidth()
         .safeAreaInset(edge: .bottom) {
             VStack(spacing: 8) {
                 SponsorView()
@@ -196,7 +196,7 @@ struct SidebarView: View {
 
 extension View {
     @ViewBuilder
-    func lumaSidebarWidth() -> some View {
+    func siphonSidebarWidth() -> some View {
         self.navigationSplitViewColumnWidth(min: 200, ideal: 220)
     }
 }

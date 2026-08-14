@@ -17,7 +17,7 @@
 		E0001057 /* GeistMono-Medium.otf in Resources */ = {isa = PBXBuildFile; fileRef = E0000057 /* GeistMono-Medium.otf */; };
 		E0001058 /* GeistMono-SemiBold.otf in Resources */ = {isa = PBXBuildFile; fileRef = E0000058 /* GeistMono-SemiBold.otf */; };
 		E0001059 /* GeistMono-Bold.otf in Resources */ = {isa = PBXBuildFile; fileRef = E0000059 /* GeistMono-Bold.otf */; };
-		E0001001 /* LumaApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000001 /* LumaApp.swift */; };
+		E0001001 /* SiphonApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000001 /* SiphonApp.swift */; };
 		E0001002 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000002 /* ContentView.swift */; };
 		E0001003 /* Download.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000003 /* Download.swift */; };
 		E0001004 /* YtdlpService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000004 /* YtdlpService.swift */; };
@@ -55,7 +55,7 @@
 		E0000057 /* GeistMono-Medium.otf */ = {isa = PBXFileReference; lastKnownFileType = file; name = "GeistMono-Medium.otf"; path = "Fonts/GeistMono-Medium.otf"; sourceTree = "<group>"; };
 		E0000058 /* GeistMono-SemiBold.otf */ = {isa = PBXFileReference; lastKnownFileType = file; name = "GeistMono-SemiBold.otf"; path = "Fonts/GeistMono-SemiBold.otf"; sourceTree = "<group>"; };
 		E0000059 /* GeistMono-Bold.otf */ = {isa = PBXFileReference; lastKnownFileType = file; name = "GeistMono-Bold.otf"; path = "Fonts/GeistMono-Bold.otf"; sourceTree = "<group>"; };
-		E0000001 /* LumaApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LumaApp.swift; sourceTree = "<group>"; };
+		E0000001 /* SiphonApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SiphonApp.swift; sourceTree = "<group>"; };
 		E0000002 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		E0000003 /* Download.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Download.swift; sourceTree = "<group>"; };
 		E0000004 /* YtdlpService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YtdlpService.swift; sourceTree = "<group>"; };
@@ -65,7 +65,7 @@
 		E0000009 /* PreferencesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreferencesView.swift; sourceTree = "<group>"; };
 		E0000011 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		E0000012 /* Siphon.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Siphon.app"; sourceTree = BUILT_PRODUCTS_DIR; };
-		E0000013 /* Luma.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Luma.entitlements; sourceTree = "<group>"; };
+		E0000013 /* Siphon.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Siphon.entitlements; sourceTree = "<group>"; };
 		E0000015 /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/InfoPlist.strings; sourceTree = "<group>"; };
 		E0000020 /* NotificationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationService.swift; sourceTree = "<group>"; };
 		E0000021 /* LoginItemHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginItemHelper.swift; sourceTree = "<group>"; };
@@ -82,7 +82,7 @@
 		E0000040 /* DownloadManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DownloadManagerTests.swift; sourceTree = "<group>"; };
 		E0000041 /* MediaInfoTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaInfoTests.swift; sourceTree = "<group>"; };
 		E0000042 /* YtdlpServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YtdlpServiceTests.swift; sourceTree = "<group>"; };
-		E0000043 /* LumaTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = LumaTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		E0000043 /* SiphonTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SiphonTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -107,43 +107,43 @@
 		E0003001 = {
 			isa = PBXGroup;
 			children = (
-				E0003002 /* Luma */,
-				E0003020 /* LumaTests */,
+				E0003002 /* Siphon */,
+				E0003020 /* SiphonTests */,
 				E0003003 /* Products */,
 				44F4CAC630137C7400207052 /* Recovered References */,
 			);
 			sourceTree = "<group>";
 		};
-		E0003002 /* Luma */ = {
+		E0003002 /* Siphon */ = {
 			isa = PBXGroup;
 			children = (
-				E0000001 /* LumaApp.swift */,
+				E0000001 /* SiphonApp.swift */,
 				E0003004 /* Models */,
 				E0003005 /* Services */,
 				E0003006 /* Views */,
 				E0003007 /* Resources */,
 				E0003009 /* Extensions */,
 				E0003010 /* Constants */,
-				E0000013 /* Luma.entitlements */,
+				E0000013 /* Siphon.entitlements */,
 			);
-			path = Luma;
+			path = Siphon;
 			sourceTree = "<group>";
 		};
-		E0003020 /* LumaTests */ = {
+		E0003020 /* SiphonTests */ = {
 			isa = PBXGroup;
 			children = (
 				E0000040 /* DownloadManagerTests.swift */,
 				E0000041 /* MediaInfoTests.swift */,
 				E0000042 /* YtdlpServiceTests.swift */,
 			);
-			path = LumaTests;
+			path = SiphonTests;
 			sourceTree = "<group>";
 		};
 		E0003003 /* Products */ = {
 			isa = PBXGroup;
 			children = (
 				E0000012 /* Siphon.app */,
-				E0000043 /* LumaTests.xctest */,
+				E0000043 /* SiphonTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -248,9 +248,9 @@
 			productReference = E0000012 /* Siphon.app */;
 			productType = "com.apple.product-type.application";
 		};
-		E0004010 /* LumaTests */ = {
+		E0004010 /* SiphonTests */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = E0005004 /* Build configuration list for PBXNativeTarget "LumaTests" */;
+			buildConfigurationList = E0005004 /* Build configuration list for PBXNativeTarget "SiphonTests" */;
 			buildPhases = (
 				E0004011 /* Sources */,
 			);
@@ -259,9 +259,9 @@
 			dependencies = (
 				E0008001 /* PBXTargetDependency */,
 			);
-			name = LumaTests;
-			productName = LumaTests;
-			productReference = E0000043 /* LumaTests.xctest */;
+			name = SiphonTests;
+			productName = SiphonTests;
+			productReference = E0000043 /* SiphonTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
 /* End PBXNativeTarget section */
@@ -283,7 +283,7 @@
 					};
 				};
 			};
-			buildConfigurationList = E0005001 /* Build configuration list for PBXProject "Luma" */;
+			buildConfigurationList = E0005001 /* Build configuration list for PBXProject "Siphon" */;
 			compatibilityVersion = "Xcode 14.0";
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
@@ -297,7 +297,7 @@
 			projectRoot = "";
 			targets = (
 				E0004001 /* Siphon */,
-				E0004010 /* LumaTests */,
+				E0004010 /* SiphonTests */,
 			);
 		};
 /* End PBXProject section */
@@ -332,7 +332,7 @@
 				E0001050 /* Font+Geist.swift in Sources */,
 				E0001003 /* Download.swift in Sources */,
 				E0001028 /* View+Compatibility.swift in Sources */,
-				E0001001 /* LumaApp.swift in Sources */,
+				E0001001 /* SiphonApp.swift in Sources */,
 				E0001002 /* ContentView.swift in Sources */,
 				E0001004 /* YtdlpService.swift in Sources */,
 				E0001005 /* DownloadManager.swift in Sources */,
@@ -523,7 +523,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CODE_SIGN_ENTITLEMENTS = Luma/Luma.entitlements;
+				CODE_SIGN_ENTITLEMENTS = Siphon/Siphon.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
@@ -533,7 +533,7 @@
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
-				INFOPLIST_FILE = Luma/Info.plist;
+				INFOPLIST_FILE = Siphon/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Siphon";
 				INFOPLIST_KEY_CFBundleURLTypes = "{\n    CFBundleURLSchemes =     (\n        macabolic\n    );\n}";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
@@ -545,7 +545,7 @@
 				MACOSX_DEPLOYMENT_TARGET = "$(RECOMMENDED_MACOSX_DEPLOYMENT_TARGET)";
 				MARKETING_VERSION = 4.2.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.marspater.siphon;
-				PRODUCT_MODULE_NAME = Luma;
+				PRODUCT_MODULE_NAME = Siphon;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
@@ -558,7 +558,7 @@
 				ARCHS = "$(ARCHS_STANDARD)";
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CODE_SIGN_ENTITLEMENTS = Luma/Luma.entitlements;
+				CODE_SIGN_ENTITLEMENTS = Siphon/Siphon.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
@@ -568,7 +568,7 @@
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
-				INFOPLIST_FILE = Luma/Info.plist;
+				INFOPLIST_FILE = Siphon/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Siphon";
 				INFOPLIST_KEY_CFBundleURLTypes = "{\n    CFBundleURLSchemes =     (\n        luma,\n        macabolic\n    );\n}";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
@@ -581,7 +581,7 @@
 				MARKETING_VERSION = 4.2.0;
 				ONLY_ACTIVE_ARCH = NO;
 				PRODUCT_BUNDLE_IDENTIFIER = com.marspater.siphon;
-				PRODUCT_MODULE_NAME = Luma;
+				PRODUCT_MODULE_NAME = Siphon;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
@@ -627,7 +627,7 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		E0005001 /* Build configuration list for PBXProject "Luma" */ = {
+		E0005001 /* Build configuration list for PBXProject "Siphon" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				E0007001 /* Debug */,
@@ -645,7 +645,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		E0005004 /* Build configuration list for PBXNativeTarget "LumaTests" */ = {
+		E0005004 /* Build configuration list for PBXNativeTarget "SiphonTests" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				E0007005 /* Debug */,

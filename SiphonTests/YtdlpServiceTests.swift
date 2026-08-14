@@ -1,5 +1,5 @@
 import XCTest
-@testable import Luma
+@testable import Siphon
 
 @MainActor
 final class YtdlpServiceTests: XCTestCase {

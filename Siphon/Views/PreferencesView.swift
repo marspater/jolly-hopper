@@ -210,7 +210,7 @@ struct PreferencesView: View {
             launchAtLoginSection
             appUpdatesSection
         }
-        .lumaFormStyle()
+        .siphonFormStyle()
         .padding()
     }
 
@@ -384,7 +384,7 @@ struct PreferencesView: View {
             embedOptionsSection
             concurrentDownloadsSection
         }
-        .lumaFormStyle()
+        .siphonFormStyle()
         .padding()
     }
 
@@ -575,7 +575,7 @@ struct PreferencesView: View {
                         .foregroundColor(.secondary)
                 }
             }
-            .lumaFormStyle()
+            .siphonFormStyle()
             
             HStack(spacing: 16) {
                 Button(languageService.s("cancel")) {
@@ -795,7 +795,7 @@ struct PreferencesView: View {
             browserCookiesSection
             debugLogsSection
         }
-        .lumaFormStyle()
+        .siphonFormStyle()
         .padding()
         .sheet(isPresented: $showDebugLogsSheet) {
             debugLogsSheet

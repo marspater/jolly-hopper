@@ -1,7 +1,7 @@
 import SwiftUI
 
 @main
-struct LumaApp: App {
+struct SiphonApp: App {
     @StateObject private var downloadManager = DownloadManager()
     @StateObject private var appState = AppState()
     @StateObject private var languageService = LanguageService()
