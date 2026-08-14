@@ -52,7 +52,16 @@ struct SiphonApp: App {
                 }
                 .keyboardShortcut("n", modifiers: .command)
             }
-            CommandGroup(after: .appSettings) {
+            CommandGroup(replacing: .appSettings) {
+                Button(languageService.s("settings") + "...") {
+                    PreferencesWindowManager.shared.showPreferencesWindow(
+                        languageService: languageService,
+                        updateChecker: updateChecker,
+                        downloadManager: downloadManager
+                    )
+                }
+                .keyboardShortcut(",", modifiers: .command)
+                
                 Button(languageService.s("ytdlp_update")) {
                     Task {
                         await downloadManager.updateYtdlp()
