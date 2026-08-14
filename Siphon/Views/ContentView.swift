@@ -9,6 +9,8 @@ struct MainWindowConfigurator: NSViewRepresentable {
         let view = NSView()
         DispatchQueue.main.async {
             guard let window = view.window else { return }
+            window.title = ""
+            window.titleVisibility = .hidden
             window.isOpaque = false
             window.backgroundColor = .clear
             window.titlebarAppearsTransparent = true

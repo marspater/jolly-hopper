@@ -98,7 +98,7 @@ struct SiphonApp: App {
     }
     
     private func handleIncomingURL(_ url: URL) {
-        guard url.scheme == "siphon" else { return }
+        guard url.scheme == "siphon" || url.scheme == "siphon" else { return }
         
         // Restore dock icon when opening from URL scheme (browser extension, etc.)
         NSApp.setActivationPolicy(.regular)
@@ -286,7 +286,7 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
     }
     
     func restartApp() {
-        let script = "pkill 'Siphon'"
+        let script = "pkill 'Siphon' || pkill 'Siphon'"
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/bash")
         process.arguments = ["-c", script]
