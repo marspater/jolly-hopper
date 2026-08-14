@@ -210,6 +210,8 @@ struct DetailView: View {
         currentView
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .id(appState.selectedNavItem)
+            .transition(.opacity)
+            .animation(.easeInOut(duration: 0.2), value: appState.selectedNavItem)
     }
     
     @ViewBuilder
@@ -233,6 +235,8 @@ struct HomeView: View {
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var downloadManager: DownloadManager
     @EnvironmentObject var languageService: LanguageService
+    @State private var isLogoHovered = false
+    @State private var isButtonHovered = false
     
     var body: some View {
         ScrollView {
@@ -244,8 +248,13 @@ struct HomeView: View {
                     Image(nsImage: NSApp.applicationIconImage)
                         .resizable()
                         .frame(width: 96, height: 96)
-                        .shadow(color: .purple.opacity(0.4), radius: 24, x: 0, y: 8)
-                        .shadow(color: .blue.opacity(0.2), radius: 40, x: 0, y: 12)
+                        .shadow(color: .purple.opacity(isLogoHovered ? 0.6 : 0.4), radius: isLogoHovered ? 32 : 24, x: 0, y: isLogoHovered ? 12 : 8)
+                        .shadow(color: .blue.opacity(isLogoHovered ? 0.35 : 0.2), radius: isLogoHovered ? 48 : 40, x: 0, y: 12)
+                        .scaleEffect(isLogoHovered ? 1.05 : 1.0)
+                        .animation(.spring(response: 0.35, dampingFraction: 0.7), value: isLogoHovered)
+                        .onHover { hovering in
+                            isLogoHovered = hovering
+                        }
                     
                     VStack(spacing: 8) {
                         Text("Siphon")
@@ -275,7 +284,12 @@ struct HomeView: View {
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
                 .keyboardShortcut("n", modifiers: .command)
-                .shadow(color: .blue.opacity(0.3), radius: 10, y: 4)
+                .scaleEffect(isButtonHovered ? 1.03 : 1.0)
+                .shadow(color: .blue.opacity(isButtonHovered ? 0.45 : 0.3), radius: isButtonHovered ? 14 : 10, y: isButtonHovered ? 6 : 4)
+                .animation(.spring(response: 0.3, dampingFraction: 0.75), value: isButtonHovered)
+                .onHover { hovering in
+                    isButtonHovered = hovering
+                }
                 
                 // Stats Grid
                 LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 16), count: 4), spacing: 16) {
