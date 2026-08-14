@@ -1086,17 +1086,24 @@ struct PreferencesView: View {
                 )
 
                 // Quick links
-                HStack(spacing: 16) {
+                HStack(spacing: 12) {
                     Link(destination: URL(string: "https://github.com/marspater/jolly-hopper")!) {
                         Label("GitHub", systemImage: "link")
-                            .padding(.horizontal, 16)
+                            .padding(.horizontal, 14)
                             .padding(.vertical, 8)
                             .background(Color.blue.opacity(0.1))
                             .cornerRadius(8)
                     }
+                    Link(destination: URL(string: "https://github.com/marspater/jolly-hopper/blob/main/README.md")!) {
+                        Label("README", systemImage: "doc.text")
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 8)
+                            .background(Color.indigo.opacity(0.1))
+                            .cornerRadius(8)
+                    }
                     Link(destination: URL(string: "https://github.com/marspater/jolly-hopper/blob/main/SUPPORTED_SITES.md")!) {
                         Label(languageService.s("supported_sites"), systemImage: "globe")
-                            .padding(.horizontal, 16)
+                            .padding(.horizontal, 14)
                             .padding(.vertical, 8)
                             .background(Color.purple.opacity(0.1))
                             .cornerRadius(8)
