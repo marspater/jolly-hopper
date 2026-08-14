@@ -894,22 +894,28 @@ class YtdlpService: ObservableObject {
             let bestVideo = videoCodecFilter.isEmpty ? requestedVideo : bestVideoBase
             let bestAudio = "bestaudio"
 
-            // Fallback order is intentionally explicit:
-            // 1. requested video codec + requested audio codec
-            // 2. requested video codec + best audio
-            // 3. best video + requested audio
-            // 4. best video + best audio
-            // 5. best combined format
-            let formatSelectors = [
-                "\(requestedVideo)+\(requestedAudio)",
-                "\(requestedVideo)+\(bestAudio)",
-                "\(bestVideo)+\(requestedAudio)",
-                "\(bestVideo)+\(bestAudio)",
-                "bestvideo*+bestaudio/best*",
-                "best"
-            ]
+            // Build deduplicated fallback chain
+            var selectors: [String] = []
 
-            args.append(contentsOf: ["-f", formatSelectors.joined(separator: "/")])
+            func addUnique(_ s: String) {
+                if !selectors.contains(s) { selectors.append(s) }
+            }
+
+            // 1. Requested codecs: split streams
+            addUnique("\(requestedVideo)+\(requestedAudio)")
+            // 2. Requested video + any audio: split streams  
+            if requestedAudio != bestAudio { addUnique("\(requestedVideo)+\(bestAudio)") }
+            // 3. Best video + requested audio: split streams
+            if requestedVideo != bestVideo { addUnique("\(bestVideo)+\(requestedAudio)") }
+            // 4. Best video + best audio: split streams
+            addUnique("\(bestVideo)+\(bestAudio)")
+            // 5. Combined/single-stream with resolution constraint (for sites like thisvid)
+            let combinedSelector = buildCombinedSelector(for: options.videoResolution)
+            addUnique(combinedSelector)
+            // 6. Ultimate fallback
+            addUnique("best")
+
+            args.append(contentsOf: ["-f", selectors.joined(separator: "/")])
             args.append(contentsOf: ["-S", "res,fps,hdr:12,vbr,abr,quality,filesize"])
 
             var finalMergeFormat = compatibleMergeOutputFormat(for: options)
@@ -985,6 +991,11 @@ class YtdlpService: ObservableObject {
         case .worst:
             return ignoreWorst ? "bestvideo" : "worstvideo"
         }
+    }
+
+    private func buildCombinedSelector(for resolution: VideoResolution?) -> String {
+        guard let resolution else { return "best*" }
+        return resolution.ytdlpCombinedValue
     }
 
     private func compatibleMergeOutputFormat(for options: DownloadOptions) -> String? {

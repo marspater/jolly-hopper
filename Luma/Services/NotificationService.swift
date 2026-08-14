@@ -1,5 +1,6 @@
 import Foundation
 import UserNotifications
+import AppKit
 
 class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     static let shared = NotificationService()
@@ -38,9 +39,28 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         }
     }
 
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        didReceive response: UNNotificationResponse,
+        withCompletionHandler completionHandler: @escaping () -> Void
+    ) {
+        DispatchQueue.main.async {
+            NSApp.activate(ignoringOtherApps: true)
+            for window in NSApp.windows where window.canBecomeMain {
+                window.makeKeyAndOrderFront(nil)
+                break
+            }
+        }
+        completionHandler()
+    }
+
+    func setup() {
+        logMessage("NotificationService initialized, delegate registered.", level: .info)
+    }
+
     func requestPermission() {
         guard let center = notificationCenter else { return }
-        center.requestAuthorization(options: [.alert, .sound, .badge]) { [weak self] granted, error in
+        center.requestAuthorization(options: [.alert, .sound, .badge, .provisional]) { [weak self] granted, error in
             if granted {
                 self?.logMessage("Notification permission granted.", level: .info)
             } else if let error = error {
@@ -63,7 +83,7 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
             switch settings.authorizationStatus {
             case .notDetermined:
                 self.logMessage("Notification permission not determined. Requesting permission now...", level: .info)
-                center.requestAuthorization(options: [.alert, .sound, .badge]) { granted, error in
+                center.requestAuthorization(options: [.alert, .sound, .badge, .provisional]) { granted, error in
                     if granted {
                         self.logMessage("Notification permission granted upon request. Posting notification...", level: .info)
                         self.postNotificationRequest(center: center, content: content, identifier: identifier, logName: logName)
@@ -82,9 +102,6 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     }
 
     private func postNotificationRequest(center: UNUserNotificationCenter, content: UNMutableNotificationContent, identifier: String, logName: String) {
-        if #available(macOS 12.0, *) {
-            content.interruptionLevel = .timeSensitive
-        }
         content.sound = .default
         let request = UNNotificationRequest(identifier: identifier, content: content, trigger: nil)
         center.add(request) { [weak self] error in
@@ -102,6 +119,7 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
             let content = UNMutableNotificationContent()
             content.title = lang.s("download_completed_title")
             content.body = String(format: lang.s("download_completed_body"), filename)
+            content.categoryIdentifier = "download"
             self.sendNotification(content: content, logName: "Completed: \(filename)")
         }
     }
@@ -119,6 +137,7 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
             let content = UNMutableNotificationContent()
             content.title = lang.s("download_failed_title")
             content.body = String(format: lang.s("download_failed_body"), filename)
+            content.categoryIdentifier = "download"
             self.sendNotification(content: content, logName: "Failed: \(filename)")
         }
     }
@@ -129,6 +148,7 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
             let content = UNMutableNotificationContent()
             content.title = lang.s("download_stopped_title")
             content.body = String(format: lang.s("download_stopped_body"), filename)
+            content.categoryIdentifier = "download"
             self.sendNotification(content: content, logName: "Stopped: \(filename)")
         }
     }

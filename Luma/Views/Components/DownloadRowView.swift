@@ -25,6 +25,7 @@ struct DownloadListView: View {
                 }
             }
         }
+        .background(.ultraThinMaterial)
         .toolbar {
             ToolbarItem {
                 Group {

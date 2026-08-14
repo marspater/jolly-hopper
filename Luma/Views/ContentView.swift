@@ -3,6 +3,24 @@ import SwiftUI
 import AppKit
 #endif
 
+// Makes the main window transparent so .ultraThinMaterial shows desktop blur
+struct MainWindowConfigurator: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        DispatchQueue.main.async {
+            guard let window = view.window else { return }
+            window.isOpaque = false
+            window.backgroundColor = .clear
+            window.titlebarAppearsTransparent = true
+            if !window.styleMask.contains(.fullSizeContentView) {
+                window.styleMask.insert(.fullSizeContentView)
+            }
+        }
+        return view
+    }
+    func updateNSView(_ nsView: NSView, context: Context) {}
+}
+
 struct ContentView: View {
     @EnvironmentObject var downloadManager: DownloadManager
     @EnvironmentObject var appState: AppState
@@ -15,6 +33,7 @@ struct ContentView: View {
     var body: some View {
         ZStack {
             mainLayout
+                .background(MainWindowConfigurator())
                 .onChange(of: appState.showAddDownloadSheet) { _, newValue in
                     if newValue {
                         AddDownloadWindowManager.shared.showAddDownloadWindow(downloadManager: downloadManager, appState: appState, languageService: languageService)
@@ -219,16 +238,11 @@ struct HomeView: View {
                 
                 // Logo & Title Section
                 VStack(spacing: 20) {
-                    ZStack {
-                        Circle()
-                            .fill(.linearGradient(colors: [.blue, .purple], startPoint: .topLeading, endPoint: .bottomTrailing))
-                            .frame(width: 96, height: 96)
-                            .shadow(color: .purple.opacity(0.35), radius: 16, x: 0, y: 8)
-                        
-                        Image(nsImage: NSApp.applicationIconImage)
-                            .resizable()
-                            .frame(width: 80, height: 80)
-                    }
+                    Image(nsImage: NSApp.applicationIconImage)
+                        .resizable()
+                        .frame(width: 96, height: 96)
+                        .shadow(color: .purple.opacity(0.4), radius: 24, x: 0, y: 8)
+                        .shadow(color: .blue.opacity(0.2), radius: 40, x: 0, y: 12)
                     
                     VStack(spacing: 8) {
                         Text("Luma Pro")
