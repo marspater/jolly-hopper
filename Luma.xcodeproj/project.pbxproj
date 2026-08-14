@@ -7,6 +7,16 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		E0001050 /* Font+Geist.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000050 /* Font+Geist.swift */; };
+		E0001051 /* Geist-Regular.otf in Resources */ = {isa = PBXBuildFile; fileRef = E0000051 /* Geist-Regular.otf */; };
+		E0001052 /* Geist-Medium.otf in Resources */ = {isa = PBXBuildFile; fileRef = E0000052 /* Geist-Medium.otf */; };
+		E0001053 /* Geist-SemiBold.otf in Resources */ = {isa = PBXBuildFile; fileRef = E0000053 /* Geist-SemiBold.otf */; };
+		E0001054 /* Geist-Bold.otf in Resources */ = {isa = PBXBuildFile; fileRef = E0000054 /* Geist-Bold.otf */; };
+		E0001055 /* Geist-Black.otf in Resources */ = {isa = PBXBuildFile; fileRef = E0000055 /* Geist-Black.otf */; };
+		E0001056 /* GeistMono-Regular.otf in Resources */ = {isa = PBXBuildFile; fileRef = E0000056 /* GeistMono-Regular.otf */; };
+		E0001057 /* GeistMono-Medium.otf in Resources */ = {isa = PBXBuildFile; fileRef = E0000057 /* GeistMono-Medium.otf */; };
+		E0001058 /* GeistMono-SemiBold.otf in Resources */ = {isa = PBXBuildFile; fileRef = E0000058 /* GeistMono-SemiBold.otf */; };
+		E0001059 /* GeistMono-Bold.otf in Resources */ = {isa = PBXBuildFile; fileRef = E0000059 /* GeistMono-Bold.otf */; };
 		E0001001 /* LumaApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000001 /* LumaApp.swift */; };
 		E0001002 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000002 /* ContentView.swift */; };
 		E0001003 /* Download.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000003 /* Download.swift */; };
@@ -35,6 +45,16 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		E0000050 /* Font+Geist.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Font+Geist.swift"; sourceTree = "<group>"; };
+		E0000051 /* Geist-Regular.otf */ = {isa = PBXFileReference; lastKnownFileType = file; name = "Geist-Regular.otf"; path = "Fonts/Geist-Regular.otf"; sourceTree = "<group>"; };
+		E0000052 /* Geist-Medium.otf */ = {isa = PBXFileReference; lastKnownFileType = file; name = "Geist-Medium.otf"; path = "Fonts/Geist-Medium.otf"; sourceTree = "<group>"; };
+		E0000053 /* Geist-SemiBold.otf */ = {isa = PBXFileReference; lastKnownFileType = file; name = "Geist-SemiBold.otf"; path = "Fonts/Geist-SemiBold.otf"; sourceTree = "<group>"; };
+		E0000054 /* Geist-Bold.otf */ = {isa = PBXFileReference; lastKnownFileType = file; name = "Geist-Bold.otf"; path = "Fonts/Geist-Bold.otf"; sourceTree = "<group>"; };
+		E0000055 /* Geist-Black.otf */ = {isa = PBXFileReference; lastKnownFileType = file; name = "Geist-Black.otf"; path = "Fonts/Geist-Black.otf"; sourceTree = "<group>"; };
+		E0000056 /* GeistMono-Regular.otf */ = {isa = PBXFileReference; lastKnownFileType = file; name = "GeistMono-Regular.otf"; path = "Fonts/GeistMono-Regular.otf"; sourceTree = "<group>"; };
+		E0000057 /* GeistMono-Medium.otf */ = {isa = PBXFileReference; lastKnownFileType = file; name = "GeistMono-Medium.otf"; path = "Fonts/GeistMono-Medium.otf"; sourceTree = "<group>"; };
+		E0000058 /* GeistMono-SemiBold.otf */ = {isa = PBXFileReference; lastKnownFileType = file; name = "GeistMono-SemiBold.otf"; path = "Fonts/GeistMono-SemiBold.otf"; sourceTree = "<group>"; };
+		E0000059 /* GeistMono-Bold.otf */ = {isa = PBXFileReference; lastKnownFileType = file; name = "GeistMono-Bold.otf"; path = "Fonts/GeistMono-Bold.otf"; sourceTree = "<group>"; };
 		E0000001 /* LumaApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LumaApp.swift; sourceTree = "<group>"; };
 		E0000002 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		E0000003 /* Download.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Download.swift; sourceTree = "<group>"; };
@@ -167,6 +187,15 @@
 		E0003007 /* Resources */ = {
 			isa = PBXGroup;
 			children = (
+				E0000051 /* Geist-Regular.otf */,
+				E0000052 /* Geist-Medium.otf */,
+				E0000053 /* Geist-SemiBold.otf */,
+				E0000054 /* Geist-Bold.otf */,
+				E0000055 /* Geist-Black.otf */,
+				E0000056 /* GeistMono-Regular.otf */,
+				E0000057 /* GeistMono-Medium.otf */,
+				E0000058 /* GeistMono-SemiBold.otf */,
+				E0000059 /* GeistMono-Bold.otf */,
 				E0000011 /* Assets.xcassets */,
 				E0000014 /* InfoPlist.strings */,
 			);
@@ -185,6 +214,7 @@
 		E0003009 /* Extensions */ = {
 			isa = PBXGroup;
 			children = (
+				E0000050 /* Font+Geist.swift */,
 				E0000028 /* View+Compatibility.swift */,
 			);
 			path = Extensions;
@@ -277,6 +307,15 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				E0001051 /* Geist-Regular.otf in Resources */,
+				E0001052 /* Geist-Medium.otf in Resources */,
+				E0001053 /* Geist-SemiBold.otf in Resources */,
+				E0001054 /* Geist-Bold.otf in Resources */,
+				E0001055 /* Geist-Black.otf in Resources */,
+				E0001056 /* GeistMono-Regular.otf in Resources */,
+				E0001057 /* GeistMono-Medium.otf in Resources */,
+				E0001058 /* GeistMono-SemiBold.otf in Resources */,
+				E0001059 /* GeistMono-Bold.otf in Resources */,
 				E0001011 /* Assets.xcassets in Resources */,
 				E0001012 /* InfoPlist.strings in Resources */,
 				E0001030 /* AppIcon.icns in Resources */,
@@ -290,6 +329,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				E0001050 /* Font+Geist.swift in Sources */,
 				E0001003 /* Download.swift in Sources */,
 				E0001028 /* View+Compatibility.swift in Sources */,
 				E0001001 /* LumaApp.swift in Sources */,
@@ -503,7 +543,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = "$(RECOMMENDED_MACOSX_DEPLOYMENT_TARGET)";
-				MARKETING_VERSION = 4.1.0;
+				MARKETING_VERSION = 4.2.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.marspater.luma;
 				PRODUCT_MODULE_NAME = Luma;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -538,7 +578,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = "$(RECOMMENDED_MACOSX_DEPLOYMENT_TARGET)";
-				MARKETING_VERSION = 4.1.0;
+				MARKETING_VERSION = 4.2.0;
 				ONLY_ACTIVE_ARCH = NO;
 				PRODUCT_BUNDLE_IDENTIFIER = com.marspater.luma;
 				PRODUCT_MODULE_NAME = Luma;

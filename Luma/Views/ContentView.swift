@@ -246,10 +246,10 @@ struct HomeView: View {
                     
                     VStack(spacing: 8) {
                         Text("Luma Pro")
-                            .font(.system(size: 42, weight: .black, design: .rounded))
+                            .font(.geist(42, weight: .black))
                         
                         Text(languageService.s("url_placeholder"))
-                            .font(.title3)
+                            .font(.geist(17))
                             .foregroundColor(.secondary)
                             .multilineTextAlignment(.center)
                             .padding(.horizontal, 24)
@@ -264,7 +264,7 @@ struct HomeView: View {
                         Image(systemName: "plus.circle.fill")
                             .font(.title3)
                         Text(languageService.s("new_download"))
-                            .font(.headline)
+                            .font(.geist(15, weight: .semibold))
                     }
                     .padding(.horizontal, 32)
                     .padding(.vertical, 14)
@@ -300,7 +300,7 @@ struct HomeView: View {
                         Image(systemName: "terminal.fill")
                             .font(.system(size: 10))
                         Text("yt-dlp \(version)")
-                            .font(.system(size: 11, weight: .medium, design: .monospaced))
+                            .font(.geistMono(11, weight: .medium))
                     }
                     .foregroundColor(.secondary.opacity(0.8))
                     .padding(.bottom, 16)
@@ -335,12 +335,11 @@ struct StatCard: View {
         Button(action: action) {
             VStack(spacing: 8) {
                 Text("\(count)")
-                    .font(.system(size: 34, weight: .bold, design: .rounded))
+                    .font(.geistMono(34, weight: .bold))
                     .foregroundColor(color)
                     .shadow(color: color.opacity(isHovered ? 0.5 : 0.2), radius: isHovered ? 8 : 2)
                 Text(title)
-                    .font(.caption)
-                    .fontWeight(.semibold)
+                    .font(.geist(12, weight: .semibold))
                     .foregroundColor(.secondary)
                     .multilineTextAlignment(.center)
                     .lineLimit(2)

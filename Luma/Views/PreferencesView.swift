@@ -960,23 +960,18 @@ struct PreferencesView: View {
             VStack(spacing: 20) {
                 // Header section with glowing icon
                 VStack(spacing: 12) {
-                    ZStack {
-                        Circle()
-                            .fill(.linearGradient(colors: [.blue, .purple], startPoint: .topLeading, endPoint: .bottomTrailing))
-                            .frame(width: 72, height: 72)
-                            .shadow(color: .purple.opacity(0.3), radius: 10)
-                        
-                        Image(nsImage: NSApp.applicationIconImage)
-                            .resizable()
-                            .frame(width: 64, height: 64)
-                    }
+                    Image(nsImage: NSApp.applicationIconImage)
+                        .resizable()
+                        .frame(width: 72, height: 72)
+                        .shadow(color: .purple.opacity(0.4), radius: 20, x: 0, y: 6)
+                        .shadow(color: .blue.opacity(0.2), radius: 30, x: 0, y: 8)
                     
                     VStack(spacing: 4) {
                         Text("Luma Pro")
-                            .font(.system(size: 24, weight: .bold))
+                            .font(.geist(24, weight: .bold))
                         
-                        Text(languageService.s("version") + " \(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "4.1.0")")
-                            .font(.caption)
+                        Text(languageService.s("version") + " \(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "4.2.0")")
+                            .font(.geistMono(11, weight: .semibold))
                             .padding(.horizontal, 10)
                             .padding(.vertical, 3)
                             .background(Color.blue.opacity(0.15))
