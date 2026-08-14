@@ -85,7 +85,7 @@ struct DownloadRowView: View {
 
                 VStack(alignment: .leading, spacing: 5) {
                     Text(download.status == .fetching ? languageService.s("fetching") : download.title)
-                        .font(.system(size: 14, weight: .semibold))
+                        .font(.geist(14, weight: .semibold))
                         .lineLimit(2)
                         .fixedSize(horizontal: false, vertical: true)
                     
@@ -94,21 +94,21 @@ struct DownloadRowView: View {
                         
                         if let duration = download.duration {
                             Text(duration)
-                                .font(.caption)
+                                .font(.geistMono(11, weight: .medium))
                                 .foregroundColor(.secondary)
                         }
                     }
                     
                     if download.status == .downloading {
                         Text(download.displayProgress)
-                            .font(.caption)
+                            .font(.geistMono(11, weight: .medium))
                             .foregroundColor(.secondary)
                     }
                     
                     if let error = download.errorMessage {
                         VStack(alignment: .leading, spacing: 4) {
                             Text(error)
-                                .font(.caption)
+                                .font(.geist(11))
                                 .foregroundColor(.red)
                                 .lineLimit(4)
                                 .fixedSize(horizontal: false, vertical: true)
@@ -281,7 +281,7 @@ struct FileThumbnailView: View {
             }
             
             Text(download.status.title(lang: languageService))
-                .font(.system(size: 11, weight: .semibold))
+                .font(.geist(11, weight: .semibold))
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 3)

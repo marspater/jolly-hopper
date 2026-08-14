@@ -21,7 +21,7 @@
     },
     "browser_specific_settings": {
         "gecko": {
-            "id": "luma@marspater.github.io",
+            "id": "siphon@marspater.github.io",
             "data_collection_permissions": {
                 "required": [
                     "none"

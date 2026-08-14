@@ -234,7 +234,7 @@ struct PreferencesView: View {
             Toggle(languageService.s("notifications"), isOn: $showNotifications)
             if showNotifications {
                 Button(languageService.s("test_notification")) {
-                    NotificationService.shared.sendDownloadCompleted(filename: "Luma Test", languageService: languageService)
+                    NotificationService.shared.sendDownloadCompleted(filename: "Siphon Test", languageService: languageService)
                 }
                 .buttonStyle(.link)
                 .controlSize(.small)

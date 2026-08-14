@@ -218,7 +218,7 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
     }
     
     nonisolated func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {
-        let tempUpdate = FileManager.default.temporaryDirectory.appendingPathComponent("Luma_Update_Package")
+        let tempUpdate = FileManager.default.temporaryDirectory.appendingPathComponent("Siphon_Update_Package")
         try? FileManager.default.removeItem(at: tempUpdate)
         try? FileManager.default.moveItem(at: location, to: tempUpdate)
         
@@ -233,13 +233,13 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
         let appPath = Bundle.main.bundlePath
         let script = """
         (
-            exec > /tmp/luma_update.log 2>&1
+            exec > /tmp/siphon_update.log 2>&1
             PKG_PATH="$1"
             APP_PATH="$2"
             echo "Starting update installation..."
             sleep 2
             
-            WORK_DIR="/tmp/LumaUpdate_$(date +%s)"
+            WORK_DIR="/tmp/SiphonUpdate_$(date +%s)"
             mkdir -p "$WORK_DIR"
             
             if file "$PKG_PATH" | grep -q "Zip archive"; then

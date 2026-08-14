@@ -801,7 +801,7 @@ class YtdlpService: ObservableObject {
             if !errText.isEmpty, isCookiePermissionError(errText), args.contains("--cookies-from-browser") {
                 LoggerService.shared.log("Cookie permission denied by macOS TCC. Retrying download automatically without browser cookies...", level: .warning)
                 tccCookieDenied = true
-                onOutput("[Luma Warning] macOS TCC permission denied reading browser cookies. Retrying download without browser cookies...\n")
+                onOutput("[Siphon Warning] macOS TCC permission denied reading browser cookies. Retrying download without browser cookies...\n")
                 let cleanArgs = stripCookieArgs(from: args)
                 outputPath = try await runDownloadProcess(
                     args: cleanArgs,
@@ -1026,11 +1026,11 @@ class YtdlpService: ObservableObject {
         var warnings: [String] = []
 
         if let videoCodec = options.videoCodec, videoCodec != .auto {
-            warnings.append("[Luma] WARNING: Requested video codec \(videoCodec.rawValue) will fall back to the best available video codec if no matching format is available.")
+            warnings.append("[Siphon] WARNING: Requested video codec \(videoCodec.rawValue) will fall back to the best available video codec if no matching format is available.")
         }
 
         if let audioCodec = options.audioCodec, audioCodec != .auto {
-            warnings.append("[Luma] WARNING: Requested audio codec \(audioCodec.rawValue) will fall back to the best available audio codec if no matching format is available.")
+            warnings.append("[Siphon] WARNING: Requested audio codec \(audioCodec.rawValue) will fall back to the best available audio codec if no matching format is available.")
         }
 
         return warnings
@@ -1833,7 +1833,7 @@ class YtdlpService: ObservableObject {
     }
 
     private func createTempCookiesFile(url: String, cookieName: String, cookieValue: String) -> URL? {
-        let tempCookiesURL = FileManager.default.temporaryDirectory.appendingPathComponent("luma_cookies_\(UUID().uuidString).txt")
+        let tempCookiesURL = FileManager.default.temporaryDirectory.appendingPathComponent("siphon_cookies_\(UUID().uuidString).txt")
         let host = URL(string: url)?.host ?? ""
         let cookieContent = "# Netscape HTTP Cookie File\n\(host)\tFALSE\t/\tFALSE\t2783382923\t\(cookieName)\t\(cookieValue)\n"
         do {
@@ -1849,7 +1849,7 @@ class YtdlpService: ObservableObject {
     private func createTempCookiesFileFromHeader(url: String, cookieHeader: String) -> URL? {
         guard let host = URL(string: url)?.host, !host.isEmpty else { return nil }
         let domain = host.hasPrefix(".") ? host : ".\(host)"
-        let tempCookiesURL = FileManager.default.temporaryDirectory.appendingPathComponent("luma_header_cookies_\(UUID().uuidString).txt")
+        let tempCookiesURL = FileManager.default.temporaryDirectory.appendingPathComponent("siphon_header_cookies_\(UUID().uuidString).txt")
         
         var lines = ["# Netscape HTTP Cookie File"]
         let pairs = cookieHeader.components(separatedBy: ";")
@@ -1913,7 +1913,7 @@ enum YtdlpError: LocalizedError {
         case .boyfriendTVNeedsBrowserCookies:
             return "boyfriend.tv often requires signed-in browser cookies. Open Settings > Advanced > Browser Cookies, choose your browser, then try again."
         case .boyfriendTVLoginRequired:
-            return "Could not extract BoyfriendTV video. This specific video may require a login (premium/private). Luma cannot automatically access logged-in BoyfriendTV videos."
+            return "Could not extract BoyfriendTV video. This specific video may require a login (premium/private). Siphon cannot automatically access logged-in BoyfriendTV videos."
         case .securityViolation(let message):
             return "Security violation: \(message)"
         }

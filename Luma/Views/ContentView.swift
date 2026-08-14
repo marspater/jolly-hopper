@@ -139,9 +139,10 @@ struct SidebarView: View {
                     HStack {
                         Image(systemName: "gear")
                         Text(languageService.s("settings"))
+                            .font(.geist(13, weight: .medium))
                         Spacer()
                         Text("⌘,")
-                            .font(.caption2)
+                            .font(.geistMono(10, weight: .medium))
                             .foregroundColor(.secondary)
                     }
                     .padding(.horizontal, 12)
@@ -172,11 +173,11 @@ struct SidebarView: View {
         } label: {
             HStack {
                 Label(item.title(lang: languageService), systemImage: item.icon)
+                    .font(.geist(13, weight: .medium))
                 Spacer()
                 if badgeCount > 0 {
                     Text("\(badgeCount)")
-                        .font(.caption2)
-                        .fontWeight(.medium)
+                        .font(.geistMono(10, weight: .bold))
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2)
                         .background(badgeColor)

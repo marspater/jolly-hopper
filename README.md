@@ -1,12 +1,12 @@
-# Luma Pro ⚡️
+# Siphon ⚡️
 
 A high-performance, native macOS media extractor & downloader powered by `yt-dlp` and `FFmpeg`. Engineered with advanced anti-bot bypass mechanisms for Cloudflare, YouTube, and 1,000+ protected video streaming sites.
 
 <div align="center">
-  <img src="assets/app_screenshot.png" alt="Luma Pro Interface" width="880" style="border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.3);" />
+  <img src="assets/app_screenshot.png" alt="Siphon Interface" width="880" style="border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.3);" />
   <p>
     <a href="https://github.com/marspater/jolly-hopper/releases/latest">
-      <img src="https://img.shields.io/badge/Download-macOS-blue?style=for-the-badge&logo=apple&logoColor=white" alt="Download Luma Pro for macOS" />
+      <img src="https://img.shields.io/badge/Download-macOS-blue?style=for-the-badge&logo=apple&logoColor=white" alt="Download Siphon for macOS" />
     </a>
     <a href="https://github.com/marspater/jolly-hopper">
       <img src="https://img.shields.io/badge/Repository-jolly--hopper-818cf8?style=for-the-badge&logo=github&logoColor=white" alt="GitHub Repository" />
@@ -34,14 +34,14 @@ A high-performance, native macOS media extractor & downloader powered by `yt-dlp
 
 ### Manual Installation
 1. Download the latest `.dmg` release from the [Releases](https://github.com/marspater/jolly-hopper/releases) page.
-2. Drag **Luma Pro** into your `/Applications` directory.
+2. Drag **Siphon** into your `/Applications` directory.
 3. If macOS Gatekeeper alerts on first open:
 ```bash
-xattr -cr /Applications/"Luma Pro.app"
+xattr -cr /Applications/"Siphon.app"
 ```
 
 ### Browser Extensions 🌐
-Integrate Luma Pro directly into your favorite web browser for 1-click video downloads:
+Integrate Siphon directly into your favorite web browser for 1-click video downloads:
 - **Chrome / Brave / Edge**: Navigate to `chrome://extensions`, enable **Developer Mode**, and click **Load Unpacked** pointing to `LumaExtension_Chrome`.
 - **Safari**: Enable the extension in Safari Preferences > Extensions.
 - **Firefox**: Load `LumaExtension_Firefox` in `about:debugging#/runtime/this-firefox`.

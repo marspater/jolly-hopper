@@ -463,7 +463,7 @@ enum DownloadPreset: String, Codable, CaseIterable, Identifiable {
 
 
 struct CustomPreset: Codable, Identifiable, Equatable {
-    private static let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "com.luma", category: "CustomPreset")
+    private static let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "com.siphon", category: "CustomPreset")
 
     let id: UUID
     var name: String

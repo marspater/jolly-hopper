@@ -8,7 +8,7 @@ class LoggerService: ObservableObject {
     @Published var logs: [String] = []
     private let logFileURL: URL
     private let maxLogEntries = 1000
-    private let fileQueue = DispatchQueue(label: "com.luma.loggerQueue", qos: .utility)
+    private let fileQueue = DispatchQueue(label: "com.siphon.loggerQueue", qos: .utility)
     
     private static let dateFormatter: DateFormatter = {
         let formatter = DateFormatter()
@@ -18,10 +18,10 @@ class LoggerService: ObservableObject {
     
     private init() {
         let appSupport = (FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first ?? URL(fileURLWithPath: NSHomeDirectory() + "/Library/Application Support"))
-            .appendingPathComponent("Luma")
+            .appendingPathComponent("Siphon")
         
         try? FileManager.default.createDirectory(at: appSupport, withIntermediateDirectories: true)
-        self.logFileURL = appSupport.appendingPathComponent("luma_debug.log")
+        self.logFileURL = appSupport.appendingPathComponent("siphon_debug.log")
         
         loadInitialLogs()
     }

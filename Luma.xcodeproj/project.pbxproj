@@ -233,7 +233,7 @@
 /* Begin PBXNativeTarget section */
 		E0004001 /* Siphon */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = E0005003 /* Build configuration list for PBXNativeTarget "Luma Pro" */;
+			buildConfigurationList = E0005003 /* Build configuration list for PBXNativeTarget "Siphon" */;
 			buildPhases = (
 				E0004002 /* Sources */,
 				E0002001 /* Frameworks */,
@@ -378,7 +378,7 @@
 			containerPortal = E0006001 /* Project object */;
 			proxyType = 1;
 			remoteGlobalIDString = E0004001;
-			remoteInfo = "Luma Pro";
+			remoteInfo = "Siphon";
 		};
 /* End PBXContainerItemProxy section */
 
@@ -598,7 +598,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.marspater.luma.LumaTests;
+				PRODUCT_BUNDLE_IDENTIFIER = com.marspater.siphon.SiphonTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 5.0;
@@ -616,7 +616,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.marspater.luma.LumaTests;
+				PRODUCT_BUNDLE_IDENTIFIER = com.marspater.siphon.SiphonTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 5.0;
@@ -636,7 +636,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		E0005003 /* Build configuration list for PBXNativeTarget "Luma Pro" */ = {
+		E0005003 /* Build configuration list for PBXNativeTarget "Siphon" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				E0007003 /* Debug */,

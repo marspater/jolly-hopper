@@ -94,7 +94,7 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
             case .authorized, .provisional:
                 self.postNotificationRequest(center: center, content: content, identifier: identifier, logName: logName)
             case .denied:
-                self.logMessage("Notification permission is denied in macOS Settings for Luma Pro.", level: .warning)
+                self.logMessage("Notification permission is denied in macOS Settings for Siphon.", level: .warning)
             @unknown default:
                 self.postNotificationRequest(center: center, content: content, identifier: identifier, logName: logName)
             }

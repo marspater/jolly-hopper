@@ -63,7 +63,7 @@ struct MenuBarView: View {
                 if let window = NSApp.windows.first(where: { $0.isVisible && $0.className != "NSStatusBarWindow" }) {
                     window.makeKeyAndOrderFront(nil)
                 } else {
-                    if let url = URL(string: "luma://show") {
+                    if let url = URL(string: "siphon://show") {
                         NSWorkspace.shared.open(url)
                     }
                 }
