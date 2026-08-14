@@ -1,6 +1,25 @@
 import SwiftUI
 import AppKit
 
+struct PreferencesWindowConfigurator: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        DispatchQueue.main.async {
+            guard let window = view.window else { return }
+            window.title = ""
+            window.titleVisibility = .hidden
+            window.isOpaque = false
+            window.backgroundColor = .clear
+            window.titlebarAppearsTransparent = true
+            if !window.styleMask.contains(.fullSizeContentView) {
+                window.styleMask.insert(.fullSizeContentView)
+            }
+        }
+        return view
+    }
+    func updateNSView(_ nsView: NSView, context: Context) {}
+}
+
 struct PreferencesView: View {
     @AppStorage(UserDefaultsKeys.theme) private var theme: String = "system"
     @AppStorage(UserDefaultsKeys.defaultSaveFolder) private var defaultSaveFolder: String = ""
@@ -110,6 +129,7 @@ struct PreferencesView: View {
         .padding(.horizontal, 16)
         .padding(.bottom, 16)
         .frame(minWidth: 620, idealWidth: 680, minHeight: 520, idealHeight: 600)
+        .background(PreferencesWindowConfigurator())
         .background(.ultraThinMaterial)
         .onChange(of: theme) { _, newValue in
             applyTheme(newValue)
