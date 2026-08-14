@@ -9,6 +9,7 @@ struct DownloadListView: View {
     
     @EnvironmentObject var downloadManager: DownloadManager
     @EnvironmentObject var languageService: LanguageService
+    @EnvironmentObject var appState: AppState
     
     var body: some View {
         Group {
@@ -51,16 +52,43 @@ struct DownloadListView: View {
     }
     
     private var emptyState: some View {
-        VStack(spacing: 16) {
-            Image(systemName: "tray")
-                .font(.system(size: 48))
-                .foregroundColor(.secondary)
+        VStack(spacing: 18) {
+            ZStack {
+                Circle()
+                    .fill(Color.primary.opacity(0.04))
+                    .frame(width: 80, height: 80)
+                Image(systemName: "tray.fill")
+                    .font(.system(size: 36))
+                    .foregroundColor(.secondary.opacity(0.7))
+            }
             
-            Text(emptyMessage)
-                .font(.title3)
-                .foregroundColor(.secondary)
+            VStack(spacing: 6) {
+                Text(emptyMessage)
+                    .font(.geist(16, weight: .semibold))
+                    .foregroundColor(.primary)
+                Text(languageService.s("url_placeholder"))
+                    .font(.geist(13))
+                    .foregroundColor(.secondary)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: 340)
+            }
+            
+            Button {
+                appState.showAddDownloadSheet = true
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "plus.circle.fill")
+                    Text(languageService.s("new_download"))
+                        .font(.geist(13, weight: .semibold))
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.regular)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(32)
     }
 }
 
@@ -515,6 +543,7 @@ struct LinearProgressBar: View {
                 Capsule()
                     .fill(Color(.displayP3, red: 0.15, green: 0.55, blue: 1.0))
                     .frame(width: max(0, geometry.size.width * CGFloat(safeValue)))
+                    .animation(.linear(duration: 0.2), value: safeValue)
             }
         }
         .frame(height: 4)
