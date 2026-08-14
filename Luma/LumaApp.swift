@@ -37,7 +37,7 @@ struct LumaApp: App {
         .handlesExternalEvents(matching: ["*"])
         .commands {
             CommandGroup(replacing: .appInfo) {
-                Button(String(format: languageService.s("about_app"), "Luma Pro")) {
+                Button(String(format: languageService.s("about_app"), "Siphon")) {
                     PreferencesWindowManager.shared.showPreferencesWindow(
                         languageService: languageService,
                         updateChecker: updateChecker,
@@ -98,7 +98,7 @@ struct LumaApp: App {
     }
     
     private func handleIncomingURL(_ url: URL) {
-        guard url.scheme == "luma" else { return }
+        guard url.scheme == "siphon" || url.scheme == "luma" else { return }
         
         // Restore dock icon when opening from URL scheme (browser extension, etc.)
         NSApp.setActivationPolicy(.regular)
@@ -286,7 +286,7 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
     }
     
     func restartApp() {
-        let script = "pkill 'Luma Pro'"
+        let script = "pkill 'Siphon' || pkill 'Luma Pro'"
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/bash")
         process.arguments = ["-c", script]
@@ -349,7 +349,7 @@ struct WelcomeView: View {
                     .font(.system(size: 60))
                     .foregroundColor(.accentColor)
                 
-                Text("Welcome to Luma Pro")
+                Text("Welcome to Siphon")
                     .font(.largeTitle)
                     .fontWeight(.bold)
             }

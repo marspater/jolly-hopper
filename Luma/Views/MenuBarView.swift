@@ -5,7 +5,7 @@ struct MenuBarView: View {
     @EnvironmentObject var languageService: LanguageService
     @State private var url: String = ""
     @State private var selectedType: String = "video"
-    @State private var selectedPreset: String = "max_compatibility"
+    @State private var selectedPreset: String = "best_quality"
     @AppStorage("customPresets") private var customPresetsData: Data = Data()
     
     // Bug #11 fix: Use State to prevent heavy computation in View body
@@ -39,22 +39,19 @@ struct MenuBarView: View {
             if newValue == "audio" {
                 selectedPreset = "audio_only"
             } else {
-                selectedPreset = "max_compatibility"
+                selectedPreset = "best_quality"
             }
         }
     }
     
     private var header: some View {
         HStack {
-            // Using AppIcon might be too large or not intended for small display, 
-            // but let's use a nice styled circle with M or a better icon if available.
-            // For now, let's use the actual app Icon if possible or a stylized version.
             Image(nsImage: NSApp.applicationIconImage)
                 .resizable()
                 .frame(width: 28, height: 28)
             
-            Text("Luma Pro")
-                .font(.system(size: 18, weight: .bold))
+            Text("Siphon")
+                .font(.geist(18, weight: .bold))
             
             Spacer()
             
@@ -102,7 +99,7 @@ struct MenuBarView: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
                 Text(languageService.s("format") + ":")
-                    .font(.caption)
+                    .font(.geist(12, weight: .medium))
                     .foregroundColor(.secondary)
                     .frame(width: 50, alignment: .leading)
                 
@@ -116,7 +113,7 @@ struct MenuBarView: View {
             
             HStack {
                 Text(languageService.s("preset") + ":")
-                    .font(.caption)
+                    .font(.geist(12, weight: .medium))
                     .foregroundColor(.secondary)
                     .frame(width: 50, alignment: .leading)
                 
@@ -209,6 +206,7 @@ struct MenuBarView: View {
             HStack {
                 Image(systemName: "arrow.down.to.line.compact")
                 Text(languageService.s("download_btn"))
+                    .font(.geist(14, weight: .semibold))
             }
             .frame(maxWidth: .infinity)
         }
@@ -230,7 +228,7 @@ struct MenuBarView: View {
                 NSApp.terminate(nil)
             }
             .buttonStyle(.plain)
-            .font(.caption)
+            .font(.geist(12))
             .foregroundColor(.secondary)
             
             Spacer()
@@ -240,7 +238,7 @@ struct MenuBarView: View {
                     ProgressView()
                         .controlSize(.small)
                     Text("\(downloadManager.downloadingDownloads.count) \(languageService.s("downloading"))")
-                        .font(.caption2)
+                        .font(.geistMono(11, weight: .medium))
                 }
             }
         }

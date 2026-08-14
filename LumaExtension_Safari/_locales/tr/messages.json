@@ -1,12 +1,12 @@
 {
     "appName": {
-        "message": "Luma Pro"
+        "message": "Siphon"
     },
     "appDesc": {
-        "message": "Videoları Luma Pro ile indir"
+        "message": "Videoları Siphon ile indir"
     },
     "downloadContext": {
-        "message": "Luma Pro ile İndir"
+        "message": "Siphon ile İndir"
     },
     "context_fast_download": {
         "message": "Hızlı İndir (En Uyumlu)"

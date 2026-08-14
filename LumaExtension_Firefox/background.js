@@ -36,10 +36,10 @@ browser.contextMenus.onClicked.addListener((info, tab) => {
                 const cookieHeader = cookies.map(c => `${c.name}=${c.value}`).join('; ');
                 cookieParam = `&cookies=${encodeURIComponent(cookieHeader)}`;
             }
-            const deepLink = `luma://${host}?url=${encodeURIComponent(url)}${cookieParam}`;
+            const deepLink = `siphon://${host}?url=${encodeURIComponent(url)}${cookieParam}`;
             browser.tabs.create({ url: deepLink, active: false });
         }).catch(() => {
-            const deepLink = `luma://${host}?url=${encodeURIComponent(url)}`;
+            const deepLink = `siphon://${host}?url=${encodeURIComponent(url)}`;
             browser.tabs.create({ url: deepLink, active: false });
         });
     }

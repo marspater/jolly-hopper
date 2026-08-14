@@ -967,7 +967,7 @@ struct PreferencesView: View {
                         .shadow(color: .blue.opacity(0.2), radius: 30, x: 0, y: 8)
                     
                     VStack(spacing: 4) {
-                        Text("Luma Pro")
+                        Text("Siphon")
                             .font(.geist(24, weight: .bold))
                         
                         Text(languageService.s("version") + " \(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "4.2.0")")

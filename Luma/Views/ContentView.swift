@@ -9,6 +9,8 @@ struct MainWindowConfigurator: NSViewRepresentable {
         let view = NSView()
         DispatchQueue.main.async {
             guard let window = view.window else { return }
+            window.title = ""
+            window.titleVisibility = .hidden
             window.isOpaque = false
             window.backgroundColor = .clear
             window.titlebarAppearsTransparent = true
@@ -245,7 +247,7 @@ struct HomeView: View {
                         .shadow(color: .blue.opacity(0.2), radius: 40, x: 0, y: 12)
                     
                     VStack(spacing: 8) {
-                        Text("Luma Pro")
+                        Text("Siphon")
                             .font(.geist(42, weight: .black))
                         
                         Text(languageService.s("url_placeholder"))

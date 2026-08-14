@@ -64,7 +64,7 @@
 		E0000007 /* DownloadRowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DownloadRowView.swift; sourceTree = "<group>"; };
 		E0000009 /* PreferencesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreferencesView.swift; sourceTree = "<group>"; };
 		E0000011 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
-		E0000012 /* Luma Pro.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Luma Pro.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		E0000012 /* Siphon.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Siphon.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		E0000013 /* Luma.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Luma.entitlements; sourceTree = "<group>"; };
 		E0000015 /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/InfoPlist.strings; sourceTree = "<group>"; };
 		E0000020 /* NotificationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationService.swift; sourceTree = "<group>"; };
@@ -142,7 +142,7 @@
 		E0003003 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				E0000012 /* Luma Pro.app */,
+				E0000012 /* Siphon.app */,
 				E0000043 /* LumaTests.xctest */,
 			);
 			name = Products;
@@ -231,7 +231,7 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		E0004001 /* Luma Pro */ = {
+		E0004001 /* Siphon */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = E0005003 /* Build configuration list for PBXNativeTarget "Luma Pro" */;
 			buildPhases = (
@@ -243,9 +243,9 @@
 			);
 			dependencies = (
 			);
-			name = "Luma Pro";
-			productName = "Luma Pro";
-			productReference = E0000012 /* Luma Pro.app */;
+			name = "Siphon";
+			productName = "Siphon";
+			productReference = E0000012 /* Siphon.app */;
 			productType = "com.apple.product-type.application";
 		};
 		E0004010 /* LumaTests */ = {
@@ -296,7 +296,7 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				E0004001 /* Luma Pro */,
+				E0004001 /* Siphon */,
 				E0004010 /* LumaTests */,
 			);
 		};
@@ -367,7 +367,7 @@
 /* Begin PBXTargetDependency section */
 		E0008001 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			target = E0004001 /* Luma Pro */;
+			target = E0004001 /* Siphon */;
 			targetProxy = E0008002 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
@@ -534,7 +534,7 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Luma/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = "Luma Pro";
+				INFOPLIST_KEY_CFBundleDisplayName = "Siphon";
 				INFOPLIST_KEY_CFBundleURLTypes = "{\n    CFBundleURLSchemes =     (\n        macabolic\n    );\n}";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright © 2026 marspater. All rights reserved.";
@@ -544,7 +544,7 @@
 				);
 				MACOSX_DEPLOYMENT_TARGET = "$(RECOMMENDED_MACOSX_DEPLOYMENT_TARGET)";
 				MARKETING_VERSION = 4.2.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.marspater.luma;
+				PRODUCT_BUNDLE_IDENTIFIER = com.marspater.siphon;
 				PRODUCT_MODULE_NAME = Luma;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -569,7 +569,7 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Luma/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = "Luma Pro";
+				INFOPLIST_KEY_CFBundleDisplayName = "Siphon";
 				INFOPLIST_KEY_CFBundleURLTypes = "{\n    CFBundleURLSchemes =     (\n        luma,\n        macabolic\n    );\n}";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright © 2026 marspater. All rights reserved.";
@@ -580,7 +580,7 @@
 				MACOSX_DEPLOYMENT_TARGET = "$(RECOMMENDED_MACOSX_DEPLOYMENT_TARGET)";
 				MARKETING_VERSION = 4.2.0;
 				ONLY_ACTIVE_ARCH = NO;
-				PRODUCT_BUNDLE_IDENTIFIER = com.marspater.luma;
+				PRODUCT_BUNDLE_IDENTIFIER = com.marspater.siphon;
 				PRODUCT_MODULE_NAME = Luma;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -602,7 +602,7 @@
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 5.0;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Luma Pro.app/Contents/MacOS/Luma Pro";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Siphon.app/Contents/MacOS/Siphon";
 			};
 			name = Debug;
 		};
@@ -620,7 +620,7 @@
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 5.0;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Luma Pro.app/Contents/MacOS/Luma Pro";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Siphon.app/Contents/MacOS/Siphon";
 			};
 			name = Release;
 		};

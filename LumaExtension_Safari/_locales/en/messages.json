@@ -1,14 +1,14 @@
 {
     "extension_name": {
-        "message": "Luma Pro Extension"
+        "message": "Siphon Extension"
     },
     "extension_description": {
-        "message": "Download videos with Luma Pro"
+        "message": "Download videos with Siphon"
     },
     "context_download": {
-        "message": "Download with Luma Pro"
+        "message": "Download with Siphon"
     },
     "context_fast_download": {
-        "message": "Fast Download with Luma Pro"
+        "message": "Fast Download with Siphon"
     }
 }
