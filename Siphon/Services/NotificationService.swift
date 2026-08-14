@@ -60,7 +60,7 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
 
     func requestPermission() {
         guard let center = notificationCenter else { return }
-        center.requestAuthorization(options: [.alert, .sound, .badge, .provisional]) { [weak self] granted, error in
+        center.requestAuthorization(options: [.alert, .sound, .badge]) { [weak self] granted, error in
             if granted {
                 self?.logMessage("Notification permission granted.", level: .info)
             } else if let error = error {
@@ -83,7 +83,7 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
             switch settings.authorizationStatus {
             case .notDetermined:
                 self.logMessage("Notification permission not determined. Requesting permission now...", level: .info)
-                center.requestAuthorization(options: [.alert, .sound, .badge, .provisional]) { granted, error in
+                center.requestAuthorization(options: [.alert, .sound, .badge]) { granted, error in
                     if granted {
                         self.logMessage("Notification permission granted upon request. Posting notification...", level: .info)
                         self.postNotificationRequest(center: center, content: content, identifier: identifier, logName: logName)
