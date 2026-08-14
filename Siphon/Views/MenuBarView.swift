@@ -13,8 +13,6 @@ struct MenuBarView: View {
     
     var body: some View {
         VStack(spacing: 12) {
-            header
-            
             VStack(spacing: 10) {
                 urlInput
                 optionsCard
@@ -42,44 +40,6 @@ struct MenuBarView: View {
             } else {
                 selectedPreset = "best_quality"
             }
-        }
-    }
-    
-    private var header: some View {
-        HStack {
-            HStack(spacing: 6) {
-                Image(systemName: "arrow.down.circle.fill")
-                    .font(.system(size: 14))
-                    .foregroundColor(.accentColor)
-                Text("Siphon")
-                    .font(.geist(13, weight: .bold))
-                    .foregroundColor(.primary)
-            }
-            
-            Spacer()
-            
-            Button {
-                MenuBarManager.shared.closePopover()
-                NSApp.setActivationPolicy(.regular)
-                NSApp.activate(ignoringOtherApps: true)
-                if let window = NSApp.windows.first(where: { $0.isVisible && $0.className != "NSStatusBarWindow" }) {
-                    window.makeKeyAndOrderFront(nil)
-                } else {
-                    if let url = URL(string: "siphon://show") {
-                        NSWorkspace.shared.open(url)
-                    }
-                }
-            } label: {
-                Image(systemName: "macwindow.on.rectangle")
-                    .font(.system(size: 13))
-                    .foregroundColor(.secondary)
-                    .padding(5)
-                    .background(Color.primary.opacity(0.06))
-                    .clipShape(RoundedRectangle(cornerRadius: 6))
-            }
-            .buttonStyle(.plain)
-            .help(languageService.s("show_main_window"))
-            .accessibilityLabel(languageService.s("show_main_window"))
         }
     }
     
@@ -262,6 +222,34 @@ struct MenuBarView: View {
     
     private var footer: some View {
         HStack(alignment: .center) {
+            Button {
+                MenuBarManager.shared.closePopover()
+                NSApp.setActivationPolicy(.regular)
+                NSApp.activate(ignoringOtherApps: true)
+                if let window = NSApp.windows.first(where: { $0.isVisible && $0.className != "NSStatusBarWindow" }) {
+                    window.makeKeyAndOrderFront(nil)
+                } else {
+                    if let url = URL(string: "siphon://show") {
+                        NSWorkspace.shared.open(url)
+                    }
+                }
+            } label: {
+                HStack(spacing: 5) {
+                    Image(systemName: "macwindow")
+                        .font(.system(size: 11, weight: .semibold))
+                    Text(languageService.s("show_main_window"))
+                        .font(.geist(11, weight: .medium))
+                }
+                .foregroundColor(.secondary)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(Color.primary.opacity(0.06))
+                .clipShape(Capsule())
+            }
+            .buttonStyle(.plain)
+            .help(languageService.s("show_main_window"))
+            .accessibilityLabel(languageService.s("show_main_window"))
+            
             if downloadManager.downloadingDownloads.count > 0 {
                 HStack(spacing: 5) {
                     ProgressView()
@@ -274,10 +262,6 @@ struct MenuBarView: View {
                 .padding(.vertical, 4)
                 .background(Color.accentColor.opacity(0.1))
                 .clipShape(Capsule())
-            } else {
-                Text(languageService.s("siphon_ready"))
-                    .font(.geist(11))
-                    .foregroundColor(.secondary)
             }
             
             Spacer()
