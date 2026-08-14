@@ -12,7 +12,7 @@ struct MenuBarView: View {
     @State private var customPresets: [CustomPreset] = []
     
     var body: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: 14) {
             header
             
             VStack(alignment: .leading, spacing: 12) {
@@ -23,10 +23,11 @@ struct MenuBarView: View {
             downloadButton
             
             Divider()
+                .opacity(0.6)
             
             footer
         }
-        .padding()
+        .padding(14)
         .frame(width: 320)
         .background(.ultraThinMaterial)
         .onAppear {
@@ -46,18 +47,10 @@ struct MenuBarView: View {
     
     private var header: some View {
         HStack {
-            Image(nsImage: NSApp.applicationIconImage)
-                .resizable()
-                .frame(width: 28, height: 28)
-            
-            Text("Siphon")
-                .font(.geist(18, weight: .bold))
-            
             Spacer()
             
             Button {
                 MenuBarManager.shared.closePopover()
-                // Restore dock icon when showing main window
                 NSApp.setActivationPolicy(.regular)
                 NSApp.activate(ignoringOtherApps: true)
                 if let window = NSApp.windows.first(where: { $0.isVisible && $0.className != "NSStatusBarWindow" }) {
@@ -68,8 +61,17 @@ struct MenuBarView: View {
                     }
                 }
             } label: {
-                Image(systemName: "macwindow")
-                    .font(.system(size: 14))
+                HStack(spacing: 4) {
+                    Image(systemName: "macwindow")
+                        .font(.system(size: 13, weight: .semibold))
+                    Text(languageService.s("show_main_window"))
+                        .font(.geist(11, weight: .medium))
+                }
+                .foregroundColor(.secondary)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(Color.primary.opacity(0.06))
+                .clipShape(Capsule())
             }
             .buttonStyle(.plain)
             .help(languageService.s("show_main_window"))
@@ -78,9 +80,23 @@ struct MenuBarView: View {
     }
     
     private var urlInput: some View {
-        HStack {
-            TextField(languageService.s("url_hint"), text: $url)
-                .textFieldStyle(.roundedBorder)
+        HStack(spacing: 6) {
+            HStack(spacing: 6) {
+                Image(systemName: "link")
+                    .font(.system(size: 11))
+                    .foregroundColor(.secondary)
+                TextField(languageService.s("url_hint"), text: $url)
+                    .textFieldStyle(.plain)
+                    .font(.geist(12))
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 6)
+            .background(Color.primary.opacity(0.05))
+            .cornerRadius(8)
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(Color.primary.opacity(0.12), lineWidth: 1)
+            )
             
             Button {
                 if let clipboard = NSPasteboard.general.string(forType: .string) {
@@ -88,8 +104,10 @@ struct MenuBarView: View {
                 }
             } label: {
                 Image(systemName: "doc.on.clipboard")
+                    .font(.system(size: 12))
             }
             .buttonStyle(.bordered)
+            .controlSize(.small)
             .help(languageService.s("paste_from_clipboard"))
             .accessibilityLabel(languageService.s("paste_from_clipboard"))
         }
@@ -97,46 +115,48 @@ struct MenuBarView: View {
     
     private var optionsList: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Text(languageService.s("format") + ":")
-                    .font(.geist(12, weight: .medium))
-                    .foregroundColor(.secondary)
-                    .frame(width: 50, alignment: .leading)
-                
-                Picker("", selection: $selectedType) {
-                    Text(languageService.s("video")).tag("video")
-                    Text(languageService.s("audio")).tag("audio")
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-            }
-            
-            HStack {
-                Text(languageService.s("preset") + ":")
-                    .font(.geist(12, weight: .medium))
-                    .foregroundColor(.secondary)
-                    .frame(width: 50, alignment: .leading)
-                
-                Picker("", selection: $selectedPreset) {
-                    Section(languageService.s("standard")) {
-                        ForEach(DownloadPreset.allCases) { preset in
-                            if (selectedType == "video" && preset != .audioOnly) || (selectedType == "audio" && preset == .audioOnly) {
-                                Text(preset.title(lang: languageService)).tag(preset.rawValue)
-                            }
-                        }
-                    }
+            Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 10) {
+                GridRow {
+                    Text(languageService.s("format") + ":")
+                        .font(.geist(12, weight: .semibold))
+                        .foregroundColor(.secondary)
+                        .gridColumnAlignment(.trailing)
                     
-                    let filtered = customPresets.filter { (selectedType == "video" && $0.fileType.isVideo) || (selectedType == "audio" && $0.fileType.isAudio) }
-                    if !filtered.isEmpty {
-                        Section(languageService.s("custom")) {
-                            ForEach(filtered) { preset in
-                                Text(preset.name).tag("custom_" + preset.id.uuidString)
+                    Picker("", selection: $selectedType) {
+                        Text(languageService.s("video")).tag("video")
+                        Text(languageService.s("audio")).tag("audio")
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                }
+                
+                GridRow {
+                    Text(languageService.s("preset") + ":")
+                        .font(.geist(12, weight: .semibold))
+                        .foregroundColor(.secondary)
+                        .gridColumnAlignment(.trailing)
+                    
+                    Picker("", selection: $selectedPreset) {
+                        Section(languageService.s("standard")) {
+                            ForEach(DownloadPreset.allCases) { preset in
+                                if (selectedType == "video" && preset != .audioOnly) || (selectedType == "audio" && preset == .audioOnly) {
+                                    Text(preset.title(lang: languageService)).tag(preset.rawValue)
+                                }
+                            }
+                        }
+                        
+                        let filtered = customPresets.filter { (selectedType == "video" && $0.fileType.isVideo) || (selectedType == "audio" && $0.fileType.isAudio) }
+                        if !filtered.isEmpty {
+                            Section(languageService.s("custom")) {
+                                ForEach(filtered) { preset in
+                                    Text(preset.name).tag("custom_" + preset.id.uuidString)
+                                }
                             }
                         }
                     }
+                    .controlSize(.small)
+                    .labelsHidden()
                 }
-                .controlSize(.small)
-                .labelsHidden()
             }
         }
     }
@@ -203,16 +223,18 @@ struct MenuBarView: View {
             url = ""
             MenuBarManager.shared.closePopover()
         } label: {
-            HStack {
+            HStack(spacing: 6) {
                 Image(systemName: "arrow.down.to.line.compact")
                 Text(languageService.s("download_btn"))
-                    .font(.geist(14, weight: .semibold))
+                    .font(.geist(14, weight: .bold))
             }
             .frame(maxWidth: .infinity)
+            .padding(.vertical, 2)
         }
         .buttonStyle(.borderedProminent)
         .controlSize(.large)
         .disabled(url.isEmpty)
+        .shadow(color: .blue.opacity(0.25), radius: 6, y: 2)
     }
     
     private func getSaveFolder() -> URL {
@@ -223,23 +245,44 @@ struct MenuBarView: View {
     }
     
     private var footer: some View {
-        HStack {
-            Button(languageService.s("quit")) {
+        HStack(alignment: .center) {
+            Button {
                 NSApp.terminate(nil)
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: "power")
+                        .font(.system(size: 10, weight: .bold))
+                    Text(languageService.s("quit"))
+                        .font(.geist(11, weight: .semibold))
+                }
+                .foregroundColor(.red)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
+                .background(Color.red.opacity(0.12))
+                .clipShape(Capsule())
+                .overlay(
+                    Capsule()
+                        .stroke(Color.red.opacity(0.25), lineWidth: 1)
+                )
             }
             .buttonStyle(.plain)
-            .font(.geist(12))
-            .foregroundColor(.secondary)
+            .help(languageService.s("quit"))
+            .accessibilityLabel(languageService.s("quit"))
             
             Spacer()
             
             if downloadManager.downloadingDownloads.count > 0 {
-                HStack(spacing: 4) {
+                HStack(spacing: 5) {
                     ProgressView()
                         .controlSize(.small)
                     Text("\(downloadManager.downloadingDownloads.count) \(languageService.s("downloading"))")
-                        .font(.geistMono(11, weight: .medium))
+                        .font(.geistMono(11, weight: .semibold))
+                        .foregroundColor(.accentColor)
                 }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(Color.accentColor.opacity(0.1))
+                .clipShape(Capsule())
             }
         }
     }
