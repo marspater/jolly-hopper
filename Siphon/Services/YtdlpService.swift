@@ -909,7 +909,7 @@ class YtdlpService: ObservableObject {
             if requestedVideo != bestVideo { addUnique("\(bestVideo)+\(requestedAudio)") }
             // 4. Best video + best audio: split streams
             addUnique("\(bestVideo)+\(bestAudio)")
-            // 5. Combined/single-stream with resolution constraint (for sites like thisvid)
+            // 5. Combined/single-stream with resolution constraint (for sites like single-stream video site)
             let combinedSelector = buildCombinedSelector(for: options.videoResolution)
             addUnique(combinedSelector)
             // 6. Ultimate fallback
@@ -1334,8 +1334,8 @@ class YtdlpService: ObservableObject {
             args.append(contentsOf: ["--concurrent-fragments", "5"])
         } else if lowerUrl.contains("justthegays.com") || lowerUrl.contains("justthegays.tv") {
             args.append(contentsOf: ["--add-header", "Referer:https://justthegays.com/"])
-        } else if lowerUrl.contains("thisvid.com") {
-            args.append(contentsOf: ["--add-header", "Referer:https://thisvid.com/"])
+        } else if lowerUrl.contains("single-stream video site.com") {
+            args.append(contentsOf: ["--add-header", "Referer:https://single-stream video site.com/"])
         } else if lowerUrl.contains(".m3u8") || lowerUrl.contains(".mpd") {
             args.append(contentsOf: ["--hls-use-mpegts"])
             args.append(contentsOf: ["--concurrent-fragments", "5"])
@@ -1911,9 +1911,9 @@ enum YtdlpError: LocalizedError {
         case .ffmpegInstallationFailed(let path):
             return "FFmpeg installation failed. Please try updating dependencies again. Attempted path: \(path)"
         case .boyfriendTVNeedsBrowserCookies:
-            return "boyfriend.tv often requires signed-in browser cookies. Open Settings > Advanced > Browser Cookies, choose your browser, then try again."
+            return "This video site requires signed-in browser cookies. Open Settings > Advanced > Browser Cookies, choose your browser, then try again."
         case .boyfriendTVLoginRequired:
-            return "Could not extract BoyfriendTV video. This specific video may require a login (premium/private). Siphon cannot automatically access logged-in BoyfriendTV videos."
+            return "Could not extract video stream. This specific video may require a login (premium/private). Siphon cannot automatically access logged-in videos."
         case .securityViolation(let message):
             return "Security violation: \(message)"
         }

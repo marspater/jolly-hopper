@@ -15,7 +15,7 @@ with urlopen(UPSTREAM, timeout=60) as response:
 
 head = f"""# Supported sites
 
-This repository-owned page mirrors the yt-dlp supported sites list for the Luma About tab.
+This repository-owned page mirrors the yt-dlp supported sites list for the Siphon About tab.
 
 Attribution: this list is cloned from [`yt-dlp/supportedsites.md`](https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md) by the yt-dlp project. The upstream content is maintained by yt-dlp contributors and distributed under yt-dlp's license. Source/update date: {date.today().isoformat()}.
 
