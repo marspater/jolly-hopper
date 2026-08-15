@@ -284,6 +284,19 @@ enum VideoResolution: String, Codable, CaseIterable, Identifiable {
         case .worst: return "worst*"
         }
     }
+
+    var maxHeight: Int? {
+        switch self {
+        case .r2160p: return 2160
+        case .r1440p: return 1440
+        case .r1080p: return 1080
+        case .r720p: return 720
+        case .r480p: return 480
+        case .r360p: return 360
+        case .r240p: return 240
+        default: return nil
+        }
+    }
 }
 
 

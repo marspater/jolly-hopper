@@ -26,7 +26,7 @@ struct MenuBarView: View {
             footer
         }
         .padding(14)
-        .frame(width: 320)
+        .frame(width: 340)
         .background(.ultraThinMaterial)
         .onAppear {
             customPresets = CustomPreset.loadAll()
@@ -254,13 +254,17 @@ struct MenuBarView: View {
                 HStack(spacing: 5) {
                     ProgressView()
                         .controlSize(.small)
-                    Text("\(downloadManager.downloadingDownloads.count) \(languageService.s("downloading"))")
-                        .font(.geistMono(11, weight: .semibold))
-                        .foregroundColor(.accentColor)
+                    Text("\(downloadManager.downloadingDownloads.count)")
+                        .font(.geistMono(11, weight: .bold))
+                    Text(languageService.s("downloading"))
+                        .font(.geist(11, weight: .medium))
                 }
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
+                .foregroundColor(.accentColor)
                 .padding(.horizontal, 8)
                 .padding(.vertical, 4)
-                .background(Color.accentColor.opacity(0.1))
+                .background(Color.accentColor.opacity(0.12))
                 .clipShape(Capsule())
             }
             
