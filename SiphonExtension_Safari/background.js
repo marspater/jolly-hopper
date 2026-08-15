@@ -24,20 +24,7 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
     }
 
     if (host) {
-        let domain = "";
-        try {
-            domain = new URL(url).hostname.replace(/^www\./, "");
-        } catch (e) {}
-
-        const cookieQuery = domain ? { domain: domain } : { url: url };
-        chrome.cookies.getAll(cookieQuery, (cookies) => {
-            let cookieParam = "";
-            if (cookies && cookies.length > 0) {
-                const cookieHeader = cookies.map(c => `${c.name}=${c.value}`).join('; ');
-                cookieParam = `&cookies=${encodeURIComponent(cookieHeader)}`;
-            }
-            const deepLink = `siphon://${host}?url=${encodeURIComponent(url)}${cookieParam}`;
-            chrome.tabs.create({ url: deepLink, active: false });
-        });
+        const deepLink = "siphon://" + host + "?url=" + encodeURIComponent(url);
+        chrome.tabs.create({ url: deepLink, active: false });
     }
 });

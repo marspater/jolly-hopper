@@ -6,10 +6,7 @@
     "description": "__MSG_extension_description__",
     "permissions": [
         "contextMenus",
-        "cookies"
-    ],
-    "host_permissions": [
-        "<all_urls>"
+        "tabs"
     ],
     "icons": {
         "128": "icons/icon128.png"
