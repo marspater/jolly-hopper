@@ -40,6 +40,7 @@ class YtdlpService: ObservableObject {
     private var tccCookieDenied: Bool = false
     private let localVersion = DependencyChecksums.ytdlpVersion
     private let bundledYtdlpName = "yt-dlp_macos"
+    private var activeSetupTask: Task<Void, Never>?
 
     #if DEBUG
     var mockCommandRunner: (@Sendable ([String]) async throws -> String)?
@@ -87,6 +88,23 @@ class YtdlpService: ObservableObject {
         FileManager.default.fileExists(atPath: url.path) && FileManager.default.isExecutableFile(atPath: url.path)
     }
 
+    enum TransactionalInstallError: LocalizedError {
+        case validationFailed(String)
+        case rollbackFailed(destination: String, underlyingError: Error)
+        case installationFailed(destination: String, underlyingError: Error)
+
+        var errorDescription: String? {
+            switch self {
+            case .validationFailed(let msg):
+                return "Validation failed: \(msg)"
+            case .rollbackFailed(let dest, let err):
+                return "CRITICAL: Rollback failed for \(dest): \(err.localizedDescription)"
+            case .installationFailed(let dest, let err):
+                return "Installation failed for \(dest): \(err.localizedDescription)"
+            }
+        }
+    }
+
     func transactionalInstall(from source: URL, to destination: URL, validate: (URL) async -> Bool) async throws -> Bool {
         let fm = FileManager.default
         let backupDestination = destination.deletingLastPathComponent().appendingPathComponent(destination.lastPathComponent + ".backup_\(UUID().uuidString)")
@@ -109,15 +127,27 @@ class YtdlpService: ObservableObject {
                 // Post-validation failed: remove new binary and restore backup
                 try? fm.removeItem(at: destination)
                 if hadOldBinary {
-                    try? fm.moveItem(at: backupDestination, to: destination)
+                    do {
+                        try fm.moveItem(at: backupDestination, to: destination)
+                    } catch {
+                        LoggerService.shared.log("CRITICAL: Failed to restore backup from \(backupDestination.path) to \(destination.path): \(error.localizedDescription)", level: .error)
+                        throw TransactionalInstallError.rollbackFailed(destination: destination.path, underlyingError: error)
+                    }
                 }
                 return false
             }
+        } catch let error as TransactionalInstallError {
+            throw error
         } catch {
             if hadOldBinary && !fm.fileExists(atPath: destination.path) {
-                try? fm.moveItem(at: backupDestination, to: destination)
+                do {
+                    try fm.moveItem(at: backupDestination, to: destination)
+                } catch {
+                    LoggerService.shared.log("CRITICAL: Failed to restore backup from \(backupDestination.path) to \(destination.path): \(error.localizedDescription)", level: .error)
+                    throw TransactionalInstallError.rollbackFailed(destination: destination.path, underlyingError: error)
+                }
             }
-            throw error
+            throw TransactionalInstallError.installationFailed(destination: destination.path, underlyingError: error)
         }
     }
 
@@ -133,22 +163,34 @@ class YtdlpService: ObservableObject {
 
     private func createSanitizedEnvironment() -> [String: String] {
         let appSupport = getAppSupportDirectory()
+        let isolatedHome = appSupport.appendingPathComponent("SandboxHome")
+        try? FileManager.default.createDirectory(at: isolatedHome, withIntermediateDirectories: true)
+
         var env: [String: String] = [:]
         env["PATH"] = "\(appSupport.path):/usr/bin:/bin:/usr/sbin:/sbin"
-        env["HOME"] = NSHomeDirectory()
+        env["HOME"] = isolatedHome.path
         env["TMPDIR"] = FileManager.default.temporaryDirectory.path
+        env["XDG_CONFIG_HOME"] = isolatedHome.appendingPathComponent(".config").path
+        env["XDG_CACHE_HOME"] = isolatedHome.appendingPathComponent(".cache").path
         env["LANG"] = "en_US.UTF-8"
         env["LC_ALL"] = "en_US.UTF-8"
         return env
     }
 
     func setupBinaries() async {
-        await findYtdlp()
-        await findFfmpeg()
+        if let existing = activeSetupTask {
+            await existing.value
+            return
+        }
+        let task = Task { @MainActor in
+            await findYtdlp()
+            await findFfmpeg()
+            await getVersion()
+        }
+        activeSetupTask = task
+        await task.value
+        activeSetupTask = nil
     }
-
-
-
 
     func findYtdlp() async {
         if let bundledPath = Bundle.main.url(forResource: "yt-dlp", withExtension: nil) {
@@ -168,8 +210,10 @@ class YtdlpService: ObservableObject {
                 isAvailable = true
                 return
             } else {
-                LoggerService.shared.log("yt-dlp binary in App Support failed SHA-256 verification. Removing and re-downloading pinned version.", level: .warning)
-                try? FileManager.default.removeItem(at: ytdlpInSupport)
+                LoggerService.shared.log("yt-dlp binary in App Support failed SHA-256 verification. Preserving invalid backup and downloading pinned version.", level: .warning)
+                let invalidBackup = appSupport.appendingPathComponent("yt-dlp.invalid-backup")
+                try? FileManager.default.removeItem(at: invalidBackup)
+                try? FileManager.default.moveItem(at: ytdlpInSupport, to: invalidBackup)
             }
         }
 
@@ -707,6 +751,7 @@ class YtdlpService: ObservableObject {
     func download(
         url: String,
         options: DownloadOptions,
+        isCancelled: (@Sendable () -> Bool)? = nil,
         onProcessCreated: @escaping @Sendable (Process) -> Void,
         onProgress: @escaping @Sendable (Double, String?, String?) -> Void,
         onOutput: @escaping @Sendable (String) -> Void
@@ -854,6 +899,7 @@ class YtdlpService: ObservableObject {
             outputPath = try await runDownloadProcess(
                 args: args,
                 saveFolder: options.saveFolder,
+                isCancelled: isCancelled,
                 onProcessCreated: onProcessCreated,
                 onProgress: onProgress,
                 onOutput: onOutput
@@ -875,6 +921,7 @@ class YtdlpService: ObservableObject {
                 outputPath = try await runDownloadProcess(
                     args: cleanArgs,
                     saveFolder: options.saveFolder,
+                    isCancelled: isCancelled,
                     onProcessCreated: onProcessCreated,
                     onProgress: onProgress,
                     onOutput: onOutput
@@ -1572,6 +1619,7 @@ class YtdlpService: ObservableObject {
     private func runDownloadProcess(
         args: [String],
         saveFolder: URL,
+        isCancelled: (@Sendable () -> Bool)? = nil,
         onProcessCreated: @escaping @Sendable (Process) -> Void,
         onProgress: @escaping @Sendable (Double, String?, String?) -> Void,
         onOutput: @escaping @Sendable (String) -> Void
@@ -1583,11 +1631,15 @@ class YtdlpService: ObservableObject {
         #endif
         return try await withCheckedThrowingContinuation { continuation in
             let safeContinuation = SafeContinuation(continuation)
+
+            if isCancelled?() == true {
+                safeContinuation.resume(throwing: YtdlpError.downloadFailed("Download was cancelled before process initialization."))
+                return
+            }
+
             let process = Process()
             let outputPipe = Pipe()
             let errorPipe = Pipe()
-
-            let inputPipe = Pipe()
 
             process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
             process.arguments = args
@@ -1598,6 +1650,11 @@ class YtdlpService: ObservableObject {
             process.environment = createSanitizedEnvironment()
 
             onProcessCreated(process)
+
+            if isCancelled?() == true {
+                safeContinuation.resume(throwing: YtdlpError.downloadFailed("Download was cancelled before process launch."))
+                return
+            }
             let outputState = ThreadSafeOutputState()
 
             let processOutputLine: @Sendable (String) -> Void = { line in
@@ -1772,6 +1829,11 @@ class YtdlpService: ObservableObject {
 
             do {
                 try process.run()
+                if isCancelled?() == true {
+                    process.terminate()
+                    safeContinuation.resume(throwing: YtdlpError.downloadFailed("Download was cancelled immediately after process launch."))
+                    return
+                }
             } catch {
                 outputPipe.fileHandleForReading.readabilityHandler = nil
                 errorPipe.fileHandleForReading.readabilityHandler = nil
@@ -2002,6 +2064,23 @@ enum YtdlpError: LocalizedError {
         case .securityViolation(let message):
             return "Security violation: \(message)"
         }
+    }
+}
+
+final class CancellationBox: @unchecked Sendable {
+    private var cancelled = false
+    private let lock = NSLock()
+
+    var isCancelled: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return cancelled
+    }
+
+    func cancel() {
+        lock.lock()
+        cancelled = true
+        lock.unlock()
     }
 }
 
