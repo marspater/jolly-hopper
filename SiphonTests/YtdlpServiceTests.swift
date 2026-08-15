@@ -111,7 +111,17 @@ final class YtdlpServiceTests: XCTestCase {
     }
 
     func testDownloadBlockedArgumentsThrowSecurityViolation() async {
-        let blockedTestArgs = ["--exec echo hacked", "--output /tmp/test", "-o /etc/passwd", "--paths /root", "--load-info-json file.json"]
+        let blockedTestArgs = [
+            "--exec echo hacked",
+            "--output /tmp/test",
+            "-o /etc/passwd",
+            "--paths /root",
+            "--load-info-json file.json",
+            "--ffmpeg-location /tmp/malicious",
+            "--netrc-cmd whoami",
+            "--plugin-dirs /tmp/plugins",
+            "--print-to-file out.txt"
+        ]
 
         for blocked in blockedTestArgs {
             var options = DownloadOptions.default
@@ -136,6 +146,25 @@ final class YtdlpServiceTests: XCTestCase {
                 XCTFail("Expected YtdlpError.securityViolation, got: \(error)")
             }
         }
+    }
+
+    func testPurgeOrphanedTempCookieFiles() throws {
+        let tempDir = FileManager.default.temporaryDirectory
+        let staleCookieFile = tempDir.appendingPathComponent("siphon_cookies_test_purge.txt")
+        let staleHeaderCookieFile = tempDir.appendingPathComponent("siphon_header_cookies_test_purge.txt")
+        let regularFile = tempDir.appendingPathComponent("siphon_regular_file.txt")
+
+        try "test".write(to: staleCookieFile, atomically: true, encoding: .utf8)
+        try "test".write(to: staleHeaderCookieFile, atomically: true, encoding: .utf8)
+        try "test".write(to: regularFile, atomically: true, encoding: .utf8)
+
+        YtdlpService.purgeOrphanedTempCookieFiles()
+
+        XCTAssertFalse(FileManager.default.fileExists(atPath: staleCookieFile.path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: staleHeaderCookieFile.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: regularFile.path))
+
+        try? FileManager.default.removeItem(at: regularFile)
     }
 
     func testSpeedLimiterFlagAppendedWhenConfigured() async throws {

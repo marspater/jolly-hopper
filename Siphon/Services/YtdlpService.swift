@@ -723,6 +723,7 @@ class YtdlpService: ObservableObject {
             let blockedFlags = [
                 "--exec",
                 "--exec-before-download",
+                "--exec-custom",
                 "--config-location",
                 "--config-locations",
                 "--downloader",
@@ -736,9 +737,21 @@ class YtdlpService: ObservableObject {
                 "--batch-file",
                 "-a",
                 "--load-info-json",
-                "--exec-custom",
                 "--postprocessor-args",
-                "--ppa"
+                "--ppa",
+                "--ffmpeg-location",
+                "--netrc-cmd",
+                "--plugin-dirs",
+                "--load-plugins",
+                "--print-to-file",
+                "--write-info-json",
+                "--write-description",
+                "--write-annotations",
+                "--write-comments",
+                "--write-thumbnail",
+                "--write-all-thumbnails",
+                "--alias",
+                "--sponsorblock-invoke"
             ]
 
             for arg in customArgs {
@@ -1984,6 +1997,18 @@ class YtdlpService: ObservableObject {
             return tempCookiesURL
         } catch {
             return nil
+        }
+    }
+
+    static func purgeOrphanedTempCookieFiles() {
+        let tempDir = FileManager.default.temporaryDirectory
+        let fileManager = FileManager.default
+        guard let files = try? fileManager.contentsOfDirectory(at: tempDir, includingPropertiesForKeys: nil) else { return }
+        for file in files {
+            let name = file.lastPathComponent
+            if (name.hasPrefix("siphon_cookies_") || name.hasPrefix("siphon_header_cookies_")) && name.hasSuffix(".txt") {
+                try? fileManager.removeItem(at: file)
+            }
         }
     }
 }
