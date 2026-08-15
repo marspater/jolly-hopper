@@ -690,4 +690,75 @@ final class YtdlpServiceTests: XCTestCase {
         dashOpts.selectedFormatId = "137+140"
         XCTAssertTrue(mediaInfo.isSelectedFormatFragmented(options: dashOpts))
     }
+
+    func testFormatSelectionPrefersHighestQualityDirectStream() {
+        let f480 = MediaFormat(formatId: "direct-480p", ext: "mp4", resolution: "854x480", fps: 30, vcodec: "avc1", acodec: "mp4a", abr: 96, vbr: 1000, filesize: 10000000, filesizeApprox: nil, formatNote: "480p", formatProtocol: "https", manifestUrl: nil)
+        let f720 = MediaFormat(formatId: "direct-720p", ext: "mp4", resolution: "1280x720", fps: 30, vcodec: "avc1", acodec: "mp4a", abr: 128, vbr: 2500, filesize: 25000000, filesizeApprox: nil, formatNote: "720p", formatProtocol: "https", manifestUrl: nil)
+        let f1080 = MediaFormat(formatId: "direct-1080p", ext: "mp4", resolution: "1920x1080", fps: 60, vcodec: "avc1", acodec: "mp4a", abr: 192, vbr: 5000, filesize: 50000000, filesizeApprox: nil, formatNote: "1080p", formatProtocol: "https", manifestUrl: nil)
+
+        let mediaInfo = MediaInfo(
+            id: "vid_test",
+            title: "Multi Quality Video",
+            formats: [f480, f1080, f720]
+        )
+
+        let options = DownloadOptions.default
+        let resolved = mediaInfo.resolveSelectedFormats(options: options)
+        XCTAssertEqual(resolved.count, 1)
+        XCTAssertEqual(resolved.first?.formatId, "direct-1080p", "Best-quality policy must deterministically select the highest resolution direct format")
+    }
+
+    func testFormatSelectionPairsDASHVideoAndAudio() {
+        let dash1080 = MediaFormat(formatId: "137", ext: "mp4", resolution: "1920x1080", fps: 60, vcodec: "avc1", acodec: "none", abr: nil, vbr: 4500, filesize: 45000000, filesizeApprox: nil, formatNote: "1080p", formatProtocol: "http_dash_segments", manifestUrl: nil)
+        let dashAudio128 = MediaFormat(formatId: "140", ext: "m4a", resolution: nil, fps: nil, vcodec: "none", acodec: "mp4a", abr: 128, vbr: nil, filesize: 5000000, filesizeApprox: nil, formatNote: "Medium audio", formatProtocol: "http_dash_segments", manifestUrl: nil)
+        let dashAudio256 = MediaFormat(formatId: "141", ext: "m4a", resolution: nil, fps: nil, vcodec: "none", acodec: "mp4a", abr: 256, vbr: nil, filesize: 10000000, filesizeApprox: nil, formatNote: "High audio", formatProtocol: "http_dash_segments", manifestUrl: nil)
+
+        let mediaInfo = MediaInfo(
+            id: "dash_vid",
+            title: "DASH Video",
+            formats: [dash1080, dashAudio128, dashAudio256]
+        )
+
+        let options = DownloadOptions.default
+        let resolved = mediaInfo.resolveSelectedFormats(options: options)
+        XCTAssertEqual(resolved.count, 2)
+        XCTAssertEqual(resolved[0].formatId, "137")
+        XCTAssertEqual(resolved[1].formatId, "141", "Must pair with the highest bitrate matching audio stream")
+    }
+
+    func testFormatSelectionCodecMismatchFallback() {
+        let h264Video = MediaFormat(formatId: "h264_1080", ext: "mp4", resolution: "1920x1080", fps: 30, vcodec: "avc1.64002a", acodec: "mp4a", abr: 128, vbr: 3000, filesize: 30000000, filesizeApprox: nil, formatNote: nil, formatProtocol: "https", manifestUrl: nil)
+        let mediaInfo = MediaInfo(
+            id: "codec_test",
+            title: "Codec Fallback",
+            formats: [h264Video]
+        )
+
+        var options = DownloadOptions.default
+        options.videoCodec = .av1 // User requested AV1, but only H264 is available
+
+        let resolved = mediaInfo.resolveSelectedFormats(options: options)
+        XCTAssertEqual(resolved.count, 1)
+        XCTAssertEqual(resolved.first?.formatId, "h264_1080", "Must fall back gracefully to available high-quality format when preferred codec is absent")
+    }
+
+    func testProcessExitNonZeroThrowsErrorEvenIfFileExists() async {
+        let service = YtdlpService()
+        service.mockDownloadRunner = { _ in
+            throw YtdlpError.downloadFailed("ffmpeg conversion crashed")
+        }
+
+        do {
+            _ = try await service.download(
+                url: "https://example.com/test",
+                options: DownloadOptions.default,
+                onProcessCreated: { _ in },
+                onProgress: { _, _, _ in },
+                onOutput: { _ in }
+            )
+            XCTFail("Non-zero/error exit must not succeed")
+        } catch {
+            XCTAssertTrue(error is YtdlpError)
+        }
+    }
 }

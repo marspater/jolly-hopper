@@ -14,13 +14,25 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
-      - name: Build and Test
+      - name: Build and Test (Debug)
         run: |
           xcodebuild test \
             -project Siphon.xcodeproj \
             -scheme Siphon \
             -destination 'platform=macOS' \
             -configuration Debug \
+            MACOSX_DEPLOYMENT_TARGET=14.0 \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Build (Release)
+        run: |
+          xcodebuild build \
+            -project Siphon.xcodeproj \
+            -scheme Siphon \
+            -destination 'platform=macOS' \
+            -configuration Release \
             MACOSX_DEPLOYMENT_TARGET=14.0 \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \

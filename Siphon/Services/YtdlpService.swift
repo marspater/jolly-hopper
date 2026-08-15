@@ -35,9 +35,7 @@ class YtdlpService: ObservableObject {
     var ytdlpPath: URL?
     var ffmpegPath: URL?
     var ffprobePath: URL?
-    /// Tracks whether macOS TCC has denied cookie access this session.
-    /// Once set, we skip --cookies-from-browser entirely to avoid 7s retry delays.
-    private var tccCookieDenied: Bool = false
+    private var deniedCookieSources: Set<String> = []
     private let localVersion = DependencyChecksums.ytdlpVersion
     private let bundledYtdlpName = "yt-dlp_macos"
     private var activeSetupTask: Task<Void, Never>?
@@ -595,7 +593,7 @@ class YtdlpService: ObservableObject {
             "--no-warnings"
         ]
         
-        let usingBrowserCookies = appendCookieArgs(to: &args, force: forceBrowserCookies)
+        let usingBrowserCookies = appendCookieArgs(for: url, to: &args, force: forceBrowserCookies)
         logCookieUsage(for: url, usingBrowserCookies: usingBrowserCookies)
 
         // Handle Sucuri bypass
@@ -647,7 +645,7 @@ class YtdlpService: ObservableObject {
             "--no-warnings"
         ]
         
-        let usingBrowserCookies = appendCookieArgs(to: &args)
+        let usingBrowserCookies = appendCookieArgs(for: url, to: &args)
         logCookieUsage(for: url, usingBrowserCookies: usingBrowserCookies)
 
         // Handle Sucuri bypass
@@ -710,7 +708,7 @@ class YtdlpService: ObservableObject {
             "--flat-playlist",
             "--no-warnings"
         ]
-        let usingBrowserCookies = appendCookieArgs(to: &args)
+        let usingBrowserCookies = appendCookieArgs(for: url, to: &args)
         logCookieUsage(for: url, usingBrowserCookies: usingBrowserCookies)
 
         // Handle Sucuri bypass
@@ -802,7 +800,7 @@ class YtdlpService: ObservableObject {
         args.append("--windows-filenames")
         args.append(contentsOf: ["-o", outputTemplate])
 
-        args.append(contentsOf: buildFormatArgs(options: options))
+        args.append(contentsOf: buildFormatArgs(options: options, mediaInfo: mediaInfo))
         let codecFallbackWarnings = codecFallbackOutputWarnings(options: options)
         if options.downloadSubtitles && !options.subtitleLanguages.isEmpty {
             let subFormat = options.subtitleFormat?.ytdlpValue ?? "srt"
@@ -861,7 +859,7 @@ class YtdlpService: ObservableObject {
                 args.append(contentsOf: ["--cookies", tempFile.path])
             }
         } else {
-            let usingBrowserCookies = appendCookieArgs(to: &args)
+            let usingBrowserCookies = appendCookieArgs(for: normalizedURL, to: &args)
             logCookieUsage(for: normalizedURL, usingBrowserCookies: usingBrowserCookies)
         }
 
@@ -920,7 +918,9 @@ class YtdlpService: ObservableObject {
 
             if !errText.isEmpty, isCookieFailureError(errText), args.contains("--cookies-from-browser") {
                 LoggerService.shared.log("Browser cookie access failed or database missing (\(errText.trimmingCharacters(in: .whitespacesAndNewlines))). Retrying download automatically without browser cookies...", level: .warning)
-                tccCookieDenied = true
+                if let browser = configuredBrowserCookieSource() {
+                    recordCookieDenial(browser: browser, url: normalizedURL)
+                }
                 onOutput("[Siphon Info] Browser cookies unavailable. Retrying download directly without browser cookies...\n")
                 let cleanArgs = stripCookieArgs(from: args)
                 outputPath = try await runDownloadProcess(
@@ -1011,9 +1011,10 @@ class YtdlpService: ObservableObject {
 
 
 
-    private func buildFormatArgs(options: DownloadOptions) -> [String] {
+    private func buildFormatArgs(options: DownloadOptions, mediaInfo: MediaInfo? = nil) -> [String] {
         var args: [String] = []
 
+        // 1. Explicit user-specified format ID
         if let customFormatId = options.selectedFormatId, !customFormatId.isEmpty {
             args.append(contentsOf: ["-f", customFormatId])
             if options.fileType.isVideo {
@@ -1029,122 +1030,90 @@ class YtdlpService: ObservableObject {
             return args
         }
 
-        if options.fileType.isVideo {
-            let videoBase = buildVideoSelector(for: options.videoResolution)
-            let bestVideoBase = buildVideoSelector(for: options.videoResolution, ignoreWorst: true)
-            let videoCodecFilter = options.videoCodec?.ytdlpFilter ?? ""
-            let audioCodecFilter = options.audioCodec?.ytdlpFilter ?? ""
-
-            let requestedVideo = "\(videoBase)\(videoCodecFilter)"
-            let requestedAudio = "bestaudio\(audioCodecFilter)"
-            let bestVideo = videoCodecFilter.isEmpty ? requestedVideo : bestVideoBase
-            let bestAudio = "bestaudio"
-
-            // Build deduplicated fallback chain
-            var selectors: [String] = []
-
-            func addUnique(_ s: String) {
-                if !selectors.contains(s) { selectors.append(s) }
-            }
-
-            // 1. Requested codecs: split streams (with and without * selector)
-            addUnique("\(requestedVideo)*+\(requestedAudio)")
-            addUnique("\(requestedVideo)+\(requestedAudio)")
-            // 2. Requested video + any audio: split streams  
-            if requestedAudio != bestAudio {
-                addUnique("\(requestedVideo)*+\(bestAudio)")
-                addUnique("\(requestedVideo)+\(bestAudio)")
-            }
-            // 3. Best video + requested audio: split streams
-            if requestedVideo != bestVideo {
-                addUnique("\(bestVideo)*+\(requestedAudio)")
-                addUnique("\(bestVideo)+\(requestedAudio)")
-            }
-            // 4. Best video + best audio: split streams
-            addUnique("\(bestVideo)*+\(bestAudio)")
-            addUnique("\(bestVideo)+\(bestAudio)")
-            // 5. Named format quality tokens used by KVS, Flowplayer, VideoJS, and tube CMS backends
-            addUnique("HQ")
-            addUnique("hd")
-            addUnique("1080p")
-            addUnique("720p")
-            addUnique("480p")
-            addUnique("high")
-            addUnique("original")
-            addUnique("source")
-            addUnique("source-mp4")
-            addUnique("best-mp4")
-            // 6. Combined/single-stream with resolution constraint
-            let combinedSelector = buildCombinedSelector(for: options.videoResolution)
-            addUnique(combinedSelector)
-            if let res = options.videoResolution, let maxH = res.maxHeight {
-                addUnique("bestvideo[height<=\(maxH)]+bestaudio/best[height<=\(maxH)]")
-                addUnique("best[height<=\(maxH)]")
-            }
-            // 7. Ultimate fallback
-            addUnique("bestvideo*+bestaudio/best")
-            addUnique("bestvideo+bestaudio/best")
-            addUnique("best")
-
-            args.append(contentsOf: ["-f", selectors.joined(separator: "/")])
-            args.append(contentsOf: ["-S", "res,height,fps,hdr:12,vbr,abr,quality,filesize"])
-
-            var finalMergeFormat = compatibleMergeOutputFormat(for: options)
-
-            if let conversionCodec = options.conversionCodec, conversionCodec != .none {
-                var targetExt = options.fileType.fileExtension
-                if conversionCodec == .av1 || conversionCodec == .vp9 {
-                    targetExt = "mkv"
+        // 2. Metadata-driven concrete format selection (eliminates silent fallback downgrades)
+        if let info = mediaInfo {
+            let resolved = info.resolveSelectedFormats(options: options)
+            if !resolved.isEmpty {
+                let formatId: String
+                if resolved.count == 2 {
+                    formatId = "\(resolved[0].formatId)+\(resolved[1].formatId)"
+                } else {
+                    formatId = resolved[0].formatId
                 }
-                finalMergeFormat = targetExt
-            }
-
-            if let mergeOutputFormat = finalMergeFormat {
-                args.append(contentsOf: ["--merge-output-format", mergeOutputFormat])
-            }
-
-            if let conversionCodec = options.conversionCodec, conversionCodec != .none {
-                var targetExt = options.fileType.fileExtension
-                if conversionCodec == .av1 || conversionCodec == .vp9 {
-                    targetExt = "mkv"
+                args.append(contentsOf: ["-f", formatId])
+                if options.fileType.isVideo {
+                    if let mergeFormat = compatibleMergeOutputFormat(for: options) {
+                        args.append(contentsOf: ["--merge-output-format", mergeFormat])
+                    }
+                } else {
+                    args.append(contentsOf: ["-x", "--audio-format", options.fileType.fileExtension])
+                    if let quality = options.audioQuality {
+                        args.append(contentsOf: ["--audio-quality", quality.ytdlpValue])
+                    }
                 }
-                
-                switch conversionCodec {
-                case .av1:
-                    args.append(contentsOf: ["--recode-video", targetExt, "--postprocessor-args", "VideoConvertor:-y -c:v libsvtav1 -preset 8 -crf 28 -strict experimental"])
-                case .h265:
-                    #if arch(arm64)
-                    args.append(contentsOf: ["--recode-video", targetExt, "--postprocessor-args", "VideoConvertor:-y -c:v hevc_videotoolbox -strict experimental"])
-                    #else
-                    args.append(contentsOf: ["--recode-video", targetExt, "--postprocessor-args", "VideoConvertor:-y -c:v libx265 -strict experimental"])
-                    #endif
-                case .vp9:
-                    args.append(contentsOf: ["--recode-video", targetExt, "--postprocessor-args", "VideoConvertor:-y -c:v libvpx-vp9 -strict experimental"])
-                case .h264:
-                    #if arch(arm64)
-                    args.append(contentsOf: ["--recode-video", targetExt, "--postprocessor-args", "VideoConvertor:-y -c:v h264_videotoolbox -strict experimental"])
-                    #else
-                    args.append(contentsOf: ["--recode-video", targetExt, "--postprocessor-args", "VideoConvertor:-y -c:v libx264 -strict experimental"])
-                    #endif
-                case .none:
-                    break
-                }
+                return args
             }
-        } else {
-            // Audio-only download
-            var audioFormat = "ba"
+        }
 
-            if let audioCodec = options.audioCodec, let filter = audioCodec.ytdlpFilter {
-                audioFormat = "ba\(filter)/ba"  // Preferred codec with fallback
-            }
-
-            args.append(contentsOf: ["-f", "\(audioFormat)/best"])
-            args.append(contentsOf: ["-x", "--audio-format", options.fileType.fileExtension])
-
+        // 3. Fallback when mediaInfo metadata is absent
+        if options.fileType.isAudio {
+            args.append(contentsOf: ["-x", "--audio-format", options.fileType.fileExtension, "-f", "bestaudio/best"])
             if let quality = options.audioQuality {
                 args.append(contentsOf: ["--audio-quality", quality.ytdlpValue])
-            } else {
-                args.append(contentsOf: ["--audio-quality", "0"]) // Best quality by default
+            }
+            return args
+        }
+
+        let maxH = options.videoResolution?.maxHeight
+        let selector: String
+        if let h = maxH {
+            selector = "bestvideo[height<=\(h)]+bestaudio/best[height<=\(h)]/bestvideo+bestaudio/best"
+        } else {
+            selector = "bestvideo+bestaudio/best"
+        }
+
+        args.append(contentsOf: ["-f", selector])
+        args.append(contentsOf: ["-S", "res,height,fps,hdr:12,vbr,abr,quality,filesize"])
+
+        var finalMergeFormat = compatibleMergeOutputFormat(for: options)
+
+        if let conversionCodec = options.conversionCodec, conversionCodec != .none {
+            var targetExt = options.fileType.fileExtension
+            if conversionCodec == .av1 || conversionCodec == .vp9 {
+                targetExt = "mkv"
+            }
+            finalMergeFormat = targetExt
+        }
+
+        if let mergeOutputFormat = finalMergeFormat {
+            args.append(contentsOf: ["--merge-output-format", mergeOutputFormat])
+        }
+
+        if let conversionCodec = options.conversionCodec, conversionCodec != .none {
+            var targetExt = options.fileType.fileExtension
+            if conversionCodec == .av1 || conversionCodec == .vp9 {
+                targetExt = "mkv"
+            }
+            
+            switch conversionCodec {
+            case .av1:
+                args.append(contentsOf: ["--recode-video", targetExt, "--postprocessor-args", "VideoConvertor:-y -c:v libsvtav1 -preset 8 -crf 28 -strict experimental"])
+            case .h265:
+                #if arch(arm64)
+                args.append(contentsOf: ["--recode-video", targetExt, "--postprocessor-args", "VideoConvertor:-y -c:v hevc_videotoolbox -strict experimental"])
+                #else
+                args.append(contentsOf: ["--recode-video", targetExt, "--postprocessor-args", "VideoConvertor:-y -c:v libx265 -strict experimental"])
+                #endif
+            case .vp9:
+                args.append(contentsOf: ["--recode-video", targetExt, "--postprocessor-args", "VideoConvertor:-y -c:v libvpx-vp9 -strict experimental"])
+            case .h264:
+                #if arch(arm64)
+                args.append(contentsOf: ["--recode-video", targetExt, "--postprocessor-args", "VideoConvertor:-y -c:v h264_videotoolbox -strict experimental"])
+                #else
+                args.append(contentsOf: ["--recode-video", targetExt, "--postprocessor-args", "VideoConvertor:-y -c:v libx264 -strict experimental"])
+                #endif
+            case .none:
+                break
             }
         }
 
@@ -1207,9 +1176,24 @@ class YtdlpService: ObservableObject {
         return warnings
     }
 
-    private func appendCookieArgs(to args: inout [String], force: Bool = false) -> Bool {
-        if tccCookieDenied { return false }
+    private func cookieScopeKey(browser: String, url: String) -> String {
+        let host = URL(string: url)?.host?.lowercased() ?? "global"
+        return "\(browser):\(host)"
+    }
+
+    private func isCookieDenied(browser: String, url: String) -> Bool {
+        let key = cookieScopeKey(browser: browser, url: url)
+        return deniedCookieSources.contains(key) || deniedCookieSources.contains(browser)
+    }
+
+    private func recordCookieDenial(browser: String, url: String) {
+        let key = cookieScopeKey(browser: browser, url: url)
+        deniedCookieSources.insert(key)
+    }
+
+    private func appendCookieArgs(for url: String, to args: inout [String], force: Bool = false) -> Bool {
         guard let browser = configuredBrowserCookieSource() else { return false }
+        if isCookieDenied(browser: browser, url: url) { return false }
         if force || !args.contains("--cookies-from-browser") {
             args.append(contentsOf: ["--cookies-from-browser", browser])
         }
@@ -1663,7 +1647,9 @@ class YtdlpService: ObservableObject {
         } catch let error as YtdlpError {
             if case .commandFailed(let output) = error, isCookieFailureError(output), args.contains("--cookies-from-browser") {
                 LoggerService.shared.log("Browser cookie access failed or database missing. Automatically retrying command without browser cookies...", level: .info)
-                tccCookieDenied = true
+                if let browser = configuredBrowserCookieSource(), let urlArg = args.last {
+                    recordCookieDenial(browser: browser, url: urlArg)
+                }
                 let cleanArgs = stripCookieArgs(from: args)
                 return try await runCommandAsync(cleanArgs)
             }
@@ -1867,10 +1853,7 @@ class YtdlpService: ObservableObject {
                         safeContinuation.resume(throwing: YtdlpError.downloadFailed("Download process completed, but no valid media file was verified in the target destination."))
                     }
                 } else {
-                    if let resolvedURL = finalURL {
-                        Task { @MainActor in LoggerService.shared.log("yt-dlp exited with error but file exists. Ignoring post-processing error.", level: .warning) }
-                        safeContinuation.resume(returning: resolvedURL.path)
-                    } else if errorOutput.contains("Cloudflare") || (errorOutput.contains("403") && errorOutput.contains("anti-bot")) {
+                    if errorOutput.contains("Cloudflare") || (errorOutput.contains("403") && errorOutput.contains("anti-bot")) {
                         safeContinuation.resume(throwing: YtdlpError.cloudflareBlocked)
                     } else if errorOutput.contains("429") || errorOutput.contains("Too Many Requests") {
                         safeContinuation.resume(throwing: YtdlpError.tooManyRequests)
