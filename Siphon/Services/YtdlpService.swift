@@ -40,11 +40,10 @@ class YtdlpService: ObservableObject {
     private let bundledYtdlpName = "yt-dlp_macos"
     private var activeSetupTask: Task<Void, Never>?
 
-    var mockCommandRunner: (@Sendable ([String]) async throws -> String)?
-    var mockDownloadRunner: (@Sendable ([String]) async throws -> String)?
+    var processRunner: YtdlpProcessRunning
 
-    init() {
-        // Initialization is explicit: setupBinaries() is called by DownloadManager or test harnesses.
+    init(processRunner: YtdlpProcessRunning = DefaultYtdlpProcessRunner()) {
+        self.processRunner = processRunner
     }
 
     nonisolated static func verifySHA256(fileURL: URL, expectedHash: String) -> Bool {
@@ -157,8 +156,8 @@ class YtdlpService: ObservableObject {
         }
     }
 
-    private func createSanitizedEnvironment() -> [String: String] {
-        let appSupport = getAppSupportDirectory()
+    nonisolated static func createSanitizedEnvironment() -> [String: String] {
+        let appSupport = Self.getAppSupportDirectory()
         let isolatedHome = appSupport.appendingPathComponent("SandboxHome")
         try? FileManager.default.createDirectory(at: isolatedHome, withIntermediateDirectories: true)
 
@@ -189,7 +188,7 @@ class YtdlpService: ObservableObject {
     }
 
     func findYtdlp() async {
-        let appSupport = getAppSupportDirectory()
+        let appSupport = Self.getAppSupportDirectory()
         let invalidBackup = appSupport.appendingPathComponent("yt-dlp.invalid-backup")
 
         if let bundledPath = Bundle.main.url(forResource: "yt-dlp", withExtension: nil) {
@@ -231,7 +230,7 @@ class YtdlpService: ObservableObject {
     }
 
     func findFfmpeg() async {
-        let appSupport = getAppSupportDirectory()
+        let appSupport = Self.getAppSupportDirectory()
         let ffmpegInSupport = appSupport.appendingPathComponent("ffmpeg")
         let ffprobeInSupport = appSupport.appendingPathComponent("ffprobe")
 
@@ -276,7 +275,7 @@ class YtdlpService: ObservableObject {
         }
 
         do {
-            _ = try await runCommandAsync([url.path, "-version"])
+            _ = try await runCommand([url.path, "-version"])
             LoggerService.shared.log("Cryptographically validated \(name) at \(url.path) for \(context).", level: .info)
             return true
         } catch {
@@ -311,7 +310,7 @@ class YtdlpService: ObservableObject {
         guard let ffmpeg = ffmpegPath,
               let ffprobe = ffprobePath,
               await validateFfmpegPair(ffmpeg: ffmpeg, ffprobe: ffprobe, context: "yt-dlp") else {
-            let attemptedPath = getAppSupportDirectory().path
+            let attemptedPath = Self.getAppSupportDirectory().path
             throw YtdlpError.ffmpegInstallationFailed(attemptedPath)
         }
 
@@ -320,7 +319,7 @@ class YtdlpService: ObservableObject {
     }
 
     func downloadFfmpeg() async {
-        let appSupport = getAppSupportDirectory()
+        let appSupport = Self.getAppSupportDirectory()
         let destinationGz = appSupport.appendingPathComponent("ffmpeg_\(UUID().uuidString).gz")
         let ffmpegDest = appSupport.appendingPathComponent("ffmpeg")
 
@@ -342,7 +341,7 @@ class YtdlpService: ObservableObject {
             }
 
             // Step 2: Decompress
-            _ = try await runCommandAsync(["/usr/bin/gzip", "-d", "-f", destinationGz.path])
+            _ = try await runCommand(["/usr/bin/gzip", "-d", "-f", destinationGz.path])
             let extractedBinURL = destinationGz.deletingPathExtension()
 
             // Step 3: Verify extracted binary SHA-256
@@ -370,7 +369,7 @@ class YtdlpService: ObservableObject {
     }
 
     func downloadFfprobe() async {
-        let appSupport = getAppSupportDirectory()
+        let appSupport = Self.getAppSupportDirectory()
         let destinationGz = appSupport.appendingPathComponent("ffprobe_\(UUID().uuidString).gz")
         let ffprobeDest = appSupport.appendingPathComponent("ffprobe")
 
@@ -392,7 +391,7 @@ class YtdlpService: ObservableObject {
             }
 
             // Step 2: Decompress
-            _ = try await runCommandAsync(["/usr/bin/gzip", "-d", "-f", destinationGz.path])
+            _ = try await runCommand(["/usr/bin/gzip", "-d", "-f", destinationGz.path])
             let extractedBinURL = destinationGz.deletingPathExtension()
 
             // Step 3: Verify extracted binary SHA-256
@@ -438,7 +437,7 @@ class YtdlpService: ObservableObject {
         }
 
         let downloadURL = DependencyChecksums.ytdlpURL
-        let appSupport = getAppSupportDirectory()
+        let appSupport = Self.getAppSupportDirectory()
         let destination = appSupport.appendingPathComponent("yt-dlp")
         let tempDestination = appSupport.appendingPathComponent("yt-dlp.tmp_\(UUID().uuidString)")
 
@@ -463,14 +462,14 @@ class YtdlpService: ObservableObject {
             try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: tempDestination.path)
 
             do {
-                _ = try await runCommandAsync([tempDestination.path, "--ignore-config", "--version"])
+                _ = try await runCommand([tempDestination.path, "--ignore-config", "--version"])
             } catch {
                 try? FileManager.default.removeItem(at: tempDestination)
                 throw YtdlpUpdateError.validationFailed("yt-dlp exited with error: \(error.localizedDescription)")
             }
 
             let installed = try await transactionalInstall(from: tempDestination, to: destination) { binURL in
-                (try? await self.runCommandAsync([binURL.path, "--ignore-config", "--version"])) != nil
+                (try? await self.runCommand([binURL.path, "--ignore-config", "--version"])) != nil
             }
             guard installed else {
                 throw YtdlpUpdateError.validationFailed("yt-dlp post-installation validation failed. Rolled back.")
@@ -496,7 +495,7 @@ class YtdlpService: ObservableObject {
         guard let path = ytdlpPath else { return }
 
         do {
-            let output = try await runCommandAsync([path.path, "--ignore-config", "--version"])
+            let output = try await runCommand([path.path, "--ignore-config", "--version"])
             version = output.trimmingCharacters(in: .whitespacesAndNewlines)
         } catch {
             LoggerService.shared.log("Failed to get yt-dlp version: \(error)", level: .warning)
@@ -776,7 +775,7 @@ class YtdlpService: ObservableObject {
             await findFfmpeg()
         }
         
-        let appSupport = getAppSupportDirectory()
+        let appSupport = Self.getAppSupportDirectory()
         let ffmpegDir: String
         if let loc = ffmpegPath?.deletingLastPathComponent().path, FileManager.default.fileExists(atPath: loc + "/ffmpeg") {
             ffmpegDir = loc
@@ -1524,10 +1523,10 @@ class YtdlpService: ObservableObject {
                 lowerUrl.contains("cdn.boyfriend.tv")
         }
 
-        if isYouTube || isFragmented {
-            args.append(contentsOf: ["--http-chunk-size", "10M"])
-            args.append(contentsOf: ["--throttled-rate", "100K"])
-        }
+        // Baseline HTTP download optimization flags for all sites (bypasses server rate limiting without aria2c)
+        args.append(contentsOf: ["--http-chunk-size", "10M"])
+        args.append(contentsOf: ["--throttled-rate", "100K"])
+        args.append(contentsOf: ["--buffer-size", "16K"])
 
         if isFragmented {
             args.append(contentsOf: ["--concurrent-fragments", "8"])
@@ -1565,55 +1564,6 @@ class YtdlpService: ObservableObject {
 
 
 
-    private func runCommandAsync(_ args: [String]) async throws -> String {
-        if let mock = mockCommandRunner {
-            return try await mock(args)
-        }
-        return try await withCheckedThrowingContinuation { continuation in
-            let safeContinuation = SafeContinuation(continuation)
-            let process = Process()
-            let pipe = Pipe()
-
-            process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-            process.arguments = args
-            process.standardOutput = pipe
-            process.standardError = pipe
-            process.environment = createSanitizedEnvironment()
-
-            let outputBuffer = ThreadSafeDataBuffer()
-            pipe.fileHandleForReading.readabilityHandler = { handle in
-                let data = handle.availableData
-                if !data.isEmpty {
-                    outputBuffer.append(data)
-                }
-            }
-
-            process.terminationHandler = { proc in
-                pipe.fileHandleForReading.readabilityHandler = nil
-
-                let remainingData = pipe.fileHandleForReading.readDataToEndOfFile()
-                if !remainingData.isEmpty {
-                    outputBuffer.append(remainingData)
-                }
-
-                let output = outputBuffer.getString()
-
-                if proc.terminationStatus == 0 {
-                    safeContinuation.resume(returning: output)
-                } else {
-                    safeContinuation.resume(throwing: YtdlpError.commandFailed(output))
-                }
-            }
-
-            do {
-                try process.run()
-            } catch {
-                pipe.fileHandleForReading.readabilityHandler = nil
-                safeContinuation.resume(throwing: error)
-            }
-        }
-    }
-
     private func isCookieFailureError(_ errorOutput: String) -> Bool {
         let lower = errorOutput.lowercased()
         return lower.contains("operation not permitted") ||
@@ -1639,7 +1589,7 @@ class YtdlpService: ObservableObject {
 
     private func runCommand(_ args: [String]) async throws -> String {
         do {
-            return try await runCommandAsync(args)
+            return try await processRunner.runCommand(args)
         } catch let error as YtdlpError {
             if case .commandFailed(let output) = error, isCookieFailureError(output), args.contains("--cookies-from-browser") {
                 LoggerService.shared.log("Browser cookie access failed or database missing. Automatically retrying command without browser cookies...", level: .info)
@@ -1647,7 +1597,7 @@ class YtdlpService: ObservableObject {
                     recordCookieDenial(browser: browser, url: urlArg)
                 }
                 let cleanArgs = stripCookieArgs(from: args)
-                return try await runCommandAsync(cleanArgs)
+                return try await processRunner.runCommand(cleanArgs)
             }
             throw error
         }
@@ -1661,225 +1611,17 @@ class YtdlpService: ObservableObject {
         onProgress: @escaping @Sendable (Double, String?, String?) -> Void,
         onOutput: @escaping @Sendable (String) -> Void
     ) async throws -> String {
-        if let mock = mockDownloadRunner {
-            return try await mock(args)
-        }
-        return try await withCheckedThrowingContinuation { continuation in
-            let safeContinuation = SafeContinuation(continuation)
-
-            if isCancelled?() == true {
-                safeContinuation.resume(throwing: YtdlpError.downloadFailed("Download was cancelled before process initialization."))
-                return
-            }
-
-            let process = Process()
-            let outputPipe = Pipe()
-            let errorPipe = Pipe()
-
-            process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-            process.arguments = args
-            process.currentDirectoryURL = saveFolder
-            process.standardInput = FileHandle.nullDevice
-            process.standardOutput = outputPipe
-            process.standardError = errorPipe
-            process.environment = createSanitizedEnvironment()
-
-            onProcessCreated(process)
-
-            if isCancelled?() == true {
-                safeContinuation.resume(throwing: YtdlpError.downloadFailed("Download was cancelled before process launch."))
-                return
-            }
-            let outputState = ThreadSafeOutputState()
-
-            let processOutputLine: @Sendable (String) -> Void = { line in
-                if line.contains("[info] Writing video thumbnail") ||
-                   line.contains("[info] Writing video subtitle") ||
-                   line.contains("[info] Writing video description") ||
-                   line.contains("[ThumbnailsConvertor]") ||
-                   line.contains("[EmbedThumbnail]") ||
-                   line.contains("[EmbedSubtitle]") {
-                    DispatchQueue.main.async { onOutput(line) }
-                    return
-                }
-
-                if line.contains("[download] Destination:") {
-                    let parts = line.components(separatedBy: "[download] Destination: ")
-                    if parts.count > 1 {
-                        outputState.addCandidatePath(parts[1])
-                    }
-                }
-
-                if line.contains("has already been downloaded") {
-                    let parts = line.components(separatedBy: "[download] ")
-                    if parts.count > 1 {
-                        let pathPart = parts[1].components(separatedBy: " has already been downloaded")
-                        if !pathPart.isEmpty {
-                            outputState.addCandidatePath(pathPart[0])
-                        }
-                    }
-                }
-
-                if line.contains("[Merger] Merging formats into") {
-                    let parts = line.components(separatedBy: "\"")
-                    if parts.count > 1 {
-                        outputState.addCandidatePath(parts[1])
-                    }
-                }
-
-                if line.contains("[ExtractAudio] Destination:") {
-                    let parts = line.components(separatedBy: "[ExtractAudio] Destination: ")
-                    if parts.count > 1 {
-                        outputState.addCandidatePath(parts[1])
-                    }
-                }
-
-                if line.contains(" to \"") {
-                    let parts = line.components(separatedBy: " to \"")
-                    if let target = parts.last?.components(separatedBy: "\"").first, !target.isEmpty {
-                        outputState.addCandidatePath(target)
-                    }
-                }
-
-                DispatchQueue.main.async {
-                    onOutput(line)
-
-                    if line.contains("%") {
-                        let components = line.trimmingCharacters(in: .whitespacesAndNewlines)
-                            .components(separatedBy: .whitespaces)
-                            .filter { !$0.isEmpty }
-
-                        if let percentStr = components.first,
-                           let percent = Double(percentStr.replacingOccurrences(of: "%", with: "")) {
-                            let speed = components.count > 1 ? components[1] : nil
-                            let eta = components.count > 2 ? components[2] : nil
-                            onProgress(percent / 100.0, speed, eta)
-                        }
-                    } else if line.contains("[EmbedThumbnail]") {
-                        onProgress(0.99, "Embedding thumbnail...", "Finalizing file")
-                    } else if line.contains("[Metadata]") {
-                        onProgress(0.99, "Adding metadata...", "Finalizing file")
-                    } else if line.contains("[Merger]") {
-                        onProgress(0.99, "Merging video & audio...", "Please wait")
-                    } else if line.contains("[VideoConvertor]") || line.contains("Converting video") {
-                        onProgress(0.99, "Converting video...", "Please wait")
-                    } else if line.contains("[ThumbnailsConvertor]") {
-                        onProgress(0.99, "Preparing thumbnail...", "Please wait")
-                    } else if line.contains("[EmbedSubtitle]") {
-                        onProgress(0.99, "Embedding subtitles...", "Please wait")
-                    } else if line.contains("[ffmpeg]") {
-                        onProgress(0.99, "Processing media...", "Please wait")
-                    }
-                }
-            }
-
-            let outputBuffer = StreamBuffer()
-            let errorBuffer = StreamBuffer()
-
-            outputPipe.fileHandleForReading.readabilityHandler = { handle in
-                let data = handle.availableData
-                guard !data.isEmpty else { return }
-                for line in outputBuffer.appendAndExtractLines(data) {
-                    processOutputLine(line)
-                }
-            }
-
-            errorPipe.fileHandleForReading.readabilityHandler = { handle in
-                let data = handle.availableData
-                guard !data.isEmpty else { return }
-                for line in errorBuffer.appendAndExtractLines(data) {
-                    outputState.appendError(line + "\n")
-                    DispatchQueue.main.async { onOutput("[ERROR] \(line)") }
-                }
-            }
-
-            process.terminationHandler = { proc in
-                outputPipe.fileHandleForReading.readabilityHandler = nil
-                errorPipe.fileHandleForReading.readabilityHandler = nil
-
-                let remainingOutput = outputPipe.fileHandleForReading.readDataToEndOfFile()
-                if !remainingOutput.isEmpty {
-                    for line in outputBuffer.appendAndExtractLines(remainingOutput) {
-                        processOutputLine(line)
-                    }
-                }
-                for line in outputBuffer.flush() {
-                    processOutputLine(line)
-                }
-
-                let remainingError = errorPipe.fileHandleForReading.readDataToEndOfFile()
-                if !remainingError.isEmpty {
-                    for line in errorBuffer.appendAndExtractLines(remainingError) {
-                        outputState.appendError(line + "\n")
-                        DispatchQueue.main.async { onOutput("[ERROR] \(line)") }
-                    }
-                }
-                for line in errorBuffer.flush() {
-                    outputState.appendError(line + "\n")
-                    DispatchQueue.main.async { onOutput("[ERROR] \(line)") }
-                }
-
-                let fm = FileManager.default
-                var finalURL: URL? = nil
-
-                // Determine final media path strictly from explicit candidates reported by the process
-                let candidates = outputState.getCandidatePaths()
-                for candidate in candidates.reversed() {
-                    let rawURL = candidate.hasPrefix("/") ? URL(fileURLWithPath: candidate) : saveFolder.appendingPathComponent(candidate)
-                    let resolved = rawURL.standardizedFileURL.resolvingSymlinksInPath()
-
-                    if fm.fileExists(atPath: resolved.path),
-                       let values = try? resolved.resourceValues(forKeys: [.isRegularFileKey]),
-                       values.isRegularFile == true,
-                       Self.isMediaFilePath(resolved.path),
-                       Self.isPathContained(targetURL: resolved, inside: saveFolder) {
-                        finalURL = resolved
-                        break
-                    }
-                }
-
-                let errorOutput = outputState.getErrorText()
-
-                if proc.terminationStatus == 0 {
-                    if let resolvedURL = finalURL {
-                        safeContinuation.resume(returning: resolvedURL.path)
-                    } else {
-                        safeContinuation.resume(throwing: YtdlpError.downloadFailed("Download process completed, but no valid media file was verified in the target destination."))
-                    }
-                } else {
-                    if errorOutput.contains("Cloudflare") || (errorOutput.contains("403") && errorOutput.contains("anti-bot")) {
-                        safeContinuation.resume(throwing: YtdlpError.cloudflareBlocked)
-                    } else if errorOutput.contains("429") || errorOutput.contains("Too Many Requests") {
-                        safeContinuation.resume(throwing: YtdlpError.tooManyRequests)
-                    } else if errorOutput.contains("subtitle") || errorOutput.contains("caption") {
-                        safeContinuation.resume(throwing: YtdlpError.subtitleError(errorOutput))
-                    } else {
-                        let cleanError = errorOutput.components(separatedBy: "\n")
-                            .filter { $0.contains("ERROR:") }
-                            .last?
-                            .replacingOccurrences(of: "ERROR: ", with: "")
-                            ?? errorOutput
-                        safeContinuation.resume(throwing: YtdlpError.downloadFailed(cleanError.isEmpty ? "Process exited with code \(proc.terminationStatus)" : cleanError))
-                    }
-                }
-            }
-
-            do {
-                try process.run()
-                if isCancelled?() == true {
-                    process.terminate()
-                    safeContinuation.resume(throwing: YtdlpError.downloadFailed("Download was cancelled immediately after process launch."))
-                    return
-                }
-            } catch {
-                outputPipe.fileHandleForReading.readabilityHandler = nil
-                errorPipe.fileHandleForReading.readabilityHandler = nil
-                safeContinuation.resume(throwing: error)
-            }
-        }
+        try await processRunner.runDownloadProcess(
+            args: args,
+            saveFolder: saveFolder,
+            isCancelled: isCancelled,
+            onProcessCreated: onProcessCreated,
+            onProgress: onProgress,
+            onOutput: onOutput
+        )
     }
 
-    private func getAppSupportDirectory() -> URL {
+    nonisolated static func getAppSupportDirectory() -> URL {
         let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Library/Application Support")
         let siphonDir = appSupport.appendingPathComponent("Siphon")
         let lumaDir = appSupport.appendingPathComponent("Luma")
@@ -1928,7 +1670,7 @@ class YtdlpService: ObservableObject {
         ]
         
         do {
-            let output = try await runCommandAsync(curlArgs)
+            let output = try await runCommand(curlArgs)
             return output
         } catch {
             return nil
