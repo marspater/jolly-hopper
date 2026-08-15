@@ -38,9 +38,9 @@ extension Font {
 }
 
 public struct GeistFontRegistrar {
-    private static var isRegistered = false
+    @MainActor private static var isRegistered = false
 
-    public static func registerFonts() {
+    @MainActor public static func registerFonts() {
         guard !isRegistered else { return }
         isRegistered = true
 

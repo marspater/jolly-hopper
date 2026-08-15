@@ -2,7 +2,7 @@ import Foundation
 import UserNotifications
 import AppKit
 
-class NotificationService: NSObject, UNUserNotificationCenterDelegate {
+final class NotificationService: NSObject, @unchecked Sendable, UNUserNotificationCenterDelegate {
     static let shared = NotificationService()
 
     private func logMessage(_ message: String, level: LoggerService.LogLevel) {

@@ -20,8 +20,8 @@ class YtdlpService: ObservableObject {
     private let bundledYtdlpName = "yt-dlp_macos"
 
     #if DEBUG
-    var mockCommandRunner: (([String]) async throws -> String)?
-    var mockDownloadRunner: (([String]) async throws -> String)?
+    var mockCommandRunner: (@Sendable ([String]) async throws -> String)?
+    var mockDownloadRunner: (@Sendable ([String]) async throws -> String)?
     #endif
 
     init() {
@@ -619,9 +619,9 @@ class YtdlpService: ObservableObject {
     func download(
         url: String,
         options: DownloadOptions,
-        onProcessCreated: @escaping (Process) -> Void,
-        onProgress: @escaping (Double, String?, String?) -> Void,
-        onOutput: @escaping (String) -> Void
+        onProcessCreated: @escaping @Sendable (Process) -> Void,
+        onProgress: @escaping @Sendable (Double, String?, String?) -> Void,
+        onOutput: @escaping @Sendable (String) -> Void
     ) async throws -> URL {
         guard let path = ytdlpPath else {
             throw YtdlpError.notFound
@@ -1554,9 +1554,9 @@ class YtdlpService: ObservableObject {
     private func runDownloadProcess(
         args: [String],
         saveFolder: URL,
-        onProcessCreated: @escaping (Process) -> Void,
-        onProgress: @escaping (Double, String?, String?) -> Void,
-        onOutput: @escaping (String) -> Void
+        onProcessCreated: @escaping @Sendable (Process) -> Void,
+        onProgress: @escaping @Sendable (Double, String?, String?) -> Void,
+        onOutput: @escaping @Sendable (String) -> Void
     ) async throws -> String {
         #if DEBUG
         if let mock = mockDownloadRunner {
@@ -1588,7 +1588,7 @@ class YtdlpService: ObservableObject {
 
             let outputState = ThreadSafeOutputState()
 
-            let isMediaFilePath: (String) -> Bool = { path in
+            let isMediaFilePath: @Sendable (String) -> Bool = { path in
                 let ext = (path as NSString).pathExtension.lowercased()
                 let nonMediaExtensions: Set<String> = [
                     "jpg", "jpeg", "png", "webp", "gif", "bmp", "tiff",
@@ -1598,7 +1598,7 @@ class YtdlpService: ObservableObject {
                 return !ext.isEmpty && !nonMediaExtensions.contains(ext)
             }
 
-            let processOutputLine: (String) -> Void = { line in
+            let processOutputLine: @Sendable (String) -> Void = { line in
                 if line.contains("[info] Writing video thumbnail") || line.contains("[info] Writing video subtitle") || line.contains("[info] Writing video description") {
                     DispatchQueue.main.async { onOutput(line) }
                     return
@@ -2115,7 +2115,7 @@ final class ThreadSafeOutputState: @unchecked Sendable {
 /// Thread-safe continuation wrapper that prevents double-resume crashes.
 /// If `process.run()` throws AND the terminationHandler fires, only the first
 /// resume call will go through; subsequent calls are safely ignored.
-final class SafeContinuation<T>: @unchecked Sendable {
+final class SafeContinuation<T: Sendable>: @unchecked Sendable {
     private var continuation: CheckedContinuation<T, Error>?
     private let lock = NSLock()
 
