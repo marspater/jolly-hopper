@@ -8,12 +8,10 @@ updates:
       time: "09:00"
       timezone: "UTC"
     open-pull-requests-limit: 10
-    # Group all action updates into a single PR instead of opening multiple individual PRs
     groups:
       github-actions:
         patterns:
           - "*"
-    # Standardize commit messages to match conventional commits (ci(deps): ...)
     commit-message:
       prefix: "ci"
       include: "scope"

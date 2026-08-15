@@ -240,37 +240,32 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
     
     private func installUpdate(packagePath: String) {
         let appPath = Bundle.main.bundlePath
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try? FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        
         let script = """
         (
-            exec > /tmp/siphon_update.log 2>&1
             PKG_PATH="$1"
             APP_PATH="$2"
-            echo "Starting update installation..."
+            WORK_DIR="$3"
+            
             sleep 2
             
-            WORK_DIR="/tmp/SiphonUpdate_$(date +%s)"
-            mkdir -p "$WORK_DIR"
-            
             if file "$PKG_PATH" | grep -q "Zip archive"; then
-                echo "Unzipping update..."
                 /usr/bin/unzip -q "$PKG_PATH" -d "$WORK_DIR"
             else
-                echo "Mounting DMG update..."
                 hdiutil mount "$PKG_PATH" -mountpoint "$WORK_DIR" -quiet
             fi
             
             NEW_APP="$(find "$WORK_DIR" -maxdepth 2 -name "*.app" | head -n 1)"
             
             if [ -n "$NEW_APP" ] && [ -d "$NEW_APP" ]; then
-                echo "Found updated app at $NEW_APP. Replacing $APP_PATH..."
                 rm -rf "$APP_PATH"
                 ditto "$NEW_APP" "$APP_PATH"
                 hdiutil unmount "$WORK_DIR" -quiet 2>/dev/null || true
                 rm -rf "$WORK_DIR"
-                echo "Update succeeded. Relaunching..."
                 open "$APP_PATH"
             else
-                echo "No valid .app found in package."
                 hdiutil unmount "$WORK_DIR" -quiet 2>/dev/null || true
                 rm -rf "$WORK_DIR"
             fi
@@ -279,7 +274,7 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
         
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/bash")
-        process.arguments = ["-c", script, "bash", packagePath, appPath]
+        process.arguments = ["-c", script, "bash", packagePath, appPath, tempDir.path]
         
         do {
             try process.run()
@@ -295,15 +290,13 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
     }
     
     func restartApp() {
-        let script = "pkill 'Siphon' || pkill 'Luma Pro'"
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/bin/bash")
-        process.arguments = ["-c", script]
-        
-        do {
-            try process.run()
-        } catch {
-            NSApp.terminate(nil)
+        let appURL = Bundle.main.bundleURL
+        let configuration = NSWorkspace.OpenConfiguration()
+        configuration.createsNewApplicationInstance = true
+        NSWorkspace.shared.openApplication(at: appURL, configuration: configuration) { _, _ in
+            DispatchQueue.main.async {
+                NSApp.terminate(nil)
+            }
         }
     }
 }
