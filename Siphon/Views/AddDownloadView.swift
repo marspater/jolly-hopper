@@ -1157,12 +1157,10 @@ struct AddDownloadView: View {
             downloadManager.addDownload(url: urlInput, options: finalOptions)
         } else {
             let selectedItems = playlistItems.filter { selectedPlaylistIds.contains($0.id) }
-            for item in selectedItems {
-                let videoUrl = item.resolvedURL
-                var itemOptions = finalOptions
-                itemOptions.customFilename = nil
-                downloadManager.addDownload(url: videoUrl, options: itemOptions)
-            }
+            let urls = selectedItems.map { $0.resolvedURL }
+            var itemOptions = finalOptions
+            itemOptions.customFilename = nil
+            downloadManager.addDownloads(urls: urls, options: itemOptions)
         }
         appState.selectedNavItem = .downloading
         AddDownloadWindowManager.shared.closeWindow()
