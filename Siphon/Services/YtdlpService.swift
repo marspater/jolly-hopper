@@ -167,7 +167,7 @@ class YtdlpService: ObservableObject {
         try? FileManager.default.createDirectory(at: isolatedHome, withIntermediateDirectories: true)
 
         var env: [String: String] = [:]
-        env["PATH"] = "\(appSupport.path):/usr/bin:/bin:/usr/sbin:/sbin"
+        env["PATH"] = "/usr/bin:/bin:/usr/sbin:/sbin"
         env["HOME"] = isolatedHome.path
         env["TMPDIR"] = FileManager.default.temporaryDirectory.path
         env["XDG_CONFIG_HOME"] = isolatedHome.appendingPathComponent(".config").path
@@ -193,25 +193,28 @@ class YtdlpService: ObservableObject {
     }
 
     func findYtdlp() async {
+        let appSupport = getAppSupportDirectory()
+        let invalidBackup = appSupport.appendingPathComponent("yt-dlp.invalid-backup")
+
         if let bundledPath = Bundle.main.url(forResource: "yt-dlp", withExtension: nil) {
             if Self.verifySHA256(fileURL: bundledPath, expectedHash: DependencyChecksums.ytdlpExecutableSHA256) {
                 ytdlpPath = bundledPath
                 isAvailable = true
+                try? FileManager.default.removeItem(at: invalidBackup)
                 return
             }
         }
 
-        let appSupport = getAppSupportDirectory()
         let ytdlpInSupport = appSupport.appendingPathComponent("yt-dlp")
 
         if FileManager.default.fileExists(atPath: ytdlpInSupport.path) {
             if Self.verifySHA256(fileURL: ytdlpInSupport, expectedHash: DependencyChecksums.ytdlpExecutableSHA256) {
                 ytdlpPath = ytdlpInSupport
                 isAvailable = true
+                try? FileManager.default.removeItem(at: invalidBackup)
                 return
             } else {
                 LoggerService.shared.log("yt-dlp binary in App Support failed SHA-256 verification. Preserving invalid backup and downloading pinned version.", level: .warning)
-                let invalidBackup = appSupport.appendingPathComponent("yt-dlp.invalid-backup")
                 try? FileManager.default.removeItem(at: invalidBackup)
                 try? FileManager.default.moveItem(at: ytdlpInSupport, to: invalidBackup)
             }

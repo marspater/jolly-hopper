@@ -567,4 +567,12 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertFalse(sanitized.contains("MyP@ssw0rd!123"))
         XCTAssertFalse(sanitized.contains("auth=SECRET"))
     }
+
+    func testCancellationBoxStateManagement() {
+        let box = CancellationBox()
+        XCTAssertFalse(box.isCancelled)
+
+        box.cancel()
+        XCTAssertTrue(box.isCancelled)
+    }
 }
