@@ -18,7 +18,7 @@ Please **do not open a public GitHub issue** for suspected security vulnerabilit
 
 Report vulnerabilities privately through GitHub's **Security Advisories** feature:
 
-**https://github.com/jolly-hopper/Siphon/security/advisories/new**
+**https://github.com/marspater/jolly-hopper/security/advisories/new**
 
 When reporting a vulnerability, please include:
 

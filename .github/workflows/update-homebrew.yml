@@ -26,10 +26,10 @@ jobs:
         id: asset
         run: |
           TAG_NAME="${{ steps.version.outputs.tag_name }}"
-          ASSET_URL="https://github.com/marspater/jolly-hopper/releases/download/${TAG_NAME}/Luma-${TAG_NAME}.dmg"
+          ASSET_URL="https://github.com/marspater/jolly-hopper/releases/download/${TAG_NAME}/Siphon-${TAG_NAME}.dmg"
           
-          curl -sL "$ASSET_URL" -o luma.dmg
-          SHA256=$(sha256sum luma.dmg | cut -d' ' -f1)
+          curl -sL "$ASSET_URL" -o siphon.dmg
+          SHA256=$(sha256sum siphon.dmg | cut -d' ' -f1)
           echo "sha256=$SHA256" >> $GITHUB_OUTPUT
 
       - name: Checkout Homebrew Tap
@@ -42,17 +42,23 @@ jobs:
       - name: Update Cask formula
         run: |
           cd homebrew-tap
-          sed -i 's/version "[^"]*"/version "${{ steps.version.outputs.version }}"/' Casks/luma-pro.rb
-          sed -i 's/sha256 "[^"]*"/sha256 "${{ steps.asset.outputs.sha256 }}"/' Casks/luma-pro.rb
+          if [ -f "Casks/siphon.rb" ]; then
+            sed -i 's/version "[^"]*"/version "${{ steps.version.outputs.version }}"/' Casks/siphon.rb
+            sed -i 's/sha256 "[^"]*"/sha256 "${{ steps.asset.outputs.sha256 }}"/' Casks/siphon.rb
+            git add Casks/siphon.rb
+          elif [ -f "Casks/luma-pro.rb" ]; then
+            sed -i 's/version "[^"]*"/version "${{ steps.version.outputs.version }}"/' Casks/luma-pro.rb
+            sed -i 's/sha256 "[^"]*"/sha256 "${{ steps.asset.outputs.sha256 }}"/' Casks/luma-pro.rb
+            git add Casks/luma-pro.rb
+          fi
 
       - name: Commit and push changes
         run: |
           cd homebrew-tap
           git config user.name "GitHub Actions Bot"
           git config user.email "actions@github.com"
-          git add Casks/luma-pro.rb
           if ! git diff --cached --quiet; then
-            git commit -m "Update Luma Pro to v${{ steps.version.outputs.version }}"
+            git commit -m "Update Siphon to v${{ steps.version.outputs.version }}"
             git push
           else
             echo "No changes to commit"
