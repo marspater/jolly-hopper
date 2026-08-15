@@ -1524,13 +1524,17 @@ class YtdlpService: ObservableObject {
                 lowerUrl.contains("cdn.boyfriend.tv")
         }
 
-        // Adaptive transport & rate-throttling policy:
-        // 1. YouTube & known rate-limited single-stream CDNs (e.g. ThisVid): apply 10MB chunking & throttled-rate re-extraction.
-        // 2. DASH/HLS fragmented streams: apply concurrent fragment downloads (8 fragments).
-        // 3. Generic direct progressive HTTP downloads: use standard single-stream HTTP first to avoid Range request overhead
-        //    and avoid false-positive re-extractions on slow connections (<100KB/s).
+        // Universal baseline transport optimization:
+        // 1. 10M HTTP chunking: enables multi-megabyte Range chunks across CDNs/hosts to bypass single-stream connection throttling.
+        //    Safe because runDownloadProcess automatically catches Range-incompatible servers and retries as continuous stream.
+        // 2. 16K buffer size: reduces read/write syscall overhead compared to default small buffers.
+        args.append(contentsOf: ["--http-chunk-size", "10M"])
+        args.append(contentsOf: ["--buffer-size", "16K"])
+
+        // Adaptive rate-throttling recovery:
+        // YouTube and ThisVid throttle video streams aggressively and require active rate monitoring & re-extraction.
+        // Scoped specifically to prevent false-positive re-extractions on slow connections for other domains.
         if isYouTube || isThisVid {
-            args.append(contentsOf: ["--http-chunk-size", "10M"])
             args.append(contentsOf: ["--throttled-rate", "100K"])
         }
 

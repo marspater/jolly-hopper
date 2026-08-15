@@ -121,16 +121,46 @@ struct DownloadRowView: View {
                         statusBadge
                         
                         if let duration = download.duration {
-                            Text(duration)
-                                .font(.geistMono(11, weight: .medium))
-                                .foregroundColor(.secondary)
+                            HStack(spacing: 3) {
+                                Image(systemName: "timer")
+                                    .font(.system(size: 9))
+                                Text(duration)
+                                    .font(.geistMono(11, weight: .medium))
+                            }
+                            .foregroundColor(.secondary)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Color.primary.opacity(0.04))
+                            .clipShape(Capsule())
                         }
                     }
                     
                     if download.status == .downloading {
-                        Text(download.displayProgress)
-                            .font(.geistMono(11, weight: .medium))
-                            .foregroundColor(.secondary)
+                        HStack(spacing: 10) {
+                            Text("\(Int(download.progress * 100))%")
+                                .font(.geistMono(12, weight: .bold))
+                                .foregroundColor(.accentColor)
+                            
+                            if let speed = download.speed, !speed.isEmpty {
+                                HStack(spacing: 3) {
+                                    Image(systemName: "arrow.down")
+                                        .font(.system(size: 9, weight: .semibold))
+                                    Text(speed)
+                                        .font(.geistMono(11, weight: .medium))
+                                }
+                                .foregroundColor(.secondary)
+                            }
+                            
+                            if let eta = download.eta, !eta.isEmpty {
+                                HStack(spacing: 3) {
+                                    Image(systemName: "clock")
+                                        .font(.system(size: 9, weight: .regular))
+                                    Text(eta)
+                                        .font(.geistMono(11, weight: .medium))
+                                }
+                                .foregroundColor(.secondary.opacity(0.8))
+                            }
+                        }
                     }
                     
                     if let error = download.errorMessage {
@@ -211,7 +241,11 @@ struct DownloadRowView: View {
         .frame(width: 120, height: 68)
         .contentShape(Rectangle())
         .clipped()
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+        )
     }
     
     private var thumbnailPlaceholder: some View {
@@ -514,13 +548,20 @@ struct StatusSpinnerView: View {
 
     var body: some View {
         Circle()
-            .trim(from: 0, to: 0.7)
-            .stroke(Color.accentColor, style: StrokeStyle(lineWidth: 1.8, lineCap: .round))
-            .frame(width: 12, height: 12)
+            .trim(from: 0, to: 0.72)
+            .stroke(
+                LinearGradient(
+                    colors: [Color.accentColor, Color.accentColor.opacity(0.3)],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                ),
+                style: StrokeStyle(lineWidth: 1.9, lineCap: .round)
+            )
+            .frame(width: 11, height: 11)
             .rotationEffect(.degrees(isRotating))
             .onAppear {
                 isRotating = 0
-                withAnimation(.linear(duration: 0.9).repeatForever(autoreverses: false)) {
+                withAnimation(.linear(duration: 0.85).repeatForever(autoreverses: false)) {
                     isRotating = 360
                 }
             }
@@ -539,14 +580,24 @@ struct LinearProgressBar: View {
         GeometryReader { geometry in
             ZStack(alignment: .leading) {
                 Capsule()
-                    .fill(Color.primary.opacity(0.1))
+                    .fill(Color.primary.opacity(0.08))
                 Capsule()
-                    .fill(Color(.displayP3, red: 0.15, green: 0.55, blue: 1.0))
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                Color(.displayP3, red: 0.12, green: 0.52, blue: 0.98),
+                                Color(.displayP3, red: 0.18, green: 0.72, blue: 0.98)
+                            ],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                    )
                     .frame(width: max(0, geometry.size.width * CGFloat(safeValue)))
+                    .shadow(color: Color.blue.opacity(0.3), radius: 3, y: 1)
                     .animation(.linear(duration: 0.2), value: safeValue)
             }
         }
-        .frame(height: 4)
+        .frame(height: 5)
         .clipShape(Capsule())
     }
 }
