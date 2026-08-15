@@ -789,6 +789,7 @@ class YtdlpService: ObservableObject {
         }
         args.append(contentsOf: ["--ffmpeg-location", ffmpegDir])
         args.append(contentsOf: ["--paths", "temp:/tmp"])
+        args.append(contentsOf: ["--paths", "thumbnail:/tmp"])
         args.append("--no-playlist")
 
         let outputTemplate: String
@@ -1525,10 +1526,9 @@ class YtdlpService: ObservableObject {
         args.append(contentsOf: ["--retries", "10"])
         args.append(contentsOf: ["--fragment-retries", "10"])
         args.append(contentsOf: ["--socket-timeout", "15"])
-        args.append(contentsOf: ["--http-chunk-size", "10M"])
-        args.append(contentsOf: ["--throttled-rate", "100K"])
         args.append("--no-mtime")
 
+        let isYouTube = lowerUrl.contains("youtube.com") || lowerUrl.contains("youtu.be")
         let isFragmented: Bool
         if let info = mediaInfo, let opts = options {
             isFragmented = info.isSelectedFormatFragmented(options: opts)
@@ -1540,6 +1540,11 @@ class YtdlpService: ObservableObject {
                 lowerUrl.contains("boyfriend.tv") ||
                 lowerUrl.contains("boyfriendtv.com") ||
                 lowerUrl.contains("cdn.boyfriend.tv")
+        }
+
+        if isYouTube || isFragmented {
+            args.append(contentsOf: ["--http-chunk-size", "10M"])
+            args.append(contentsOf: ["--throttled-rate", "100K"])
         }
 
         if isFragmented {
@@ -1708,7 +1713,12 @@ class YtdlpService: ObservableObject {
             let outputState = ThreadSafeOutputState()
 
             let processOutputLine: @Sendable (String) -> Void = { line in
-                if line.contains("[info] Writing video thumbnail") || line.contains("[info] Writing video subtitle") || line.contains("[info] Writing video description") {
+                if line.contains("[info] Writing video thumbnail") ||
+                   line.contains("[info] Writing video subtitle") ||
+                   line.contains("[info] Writing video description") ||
+                   line.contains("[ThumbnailsConvertor]") ||
+                   line.contains("[EmbedThumbnail]") ||
+                   line.contains("[EmbedSubtitle]") {
                     DispatchQueue.main.async { onOutput(line) }
                     return
                 }
