@@ -548,4 +548,23 @@ final class YtdlpServiceTests: XCTestCase {
         await fulfillment(of: [expectation], timeout: 1.0)
         XCTAssertEqual(checkedResult, 42)
     }
+
+    func testSanitizeCommandForLogSensitiveCredentials() {
+        let args = [
+            "yt-dlp",
+            "--username", "secret_user@example.com",
+            "--password", "MyP@ssw0rd!123",
+            "--proxy", "http://user:pass@127.0.0.1:8080",
+            "https://site.example/video?auth=SECRET"
+        ]
+
+        let sanitized = LoggerService.sanitizeCommandForLog(args)
+        XCTAssertTrue(sanitized.contains("--username \"<USERNAME>\""))
+        XCTAssertTrue(sanitized.contains("--password \"<PASSWORD>\""))
+        XCTAssertTrue(sanitized.contains("--proxy \"<PROXY_REDACTED>\""))
+        XCTAssertTrue(sanitized.contains("https://site.example/video"))
+        XCTAssertFalse(sanitized.contains("secret_user@example.com"))
+        XCTAssertFalse(sanitized.contains("MyP@ssw0rd!123"))
+        XCTAssertFalse(sanitized.contains("auth=SECRET"))
+    }
 }

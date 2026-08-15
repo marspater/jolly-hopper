@@ -30,6 +30,17 @@ class LoggerService: ObservableObject {
         var sanitizedArgs: [String] = []
         var skipNextForRedaction: String? = nil
 
+        let sensitiveValueFlags: [String: String] = [
+            "--cookies": "\"<COOKIE_FILE>\"",
+            "--add-header": "\"<REDACTED_HEADER>\"",
+            "--header": "\"<REDACTED_HEADER>\"",
+            "--username": "\"<USERNAME>\"",
+            "-u": "\"<USERNAME>\"",
+            "--password": "\"<PASSWORD>\"",
+            "-p": "\"<PASSWORD>\"",
+            "--proxy": "\"<PROXY_REDACTED>\""
+        ]
+
         for arg in args {
             if let redactionPlaceholder = skipNextForRedaction {
                 sanitizedArgs.append(redactionPlaceholder)
@@ -37,15 +48,9 @@ class LoggerService: ObservableObject {
                 continue
             }
 
-            if arg == "--cookies" {
+            if let placeholder = sensitiveValueFlags[arg] {
                 sanitizedArgs.append(arg)
-                skipNextForRedaction = "\"<COOKIE_FILE>\""
-                continue
-            }
-
-            if arg == "--add-header" || arg == "--header" {
-                sanitizedArgs.append(arg)
-                skipNextForRedaction = "\"<REDACTED_HEADER>\""
+                skipNextForRedaction = placeholder
                 continue
             }
 

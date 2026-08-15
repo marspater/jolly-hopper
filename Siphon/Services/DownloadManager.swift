@@ -25,6 +25,7 @@ class DownloadManager: ObservableObject {
     }
     private let userDefaults = UserDefaults.standard
     private var activeProcesses: [UUID: Process] = [:]
+    private var activeCancellations: [UUID: CancellationBox] = [:]
     private var languageService: LanguageService?
     private var failedDownloadsMap: [UUID: Download] = [:]
 
@@ -245,19 +246,23 @@ class DownloadManager: ObservableObject {
             updateStatus(for: download, to: .downloading)
             objectWillChange.send()
 
+            let cancelBox = CancellationBox()
+            activeCancellations[download.id] = cancelBox
+
             LoggerService.shared.log("Starting download for URL: \(LoggerService.sanitizeURLForLog(download.url))", level: .info)
             let outputPath = try await ytdlpService.download(
                 url: download.url,
                 options: download.options,
-                onProcessCreated: { [weak self] process in
-                    // Bug #6 fix: Always register process immediately, then check if already cancelled
+                isCancelled: {
+                    cancelBox.isCancelled
+                },
+                onProcessCreated: { [weak self, weak download] process in
                     Task { @MainActor in
-                        guard let self = self else { return }
-                        self.activeProcesses[download.id] = process
-                        // If download was stopped while we were setting up, kill the process immediately
-                        if download.status == .stopped {
+                        guard let self = self, let download = download else { return }
+                        if download.status == .stopped || cancelBox.isCancelled {
                             process.terminate()
-                            self.activeProcesses.removeValue(forKey: download.id)
+                        } else {
+                            self.activeProcesses[download.id] = process
                         }
                     }
                 },
@@ -361,6 +366,7 @@ class DownloadManager: ObservableObject {
             return
         }
         updateStatus(for: download, to: .stopped)
+        activeCancellations.removeValue(forKey: download.id)?.cancel()
         if let process = activeProcesses.removeValue(forKey: download.id) {
             process.terminate()
             Task.detached { [weak process] in
