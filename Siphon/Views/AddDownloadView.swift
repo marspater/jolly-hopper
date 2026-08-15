@@ -39,7 +39,6 @@ struct AddDownloadView: View {
     @State private var embedMetadata: Bool = true
     @State private var splitChapters: Bool = false
     @State private var sponsorBlock: Bool = false
-    @State private var additionalArguments: String = ""
 
     @State private var showFileExistsAlert: Bool = false
     @State private var pendingDownloadOptions: DownloadOptions? = nil
@@ -147,43 +146,9 @@ struct AddDownloadView: View {
                 videoResolution = customPreset.videoResolution
                 selectedCodec = customPreset.videoCodec.rawValue
                 selectedConversionCodec = "none"
-                selectedAudioCodec = customPreset.audioCodec.rawValue
-                isVideoTab = customPreset.fileType.isVideo
-                selectedPresetName = customPreset.name
-                downloadSubtitles = customPreset.downloadSubtitles ?? false
-                additionalArguments = customPreset.additionalArguments ?? ""
-
-                let rawLang = customPreset.subtitleLanguage ?? ""
-                if rawLang.hasPrefix("embed:") {
-                    embedSubtitles = true
-                    presetSubtitleLanguage = rawLang.replacingOccurrences(of: "embed:", with: "")
-                } else {
-                    embedSubtitles = false
-                    presetSubtitleLanguage = rawLang
-                }
-
-                sponsorBlock = customPreset.sponsorBlock ?? false
-                splitChapters = customPreset.splitChapters ?? false
-
-            }
-            // 2. Fallback to Standard Preset
-            else if let preset = DownloadPreset(rawValue: selectedPreset) {
-                fileType = preset.fileType
-                videoResolution = preset.videoResolution
-                selectedCodec = preset.videoCodec.rawValue
-                selectedConversionCodec = "none"
-                selectedAudioCodec = preset.audioCodec.rawValue
-                isVideoTab = preset.fileType.isVideo
-                selectedPresetName = preset.title(lang: languageService)
-
                 downloadSubtitles = false
                 embedSubtitles = false
                 presetSubtitleLanguage = ""
-                additionalArguments = defaultAdditionalArguments
-            }
-            // 3. Last fallback (should not happen normally)
-            else {
-                additionalArguments = defaultAdditionalArguments
             }
 
             // Handle Clipboard and External URLs
@@ -785,7 +750,6 @@ struct AddDownloadView: View {
         embedSubtitles = false
         selectedSubtitleLangs.removeAll()
         presetSubtitleLanguage = ""
-        additionalArguments = defaultAdditionalArguments
     }
 
     private func applyCustomPreset(_ preset: CustomPreset, preserveSelectedCodec: Bool = true) {
@@ -811,7 +775,6 @@ struct AddDownloadView: View {
         subtitleFormat = preset.subtitleFormat ?? .srt
         sponsorBlock = preset.sponsorBlock ?? false
         splitChapters = preset.splitChapters ?? false
-        additionalArguments = preset.additionalArguments ?? ""
 
         if !presetSubtitleLanguage.isEmpty && !availableSubtitles.isEmpty {
             if availableSubtitles.contains(where: { $0.id == presetSubtitleLanguage }) {
@@ -921,16 +884,6 @@ struct AddDownloadView: View {
                     Toggle(languageService.s("sponsorblock_hint"), isOn: $sponsorBlock)
                 }
                 .padding(.vertical, 4)
-            }
-            GroupBox(languageService.s("additional_arguments")) {
-                TextField(languageService.s("additional_arguments_hint"), text: $additionalArguments)
-                    .textFieldStyle(.roundedBorder)
-
-                Text(.init(languageService.s("additional_arguments_help")))
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                    .multilineTextAlignment(.leading)
-                    .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
         .padding(.top, 8)
@@ -1114,7 +1067,6 @@ struct AddDownloadView: View {
             audioCodec: audioCodecEnum,
             conversionCodec: conversionCodecEnum,
             forceOverwrite: false,
-            additionalArguments: additionalArguments.isEmpty ? nil : additionalArguments,
             rawCookies: nil,
             selectedFormatId: inputMode == .single ? selectedFormatId : nil
         )

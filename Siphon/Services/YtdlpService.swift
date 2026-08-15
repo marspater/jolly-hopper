@@ -1,6 +1,29 @@
 import Foundation
+import CryptoKit
 
+struct DependencyChecksums {
+    static let ytdlpVersion = "2026.07.04"
+    static let ytdlpURL = URL(string: "https://github.com/yt-dlp/yt-dlp/releases/download/2026.07.04/yt-dlp_macos")!
+    static let ytdlpExecutableSHA256 = "498bd0dae17855c599d371d68ec5bafc439a9d8640e838be25c765a9792f261b"
 
+    #if arch(arm64)
+    static let ffmpegURL = URL(string: "https://github.com/eugeneware/ffmpeg-static/releases/download/b6.1.1/ffmpeg-darwin-arm64.gz")!
+    static let ffmpegArchiveSHA256 = "8923876afa8db5585022d7860ec7e589af192f441c56793971276d450ed3bbfa"
+    static let ffmpegExecutableSHA256 = "a90e3db6a3fd35f6074b013f948b1aa45b31c6375489d39e572bea3f18336584"
+
+    static let ffprobeURL = URL(string: "https://github.com/eugeneware/ffmpeg-static/releases/download/b6.1.1/ffprobe-darwin-arm64.gz")!
+    static let ffprobeArchiveSHA256 = "d986a8ec7b030899fe66a8a288ed809a3543338705a3ce178cfb85869c5d80be"
+    static let ffprobeExecutableSHA256 = "bb2db6f5d8cef919da12fbf592119a987202a8c060a886f3cab091f9cab90b64"
+    #else
+    static let ffmpegURL = URL(string: "https://github.com/eugeneware/ffmpeg-static/releases/download/b6.1.1/ffmpeg-darwin-x64.gz")!
+    static let ffmpegArchiveSHA256 = "929b375c1182d956c51f7ac25e0b2b0411fb01f6f407aa15c9758efeb4242106"
+    static let ffmpegExecutableSHA256 = "ebdddc936f61e14049a2d4b549a412b8a40deeff6540e58a9f2a2da9e6b18894"
+
+    static let ffprobeURL = URL(string: "https://github.com/eugeneware/ffmpeg-static/releases/download/b6.1.1/ffprobe-darwin-x64.gz")!
+    static let ffprobeArchiveSHA256 = "d4da574d6e2e197bd259b47d69cf262df9e312af24ad960444f6d806d3d4c186"
+    static let ffprobeExecutableSHA256 = "fa3add0ce901f7241abe0dfc0155d958fc834aca3f8ce61f87cc712ae669c1e0"
+    #endif
+}
 
 @MainActor
 class YtdlpService: ObservableObject {
@@ -12,7 +35,6 @@ class YtdlpService: ObservableObject {
     var ytdlpPath: URL?
     var ffmpegPath: URL?
     var ffprobePath: URL?
-    var aria2cPath: URL?
     /// Tracks whether macOS TCC has denied cookie access this session.
     /// Once set, we skip --cookies-from-browser entirely to avoid 7s retry delays.
     private var tccCookieDenied: Bool = false
@@ -30,35 +52,72 @@ class YtdlpService: ObservableObject {
         }
     }
 
+    nonisolated static func verifySHA256(fileURL: URL, expectedHash: String) -> Bool {
+        guard let data = try? Data(contentsOf: fileURL, options: .mappedIfSafe) else { return false }
+        let digest = SHA256.hash(data: data)
+        let hashString = digest.map { String(format: "%02x", $0) }.joined()
+        return hashString.caseInsensitiveCompare(expectedHash) == .orderedSame
+    }
 
+    nonisolated static func isPathContained(targetURL: URL, inside parentDirectoryURL: URL) -> Bool {
+        let root = parentDirectoryURL.standardizedFileURL.resolvingSymlinksInPath()
+        let candidate = targetURL.standardizedFileURL.resolvingSymlinksInPath()
+        return candidate.path == root.path || candidate.path.hasPrefix(root.path + "/")
+    }
+
+    private func isExecutableBinary(at url: URL) -> Bool {
+        FileManager.default.fileExists(atPath: url.path) && FileManager.default.isExecutableFile(atPath: url.path)
+    }
+
+    private func repairAppSupportFfmpegPair(ffmpeg: URL, ffprobe: URL) async {
+        if !isExecutableBinary(at: ffmpeg) || !isExecutableBinary(at: ffprobe) ||
+           !Self.verifySHA256(fileURL: ffmpeg, expectedHash: DependencyChecksums.ffmpegExecutableSHA256) ||
+           !Self.verifySHA256(fileURL: ffprobe, expectedHash: DependencyChecksums.ffprobeExecutableSHA256) {
+            LoggerService.shared.log("Downloading or repairing FFmpeg and FFprobe in \(ffmpeg.deletingLastPathComponent().path)", level: .info)
+            await downloadFfmpeg()
+            await downloadFfprobe()
+        }
+    }
+
+    private func createSanitizedEnvironment() -> [String: String] {
+        let appSupport = getAppSupportDirectory()
+        var env: [String: String] = [:]
+        env["PATH"] = "\(appSupport.path):/usr/bin:/bin"
+        env["HOME"] = appSupport.path
+        env["TMPDIR"] = FileManager.default.temporaryDirectory.path
+        return env
+    }
 
     func setupBinaries() async {
         await findYtdlp()
         await findFfmpeg()
-        await findAria2c()
     }
 
 
 
 
     func findYtdlp() async {
-
         if let bundledPath = Bundle.main.url(forResource: "yt-dlp", withExtension: nil) {
-            ytdlpPath = bundledPath
-            isAvailable = true
-            return
+            if Self.verifySHA256(fileURL: bundledPath, expectedHash: DependencyChecksums.ytdlpExecutableSHA256) {
+                ytdlpPath = bundledPath
+                isAvailable = true
+                return
+            }
         }
-
 
         let appSupport = getAppSupportDirectory()
         let ytdlpInSupport = appSupport.appendingPathComponent("yt-dlp")
 
         if FileManager.default.fileExists(atPath: ytdlpInSupport.path) {
-            ytdlpPath = ytdlpInSupport
-            isAvailable = true
-            return
+            if Self.verifySHA256(fileURL: ytdlpInSupport, expectedHash: DependencyChecksums.ytdlpExecutableSHA256) {
+                ytdlpPath = ytdlpInSupport
+                isAvailable = true
+                return
+            } else {
+                LoggerService.shared.log("yt-dlp binary in App Support failed SHA-256 verification. Removing and re-downloading pinned version.", level: .warning)
+                try? FileManager.default.removeItem(at: ytdlpInSupport)
+            }
         }
-
 
         await downloadYtdlp()
     }
@@ -123,53 +182,20 @@ class YtdlpService: ObservableObject {
         LoggerService.shared.log("FFmpeg installation failed. Attempted path: \(appSupport.path)", level: .error)
     }
 
-    func findAria2c() async {
-        let appSupport = getAppSupportDirectory()
-        let aria2cInSupport = appSupport.appendingPathComponent("aria2c")
-        if isExecutableBinary(at: aria2cInSupport) {
-            aria2cPath = aria2cInSupport
-            LoggerService.shared.log("Selected app-support aria2c path: \(aria2cInSupport.path)", level: .info)
-            return
-        }
-
-        if let bundledAria2c = Bundle.main.url(forResource: "aria2c", withExtension: nil), isExecutableBinary(at: bundledAria2c) {
-            aria2cPath = bundledAria2c
-            LoggerService.shared.log("Selected bundled aria2c path: \(bundledAria2c.path)", level: .info)
-            return
-        }
-
-        let systemDirectories = ["/opt/homebrew/bin", "/usr/local/bin", "/usr/bin"]
-        for directory in systemDirectories {
-            let aria2c = URL(fileURLWithPath: directory).appendingPathComponent("aria2c")
-            if isExecutableBinary(at: aria2c) {
-                aria2cPath = aria2c
-                LoggerService.shared.log("Selected system aria2c path: \(aria2c.path)", level: .info)
-                return
-            }
-        }
-    }
-
-    private func repairAppSupportFfmpegPair(ffmpeg: URL, ffprobe: URL) async {
-        if !isExecutableBinary(at: ffmpeg) || !isExecutableBinary(at: ffprobe) {
-            LoggerService.shared.log("Downloading or repairing FFmpeg and FFprobe in \(ffmpeg.deletingLastPathComponent().path)", level: .info)
-            await downloadFfmpeg()
-            await downloadFfprobe()
-        }
-    }
-
-    private func isExecutableBinary(at url: URL) -> Bool {
-        FileManager.default.fileExists(atPath: url.path) && FileManager.default.isExecutableFile(atPath: url.path)
-    }
-
-    private func validateBinary(_ url: URL, name: String, context: String) async -> Bool {
+    private func validateBinary(_ url: URL, name: String, expectedSHA256: String, context: String) async -> Bool {
         guard isExecutableBinary(at: url) else {
             LoggerService.shared.log("\(name) at \(url.path) is missing or not executable for \(context).", level: .warning)
             return false
         }
 
+        guard Self.verifySHA256(fileURL: url, expectedHash: expectedSHA256) else {
+            LoggerService.shared.log("\(name) at \(url.path) failed SHA-256 checksum verification for \(context). Expected: \(expectedSHA256)", level: .error)
+            return false
+        }
+
         do {
             _ = try await runCommandAsync([url.path, "-version"])
-            LoggerService.shared.log("Validated \(name) at \(url.path) for \(context).", level: .info)
+            LoggerService.shared.log("Cryptographically validated \(name) at \(url.path) for \(context).", level: .info)
             return true
         } catch {
             LoggerService.shared.log("Failed to validate \(name) at \(url.path) for \(context): \(error.localizedDescription)", level: .error)
@@ -178,8 +204,8 @@ class YtdlpService: ObservableObject {
     }
 
     private func validateFfmpegPair(ffmpeg: URL, ffprobe: URL, context: String) async -> Bool {
-        let ffmpegValid = await validateBinary(ffmpeg, name: "FFmpeg", context: context)
-        let ffprobeValid = await validateBinary(ffprobe, name: "FFprobe", context: context)
+        let ffmpegValid = await validateBinary(ffmpeg, name: "FFmpeg", expectedSHA256: DependencyChecksums.ffmpegExecutableSHA256, context: context)
+        let ffprobeValid = await validateBinary(ffprobe, name: "FFprobe", expectedSHA256: DependencyChecksums.ffprobeExecutableSHA256, context: context)
         return ffmpegValid && ffprobeValid
     }
 
@@ -212,88 +238,98 @@ class YtdlpService: ObservableObject {
     }
 
     func downloadFfmpeg() async {
-        #if arch(arm64)
-        guard let ffmpegURL = URL(string: "https://github.com/eugeneware/ffmpeg-static/releases/download/b6.1.1/ffmpeg-darwin-arm64.gz") else { return }
-        #else
-        guard let ffmpegURL = URL(string: "https://github.com/eugeneware/ffmpeg-static/releases/download/b6.1.1/ffmpeg-darwin-x64.gz") else { return }
-        #endif
-        
         let appSupport = getAppSupportDirectory()
-        let destinationGz = appSupport.appendingPathComponent("ffmpeg.gz")
+        let destinationGz = appSupport.appendingPathComponent("ffmpeg_\(UUID().uuidString).gz")
         let ffmpegDest = appSupport.appendingPathComponent("ffmpeg")
 
-        LoggerService.shared.log("Safely updating FFmpeg from \(ffmpegURL)", level: .info)
+        LoggerService.shared.log("Safely downloading FFmpeg from \(DependencyChecksums.ffmpegURL)", level: .info)
 
         do {
             try FileManager.default.createDirectory(at: appSupport, withIntermediateDirectories: true)
-            let (tempURL, _) = try await URLSession.shared.download(from: ffmpegURL)
+            let (tempURL, _) = try await URLSession.shared.download(from: DependencyChecksums.ffmpegURL)
             if FileManager.default.fileExists(atPath: destinationGz.path) {
                 try FileManager.default.removeItem(at: destinationGz)
             }
             try FileManager.default.moveItem(at: tempURL, to: destinationGz)
 
-            if FileManager.default.fileExists(atPath: ffmpegDest.path) {
-                try? FileManager.default.removeItem(at: ffmpegDest)
+            // Step 1: Verify .gz archive SHA-256 before decompression
+            guard Self.verifySHA256(fileURL: destinationGz, expectedHash: DependencyChecksums.ffmpegArchiveSHA256) else {
+                try? FileManager.default.removeItem(at: destinationGz)
+                LoggerService.shared.log("FFmpeg .gz archive failed SHA-256 verification. Download aborted.", level: .error)
+                return
             }
 
-            _ = try? await runCommandAsync(["/usr/bin/gzip", "-d", "-f", destinationGz.path])
+            // Step 2: Decompress
+            _ = try await runCommandAsync(["/usr/bin/gzip", "-d", "-f", destinationGz.path])
+            let extractedBinURL = destinationGz.deletingPathExtension()
+
+            // Step 3: Verify extracted binary SHA-256
+            guard Self.verifySHA256(fileURL: extractedBinURL, expectedHash: DependencyChecksums.ffmpegExecutableSHA256) else {
+                try? FileManager.default.removeItem(at: extractedBinURL)
+                LoggerService.shared.log("FFmpeg executable failed SHA-256 verification after decompression. Aborted.", level: .error)
+                return
+            }
+
+            try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: extractedBinURL.path)
 
             if FileManager.default.fileExists(atPath: ffmpegDest.path) {
-                try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: ffmpegDest.path)
-                
-                // Strip quarantine attribute if present
-                _ = try? await runCommandAsync(["/usr/bin/xattr", "-c", ffmpegDest.path])
-
-                if await validateBinary(ffmpegDest, name: "FFmpeg", context: "download") {
-                    ffmpegPath = ffmpegDest
-                    LoggerService.shared.log("FFmpeg downloaded and validated at \(ffmpegDest.path).", level: .info)
-                }
+                try FileManager.default.removeItem(at: ffmpegDest)
             }
-            try? FileManager.default.removeItem(at: destinationGz)
+            try FileManager.default.moveItem(at: extractedBinURL, to: ffmpegDest)
+
+            if await validateBinary(ffmpegDest, name: "FFmpeg", expectedSHA256: DependencyChecksums.ffmpegExecutableSHA256, context: "download") {
+                ffmpegPath = ffmpegDest
+                LoggerService.shared.log("FFmpeg cryptographically verified and installed at \(ffmpegDest.path).", level: .info)
+            }
         } catch {
             LoggerService.shared.log("Failed to download FFmpeg: \(error.localizedDescription)", level: .error)
         }
     }
 
     func downloadFfprobe() async {
-        #if arch(arm64)
-        guard let ffprobeURL = URL(string: "https://github.com/eugeneware/ffmpeg-static/releases/download/b6.1.1/ffprobe-darwin-arm64.gz") else { return }
-        #else
-        guard let ffprobeURL = URL(string: "https://github.com/eugeneware/ffmpeg-static/releases/download/b6.1.1/ffprobe-darwin-x64.gz") else { return }
-        #endif
-        
         let appSupport = getAppSupportDirectory()
-        let destinationGz = appSupport.appendingPathComponent("ffprobe.gz")
+        let destinationGz = appSupport.appendingPathComponent("ffprobe_\(UUID().uuidString).gz")
         let ffprobeDest = appSupport.appendingPathComponent("ffprobe")
 
-        LoggerService.shared.log("Safely updating FFprobe from \(ffprobeURL)", level: .info)
+        LoggerService.shared.log("Safely downloading FFprobe from \(DependencyChecksums.ffprobeURL)", level: .info)
 
         do {
             try FileManager.default.createDirectory(at: appSupport, withIntermediateDirectories: true)
-            let (tempURL, _) = try await URLSession.shared.download(from: ffprobeURL)
+            let (tempURL, _) = try await URLSession.shared.download(from: DependencyChecksums.ffprobeURL)
             if FileManager.default.fileExists(atPath: destinationGz.path) {
                 try FileManager.default.removeItem(at: destinationGz)
             }
             try FileManager.default.moveItem(at: tempURL, to: destinationGz)
 
-            if FileManager.default.fileExists(atPath: ffprobeDest.path) {
-                try? FileManager.default.removeItem(at: ffprobeDest)
+            // Step 1: Verify .gz archive SHA-256 before decompression
+            guard Self.verifySHA256(fileURL: destinationGz, expectedHash: DependencyChecksums.ffprobeArchiveSHA256) else {
+                try? FileManager.default.removeItem(at: destinationGz)
+                LoggerService.shared.log("FFprobe .gz archive failed SHA-256 verification. Download aborted.", level: .error)
+                return
             }
 
-            _ = try? await runCommandAsync(["/usr/bin/gzip", "-d", "-f", destinationGz.path])
+            // Step 2: Decompress
+            _ = try await runCommandAsync(["/usr/bin/gzip", "-d", "-f", destinationGz.path])
+            let extractedBinURL = destinationGz.deletingPathExtension()
+
+            // Step 3: Verify extracted binary SHA-256
+            guard Self.verifySHA256(fileURL: extractedBinURL, expectedHash: DependencyChecksums.ffprobeExecutableSHA256) else {
+                try? FileManager.default.removeItem(at: extractedBinURL)
+                LoggerService.shared.log("FFprobe executable failed SHA-256 verification after decompression. Aborted.", level: .error)
+                return
+            }
+
+            try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: extractedBinURL.path)
 
             if FileManager.default.fileExists(atPath: ffprobeDest.path) {
-                try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: ffprobeDest.path)
-                
-                // Strip quarantine attribute if present
-                _ = try? await runCommandAsync(["/usr/bin/xattr", "-c", ffprobeDest.path])
-
-                if await validateBinary(ffprobeDest, name: "FFprobe", context: "download") {
-                    ffprobePath = ffprobeDest
-                    LoggerService.shared.log("FFprobe downloaded and validated at \(ffprobeDest.path).", level: .info)
-                }
+                try FileManager.default.removeItem(at: ffprobeDest)
             }
-            try? FileManager.default.removeItem(at: destinationGz)
+            try FileManager.default.moveItem(at: extractedBinURL, to: ffprobeDest)
+
+            if await validateBinary(ffprobeDest, name: "FFprobe", expectedSHA256: DependencyChecksums.ffprobeExecutableSHA256, context: "download") {
+                ffprobePath = ffprobeDest
+                LoggerService.shared.log("FFprobe cryptographically verified and installed at \(ffprobeDest.path).", level: .info)
+            }
         } catch {
             LoggerService.shared.log("Failed to download FFprobe: \(error.localizedDescription)", level: .error)
         }
@@ -317,14 +353,12 @@ class YtdlpService: ObservableObject {
             isUpdating = false
         }
 
-        guard let downloadURL = URL(string: "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_macos") else {
-            throw YtdlpUpdateError.validationFailed("Invalid update URL")
-        }
+        let downloadURL = DependencyChecksums.ytdlpURL
         let appSupport = getAppSupportDirectory()
         let destination = appSupport.appendingPathComponent("yt-dlp")
         let tempDestination = appSupport.appendingPathComponent("yt-dlp.tmp_\(UUID().uuidString)")
 
-        LoggerService.shared.log("Safely updating yt-dlp binary from \(downloadURL)", level: .info)
+        LoggerService.shared.log("Safely downloading yt-dlp binary from \(downloadURL)", level: .info)
 
         do {
             try FileManager.default.createDirectory(at: appSupport, withIntermediateDirectories: true)
@@ -335,6 +369,13 @@ class YtdlpService: ObservableObject {
                 try FileManager.default.removeItem(at: tempDestination)
             }
             try FileManager.default.moveItem(at: downloadedTempURL, to: tempDestination)
+
+            // Step 1: Cryptographic SHA-256 verification before staging or permissions
+            guard Self.verifySHA256(fileURL: tempDestination, expectedHash: DependencyChecksums.ytdlpExecutableSHA256) else {
+                try? FileManager.default.removeItem(at: tempDestination)
+                throw YtdlpUpdateError.validationFailed("yt-dlp binary failed SHA-256 integrity verification. Expected: \(DependencyChecksums.ytdlpExecutableSHA256)")
+            }
+
             try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: tempDestination.path)
 
             do {
@@ -353,7 +394,7 @@ class YtdlpService: ObservableObject {
             updateProgress = 0.9
             await getVersion()
             let installedVersion = version ?? "unknown"
-            LoggerService.shared.log("yt-dlp updated successfully to version \(installedVersion)", level: .info)
+            LoggerService.shared.log("yt-dlp verified and updated successfully to version \(installedVersion)", level: .info)
             return installedVersion
         } catch {
             try? FileManager.default.removeItem(at: tempDestination)
@@ -717,54 +758,6 @@ class YtdlpService: ObservableObject {
         let speedLimit = UserDefaults.standard.integer(forKey: UserDefaultsKeys.downloadSpeedLimit)
         if speedLimit > 0 {
             args.append(contentsOf: ["--limit-rate", "\(speedLimit)K"])
-        }
-
-        if let additionalArgs = options.additionalArguments, !additionalArgs.isEmpty {
-            let customArgs = splitArguments(additionalArgs)
-
-            let blockedFlags = [
-                "--exec",
-                "--exec-before-download",
-                "--exec-custom",
-                "--config-location",
-                "--config-locations",
-                "--downloader",
-                "--downloader-args",
-                "--external-downloader",
-                "--external-downloader-args",
-                "--output",
-                "-o",
-                "--paths",
-                "-P",
-                "--batch-file",
-                "-a",
-                "--load-info-json",
-                "--postprocessor-args",
-                "--ppa",
-                "--ffmpeg-location",
-                "--netrc-cmd",
-                "--plugin-dirs",
-                "--load-plugins",
-                "--print-to-file",
-                "--write-info-json",
-                "--write-description",
-                "--write-annotations",
-                "--write-comments",
-                "--write-thumbnail",
-                "--write-all-thumbnails",
-                "--alias",
-                "--sponsorblock-invoke"
-            ]
-
-            for arg in customArgs {
-                for blockedFlag in blockedFlags {
-                    if arg == blockedFlag || arg.hasPrefix("\(blockedFlag)=") || arg.hasPrefix("\(blockedFlag):") {
-                        throw YtdlpError.securityViolation("Blocked argument '\(blockedFlag)' is not allowed for security reasons.")
-                    }
-                }
-            }
-
-            args.append(contentsOf: customArgs)
         }
 
         var tempCookieFiles: [URL] = []
@@ -1425,11 +1418,6 @@ class YtdlpService: ObservableObject {
         args.append(contentsOf: ["--concurrent-fragments", "5"])
         args.append("--no-mtime")
 
-        if let aria2c = aria2cPath {
-            args.append(contentsOf: ["--downloader", aria2c.path])
-            args.append(contentsOf: ["--downloader-args", "aria2c:-x 16 -s 16 -k 1M -j 16 --min-split-size=1M"])
-        }
-
         if lowerUrl.contains("boyfriend.tv") || lowerUrl.contains("boyfriendtv.com") || lowerUrl.contains("cdn.boyfriend.tv") {
             args.append(contentsOf: ["--user-agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"])
             args.append(contentsOf: ["--add-header", "Origin:https://www.boyfriend.tv"])
@@ -1480,12 +1468,7 @@ class YtdlpService: ObservableObject {
             process.arguments = args
             process.standardOutput = pipe
             process.standardError = pipe
-
-            var env = ProcessInfo.processInfo.environment
-            let appSupport = getAppSupportDirectory()
-            let currentPath = env["PATH"] ?? ""
-            env["PATH"] = "\(appSupport.path):/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:\(currentPath)"
-            process.environment = env
+            process.environment = createSanitizedEnvironment()
 
             let outputBuffer = ThreadSafeDataBuffer()
             pipe.fileHandleForReading.readabilityHandler = { handle in
@@ -1577,12 +1560,7 @@ class YtdlpService: ObservableObject {
             process.standardInput = FileHandle.nullDevice
             process.standardOutput = outputPipe
             process.standardError = errorPipe
-
-            var env = ProcessInfo.processInfo.environment
-            let appSupport = getAppSupportDirectory()
-            let currentPath = env["PATH"] ?? ""
-            env["PATH"] = "\(appSupport.path):/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:\(currentPath)"
-            process.environment = env
+            process.environment = createSanitizedEnvironment()
 
             onProcessCreated(process)
 
@@ -1762,6 +1740,11 @@ class YtdlpService: ObservableObject {
                 }
 
                 if let resolvedURL = finalURL {
+                    guard Self.isPathContained(targetURL: resolvedURL, inside: saveFolder) else {
+                        safeContinuation.resume(throwing: YtdlpError.securityViolation("Resolved output file is outside the designated save directory."))
+                        return
+                    }
+
                     currentOutputPath = resolvedURL.path
 
                     // If final URL is .mp4 (or another target format), clean up leftover intermediate .mkv file if present
@@ -1827,43 +1810,6 @@ class YtdlpService: ObservableObject {
         }
 
         return siphonDir
-    }
-
-    private func splitArguments(_ input: String) -> [String] {
-        var result: [String] = []
-        var current: String = ""
-        var inQuotes: Bool = false
-        var quoteChar: Character? = nil
-
-        var iterator = input.makeIterator()
-        while let char = iterator.next() {
-            if char == "\"" || char == "'" {
-                if inQuotes {
-                    if char == quoteChar {
-                        inQuotes = false
-                        quoteChar = nil
-                    } else {
-                        current.append(char)
-                    }
-                } else {
-                    inQuotes = true
-                    quoteChar = char
-                }
-            } else if char.isWhitespace && !inQuotes {
-                if !current.isEmpty {
-                    result.append(current)
-                    current = ""
-                }
-            } else {
-                current.append(char)
-            }
-        }
-
-        if !current.isEmpty {
-            result.append(current)
-        }
-
-        return result
     }
 
     private func extractBrowserCookiesToTempFile(url: String, browser: String) async -> URL? {
