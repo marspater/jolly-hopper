@@ -575,4 +575,49 @@ final class YtdlpServiceTests: XCTestCase {
         box.cancel()
         XCTAssertTrue(box.isCancelled)
     }
+
+    func testSpeedOptimizationAndStreamConcurrencyFlags() async throws {
+        let capturedArgsBox = TestBox<[String]>([])
+        service.mockDownloadRunner = { args in
+            capturedArgsBox.value = args
+            return "[download] Destination: /tmp/test.mp4\n"
+        }
+
+        // Test A: Direct progressive stream (e.g. ThisVid)
+        _ = try await service.download(
+            url: "https://thisvid.com/videos/test-progressive-stream",
+            options: DownloadOptions.default,
+            onProcessCreated: { _ in },
+            onProgress: { _, _, _ in },
+            onOutput: { _ in }
+        )
+
+        let directArgs = capturedArgsBox.value
+        XCTAssertTrue(directArgs.contains("--http-chunk-size"))
+        if let idx = directArgs.firstIndex(of: "--http-chunk-size") {
+            XCTAssertEqual(directArgs[idx + 1], "10M")
+        }
+        XCTAssertTrue(directArgs.contains("--throttled-rate"))
+        if let idx = directArgs.firstIndex(of: "--throttled-rate") {
+            XCTAssertEqual(directArgs[idx + 1], "100K")
+        }
+        XCTAssertFalse(directArgs.contains("--concurrent-fragments"), "Direct MP4 must not have concurrent-fragments flag")
+
+        // Test B: Segmented HLS stream (e.g. BoyfriendTV)
+        _ = try await service.download(
+            url: "https://www.boyfriend.tv/videos/12345/test-hls-stream",
+            options: DownloadOptions.default,
+            onProcessCreated: { _ in },
+            onProgress: { _, _, _ in },
+            onOutput: { _ in }
+        )
+
+        let hlsArgs = capturedArgsBox.value
+        XCTAssertTrue(hlsArgs.contains("--http-chunk-size"))
+        XCTAssertTrue(hlsArgs.contains("--throttled-rate"))
+        XCTAssertTrue(hlsArgs.contains("--concurrent-fragments"))
+        if let idx = hlsArgs.firstIndex(of: "--concurrent-fragments") {
+            XCTAssertEqual(hlsArgs[idx + 1], "8")
+        }
+    }
 }
