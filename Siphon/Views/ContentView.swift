@@ -171,8 +171,11 @@ struct SidebarView: View {
         Button {
             appState.selectedNavItem = item
         } label: {
-            HStack {
-                Label(item.title(lang: languageService), systemImage: item.icon)
+            HStack(spacing: 8) {
+                Image(systemName: item.icon)
+                    .font(.system(size: 13, weight: .medium))
+                    .frame(width: 18, alignment: .center)
+                Text(item.title(lang: languageService))
                     .font(.geist(13, weight: .medium))
                 Spacer()
                 if badgeCount > 0 {
