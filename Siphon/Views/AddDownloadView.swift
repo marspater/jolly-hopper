@@ -987,6 +987,7 @@ struct AddDownloadView: View {
         isLoading = true
         errorMessage = nil
         mediaInfo = nil
+        selectedFormatId = nil
         Task {
             do {
                 let info = try await downloadManager.ytdlpService.fetchInfo(url: urlInput)

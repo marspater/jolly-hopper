@@ -451,6 +451,59 @@ class YtdlpService: ObservableObject {
                     playlistCount: nil
                 )
             }
+        } else if isThisVidURL(url) {
+            if let tvMedia = await resolveThisVidMediaInfo(url: url) {
+                var tvArgs = [
+                    path,
+                    "--dump-json",
+                    "--no-playlist",
+                    "--no-warnings"
+                ]
+                appendSiteSpecificArgs(for: tvMedia.embedURL, to: &tvArgs)
+                tvArgs.append(tvMedia.streamURL)
+                
+                if let output = try? await runCommand(tvArgs),
+                   let data = output.data(using: .utf8),
+                   let parsedInfo = try? JSONDecoder().decode(MediaInfo.self, from: data) {
+                    return MediaInfo(
+                        id: url,
+                        title: tvMedia.title.isEmpty ? (parsedInfo.title ?? "ThisVid Video") : tvMedia.title,
+                        description: parsedInfo.description,
+                        thumbnail: parsedInfo.thumbnail ?? tvMedia.thumbnailURL,
+                        duration: parsedInfo.duration,
+                        uploader: "ThisVid",
+                        uploadDate: parsedInfo.uploadDate,
+                        viewCount: parsedInfo.viewCount,
+                        likeCount: parsedInfo.likeCount,
+                        formats: parsedInfo.formats,
+                        subtitles: parsedInfo.subtitles,
+                        automaticCaptions: parsedInfo.automaticCaptions,
+                        chapters: parsedInfo.chapters,
+                        playlist: nil,
+                        playlistIndex: nil,
+                        playlistCount: nil
+                    )
+                }
+
+                return MediaInfo(
+                    id: url,
+                    title: tvMedia.title.isEmpty ? "ThisVid Video" : tvMedia.title,
+                    description: nil,
+                    thumbnail: tvMedia.thumbnailURL,
+                    duration: nil,
+                    uploader: "ThisVid",
+                    uploadDate: nil,
+                    viewCount: nil,
+                    likeCount: nil,
+                    formats: nil,
+                    subtitles: nil,
+                    automaticCaptions: nil,
+                    chapters: nil,
+                    playlist: nil,
+                    playlistIndex: nil,
+                    playlistCount: nil
+                )
+            }
         }
 
         var args = [
@@ -626,11 +679,19 @@ class YtdlpService: ObservableObject {
         }
         let normalizedURL = normalizeURLForYtdlp(url)
         var targetURL = normalizedURL
-        var btvTitle: String? = nil
+        var customResolvedTitle: String? = nil
+        var customEmbedURL: String? = nil
         if isBoyfriendTVURL(url) {
             if let btvMedia = await resolveBoyfriendTVMediaInfo(url: url) {
                 targetURL = btvMedia.streamURL
-                btvTitle = btvMedia.title
+                customResolvedTitle = btvMedia.title
+                customEmbedURL = btvMedia.embedURL
+            }
+        } else if isThisVidURL(url) {
+            if let tvMedia = await resolveThisVidMediaInfo(url: url) {
+                targetURL = tvMedia.streamURL
+                customResolvedTitle = tvMedia.title
+                customEmbedURL = tvMedia.embedURL
             }
         }
 
@@ -657,7 +718,7 @@ class YtdlpService: ObservableObject {
         args.append("--no-playlist")
 
         let outputTemplate: String
-        if let customFilename = options.customFilename ?? btvTitle, !customFilename.isEmpty {
+        if let customFilename = options.customFilename ?? customResolvedTitle, !customFilename.isEmpty {
             let safeName = sanitizeFilename(customFilename)
             outputTemplate = options.saveFolder.appendingPathComponent("\(safeName).%(ext)s").path
         } else {
@@ -772,7 +833,7 @@ class YtdlpService: ObservableObject {
             }
         }
         
-        appendSiteSpecificArgs(for: targetURL, to: &args)
+        appendSiteSpecificArgs(for: customEmbedURL ?? targetURL, to: &args)
 
         args.append("--no-color")
         args.append("--newline")
@@ -1352,6 +1413,150 @@ class YtdlpService: ObservableObject {
         }
 
         return components.string ?? urlString
+    }
+
+    private func isThisVidURL(_ url: String) -> Bool {
+        let lower = url.lowercased()
+        return lower.contains("thisvid.com") || lower.contains("thisvid")
+    }
+
+    private struct ResolvedThisVidMedia {
+        let title: String
+        let streamURL: String
+        let thumbnailURL: String?
+        let embedURL: String
+    }
+
+    private func resolveThisVidMediaInfo(url: String) async -> ResolvedThisVidMedia? {
+        let targetUrl = normalizeURLForYtdlp(url)
+        guard let pageURL = URL(string: targetUrl) else { return nil }
+
+        var request = URLRequest(url: pageURL)
+        request.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36", forHTTPHeaderField: "User-Agent")
+        request.setValue("https://thisvid.com/", forHTTPHeaderField: "Referer")
+        request.setValue("https://thisvid.com", forHTTPHeaderField: "Origin")
+        request.setValue("text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8", forHTTPHeaderField: "Accept")
+
+        guard let (data, response) = try? await URLSession.shared.data(for: request),
+              let httpResponse = response as? HTTPURLResponse,
+              httpResponse.statusCode == 200,
+              let html = String(data: data, encoding: .utf8) else {
+            return nil
+        }
+
+        // Extract Title
+        var title = "ThisVid Video"
+        if let titleRange = html.range(of: "class=\"video-title\"[^>]*>([^<]+)<", options: [.regularExpression, .caseInsensitive]) ??
+                            html.range(of: "property=\"og:title\"\\s+content=\"([^\"]+)\"", options: [.regularExpression, .caseInsensitive]) ??
+                            html.range(of: "<title>(.*?)</title>", options: [.regularExpression, .caseInsensitive]) {
+            let rawTitle = String(html[titleRange])
+                .replacingOccurrences(of: "(?i)<[^>]+>", with: "", options: .regularExpression)
+                .replacingOccurrences(of: "(?i)property=\"og:title\"\\s+content=\"", with: "", options: .regularExpression)
+                .replacingOccurrences(of: "\"", with: "")
+                .replacingOccurrences(of: "(?i) - thisvid\\.com", with: "", options: .regularExpression)
+                .replacingOccurrences(of: "(?i)thisvid\\.com - ", with: "", options: .regularExpression)
+                .replacingOccurrences(of: "(?i) - thisvid", with: "", options: .regularExpression)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if !rawTitle.isEmpty {
+                title = rawTitle
+            }
+        }
+
+        // Extract Thumbnail URL
+        var thumbnailUrl: String? = nil
+        if let posterRange = html.range(of: "property=\"og:image\"\\s+content=\"([^\"]+)\"", options: .regularExpression) ??
+                              html.range(of: "poster\\s*:\\s*['\"]([^'\"]+)['\"]", options: .regularExpression) ??
+                              html.range(of: "preview_url\\s*:\\s*['\"]([^'\"]+)['\"]", options: .regularExpression) {
+            let rawPoster = String(html[posterRange])
+            if let firstHttp = rawPoster.range(of: "http") {
+                let candidate = String(rawPoster[firstHttp.lowerBound...])
+                    .replacingOccurrences(of: "\"", with: "")
+                    .replacingOccurrences(of: "'", with: "")
+                    .replacingOccurrences(of: "\\/", with: "/")
+                    .components(separatedBy: " ").first ?? ""
+                if candidate.hasPrefix("http") {
+                    thumbnailUrl = candidate
+                }
+            }
+        }
+
+        // Extract Stream URL (Prioritizing HLS master playlist, then highest alt video, then standard video)
+        var streamUrl: String? = nil
+
+        // Priority 1: HLS master playlist (.m3u8)
+        let m3u8Pattern = "https?:\\\\?/\\\\?/[^\"'\\s]+\\.m3u8[^\"'\\s]*"
+        if let range = html.range(of: m3u8Pattern, options: [.regularExpression, .caseInsensitive]) {
+            let raw = String(html[range]).replacingOccurrences(of: "\\/", with: "/")
+            if raw.hasPrefix("http") {
+                streamUrl = raw
+            }
+        }
+
+        // Priority 2: video_alt_url3 / video_alt_url2 / video_alt_url / video_url keys
+        if streamUrl == nil {
+            let playerKeys = [
+                "video_alt_url3",
+                "video_alt_url2",
+                "video_alt_url",
+                "video_url",
+                "\"video_alt_url3\"",
+                "\"video_alt_url2\"",
+                "\"video_alt_url\"",
+                "\"video_url\""
+            ]
+            for key in playerKeys {
+                let pattern = "\(key)\\s*[:=]\\s*['\"]([^'\"]+)['\"]"
+                if let range = html.range(of: pattern, options: [.regularExpression, .caseInsensitive]) {
+                    let rawMatch = String(html[range])
+                    if let firstHttp = rawMatch.range(of: "http") {
+                        let candidate = String(rawMatch[firstHttp.lowerBound...])
+                            .replacingOccurrences(of: "\"", with: "")
+                            .replacingOccurrences(of: "'", with: "")
+                            .replacingOccurrences(of: "\\/", with: "/")
+                            .components(separatedBy: ";").first?
+                            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                        if candidate.hasPrefix("http") && !candidate.lowercased().contains("preview") {
+                            streamUrl = candidate
+                            break
+                        }
+                    }
+                }
+            }
+        }
+
+        // Priority 3: HTML5 source tag or direct CDN MP4 links
+        if streamUrl == nil {
+            let mp4Pattern = "https?:\\\\?/\\\\?/[^\"'\\s]+\\.mp4[^\"'\\s]*"
+            if let regex = try? NSRegularExpression(pattern: mp4Pattern, options: .caseInsensitive) {
+                let matches = regex.matches(in: html, options: [], range: NSRange(location: 0, length: html.utf16.count))
+                for match in matches {
+                    if let range = Range(match.range, in: html) {
+                        let candidate = String(html[range])
+                            .replacingOccurrences(of: "\\/", with: "/")
+                            .replacingOccurrences(of: "\"", with: "")
+                            .replacingOccurrences(of: "'", with: "")
+                        let lower = candidate.lowercased()
+                        if lower.hasPrefix("http") &&
+                            !lower.contains("preview") &&
+                            !lower.contains("trailer") &&
+                            !lower.contains("thumb") &&
+                            !lower.contains("sprite") {
+                            streamUrl = candidate
+                            break
+                        }
+                    }
+                }
+            }
+        }
+
+        guard let resolvedStream = streamUrl else { return nil }
+
+        return ResolvedThisVidMedia(
+            title: title,
+            streamURL: resolvedStream,
+            thumbnailURL: thumbnailUrl,
+            embedURL: targetUrl
+        )
     }
 
     private func shouldRetryWithBrowserCookies(error _: Error, url: String, usingBrowserCookies: Bool, forceBrowserCookies: Bool) -> Bool {
