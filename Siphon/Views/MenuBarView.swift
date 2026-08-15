@@ -184,7 +184,7 @@ struct MenuBarView: View {
                     embedThumbnail: true,
                     embedMetadata: true,
                     splitChapters: false,
-                    sponsorBlock: true,
+                    sponsorBlock: UserDefaults.standard.bool(forKey: UserDefaultsKeys.sponsorBlock),
                     timeFrameStart: nil,
                     timeFrameEnd: nil,
                     customFilename: nil,

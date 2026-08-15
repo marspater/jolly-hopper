@@ -243,6 +243,12 @@ class LanguageService: ObservableObject {
         "auto_recommended": "Smart Auto (Recommended)",
         "custom_stream": "Custom Stream",
         "select_all": "Select All",
-        "deselect_all": "Deselect All"
+        "deselect_all": "Deselect All",
+        "download_selected": "Download %d Selected",
+        "download_new_name": "Download with new name",
+        "file_exists_status": "File Exists",
+        "playlist_detected": "Playlist Detected",
+        "entire_playlist": "Would you like to download the entire playlist or select specific videos?",
+        "load_playlist": "Load Playlist Items"
     ]
 }

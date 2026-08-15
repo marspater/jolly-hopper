@@ -19,7 +19,10 @@ class DownloadManager: ObservableObject {
     let ytdlpService = YtdlpService()
 
 
-    private let maxConcurrentDownloads = 3
+    private var maxConcurrentDownloads: Int {
+        let val = userDefaults.integer(forKey: UserDefaultsKeys.maxConcurrentDownloads)
+        return val > 0 ? val : 3
+    }
     private let userDefaults = UserDefaults.standard
     private var activeProcesses: [UUID: Process] = [:]
     private var languageService: LanguageService?
@@ -438,7 +441,7 @@ class DownloadManager: ObservableObject {
 
 
     func retryFailedDownloads() {
-        for download in failedDownloadsMap.values {
+        for download in failedDownloads {
             retryDownload(download)
         }
     }

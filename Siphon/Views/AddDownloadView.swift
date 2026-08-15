@@ -202,6 +202,14 @@ struct AddDownloadView: View {
                 fetchInfo()
             }
         }
+        .onChange(of: appState.urlToDownload) { _, newUrl in
+            if !newUrl.isEmpty {
+                urlInput = newUrl
+                appState.urlToDownload = ""
+                inputMode = .single
+                fetchInfo()
+            }
+        }
         .alert(languageService.s("file_exists_title"), isPresented: $showFileExistsAlert) {
             Button(languageService.s("overwrite"), role: .destructive) {
                 if let options = pendingDownloadOptions {
