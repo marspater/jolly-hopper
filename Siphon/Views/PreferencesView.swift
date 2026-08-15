@@ -746,6 +746,7 @@ struct PreferencesView: View {
         presetVideoResolution = preset.videoResolution
         presetVideoCodec = preset.videoCodec
         presetAudioCodec = preset.audioCodec
+        presetEmbedSubtitles = preset.downloadSubtitles ?? false
         presetSubtitleLang = preset.subtitleLanguage ?? ""
         presetSubtitleFormat = preset.subtitleFormat ?? .srt
         presetSponsorBlock = preset.sponsorBlock ?? false
@@ -809,6 +810,9 @@ struct PreferencesView: View {
     }
     
     private func deleteCustomPreset(_ preset: CustomPreset) {
+        if selectedCustomPresetIdString == preset.id.uuidString {
+            selectedCustomPresetIdString = ""
+        }
         customPresets.removeAll { $0.id == preset.id }
         CustomPreset.saveAll(customPresets)
     }

@@ -44,4 +44,32 @@ final class DownloadManagerTests: XCTestCase {
         XCTAssertEqual(manager.downloads[1].url, "https://example.com/video2")
         XCTAssertEqual(manager.downloads[2].url, "https://example.com/video3")
     }
+
+    func testRetryFailedDownloadsIncludesStoppedDownloads() {
+        let manager = DownloadManager()
+        let options = DownloadOptions.default
+
+        let downloadStopped = Download(url: "https://example.com/stopped", options: options)
+        downloadStopped.status = .stopped
+        manager.downloads.append(downloadStopped)
+
+        let downloadFailed = Download(url: "https://example.com/failed", options: options)
+        downloadFailed.status = .failed
+        manager.downloads.append(downloadFailed)
+
+        XCTAssertEqual(manager.failedDownloads.count, 2)
+
+        manager.retryFailedDownloads()
+
+        XCTAssertEqual(downloadStopped.status, .queued)
+        XCTAssertEqual(downloadFailed.status, .queued)
+    }
+
+    func testLanguageServiceTranslationsForMissingKeys() {
+        let lang = LanguageService()
+        XCTAssertEqual(lang.s("download_selected"), "Download %d Selected")
+        XCTAssertEqual(lang.s("download_new_name"), "Download with new name")
+        XCTAssertEqual(lang.s("file_exists_status"), "File Exists")
+        XCTAssertEqual(lang.s("playlist_detected"), "Playlist Detected")
+    }
 }
