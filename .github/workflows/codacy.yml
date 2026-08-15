@@ -35,32 +35,51 @@ jobs:
           severity-cutoff: 1
           fail-if-incomplete: false
 
-      - name: Prepare SARIF for GitHub Code Scanning
+      - name: Consolidate SARIF runs for GitHub Code Scanning
+        if: always()
         run: |
           python3 -c "
           import json, os
           if os.path.exists('results.sarif'):
               with open('results.sarif', 'r') as f:
                   data = json.load(f)
-              os.makedirs('sarif-results', exist_ok=True)
-              runs = data.get('runs', [])
-              if runs:
-                  for idx, run in enumerate(runs):
-                      tool_name = run.get('tool', {}).get('driver', {}).get('name', f'tool_{idx}').replace('/', '_')
-                      single_sarif = {
-                          'version': data.get('version', '2.1.0'),
-                          '\$schema': data.get('\$schema', 'https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json'),
-                          'runs': [run]
+              
+              all_results = []
+              all_rules = {}
+              
+              for r in data.get('runs', []):
+                  driver = r.get('tool', {}).get('driver', {})
+                  for rule in driver.get('rules', []):
+                      if 'id' in rule:
+                          all_rules[rule['id']] = rule
+                  for res in r.get('results', []):
+                      all_results.append(res)
+                      rule_id = res.get('ruleId')
+                      if rule_id and rule_id not in all_rules:
+                          all_rules[rule_id] = {'id': rule_id, 'shortDescription': {'text': rule_id}}
+              
+              single_run = {
+                  'tool': {
+                      'driver': {
+                          'name': 'Codacy',
+                          'rules': list(all_rules.values())
                       }
-                      with open(f'sarif-results/{tool_name}_{idx}.sarif', 'w') as out:
-                          json.dump(single_sarif, out)
-              else:
-                  with open('sarif-results/empty.sarif', 'w') as out:
-                      json.dump(data, out)
+                  },
+                  'results': all_results
+              }
+              
+              sanitized_sarif = {
+                  'version': '2.1.0',
+                  '\$schema': 'https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json',
+                  'runs': [single_run]
+              }
+              
+              with open('results.sarif', 'w') as f:
+                  json.dump(sanitized_sarif, f)
           "
 
       - name: Upload SARIF results
         uses: github/codeql-action/upload-sarif@6bb031afdd8eb862ea3fc1848194185e076637e5 # v3.28.11
         if: always()
         with:
-          sarif_file: sarif-results
+          sarif_file: results.sarif
