@@ -540,6 +540,48 @@ struct MediaInfo: Codable {
     let playlist: String?
     let playlistIndex: Int?
     let playlistCount: Int?
+    let webpageUrl: String?
+    let originalUrl: String?
+    
+    init(
+        id: String,
+        title: String,
+        description: String? = nil,
+        thumbnail: String? = nil,
+        duration: Double? = nil,
+        uploader: String? = nil,
+        uploadDate: String? = nil,
+        viewCount: Int? = nil,
+        likeCount: Int? = nil,
+        formats: [MediaFormat]? = nil,
+        subtitles: [String: [SubtitleInfo]]? = nil,
+        automaticCaptions: [String: [SubtitleInfo]]? = nil,
+        chapters: [ChapterInfo]? = nil,
+        playlist: String? = nil,
+        playlistIndex: Int? = nil,
+        playlistCount: Int? = nil,
+        webpageUrl: String? = nil,
+        originalUrl: String? = nil
+    ) {
+        self.id = id
+        self.title = title
+        self.description = description
+        self.thumbnail = thumbnail
+        self.duration = duration
+        self.uploader = uploader
+        self.uploadDate = uploadDate
+        self.viewCount = viewCount
+        self.likeCount = likeCount
+        self.formats = formats
+        self.subtitles = subtitles
+        self.automaticCaptions = automaticCaptions
+        self.chapters = chapters
+        self.playlist = playlist
+        self.playlistIndex = playlistIndex
+        self.playlistCount = playlistCount
+        self.webpageUrl = webpageUrl
+        self.originalUrl = originalUrl
+    }
     
     var durationString: String? {
         guard let duration = duration else { return nil }
@@ -568,6 +610,22 @@ struct MediaInfo: Codable {
         
         return nil
     }
+
+    var resolvedURL: String {
+        if let webpage = webpageUrl, !webpage.isEmpty {
+            return webpage
+        }
+        if let original = originalUrl, !original.isEmpty {
+            return original
+        }
+        if id.hasPrefix("http://") || id.hasPrefix("https://") {
+            return id
+        }
+        if id.count == 11 {
+            return "https://www.youtube.com/watch?v=\(id)"
+        }
+        return id
+    }
     
     enum CodingKeys: String, CodingKey {
         case id, title, description, thumbnail, duration, uploader, formats, subtitles, chapters, playlist
@@ -577,6 +635,8 @@ struct MediaInfo: Codable {
         case likeCount = "like_count"
         case playlistIndex = "playlist_index"
         case playlistCount = "playlist_count"
+        case webpageUrl = "webpage_url"
+        case originalUrl = "original_url"
     }
 }
 

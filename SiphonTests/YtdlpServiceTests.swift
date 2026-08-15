@@ -109,4 +109,32 @@ final class YtdlpServiceTests: XCTestCase {
             XCTFail("Expected YtdlpError.notFound, but got: \(error)")
         }
     }
+
+    func testDownloadBlockedArgumentsThrowSecurityViolation() async {
+        let blockedTestArgs = ["--exec echo hacked", "--output /tmp/test", "-o /etc/passwd", "--paths /root", "--load-info-json file.json"]
+
+        for blocked in blockedTestArgs {
+            var options = DownloadOptions.default
+            options.additionalArguments = blocked
+
+            do {
+                _ = try await service.download(
+                    url: "https://example.com/video",
+                    options: options,
+                    onProcessCreated: { _ in },
+                    onProgress: { _, _, _ in },
+                    onOutput: { _ in }
+                )
+                XCTFail("Expected securityViolation for argument: \(blocked)")
+            } catch let error as YtdlpError {
+                if case .securityViolation = error {
+                    // Expected
+                } else {
+                    XCTFail("Expected .securityViolation, got: \(error)")
+                }
+            } catch {
+                XCTFail("Expected YtdlpError.securityViolation, got: \(error)")
+            }
+        }
+    }
 }

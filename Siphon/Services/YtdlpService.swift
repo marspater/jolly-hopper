@@ -720,12 +720,22 @@ class YtdlpService: ObservableObject {
                 "--downloader",
                 "--downloader-args",
                 "--external-downloader",
-                "--external-downloader-args"
+                "--external-downloader-args",
+                "--output",
+                "-o",
+                "--paths",
+                "-P",
+                "--batch-file",
+                "-a",
+                "--load-info-json",
+                "--exec-custom",
+                "--postprocessor-args",
+                "--ppa"
             ]
 
             for arg in customArgs {
                 for blockedFlag in blockedFlags {
-                    if arg == blockedFlag || arg.hasPrefix("\(blockedFlag)=") {
+                    if arg == blockedFlag || arg.hasPrefix("\(blockedFlag)=") || arg.hasPrefix("\(blockedFlag):") {
                         throw YtdlpError.securityViolation("Blocked argument '\(blockedFlag)' is not allowed for security reasons.")
                     }
                 }

@@ -953,7 +953,7 @@ struct AddDownloadView: View {
         } else {
             let selectedItems = playlistItems.filter { selectedPlaylistIds.contains($0.id) }
             for item in selectedItems {
-                let videoUrl = "https://www.youtube.com/watch?v=\(item.id)"
+                let videoUrl = item.resolvedURL
                 var itemOptions = finalOptions
                 itemOptions.customFilename = nil
                 downloadManager.addDownload(url: videoUrl, options: itemOptions)

@@ -178,6 +178,7 @@ struct SidebarView: View {
                 if badgeCount > 0 {
                     Text("\(badgeCount)")
                         .font(.geistMono(10, weight: .bold))
+                        .monospacedDigit()
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2)
                         .background(badgeColor)

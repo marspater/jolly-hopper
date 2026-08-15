@@ -25,6 +25,12 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
 
     if (host) {
         const deepLink = "siphon://" + host + "?url=" + encodeURIComponent(url);
-        chrome.tabs.create({ url: deepLink, active: false });
+        chrome.tabs.create({ url: deepLink, active: false }, (createdTab) => {
+            if (createdTab && createdTab.id) {
+                setTimeout(() => {
+                    chrome.tabs.remove(createdTab.id).catch(() => {});
+                }, 500);
+            }
+        });
     }
 });
