@@ -38,7 +38,7 @@ class YtdlpService: ObservableObject {
     /// Tracks whether macOS TCC has denied cookie access this session.
     /// Once set, we skip --cookies-from-browser entirely to avoid 7s retry delays.
     private var tccCookieDenied: Bool = false
-    private let localVersion = "1.5.5"
+    private let localVersion = DependencyChecksums.ytdlpVersion
     private let bundledYtdlpName = "yt-dlp_macos"
 
     #if DEBUG
@@ -82,9 +82,11 @@ class YtdlpService: ObservableObject {
     private func createSanitizedEnvironment() -> [String: String] {
         let appSupport = getAppSupportDirectory()
         var env: [String: String] = [:]
-        env["PATH"] = "\(appSupport.path):/usr/bin:/bin"
-        env["HOME"] = appSupport.path
+        env["PATH"] = "\(appSupport.path):/usr/bin:/bin:/usr/sbin:/sbin"
+        env["HOME"] = NSHomeDirectory()
         env["TMPDIR"] = FileManager.default.temporaryDirectory.path
+        env["LANG"] = "en_US.UTF-8"
+        env["LC_ALL"] = "en_US.UTF-8"
         return env
     }
 
@@ -162,21 +164,6 @@ class YtdlpService: ObservableObject {
         if await validateFfmpegPair(ffmpeg: ffmpegInSupport, ffprobe: ffprobeInSupport, context: "app-support repaired") {
             setFfmpegPaths(ffmpeg: ffmpegInSupport, ffprobe: ffprobeInSupport, source: "app-support repaired")
             return
-        }
-
-        let systemDirectories = [
-            "/opt/homebrew/bin",
-            "/usr/local/bin",
-            "/usr/bin"
-        ]
-
-        for directory in systemDirectories {
-            let ffmpeg = URL(fileURLWithPath: directory).appendingPathComponent("ffmpeg")
-            let ffprobe = URL(fileURLWithPath: directory).appendingPathComponent("ffprobe")
-            if await validateFfmpegPair(ffmpeg: ffmpeg, ffprobe: ffprobe, context: "system") {
-                setFfmpegPaths(ffmpeg: ffmpeg, ffprobe: ffprobe, source: "system")
-                return
-            }
         }
 
         LoggerService.shared.log("FFmpeg installation failed. Attempted path: \(appSupport.path)", level: .error)
@@ -688,12 +675,6 @@ class YtdlpService: ObservableObject {
         let ffmpegDir: String
         if let loc = ffmpegPath?.deletingLastPathComponent().path, FileManager.default.fileExists(atPath: loc + "/ffmpeg") {
             ffmpegDir = loc
-        } else if FileManager.default.fileExists(atPath: appSupport.appendingPathComponent("ffmpeg").path) {
-            ffmpegDir = appSupport.path
-        } else if FileManager.default.fileExists(atPath: "/opt/homebrew/bin/ffmpeg") {
-            ffmpegDir = "/opt/homebrew/bin"
-        } else if FileManager.default.fileExists(atPath: "/usr/local/bin/ffmpeg") {
-            ffmpegDir = "/usr/local/bin"
         } else {
             ffmpegDir = appSupport.path
         }
@@ -824,10 +805,10 @@ class YtdlpService: ObservableObject {
                 errText = ""
             }
 
-            if !errText.isEmpty, isCookiePermissionError(errText), args.contains("--cookies-from-browser") {
-                LoggerService.shared.log("Cookie permission denied by macOS TCC. Retrying download automatically without browser cookies...", level: .warning)
+            if !errText.isEmpty, isCookieFailureError(errText), args.contains("--cookies-from-browser") {
+                LoggerService.shared.log("Browser cookie access failed or database missing (\(errText.trimmingCharacters(in: .whitespacesAndNewlines))). Retrying download automatically without browser cookies...", level: .warning)
                 tccCookieDenied = true
-                onOutput("[Siphon Warning] macOS TCC permission denied reading browser cookies. Retrying download without browser cookies...\n")
+                onOutput("[Siphon Info] Browser cookies unavailable. Retrying download directly without browser cookies...\n")
                 let cleanArgs = stripCookieArgs(from: args)
                 outputPath = try await runDownloadProcess(
                     args: cleanArgs,
@@ -1504,9 +1485,16 @@ class YtdlpService: ObservableObject {
         }
     }
 
-    private func isCookiePermissionError(_ errorOutput: String) -> Bool {
+    private func isCookieFailureError(_ errorOutput: String) -> Bool {
         let lower = errorOutput.lowercased()
-        return lower.contains("operation not permitted") || lower.contains("cookies.binarycookies") || lower.contains("errno 1")
+        return lower.contains("operation not permitted") ||
+               lower.contains("cookies.binarycookies") ||
+               lower.contains("errno 1") ||
+               (lower.contains("could not find") && lower.contains("cookie")) ||
+               lower.contains("cookies database") ||
+               lower.contains("failed to decrypt") ||
+               (lower.contains("cookie") && lower.contains("database")) ||
+               (lower.contains("unable to extract") && lower.contains("cookie"))
     }
 
     private func stripCookieArgs(from args: [String]) -> [String] {
@@ -1524,8 +1512,8 @@ class YtdlpService: ObservableObject {
         do {
             return try await runCommandAsync(args)
         } catch let error as YtdlpError {
-            if case .commandFailed(let output) = error, isCookiePermissionError(output), args.contains("--cookies-from-browser") {
-                LoggerService.shared.log("Cookie permission denied by macOS TCC. Automatically retrying command without browser cookies...", level: .warning)
+            if case .commandFailed(let output) = error, isCookieFailureError(output), args.contains("--cookies-from-browser") {
+                LoggerService.shared.log("Browser cookie access failed or database missing. Automatically retrying command without browser cookies...", level: .info)
                 tccCookieDenied = true
                 let cleanArgs = stripCookieArgs(from: args)
                 return try await runCommandAsync(cleanArgs)
@@ -1926,7 +1914,7 @@ class YtdlpService: ObservableObject {
     }
 
     private func createTempCookiesFileFromHeader(url: String, cookieHeader: String) -> URL? {
-        guard let host = URL(string: url)?.host, !host.isEmpty else { return nil }
+        guard let urlObj = URL(string: url), let host = urlObj.host, !host.isEmpty else { return nil }
         let domain = host.hasPrefix(".") ? host : ".\(host)"
         let tempCookiesURL = FileManager.default.temporaryDirectory.appendingPathComponent("siphon_header_cookies_\(UUID().uuidString).txt")
         
@@ -1937,9 +1925,9 @@ class YtdlpService: ObservableObject {
         for pair in pairs {
             let parts = pair.trimmingCharacters(in: .whitespacesAndNewlines).components(separatedBy: "=")
             if parts.count >= 2 {
-                let key = parts[0].trimmingCharacters(in: .whitespacesAndNewlines)
-                let value = parts.dropFirst().joined(separator: "=").trimmingCharacters(in: .whitespacesAndNewlines)
-                if !key.isEmpty {
+                let key = sanitizeCookieToken(parts[0].trimmingCharacters(in: .whitespacesAndNewlines))
+                let value = sanitizeCookieToken(parts.dropFirst().joined(separator: "=").trimmingCharacters(in: .whitespacesAndNewlines))
+                if !key.isEmpty && !value.isEmpty {
                     lines.append("\(domain)\tTRUE\t/\tFALSE\t\(expiry)\t\(key)\t\(value)")
                 }
             }
@@ -1953,6 +1941,12 @@ class YtdlpService: ObservableObject {
         } catch {
             return nil
         }
+    }
+
+    private func sanitizeCookieToken(_ token: String) -> String {
+        return token.replacingOccurrences(of: "\t", with: "")
+                    .replacingOccurrences(of: "\n", with: "")
+                    .replacingOccurrences(of: "\r", with: "")
     }
 
     static func purgeOrphanedTempCookieFiles() {
