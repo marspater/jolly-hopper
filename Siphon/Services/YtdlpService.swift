@@ -1492,8 +1492,9 @@ class YtdlpService: ObservableObject {
         args.append(contentsOf: ["--retries", "10"])
         args.append(contentsOf: ["--fragment-retries", "10"])
         args.append(contentsOf: ["--socket-timeout", "15"])
-        args.append(contentsOf: ["--buffer-size", "1M"])
-        args.append(contentsOf: ["--concurrent-fragments", "5"])
+        args.append(contentsOf: ["--buffer-size", "16K"])
+        args.append(contentsOf: ["--http-chunk-size", "10M"])
+        args.append(contentsOf: ["--throttled-rate", "100K"])
         args.append("--no-mtime")
 
         if lowerUrl.contains("boyfriend.tv") || lowerUrl.contains("boyfriendtv.com") || lowerUrl.contains("cdn.boyfriend.tv") {
@@ -1503,18 +1504,17 @@ class YtdlpService: ObservableObject {
             let referer = lowerUrl.contains("/embed/") ? url : "https://www.boyfriend.tv/"
             args.append(contentsOf: ["--add-header", "Referer:\(referer)"])
             args.append(contentsOf: ["--hls-use-mpegts"])
-            args.append(contentsOf: ["--concurrent-fragments", "5"])
+            args.append(contentsOf: ["--concurrent-fragments", "8"])
         } else if lowerUrl.contains("justthegays.com") || lowerUrl.contains("justthegays.tv") {
             args.append(contentsOf: ["--add-header", "Referer:https://justthegays.com/"])
         } else if lowerUrl.contains("thisvid.com") || lowerUrl.contains("thisvid") {
             args.append(contentsOf: ["--add-header", "Referer:https://thisvid.com/"])
             args.append(contentsOf: ["--add-header", "Origin:https://thisvid.com"])
-            args.append(contentsOf: ["--concurrent-fragments", "5"])
         } else if lowerUrl.contains("single-stream video site.com") {
             args.append(contentsOf: ["--add-header", "Referer:https://single-stream video site.com/"])
         } else if lowerUrl.contains(".m3u8") || lowerUrl.contains(".mpd") {
             args.append(contentsOf: ["--hls-use-mpegts"])
-            args.append(contentsOf: ["--concurrent-fragments", "5"])
+            args.append(contentsOf: ["--concurrent-fragments", "8"])
         } else if let components = URLComponents(string: url), let host = components.host, !host.isEmpty {
             // Universal Referer and Origin auto-injection for anti-hotlinking CDN protection
             let scheme = components.scheme ?? "https"
