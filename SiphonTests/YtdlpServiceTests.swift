@@ -603,23 +603,55 @@ final class YtdlpServiceTests: XCTestCase {
         }
         XCTAssertFalse(directArgs.contains("--concurrent-fragments"), "Direct MP4 must not have concurrent-fragments flag")
 
-        // Test B: Generic webpage URL (e.g. YouTube) with metadata-derived isFragmentedStream = true
-        var ytOptions = DownloadOptions.default
-        ytOptions.isFragmentedStream = true
+        // Test B: Mixed MediaInfo with both direct MP4 and DASH formats
+        let mixedFormats = [
+            MediaFormat(formatId: "http-1080p", ext: "mp4", resolution: "1920x1080", fps: 60, vcodec: "avc1.64002a", acodec: "mp4a.40.2", abr: 128, vbr: 4000, filesize: 50000000, filesizeApprox: nil, formatNote: "Direct MP4", formatProtocol: "https", manifestUrl: nil),
+            MediaFormat(formatId: "137", ext: "mp4", resolution: "1920x1080", fps: 60, vcodec: "avc1.64002a", acodec: "none", abr: nil, vbr: 4000, filesize: 45000000, filesizeApprox: nil, formatNote: "1080p DASH", formatProtocol: "http_dash_segments", manifestUrl: nil),
+            MediaFormat(formatId: "140", ext: "m4a", resolution: nil, fps: nil, vcodec: "none", acodec: "mp4a.40.2", abr: 128, vbr: nil, filesize: 5000000, filesizeApprox: nil, formatNote: "DASH Audio", formatProtocol: "http_dash_segments", manifestUrl: nil)
+        ]
+
+        let mixedInfo = MediaInfo(
+            id: "dQw4w9WgXcQ",
+            title: "Mixed Video Stream",
+            formats: mixedFormats,
+            webpageUrl: "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+        )
+
+        // B1: User selects direct progressive MP4 -> NO concurrent-fragments
+        var directOptions = DownloadOptions.default
+        directOptions.selectedFormatId = "http-1080p"
         _ = try await service.download(
             url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
-            options: ytOptions,
+            options: directOptions,
+            mediaInfo: mixedInfo,
             onProcessCreated: { _ in },
             onProgress: { _, _, _ in },
             onOutput: { _ in }
         )
 
-        let ytArgs = capturedArgsBox.value
-        XCTAssertTrue(ytArgs.contains("--http-chunk-size"))
-        XCTAssertTrue(ytArgs.contains("--throttled-rate"))
-        XCTAssertTrue(ytArgs.contains("--concurrent-fragments"))
-        if let idx = ytArgs.firstIndex(of: "--concurrent-fragments") {
-            XCTAssertEqual(ytArgs[idx + 1], "8")
+        let selectedDirectArgs = capturedArgsBox.value
+        XCTAssertTrue(selectedDirectArgs.contains("--http-chunk-size"))
+        XCTAssertTrue(selectedDirectArgs.contains("--throttled-rate"))
+        XCTAssertFalse(selectedDirectArgs.contains("--concurrent-fragments"), "Direct MP4 format must not have concurrent-fragments even when DASH exists on same page")
+
+        // B2: User selects DASH format combination -> CONCURRENCY 8
+        var dashOptions = DownloadOptions.default
+        dashOptions.selectedFormatId = "137+140"
+        _ = try await service.download(
+            url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+            options: dashOptions,
+            mediaInfo: mixedInfo,
+            onProcessCreated: { _ in },
+            onProgress: { _, _, _ in },
+            onOutput: { _ in }
+        )
+
+        let selectedDashArgs = capturedArgsBox.value
+        XCTAssertTrue(selectedDashArgs.contains("--http-chunk-size"))
+        XCTAssertTrue(selectedDashArgs.contains("--throttled-rate"))
+        XCTAssertTrue(selectedDashArgs.contains("--concurrent-fragments"))
+        if let idx = selectedDashArgs.firstIndex(of: "--concurrent-fragments") {
+            XCTAssertEqual(selectedDashArgs[idx + 1], "8")
         }
 
         // Test C: Direct HLS manifest URL (e.g. BoyfriendTV)
@@ -640,56 +672,28 @@ final class YtdlpServiceTests: XCTestCase {
         }
     }
 
-    func testMediaInfoFragmentedStreamDetection() {
-        let jsonHLS = """
-        {
-            "id": "test_video",
-            "title": "HLS Video",
-            "protocol": "m3u8_native",
-            "manifest_url": "https://example.com/master.m3u8"
-        }
-        """.data(using: .utf8)!
+    func testSelectedFormatLevelFragmentDetection() {
+        let directFormat = MediaFormat(formatId: "http-1080p", ext: "mp4", resolution: "1920x1080", fps: 60, vcodec: "avc1.64002a", acodec: "mp4a.40.2", abr: 128, vbr: 4000, filesize: 50000000, filesizeApprox: nil, formatNote: nil, formatProtocol: "https", manifestUrl: nil)
+        let dashVideo = MediaFormat(formatId: "137", ext: "mp4", resolution: "1920x1080", fps: 60, vcodec: "avc1.64002a", acodec: "none", abr: nil, vbr: 4000, filesize: 45000000, filesizeApprox: nil, formatNote: nil, formatProtocol: "http_dash_segments", manifestUrl: nil)
+        let dashAudio = MediaFormat(formatId: "140", ext: "m4a", resolution: nil, fps: nil, vcodec: "none", acodec: "mp4a.40.2", abr: 128, vbr: nil, filesize: 5000000, filesizeApprox: nil, formatNote: nil, formatProtocol: "http_dash_segments", manifestUrl: nil)
 
-        let decoder = JSONDecoder()
-        let infoHLS = try? decoder.decode(MediaInfo.self, from: jsonHLS)
-        XCTAssertNotNil(infoHLS)
-        XCTAssertTrue(infoHLS?.isFragmented == true)
+        let mediaInfo = MediaInfo(
+            id: "test_vid",
+            title: "Test Video",
+            formats: [directFormat, dashVideo, dashAudio]
+        )
 
-        let jsonDASH = """
-        {
-            "id": "test_dash",
-            "title": "DASH Video",
-            "formats": [
-                {
-                    "format_id": "137",
-                    "ext": "mp4",
-                    "protocol": "http_dash_segments"
-                }
-            ]
-        }
-        """.data(using: .utf8)!
+        // 1. Overall MediaInfo without top-level protocol is not blindly fragmented
+        XCTAssertFalse(mediaInfo.isFragmented)
 
-        let infoDASH = try? decoder.decode(MediaInfo.self, from: jsonDASH)
-        XCTAssertNotNil(infoDASH)
-        XCTAssertTrue(infoDASH?.isFragmented == true)
+        // 2. Direct format selected
+        var directOpts = DownloadOptions.default
+        directOpts.selectedFormatId = "http-1080p"
+        XCTAssertFalse(mediaInfo.isSelectedFormatFragmented(options: directOpts))
 
-        let jsonDirectMP4 = """
-        {
-            "id": "test_direct",
-            "title": "Direct MP4 Video",
-            "protocol": "https",
-            "formats": [
-                {
-                    "format_id": "http-1080p",
-                    "ext": "mp4",
-                    "protocol": "https"
-                }
-            ]
-        }
-        """.data(using: .utf8)!
-
-        let infoDirect = try? decoder.decode(MediaInfo.self, from: jsonDirectMP4)
-        XCTAssertNotNil(infoDirect)
-        XCTAssertFalse(infoDirect?.isFragmented == true)
+        // 3. DASH format selected
+        var dashOpts = DownloadOptions.default
+        dashOpts.selectedFormatId = "137+140"
+        XCTAssertTrue(mediaInfo.isSelectedFormatFragmented(options: dashOpts))
     }
 }

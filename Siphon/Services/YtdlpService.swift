@@ -754,6 +754,7 @@ class YtdlpService: ObservableObject {
     func download(
         url: String,
         options: DownloadOptions,
+        mediaInfo: MediaInfo? = nil,
         isCancelled: (@Sendable () -> Bool)? = nil,
         onProcessCreated: @escaping @Sendable (Process) -> Void,
         onProgress: @escaping @Sendable (Double, String?, String?) -> Void,
@@ -873,7 +874,7 @@ class YtdlpService: ObservableObject {
             }
         }
         
-        appendSiteSpecificArgs(for: customEmbedURL ?? targetURL, options: options, to: &args)
+        appendSiteSpecificArgs(for: customEmbedURL ?? targetURL, options: options, mediaInfo: mediaInfo, to: &args)
 
         args.append("--no-color")
         args.append("--newline")
@@ -929,7 +930,7 @@ class YtdlpService: ObservableObject {
                     onProgress: onProgress,
                     onOutput: onOutput
                 )
-            } else if !errText.isEmpty, (errText.contains("416") || errText.lowercased().contains("range") || errText.lowercased().contains("chunk")), args.contains("--http-chunk-size") {
+            } else if !errText.isEmpty, isRangeError(errText), args.contains("--http-chunk-size") {
                 LoggerService.shared.log("Server range request error encountered (\(errText.trimmingCharacters(in: .whitespacesAndNewlines))). Retrying download without HTTP chunking...", level: .warning)
                 onOutput("[Siphon Info] Server does not support HTTP Range chunks. Retrying download directly as continuous stream...\n")
                 var unchunkedArgs = args
@@ -1491,7 +1492,21 @@ class YtdlpService: ObservableObject {
         return error
     }
 
-    private func appendSiteSpecificArgs(for url: String, options: DownloadOptions? = nil, to args: inout [String]) {
+    private func isRangeError(_ text: String) -> Bool {
+        let lower = text.lowercased()
+        if text.contains("416") || lower.contains("requested range not satisfiable") {
+            return true
+        }
+        if lower.contains("byte range") || lower.contains("byte ranges") {
+            return true
+        }
+        if lower.contains("range header not supported") || lower.contains("range request not supported") || lower.contains("does not support range") || lower.contains("server does not support ranges") {
+            return true
+        }
+        return false
+    }
+
+    private func appendSiteSpecificArgs(for url: String, options: DownloadOptions? = nil, mediaInfo: MediaInfo? = nil, to args: inout [String]) {
         let lowerUrl = url.lowercased()
 
         // Common modern browser headers & Cloudflare extraction options
@@ -1514,12 +1529,18 @@ class YtdlpService: ObservableObject {
         args.append(contentsOf: ["--throttled-rate", "100K"])
         args.append("--no-mtime")
 
-        let isFragmented = options?.isFragmentedStream == true ||
-            lowerUrl.contains(".m3u8") ||
-            lowerUrl.contains(".mpd") ||
-            lowerUrl.contains("boyfriend.tv") ||
-            lowerUrl.contains("boyfriendtv.com") ||
-            lowerUrl.contains("cdn.boyfriend.tv")
+        let isFragmented: Bool
+        if let info = mediaInfo, let opts = options {
+            isFragmented = info.isSelectedFormatFragmented(options: opts)
+        } else if let info = mediaInfo {
+            isFragmented = info.isFragmented
+        } else {
+            isFragmented = lowerUrl.contains(".m3u8") ||
+                lowerUrl.contains(".mpd") ||
+                lowerUrl.contains("boyfriend.tv") ||
+                lowerUrl.contains("boyfriendtv.com") ||
+                lowerUrl.contains("cdn.boyfriend.tv")
+        }
 
         if isFragmented {
             args.append(contentsOf: ["--concurrent-fragments", "8"])
