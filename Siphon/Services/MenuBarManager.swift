@@ -18,7 +18,7 @@ class MenuBarManager: NSObject {
         
         // Setup Popover
         let popover = NSPopover()
-        popover.contentSize = NSSize(width: 340, height: 420)
+        popover.contentSize = NSSize(width: 360, height: 420)
         popover.behavior = .transient
         
         let contentView = MenuBarView()

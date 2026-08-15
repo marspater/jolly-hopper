@@ -26,7 +26,7 @@ struct MenuBarView: View {
             footer
         }
         .padding(14)
-        .frame(width: 340)
+        .frame(width: 360)
         .background(.ultraThinMaterial)
         .onAppear {
             customPresets = CustomPreset.loadAll()
@@ -239,12 +239,19 @@ struct MenuBarView: View {
                         .font(.system(size: 11, weight: .semibold))
                     Text(languageService.s("show_main_window"))
                         .font(.geist(11, weight: .medium))
+                        .lineLimit(1)
                 }
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
                 .foregroundColor(.secondary)
                 .padding(.horizontal, 9)
                 .frame(height: 28)
                 .background(Color.primary.opacity(0.06))
                 .clipShape(Capsule())
+                .overlay(
+                    Capsule()
+                        .stroke(Color.primary.opacity(0.12), lineWidth: 1)
+                )
             }
             .buttonStyle(.plain)
             .help(languageService.s("show_main_window"))
@@ -259,6 +266,7 @@ struct MenuBarView: View {
                         .font(.geistMono(11, weight: .bold))
                     Text(languageService.s("downloading"))
                         .font(.geist(11, weight: .medium))
+                        .lineLimit(1)
                 }
                 .lineLimit(1)
                 .fixedSize(horizontal: true, vertical: false)
@@ -267,9 +275,13 @@ struct MenuBarView: View {
                 .frame(height: 28)
                 .background(Color.accentColor.opacity(0.12))
                 .clipShape(Capsule())
+                .overlay(
+                    Capsule()
+                        .stroke(Color.accentColor.opacity(0.25), lineWidth: 1)
+                )
             }
             
-            Spacer()
+            Spacer(minLength: 0)
             
             Button {
                 NSApp.terminate(nil)
@@ -279,7 +291,10 @@ struct MenuBarView: View {
                         .font(.system(size: 11, weight: .bold))
                     Text(languageService.s("quit"))
                         .font(.geist(11, weight: .semibold))
+                        .lineLimit(1)
                 }
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
                 .foregroundColor(.red)
                 .padding(.horizontal, 10)
                 .frame(height: 28)
