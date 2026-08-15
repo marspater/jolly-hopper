@@ -8,6 +8,7 @@ struct AddDownloadView: View {
     @AppStorage("selectedPreset") private var selectedPreset: String = "best_quality"
     @AppStorage("selectedCustomPresetId") private var selectedCustomPresetIdString: String = ""
     @AppStorage("defaultAdditionalArguments") private var defaultAdditionalArguments: String = ""
+    @AppStorage(UserDefaultsKeys.theme) private var selectedTheme: String = "system"
 
     @State private var urlInput: String = ""
     @State private var isLoading: Bool = false
@@ -131,7 +132,8 @@ struct AddDownloadView: View {
             Divider()
             footer
         }
-        .frame(minWidth: 680, idealWidth: 760, maxWidth: 1000, minHeight: 560, idealHeight: 700, maxHeight: 1000)
+        .frame(minWidth: 520, idealWidth: 740, maxWidth: .infinity, minHeight: 420, idealHeight: 640, maxHeight: .infinity)
+        .preferredColorScheme(selectedTheme == "light" ? .light : (selectedTheme == "dark" ? .dark : nil))
         .background(.ultraThinMaterial)
         .onAppear {
             let loadedPresets = CustomPreset.loadAll()
@@ -231,7 +233,8 @@ struct AddDownloadView: View {
                 let count = extractBatchUrls(from: batchUrlsText).count
                 if count > 0 {
                     Text("\(count) URLs")
-                        .font(.geistMono(11, weight: .bold))
+                        .font(.geist(11, weight: .semibold))
+                        .monospacedDigit()
                         .padding(.horizontal, 8)
                         .padding(.vertical, 3)
                         .background(Color.blue.opacity(0.15))
@@ -240,16 +243,27 @@ struct AddDownloadView: View {
                 }
             }
 
-            TextEditor(text: $batchUrlsText)
-                .font(.geistMono(12))
-                .frame(minHeight: 130, maxHeight: 180)
-                .padding(6)
-                .background(Color.gray.opacity(0.08))
-                .cornerRadius(8)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 8)
-                        .stroke(Color.gray.opacity(0.2), lineWidth: 1)
-                )
+            ZStack(alignment: .topLeading) {
+                if batchUrlsText.isEmpty {
+                    Text("https://example.com/video1\nhttps://example.com/video2\n...")
+                        .font(.geistMono(12, relativeTo: .body))
+                        .foregroundColor(.secondary.opacity(0.4))
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 10)
+                        .allowsHitTesting(false)
+                }
+                TextEditor(text: $batchUrlsText)
+                    .font(.geistMono(12, relativeTo: .body))
+                    .scrollContentBackground(.hidden)
+                    .frame(minHeight: 120, idealHeight: 160, maxHeight: 240)
+                    .padding(6)
+            }
+            .background(Color.primary.opacity(0.035))
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+            )
 
             HStack {
                 Button {
@@ -423,7 +437,7 @@ struct AddDownloadView: View {
 
             HStack(alignment: .firstTextBaseline, spacing: 10) {
                 TextField(languageService.s("url_hint"), text: $urlInput)
-                    .font(.geist(13))
+                    .font(.geistMono(12, relativeTo: .body))
                     .textFieldStyle(.roundedBorder)
                     .onSubmit {
                         fetchInfo()
@@ -787,10 +801,10 @@ struct AddDownloadView: View {
         VStack(alignment: .leading, spacing: 12) {
             Text(languageService.s("save_folder")).font(.geist(14, weight: .semibold))
             HStack(alignment: .firstTextBaseline, spacing: 10) {
-                TextField(languageService.s("save_folder"), text: .constant(saveFolder.path)).font(.geist(12)).textFieldStyle(.roundedBorder).disabled(true)
+                TextField(languageService.s("save_folder"), text: .constant(saveFolder.path)).font(.geistMono(12, relativeTo: .body)).textFieldStyle(.roundedBorder).disabled(true)
                 Button(languageService.s("select")) { selectFolder() }
             }
-            TextField(languageService.s("custom_filename_hint"), text: $customFilename).font(.geist(13)).textFieldStyle(.roundedBorder)
+            TextField(languageService.s("custom_filename_hint"), text: $customFilename).font(.geistMono(12, relativeTo: .body)).textFieldStyle(.roundedBorder)
         }
     }
 

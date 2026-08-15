@@ -35,7 +35,7 @@ final class AddDownloadWindowManager: NSObject, NSWindowDelegate {
         window.center()
         window.isReleasedWhenClosed = false
         window.title = "Add New Download"
-        window.minSize = NSSize(width: 680, height: 560)
+        window.minSize = NSSize(width: 520, height: 420)
         window.contentViewController = hostingController
         window.delegate = self
         

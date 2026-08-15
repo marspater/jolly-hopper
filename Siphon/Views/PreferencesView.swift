@@ -127,12 +127,10 @@ struct PreferencesView: View {
         }
         .padding(.horizontal, 16)
         .padding(.bottom, 16)
-        .frame(minWidth: 620, idealWidth: 680, minHeight: 520, idealHeight: 600)
+        .frame(minWidth: 520, idealWidth: 680, maxWidth: .infinity, minHeight: 420, idealHeight: 580, maxHeight: .infinity)
+        .preferredColorScheme(theme == "light" ? .light : (theme == "dark" ? .dark : nil))
         .background(PreferencesWindowConfigurator())
         .background(.ultraThinMaterial)
-        .onChange(of: theme) { _, newValue in
-            applyTheme(newValue)
-        }
         .onChange(of: languageService.selectedLanguage) { _, newValue in
             if previousLanguage != nil && previousLanguage != newValue {
                 showLanguageChangeAlert = true
@@ -140,7 +138,6 @@ struct PreferencesView: View {
             previousLanguage = newValue
         }
         .onAppear {
-            applyTheme(theme)
             previousLanguage = languageService.selectedLanguage
             installedBrowsers = BrowserUtils.shared.getInstalledBrowsers()
             customPresets = CustomPreset.loadAll()
@@ -198,30 +195,6 @@ struct PreferencesView: View {
         .buttonStyle(.plain)
     }
 
-    
-    static func applyTheme(_ theme: String) {
-        guard let app = NSApp else { return }
-        switch theme {
-        case "light":
-            app.appearance = NSAppearance(named: .aqua)
-        case "dark":
-            app.appearance = NSAppearance(named: .darkAqua)
-        default:
-            app.appearance = nil
-        }
-    }
-
-    static func applyStoredTheme() {
-        let theme = UserDefaults.standard.string(forKey: UserDefaultsKeys.theme) ?? "system"
-        applyTheme(theme)
-    }
-
-    private func applyTheme(_ theme: String) {
-        Self.applyTheme(theme)
-    }
-    
-
-    
     private var generalTab: some View {
         Form {
             themeSection

@@ -34,7 +34,7 @@ final class PreferencesWindowManager: NSObject, NSWindowDelegate {
         window.center()
         window.isReleasedWhenClosed = false
         window.title = languageService.s("preferences")
-        window.minSize = NSSize(width: 580, height: 500)
+        window.minSize = NSSize(width: 520, height: 420)
         window.contentViewController = hostingController
         window.delegate = self
         
