@@ -18,6 +18,7 @@ class Download: ObservableObject, Identifiable {
     @Published var filePath: URL?
     @Published var errorMessage: String?
     @Published var log: String = ""
+    @Published var mediaInfo: MediaInfo? = nil
     
     var displayProgress: String {
         let percentage = Int(progress * 100)
@@ -105,7 +106,6 @@ struct DownloadOptions: Codable {
     var forceOverwrite: Bool?
     var rawCookies: String?
     var selectedFormatId: String?
-    var isFragmentedStream: Bool?
     
     static var `default`: DownloadOptions {
         let saveFolderURL = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first ?? URL(fileURLWithPath: NSHomeDirectory() + "/Downloads")
@@ -124,8 +124,7 @@ struct DownloadOptions: Codable {
             conversionCodec: ConversionCodec.none,
             forceOverwrite: false,
             rawCookies: nil,
-            selectedFormatId: nil,
-            isFragmentedStream: nil
+            selectedFormatId: nil
         )
     }
 }
@@ -642,9 +641,99 @@ struct MediaInfo: Codable {
                 return true
             }
         }
-        if let formats = formats {
-            return formats.contains(where: { $0.isFragmented })
+        return false
+    }
+
+    func resolveSelectedFormats(options: DownloadOptions) -> [MediaFormat] {
+        guard let formats = formats, !formats.isEmpty else { return [] }
+        
+        // 1. If explicit selectedFormatId is specified (can be combined like "137+140"):
+        if let customId = options.selectedFormatId, !customId.isEmpty {
+            let ids = customId.components(separatedBy: "+").map { $0.trimmingCharacters(in: .whitespaces) }
+            return formats.filter { ids.contains($0.formatId) }
         }
+        
+        // 2. If audio-only download:
+        if options.fileType.isAudio {
+            let audioFormats = formats.filter { $0.isAudioOnly || ($0.vcodec == "none" || $0.vcodec == nil) }
+            if let requestedAudioCodec = options.audioCodec, requestedAudioCodec != .auto {
+                let matching = audioFormats.filter { fmt in
+                    guard let acodec = fmt.acodec?.lowercased() else { return false }
+                    return acodec.contains(requestedAudioCodec.rawValue.lowercased())
+                }
+                if let best = matching.max(by: { ($0.abr ?? 0) < ($1.abr ?? 0) }) {
+                    return [best]
+                }
+            }
+            if let best = audioFormats.max(by: { ($0.abr ?? 0) < ($1.abr ?? 0) }) {
+                return [best]
+            }
+        }
+        
+        // 3. Video formats: match resolution and codec if specified
+        let maxHeight = options.videoResolution?.maxHeight
+        var candidateVideos = formats.filter { !$0.isAudioOnly }
+        
+        if let maxH = maxHeight {
+            let matchingHeight = candidateVideos.filter { fmt in
+                if let res = fmt.resolution {
+                    let digits = res.components(separatedBy: CharacterSet.decimalDigits.inverted).filter { !$0.isEmpty }
+                    if let lastNum = digits.last, let h = Int(lastNum) {
+                        return h <= maxH
+                    }
+                }
+                return true
+            }
+            if !matchingHeight.isEmpty {
+                candidateVideos = matchingHeight
+            }
+        }
+        
+        if let requestedCodec = options.videoCodec, requestedCodec != .auto {
+            let matchingCodec = candidateVideos.filter { fmt in
+                guard let vcodec = fmt.vcodec?.lowercased() else { return false }
+                switch requestedCodec {
+                case .h264: return vcodec.hasPrefix("avc1") || vcodec.contains("h264")
+                case .h265: return vcodec.hasPrefix("hev1") || vcodec.hasPrefix("hvc1") || vcodec.contains("h265") || vcodec.contains("hevc")
+                case .vp9: return vcodec.hasPrefix("vp9") || vcodec.contains("vp9")
+                case .av1: return vcodec.hasPrefix("av01") || vcodec.contains("av1")
+                case .auto: return true
+                }
+            }
+            if !matchingCodec.isEmpty {
+                candidateVideos = matchingCodec
+            }
+        }
+        
+        if let bestVideo = candidateVideos.first {
+            if bestVideo.isVideoOnly {
+                let audioFormats = formats.filter { $0.isAudioOnly || ($0.vcodec == "none" || $0.vcodec == nil) }
+                if let bestAudio = audioFormats.first {
+                    return [bestVideo, bestAudio]
+                }
+            }
+            return [bestVideo]
+        }
+        
+        return []
+    }
+
+    func isSelectedFormatFragmented(options: DownloadOptions) -> Bool {
+        if isFragmented {
+            return true
+        }
+        
+        let resolved = resolveSelectedFormats(options: options)
+        if !resolved.isEmpty {
+            return resolved.contains(where: { $0.isFragmented })
+        }
+        
+        if let customId = options.selectedFormatId?.lowercased() {
+            if customId.contains("dash") || customId.contains("m3u8") || customId.contains("hls") {
+                return true
+            }
+        }
+        
         return false
     }
 
