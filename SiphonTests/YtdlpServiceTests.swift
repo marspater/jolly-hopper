@@ -617,7 +617,7 @@ final class YtdlpServiceTests: XCTestCase {
             return "[download] Destination: /tmp/test.mp4\n"
         })
 
-        // Test A: Generic direct progressive stream (e.g. standard CDN / web host) -> normal HTTP, no chunking overhead, no false-positive throttled rate
+        // Test A: Generic direct progressive stream (e.g. standard CDN / web host) -> universal 10M chunking + 16K buffer, no throttled-rate re-extraction overhead, no fragment concurrency
         _ = try await service.download(
             url: "https://example.com/videos/test-progressive-stream.mp4",
             options: DownloadOptions.default,
@@ -627,7 +627,14 @@ final class YtdlpServiceTests: XCTestCase {
         )
 
         let genericArgs = capturedArgsBox.value
-        XCTAssertFalse(genericArgs.contains("--http-chunk-size"), "Generic progressive stream must not force chunking Range requests")
+        XCTAssertTrue(genericArgs.contains("--http-chunk-size"), "All downloads receive 10M chunking baseline")
+        if let idx = genericArgs.firstIndex(of: "--http-chunk-size") {
+            XCTAssertEqual(genericArgs[idx + 1], "10M")
+        }
+        XCTAssertTrue(genericArgs.contains("--buffer-size"), "All downloads receive 16K buffer baseline")
+        if let idx = genericArgs.firstIndex(of: "--buffer-size") {
+            XCTAssertEqual(genericArgs[idx + 1], "16K")
+        }
         XCTAssertFalse(genericArgs.contains("--throttled-rate"), "Generic progressive stream must not force throttled rate re-extraction")
         XCTAssertFalse(genericArgs.contains("--concurrent-fragments"), "Direct MP4 must not have concurrent-fragments flag")
 
@@ -642,6 +649,7 @@ final class YtdlpServiceTests: XCTestCase {
 
         let thisVidArgs = capturedArgsBox.value
         XCTAssertTrue(thisVidArgs.contains("--http-chunk-size"), "ThisVid direct stream should receive 10MB chunking to defeat server rate limits")
+        XCTAssertTrue(thisVidArgs.contains("--buffer-size"), "ThisVid receives 16K buffer baseline")
         XCTAssertTrue(thisVidArgs.contains("--throttled-rate"), "ThisVid direct stream should receive throttled rate recovery")
         XCTAssertFalse(thisVidArgs.contains("--concurrent-fragments"), "ThisVid direct MP4 must not have concurrent-fragments flag")
 
@@ -659,7 +667,7 @@ final class YtdlpServiceTests: XCTestCase {
             webpageUrl: "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
         )
 
-        // C1: User selects direct progressive MP4 -> YouTube chunking, but NO concurrent-fragments
+        // C1: User selects direct progressive MP4 -> YouTube chunking + buffer + throttled rate, but NO concurrent-fragments
         var directOptions = DownloadOptions.default
         directOptions.selectedFormatId = "http-1080p"
         _ = try await service.download(
@@ -673,6 +681,7 @@ final class YtdlpServiceTests: XCTestCase {
 
         let selectedDirectArgs = capturedArgsBox.value
         XCTAssertTrue(selectedDirectArgs.contains("--http-chunk-size"), "YouTube streams require 10MB chunking")
+        XCTAssertTrue(selectedDirectArgs.contains("--buffer-size"), "YouTube receives 16K buffer")
         XCTAssertTrue(selectedDirectArgs.contains("--throttled-rate"), "YouTube streams require throttled rate recovery")
         XCTAssertFalse(selectedDirectArgs.contains("--concurrent-fragments"), "Direct MP4 format must not have concurrent-fragments even when DASH exists on same page")
 
@@ -690,6 +699,7 @@ final class YtdlpServiceTests: XCTestCase {
 
         let selectedDashArgs = capturedArgsBox.value
         XCTAssertTrue(selectedDashArgs.contains("--http-chunk-size"))
+        XCTAssertTrue(selectedDashArgs.contains("--buffer-size"))
         XCTAssertTrue(selectedDashArgs.contains("--throttled-rate"))
         XCTAssertTrue(selectedDashArgs.contains("--concurrent-fragments"))
         if let idx = selectedDashArgs.firstIndex(of: "--concurrent-fragments") {
@@ -710,6 +720,33 @@ final class YtdlpServiceTests: XCTestCase {
         if let idx = hlsArgs.firstIndex(of: "--concurrent-fragments") {
             XCTAssertEqual(hlsArgs[idx + 1], "8")
         }
+    }
+
+    func testRangeErrorRetryFallback() async throws {
+        let callCountBox = TestBox<Int>(0)
+        let capturedArgs = TestBox<[[String]]>([])
+
+        service.processRunner = MockYtdlpProcessRunner(mockDownload: { args in
+            callCountBox.value += 1
+            capturedArgs.value.append(args)
+            if callCountBox.value == 1 {
+                throw YtdlpError.commandFailed("ERROR: The server does not support ranges. Range header not supported.")
+            }
+            return "/tmp/unchunked_download.mp4"
+        })
+
+        let result = try await service.download(
+            url: "https://example.com/legacy-server-no-range.mp4",
+            options: DownloadOptions.default,
+            onProcessCreated: { _ in },
+            onProgress: { _, _, _ in },
+            onOutput: { _ in }
+        )
+
+        XCTAssertEqual(callCountBox.value, 2, "Should retry once upon encountering Range error")
+        XCTAssertTrue(capturedArgs.value[0].contains("--http-chunk-size"), "Initial attempt should include chunk size")
+        XCTAssertFalse(capturedArgs.value[1].contains("--http-chunk-size"), "Retry attempt must strip --http-chunk-size")
+        XCTAssertEqual(result.lastPathComponent, "unchunked_download.mp4")
     }
 
     func testSelectedFormatLevelFragmentDetection() {

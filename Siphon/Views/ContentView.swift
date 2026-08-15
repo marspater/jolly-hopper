@@ -168,15 +168,19 @@ struct SidebarView: View {
     
     @ViewBuilder
     private func sidebarButton(item: NavigationItem, badgeCount: Int = 0, badgeColor: Color = .blue) -> some View {
+        let isSelected = appState.selectedNavItem == item
         Button {
-            appState.selectedNavItem = item
+            withAnimation(.spring(response: 0.25, dampingFraction: 0.8)) {
+                appState.selectedNavItem = item
+            }
         } label: {
             HStack(spacing: 8) {
                 Image(systemName: item.icon)
-                    .font(.system(size: 13, weight: .medium))
+                    .font(.system(size: 13, weight: isSelected ? .semibold : .medium))
                     .frame(width: 18, alignment: .center)
+                    .foregroundColor(isSelected ? .accentColor : .secondary)
                 Text(item.title(lang: languageService))
-                    .font(.geist(13, weight: .medium))
+                    .font(.geist(13, weight: isSelected ? .semibold : .medium))
                 Spacer()
                 if badgeCount > 0 {
                     Text("\(badgeCount)")
@@ -193,8 +197,13 @@ struct SidebarView: View {
         }
         .buttonStyle(.plain)
         .padding(.vertical, 2)
-        .foregroundColor(appState.selectedNavItem == item ? .accentColor : .primary)
-        .listRowBackground(appState.selectedNavItem == item ? Color.accentColor.opacity(0.1) : Color.clear)
+        .foregroundColor(isSelected ? .accentColor : .primary)
+        .listRowBackground(
+            RoundedRectangle(cornerRadius: 8)
+                .fill(isSelected ? Color.accentColor.opacity(0.12) : Color.clear)
+                .padding(.horizontal, 4)
+                .padding(.vertical, 1)
+        )
     }
 }
 
@@ -358,7 +367,7 @@ struct StatCard: View {
                 Text("\(count)")
                     .font(.geistMono(34, weight: .bold))
                     .foregroundColor(color)
-                    .shadow(color: color.opacity(isHovered ? 0.5 : 0.2), radius: isHovered ? 8 : 2)
+                    .shadow(color: color.opacity(isHovered ? 0.6 : 0.2), radius: isHovered ? 10 : 3, x: 0, y: 1)
                 Text(title)
                     .font(.geist(12, weight: .semibold))
                     .foregroundColor(.secondary)
@@ -366,7 +375,7 @@ struct StatCard: View {
                     .lineLimit(2)
             }
             .frame(maxWidth: .infinity)
-            .frame(height: 100)
+            .frame(height: 102)
             .padding(.vertical, 8)
             .padding(.horizontal, 4)
             .background(.ultraThinMaterial)
@@ -375,16 +384,16 @@ struct StatCard: View {
                 RoundedRectangle(cornerRadius: 16)
                     .stroke(
                         LinearGradient(
-                            colors: [color.opacity(isHovered ? 0.6 : 0.25), Color.white.opacity(0.1)],
+                            colors: [color.opacity(isHovered ? 0.7 : 0.25), Color.white.opacity(isHovered ? 0.2 : 0.08)],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         ),
-                        lineWidth: 1.5
+                        lineWidth: isHovered ? 1.5 : 1
                     )
             )
-            .shadow(color: color.opacity(isHovered ? 0.25 : 0.08), radius: isHovered ? 12 : 4, x: 0, y: isHovered ? 6 : 2)
-            .scaleEffect(isHovered ? 1.03 : 1.0)
-            .animation(.spring(response: 0.35, dampingFraction: 0.75), value: isHovered)
+            .shadow(color: color.opacity(isHovered ? 0.28 : 0.06), radius: isHovered ? 14 : 4, x: 0, y: isHovered ? 6 : 2)
+            .scaleEffect(isHovered ? 1.035 : 1.0)
+            .animation(.spring(response: 0.32, dampingFraction: 0.75), value: isHovered)
         }
         .buttonStyle(.plain)
         .onHover { hovering in
