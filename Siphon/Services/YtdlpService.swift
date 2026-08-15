@@ -950,12 +950,17 @@ class YtdlpService: ObservableObject {
             // 4. Best video + best audio: split streams
             addUnique("\(bestVideo)*+\(bestAudio)")
             addUnique("\(bestVideo)+\(bestAudio)")
-            // 5. Explicit format names for sites like ThisVid (HQ, 1080p, 720p, 480p)
+            // 5. Named format quality tokens used by KVS, Flowplayer, VideoJS, and tube CMS backends
             addUnique("HQ")
             addUnique("hd")
             addUnique("1080p")
             addUnique("720p")
             addUnique("480p")
+            addUnique("high")
+            addUnique("original")
+            addUnique("source")
+            addUnique("source-mp4")
+            addUnique("best-mp4")
             // 6. Combined/single-stream with resolution constraint
             let combinedSelector = buildCombinedSelector(for: options.videoResolution)
             addUnique(combinedSelector)
@@ -1337,26 +1342,26 @@ class YtdlpService: ObservableObject {
             return components.string ?? urlString
         }
 
-        // 2. ThisVid normalization: convert /playlist/.../video/<slug> or /video/<slug> to /videos/<slug>/
-        if host.contains("thisvid.com") || host.contains("thisvid") {
-            components.scheme = "https"
-            let path = components.path
-            let playlistVideoPattern = "^/playlist/\\d+/video/([^/]+)"
-            let singleVideoPattern = "^/video/([^/]+)"
-            if let regex = try? NSRegularExpression(pattern: playlistVideoPattern, options: .caseInsensitive),
+        // 2. Generic Tube / Gallery / Playlist URL normalization (e.g. /playlist/123/video/slug or /album/123/video/slug)
+        let path = components.path
+        let galleryVideoPattern = "^/(?:playlist|album|galleries)/\\d+/video/([^/]+)"
+        let singleVideoPattern = "^/video/([^/]+)"
+        if let regex = try? NSRegularExpression(pattern: galleryVideoPattern, options: .caseInsensitive),
+           let match = regex.firstMatch(in: path, options: [], range: NSRange(location: 0, length: path.utf16.count)),
+           match.numberOfRanges > 1,
+           let range = Range(match.range(at: 1), in: path) {
+            let videoSlug = String(path[range])
+            components.path = "/videos/\(videoSlug)/"
+            return components.string ?? urlString
+        } else if host.contains("thisvid") {
+            if let regex = try? NSRegularExpression(pattern: singleVideoPattern, options: .caseInsensitive),
                let match = regex.firstMatch(in: path, options: [], range: NSRange(location: 0, length: path.utf16.count)),
                match.numberOfRanges > 1,
                let range = Range(match.range(at: 1), in: path) {
                 let videoSlug = String(path[range])
                 components.path = "/videos/\(videoSlug)/"
-            } else if let regex = try? NSRegularExpression(pattern: singleVideoPattern, options: .caseInsensitive),
-                      let match = regex.firstMatch(in: path, options: [], range: NSRange(location: 0, length: path.utf16.count)),
-                      match.numberOfRanges > 1,
-                      let range = Range(match.range(at: 1), in: path) {
-                let videoSlug = String(path[range])
-                components.path = "/videos/\(videoSlug)/"
+                return components.string ?? urlString
             }
-            return components.string ?? urlString
         }
 
         return components.string ?? urlString
@@ -1365,145 +1370,6 @@ class YtdlpService: ObservableObject {
     private func isThisVidURL(_ url: String) -> Bool {
         let lower = url.lowercased()
         return lower.contains("thisvid.com") || lower.contains("thisvid")
-    }
-
-    private struct ResolvedThisVidMedia {
-        let title: String
-        let streamURL: String
-        let thumbnailURL: String?
-        let embedURL: String
-    }
-
-    private func resolveThisVidMediaInfo(url: String) async -> ResolvedThisVidMedia? {
-        let targetUrl = normalizeURLForYtdlp(url)
-        guard let pageURL = URL(string: targetUrl) else { return nil }
-
-        var request = URLRequest(url: pageURL)
-        request.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36", forHTTPHeaderField: "User-Agent")
-        request.setValue("https://thisvid.com/", forHTTPHeaderField: "Referer")
-        request.setValue("https://thisvid.com", forHTTPHeaderField: "Origin")
-        request.setValue("text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8", forHTTPHeaderField: "Accept")
-
-        guard let (data, response) = try? await URLSession.shared.data(for: request),
-              let httpResponse = response as? HTTPURLResponse,
-              httpResponse.statusCode == 200,
-              let html = String(data: data, encoding: .utf8) else {
-            return nil
-        }
-
-        // Extract Title
-        var title = "ThisVid Video"
-        if let titleRange = html.range(of: "class=\"video-title\"[^>]*>([^<]+)<", options: [.regularExpression, .caseInsensitive]) ??
-                            html.range(of: "property=\"og:title\"\\s+content=\"([^\"]+)\"", options: [.regularExpression, .caseInsensitive]) ??
-                            html.range(of: "<title>(.*?)</title>", options: [.regularExpression, .caseInsensitive]) {
-            let rawTitle = String(html[titleRange])
-                .replacingOccurrences(of: "(?i)<[^>]+>", with: "", options: .regularExpression)
-                .replacingOccurrences(of: "(?i)property=\"og:title\"\\s+content=\"", with: "", options: .regularExpression)
-                .replacingOccurrences(of: "\"", with: "")
-                .replacingOccurrences(of: "(?i) - thisvid\\.com", with: "", options: .regularExpression)
-                .replacingOccurrences(of: "(?i)thisvid\\.com - ", with: "", options: .regularExpression)
-                .replacingOccurrences(of: "(?i) - thisvid", with: "", options: .regularExpression)
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-            if !rawTitle.isEmpty {
-                title = rawTitle
-            }
-        }
-
-        // Extract Thumbnail URL
-        var thumbnailUrl: String? = nil
-        if let posterRange = html.range(of: "property=\"og:image\"\\s+content=\"([^\"]+)\"", options: .regularExpression) ??
-                              html.range(of: "poster\\s*:\\s*['\"]([^'\"]+)['\"]", options: .regularExpression) ??
-                              html.range(of: "preview_url\\s*:\\s*['\"]([^'\"]+)['\"]", options: .regularExpression) {
-            let rawPoster = String(html[posterRange])
-            if let firstHttp = rawPoster.range(of: "http") {
-                let candidate = String(rawPoster[firstHttp.lowerBound...])
-                    .replacingOccurrences(of: "\"", with: "")
-                    .replacingOccurrences(of: "'", with: "")
-                    .replacingOccurrences(of: "\\/", with: "/")
-                    .components(separatedBy: " ").first ?? ""
-                if candidate.hasPrefix("http") {
-                    thumbnailUrl = candidate
-                }
-            }
-        }
-
-        // Extract Stream URL (Prioritizing HLS master playlist, then highest alt video, then standard video)
-        var streamUrl: String? = nil
-
-        // Priority 1: HLS master playlist (.m3u8)
-        let m3u8Pattern = "https?:\\\\?/\\\\?/[^\"'\\s]+\\.m3u8[^\"'\\s]*"
-        if let range = html.range(of: m3u8Pattern, options: [.regularExpression, .caseInsensitive]) {
-            let raw = String(html[range]).replacingOccurrences(of: "\\/", with: "/")
-            if raw.hasPrefix("http") {
-                streamUrl = raw
-            }
-        }
-
-        // Priority 2: video_alt_url3 / video_alt_url2 / video_alt_url / video_url keys
-        if streamUrl == nil {
-            let playerKeys = [
-                "video_alt_url3",
-                "video_alt_url2",
-                "video_alt_url",
-                "video_url",
-                "\"video_alt_url3\"",
-                "\"video_alt_url2\"",
-                "\"video_alt_url\"",
-                "\"video_url\""
-            ]
-            for key in playerKeys {
-                let pattern = "\(key)\\s*[:=]\\s*['\"]([^'\"]+)['\"]"
-                if let range = html.range(of: pattern, options: [.regularExpression, .caseInsensitive]) {
-                    let rawMatch = String(html[range])
-                    if let firstHttp = rawMatch.range(of: "http") {
-                        let candidate = String(rawMatch[firstHttp.lowerBound...])
-                            .replacingOccurrences(of: "\"", with: "")
-                            .replacingOccurrences(of: "'", with: "")
-                            .replacingOccurrences(of: "\\/", with: "/")
-                            .components(separatedBy: ";").first?
-                            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-                        if candidate.hasPrefix("http") && !candidate.lowercased().contains("preview") {
-                            streamUrl = candidate
-                            break
-                        }
-                    }
-                }
-            }
-        }
-
-        // Priority 3: HTML5 source tag or direct CDN MP4 links
-        if streamUrl == nil {
-            let mp4Pattern = "https?:\\\\?/\\\\?/[^\"'\\s]+\\.mp4[^\"'\\s]*"
-            if let regex = try? NSRegularExpression(pattern: mp4Pattern, options: .caseInsensitive) {
-                let matches = regex.matches(in: html, options: [], range: NSRange(location: 0, length: html.utf16.count))
-                for match in matches {
-                    if let range = Range(match.range, in: html) {
-                        let candidate = String(html[range])
-                            .replacingOccurrences(of: "\\/", with: "/")
-                            .replacingOccurrences(of: "\"", with: "")
-                            .replacingOccurrences(of: "'", with: "")
-                        let lower = candidate.lowercased()
-                        if lower.hasPrefix("http") &&
-                            !lower.contains("preview") &&
-                            !lower.contains("trailer") &&
-                            !lower.contains("thumb") &&
-                            !lower.contains("sprite") {
-                            streamUrl = candidate
-                            break
-                        }
-                    }
-                }
-            }
-        }
-
-        guard let resolvedStream = streamUrl else { return nil }
-
-        return ResolvedThisVidMedia(
-            title: title,
-            streamURL: resolvedStream,
-            thumbnailURL: thumbnailUrl,
-            embedURL: targetUrl
-        )
     }
 
     private func shouldRetryWithBrowserCookies(error _: Error, url: String, usingBrowserCookies: Bool, forceBrowserCookies: Bool) -> Bool {
@@ -1568,6 +1434,17 @@ class YtdlpService: ObservableObject {
         } else if lowerUrl.contains(".m3u8") || lowerUrl.contains(".mpd") {
             args.append(contentsOf: ["--hls-use-mpegts"])
             args.append(contentsOf: ["--concurrent-fragments", "5"])
+        } else if let components = URLComponents(string: url), let host = components.host, !host.isEmpty {
+            // Universal Referer and Origin auto-injection for anti-hotlinking CDN protection
+            let scheme = components.scheme ?? "https"
+            let origin = "\(scheme)://\(host)"
+            let referer = "\(origin)/"
+            if !args.contains("Referer:\(referer)") && !args.contains(where: { $0.hasPrefix("Referer:") }) {
+                args.append(contentsOf: ["--add-header", "Referer:\(referer)"])
+            }
+            if !args.contains("Origin:\(origin)") && !args.contains(where: { $0.hasPrefix("Origin:") }) {
+                args.append(contentsOf: ["--add-header", "Origin:\(origin)"])
+            }
         }
     }
 
