@@ -24,6 +24,7 @@
 		E0001005 /* DownloadManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000005 /* DownloadManager.swift */; };
 		E0001006 /* AddDownloadView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000006 /* AddDownloadView.swift */; };
 		E0001007 /* DownloadRowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000007 /* DownloadRowView.swift */; };
+		E0001008 /* YtdlpProcessRunner.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000008 /* YtdlpProcessRunner.swift */; };
 		E0001009 /* PreferencesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000009 /* PreferencesView.swift */; };
 		E0001011 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = E0000011 /* Assets.xcassets */; };
 		E0001012 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = E0000014 /* InfoPlist.strings */; };
@@ -62,6 +63,7 @@
 		E0000005 /* DownloadManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DownloadManager.swift; sourceTree = "<group>"; };
 		E0000006 /* AddDownloadView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddDownloadView.swift; sourceTree = "<group>"; };
 		E0000007 /* DownloadRowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DownloadRowView.swift; sourceTree = "<group>"; };
+		E0000008 /* YtdlpProcessRunner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YtdlpProcessRunner.swift; sourceTree = "<group>"; };
 		E0000009 /* PreferencesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreferencesView.swift; sourceTree = "<group>"; };
 		E0000011 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		E0000012 /* Siphon.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Siphon.app"; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -160,6 +162,7 @@
 			isa = PBXGroup;
 			children = (
 				E0000004 /* YtdlpService.swift */,
+				E0000008 /* YtdlpProcessRunner.swift */,
 				E0000005 /* DownloadManager.swift */,
 				E0000020 /* NotificationService.swift */,
 				E0000021 /* LoginItemHelper.swift */,
@@ -335,6 +338,7 @@
 				E0001001 /* SiphonApp.swift in Sources */,
 				E0001002 /* ContentView.swift in Sources */,
 				E0001004 /* YtdlpService.swift in Sources */,
+				E0001008 /* YtdlpProcessRunner.swift in Sources */,
 				E0001005 /* DownloadManager.swift in Sources */,
 				E0001006 /* AddDownloadView.swift in Sources */,
 				E0001007 /* DownloadRowView.swift in Sources */,

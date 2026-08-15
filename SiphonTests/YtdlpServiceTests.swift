@@ -6,6 +6,40 @@ final class TestBox<T>: @unchecked Sendable {
     init(_ value: T) { self.value = value }
 }
 
+final class MockYtdlpProcessRunner: YtdlpProcessRunning, @unchecked Sendable {
+    var mockCommand: (@Sendable ([String]) async throws -> String)?
+    var mockDownload: (@Sendable ([String]) async throws -> String)?
+
+    init(
+        mockCommand: (@Sendable ([String]) async throws -> String)? = nil,
+        mockDownload: (@Sendable ([String]) async throws -> String)? = nil
+    ) {
+        self.mockCommand = mockCommand
+        self.mockDownload = mockDownload
+    }
+
+    func runCommand(_ args: [String]) async throws -> String {
+        if let mock = mockCommand {
+            return try await mock(args)
+        }
+        return ""
+    }
+
+    func runDownloadProcess(
+        args: [String],
+        saveFolder: URL,
+        isCancelled: (@Sendable () -> Bool)?,
+        onProcessCreated: @escaping @Sendable (Process) -> Void,
+        onProgress: @escaping @Sendable (Double, String?, String?) -> Void,
+        onOutput: @escaping @Sendable (String) -> Void
+    ) async throws -> String {
+        if let mock = mockDownload {
+            return try await mock(args)
+        }
+        return ""
+    }
+}
+
 @MainActor
 final class YtdlpServiceTests: XCTestCase {
 
@@ -37,9 +71,9 @@ final class YtdlpServiceTests: XCTestCase {
         }
         """
 
-        service.mockCommandRunner = { args in
+        service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
             return expectedJSON
-        }
+        })
 
         let mediaInfo = try await service.fetchInfo(url: "https://www.youtube.com/watch?v=test_video_id")
 
@@ -63,16 +97,14 @@ final class YtdlpServiceTests: XCTestCase {
         """
 
         let callCountBox = TestBox(0)
-        service.mockCommandRunner = { args in
+        service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
             callCountBox.value += 1
-            if callCountBox.value == 1 {
-                // First call: simulate failure of single video fetch
-                throw YtdlpError.commandFailed("Simulated single video failure")
-            } else {
-                // Subsequent calls: return valid playlist JSON
+            if args.contains("--flat-playlist") {
                 return validPlaylistJSON
+            } else {
+                throw YtdlpError.commandFailed("Single video extraction failed")
             }
-        }
+        })
 
         let mediaInfo = try await service.fetchInfo(url: "https://www.youtube.com/playlist?list=test_playlist_id")
 
@@ -87,9 +119,9 @@ final class YtdlpServiceTests: XCTestCase {
         // 🎯 What: Test that invalid JSON response throws a parseError.
         let invalidJSON = "This is not valid JSON"
 
-        service.mockCommandRunner = { args in
-            return invalidJSON
-        }
+        service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
+            return "invalid json response"
+        })
 
         do {
             _ = try await service.fetchInfo(url: "https://www.youtube.com/watch?v=test_video_id")
@@ -200,10 +232,10 @@ final class YtdlpServiceTests: XCTestCase {
         defer { UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.downloadSpeedLimit) }
 
         let capturedArgsBox = TestBox<[String]>([])
-        service.mockDownloadRunner = { args in
+        service.processRunner = MockYtdlpProcessRunner(mockDownload: { args in
             capturedArgsBox.value = args
             return "[download] Destination: /tmp/test.mp4\n"
-        }
+        })
 
         let options = DownloadOptions.default
         _ = try await service.download(
@@ -222,10 +254,10 @@ final class YtdlpServiceTests: XCTestCase {
 
     func testCustomFormatIdSelectionFlagAppended() async throws {
         let capturedArgsBox = TestBox<[String]>([])
-        service.mockDownloadRunner = { args in
+        service.processRunner = MockYtdlpProcessRunner(mockDownload: { args in
             capturedArgsBox.value = args
             return "[download] Destination: /tmp/test.mp4\n"
-        }
+        })
 
         var options = DownloadOptions.default
         options.selectedFormatId = "137+140"
@@ -246,10 +278,10 @@ final class YtdlpServiceTests: XCTestCase {
 
     func testAudioExtractionAndMetadataFlags() async throws {
         let capturedArgsBox = TestBox<[String]>([])
-        service.mockDownloadRunner = { args in
+        service.processRunner = MockYtdlpProcessRunner(mockDownload: { args in
             capturedArgsBox.value = args
             return "[download] Destination: /tmp/test.mp3\n"
-        }
+        })
 
         var options = DownloadOptions.default
         options.fileType = .mp3
@@ -273,10 +305,10 @@ final class YtdlpServiceTests: XCTestCase {
 
     func testThisVidURLNormalizationAndHeaders() async throws {
         let capturedArgsBox = TestBox<[String]>([])
-        service.mockDownloadRunner = { args in
+        service.processRunner = MockYtdlpProcessRunner(mockDownload: { args in
             capturedArgsBox.value = args
             return "[download] Destination: /tmp/test.mp4\n"
-        }
+        })
 
         var options = DownloadOptions.default
         options.videoResolution = .r1080p
@@ -297,10 +329,10 @@ final class YtdlpServiceTests: XCTestCase {
 
     func testMetadataFlagGatingWhenDisabled() async throws {
         let capturedArgsBox = TestBox<[String]>([])
-        service.mockDownloadRunner = { args in
+        service.processRunner = MockYtdlpProcessRunner(mockDownload: { args in
             capturedArgsBox.value = args
             return "[download] Destination: /tmp/test.mp4\n"
-        }
+        })
 
         var options = DownloadOptions.default
         options.embedMetadata = false
@@ -355,15 +387,17 @@ final class YtdlpServiceTests: XCTestCase {
 
         let serviceA = YtdlpService()
         serviceA.ytdlpPath = URL(fileURLWithPath: "/usr/local/bin/yt-dlp")
-        serviceA.mockDownloadRunner = { args in
+        serviceA.processRunner = MockYtdlpProcessRunner(mockDownload: { args in
+            try? await Task.sleep(nanoseconds: 50_000_000)
             return fileA.path
-        }
+        })
 
         let serviceB = YtdlpService()
         serviceB.ytdlpPath = URL(fileURLWithPath: "/usr/local/bin/yt-dlp")
-        serviceB.mockDownloadRunner = { args in
+        serviceB.processRunner = MockYtdlpProcessRunner(mockDownload: { args in
+            try? await Task.sleep(nanoseconds: 50_000_000)
             return fileB.path
-        }
+        })
 
         var optionsA = DownloadOptions.default
         optionsA.saveFolder = sessionFolder
@@ -578,12 +612,12 @@ final class YtdlpServiceTests: XCTestCase {
 
     func testSpeedOptimizationAndStreamConcurrencyFlags() async throws {
         let capturedArgsBox = TestBox<[String]>([])
-        service.mockDownloadRunner = { args in
+        service.processRunner = MockYtdlpProcessRunner(mockDownload: { args in
             capturedArgsBox.value = args
             return "[download] Destination: /tmp/test.mp4\n"
-        }
+        })
 
-        // Test A: Direct progressive stream (e.g. ThisVid) - full native speed without chunk range overhead
+        // Test A: Direct progressive stream (e.g. ThisVid) - includes baseline speed flags, no concurrent fragments
         _ = try await service.download(
             url: "https://thisvid.com/videos/test-progressive-stream",
             options: DownloadOptions.default,
@@ -593,8 +627,9 @@ final class YtdlpServiceTests: XCTestCase {
         )
 
         let directArgs = capturedArgsBox.value
-        XCTAssertFalse(directArgs.contains("--http-chunk-size"), "Direct progressive streams must not force chunking")
-        XCTAssertFalse(directArgs.contains("--throttled-rate"), "Direct progressive streams must not force throttled rate restarts")
+        XCTAssertTrue(directArgs.contains("--http-chunk-size"), "Baseline speed optimization must include chunk size")
+        XCTAssertTrue(directArgs.contains("--throttled-rate"), "Baseline speed optimization must include throttled rate")
+        XCTAssertTrue(directArgs.contains("--buffer-size"), "Baseline speed optimization must include buffer size")
         XCTAssertFalse(directArgs.contains("--concurrent-fragments"), "Direct MP4 must not have concurrent-fragments flag")
 
         // Test B: Mixed MediaInfo with both direct MP4 and DASH formats
@@ -743,10 +778,9 @@ final class YtdlpServiceTests: XCTestCase {
     }
 
     func testProcessExitNonZeroThrowsErrorEvenIfFileExists() async {
-        let service = YtdlpService()
-        service.mockDownloadRunner = { _ in
+        let service = YtdlpService(processRunner: MockYtdlpProcessRunner(mockDownload: { _ in
             throw YtdlpError.downloadFailed("ffmpeg conversion crashed")
-        }
+        }))
 
         do {
             _ = try await service.download(
