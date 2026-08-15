@@ -386,7 +386,7 @@ class YtdlpService: ObservableObject {
         do {
              return try await fetchSingleVideoInfo(path: path.path, url: normalizedURL)
         } catch {
-            if normalizedURL.contains("list=") || normalizedURL.contains("/playlist") {
+            if (normalizedURL.contains("list=") || normalizedURL.contains("/playlist/")) && !normalizedURL.contains("/videos/") {
                 do {
                     return try await fetchPlaylistSummaryInfo(path: path.path, url: normalizedURL)
                 } catch {
@@ -940,10 +940,15 @@ class YtdlpService: ObservableObject {
             if requestedVideo != bestVideo { addUnique("\(bestVideo)+\(requestedAudio)") }
             // 4. Best video + best audio: split streams
             addUnique("\(bestVideo)+\(bestAudio)")
-            // 5. Combined/single-stream with resolution constraint (for sites like single-stream video site)
+            // 5. Combined/single-stream with resolution constraint (for single-file / HLS sites like thisvid, twitter)
             let combinedSelector = buildCombinedSelector(for: options.videoResolution)
             addUnique(combinedSelector)
+            if let res = options.videoResolution, let maxH = res.maxHeight {
+                addUnique("bestvideo[height<=\(maxH)]")
+                addUnique("best[height<=\(maxH)]")
+            }
             // 6. Ultimate fallback
+            addUnique("bestvideo")
             addUnique("best")
 
             args.append(contentsOf: ["-f", selectors.joined(separator: "/")])
@@ -1287,28 +1292,56 @@ class YtdlpService: ObservableObject {
            isBoyfriendTVURL(nested) {
             return normalizeURLForYtdlp(nested)
         }
-        guard let host = components.host?.lowercased(), isBoyfriendTVURL(host) else { return urlString }
-        components.scheme = "https"
-        let trackingPrefixes = ["utm_"]
-        let trackingNames = Set(["fbclid", "gclid", "dclid", "msclkid", "igshid", "mc_cid", "mc_eid", "ref", "source"])
-        components.queryItems = components.queryItems?.filter { item in
-            let name = item.name.lowercased()
-            return !trackingNames.contains(name) && !trackingPrefixes.contains { name.hasPrefix($0) }
-        }
-        if components.queryItems?.isEmpty == true { components.queryItems = nil }
-        
-        // Strip localized language path prefixes like /ru/, /de/, /fr/, /es/, /it/, /pt/, /pl/, /ja/, /zh/, /ko/, etc.
-        var path = components.path
-        let langRegex = "^/([a-z]{2})/"
-        if let range = path.range(of: langRegex, options: [.regularExpression, .caseInsensitive]) {
-            let matched = String(path[range])
-            let reservedPaths = ["/v/", "/u/", "/b/", "/p/"]
-            if !reservedPaths.contains(matched.lowercased()) {
-                path = "/" + String(path.dropFirst(matched.count))
-                components.path = path
+
+        guard let host = components.host?.lowercased() else { return urlString }
+
+        // 1. BoyfriendTV normalization
+        if isBoyfriendTVURL(host) {
+            components.scheme = "https"
+            let trackingPrefixes = ["utm_"]
+            let trackingNames = Set(["fbclid", "gclid", "dclid", "msclkid", "igshid", "mc_cid", "mc_eid", "ref", "source"])
+            components.queryItems = components.queryItems?.filter { item in
+                let name = item.name.lowercased()
+                return !trackingNames.contains(name) && !trackingPrefixes.contains { name.hasPrefix($0) }
             }
+            if components.queryItems?.isEmpty == true { components.queryItems = nil }
+            
+            // Strip localized language path prefixes like /ru/, /de/, /fr/, /es/, /it/, /pt/, /pl/, /ja/, /zh/, /ko/, etc.
+            var path = components.path
+            let langRegex = "^/([a-z]{2})/"
+            if let range = path.range(of: langRegex, options: [.regularExpression, .caseInsensitive]) {
+                let matched = String(path[range])
+                let reservedPaths = ["/v/", "/u/", "/b/", "/p/"]
+                if !reservedPaths.contains(matched.lowercased()) {
+                    path = "/" + String(path.dropFirst(matched.count))
+                    components.path = path
+                }
+            }
+            return components.string ?? urlString
         }
-        
+
+        // 2. ThisVid normalization: convert /playlist/.../video/<slug> or /video/<slug> to /videos/<slug>/
+        if host.contains("thisvid.com") || host.contains("thisvid") {
+            components.scheme = "https"
+            let path = components.path
+            let playlistVideoPattern = "^/playlist/\\d+/video/([^/]+)"
+            let singleVideoPattern = "^/video/([^/]+)"
+            if let regex = try? NSRegularExpression(pattern: playlistVideoPattern, options: .caseInsensitive),
+               let match = regex.firstMatch(in: path, options: [], range: NSRange(location: 0, length: path.utf16.count)),
+               match.numberOfRanges > 1,
+               let range = Range(match.range(at: 1), in: path) {
+                let videoSlug = String(path[range])
+                components.path = "/videos/\(videoSlug)/"
+            } else if let regex = try? NSRegularExpression(pattern: singleVideoPattern, options: .caseInsensitive),
+                      let match = regex.firstMatch(in: path, options: [], range: NSRange(location: 0, length: path.utf16.count)),
+                      match.numberOfRanges > 1,
+                      let range = Range(match.range(at: 1), in: path) {
+                let videoSlug = String(path[range])
+                components.path = "/videos/\(videoSlug)/"
+            }
+            return components.string ?? urlString
+        }
+
         return components.string ?? urlString
     }
 
@@ -1365,6 +1398,10 @@ class YtdlpService: ObservableObject {
             args.append(contentsOf: ["--concurrent-fragments", "5"])
         } else if lowerUrl.contains("justthegays.com") || lowerUrl.contains("justthegays.tv") {
             args.append(contentsOf: ["--add-header", "Referer:https://justthegays.com/"])
+        } else if lowerUrl.contains("thisvid.com") || lowerUrl.contains("thisvid") {
+            args.append(contentsOf: ["--add-header", "Referer:https://thisvid.com/"])
+            args.append(contentsOf: ["--add-header", "Origin:https://thisvid.com"])
+            args.append(contentsOf: ["--concurrent-fragments", "5"])
         } else if lowerUrl.contains("single-stream video site.com") {
             args.append(contentsOf: ["--add-header", "Referer:https://single-stream video site.com/"])
         } else if lowerUrl.contains(".m3u8") || lowerUrl.contains(".mpd") {

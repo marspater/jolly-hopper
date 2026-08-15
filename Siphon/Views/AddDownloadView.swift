@@ -243,8 +243,7 @@ struct AddDownloadView: View {
     private var header: some View {
         HStack {
             Text(languageService.s("new_download"))
-                .font(.title2)
-                .fontWeight(.semibold)
+                .font(.geist(18, weight: .bold))
 
             Spacer()
 
@@ -262,12 +261,12 @@ struct AddDownloadView: View {
         VStack(alignment: .leading, spacing: 14) {
             HStack {
                 Text(languageService.s("paste_multiple_urls"))
-                    .font(.headline)
+                    .font(.geist(14, weight: .semibold))
                 Spacer()
                 let count = extractBatchUrls(from: batchUrlsText).count
                 if count > 0 {
                     Text("\(count) URLs")
-                        .font(.caption)
+                        .font(.geistMono(11, weight: .bold))
                         .padding(.horizontal, 8)
                         .padding(.vertical, 3)
                         .background(Color.blue.opacity(0.15))
@@ -277,7 +276,7 @@ struct AddDownloadView: View {
             }
 
             TextEditor(text: $batchUrlsText)
-                .font(.system(size: 12, design: .monospaced))
+                .font(.geistMono(12))
                 .frame(minHeight: 130, maxHeight: 180)
                 .padding(6)
                 .background(Color.gray.opacity(0.08))
@@ -325,12 +324,12 @@ struct AddDownloadView: View {
                                 .font(.system(size: 11, weight: .bold))
                                 .foregroundColor(.accentColor)
                             Text(languageService.s("stream_inspector"))
-                                .font(.system(size: 14, weight: .medium))
+                                .font(.geist(13, weight: .medium))
                                 .foregroundColor(.primary)
                             Spacer()
                             if let selected = selectedFormatId {
                                 Text("\(languageService.s("custom_stream")): \(selected)")
-                                    .font(.caption)
+                                    .font(.geistMono(11, weight: .semibold))
                                     .padding(.horizontal, 6)
                                     .padding(.vertical, 2)
                                     .background(Color.blue.opacity(0.15))
@@ -455,10 +454,11 @@ struct AddDownloadView: View {
     private var urlSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(languageService.s("video_url"))
-                .font(.headline)
+                .font(.geist(14, weight: .semibold))
 
             HStack(alignment: .firstTextBaseline, spacing: 10) {
                 TextField(languageService.s("url_hint"), text: $urlInput)
+                    .font(.geist(13))
                     .textFieldStyle(.roundedBorder)
                     .onSubmit {
                         fetchInfo()
@@ -503,16 +503,16 @@ struct AddDownloadView: View {
             .clipShape(RoundedRectangle(cornerRadius: 8))
 
             VStack(alignment: .leading, spacing: 4) {
-                Text(info.title).font(.headline).lineLimit(2)
+                Text(info.title).font(.geist(15, weight: .semibold)).lineLimit(2)
                 if let uploader = info.uploader {
-                    Text(uploader).font(.subheadline).foregroundColor(.secondary)
+                    Text(uploader).font(.geist(12)).foregroundColor(.secondary)
                 }
                 HStack(spacing: 12) {
                     if let duration = info.durationString {
-                        Label(duration, systemImage: "clock").font(.caption).foregroundColor(.secondary)
+                        Label(duration, systemImage: "clock").font(.geistMono(11)).foregroundColor(.secondary)
                     }
                     if let views = info.viewCount {
-                        Label(formatNumber(views), systemImage: "eye").font(.caption).foregroundColor(.secondary)
+                        Label(formatNumber(views), systemImage: "eye").font(.geistMono(11)).foregroundColor(.secondary)
                     }
                 }
             }
@@ -600,7 +600,7 @@ struct AddDownloadView: View {
     private var formatSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text(languageService.s("format")).font(.headline)
+                Text(languageService.s("format")).font(.geist(14, weight: .semibold))
                 Spacer()
 
                 Menu {
@@ -822,12 +822,12 @@ struct AddDownloadView: View {
 
     private var saveSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(languageService.s("save_folder")).font(.headline)
+            Text(languageService.s("save_folder")).font(.geist(14, weight: .semibold))
             HStack(alignment: .firstTextBaseline, spacing: 10) {
-                TextField(languageService.s("save_folder"), text: .constant(saveFolder.path)).textFieldStyle(.roundedBorder).disabled(true)
+                TextField(languageService.s("save_folder"), text: .constant(saveFolder.path)).font(.geist(12)).textFieldStyle(.roundedBorder).disabled(true)
                 Button(languageService.s("select")) { selectFolder() }
             }
-            TextField(languageService.s("custom_filename_hint"), text: $customFilename).textFieldStyle(.roundedBorder)
+            TextField(languageService.s("custom_filename_hint"), text: $customFilename).font(.geist(13)).textFieldStyle(.roundedBorder)
         }
     }
 

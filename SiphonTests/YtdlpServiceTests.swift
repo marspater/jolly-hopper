@@ -213,4 +213,28 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertTrue(capturedArgs.contains("--embed-thumbnail"))
         XCTAssertTrue(capturedArgs.contains("--embed-metadata"))
     }
+
+    func testThisVidURLNormalizationAndHeaders() async throws {
+        var capturedArgs: [String] = []
+        service.mockDownloadRunner = { args in
+            capturedArgs = args
+            return "[download] Destination: /tmp/test.mp4\n"
+        }
+
+        var options = DownloadOptions.default
+        options.videoResolution = .r1080p
+
+        _ = try await service.download(
+            url: "https://thisvid.com/playlist/461301/video/huge-butt5/",
+            options: options,
+            onProcessCreated: { _ in },
+            onProgress: { _, _, _ in },
+            onOutput: { _ in }
+        )
+
+        // Verify URL was normalized to direct /videos/ path for ThisVid extractor
+        XCTAssertTrue(capturedArgs.contains("https://thisvid.com/videos/huge-butt5/"))
+        XCTAssertTrue(capturedArgs.contains("Referer:https://thisvid.com/"))
+        XCTAssertTrue(capturedArgs.contains("Origin:https://thisvid.com"))
+    }
 }
