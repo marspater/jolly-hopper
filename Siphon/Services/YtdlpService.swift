@@ -40,10 +40,8 @@ class YtdlpService: ObservableObject {
     private let bundledYtdlpName = "yt-dlp_macos"
     private var activeSetupTask: Task<Void, Never>?
 
-    #if DEBUG
     var mockCommandRunner: (@Sendable ([String]) async throws -> String)?
     var mockDownloadRunner: (@Sendable ([String]) async throws -> String)?
-    #endif
 
     init() {
         // Initialization is explicit: setupBinaries() is called by DownloadManager or test harnesses.
@@ -1568,11 +1566,9 @@ class YtdlpService: ObservableObject {
 
 
     private func runCommandAsync(_ args: [String]) async throws -> String {
-        #if DEBUG
         if let mock = mockCommandRunner {
             return try await mock(args)
         }
-        #endif
         return try await withCheckedThrowingContinuation { continuation in
             let safeContinuation = SafeContinuation(continuation)
             let process = Process()
@@ -1665,11 +1661,9 @@ class YtdlpService: ObservableObject {
         onProgress: @escaping @Sendable (Double, String?, String?) -> Void,
         onOutput: @escaping @Sendable (String) -> Void
     ) async throws -> String {
-        #if DEBUG
         if let mock = mockDownloadRunner {
             return try await mock(args)
         }
-        #endif
         return try await withCheckedThrowingContinuation { continuation in
             let safeContinuation = SafeContinuation(continuation)
 

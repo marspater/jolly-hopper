@@ -670,22 +670,10 @@ struct MediaInfo: Codable {
             }
         }
         
-        // 3. Video formats: match resolution and codec if specified
-        let maxHeight = options.videoResolution?.maxHeight
+        // 3. Video formats: filter by hard constraints (codec & resolution), then rank by quality
         var candidateVideos = formats.filter { !$0.isAudioOnly }
-        
-        if let maxH = maxHeight {
-            let matchingHeight = candidateVideos.filter { fmt in
-                if let h = fmt.parsedHeight {
-                    return h <= maxH
-                }
-                return true
-            }
-            if !matchingHeight.isEmpty {
-                candidateVideos = matchingHeight
-            }
-        }
-        
+
+        // Hard constraint: Video Codec filter (first satisfy codec requirement)
         if let requestedCodec = options.videoCodec, requestedCodec != .auto {
             let matchingCodec = candidateVideos.filter { fmt in
                 guard let vcodec = fmt.vcodec?.lowercased() else { return false }
@@ -699,6 +687,20 @@ struct MediaInfo: Codable {
             }
             if !matchingCodec.isEmpty {
                 candidateVideos = matchingCodec
+            }
+        }
+
+        // Hard constraint: Maximum resolution ceiling
+        let maxHeight = options.videoResolution?.maxHeight
+        if let maxH = maxHeight {
+            let matchingHeight = candidateVideos.filter { fmt in
+                if let h = fmt.parsedHeight {
+                    return h <= maxH
+                }
+                return true
+            }
+            if !matchingHeight.isEmpty {
+                candidateVideos = matchingHeight
             }
         }
         
@@ -837,7 +839,7 @@ struct MediaFormat: Codable, Identifiable, Hashable {
     func videoQualityScore(options: DownloadOptions) -> Double {
         var score: Double = 0
         let h = parsedHeight ?? 0
-        score += Double(h) * 1000.0
+        score += Double(h) * 10000.0
         
         if let bitrate = vbr ?? abr {
             score += bitrate
@@ -848,28 +850,27 @@ struct MediaFormat: Codable, Identifiable, Hashable {
         if let fps = fps {
             score += fps
         }
-        if let requestedCodec = options.videoCodec, requestedCodec != .auto {
-            if let vcodec = vcodec?.lowercased() {
-                let matches: Bool
-                switch requestedCodec {
-                case .h264: matches = vcodec.hasPrefix("avc1") || vcodec.contains("h264")
-                case .h265: matches = vcodec.hasPrefix("hev1") || vcodec.hasPrefix("hvc1") || vcodec.contains("h265") || vcodec.contains("hevc")
-                case .vp9: matches = vcodec.hasPrefix("vp9") || vcodec.contains("vp9")
-                case .av1: matches = vcodec.hasPrefix("av01") || vcodec.contains("av1")
-                case .auto: matches = true
-                }
-                if matches { score += 10000.0 }
-            }
-        }
         return score
     }
     
     var isVideoOnly: Bool {
-        acodec == "none" || acodec == nil
+        if acodec == "none" { return true }
+        if let note = formatNote?.lowercased(), note.contains("video only") {
+            return true
+        }
+        return false
     }
     
     var isAudioOnly: Bool {
-        vcodec == "none" || vcodec == nil
+        if vcodec == "none" { return true }
+        let lowerExt = ext.lowercased()
+        if lowerExt == "m4a" || lowerExt == "mp3" || lowerExt == "opus" || lowerExt == "flac" || lowerExt == "aac" || lowerExt == "wav" {
+            return true
+        }
+        if let note = formatNote?.lowercased(), note.contains("audio only") {
+            return true
+        }
+        return false
     }
 
     var displaySummary: String {
