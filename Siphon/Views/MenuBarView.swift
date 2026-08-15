@@ -216,7 +216,7 @@ struct MenuBarView: View {
     private func getSaveFolder() -> URL {
         let defaultPath = UserDefaults.standard.string(forKey: UserDefaultsKeys.defaultSaveFolder) ?? ""
         return defaultPath.isEmpty ? 
-            FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first! :
+            (FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Downloads")) :
             URL(fileURLWithPath: defaultPath)
     }
     

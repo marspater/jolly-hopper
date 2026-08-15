@@ -213,9 +213,9 @@ class YtdlpService: ObservableObject {
 
     func downloadFfmpeg() async {
         #if arch(arm64)
-        let ffmpegURL = URL(string: "https://github.com/eugeneware/ffmpeg-static/releases/download/b6.1.1/ffmpeg-darwin-arm64.gz")!
+        guard let ffmpegURL = URL(string: "https://github.com/eugeneware/ffmpeg-static/releases/download/b6.1.1/ffmpeg-darwin-arm64.gz") else { return }
         #else
-        let ffmpegURL = URL(string: "https://github.com/eugeneware/ffmpeg-static/releases/download/b6.1.1/ffmpeg-darwin-x64.gz")!
+        guard let ffmpegURL = URL(string: "https://github.com/eugeneware/ffmpeg-static/releases/download/b6.1.1/ffmpeg-darwin-x64.gz") else { return }
         #endif
         
         let appSupport = getAppSupportDirectory()
@@ -257,9 +257,9 @@ class YtdlpService: ObservableObject {
 
     func downloadFfprobe() async {
         #if arch(arm64)
-        let ffprobeURL = URL(string: "https://github.com/eugeneware/ffmpeg-static/releases/download/b6.1.1/ffprobe-darwin-arm64.gz")!
+        guard let ffprobeURL = URL(string: "https://github.com/eugeneware/ffmpeg-static/releases/download/b6.1.1/ffprobe-darwin-arm64.gz") else { return }
         #else
-        let ffprobeURL = URL(string: "https://github.com/eugeneware/ffmpeg-static/releases/download/b6.1.1/ffprobe-darwin-x64.gz")!
+        guard let ffprobeURL = URL(string: "https://github.com/eugeneware/ffmpeg-static/releases/download/b6.1.1/ffprobe-darwin-x64.gz") else { return }
         #endif
         
         let appSupport = getAppSupportDirectory()
@@ -317,7 +317,9 @@ class YtdlpService: ObservableObject {
             isUpdating = false
         }
 
-        let downloadURL = URL(string: "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_macos")!
+        guard let downloadURL = URL(string: "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_macos") else {
+            throw YtdlpUpdateError.validationFailed("Invalid update URL")
+        }
         let appSupport = getAppSupportDirectory()
         let destination = appSupport.appendingPathComponent("yt-dlp")
         let tempDestination = appSupport.appendingPathComponent("yt-dlp.tmp_\(UUID().uuidString)")
@@ -1734,7 +1736,14 @@ class YtdlpService: ObservableObject {
                 }
 
                 // Fallback: If finalURL is still missing or points to a non-existent/non-media file, find the most recent media file in saveFolder
-                if finalURL == nil || !fm.fileExists(atPath: finalURL!.path) || !isMediaFilePath(finalURL!.path) {
+                let isResolvedMedia: Bool
+                if let candidate = finalURL, fm.fileExists(atPath: candidate.path), isMediaFilePath(candidate.path) {
+                    isResolvedMedia = true
+                } else {
+                    isResolvedMedia = false
+                }
+
+                if !isResolvedMedia {
                     if let files = try? fm.contentsOfDirectory(at: saveFolder, includingPropertiesForKeys: [.contentModificationDateKey, .isRegularFileKey]) {
                         let recentFiles = files.compactMap { url -> (URL, Date)? in
                             guard let values = try? url.resourceValues(forKeys: [.contentModificationDateKey, .isRegularFileKey]),

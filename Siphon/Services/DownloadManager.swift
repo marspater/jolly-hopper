@@ -132,7 +132,7 @@ class DownloadManager: ObservableObject {
         // Get default save folder
         let defaultPath = userDefaults.string(forKey: UserDefaultsKeys.defaultSaveFolder) ?? ""
         let folder = defaultPath.isEmpty ?
-            FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first! :
+            (FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Downloads")) :
             URL(fileURLWithPath: defaultPath)
 
         let options = DownloadOptions(
@@ -171,7 +171,7 @@ class DownloadManager: ObservableObject {
         if !defaultPath.isEmpty {
             saveFolderURL = URL(fileURLWithPath: defaultPath)
         } else {
-            saveFolderURL = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first!
+            saveFolderURL = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Downloads")
         }
 
         var options = DownloadOptions(
