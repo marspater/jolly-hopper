@@ -55,7 +55,7 @@ class LoggerService: ObservableObject {
         }
     }
     
-    private static func appendToLogFile(_ string: String, at logFileURL: URL, maxEntries: Int) {
+    nonisolated private static func appendToLogFile(_ string: String, at logFileURL: URL, maxEntries: Int) {
         guard let data = string.data(using: .utf8) else { return }
         
         if FileManager.default.fileExists(atPath: logFileURL.path) {
@@ -73,7 +73,7 @@ class LoggerService: ObservableObject {
         }
     }
     
-    private static func trimLogFile(at logFileURL: URL, maxEntries: Int) {
+    nonisolated private static func trimLogFile(at logFileURL: URL, maxEntries: Int) {
         guard let content = try? String(contentsOf: logFileURL, encoding: .utf8) else { return }
         let lines = content.components(separatedBy: .newlines).filter { !$0.isEmpty }
         let trimmed = lines.suffix(maxEntries).joined(separator: "\n") + "\n"

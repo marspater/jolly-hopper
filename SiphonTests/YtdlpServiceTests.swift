@@ -1,6 +1,11 @@
 import XCTest
 @testable import Siphon
 
+final class TestBox<T>: @unchecked Sendable {
+    var value: T
+    init(_ value: T) { self.value = value }
+}
+
 @MainActor
 final class YtdlpServiceTests: XCTestCase {
 
@@ -57,10 +62,10 @@ final class YtdlpServiceTests: XCTestCase {
         }
         """
 
-        var callCount = 0
+        let callCountBox = TestBox(0)
         service.mockCommandRunner = { args in
-            callCount += 1
-            if callCount == 1 {
+            callCountBox.value += 1
+            if callCountBox.value == 1 {
                 // First call: simulate failure of single video fetch
                 throw YtdlpError.commandFailed("Simulated single video failure")
             } else {
@@ -71,7 +76,7 @@ final class YtdlpServiceTests: XCTestCase {
 
         let mediaInfo = try await service.fetchInfo(url: "https://www.youtube.com/playlist?list=test_playlist_id")
 
-        XCTAssertGreaterThanOrEqual(callCount, 2, "Expected mock to be called at least twice: once for single video, once for playlist fallback")
+        XCTAssertGreaterThanOrEqual(callCountBox.value, 2, "Expected mock to be called at least twice: once for single video, once for playlist fallback")
         XCTAssertEqual(mediaInfo.id, "test_playlist_id")
         XCTAssertEqual(mediaInfo.title, "Test Playlist")
         XCTAssertEqual(mediaInfo.playlistCount, 5)
@@ -171,9 +176,9 @@ final class YtdlpServiceTests: XCTestCase {
         UserDefaults.standard.set(5120, forKey: UserDefaultsKeys.downloadSpeedLimit)
         defer { UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.downloadSpeedLimit) }
 
-        var capturedArgs: [String] = []
+        let capturedArgsBox = TestBox<[String]>([])
         service.mockDownloadRunner = { args in
-            capturedArgs = args
+            capturedArgsBox.value = args
             return "[download] Destination: /tmp/test.mp4\n"
         }
 
@@ -186,16 +191,16 @@ final class YtdlpServiceTests: XCTestCase {
             onOutput: { _ in }
         )
 
-        XCTAssertTrue(capturedArgs.contains("--limit-rate"))
-        if let idx = capturedArgs.firstIndex(of: "--limit-rate") {
-            XCTAssertEqual(capturedArgs[idx + 1], "5120K")
+        XCTAssertTrue(capturedArgsBox.value.contains("--limit-rate"))
+        if let idx = capturedArgsBox.value.firstIndex(of: "--limit-rate") {
+            XCTAssertEqual(capturedArgsBox.value[idx + 1], "5120K")
         }
     }
 
     func testCustomFormatIdSelectionFlagAppended() async throws {
-        var capturedArgs: [String] = []
+        let capturedArgsBox = TestBox<[String]>([])
         service.mockDownloadRunner = { args in
-            capturedArgs = args
+            capturedArgsBox.value = args
             return "[download] Destination: /tmp/test.mp4\n"
         }
 
@@ -210,16 +215,16 @@ final class YtdlpServiceTests: XCTestCase {
             onOutput: { _ in }
         )
 
-        XCTAssertTrue(capturedArgs.contains("-f"))
-        if let idx = capturedArgs.firstIndex(of: "-f") {
-            XCTAssertEqual(capturedArgs[idx + 1], "137+140")
+        XCTAssertTrue(capturedArgsBox.value.contains("-f"))
+        if let idx = capturedArgsBox.value.firstIndex(of: "-f") {
+            XCTAssertEqual(capturedArgsBox.value[idx + 1], "137+140")
         }
     }
 
     func testAudioExtractionAndMetadataFlags() async throws {
-        var capturedArgs: [String] = []
+        let capturedArgsBox = TestBox<[String]>([])
         service.mockDownloadRunner = { args in
-            capturedArgs = args
+            capturedArgsBox.value = args
             return "[download] Destination: /tmp/test.mp3\n"
         }
 
@@ -236,17 +241,17 @@ final class YtdlpServiceTests: XCTestCase {
             onOutput: { _ in }
         )
 
-        XCTAssertTrue(capturedArgs.contains("-x"))
-        XCTAssertTrue(capturedArgs.contains("--audio-format"))
-        XCTAssertTrue(capturedArgs.contains("mp3"))
-        XCTAssertTrue(capturedArgs.contains("--embed-thumbnail"))
-        XCTAssertTrue(capturedArgs.contains("--embed-metadata"))
+        XCTAssertTrue(capturedArgsBox.value.contains("-x"))
+        XCTAssertTrue(capturedArgsBox.value.contains("--audio-format"))
+        XCTAssertTrue(capturedArgsBox.value.contains("mp3"))
+        XCTAssertTrue(capturedArgsBox.value.contains("--embed-thumbnail"))
+        XCTAssertTrue(capturedArgsBox.value.contains("--embed-metadata"))
     }
 
     func testThisVidURLNormalizationAndHeaders() async throws {
-        var capturedArgs: [String] = []
+        let capturedArgsBox = TestBox<[String]>([])
         service.mockDownloadRunner = { args in
-            capturedArgs = args
+            capturedArgsBox.value = args
             return "[download] Destination: /tmp/test.mp4\n"
         }
 
@@ -262,8 +267,8 @@ final class YtdlpServiceTests: XCTestCase {
         )
 
         // Verify URL was normalized/resolved for ThisVid extractor with required headers
-        XCTAssertTrue(capturedArgs.contains(where: { $0.contains("thisvid") || $0.contains("huge-butt5") }))
-        XCTAssertTrue(capturedArgs.contains("Referer:https://thisvid.com/"))
-        XCTAssertTrue(capturedArgs.contains("Origin:https://thisvid.com"))
+        XCTAssertTrue(capturedArgsBox.value.contains(where: { $0.contains("thisvid") || $0.contains("huge-butt5") }))
+        XCTAssertTrue(capturedArgsBox.value.contains("Referer:https://thisvid.com/"))
+        XCTAssertTrue(capturedArgsBox.value.contains("Origin:https://thisvid.com"))
     }
 }

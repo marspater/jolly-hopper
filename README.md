@@ -27,7 +27,30 @@ A high-performance, native macOS media extractor & downloader powered by `yt-dlp
 
 ## 💻 Installation
 
-### Manual Installation
+### Homebrew (Recommended) 🍺
+
+Install Siphon using Homebrew Cask:
+
+```bash
+brew tap marspater/jolly-hopper
+brew install --cask siphon
+```
+
+Or install in a single command without tapping first:
+
+```bash
+brew install --cask marspater/jolly-hopper/siphon
+```
+
+To update in the future:
+```bash
+brew upgrade --cask siphon
+```
+
+---
+
+### Manual Installation 📦
+
 1. Download the latest `.dmg` release from the [Releases](https://github.com/marspater/jolly-hopper/releases) page.
 2. Drag **Siphon** into your `/Applications` directory.
 3. If macOS Gatekeeper alerts on first open:
@@ -35,7 +58,10 @@ A high-performance, native macOS media extractor & downloader powered by `yt-dlp
 xattr -cr /Applications/"Siphon.app"
 ```
 
+---
+
 ### Browser Extensions 🌐
+
 Integrate Siphon directly into your favorite web browser for 1-click video downloads:
 - **Chrome / Brave / Edge**: Navigate to `chrome://extensions`, enable **Developer Mode**, and click **Load Unpacked** pointing to `SiphonExtension_Chrome`.
 - **Safari**: Enable the extension in Safari Preferences > Extensions.
@@ -45,7 +71,7 @@ Integrate Siphon directly into your favorite web browser for 1-click video downl
 
 ## 🛠️ Technical Stack & Architecture
 
-- **Language**: Swift 5.0, SwiftUI, AppKit
+- **Language**: Swift 6.0 (Strict Concurrency & Sendable thread safety), SwiftUI, AppKit
 - **Extraction Engine**: Custom `yt-dlp` process coordinator
 - **Media Transcoder**: Native `FFmpeg` & `FFprobe` 6.0 (`arm64` / `x86_64`)
 - **Logging & Diagnostics**: Centralized structured `LoggerService` & os_log tracing

@@ -1209,7 +1209,7 @@ enum SupportedBrowser: String, CaseIterable, Identifiable {
     }
 }
 
-class BrowserUtils {
+final class BrowserUtils: Sendable {
     static let shared = BrowserUtils()
     
     func getInstalledBrowsers() -> [SupportedBrowser] {
