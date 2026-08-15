@@ -583,7 +583,7 @@ final class YtdlpServiceTests: XCTestCase {
             return "[download] Destination: /tmp/test.mp4\n"
         }
 
-        // Test A: Direct progressive stream (e.g. ThisVid)
+        // Test A: Direct progressive stream (e.g. ThisVid) - full native speed without chunk range overhead
         _ = try await service.download(
             url: "https://thisvid.com/videos/test-progressive-stream",
             options: DownloadOptions.default,
@@ -593,14 +593,8 @@ final class YtdlpServiceTests: XCTestCase {
         )
 
         let directArgs = capturedArgsBox.value
-        XCTAssertTrue(directArgs.contains("--http-chunk-size"))
-        if let idx = directArgs.firstIndex(of: "--http-chunk-size") {
-            XCTAssertEqual(directArgs[idx + 1], "10M")
-        }
-        XCTAssertTrue(directArgs.contains("--throttled-rate"))
-        if let idx = directArgs.firstIndex(of: "--throttled-rate") {
-            XCTAssertEqual(directArgs[idx + 1], "100K")
-        }
+        XCTAssertFalse(directArgs.contains("--http-chunk-size"), "Direct progressive streams must not force chunking")
+        XCTAssertFalse(directArgs.contains("--throttled-rate"), "Direct progressive streams must not force throttled rate restarts")
         XCTAssertFalse(directArgs.contains("--concurrent-fragments"), "Direct MP4 must not have concurrent-fragments flag")
 
         // Test B: Mixed MediaInfo with both direct MP4 and DASH formats
