@@ -26,6 +26,49 @@ class LoggerService: ObservableObject {
         return components?.string ?? "\(url.scheme ?? "https")://\(url.host ?? "unknown")"
     }
 
+    nonisolated static func sanitizeCommandForLog(_ args: [String]) -> String {
+        var sanitizedArgs: [String] = []
+        var skipNextForRedaction: String? = nil
+
+        for arg in args {
+            if let redactionPlaceholder = skipNextForRedaction {
+                sanitizedArgs.append(redactionPlaceholder)
+                skipNextForRedaction = nil
+                continue
+            }
+
+            if arg == "--cookies" {
+                sanitizedArgs.append(arg)
+                skipNextForRedaction = "\"<COOKIE_FILE>\""
+                continue
+            }
+
+            if arg == "--add-header" || arg == "--header" {
+                sanitizedArgs.append(arg)
+                skipNextForRedaction = "\"<REDACTED_HEADER>\""
+                continue
+            }
+
+            if arg.hasPrefix("http://") || arg.hasPrefix("https://") {
+                let sanitized = sanitizeURLForLog(arg)
+                sanitizedArgs.append(sanitized.contains(" ") ? "\"\(sanitized)\"" : sanitized)
+                continue
+            }
+
+            if arg.contains(" ") {
+                sanitizedArgs.append("\"\(arg)\"")
+            } else {
+                sanitizedArgs.append(arg)
+            }
+        }
+
+        if let pending = skipNextForRedaction {
+            sanitizedArgs.append(pending)
+        }
+
+        return sanitizedArgs.joined(separator: " ")
+    }
+
     private init() {
         let appSupport = (FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first ?? URL(fileURLWithPath: NSHomeDirectory() + "/Library/Application Support"))
             .appendingPathComponent("Siphon")

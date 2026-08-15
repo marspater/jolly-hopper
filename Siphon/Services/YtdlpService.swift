@@ -73,24 +73,48 @@ class YtdlpService: ObservableObject {
         return candidate.path == root.path || candidate.path.hasPrefix(root.path + "/")
     }
 
+    nonisolated static let supportedMediaExtensions: Set<String> = [
+        "mp4", "m4v", "mkv", "webm", "mov", "avi", "flv", "wmv", "ts",
+        "mp3", "m4a", "aac", "flac", "wav", "opus", "ogg", "alac", "aiff"
+    ]
+
+    nonisolated static func isMediaFilePath(_ path: String) -> Bool {
+        let ext = (path as NSString).pathExtension.lowercased()
+        return supportedMediaExtensions.contains(ext)
+    }
+
     private func isExecutableBinary(at url: URL) -> Bool {
         FileManager.default.fileExists(atPath: url.path) && FileManager.default.isExecutableFile(atPath: url.path)
     }
 
-    private func atomicInstall(from source: URL, to destination: URL) throws {
+    func transactionalInstall(from source: URL, to destination: URL, validate: (URL) async -> Bool) async throws -> Bool {
         let fm = FileManager.default
-        let backupDestination = destination.deletingLastPathComponent().appendingPathComponent(destination.lastPathComponent + ".backup")
+        let backupDestination = destination.deletingLastPathComponent().appendingPathComponent(destination.lastPathComponent + ".backup_\(UUID().uuidString)")
         try? fm.removeItem(at: backupDestination)
 
-        if fm.fileExists(atPath: destination.path) {
+        let hadOldBinary = fm.fileExists(atPath: destination.path)
+        if hadOldBinary {
             try fm.moveItem(at: destination, to: backupDestination)
         }
 
         do {
             try fm.moveItem(at: source, to: destination)
-            try? fm.removeItem(at: backupDestination)
+            let isValid = await validate(destination)
+            if isValid {
+                if hadOldBinary {
+                    try? fm.removeItem(at: backupDestination)
+                }
+                return true
+            } else {
+                // Post-validation failed: remove new binary and restore backup
+                try? fm.removeItem(at: destination)
+                if hadOldBinary {
+                    try? fm.moveItem(at: backupDestination, to: destination)
+                }
+                return false
+            }
         } catch {
-            if fm.fileExists(atPath: backupDestination.path) && !fm.fileExists(atPath: destination.path) {
+            if hadOldBinary && !fm.fileExists(atPath: destination.path) {
                 try? fm.moveItem(at: backupDestination, to: destination)
             }
             throw error
@@ -287,11 +311,15 @@ class YtdlpService: ObservableObject {
 
             try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: extractedBinURL.path)
 
-            try atomicInstall(from: extractedBinURL, to: ffmpegDest)
+            let installed = try await transactionalInstall(from: extractedBinURL, to: ffmpegDest) { binURL in
+                await self.validateBinary(binURL, name: "FFmpeg", expectedSHA256: DependencyChecksums.ffmpegExecutableSHA256, context: "download")
+            }
 
-            if await validateBinary(ffmpegDest, name: "FFmpeg", expectedSHA256: DependencyChecksums.ffmpegExecutableSHA256, context: "download") {
+            if installed {
                 ffmpegPath = ffmpegDest
                 LoggerService.shared.log("FFmpeg cryptographically verified and installed at \(ffmpegDest.path).", level: .info)
+            } else {
+                LoggerService.shared.log("FFmpeg post-install validation failed. Rolled back.", level: .error)
             }
         } catch {
             LoggerService.shared.log("Failed to download FFmpeg: \(error.localizedDescription)", level: .error)
@@ -333,11 +361,15 @@ class YtdlpService: ObservableObject {
 
             try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: extractedBinURL.path)
 
-            try atomicInstall(from: extractedBinURL, to: ffprobeDest)
+            let installed = try await transactionalInstall(from: extractedBinURL, to: ffprobeDest) { binURL in
+                await self.validateBinary(binURL, name: "FFprobe", expectedSHA256: DependencyChecksums.ffprobeExecutableSHA256, context: "download")
+            }
 
-            if await validateBinary(ffprobeDest, name: "FFprobe", expectedSHA256: DependencyChecksums.ffprobeExecutableSHA256, context: "download") {
+            if installed {
                 ffprobePath = ffprobeDest
                 LoggerService.shared.log("FFprobe cryptographically verified and installed at \(ffprobeDest.path).", level: .info)
+            } else {
+                LoggerService.shared.log("FFprobe post-install validation failed. Rolled back.", level: .error)
             }
         } catch {
             LoggerService.shared.log("Failed to download FFprobe: \(error.localizedDescription)", level: .error)
@@ -394,7 +426,12 @@ class YtdlpService: ObservableObject {
                 throw YtdlpUpdateError.validationFailed("yt-dlp exited with error: \(error.localizedDescription)")
             }
 
-            try atomicInstall(from: tempDestination, to: destination)
+            let installed = try await transactionalInstall(from: tempDestination, to: destination) { binURL in
+                (try? await self.runCommandAsync([binURL.path, "--ignore-config", "--version"])) != nil
+            }
+            guard installed else {
+                throw YtdlpUpdateError.validationFailed("yt-dlp post-installation validation failed. Rolled back.")
+            }
             ytdlpPath = destination
             isAvailable = true
             updateProgress = 0.9
@@ -797,13 +834,13 @@ class YtdlpService: ObservableObject {
         
         args.append(targetURL)
         
-        let fullCommand = args.map { $0.contains(" ") ? "\"\($0)\"" : $0 }.joined(separator: " ")
+        let sanitizedCommand = LoggerService.sanitizeCommandForLog(args)
         for warning in codecFallbackWarnings {
             onOutput("\(warning)\n")
         }
-        onOutput("[COMMAND] \(fullCommand)\n")
+        onOutput("[COMMAND] \(sanitizedCommand)\n")
         Task { @MainActor in
-            LoggerService.shared.log(LoggerService.sanitizeURLForLog(fullCommand), level: .command)
+            LoggerService.shared.log(sanitizedCommand, level: .command)
         }
 
         defer {
@@ -1563,16 +1600,6 @@ class YtdlpService: ObservableObject {
             onProcessCreated(process)
             let outputState = ThreadSafeOutputState()
 
-            let isMediaFilePath: @Sendable (String) -> Bool = { path in
-                let ext = (path as NSString).pathExtension.lowercased()
-                let nonMediaExtensions: Set<String> = [
-                    "jpg", "jpeg", "png", "webp", "gif", "bmp", "tiff",
-                    "vtt", "srt", "ass", "lrc",
-                    "json", "part", "ytdl", "description", "txt", "info"
-                ]
-                return !ext.isEmpty && !nonMediaExtensions.contains(ext)
-            }
-
             let processOutputLine: @Sendable (String) -> Void = { line in
                 if line.contains("[info] Writing video thumbnail") || line.contains("[info] Writing video subtitle") || line.contains("[info] Writing video description") {
                     DispatchQueue.main.async { onOutput(line) }
@@ -1654,16 +1681,16 @@ class YtdlpService: ObservableObject {
 
             outputPipe.fileHandleForReading.readabilityHandler = { handle in
                 let data = handle.availableData
-                guard !data.isEmpty, let text = String(data: data, encoding: .utf8) else { return }
-                for line in outputBuffer.appendAndExtractLines(text) {
+                guard !data.isEmpty else { return }
+                for line in outputBuffer.appendAndExtractLines(data) {
                     processOutputLine(line)
                 }
             }
 
             errorPipe.fileHandleForReading.readabilityHandler = { handle in
                 let data = handle.availableData
-                guard !data.isEmpty, let text = String(data: data, encoding: .utf8) else { return }
-                for line in errorBuffer.appendAndExtractLines(text) {
+                guard !data.isEmpty else { return }
+                for line in errorBuffer.appendAndExtractLines(data) {
                     outputState.appendError(line + "\n")
                     DispatchQueue.main.async { onOutput("[ERROR] \(line)") }
                 }
@@ -1674,8 +1701,8 @@ class YtdlpService: ObservableObject {
                 errorPipe.fileHandleForReading.readabilityHandler = nil
 
                 let remainingOutput = outputPipe.fileHandleForReading.readDataToEndOfFile()
-                if !remainingOutput.isEmpty, let text = String(data: remainingOutput, encoding: .utf8) {
-                    for line in outputBuffer.appendAndExtractLines(text) {
+                if !remainingOutput.isEmpty {
+                    for line in outputBuffer.appendAndExtractLines(remainingOutput) {
                         processOutputLine(line)
                     }
                 }
@@ -1684,8 +1711,8 @@ class YtdlpService: ObservableObject {
                 }
 
                 let remainingError = errorPipe.fileHandleForReading.readDataToEndOfFile()
-                if !remainingError.isEmpty, let text = String(data: remainingError, encoding: .utf8) {
-                    for line in errorBuffer.appendAndExtractLines(text) {
+                if !remainingError.isEmpty {
+                    for line in errorBuffer.appendAndExtractLines(remainingError) {
                         outputState.appendError(line + "\n")
                         DispatchQueue.main.async { onOutput("[ERROR] \(line)") }
                     }
@@ -1707,24 +1734,10 @@ class YtdlpService: ObservableObject {
                     if fm.fileExists(atPath: resolved.path),
                        let values = try? resolved.resourceValues(forKeys: [.isRegularFileKey]),
                        values.isRegularFile == true,
-                       isMediaFilePath(resolved.path),
+                       Self.isMediaFilePath(resolved.path),
                        Self.isPathContained(targetURL: resolved, inside: saveFolder) {
                         finalURL = resolved
                         break
-                    } else {
-                        // Check if container converted format (e.g. .mp4 instead of intermediate .mkv)
-                        let baseName = rawURL.deletingPathExtension().lastPathComponent
-                        if let files = try? fm.contentsOfDirectory(at: saveFolder, includingPropertiesForKeys: [.isRegularFileKey]) {
-                            if let match = files.first(where: {
-                                $0.deletingPathExtension().lastPathComponent == baseName &&
-                                fm.fileExists(atPath: $0.path) &&
-                                isMediaFilePath($0.path) &&
-                                Self.isPathContained(targetURL: $0, inside: saveFolder)
-                            }) {
-                                finalURL = match.standardizedFileURL.resolvingSymlinksInPath()
-                                break
-                            }
-                        }
                     }
                 }
 
@@ -1732,13 +1745,6 @@ class YtdlpService: ObservableObject {
 
                 if proc.terminationStatus == 0 {
                     if let resolvedURL = finalURL {
-                        // Intermediate .mkv cleanup if target .mp4 exists
-                        if resolvedURL.pathExtension.lowercased() == "mp4" {
-                            let intermediateMKV = resolvedURL.deletingPathExtension().appendingPathExtension("mkv")
-                            if fm.fileExists(atPath: intermediateMKV.path) && intermediateMKV.path != resolvedURL.path {
-                                try? fm.removeItem(at: intermediateMKV)
-                            }
-                        }
                         safeContinuation.resume(returning: resolvedURL.path)
                     } else {
                         safeContinuation.resume(throwing: YtdlpError.downloadFailed("Download process completed, but no valid media file was verified in the target destination."))
@@ -1798,20 +1804,23 @@ class YtdlpService: ObservableObject {
 
     private func fetchHTMLWithBrowserCookies(url: String, browser: String) async -> String? {
         guard let path = ytdlpPath?.path else { return nil }
-        let cookiePath = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + "_cookies.txt").path
+        let cookieURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + "_cookies.txt")
+        let cookiePath = cookieURL.path
+        FileManager.default.createFile(atPath: cookiePath, contents: nil, attributes: [.posixPermissions: 0o600])
         defer {
             try? FileManager.default.removeItem(atPath: cookiePath)
         }
 
-        let ytdlpArgs = ["--cookies-from-browser", browser, "--cookies", cookiePath, "--skip-download", url]
+        let ytdlpArgs = [path, "--ignore-config", "--cookies-from-browser", browser, "--cookies", cookiePath, "--skip-download", url]
         
         // This will create the cookies file, even if it eventually fails with "Unsupported URL"
         _ = try? await runCommand(ytdlpArgs)
         
         guard FileManager.default.fileExists(atPath: cookiePath) else { return nil }
+        try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: cookiePath)
         
         let curlArgs = [
-            "curl",
+            "/usr/bin/curl",
             "-sL",
             "--cookie", cookiePath,
             "-A", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15",
@@ -2014,19 +2023,24 @@ final class ThreadSafeDataBuffer: @unchecked Sendable {
 }
 
 final class StreamBuffer: @unchecked Sendable {
-    private var buffer = ""
+    private var buffer = Data()
     private let lock = NSLock()
 
-    func appendAndExtractLines(_ text: String) -> [String] {
+    func appendAndExtractLines(_ chunk: Data) -> [String] {
         lock.lock()
         defer { lock.unlock() }
-        buffer += text
+        buffer.append(chunk)
         var lines: [String] = []
-        while let newlineRange = buffer.range(of: "\n") {
-            let line = String(buffer[..<newlineRange.lowerBound]).trimmingCharacters(in: CharacterSet(charactersIn: "\r"))
-            buffer.removeSubrange(..<newlineRange.upperBound)
-            if !line.isEmpty {
-                lines.append(line)
+
+        while let newlineIndex = buffer.firstIndex(of: 0x0A) { // 0x0A is '\n'
+            let lineData = buffer.subdata(in: buffer.startIndex..<newlineIndex)
+            buffer.removeSubrange(buffer.startIndex...newlineIndex)
+
+            if let line = String(data: lineData, encoding: .utf8) {
+                let trimmed = line.trimmingCharacters(in: CharacterSet(charactersIn: "\r"))
+                if !trimmed.isEmpty {
+                    lines.append(trimmed)
+                }
             }
         }
         return lines
@@ -2035,9 +2049,17 @@ final class StreamBuffer: @unchecked Sendable {
     func flush() -> [String] {
         lock.lock()
         defer { lock.unlock() }
-        let remaining = buffer
-        buffer = ""
-        return remaining.components(separatedBy: .newlines).filter { !$0.isEmpty }
+        var lines: [String] = []
+        if !buffer.isEmpty {
+            if let line = String(data: buffer, encoding: .utf8) {
+                let trimmed = line.trimmingCharacters(in: CharacterSet(charactersIn: "\r\n"))
+                if !trimmed.isEmpty {
+                    lines.append(trimmed)
+                }
+            }
+            buffer.removeAll()
+        }
+        return lines
     }
 }
 

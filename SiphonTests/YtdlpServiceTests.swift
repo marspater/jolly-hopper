@@ -391,4 +391,161 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertEqual(urlB.path, fileB.path)
         XCTAssertNotEqual(urlA.path, urlB.path)
     }
+
+    func testByteSafeStreamBufferSplitUTF8() {
+        let buffer = StreamBuffer()
+
+        // "Test ✅ Title\n" in UTF-8 bytes:
+        // '✅' is 3 bytes: 0xE2, 0x9C, 0x85
+        let text = "Test ✅ Title\n"
+        let fullData = text.data(using: .utf8)!
+
+        // Split right inside the 3-byte UTF-8 emoji
+        let splitIndex = 7 // Inside the emoji
+        let chunk1 = fullData.subdata(in: 0..<splitIndex)
+        let chunk2 = fullData.subdata(in: splitIndex..<fullData.count)
+
+        let lines1 = buffer.appendAndExtractLines(chunk1)
+        XCTAssertTrue(lines1.isEmpty, "Should not emit lines until newline byte is reached")
+
+        let lines2 = buffer.appendAndExtractLines(chunk2)
+        XCTAssertEqual(lines2, ["Test ✅ Title"], "Complete line with split UTF-8 character must decode cleanly")
+    }
+
+    func testSanitizeCommandForLog() {
+        let args = [
+            "/usr/local/bin/yt-dlp",
+            "--ignore-config",
+            "--cookies",
+            "/tmp/siphon_cookie_secret_123.txt",
+            "--add-header",
+            "Authorization: Bearer SECRET_TOKEN_ABC",
+            "--add-header",
+            "Referer:https://site.example/page",
+            "https://site.example/watch?v=12345&token=SECRET999&sig=ABCDEF#section"
+        ]
+
+        let sanitized = LoggerService.sanitizeCommandForLog(args)
+
+        XCTAssertTrue(sanitized.contains("/usr/local/bin/yt-dlp"))
+        XCTAssertTrue(sanitized.contains("--ignore-config"))
+        XCTAssertTrue(sanitized.contains("--cookies \"<COOKIE_FILE>\""))
+        XCTAssertTrue(sanitized.contains("--add-header \"<REDACTED_HEADER>\""))
+        XCTAssertTrue(sanitized.contains("https://site.example/watch"))
+        XCTAssertFalse(sanitized.contains("siphon_cookie_secret_123"))
+        XCTAssertFalse(sanitized.contains("SECRET_TOKEN_ABC"))
+        XCTAssertFalse(sanitized.contains("token=SECRET999"))
+        XCTAssertFalse(sanitized.contains("sig=ABCDEF"))
+    }
+
+    func testMediaExtensionAllowlist() {
+        // Supported extensions must pass
+        XCTAssertTrue(YtdlpService.isMediaFilePath("/path/to/video.mp4"))
+        XCTAssertTrue(YtdlpService.isMediaFilePath("/path/to/video.mkv"))
+        XCTAssertTrue(YtdlpService.isMediaFilePath("/path/to/video.webm"))
+        XCTAssertTrue(YtdlpService.isMediaFilePath("/path/to/audio.mp3"))
+        XCTAssertTrue(YtdlpService.isMediaFilePath("/path/to/audio.m4a"))
+        XCTAssertTrue(YtdlpService.isMediaFilePath("/path/to/audio.opus"))
+        XCTAssertTrue(YtdlpService.isMediaFilePath("/path/to/audio.flac"))
+
+        // Unsafe or non-media extensions must fail
+        XCTAssertFalse(YtdlpService.isMediaFilePath("/path/to/malicious.exe"))
+        XCTAssertFalse(YtdlpService.isMediaFilePath("/path/to/installer.dmg"))
+        XCTAssertFalse(YtdlpService.isMediaFilePath("/path/to/archive.zip"))
+        XCTAssertFalse(YtdlpService.isMediaFilePath("/path/to/document.pdf"))
+        XCTAssertFalse(YtdlpService.isMediaFilePath("/path/to/script.js"))
+    }
+
+    func testTransactionalInstallRollback() async throws {
+        let tempDir = FileManager.default.temporaryDirectory
+        let workFolder = tempDir.appendingPathComponent("tx_install_test_\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: workFolder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: workFolder) }
+
+        let originalBinary = workFolder.appendingPathComponent("bin_target")
+        let candidateBinary = workFolder.appendingPathComponent("bin_candidate")
+
+        try "ORIGINAL_WORKING_VERSION".data(using: .utf8)?.write(to: originalBinary)
+        try "BROKEN_NEW_VERSION".data(using: .utf8)?.write(to: candidateBinary)
+
+        let service = YtdlpService()
+
+        // Case A: Validation fails -> rollback to original
+        let resultFailed = try await service.transactionalInstall(from: candidateBinary, to: originalBinary) { targetURL in
+            return false // Simulation of post-validation failure
+        }
+
+        XCTAssertFalse(resultFailed)
+        let contentAfterRollback = try String(contentsOf: originalBinary, encoding: .utf8)
+        XCTAssertEqual(contentAfterRollback, "ORIGINAL_WORKING_VERSION")
+
+        // Case B: Validation succeeds -> replace and delete backup
+        let newCandidate = workFolder.appendingPathComponent("bin_candidate_good")
+        try "NEW_WORKING_VERSION".data(using: .utf8)?.write(to: newCandidate)
+
+        let resultSuccess = try await service.transactionalInstall(from: newCandidate, to: originalBinary) { targetURL in
+            return true // Simulation of validation success
+        }
+
+        XCTAssertTrue(resultSuccess)
+        let contentAfterSuccess = try String(contentsOf: originalBinary, encoding: .utf8)
+        XCTAssertEqual(contentAfterSuccess, "NEW_WORKING_VERSION")
+    }
+
+    func testCandidateCollisionDoesNotClaimUnrelatedFile() async throws {
+        let tempDir = FileManager.default.temporaryDirectory
+        let sessionFolder = tempDir.appendingPathComponent("collision_test_\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: sessionFolder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: sessionFolder) }
+
+        // B.mp4 exists in saveFolder (unrelated user file)
+        let unrelatedFile = sessionFolder.appendingPathComponent("B.mp4")
+        try "UNRELATED_USER_FILE".data(using: .utf8)?.write(to: unrelatedFile)
+
+        // yt-dlp reported A.mp4 (which was never created / failed during conversion)
+        let ghostFile = sessionFolder.appendingPathComponent("A.mp4")
+
+        let state = ThreadSafeOutputState()
+        state.addCandidatePath(ghostFile.path)
+
+        let candidates = state.getCandidatePaths()
+        let fm = FileManager.default
+        var finalURL: URL? = nil
+        for candidate in candidates.reversed() {
+            let rawURL = candidate.hasPrefix("/") ? URL(fileURLWithPath: candidate) : sessionFolder.appendingPathComponent(candidate)
+            let resolved = rawURL.standardizedFileURL.resolvingSymlinksInPath()
+            if fm.fileExists(atPath: resolved.path),
+               let values = try? resolved.resourceValues(forKeys: [.isRegularFileKey]),
+               values.isRegularFile == true,
+               YtdlpService.isMediaFilePath(resolved.path),
+               YtdlpService.isPathContained(targetURL: resolved, inside: sessionFolder) {
+                finalURL = resolved
+                break
+            }
+        }
+
+        XCTAssertNil(finalURL, "Resolution must fail when candidate does not exist")
+        XCTAssertTrue(fm.fileExists(atPath: unrelatedFile.path), "Unrelated B.mp4 must remain untouched")
+        let unrelatedContent = try String(contentsOf: unrelatedFile, encoding: .utf8)
+        XCTAssertEqual(unrelatedContent, "UNRELATED_USER_FILE")
+    }
+
+    func testSafeContinuationDoubleResumeProtection() async throws {
+        let expectation = expectation(description: "Continuation resumes exactly once")
+        
+        let checkedResult = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Int, Error>) in
+            let safeCont = SafeContinuation(continuation)
+            
+            // First resume succeeds
+            safeCont.resume(returning: 42)
+            expectation.fulfill()
+            
+            // Subsequent resumes are ignored and will not crash
+            safeCont.resume(returning: 99)
+            safeCont.resume(throwing: YtdlpError.downloadFailed("Ignored"))
+        }
+
+        await fulfillment(of: [expectation], timeout: 1.0)
+        XCTAssertEqual(checkedResult, 42)
+    }
 }
