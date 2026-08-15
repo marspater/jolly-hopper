@@ -27,5 +27,21 @@ final class DownloadManagerTests: XCTestCase {
         XCTAssertEqual(addedDownload.status, .queued, "The added download should have .queued status initially")
     }
 
+    func testAddDownloadsBatch() {
+        let manager = DownloadManager()
+        let urls = [
+            "https://example.com/video1",
+            "https://example.com/video2",
+            "https://example.com/video3"
+        ]
+        let options = DownloadOptions.default
+        let initialCount = manager.downloads.count
 
+        manager.addDownloads(urls: urls, options: options)
+
+        XCTAssertEqual(manager.downloads.count, initialCount + 3)
+        XCTAssertEqual(manager.downloads[0].url, "https://example.com/video1")
+        XCTAssertEqual(manager.downloads[1].url, "https://example.com/video2")
+        XCTAssertEqual(manager.downloads[2].url, "https://example.com/video3")
+    }
 }

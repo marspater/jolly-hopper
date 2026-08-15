@@ -137,4 +137,80 @@ final class YtdlpServiceTests: XCTestCase {
             }
         }
     }
+
+    func testSpeedLimiterFlagAppendedWhenConfigured() async throws {
+        UserDefaults.standard.set(5120, forKey: UserDefaultsKeys.downloadSpeedLimit)
+        defer { UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.downloadSpeedLimit) }
+
+        var capturedArgs: [String] = []
+        service.mockDownloadRunner = { args in
+            capturedArgs = args
+            return "[download] Destination: /tmp/test.mp4\n"
+        }
+
+        let options = DownloadOptions.default
+        _ = try await service.download(
+            url: "https://example.com/video",
+            options: options,
+            onProcessCreated: { _ in },
+            onProgress: { _, _, _ in },
+            onOutput: { _ in }
+        )
+
+        XCTAssertTrue(capturedArgs.contains("--limit-rate"))
+        if let idx = capturedArgs.firstIndex(of: "--limit-rate") {
+            XCTAssertEqual(capturedArgs[idx + 1], "5120K")
+        }
+    }
+
+    func testCustomFormatIdSelectionFlagAppended() async throws {
+        var capturedArgs: [String] = []
+        service.mockDownloadRunner = { args in
+            capturedArgs = args
+            return "[download] Destination: /tmp/test.mp4\n"
+        }
+
+        var options = DownloadOptions.default
+        options.selectedFormatId = "137+140"
+
+        _ = try await service.download(
+            url: "https://example.com/video",
+            options: options,
+            onProcessCreated: { _ in },
+            onProgress: { _, _, _ in },
+            onOutput: { _ in }
+        )
+
+        XCTAssertTrue(capturedArgs.contains("-f"))
+        if let idx = capturedArgs.firstIndex(of: "-f") {
+            XCTAssertEqual(capturedArgs[idx + 1], "137+140")
+        }
+    }
+
+    func testAudioExtractionAndMetadataFlags() async throws {
+        var capturedArgs: [String] = []
+        service.mockDownloadRunner = { args in
+            capturedArgs = args
+            return "[download] Destination: /tmp/test.mp3\n"
+        }
+
+        var options = DownloadOptions.default
+        options.fileType = .mp3
+        options.embedThumbnail = true
+        options.embedMetadata = true
+
+        _ = try await service.download(
+            url: "https://example.com/audio",
+            options: options,
+            onProcessCreated: { _ in },
+            onProgress: { _, _, _ in },
+            onOutput: { _ in }
+        )
+
+        XCTAssertTrue(capturedArgs.contains("-x"))
+        XCTAssertTrue(capturedArgs.contains("--audio-format"))
+        XCTAssertTrue(capturedArgs.contains("mp3"))
+        XCTAssertTrue(capturedArgs.contains("--embed-thumbnail"))
+        XCTAssertTrue(capturedArgs.contains("--embed-metadata"))
+    }
 }

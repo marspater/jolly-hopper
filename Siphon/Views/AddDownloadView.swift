@@ -52,6 +52,16 @@ struct AddDownloadView: View {
     @State private var isLoadingPlaylist: Bool = false
     @State private var showPlaylistSelector: Bool = false
     @State private var downloadMode: DownloadMode = .single
+    @State private var inputMode: InputMode = .single
+    @State private var batchUrlsText: String = ""
+    @State private var selectedFormatId: String? = nil
+    @State private var showStreamInspector: Bool = false
+
+    enum InputMode: String, CaseIterable, Identifiable {
+        case single = "single"
+        case batch = "batch"
+        var id: String { rawValue }
+    }
 
     enum DownloadMode {
         case single, playlist
@@ -88,60 +98,32 @@ struct AddDownloadView: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
-                    urlSection
+                    if inputMode == .single {
+                        urlSection
 
-                    if let info = mediaInfo {
-                        if !showPlaylistSelector {
-                            mediaInfoSection(info)
+                        if let info = mediaInfo {
+                            if !showPlaylistSelector {
+                                mediaInfoSection(info)
 
-                            if info.playlist != nil {
-                                playlistDetectedBanner
+                                if info.playlist != nil {
+                                    playlistDetectedBanner
+                                }
+
+                                streamInspectorSection(info)
+                            } else {
+                                playlistSelectorSection
                             }
-                        } else {
-                            playlistSelectorSection
+
+                            formatSection
+                            saveSection
+                            extraOptionsToggleSection
                         }
 
-                        formatSection
-                        saveSection
-
-                        VStack(alignment: .leading, spacing: 12) {
-                            Button {
-                                withAnimation(.easeInOut(duration: 0.2)) {
-                                    showAdvancedOptions.toggle()
-                                }
-                            } label: {
-                                HStack {
-                                    Image(systemName: showAdvancedOptions ? "chevron.down" : "chevron.right")
-                                        .font(.system(size: 11, weight: .bold))
-                                        .foregroundColor(.accentColor)
-                                    Text(languageService.s("extra_settings"))
-                                        .font(.system(size: 14, weight: .medium))
-                                        .foregroundColor(.primary)
-                                    Spacer()
-                                }
-                                .padding(.horizontal, 14)
-                                .padding(.vertical, 10)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 8)
-                                        .fill(Color.gray.opacity(0.1))
-                                )
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 8)
-                                        .stroke(Color.gray.opacity(0.3), lineWidth: 1)
-                                )
-                            }
-                            .buttonStyle(.plain)
-
-                            if showAdvancedOptions {
-                                extraOptionsSection
-                                    .transition(.opacity.combined(with: .move(edge: .top)))
-                            }
+                        if let error = errorMessage {
+                            errorSection(error)
                         }
-                        .padding(.top, 8)
-                    }
-
-                    if let error = errorMessage {
-                        errorSection(error)
+                    } else {
+                        batchSection
                     }
                 }
                 .padding(20)
@@ -257,8 +239,209 @@ struct AddDownloadView: View {
                 .fontWeight(.semibold)
 
             Spacer()
+
+            Picker("", selection: $inputMode) {
+                Text(languageService.s("single_mode")).tag(InputMode.single)
+                Text(languageService.s("batch_import")).tag(InputMode.batch)
+            }
+            .pickerStyle(.segmented)
+            .frame(width: 220)
         }
         .padding()
+    }
+
+    private var batchSection: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack {
+                Text(languageService.s("paste_multiple_urls"))
+                    .font(.headline)
+                Spacer()
+                let count = extractBatchUrls(from: batchUrlsText).count
+                if count > 0 {
+                    Text("\(count) URLs")
+                        .font(.caption)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(Color.blue.opacity(0.15))
+                        .foregroundColor(.blue)
+                        .clipShape(Capsule())
+                }
+            }
+
+            TextEditor(text: $batchUrlsText)
+                .font(.system(size: 12, design: .monospaced))
+                .frame(minHeight: 130, maxHeight: 180)
+                .padding(6)
+                .background(Color.gray.opacity(0.08))
+                .cornerRadius(8)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8)
+                        .stroke(Color.gray.opacity(0.2), lineWidth: 1)
+                )
+
+            HStack {
+                Button {
+                    importBatchFromFile()
+                } label: {
+                    Label(languageService.s("import_file"), systemImage: "doc.text")
+                }
+                .buttonStyle(.bordered)
+
+                Button(languageService.s("clear")) {
+                    batchUrlsText = ""
+                }
+                .buttonStyle(.plain)
+                .foregroundColor(.secondary)
+                .disabled(batchUrlsText.isEmpty)
+
+                Spacer()
+            }
+
+            formatSection
+            saveSection
+            extraOptionsToggleSection
+        }
+    }
+
+    private func streamInspectorSection(_ info: MediaInfo) -> some View {
+        Group {
+            if let formats = info.formats, !formats.isEmpty {
+                VStack(alignment: .leading, spacing: 10) {
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            showStreamInspector.toggle()
+                        }
+                    } label: {
+                        HStack {
+                            Image(systemName: showStreamInspector ? "chevron.down" : "chevron.right")
+                                .font(.system(size: 11, weight: .bold))
+                                .foregroundColor(.accentColor)
+                            Text(languageService.s("stream_inspector"))
+                                .font(.system(size: 14, weight: .medium))
+                                .foregroundColor(.primary)
+                            Spacer()
+                            if let selected = selectedFormatId {
+                                Text("\(languageService.s("custom_stream")): \(selected)")
+                                    .font(.caption)
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 2)
+                                    .background(Color.blue.opacity(0.15))
+                                    .foregroundColor(.blue)
+                                    .cornerRadius(4)
+                            }
+                        }
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 10)
+                        .background(RoundedRectangle(cornerRadius: 8).fill(Color.gray.opacity(0.1)))
+                        .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.gray.opacity(0.3), lineWidth: 1))
+                    }
+                    .buttonStyle(.plain)
+
+                    if showStreamInspector {
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack {
+                                Button {
+                                    selectedFormatId = nil
+                                } label: {
+                                    HStack {
+                                        Image(systemName: selectedFormatId == nil ? "checkmark.circle.fill" : "circle")
+                                            .foregroundColor(selectedFormatId == nil ? .accentColor : .secondary)
+                                        Text(languageService.s("auto_recommended"))
+                                            .font(.system(size: 12, weight: .semibold))
+                                    }
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 6)
+                                    .background(selectedFormatId == nil ? Color.accentColor.opacity(0.15) : Color.gray.opacity(0.08))
+                                    .cornerRadius(6)
+                                }
+                                .buttonStyle(.plain)
+
+                                Spacer()
+                            }
+
+                            ScrollView {
+                                VStack(spacing: 4) {
+                                    ForEach(formats) { fmt in
+                                        Button {
+                                            selectedFormatId = fmt.formatId
+                                        } label: {
+                                            HStack(spacing: 8) {
+                                                Image(systemName: selectedFormatId == fmt.formatId ? "checkmark.circle.fill" : "circle")
+                                                    .foregroundColor(selectedFormatId == fmt.formatId ? .accentColor : .secondary)
+
+                                                Text(fmt.formatId)
+                                                    .font(.geistMono(11, weight: .bold))
+                                                    .padding(.horizontal, 6)
+                                                    .padding(.vertical, 2)
+                                                    .background(Color.primary.opacity(0.08))
+                                                    .cornerRadius(4)
+
+                                                Text(fmt.ext.uppercased())
+                                                    .font(.system(size: 11, weight: .bold))
+                                                    .foregroundColor(.primary)
+
+                                                Text(fmt.displaySummary)
+                                                    .font(.system(size: 11))
+                                                    .foregroundColor(.secondary)
+                                                    .lineLimit(1)
+
+                                                Spacer()
+                                            }
+                                            .padding(.horizontal, 10)
+                                            .padding(.vertical, 6)
+                                            .background(selectedFormatId == fmt.formatId ? Color.accentColor.opacity(0.12) : Color.clear)
+                                            .cornerRadius(6)
+                                        }
+                                        .buttonStyle(.plain)
+                                    }
+                                }
+                            }
+                            .frame(maxHeight: 180)
+                        }
+                        .padding(12)
+                        .background(Color.gray.opacity(0.05))
+                        .cornerRadius(8)
+                    }
+                }
+            }
+        }
+    }
+
+    private var extraOptionsToggleSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Button {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    showAdvancedOptions.toggle()
+                }
+            } label: {
+                HStack {
+                    Image(systemName: showAdvancedOptions ? "chevron.down" : "chevron.right")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundColor(.accentColor)
+                    Text(languageService.s("extra_settings"))
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundColor(.primary)
+                    Spacer()
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .background(
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(Color.gray.opacity(0.1))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8)
+                        .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                )
+            }
+            .buttonStyle(.plain)
+
+            if showAdvancedOptions {
+                extraOptionsSection
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+        }
+        .padding(.top, 8)
     }
 
     private var urlSection: some View {
@@ -769,14 +952,24 @@ struct AddDownloadView: View {
                 dismiss()
             }.keyboardShortcut(.escape)
 
-            let downloadTitle = downloadMode == .playlist ?
-                String(format: languageService.s("download_selected"), selectedPlaylistIds.count) :
-                languageService.s("download_btn")
+            if inputMode == .batch {
+                let count = extractBatchUrls(from: batchUrlsText).count
+                Button(String(format: languageService.s("queue_batch"), count)) {
+                    startDownload()
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(count == 0)
+                .keyboardShortcut(.return)
+            } else {
+                let downloadTitle = downloadMode == .playlist ?
+                    String(format: languageService.s("download_selected"), selectedPlaylistIds.count) :
+                    languageService.s("download_btn")
 
-            Button(downloadTitle) { startDownload() }
-            .buttonStyle(.borderedProminent)
-            .disabled(mediaInfo == nil || (downloadMode == .playlist && selectedPlaylistIds.isEmpty))
-            .keyboardShortcut(.return)
+                Button(downloadTitle) { startDownload() }
+                .buttonStyle(.borderedProminent)
+                .disabled(mediaInfo == nil || (downloadMode == .playlist && selectedPlaylistIds.isEmpty))
+                .keyboardShortcut(.return)
+            }
         }
         .padding()
     }
@@ -911,8 +1104,18 @@ struct AddDownloadView: View {
             videoCodec: videoCodecEnum,
             audioCodec: audioCodecEnum,
             conversionCodec: conversionCodecEnum,
-            additionalArguments: additionalArguments.isEmpty ? nil : additionalArguments
+            forceOverwrite: false,
+            additionalArguments: additionalArguments.isEmpty ? nil : additionalArguments,
+            rawCookies: nil,
+            selectedFormatId: inputMode == .single ? selectedFormatId : nil
         )
+
+        if inputMode == .batch {
+            let urls = extractBatchUrls(from: batchUrlsText)
+            guard !urls.isEmpty else { return }
+            proceedWithBatchDownload(urls: urls, options: options)
+            return
+        }
 
         if downloadMode == .single {
             let filename = customFilename.isEmpty ? (mediaInfo?.title ?? "") : customFilename
@@ -938,6 +1141,47 @@ struct AddDownloadView: View {
         }
 
         proceedWithDownload(options: options, forceOverwrite: false)
+    }
+
+    private func extractBatchUrls(from text: String) -> [String] {
+        let lines = text.components(separatedBy: CharacterSet.newlines.union(CharacterSet.whitespaces))
+        var valid: [String] = []
+        for line in lines {
+            let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+            if (trimmed.hasPrefix("http://") || trimmed.hasPrefix("https://")) && !valid.contains(trimmed) {
+                valid.append(trimmed)
+            }
+        }
+        return valid
+    }
+
+    private func importBatchFromFile() {
+        let panel = NSOpenPanel()
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        panel.canCreateDirectories = false
+        panel.canChooseFiles = true
+        panel.allowedContentTypes = [.plainText, .text, .item]
+        
+        if panel.runModal() == .OK, let selectedURL = panel.url {
+            if let content = try? String(contentsOf: selectedURL, encoding: .utf8) {
+                let existing = batchUrlsText.isEmpty ? "" : batchUrlsText + "\n"
+                batchUrlsText = existing + content
+            }
+        }
+    }
+
+    private func proceedWithBatchDownload(urls: [String], options: DownloadOptions) {
+        var finalOptions = options
+        if let rawCookies = appState.rawCookiesToDownload, !rawCookies.isEmpty {
+            finalOptions.rawCookies = rawCookies
+            appState.rawCookiesToDownload = nil
+        }
+        finalOptions.customFilename = nil
+        downloadManager.addDownloads(urls: urls, options: finalOptions)
+        appState.selectedNavItem = .downloading
+        AddDownloadWindowManager.shared.closeWindow()
+        dismiss()
     }
 
     private func proceedWithDownload(options: DownloadOptions, forceOverwrite: Bool) {
