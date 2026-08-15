@@ -1253,7 +1253,7 @@ class YtdlpService: ObservableObject {
                 
                 var dumpOutput: String? = nil
                 do {
-                    dumpOutput = try await runCommand(args)
+                    dumpOutput = try await processRunner.runCommand(args)
                 } catch let error as YtdlpError {
                     if case .commandFailed(let output) = error {
                         dumpOutput = output
@@ -1267,10 +1267,11 @@ class YtdlpService: ObservableObject {
                     for line in output.components(separatedBy: .newlines) {
                         let trimmed = line.trimmingCharacters(in: .whitespaces)
                         if !trimmed.starts(with: "#") && !trimmed.starts(with: "[") && !trimmed.starts(with: "WARNING") && !trimmed.starts(with: "ERROR") {
-                            if let decodedData = Data(base64Encoded: trimmed, options: .ignoreUnknownCharacters),
-                               let decodedString = String(data: decodedData, encoding: .utf8),
-                               !decodedString.isEmpty {
-                                browserHtml += decodedString
+                            if let decodedData = Data(base64Encoded: trimmed, options: .ignoreUnknownCharacters) {
+                                let decodedString = String(decoding: decodedData, as: UTF8.self)
+                                if !decodedString.isEmpty {
+                                    browserHtml += decodedString
+                                }
                             }
                         }
                     }
@@ -1388,7 +1389,7 @@ class YtdlpService: ObservableObject {
                 
                 var embedDump: String? = nil
                 do {
-                    embedDump = try await runCommand(embedArgs)
+                    embedDump = try await processRunner.runCommand(embedArgs)
                 } catch let error as YtdlpError {
                     if case .commandFailed(let output) = error {
                         embedDump = output
@@ -1400,10 +1401,11 @@ class YtdlpService: ObservableObject {
                     for line in output.components(separatedBy: .newlines) {
                         let trimmed = line.trimmingCharacters(in: .whitespaces)
                         if !trimmed.starts(with: "#") && !trimmed.starts(with: "[") && !trimmed.starts(with: "WARNING") && !trimmed.starts(with: "ERROR") {
-                            if let decodedData = Data(base64Encoded: trimmed, options: .ignoreUnknownCharacters),
-                               let decodedString = String(data: decodedData, encoding: .utf8),
-                               !decodedString.isEmpty {
-                                embedHtml += decodedString
+                            if let decodedData = Data(base64Encoded: trimmed, options: .ignoreUnknownCharacters) {
+                                let decodedString = String(decoding: decodedData, as: UTF8.self)
+                                if !decodedString.isEmpty {
+                                    embedHtml += decodedString
+                                }
                             }
                         }
                     }
@@ -1659,9 +1661,10 @@ class YtdlpService: ObservableObject {
         do {
             return try await processRunner.runCommand(args)
         } catch let error as YtdlpError {
-            if case .commandFailed(let output) = error, isCookieFailureError(output), args.contains("--cookies-from-browser") {
-                LoggerService.shared.log("Browser cookie access failed or database missing. Automatically retrying command without browser cookies...", level: .info)
-                if let browser = configuredBrowserCookieSource(), let urlArg = args.last {
+            if case .commandFailed(let output) = error, isCookieFailureError(output), let idx = args.firstIndex(of: "--cookies-from-browser"), idx + 1 < args.count {
+                let browser = args[idx + 1]
+                LoggerService.shared.log("Browser cookie access failed for '\(browser)' or database missing. Automatically retrying command without browser cookies...", level: .info)
+                if let urlArg = args.last {
                     recordCookieDenial(browser: browser, url: urlArg)
                 }
                 let cleanArgs = stripCookieArgs(from: args)
