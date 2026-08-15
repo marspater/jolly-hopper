@@ -164,8 +164,7 @@ struct MenuBarView: View {
                         customFilename: nil,
                         videoCodec: preset.videoCodec,
                         audioCodec: preset.audioCodec,
-                        forceOverwrite: false,
-                        additionalArguments: preset.additionalArguments
+                        forceOverwrite: false
                     ))
                 }
             } else if let preset = DownloadPreset(rawValue: selectedPreset) {
@@ -190,8 +189,7 @@ struct MenuBarView: View {
                     customFilename: nil,
                     videoCodec: preset.videoCodec,
                     audioCodec: preset.audioCodec,
-                    forceOverwrite: false,
-                    additionalArguments: nil
+                    forceOverwrite: false
                 ))
             }
             

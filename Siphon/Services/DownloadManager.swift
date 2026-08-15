@@ -156,8 +156,7 @@ class DownloadManager: ObservableObject {
             customFilename: nil,
             videoCodec: type == "video" ? .auto : .none,
             audioCodec: .auto,
-            forceOverwrite: false,
-            additionalArguments: nil
+            forceOverwrite: false
         )
         addDownload(url: url, options: options)
     }

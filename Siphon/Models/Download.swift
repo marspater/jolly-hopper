@@ -103,7 +103,6 @@ struct DownloadOptions: Codable {
     var audioCodec: AudioCodec?
     var conversionCodec: ConversionCodec?
     var forceOverwrite: Bool?
-    var additionalArguments: String?
     var rawCookies: String?
     var selectedFormatId: String?
     
@@ -123,7 +122,6 @@ struct DownloadOptions: Codable {
             sponsorBlock: false,
             conversionCodec: ConversionCodec.none,
             forceOverwrite: false,
-            additionalArguments: nil,
             rawCookies: nil,
             selectedFormatId: nil
         )
@@ -493,14 +491,13 @@ struct CustomPreset: Codable, Identifiable, Equatable {
     var sponsorBlock: Bool?
 
     var splitChapters: Bool?
-    var additionalArguments: String?
     
     enum CodingKeys: String, CodingKey {
-        case id, name, videoCodec, audioCodec, videoResolution, fileType, subtitleLanguage, subtitleFormat, sponsorBlock, splitChapters, additionalArguments
+        case id, name, videoCodec, audioCodec, videoResolution, fileType, subtitleLanguage, subtitleFormat, sponsorBlock, splitChapters
         case downloadSubtitles = "embedSubtitles"
     }
     
-    init(name: String, videoCodec: VideoCodec, audioCodec: AudioCodec, videoResolution: VideoResolution, fileType: MediaFileType, downloadSubtitles: Bool = false, subtitleLanguage: String = "", subtitleFormat: SubtitleFormat = .srt, sponsorBlock: Bool = false, splitChapters: Bool = false, additionalArguments: String? = nil) {
+    init(name: String, videoCodec: VideoCodec, audioCodec: AudioCodec, videoResolution: VideoResolution, fileType: MediaFileType, downloadSubtitles: Bool = false, subtitleLanguage: String = "", subtitleFormat: SubtitleFormat = .srt, sponsorBlock: Bool = false, splitChapters: Bool = false) {
         self.id = UUID()
         self.name = name
         self.videoCodec = videoCodec
@@ -512,7 +509,6 @@ struct CustomPreset: Codable, Identifiable, Equatable {
         self.subtitleFormat = subtitleFormat
         self.sponsorBlock = sponsorBlock
         self.splitChapters = splitChapters
-        self.additionalArguments = additionalArguments
     }
     
     static func loadAll() -> [CustomPreset] {

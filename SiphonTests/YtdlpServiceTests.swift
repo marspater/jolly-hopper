@@ -115,42 +115,65 @@ final class YtdlpServiceTests: XCTestCase {
         }
     }
 
-    func testDownloadBlockedArgumentsThrowSecurityViolation() async {
-        let blockedTestArgs = [
-            "--exec echo hacked",
-            "--output /tmp/test",
-            "-o /etc/passwd",
-            "--paths /root",
-            "--load-info-json file.json",
-            "--ffmpeg-location /tmp/malicious",
-            "--netrc-cmd whoami",
-            "--plugin-dirs /tmp/plugins",
-            "--print-to-file out.txt"
-        ]
+    func testVerifySHA256CryptographicValidation() throws {
+        let tempDir = FileManager.default.temporaryDirectory
+        let testFile = tempDir.appendingPathComponent("sha256_test_\(UUID().uuidString).bin")
+        let testContent = "Siphon Secure Media Downloader Test Content".data(using: .utf8)!
+        try testContent.write(to: testFile)
+        defer { try? FileManager.default.removeItem(at: testFile) }
 
-        for blocked in blockedTestArgs {
-            var options = DownloadOptions.default
-            options.additionalArguments = blocked
+        // Expected SHA-256 for testContent
+        let expectedHash = "cadd1db9485d4657d4a9084d308ae8eb6fb3086d9ce295f3134b598f028bdc0d"
 
-            do {
-                _ = try await service.download(
-                    url: "https://example.com/video",
-                    options: options,
-                    onProcessCreated: { _ in },
-                    onProgress: { _, _, _ in },
-                    onOutput: { _ in }
-                )
-                XCTFail("Expected securityViolation for argument: \(blocked)")
-            } catch let error as YtdlpError {
-                if case .securityViolation = error {
-                    // Expected
-                } else {
-                    XCTFail("Expected .securityViolation, got: \(error)")
-                }
-            } catch {
-                XCTFail("Expected YtdlpError.securityViolation, got: \(error)")
-            }
-        }
+        // 1. Valid hash match
+        XCTAssertTrue(YtdlpService.verifySHA256(fileURL: testFile, expectedHash: expectedHash))
+        XCTAssertTrue(YtdlpService.verifySHA256(fileURL: testFile, expectedHash: expectedHash.uppercased()))
+
+        // 2. Tampered content (1 byte modified)
+        var tamperedContent = testContent
+        tamperedContent[0] ^= 0xFF
+        let tamperedFile = tempDir.appendingPathComponent("sha256_tampered_\(UUID().uuidString).bin")
+        try tamperedContent.write(to: tamperedFile)
+        defer { try? FileManager.default.removeItem(at: tamperedFile) }
+
+        XCTAssertFalse(YtdlpService.verifySHA256(fileURL: tamperedFile, expectedHash: expectedHash))
+
+        // 3. Non-existent file
+        let nonExistentFile = tempDir.appendingPathComponent("non_existent_\(UUID().uuidString).bin")
+        XCTAssertFalse(YtdlpService.verifySHA256(fileURL: nonExistentFile, expectedHash: expectedHash))
+    }
+
+    func testPathContainmentSecurityValidation() throws {
+        let tempDir = FileManager.default.temporaryDirectory
+        let sandboxFolder = tempDir.appendingPathComponent("siphon_containment_\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: sandboxFolder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: sandboxFolder) }
+
+        // 1. Valid child file
+        let validChild = sandboxFolder.appendingPathComponent("media.mp4")
+        XCTAssertTrue(YtdlpService.isPathContained(targetURL: validChild, inside: sandboxFolder))
+
+        // 2. Valid nested child
+        let validNested = sandboxFolder.appendingPathComponent("subfolder/media.mp4")
+        XCTAssertTrue(YtdlpService.isPathContained(targetURL: validNested, inside: sandboxFolder))
+
+        // 3. Directory traversal attempt
+        let outsideTarget = sandboxFolder.appendingPathComponent("../../evil.mp4")
+        XCTAssertFalse(YtdlpService.isPathContained(targetURL: outsideTarget, inside: sandboxFolder))
+
+        // 4. Absolute path to system directory
+        let systemPath = URL(fileURLWithPath: "/etc/passwd")
+        XCTAssertFalse(YtdlpService.isPathContained(targetURL: systemPath, inside: sandboxFolder))
+
+        // 5. Symlink escaping designated directory
+        let outsideFile = tempDir.appendingPathComponent("outside_\(UUID().uuidString).txt")
+        try "outside".write(to: outsideFile, atomically: true, encoding: .utf8)
+        defer { try? FileManager.default.removeItem(at: outsideFile) }
+
+        let symlinkInSandbox = sandboxFolder.appendingPathComponent("symlink_escape.mp4")
+        try? FileManager.default.createSymbolicLink(at: symlinkInSandbox, withDestinationURL: outsideFile)
+
+        XCTAssertFalse(YtdlpService.isPathContained(targetURL: symlinkInSandbox, inside: sandboxFolder))
     }
 
     func testPurgeOrphanedTempCookieFiles() throws {

@@ -62,9 +62,7 @@ struct PreferencesView: View {
     @State private var presetSubtitleLang: String = ""
     @State private var presetSubtitleFormat: SubtitleFormat = .srt
     @State private var presetSponsorBlock: Bool = false
-
     @State private var presetSplitChapters: Bool = false
-    @State private var presetAdditionalArguments: String = ""
     @State private var editingPreset: CustomPreset? = nil
     
     private var presetFilteredResolutions: [VideoResolution] {
@@ -603,15 +601,6 @@ struct PreferencesView: View {
                 presetCodecSection
                 presetSubtitleSection
                 presetAdvancedSection
-                
-                Section(languageService.s("additional_arguments")) {
-                    TextField(languageService.s("additional_arguments_hint"), text: $presetAdditionalArguments)
-                        .textFieldStyle(.roundedBorder)
-                    
-                    Text(.init(languageService.s("additional_arguments_help")))
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
             }
             .siphonFormStyle()
             
@@ -736,7 +725,6 @@ struct PreferencesView: View {
         presetSubtitleFormat = .srt
         presetSponsorBlock = false
         presetSplitChapters = false
-        presetAdditionalArguments = ""
     }
     
     private func startEditingPreset(_ preset: CustomPreset) {
@@ -751,7 +739,6 @@ struct PreferencesView: View {
         presetSubtitleFormat = preset.subtitleFormat ?? .srt
         presetSponsorBlock = preset.sponsorBlock ?? false
         presetSplitChapters = preset.splitChapters ?? false
-        presetAdditionalArguments = preset.additionalArguments ?? ""
         showCreatePresetSheet = true
     }
     
@@ -760,7 +747,6 @@ struct PreferencesView: View {
         defaultAudioCodec = preset.audioCodec.rawValue
         defaultVideoResolution = preset.videoResolution.rawValue
         defaultFileType = preset.fileType.rawValue.lowercased()
-        defaultAdditionalArguments = ""
     }
     
     private func applyCustomPreset(_ preset: CustomPreset) {
@@ -768,7 +754,6 @@ struct PreferencesView: View {
         defaultAudioCodec = preset.audioCodec.rawValue
         defaultVideoResolution = preset.videoResolution.rawValue
         defaultFileType = preset.fileType.rawValue.lowercased()
-        // Do not overwrite global defaultAdditionalArguments with preset-specific ones
     }
     
     private func createCustomPreset() {
@@ -784,7 +769,6 @@ struct PreferencesView: View {
                 customPresets[index].subtitleFormat = presetSubtitleFormat
                 customPresets[index].sponsorBlock = presetSponsorBlock
                 customPresets[index].splitChapters = presetSplitChapters
-                customPresets[index].additionalArguments = presetAdditionalArguments
             }
             editingPreset = nil
         } else {
@@ -798,8 +782,7 @@ struct PreferencesView: View {
                 subtitleLanguage: presetSubtitleLang,
                 subtitleFormat: presetSubtitleFormat,
                 sponsorBlock: presetSponsorBlock,
-                splitChapters: presetSplitChapters,
-                additionalArguments: presetAdditionalArguments
+                splitChapters: presetSplitChapters
             )
             customPresets.append(preset)
         }
