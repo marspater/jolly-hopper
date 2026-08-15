@@ -1510,6 +1510,7 @@ class YtdlpService: ObservableObject {
         args.append("--no-mtime")
 
         let isYouTube = lowerUrl.contains("youtube.com") || lowerUrl.contains("youtu.be")
+        let isThisVid = lowerUrl.contains("thisvid.com") || lowerUrl.contains("thisvid")
         let isFragmented: Bool
         if let info = mediaInfo, let opts = options {
             isFragmented = info.isSelectedFormatFragmented(options: opts)
@@ -1523,10 +1524,15 @@ class YtdlpService: ObservableObject {
                 lowerUrl.contains("cdn.boyfriend.tv")
         }
 
-        // Baseline HTTP download optimization flags for all sites (bypasses server rate limiting without aria2c)
-        args.append(contentsOf: ["--http-chunk-size", "10M"])
-        args.append(contentsOf: ["--throttled-rate", "100K"])
-        args.append(contentsOf: ["--buffer-size", "16K"])
+        // Adaptive transport & rate-throttling policy:
+        // 1. YouTube & known rate-limited single-stream CDNs (e.g. ThisVid): apply 10MB chunking & throttled-rate re-extraction.
+        // 2. DASH/HLS fragmented streams: apply concurrent fragment downloads (8 fragments).
+        // 3. Generic direct progressive HTTP downloads: use standard single-stream HTTP first to avoid Range request overhead
+        //    and avoid false-positive re-extractions on slow connections (<100KB/s).
+        if isYouTube || isThisVid {
+            args.append(contentsOf: ["--http-chunk-size", "10M"])
+            args.append(contentsOf: ["--throttled-rate", "100K"])
+        }
 
         if isFragmented {
             args.append(contentsOf: ["--concurrent-fragments", "8"])

@@ -617,22 +617,35 @@ final class YtdlpServiceTests: XCTestCase {
             return "[download] Destination: /tmp/test.mp4\n"
         })
 
-        // Test A: Direct progressive stream (e.g. ThisVid) - includes baseline speed flags, no concurrent fragments
+        // Test A: Generic direct progressive stream (e.g. standard CDN / web host) -> normal HTTP, no chunking overhead, no false-positive throttled rate
         _ = try await service.download(
-            url: "https://thisvid.com/videos/test-progressive-stream",
+            url: "https://example.com/videos/test-progressive-stream.mp4",
             options: DownloadOptions.default,
             onProcessCreated: { _ in },
             onProgress: { _, _, _ in },
             onOutput: { _ in }
         )
 
-        let directArgs = capturedArgsBox.value
-        XCTAssertTrue(directArgs.contains("--http-chunk-size"), "Baseline speed optimization must include chunk size")
-        XCTAssertTrue(directArgs.contains("--throttled-rate"), "Baseline speed optimization must include throttled rate")
-        XCTAssertTrue(directArgs.contains("--buffer-size"), "Baseline speed optimization must include buffer size")
-        XCTAssertFalse(directArgs.contains("--concurrent-fragments"), "Direct MP4 must not have concurrent-fragments flag")
+        let genericArgs = capturedArgsBox.value
+        XCTAssertFalse(genericArgs.contains("--http-chunk-size"), "Generic progressive stream must not force chunking Range requests")
+        XCTAssertFalse(genericArgs.contains("--throttled-rate"), "Generic progressive stream must not force throttled rate re-extraction")
+        XCTAssertFalse(genericArgs.contains("--concurrent-fragments"), "Direct MP4 must not have concurrent-fragments flag")
 
-        // Test B: Mixed MediaInfo with both direct MP4 and DASH formats
+        // Test B: Known rate-limited single-stream CDN (e.g. ThisVid) -> targeted 10MB chunking & throttled-rate recovery
+        _ = try await service.download(
+            url: "https://thisvid.com/videos/test-rate-limited-stream",
+            options: DownloadOptions.default,
+            onProcessCreated: { _ in },
+            onProgress: { _, _, _ in },
+            onOutput: { _ in }
+        )
+
+        let thisVidArgs = capturedArgsBox.value
+        XCTAssertTrue(thisVidArgs.contains("--http-chunk-size"), "ThisVid direct stream should receive 10MB chunking to defeat server rate limits")
+        XCTAssertTrue(thisVidArgs.contains("--throttled-rate"), "ThisVid direct stream should receive throttled rate recovery")
+        XCTAssertFalse(thisVidArgs.contains("--concurrent-fragments"), "ThisVid direct MP4 must not have concurrent-fragments flag")
+
+        // Test C: Mixed MediaInfo with both direct MP4 and DASH formats
         let mixedFormats = [
             MediaFormat(formatId: "http-1080p", ext: "mp4", resolution: "1920x1080", fps: 60, vcodec: "avc1.64002a", acodec: "mp4a.40.2", abr: 128, vbr: 4000, filesize: 50000000, filesizeApprox: nil, formatNote: "Direct MP4", formatProtocol: "https", manifestUrl: nil),
             MediaFormat(formatId: "137", ext: "mp4", resolution: "1920x1080", fps: 60, vcodec: "avc1.64002a", acodec: "none", abr: nil, vbr: 4000, filesize: 45000000, filesizeApprox: nil, formatNote: "1080p DASH", formatProtocol: "http_dash_segments", manifestUrl: nil),
@@ -646,7 +659,7 @@ final class YtdlpServiceTests: XCTestCase {
             webpageUrl: "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
         )
 
-        // B1: User selects direct progressive MP4 -> NO concurrent-fragments
+        // C1: User selects direct progressive MP4 -> YouTube chunking, but NO concurrent-fragments
         var directOptions = DownloadOptions.default
         directOptions.selectedFormatId = "http-1080p"
         _ = try await service.download(
@@ -659,11 +672,11 @@ final class YtdlpServiceTests: XCTestCase {
         )
 
         let selectedDirectArgs = capturedArgsBox.value
-        XCTAssertTrue(selectedDirectArgs.contains("--http-chunk-size"))
-        XCTAssertTrue(selectedDirectArgs.contains("--throttled-rate"))
+        XCTAssertTrue(selectedDirectArgs.contains("--http-chunk-size"), "YouTube streams require 10MB chunking")
+        XCTAssertTrue(selectedDirectArgs.contains("--throttled-rate"), "YouTube streams require throttled rate recovery")
         XCTAssertFalse(selectedDirectArgs.contains("--concurrent-fragments"), "Direct MP4 format must not have concurrent-fragments even when DASH exists on same page")
 
-        // B2: User selects DASH format combination -> CONCURRENCY 8
+        // C2: User selects DASH format combination -> YouTube chunking + CONCURRENCY 8
         var dashOptions = DownloadOptions.default
         dashOptions.selectedFormatId = "137+140"
         _ = try await service.download(
@@ -683,7 +696,7 @@ final class YtdlpServiceTests: XCTestCase {
             XCTAssertEqual(selectedDashArgs[idx + 1], "8")
         }
 
-        // Test C: Direct HLS manifest URL (e.g. BoyfriendTV)
+        // Test D: Direct HLS manifest URL (e.g. BoyfriendTV)
         _ = try await service.download(
             url: "https://www.boyfriend.tv/videos/12345/test-hls-stream",
             options: DownloadOptions.default,
@@ -693,8 +706,6 @@ final class YtdlpServiceTests: XCTestCase {
         )
 
         let hlsArgs = capturedArgsBox.value
-        XCTAssertTrue(hlsArgs.contains("--http-chunk-size"))
-        XCTAssertTrue(hlsArgs.contains("--throttled-rate"))
         XCTAssertTrue(hlsArgs.contains("--concurrent-fragments"))
         if let idx = hlsArgs.firstIndex(of: "--concurrent-fragments") {
             XCTAssertEqual(hlsArgs[idx + 1], "8")
