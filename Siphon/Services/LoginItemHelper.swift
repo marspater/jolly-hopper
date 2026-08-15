@@ -26,7 +26,7 @@ class LoginItemHelper {
                     try SMAppService.mainApp.unregister()
                 }
             } catch {
-                print("Failed to update login item status: \(error.localizedDescription)")
+                LoggerService.shared.log("Failed to update login item status: \(error.localizedDescription)", level: .error)
             }
         }
         

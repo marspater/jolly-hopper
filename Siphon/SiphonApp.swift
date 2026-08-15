@@ -284,7 +284,7 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
                 self.needsRestart = true
             }
         } catch {
-            print("Update error: \(error)")
+            LoggerService.shared.log("Update error: \(error)", level: .error)
             isInstalling = false
         }
     }

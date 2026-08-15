@@ -354,7 +354,7 @@ struct AddDownloadView: View {
                                         Image(systemName: selectedFormatId == nil ? "checkmark.circle.fill" : "circle")
                                             .foregroundColor(selectedFormatId == nil ? .accentColor : .secondary)
                                         Text(languageService.s("auto_recommended"))
-                                            .font(.system(size: 12, weight: .semibold))
+                                            .font(.geist(12, weight: .semibold))
                                     }
                                     .padding(.horizontal, 10)
                                     .padding(.vertical, 6)
@@ -384,11 +384,11 @@ struct AddDownloadView: View {
                                                     .cornerRadius(4)
 
                                                 Text(fmt.ext.uppercased())
-                                                    .font(.system(size: 11, weight: .bold))
+                                                    .font(.geist(11, weight: .bold))
                                                     .foregroundColor(.primary)
 
                                                 Text(fmt.displaySummary)
-                                                    .font(.system(size: 11))
+                                                    .font(.geist(11))
                                                     .foregroundColor(.secondary)
                                                     .lineLimit(1)
 
@@ -426,7 +426,7 @@ struct AddDownloadView: View {
                         .font(.system(size: 11, weight: .bold))
                         .foregroundColor(.accentColor)
                     Text(languageService.s("extra_settings"))
-                        .font(.system(size: 14, weight: .medium))
+                        .font(.geist(14, weight: .medium))
                         .foregroundColor(.primary)
                     Spacer()
                 }
@@ -579,9 +579,9 @@ struct AddDownloadView: View {
                             .frame(width: 50, height: 30).cornerRadius(4)
 
                             VStack(alignment: .leading) {
-                                Text(item.title).font(.system(size: 13, weight: .medium)).lineLimit(1)
+                                Text(item.title).font(.geist(13, weight: .medium)).lineLimit(1)
                                 if let duration = item.durationString {
-                                    Text(duration).font(.system(size: 11)).foregroundColor(.secondary)
+                                    Text(duration).font(.geist(11)).foregroundColor(.secondary)
                                 }
                             }
                             Spacer()

@@ -870,7 +870,7 @@ class YtdlpService: ObservableObject {
                 }
             }
         } catch {
-            print("Error cleaning up subtitle files: \(error)")
+            LoggerService.shared.log("Error cleaning up subtitle files: \(error)", level: .warning)
         }
     }
 
@@ -892,7 +892,7 @@ class YtdlpService: ObservableObject {
                 }
             }
         } catch {
-            print("Error cleaning up thumbnail files: \(error)")
+            LoggerService.shared.log("Error cleaning up thumbnail files: \(error)", level: .warning)
         }
     }
 
@@ -1930,7 +1930,7 @@ class YtdlpService: ObservableObject {
                 }
             }
         } catch {
-            print("Error resolving Sucuri cookie: \(error)")
+            LoggerService.shared.log("Error resolving Sucuri cookie: \(error)", level: .error)
         }
         return nil
     }
@@ -1952,7 +1952,7 @@ class YtdlpService: ObservableObject {
             try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: tempCookiesURL.path)
             return tempCookiesURL
         } catch {
-            print("Error writing cookies file: \(error)")
+            LoggerService.shared.log("Error writing cookies file: \(error)", level: .error)
             return nil
         }
     }

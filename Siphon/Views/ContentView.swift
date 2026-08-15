@@ -408,7 +408,7 @@ struct SponsorView: View {
                     .foregroundColor(.yellow)
                     .font(.system(size: 13, weight: .semibold))
                 Text(languageService.s("star_github"))
-                    .font(.system(size: 12, weight: .bold))
+                    .font(.geist(12, weight: .bold))
                 Spacer()
                 Image(systemName: "arrow.up.right")
                     .font(.system(size: 10))

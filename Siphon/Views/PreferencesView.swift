@@ -174,7 +174,7 @@ struct PreferencesView: View {
                 Image(systemName: icon)
                     .font(.system(size: 12, weight: .semibold))
                 Text(title)
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(.geist(12, weight: .semibold))
             }
             .foregroundColor(selectedTab == tab ? .white : .secondary)
             .padding(.horizontal, 16)
@@ -1035,11 +1035,11 @@ struct PreferencesView: View {
                         Image(systemName: "exclamationmark.shield.fill")
                             .foregroundColor(.orange)
                         Text(languageService.s("legal_disclaimer_title"))
-                            .font(.system(size: 13, weight: .bold))
+                            .font(.geist(13, weight: .bold))
                     }
                     
                     Text(languageService.s("legal_disclaimer_message"))
-                        .font(.caption)
+                        .font(.geist(11))
                         .foregroundColor(.secondary)
                         .lineSpacing(3)
                         .fixedSize(horizontal: false, vertical: true)
@@ -1055,16 +1055,16 @@ struct PreferencesView: View {
                 // Credits & Details Card
                 VStack(alignment: .leading, spacing: 10) {
                     Text(languageService.s("credits"))
-                        .font(.system(size: 13, weight: .bold))
+                        .font(.geist(13, weight: .bold))
                     
                     HStack {
                         Text("Maintainer")
                             .foregroundColor(.secondary)
                         Spacer()
                         Text("marspater")
-                            .font(.system(size: 13, weight: .medium))
+                            .font(.geist(13, weight: .medium))
                     }
-                    .font(.caption)
+                    .font(.geist(11))
                     
                     Divider()
                     
@@ -1073,9 +1073,9 @@ struct PreferencesView: View {
                             .foregroundColor(.secondary)
                         Spacer()
                         Link("yt-dlp", destination: URL(string: "https://github.com/yt-dlp/yt-dlp")!)
-                            .font(.system(size: 13, weight: .medium))
+                            .font(.geist(13, weight: .medium))
                     }
-                    .font(.caption)
+                    .font(.geist(11))
                 }
                 .padding(14)
                 .background(.ultraThinMaterial)
@@ -1088,15 +1088,14 @@ struct PreferencesView: View {
                 // License Card
                 VStack(alignment: .leading, spacing: 6) {
                     Text(languageService.s("license"))
-                        .font(.system(size: 13, weight: .bold))
+                        .font(.geist(13, weight: .bold))
                     Text("GNU General Public License v3.0")
-                        .font(.caption)
-                        .fontWeight(.semibold)
+                        .font(.geist(11, weight: .semibold))
                     Text(languageService.s("license_desc"))
-                        .font(.caption2)
+                        .font(.geist(10))
                         .foregroundColor(.secondary)
                     Link(languageService.s("view_license"), destination: URL(string: "https://www.gnu.org/licenses/gpl-3.0.html")!)
-                        .font(.caption)
+                        .font(.geist(11))
                 }
                 .padding(14)
                 .frame(maxWidth: .infinity, alignment: .leading)
