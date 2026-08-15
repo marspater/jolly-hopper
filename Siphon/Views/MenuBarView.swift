@@ -221,7 +221,7 @@ struct MenuBarView: View {
     }
     
     private var footer: some View {
-        HStack(alignment: .center) {
+        HStack(alignment: .center, spacing: 8) {
             Button {
                 MenuBarManager.shared.closePopover()
                 NSApp.setActivationPolicy(.regular)
@@ -241,8 +241,8 @@ struct MenuBarView: View {
                         .font(.geist(11, weight: .medium))
                 }
                 .foregroundColor(.secondary)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
+                .padding(.horizontal, 9)
+                .frame(height: 28)
                 .background(Color.primary.opacity(0.06))
                 .clipShape(Capsule())
             }
@@ -254,6 +254,7 @@ struct MenuBarView: View {
                 HStack(spacing: 5) {
                     ProgressView()
                         .controlSize(.small)
+                        .scaleEffect(0.75)
                     Text("\(downloadManager.downloadingDownloads.count)")
                         .font(.geistMono(11, weight: .bold))
                     Text(languageService.s("downloading"))
@@ -262,8 +263,8 @@ struct MenuBarView: View {
                 .lineLimit(1)
                 .fixedSize(horizontal: true, vertical: false)
                 .foregroundColor(.accentColor)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
+                .padding(.horizontal, 9)
+                .frame(height: 28)
                 .background(Color.accentColor.opacity(0.12))
                 .clipShape(Capsule())
             }
@@ -275,13 +276,13 @@ struct MenuBarView: View {
             } label: {
                 HStack(spacing: 4) {
                     Image(systemName: "power")
-                        .font(.system(size: 10, weight: .bold))
+                        .font(.system(size: 11, weight: .bold))
                     Text(languageService.s("quit"))
                         .font(.geist(11, weight: .semibold))
                 }
                 .foregroundColor(.red)
                 .padding(.horizontal, 10)
-                .padding(.vertical, 5)
+                .frame(height: 28)
                 .background(Color.red.opacity(0.12))
                 .clipShape(Capsule())
                 .overlay(

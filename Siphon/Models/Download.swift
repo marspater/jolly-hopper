@@ -260,28 +260,28 @@ enum VideoResolution: String, Codable, CaseIterable, Identifiable {
     var ytdlpValue: String {
         switch self {
         case .best: return "bestvideo"
-        case .r2160p: return "bestvideo[height<=?2160]"
-        case .r1440p: return "bestvideo[height<=?1440]"
-        case .r1080p: return "bestvideo[height<=?1080]"
-        case .r720p: return "bestvideo[height<=?720]"
-        case .r480p: return "bestvideo[height<=?480]"
-        case .r360p: return "bestvideo[height<=?360]"
-        case .r240p: return "bestvideo[height<=?240]"
+        case .r2160p: return "bestvideo[height<=2160]"
+        case .r1440p: return "bestvideo[height<=1440]"
+        case .r1080p: return "bestvideo[height<=1080]"
+        case .r720p: return "bestvideo[height<=720]"
+        case .r480p: return "bestvideo[height<=480]"
+        case .r360p: return "bestvideo[height<=360]"
+        case .r240p: return "bestvideo[height<=240]"
         case .worst: return "worstvideo"
         }
     }
     
     var ytdlpCombinedValue: String {
         switch self {
-        case .best: return "best*"
-        case .r2160p: return "best*[height<=?2160]"
-        case .r1440p: return "best*[height<=?1440]"
-        case .r1080p: return "best*[height<=?1080]"
-        case .r720p: return "best*[height<=?720]"
-        case .r480p: return "best*[height<=?480]"
-        case .r360p: return "best*[height<=?360]"
-        case .r240p: return "best*[height<=?240]"
-        case .worst: return "worst*"
+        case .best: return "bestvideo*+bestaudio/best"
+        case .r2160p: return "bestvideo*[height<=2160]+bestaudio/best[height<=2160]/best"
+        case .r1440p: return "bestvideo*[height<=1440]+bestaudio/best[height<=1440]/best"
+        case .r1080p: return "bestvideo*[height<=1080]+bestaudio/best[height<=1080]/best"
+        case .r720p: return "bestvideo*[height<=720]+bestaudio/best[height<=720]/best"
+        case .r480p: return "bestvideo*[height<=480]+bestaudio/best[height<=480]/best"
+        case .r360p: return "bestvideo*[height<=360]+bestaudio/best[height<=360]/best"
+        case .r240p: return "bestvideo*[height<=240]+bestaudio/best[height<=240]/best"
+        case .worst: return "worstvideo*+worstaudio/worst"
         }
     }
 
