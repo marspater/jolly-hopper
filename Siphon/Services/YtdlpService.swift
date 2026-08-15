@@ -932,27 +932,36 @@ class YtdlpService: ObservableObject {
                 if !selectors.contains(s) { selectors.append(s) }
             }
 
-            // 1. Requested codecs: split streams
+            // 1. Requested codecs: split streams (with and without * selector)
+            addUnique("\(requestedVideo)*+\(requestedAudio)")
             addUnique("\(requestedVideo)+\(requestedAudio)")
             // 2. Requested video + any audio: split streams  
-            if requestedAudio != bestAudio { addUnique("\(requestedVideo)+\(bestAudio)") }
+            if requestedAudio != bestAudio {
+                addUnique("\(requestedVideo)*+\(bestAudio)")
+                addUnique("\(requestedVideo)+\(bestAudio)")
+            }
             // 3. Best video + requested audio: split streams
-            if requestedVideo != bestVideo { addUnique("\(bestVideo)+\(requestedAudio)") }
+            if requestedVideo != bestVideo {
+                addUnique("\(bestVideo)*+\(requestedAudio)")
+                addUnique("\(bestVideo)+\(requestedAudio)")
+            }
             // 4. Best video + best audio: split streams
+            addUnique("\(bestVideo)*+\(bestAudio)")
             addUnique("\(bestVideo)+\(bestAudio)")
-            // 5. Combined/single-stream with resolution constraint (for single-file / HLS sites like thisvid, twitter)
+            // 5. Combined/single-stream with resolution constraint
             let combinedSelector = buildCombinedSelector(for: options.videoResolution)
             addUnique(combinedSelector)
             if let res = options.videoResolution, let maxH = res.maxHeight {
-                addUnique("bestvideo[height<=\(maxH)]")
+                addUnique("bestvideo[height<=\(maxH)]+bestaudio/best[height<=\(maxH)]")
                 addUnique("best[height<=\(maxH)]")
             }
             // 6. Ultimate fallback
-            addUnique("bestvideo")
+            addUnique("bestvideo*+bestaudio/best")
+            addUnique("bestvideo+bestaudio/best")
             addUnique("best")
 
             args.append(contentsOf: ["-f", selectors.joined(separator: "/")])
-            args.append(contentsOf: ["-S", "res,fps,hdr:12,vbr,abr,quality,filesize"])
+            args.append(contentsOf: ["-S", "res,height,fps,hdr:12,vbr,abr,quality,filesize"])
 
             var finalMergeFormat = compatibleMergeOutputFormat(for: options)
 
