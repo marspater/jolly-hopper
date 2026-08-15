@@ -1,18 +1,18 @@
-browser.runtime.onInstalled.addListener(() => {
-    browser.contextMenus.create({
+chrome.runtime.onInstalled.addListener(() => {
+    chrome.contextMenus.create({
         id: "download-siphon",
-        title: browser.i18n.getMessage("context_download"),
+        title: chrome.i18n.getMessage("context_download"),
         contexts: ["link", "video", "page"]
     });
 
-    browser.contextMenus.create({
+    chrome.contextMenus.create({
         id: "fast-download-siphon",
-        title: browser.i18n.getMessage("context_fast_download"),
+        title: chrome.i18n.getMessage("context_fast_download"),
         contexts: ["link", "video"]
     });
 });
 
-browser.contextMenus.onClicked.addListener((info, tab) => {
+chrome.contextMenus.onClicked.addListener((info, tab) => {
     const url = info.linkUrl || info.srcUrl || info.pageUrl;
     if (!url) return;
 
@@ -24,23 +24,7 @@ browser.contextMenus.onClicked.addListener((info, tab) => {
     }
 
     if (host) {
-        let domain = "";
-        try {
-            domain = new URL(url).hostname.replace(/^www\./, "");
-        } catch (e) {}
-
-        const cookieQuery = domain ? { domain: domain } : { url: url };
-        browser.cookies.getAll(cookieQuery).then((cookies) => {
-            let cookieParam = "";
-            if (cookies && cookies.length > 0) {
-                const cookieHeader = cookies.map(c => `${c.name}=${c.value}`).join('; ');
-                cookieParam = `&cookies=${encodeURIComponent(cookieHeader)}`;
-            }
-            const deepLink = `siphon://${host}?url=${encodeURIComponent(url)}${cookieParam}`;
-            browser.tabs.create({ url: deepLink, active: false });
-        }).catch(() => {
-            const deepLink = `siphon://${host}?url=${encodeURIComponent(url)}`;
-            browser.tabs.create({ url: deepLink, active: false });
-        });
+        const deepLink = "siphon://" + host + "?url=" + encodeURIComponent(url);
+        chrome.tabs.create({ url: deepLink, active: false });
     }
 });
