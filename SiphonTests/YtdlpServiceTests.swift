@@ -912,4 +912,87 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertEqual(resolved.first?.formatId, "HQ", "Default selection on ThisVid metadata must select the HQ source stream over 240p")
         XCTAssertFalse(mediaInfo!.isSelectedFormatFragmented(options: options), "HQ progressive stream must not be treated as fragmented")
     }
+
+    func testBoyfriendTVURLNormalizationAndCanonicalHost() async throws {
+        service.ytdlpPath = URL(fileURLWithPath: "/usr/local/bin/yt-dlp")
+        let capturedArgsBox = TestBox<[String]>([])
+        service.processRunner = MockYtdlpProcessRunner(
+            mockCommand: { _ in "{}" },
+            mockDownload: { args in
+                capturedArgsBox.value = args
+                return "[download] Destination: /tmp/test.mp4\n"
+            }
+        )
+
+        _ = try await service.download(
+            url: "https://www.boyfriendtv.com/videos/1140993/horus-scat-piss-chute/",
+            options: DownloadOptions.default,
+            onProcessCreated: { _ in },
+            onProgress: { _, _, _ in },
+            onOutput: { _ in }
+        )
+        
+        let lastArg = capturedArgsBox.value.last ?? ""
+        XCTAssertTrue(lastArg.contains("boyfriend.tv"), "BoyfriendTV download must target the resolved stream or canonical BoyfriendTV domain")
+        XCTAssertTrue(capturedArgsBox.value.contains("Origin:https://www.boyfriend.tv"))
+        XCTAssertTrue(capturedArgsBox.value.contains(where: { $0.contains("Referer:https://www.boyfriend.tv") }))
+    }
+
+    func testBoyfriendTVMultiFormatManifestExtraction() async throws {
+        service.ytdlpPath = URL(fileURLWithPath: "/usr/local/bin/yt-dlp")
+        let capturedArgs = TestBox<[[String]]>([])
+        
+        let mainPageHTML = """
+        <!DOCTYPE html><html><head><title>boyfriend.tv - Horus sexy blowjob compilation</title>
+        <script type="application/ld+json">
+        {"@type":"VideoObject","name":"Horus sexy blowjob compilation","embedUrl":"https://www.boyfriend.tv/embed/1140993/46075/","thumbnailUrl":["https://cdn77-t.boyfriendtv.com/thumb.jpg"]}
+        </script>
+        </head><body></body></html>
+        """
+        let mainB64 = mainPageHTML.data(using: .utf8)!.base64EncodedString()
+        
+        let embedPageHTML = """
+        <!DOCTYPE html><html><head><title>Embed</title></head><body>
+        <script>
+        window.player = {"hlsAuto":"https://cdn.boyfriend.tv/key=abc,end=123/media=hls4A/multi=854x480:v480,1280x720:v720,1920x1080:v1080/2024-03/_TPL_.mp4"};
+        </script></body></html>
+        """
+        let embedB64 = embedPageHTML.data(using: .utf8)!.base64EncodedString()
+        
+        let jsonManifestOutput = """
+        {
+            "id": "_TPL_",
+            "title": "_TPL_",
+            "duration": 297,
+            "thumbnail": "https://cdn77-t.boyfriendtv.com/thumb.jpg",
+            "formats": [
+                {"format_id": "430", "width": 854, "height": 480, "ext": "mp4", "protocol": "m3u8_native"},
+                {"format_id": "757", "width": 1280, "height": 720, "ext": "mp4", "protocol": "m3u8_native"},
+                {"format_id": "1409", "width": 1920, "height": 1080, "ext": "mp4", "protocol": "m3u8_native"}
+            ]
+        }
+        """
+
+        service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
+            capturedArgs.value.append(args)
+            if args.contains("--dump-pages") {
+                if args.contains("https://www.boyfriend.tv/videos/1140993/") {
+                    return mainB64
+                } else if args.contains("https://www.boyfriend.tv/embed/1140993/46075/") {
+                    return embedB64
+                }
+            }
+            if args.contains("--dump-json") {
+                return jsonManifestOutput
+            }
+            return "{}"
+        })
+
+        let info = try await service.fetchInfo(url: "https://www.boyfriendtv.com/videos/1140993/horus-scat-piss-chute/")
+        XCTAssertEqual(info.title, "Horus sexy blowjob compilation")
+        XCTAssertEqual(info.formats?.count, 3)
+        XCTAssertEqual(info.duration, 297)
+        XCTAssertEqual(info.thumbnail, "https://cdn77-t.boyfriendtv.com/thumb.jpg")
+    }
 }
+

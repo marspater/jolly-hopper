@@ -1228,12 +1228,21 @@ class YtdlpService: ObservableObject {
         
         var html = ""
         
-        var browsersToTry: [String?] = [nil] // Try without browser cookies first
+        var browsersToTry: [String?] = []
         if let configured = configuredBrowserCookieSource() {
             browsersToTry.append(configured)
         }
+        for candidate in ["safari", "chrome", "brave", "firefox", "edge"] {
+            if !browsersToTry.contains(where: { $0 == candidate }) {
+                browsersToTry.append(candidate)
+            }
+        }
+        browsersToTry.append(nil)
 
-        if let ytdlp = ytdlpPath ?? Bundle.main.url(forResource: "yt-dlp", withExtension: nil) {
+        let appSupportYtdlp = Self.getAppSupportDirectory().appendingPathComponent("yt-dlp")
+        let ytdlpBinary = ytdlpPath ?? Bundle.main.url(forResource: "yt-dlp", withExtension: nil) ?? (FileManager.default.fileExists(atPath: appSupportYtdlp.path) ? appSupportYtdlp : nil)
+
+        if let ytdlp = ytdlpBinary {
             for browser in browsersToTry {
                 var args = [ytdlp.path, "--ignore-config", "--dump-pages"]
                 if let browserName = browser {
@@ -1271,7 +1280,9 @@ class YtdlpService: ObservableObject {
                                            browserHtml.contains("sources") ||
                                            browserHtml.contains(".m3u8") ||
                                            browserHtml.contains("growcdnssedge") ||
-                                           browserHtml.contains("boyfriendtv")
+                                           browserHtml.contains("boyfriendtv") ||
+                                           browserHtml.contains("cdn.boyfriend.tv") ||
+                                           browserHtml.contains("embedUrl")
                         if hasMediaData {
                             html = browserHtml
                             let sourceLog = browser == nil ? "impersonated HTTP request" : "browser cookies from '\(browser!)'"
@@ -1307,6 +1318,7 @@ class YtdlpService: ObservableObject {
                 .replacingOccurrences(of: "(?i)</title>", with: "", options: .regularExpression)
                 .replacingOccurrences(of: "(?i)boyfriend\\.tv - ", with: "", options: .regularExpression)
                 .replacingOccurrences(of: "(?i) - boyfriend\\.tv", with: "", options: .regularExpression)
+                .replacingOccurrences(of: "(?i) \\| BoyFriendTV", with: "", options: .regularExpression)
                 .trimmingCharacters(in: .whitespacesAndNewlines)
             if !rawTitle.isEmpty {
                 title = rawTitle
@@ -1314,7 +1326,7 @@ class YtdlpService: ObservableObject {
         }
         
         // Extract Embed URL
-        var embedUrl: String = targetUrl
+        var embedUrl: String? = nil
         if let embedRange = html.range(of: "\"embedUrl\"\\s*:\\s*\"([^\"]+)\"", options: .regularExpression) {
             let rawEmbed = String(html[embedRange])
             if let firstColon = rawEmbed.firstIndex(of: ":"),
@@ -1325,6 +1337,15 @@ class YtdlpService: ObservableObject {
                 if val.hasPrefix("http") {
                     embedUrl = val
                 }
+            }
+        }
+        if embedUrl == nil {
+            let videoIdPattern = "/videos/(\\d+)"
+            if let regex = try? NSRegularExpression(pattern: videoIdPattern, options: .caseInsensitive),
+               let match = regex.firstMatch(in: targetUrl, options: [], range: NSRange(location: 0, length: (targetUrl as NSString).length)),
+               match.numberOfRanges > 1 {
+                let videoId = (targetUrl as NSString).substring(with: match.range(at: 1))
+                embedUrl = "https://www.boyfriend.tv/embed/\(videoId)/"
             }
         }
 
@@ -1345,53 +1366,75 @@ class YtdlpService: ObservableObject {
             }
         }
         
-        // Stream URL extraction
-        var streamUrl: String? = nil
+        // Stream URL extraction from main page
+        var streamUrl = extractStreamURLFromHTML(html)
         
-        // Strategy A: Key-value matching in JSON objects
-        let streamPatterns = [
-            "\"hlsAuto\"\\s*:\\s*\"([^\"]+)\"",
-            "\"hls\"\\s*:\\s*\"([^\"]+)\"",
-            "\"videoUrl\"\\s*:\\s*\"([^\"]+)\"",
-            "\"media\"\\s*:\\s*\"([^\"]+)\"",
-            "\"src\"\\s*:\\s*\"([^\"]+)\"",
-            "\"file\"\\s*:\\s*\"([^\"]+)\"",
-            "\"video_url\"\\s*:\\s*\"([^\"]+)\""
-        ]
-        
-        for pattern in streamPatterns {
-            if let range = html.range(of: pattern, options: .regularExpression) {
-                let rawMatch = String(html[range])
-                if let firstColon = rawMatch.firstIndex(of: ":"),
-                   let startQuote = rawMatch[firstColon...].firstIndex(of: "\"") {
-                    let val = String(rawMatch[startQuote...])
-                        .replacingOccurrences(of: "\"", with: "")
-                        .replacingOccurrences(of: "\\/", with: "/")
-                    if val.hasPrefix("http") {
-                        streamUrl = val
-                        break
+        // If stream URL is not found on main page, fetch embed URL page
+        if streamUrl == nil, let embed = embedUrl, let ytdlp = ytdlpBinary {
+            for browser in browsersToTry {
+                var embedArgs = [ytdlp.path, "--ignore-config", "--dump-pages"]
+                if let browserName = browser {
+                    embedArgs.append(contentsOf: ["--cookies-from-browser", browserName])
+                }
+                appendSiteSpecificArgs(for: embed, to: &embedArgs)
+                embedArgs.append(embed)
+                
+                var embedDump: String? = nil
+                do {
+                    embedDump = try await runCommand(embedArgs)
+                } catch let error as YtdlpError {
+                    if case .commandFailed(let output) = error {
+                        embedDump = output
+                    }
+                } catch {}
+                
+                if let output = embedDump, !output.isEmpty {
+                    var embedHtml = ""
+                    for line in output.components(separatedBy: .newlines) {
+                        let trimmed = line.trimmingCharacters(in: .whitespaces)
+                        if !trimmed.starts(with: "#") && !trimmed.starts(with: "[") && !trimmed.starts(with: "WARNING") && !trimmed.starts(with: "ERROR") {
+                            if let decodedData = Data(base64Encoded: trimmed, options: .ignoreUnknownCharacters),
+                               let decodedString = String(data: decodedData, encoding: .utf8),
+                               !decodedString.isEmpty {
+                                embedHtml += decodedString
+                            }
+                        }
+                    }
+                    if !embedHtml.isEmpty {
+                        if let extracted = extractStreamURLFromHTML(embedHtml) {
+                            streamUrl = extracted
+                            break
+                        }
                     }
                 }
             }
         }
         
-        // Strategy B: Direct URL regex matching in HTML source for HLS / CDN streams
-        if streamUrl == nil {
-            if let range = html.range(of: "https?:\\\\?/\\\\?/[^\"]*growcdnssedge[^\"]*\\.m3u8[^\"]*", options: [.regularExpression, .caseInsensitive]) ??
-                           html.range(of: "https?:\\\\?/\\\\?/cdn[^\"]*boyfriendtv[^\"]*\\.mp4[^\"]*", options: [.regularExpression, .caseInsensitive]) ??
-                           html.range(of: "https?:\\\\?/\\\\?/cdn[^\"]*boyfriendtv[^\"]*", options: [.regularExpression, .caseInsensitive]) ??
-                           html.range(of: "https?:\\\\?/\\\\?/[^\"]*\\.m3u8[^\"]*", options: [.regularExpression, .caseInsensitive]) {
-                let val = String(html[range]).replacingOccurrences(of: "\\/", with: "/")
-                if val.hasPrefix("http") {
-                    streamUrl = val
+        if let validStreamUrl = streamUrl {
+            return BoyfriendTVExtractedMedia(streamURL: validStreamUrl, embedURL: embedUrl ?? targetUrl, title: title, thumbnailURL: thumbnailUrl)
+        }
+        
+        return nil
+    }
+
+    private func extractStreamURLFromHTML(_ html: String) -> String? {
+        let streamPatterns = [
+            "\"(?:hlsAuto|hls|videoUrl|media|src|file|video_url)\"\\s*:\\s*\"(https?:[^\"]+)\"",
+            "(https?:\\\\?/\\\\?/cdn\\.boyfriend\\.tv[^\\s\"'<>]+?\\.mp4)",
+            "(https?:\\\\?/\\\\?/cdn\\.boyfriend\\.tv[^\\s\"'<>]+?\\.m3u8)",
+            "(https?:\\\\?/\\\\?/[^\\s\"'<>]+?growcdnssedge[^\\s\"'<>]+?\\.m3u8)"
+        ]
+        for pattern in streamPatterns {
+            if let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive),
+               let match = regex.firstMatch(in: html, options: [], range: NSRange(location: 0, length: html.utf16.count)),
+               match.numberOfRanges > 1,
+               let range = Range(match.range(at: 1), in: html) {
+                let rawVal = String(html[range]).replacingOccurrences(of: "\\/", with: "/")
+                if rawVal.hasPrefix("http") {
+                    return rawVal
                 }
             }
         }
-        
-        if let validStreamUrl = streamUrl {
-            return BoyfriendTVExtractedMedia(streamURL: validStreamUrl, embedURL: embedUrl, title: title, thumbnailURL: thumbnailUrl)
-        }
-        
         return nil
     }
 
@@ -1426,7 +1469,18 @@ class YtdlpService: ObservableObject {
                     components.path = path
                 }
             }
-            return components.string ?? urlString
+
+            // Normalize video paths with ID to canonical host www.boyfriend.tv and path /videos/<id>/
+            let videoIdPattern = "^/(?:videos|embed)/(\\d+)"
+            if let regex = try? NSRegularExpression(pattern: videoIdPattern, options: .caseInsensitive),
+               let match = regex.firstMatch(in: path, options: [], range: NSRange(location: 0, length: (path as NSString).length)),
+               match.numberOfRanges > 1 {
+                let videoId = (path as NSString).substring(with: match.range(at: 1))
+                return "https://www.boyfriend.tv/videos/\(videoId)/"
+            }
+
+            components.host = "www.boyfriend.tv"
+            return components.url?.absoluteString ?? components.string ?? urlString
         }
 
         // 2. Generic Tube / Gallery / Playlist URL normalization (e.g. /playlist/123/video/slug or /album/123/video/slug)
@@ -1434,20 +1488,18 @@ class YtdlpService: ObservableObject {
         let galleryVideoPattern = "^/(?:playlist|album|galleries)/\\d+/video/([^/]+)"
         let singleVideoPattern = "^/video/([^/]+)"
         if let regex = try? NSRegularExpression(pattern: galleryVideoPattern, options: .caseInsensitive),
-           let match = regex.firstMatch(in: path, options: [], range: NSRange(location: 0, length: path.utf16.count)),
-           match.numberOfRanges > 1,
-           let range = Range(match.range(at: 1), in: path) {
-            let videoSlug = String(path[range])
+           let match = regex.firstMatch(in: path, options: [], range: NSRange(location: 0, length: (path as NSString).length)),
+           match.numberOfRanges > 1 {
+            let videoSlug = (path as NSString).substring(with: match.range(at: 1))
             components.path = "/videos/\(videoSlug)/"
-            return components.string ?? urlString
+            return components.url?.absoluteString ?? components.string ?? urlString
         } else if host.contains("thisvid") {
             if let regex = try? NSRegularExpression(pattern: singleVideoPattern, options: .caseInsensitive),
-               let match = regex.firstMatch(in: path, options: [], range: NSRange(location: 0, length: path.utf16.count)),
-               match.numberOfRanges > 1,
-               let range = Range(match.range(at: 1), in: path) {
-                let videoSlug = String(path[range])
+               let match = regex.firstMatch(in: path, options: [], range: NSRange(location: 0, length: (path as NSString).length)),
+               match.numberOfRanges > 1 {
+                let videoSlug = (path as NSString).substring(with: match.range(at: 1))
                 components.path = "/videos/\(videoSlug)/"
-                return components.string ?? urlString
+                return components.url?.absoluteString ?? components.string ?? urlString
             }
         }
 
@@ -1576,14 +1628,15 @@ class YtdlpService: ObservableObject {
 
     private func isCookieFailureError(_ errorOutput: String) -> Bool {
         let lower = errorOutput.lowercased()
+        if lower.contains("extracted") && lower.contains("cookies") {
+            return false
+        }
         return lower.contains("operation not permitted") ||
                lower.contains("cookies.binarycookies") ||
                lower.contains("errno 1") ||
-               (lower.contains("could not find") && lower.contains("cookie")) ||
-               lower.contains("cookies database") ||
+               (lower.contains("could not find") && lower.contains("cookies database")) ||
                lower.contains("failed to decrypt") ||
-               (lower.contains("cookie") && lower.contains("database")) ||
-               (lower.contains("unable to extract") && lower.contains("cookie"))
+               (lower.contains("unable to extract") && lower.contains("cookies"))
     }
 
     private func stripCookieArgs(from args: [String]) -> [String] {
