@@ -70,4 +70,40 @@ final class MediaInfoTests: XCTestCase {
         let info = createMediaInfo(duration: 59.9)
         XCTAssertEqual(info.durationString, "0:59")
     }
+
+    func testResolvedURL_WithWebpageUrl_ReturnsWebpageUrl() {
+        let info = MediaInfo(id: "12345", title: "SoundCloud Track", webpageUrl: "https://soundcloud.com/artist/track")
+        XCTAssertEqual(info.resolvedURL, "https://soundcloud.com/artist/track")
+    }
+
+    func testResolvedURL_WithOriginalUrl_ReturnsOriginalUrl() {
+        let info = MediaInfo(id: "12345", title: "Vimeo Video", originalUrl: "https://vimeo.com/12345")
+        XCTAssertEqual(info.resolvedURL, "https://vimeo.com/12345")
+    }
+
+    func testResolvedURL_WithFullHttpId_ReturnsId() {
+        let info = MediaInfo(id: "https://example.com/video.mp4", title: "Direct Stream")
+        XCTAssertEqual(info.resolvedURL, "https://example.com/video.mp4")
+    }
+
+    func testResolvedURL_WithYouTube11CharId_ReturnsYouTubeUrl() {
+        let info = MediaInfo(id: "dQw4w9WgXcQ", title: "YouTube Video")
+        XCTAssertEqual(info.resolvedURL, "https://www.youtube.com/watch?v=dQw4w9WgXcQ")
+    }
+
+    func testMediaInfoDecoding_WithWebpageUrl_DecodesSuccessfully() throws {
+        let json = """
+        {
+            "id": "abc123xyz",
+            "title": "Bilibili Video",
+            "webpage_url": "https://www.bilibili.com/video/BV1xx411c7mD"
+        }
+        """.data(using: .utf8)!
+
+        let decoded = try JSONDecoder().decode(MediaInfo.self, from: json)
+        XCTAssertEqual(decoded.id, "abc123xyz")
+        XCTAssertEqual(decoded.title, "Bilibili Video")
+        XCTAssertEqual(decoded.webpageUrl, "https://www.bilibili.com/video/BV1xx411c7mD")
+        XCTAssertEqual(decoded.resolvedURL, "https://www.bilibili.com/video/BV1xx411c7mD")
+    }
 }

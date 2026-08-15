@@ -223,7 +223,12 @@ class DownloadManager: ObservableObject {
             let folderPath = download.options.saveFolder
             let fileExists = await Task.detached {
                 if let contents = try? FileManager.default.contentsOfDirectory(at: folderPath, includingPropertiesForKeys: nil) {
-                    let matches = contents.filter { $0.lastPathComponent.hasPrefix(sanitizedBaseName + ".") && !$0.lastPathComponent.hasSuffix(".part") }
+                    let matches = contents.filter { file in
+                        let nameWithoutExt = file.deletingPathExtension().lastPathComponent
+                        let isExactMatch = nameWithoutExt == sanitizedBaseName || nameWithoutExt == rawBaseName
+                        let isPart = file.lastPathComponent.hasSuffix(".part") || file.lastPathComponent.hasSuffix(".ytdl")
+                        return isExactMatch && !isPart
+                    }
                     return !matches.isEmpty
                 }
                 return false
@@ -356,7 +361,16 @@ class DownloadManager: ObservableObject {
         updateStatus(for: download, to: .stopped)
         if let process = activeProcesses[download.id] {
             process.terminate()
+            let pid = process.processIdentifier
             activeProcesses.removeValue(forKey: download.id)
+            if pid > 0 {
+                Task.detached {
+                    try? await Task.sleep(nanoseconds: 2_000_000_000)
+                    if kill(pid, 0) == 0 {
+                        kill(pid, SIGKILL)
+                    }
+                }
+            }
         }
         if !skipSaveAndBroadcast {
             objectWillChange.send()
