@@ -28,6 +28,7 @@ class DownloadManager: ObservableObject {
     private var activeCancellations: [UUID: CancellationBox] = [:]
     private var languageService: LanguageService?
     private var failedDownloadsMap: [UUID: Download] = [:]
+    private var reservedOutputPaths: Set<String> = []
 
     init() {
         ytdlpService.$isUpdating
@@ -225,11 +226,27 @@ class DownloadManager: ObservableObject {
             let sanitizedBaseName = sanitize(rawBaseName)
             
             let folderPath = download.options.saveFolder
+            var resolvedBaseName = sanitizedBaseName
+            var counter = 1
+            var candidateKey = folderPath.appendingPathComponent("\(resolvedBaseName).\(download.options.fileType.fileExtension)").path
+            while reservedOutputPaths.contains(candidateKey) {
+                resolvedBaseName = "\(sanitizedBaseName)_\(counter)"
+                candidateKey = folderPath.appendingPathComponent("\(resolvedBaseName).\(download.options.fileType.fileExtension)").path
+                counter += 1
+            }
+            if resolvedBaseName != sanitizedBaseName && download.options.customFilename == nil {
+                download.options.customFilename = resolvedBaseName
+            }
+            reservedOutputPaths.insert(candidateKey)
+            defer {
+                reservedOutputPaths.remove(candidateKey)
+            }
+
             let fileExists = await Task.detached {
                 if let contents = try? FileManager.default.contentsOfDirectory(at: folderPath, includingPropertiesForKeys: nil) {
                     let matches = contents.filter { file in
                         let nameWithoutExt = file.deletingPathExtension().lastPathComponent
-                        let isExactMatch = nameWithoutExt == sanitizedBaseName || nameWithoutExt == rawBaseName
+                        let isExactMatch = nameWithoutExt == resolvedBaseName || nameWithoutExt == rawBaseName
                         let isPart = file.lastPathComponent.hasSuffix(".part") || file.lastPathComponent.hasSuffix(".ytdl")
                         return isExactMatch && !isPart
                     }
@@ -285,6 +302,11 @@ class DownloadManager: ObservableObject {
                     // Bug #4 fix: Dispatch to main actor for @Published property writes
                     DispatchQueue.main.async {
                         download.log += line + "\n"
+                        if line.contains("[EmbedThumbnail]") || line.contains("[Metadata]") || line.contains("[Merger]") || line.contains("[VideoConvertor]") || line.contains("[ThumbnailsConvertor]") || line.contains("[EmbedSubtitle]") {
+                            if download.status == .downloading {
+                                download.status = .processing
+                            }
+                        }
                     }
                 }
             )

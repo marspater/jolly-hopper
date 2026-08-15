@@ -676,11 +676,8 @@ struct MediaInfo: Codable {
         
         if let maxH = maxHeight {
             let matchingHeight = candidateVideos.filter { fmt in
-                if let res = fmt.resolution {
-                    let digits = res.components(separatedBy: CharacterSet.decimalDigits.inverted).filter { !$0.isEmpty }
-                    if let lastNum = digits.last, let h = Int(lastNum) {
-                        return h <= maxH
-                    }
+                if let h = fmt.parsedHeight {
+                    return h <= maxH
                 }
                 return true
             }
@@ -705,9 +702,21 @@ struct MediaInfo: Codable {
             }
         }
         
+        candidateVideos.sort { $0.videoQualityScore(options: options) > $1.videoQualityScore(options: options) }
+        
         if let bestVideo = candidateVideos.first {
             if bestVideo.isVideoOnly {
-                let audioFormats = formats.filter { $0.isAudioOnly || ($0.vcodec == "none" || $0.vcodec == nil) }
+                var audioFormats = formats.filter { $0.isAudioOnly || ($0.vcodec == "none" || $0.vcodec == nil) }
+                if let requestedAudioCodec = options.audioCodec, requestedAudioCodec != .auto {
+                    let matchingAudio = audioFormats.filter { fmt in
+                        guard let acodec = fmt.acodec?.lowercased() else { return false }
+                        return acodec.contains(requestedAudioCodec.rawValue.lowercased())
+                    }
+                    if !matchingAudio.isEmpty {
+                        audioFormats = matchingAudio
+                    }
+                }
+                audioFormats.sort { ($0.abr ?? 0) > ($1.abr ?? 0) }
                 if let bestAudio = audioFormats.first {
                     return [bestVideo, bestAudio]
                 }
@@ -719,10 +728,6 @@ struct MediaInfo: Codable {
     }
 
     func isSelectedFormatFragmented(options: DownloadOptions) -> Bool {
-        if isFragmented {
-            return true
-        }
-        
         let resolved = resolveSelectedFormats(options: options)
         if !resolved.isEmpty {
             return resolved.contains(where: { $0.isFragmented })
@@ -734,7 +739,7 @@ struct MediaInfo: Codable {
             }
         }
         
-        return false
+        return isFragmented
     }
 
     var resolvedURL: String {
@@ -805,6 +810,58 @@ struct MediaFormat: Codable, Identifiable, Hashable {
             }
         }
         return false
+    }
+    
+    var parsedHeight: Int? {
+        if let res = resolution {
+            let digits = res.components(separatedBy: CharacterSet.decimalDigits.inverted).filter { !$0.isEmpty }
+            if let lastNum = digits.last, let h = Int(lastNum) {
+                return h
+            }
+        }
+        let lowerNote = (formatNote ?? "").lowercased()
+        let lowerId = formatId.lowercased()
+        if lowerNote.contains("2160p") || lowerId.contains("2160p") { return 2160 }
+        if lowerNote.contains("1440p") || lowerId.contains("1440p") { return 1440 }
+        if lowerNote.contains("1080p") || lowerId.contains("1080p") { return 1080 }
+        if lowerNote.contains("720p") || lowerId.contains("720p") { return 720 }
+        if lowerNote.contains("480p") || lowerId.contains("480p") { return 480 }
+        if lowerNote.contains("360p") || lowerId.contains("360p") { return 360 }
+        if lowerNote.contains("240p") || lowerId.contains("240p") { return 240 }
+        if lowerId == "hq" || lowerId == "hd" || lowerId == "source" || lowerId == "original" || lowerId == "best-mp4" || lowerId == "source-mp4" {
+            return 1080
+        }
+        return nil
+    }
+
+    func videoQualityScore(options: DownloadOptions) -> Double {
+        var score: Double = 0
+        let h = parsedHeight ?? 0
+        score += Double(h) * 1000.0
+        
+        if let bitrate = vbr ?? abr {
+            score += bitrate
+        }
+        if let size = filesize ?? filesizeApprox {
+            score += Double(size) / (1024.0 * 1024.0)
+        }
+        if let fps = fps {
+            score += fps
+        }
+        if let requestedCodec = options.videoCodec, requestedCodec != .auto {
+            if let vcodec = vcodec?.lowercased() {
+                let matches: Bool
+                switch requestedCodec {
+                case .h264: matches = vcodec.hasPrefix("avc1") || vcodec.contains("h264")
+                case .h265: matches = vcodec.hasPrefix("hev1") || vcodec.hasPrefix("hvc1") || vcodec.contains("h265") || vcodec.contains("hevc")
+                case .vp9: matches = vcodec.hasPrefix("vp9") || vcodec.contains("vp9")
+                case .av1: matches = vcodec.hasPrefix("av01") || vcodec.contains("av1")
+                case .auto: matches = true
+                }
+                if matches { score += 10000.0 }
+            }
+        }
+        return score
     }
     
     var isVideoOnly: Bool {
