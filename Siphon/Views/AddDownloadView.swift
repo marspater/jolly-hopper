@@ -15,7 +15,7 @@ struct AddDownloadView: View {
     @State private var errorMessage: String?
 
 
-    @State private var saveFolder: URL = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first!
+    @State private var saveFolder: URL = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Downloads")
     @State private var fileType: MediaFileType = .mp4
     @State private var videoResolution: VideoResolution = .best
     @State private var audioQuality: AudioQuality = .best

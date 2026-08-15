@@ -159,7 +159,10 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
     
     func checkForUpdates() async {
         isChecking = true
-        let url = URL(string: "https://api.github.com/repos/\(repoOwner)/\(repoName)/releases/latest")!
+        guard let url = URL(string: "https://api.github.com/repos/\(repoOwner)/\(repoName)/releases/latest") else {
+            isChecking = false
+            return
+        }
         
         do {
             let (data, _) = try await URLSession.shared.data(from: url)

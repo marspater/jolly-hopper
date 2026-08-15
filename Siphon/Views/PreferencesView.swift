@@ -1072,7 +1072,7 @@ struct PreferencesView: View {
                         Text(languageService.s("video_downloading"))
                             .foregroundColor(.secondary)
                         Spacer()
-                        Link("yt-dlp", destination: URL(string: "https://github.com/yt-dlp/yt-dlp")!)
+                        Link("yt-dlp", destination: URL(string: "https://github.com/yt-dlp/yt-dlp") ?? URL(fileURLWithPath: "/"))
                             .font(.geist(13, weight: .medium))
                     }
                     .font(.geist(11))
@@ -1094,7 +1094,7 @@ struct PreferencesView: View {
                     Text(languageService.s("license_desc"))
                         .font(.geist(10))
                         .foregroundColor(.secondary)
-                    Link(languageService.s("view_license"), destination: URL(string: "https://www.gnu.org/licenses/gpl-3.0.html")!)
+                    Link(languageService.s("view_license"), destination: URL(string: "https://www.gnu.org/licenses/gpl-3.0.html") ?? URL(fileURLWithPath: "/"))
                         .font(.geist(11))
                 }
                 .padding(14)
@@ -1108,21 +1108,21 @@ struct PreferencesView: View {
 
                 // Quick links
                 HStack(spacing: 12) {
-                    Link(destination: URL(string: "https://github.com/marspater/jolly-hopper")!) {
+                    Link(destination: URL(string: "https://github.com/marspater/jolly-hopper") ?? URL(fileURLWithPath: "/")) {
                         Label("GitHub", systemImage: "link")
                             .padding(.horizontal, 14)
                             .padding(.vertical, 8)
                             .background(Color.blue.opacity(0.1))
                             .cornerRadius(8)
                     }
-                    Link(destination: URL(string: "https://github.com/marspater/jolly-hopper/blob/main/README.md")!) {
+                    Link(destination: URL(string: "https://github.com/marspater/jolly-hopper/blob/main/README.md") ?? URL(fileURLWithPath: "/")) {
                         Label("README", systemImage: "doc.text")
                             .padding(.horizontal, 14)
                             .padding(.vertical, 8)
                             .background(Color.indigo.opacity(0.1))
                             .cornerRadius(8)
                     }
-                    Link(destination: URL(string: "https://github.com/marspater/jolly-hopper/blob/main/SUPPORTED_SITES.md")!) {
+                    Link(destination: URL(string: "https://github.com/marspater/jolly-hopper/blob/main/SUPPORTED_SITES.md") ?? URL(fileURLWithPath: "/")) {
                         Label(languageService.s("supported_sites"), systemImage: "globe")
                             .padding(.horizontal, 14)
                             .padding(.vertical, 8)
