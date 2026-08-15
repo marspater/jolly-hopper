@@ -1278,11 +1278,10 @@ class YtdlpService: ObservableObject {
                         let hasMediaData = browserHtml.contains("hlsAuto") ||
                                            browserHtml.contains("videoPlayerData") ||
                                            browserHtml.contains("sources") ||
-                                           browserHtml.contains(".m3u8") ||
-                                           browserHtml.contains("growcdnssedge") ||
-                                           browserHtml.contains("boyfriendtv") ||
                                            browserHtml.contains("cdn.boyfriend.tv") ||
-                                           browserHtml.contains("embedUrl")
+                                           browserHtml.contains("boyfriendtv") ||
+                                           browserHtml.contains("embedUrl") ||
+                                           browserHtml.contains("/embed/")
                         if hasMediaData {
                             html = browserHtml
                             let sourceLog = browser == nil ? "impersonated HTTP request" : "browser cookies from '\(browser!)'"
@@ -1327,15 +1326,23 @@ class YtdlpService: ObservableObject {
         
         // Extract Embed URL
         var embedUrl: String? = nil
-        if let embedRange = html.range(of: "\"embedUrl\"\\s*:\\s*\"([^\"]+)\"", options: .regularExpression) {
-            let rawEmbed = String(html[embedRange])
-            if let firstColon = rawEmbed.firstIndex(of: ":"),
-               let startQuote = rawEmbed[firstColon...].firstIndex(of: "\"") {
-                let val = String(rawEmbed[startQuote...])
-                    .replacingOccurrences(of: "\"", with: "")
+        let embedPatterns = [
+            "\"embedUrl\"\\s*:\\s*\"([^\"]+)\"",
+            "<iframe[^>]+src=[\"'](https?://(?:www\\.)?boyfriend\\.tv/embed/[^\"']+)[\"']",
+            "<iframe[^>]+src=[\"'](/embed/[^\"']+)[\"']"
+        ]
+        for pattern in embedPatterns {
+            if let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive),
+               let match = regex.firstMatch(in: html, options: [], range: NSRange(location: 0, length: (html as NSString).length)),
+               match.numberOfRanges > 1 {
+                let val = (html as NSString).substring(with: match.range(at: 1))
                     .replacingOccurrences(of: "\\/", with: "/")
                 if val.hasPrefix("http") {
                     embedUrl = val
+                    break
+                } else if val.hasPrefix("/embed/") {
+                    embedUrl = "https://www.boyfriend.tv" + val
+                    break
                 }
             }
         }
@@ -1421,15 +1428,13 @@ class YtdlpService: ObservableObject {
         let streamPatterns = [
             "\"(?:hlsAuto|hls|videoUrl|media|src|file|video_url)\"\\s*:\\s*\"(https?:[^\"]+)\"",
             "(https?:\\\\?/\\\\?/cdn\\.boyfriend\\.tv[^\\s\"'<>]+?\\.mp4)",
-            "(https?:\\\\?/\\\\?/cdn\\.boyfriend\\.tv[^\\s\"'<>]+?\\.m3u8)",
-            "(https?:\\\\?/\\\\?/[^\\s\"'<>]+?growcdnssedge[^\\s\"'<>]+?\\.m3u8)"
+            "(https?:\\\\?/\\\\?/cdn\\.boyfriend\\.tv[^\\s\"'<>]+?\\.m3u8)"
         ]
         for pattern in streamPatterns {
             if let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive),
-               let match = regex.firstMatch(in: html, options: [], range: NSRange(location: 0, length: html.utf16.count)),
-               match.numberOfRanges > 1,
-               let range = Range(match.range(at: 1), in: html) {
-                let rawVal = String(html[range]).replacingOccurrences(of: "\\/", with: "/")
+               let match = regex.firstMatch(in: html, options: [], range: NSRange(location: 0, length: (html as NSString).length)),
+               match.numberOfRanges > 1 {
+                let rawVal = (html as NSString).substring(with: match.range(at: 1)).replacingOccurrences(of: "\\/", with: "/")
                 if rawVal.hasPrefix("http") {
                     return rawVal
                 }
