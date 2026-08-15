@@ -42,15 +42,21 @@ jobs:
       - name: Update Cask formula
         run: |
           cd homebrew-tap
-          sed -i 's/version "[^"]*"/version "${{ steps.version.outputs.version }}"/' Casks/siphon.rb
-          sed -i 's/sha256 "[^"]*"/sha256 "${{ steps.asset.outputs.sha256 }}"/' Casks/siphon.rb
+          if [ -f "Casks/siphon.rb" ]; then
+            sed -i 's/version "[^"]*"/version "${{ steps.version.outputs.version }}"/' Casks/siphon.rb
+            sed -i 's/sha256 "[^"]*"/sha256 "${{ steps.asset.outputs.sha256 }}"/' Casks/siphon.rb
+            git add Casks/siphon.rb
+          elif [ -f "Casks/siphon.rb" ]; then
+            sed -i 's/version "[^"]*"/version "${{ steps.version.outputs.version }}"/' Casks/siphon.rb
+            sed -i 's/sha256 "[^"]*"/sha256 "${{ steps.asset.outputs.sha256 }}"/' Casks/siphon.rb
+            git add Casks/siphon.rb
+          fi
 
       - name: Commit and push changes
         run: |
           cd homebrew-tap
           git config user.name "GitHub Actions Bot"
           git config user.email "actions@github.com"
-          git add Casks/siphon.rb
           if ! git diff --cached --quiet; then
             git commit -m "Update Siphon to v${{ steps.version.outputs.version }}"
             git push
