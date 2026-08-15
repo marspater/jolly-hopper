@@ -451,59 +451,6 @@ class YtdlpService: ObservableObject {
                     playlistCount: nil
                 )
             }
-        } else if isThisVidURL(url) {
-            if let tvMedia = await resolveThisVidMediaInfo(url: url) {
-                var tvArgs = [
-                    path,
-                    "--dump-json",
-                    "--no-playlist",
-                    "--no-warnings"
-                ]
-                appendSiteSpecificArgs(for: tvMedia.embedURL, to: &tvArgs)
-                tvArgs.append(tvMedia.streamURL)
-                
-                if let output = try? await runCommand(tvArgs),
-                   let data = output.data(using: .utf8),
-                   let parsedInfo = try? JSONDecoder().decode(MediaInfo.self, from: data) {
-                    return MediaInfo(
-                        id: url,
-                        title: tvMedia.title.isEmpty ? (parsedInfo.title ?? "ThisVid Video") : tvMedia.title,
-                        description: parsedInfo.description,
-                        thumbnail: parsedInfo.thumbnail ?? tvMedia.thumbnailURL,
-                        duration: parsedInfo.duration,
-                        uploader: "ThisVid",
-                        uploadDate: parsedInfo.uploadDate,
-                        viewCount: parsedInfo.viewCount,
-                        likeCount: parsedInfo.likeCount,
-                        formats: parsedInfo.formats,
-                        subtitles: parsedInfo.subtitles,
-                        automaticCaptions: parsedInfo.automaticCaptions,
-                        chapters: parsedInfo.chapters,
-                        playlist: nil,
-                        playlistIndex: nil,
-                        playlistCount: nil
-                    )
-                }
-
-                return MediaInfo(
-                    id: url,
-                    title: tvMedia.title.isEmpty ? "ThisVid Video" : tvMedia.title,
-                    description: nil,
-                    thumbnail: tvMedia.thumbnailURL,
-                    duration: nil,
-                    uploader: "ThisVid",
-                    uploadDate: nil,
-                    viewCount: nil,
-                    likeCount: nil,
-                    formats: nil,
-                    subtitles: nil,
-                    automaticCaptions: nil,
-                    chapters: nil,
-                    playlist: nil,
-                    playlistIndex: nil,
-                    playlistCount: nil
-                )
-            }
         }
 
         var args = [
@@ -686,12 +633,6 @@ class YtdlpService: ObservableObject {
                 targetURL = btvMedia.streamURL
                 customResolvedTitle = btvMedia.title
                 customEmbedURL = btvMedia.embedURL
-            }
-        } else if isThisVidURL(url) {
-            if let tvMedia = await resolveThisVidMediaInfo(url: url) {
-                targetURL = tvMedia.streamURL
-                customResolvedTitle = tvMedia.title
-                customEmbedURL = tvMedia.embedURL
             }
         }
 
@@ -1009,14 +950,20 @@ class YtdlpService: ObservableObject {
             // 4. Best video + best audio: split streams
             addUnique("\(bestVideo)*+\(bestAudio)")
             addUnique("\(bestVideo)+\(bestAudio)")
-            // 5. Combined/single-stream with resolution constraint
+            // 5. Explicit format names for sites like ThisVid (HQ, 1080p, 720p, 480p)
+            addUnique("HQ")
+            addUnique("hd")
+            addUnique("1080p")
+            addUnique("720p")
+            addUnique("480p")
+            // 6. Combined/single-stream with resolution constraint
             let combinedSelector = buildCombinedSelector(for: options.videoResolution)
             addUnique(combinedSelector)
             if let res = options.videoResolution, let maxH = res.maxHeight {
                 addUnique("bestvideo[height<=\(maxH)]+bestaudio/best[height<=\(maxH)]")
                 addUnique("best[height<=\(maxH)]")
             }
-            // 6. Ultimate fallback
+            // 7. Ultimate fallback
             addUnique("bestvideo*+bestaudio/best")
             addUnique("bestvideo+bestaudio/best")
             addUnique("best")
