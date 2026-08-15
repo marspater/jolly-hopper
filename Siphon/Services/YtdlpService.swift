@@ -873,7 +873,7 @@ class YtdlpService: ObservableObject {
             }
         }
         
-        appendSiteSpecificArgs(for: customEmbedURL ?? targetURL, to: &args)
+        appendSiteSpecificArgs(for: customEmbedURL ?? targetURL, options: options, to: &args)
 
         args.append("--no-color")
         args.append("--newline")
@@ -923,6 +923,24 @@ class YtdlpService: ObservableObject {
                 let cleanArgs = stripCookieArgs(from: args)
                 outputPath = try await runDownloadProcess(
                     args: cleanArgs,
+                    saveFolder: options.saveFolder,
+                    isCancelled: isCancelled,
+                    onProcessCreated: onProcessCreated,
+                    onProgress: onProgress,
+                    onOutput: onOutput
+                )
+            } else if !errText.isEmpty, (errText.contains("416") || errText.lowercased().contains("range") || errText.lowercased().contains("chunk")), args.contains("--http-chunk-size") {
+                LoggerService.shared.log("Server range request error encountered (\(errText.trimmingCharacters(in: .whitespacesAndNewlines))). Retrying download without HTTP chunking...", level: .warning)
+                onOutput("[Siphon Info] Server does not support HTTP Range chunks. Retrying download directly as continuous stream...\n")
+                var unchunkedArgs = args
+                if let idx = unchunkedArgs.firstIndex(of: "--http-chunk-size") {
+                    unchunkedArgs.remove(at: idx)
+                    if idx < unchunkedArgs.count {
+                        unchunkedArgs.remove(at: idx)
+                    }
+                }
+                outputPath = try await runDownloadProcess(
+                    args: unchunkedArgs,
                     saveFolder: options.saveFolder,
                     isCancelled: isCancelled,
                     onProcessCreated: onProcessCreated,
@@ -1473,7 +1491,7 @@ class YtdlpService: ObservableObject {
         return error
     }
 
-    private func appendSiteSpecificArgs(for url: String, to args: inout [String]) {
+    private func appendSiteSpecificArgs(for url: String, options: DownloadOptions? = nil, to args: inout [String]) {
         let lowerUrl = url.lowercased()
 
         // Common modern browser headers & Cloudflare extraction options
@@ -1492,10 +1510,20 @@ class YtdlpService: ObservableObject {
         args.append(contentsOf: ["--retries", "10"])
         args.append(contentsOf: ["--fragment-retries", "10"])
         args.append(contentsOf: ["--socket-timeout", "15"])
-        args.append(contentsOf: ["--buffer-size", "16K"])
         args.append(contentsOf: ["--http-chunk-size", "10M"])
         args.append(contentsOf: ["--throttled-rate", "100K"])
         args.append("--no-mtime")
+
+        let isFragmented = options?.isFragmentedStream == true ||
+            lowerUrl.contains(".m3u8") ||
+            lowerUrl.contains(".mpd") ||
+            lowerUrl.contains("boyfriend.tv") ||
+            lowerUrl.contains("boyfriendtv.com") ||
+            lowerUrl.contains("cdn.boyfriend.tv")
+
+        if isFragmented {
+            args.append(contentsOf: ["--concurrent-fragments", "8"])
+        }
 
         if lowerUrl.contains("boyfriend.tv") || lowerUrl.contains("boyfriendtv.com") || lowerUrl.contains("cdn.boyfriend.tv") {
             args.append(contentsOf: ["--user-agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"])
@@ -1504,7 +1532,6 @@ class YtdlpService: ObservableObject {
             let referer = lowerUrl.contains("/embed/") ? url : "https://www.boyfriend.tv/"
             args.append(contentsOf: ["--add-header", "Referer:\(referer)"])
             args.append(contentsOf: ["--hls-use-mpegts"])
-            args.append(contentsOf: ["--concurrent-fragments", "8"])
         } else if lowerUrl.contains("justthegays.com") || lowerUrl.contains("justthegays.tv") {
             args.append(contentsOf: ["--add-header", "Referer:https://justthegays.com/"])
         } else if lowerUrl.contains("thisvid.com") || lowerUrl.contains("thisvid") {
@@ -1514,7 +1541,6 @@ class YtdlpService: ObservableObject {
             args.append(contentsOf: ["--add-header", "Referer:https://single-stream video site.com/"])
         } else if lowerUrl.contains(".m3u8") || lowerUrl.contains(".mpd") {
             args.append(contentsOf: ["--hls-use-mpegts"])
-            args.append(contentsOf: ["--concurrent-fragments", "8"])
         } else if let components = URLComponents(string: url), let host = components.host, !host.isEmpty {
             // Universal Referer and Origin auto-injection for anti-hotlinking CDN protection
             let scheme = components.scheme ?? "https"
