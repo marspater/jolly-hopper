@@ -5,18 +5,10 @@ A high-performance, native macOS media extractor & downloader powered by `yt-dlp
 <div align="center">
   <img src="assets/app_screenshot.png?v=2" alt="Siphon Interface" width="880" style="border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.3);" />
   <p>
-    <a href="https://github.com/marspater/jolly-hopper/releases/latest">
-      <img src="https://img.shields.io/badge/Version-v5.0.0-indigo?style=for-the-badge&logo=swift&logoColor=white" alt="Version 5.0.0" />
-    </a>
-    <a href="https://github.com/marspater/jolly-hopper/releases/latest">
-      <img src="https://img.shields.io/badge/Download-macOS-blue?style=for-the-badge&logo=apple&logoColor=white" alt="Download Siphon for macOS" />
-    </a>
-    <a href="https://github.com/marspater/jolly-hopper">
-      <img src="https://img.shields.io/badge/Repository-jolly--hopper-818cf8?style=for-the-badge&logo=github&logoColor=white" alt="GitHub Repository" />
-    </a>
-    <a href="https://github.com/marspater/jolly-hopper/blob/main/SUPPORTED_SITES.md">
-      <img src="https://img.shields.io/badge/Supported--Sites-1000%2B-green?style=for-the-badge&logo=globe&logoColor=white" alt="Supported Sites" />
-    </a>
+    <a href="https://github.com/marspater/jolly-hopper/releases/latest"><img src="https://img.shields.io/badge/Version-v5.0.0-indigo?style=for-the-badge&logo=swift&logoColor=white" alt="Version 5.0.0" /></a>
+    <a href="https://github.com/marspater/jolly-hopper/releases/latest"><img src="https://img.shields.io/badge/Download-macOS-blue?style=for-the-badge&logo=apple&logoColor=white" alt="Download Siphon for macOS" /></a>
+    <a href="https://github.com/marspater/jolly-hopper"><img src="https://img.shields.io/badge/Repository-jolly--hopper-818cf8?style=for-the-badge&logo=github&logoColor=white" alt="GitHub Repository" /></a>
+    <a href="https://github.com/marspater/jolly-hopper/blob/main/SUPPORTED_SITES.md"><img src="https://img.shields.io/badge/Supported--Sites-1000%2B-green?style=for-the-badge&logo=globe&logoColor=white" alt="Supported Sites" /></a>
   </p>
 </div>
 
