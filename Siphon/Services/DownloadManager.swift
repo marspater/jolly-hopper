@@ -125,8 +125,14 @@ class DownloadManager: ObservableObject {
 
 
     func addDownloads(urls: [String], options: DownloadOptions) {
-        for url in urls {
-            addDownload(url: url, options: options)
+        // Bolt Performance Optimization: Batch array mutations to prevent redundant UI broadcasts
+        let newDownloads = urls.map { Download(url: $0, options: options) }
+        downloads.append(contentsOf: newDownloads)
+
+        for download in newDownloads {
+            Task {
+                await processDownload(download)
+            }
         }
     }
 
