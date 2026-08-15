@@ -12,6 +12,7 @@ struct SiphonApp: App {
     init() {
         GeistFontRegistrar.registerFonts()
         NotificationService.shared.setup()
+        YtdlpService.purgeOrphanedTempCookieFiles()
     }
     
     var body: some Scene {
@@ -121,13 +122,10 @@ struct SiphonApp: App {
         guard let rawVideoUrl = videoUrl?.trimmingCharacters(in: .whitespacesAndNewlines), !rawVideoUrl.isEmpty,
               let targetURL = URL(string: rawVideoUrl), targetURL.scheme == "http" || targetURL.scheme == "https" else { return }
         
-        if url.host == "download" {
+        if url.host == "download" || url.host == "fast-download" {
             appState.urlToDownload = rawVideoUrl
             appState.rawCookiesToDownload = rawCookies
             appState.showAddDownloadSheet = true
-        } else if url.host == "fast-download" {
-            downloadManager.quickDownload(url: rawVideoUrl, rawCookies: rawCookies)
-            appState.selectedNavItem = .downloading
         }
         
         for window in NSApp.windows {
@@ -260,11 +258,16 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
             NEW_APP="$(find "$WORK_DIR" -maxdepth 2 -name "*.app" | head -n 1)"
             
             if [ -n "$NEW_APP" ] && [ -d "$NEW_APP" ]; then
-                rm -rf "$APP_PATH"
-                ditto "$NEW_APP" "$APP_PATH"
-                hdiutil unmount "$WORK_DIR" -quiet 2>/dev/null || true
-                rm -rf "$WORK_DIR"
-                open "$APP_PATH"
+                if /usr/bin/codesign --verify --deep --strict "$NEW_APP" 2>/dev/null; then
+                    rm -rf "$APP_PATH"
+                    ditto "$NEW_APP" "$APP_PATH"
+                    hdiutil unmount "$WORK_DIR" -quiet 2>/dev/null || true
+                    rm -rf "$WORK_DIR"
+                    open "$APP_PATH"
+                else
+                    hdiutil unmount "$WORK_DIR" -quiet 2>/dev/null || true
+                    rm -rf "$WORK_DIR"
+                fi
             else
                 hdiutil unmount "$WORK_DIR" -quiet 2>/dev/null || true
                 rm -rf "$WORK_DIR"
