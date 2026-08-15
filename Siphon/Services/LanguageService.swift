@@ -226,6 +226,23 @@ class LanguageService: ObservableObject {
         "notifications": "Notifications",
         "show_menubar_icon": "Show Menu Bar Icon",
         "first_sponsor": "First Sponsor",
-        "test_notification": "Send Test Notification"
+        "test_notification": "Send Test Notification",
+        "speed_limiter": "Speed Limiter",
+        "max_download_speed": "Max Download Speed",
+        "unlimited": "Unlimited",
+        "speed_limiter_desc": "Throttle maximum download bandwidth to prevent network congestion.",
+        "batch_import": "Batch Import",
+        "single_mode": "Single / Playlist",
+        "paste_multiple_urls": "Paste Multiple URLs",
+        "paste_multiple_urls_hint": "Enter one URL per line...",
+        "import_file": "Import .txt / .m3u File...",
+        "queue_batch": "Queue %d Downloads",
+        "no_valid_urls": "No valid URLs found",
+        "stream_inspector": "Stream & Codec Inspector",
+        "stream_inspector_desc": "Select a specific format stream or leave as Smart Auto.",
+        "auto_recommended": "Smart Auto (Recommended)",
+        "custom_stream": "Custom Stream",
+        "select_all": "Select All",
+        "deselect_all": "Deselect All"
     ]
 }

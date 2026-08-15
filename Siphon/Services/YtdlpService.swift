@@ -21,6 +21,7 @@ class YtdlpService: ObservableObject {
 
     #if DEBUG
     var mockCommandRunner: (([String]) async throws -> String)?
+    var mockDownloadRunner: (([String]) async throws -> String)?
     #endif
 
     init() {
@@ -709,6 +710,11 @@ class YtdlpService: ObservableObject {
             args.append("--force-overwrites")
         }
 
+        let speedLimit = UserDefaults.standard.integer(forKey: UserDefaultsKeys.downloadSpeedLimit)
+        if speedLimit > 0 {
+            args.append(contentsOf: ["--limit-rate", "\(speedLimit)K"])
+        }
+
         if let additionalArgs = options.additionalArguments, !additionalArgs.isEmpty {
             let customArgs = splitArguments(additionalArgs)
 
@@ -892,6 +898,21 @@ class YtdlpService: ObservableObject {
 
     private func buildFormatArgs(options: DownloadOptions) -> [String] {
         var args: [String] = []
+
+        if let customFormatId = options.selectedFormatId, !customFormatId.isEmpty {
+            args.append(contentsOf: ["-f", customFormatId])
+            if options.fileType.isVideo {
+                if let mergeFormat = compatibleMergeOutputFormat(for: options) {
+                    args.append(contentsOf: ["--merge-output-format", mergeFormat])
+                }
+            } else {
+                args.append(contentsOf: ["-x", "--audio-format", options.fileType.fileExtension])
+                if let quality = options.audioQuality {
+                    args.append(contentsOf: ["--audio-quality", quality.ytdlpValue])
+                }
+            }
+            return args
+        }
 
         if options.fileType.isVideo {
             let videoBase = buildVideoSelector(for: options.videoResolution)
@@ -1447,6 +1468,11 @@ class YtdlpService: ObservableObject {
         onProgress: @escaping (Double, String?, String?) -> Void,
         onOutput: @escaping (String) -> Void
     ) async throws -> String {
+        #if DEBUG
+        if let mock = mockDownloadRunner {
+            return try await mock(args)
+        }
+        #endif
         return try await withCheckedThrowingContinuation { continuation in
             let safeContinuation = SafeContinuation(continuation)
             let process = Process()

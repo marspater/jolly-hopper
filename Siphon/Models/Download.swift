@@ -105,6 +105,7 @@ struct DownloadOptions: Codable {
     var forceOverwrite: Bool?
     var additionalArguments: String?
     var rawCookies: String?
+    var selectedFormatId: String?
     
     static var `default`: DownloadOptions {
         let saveFolderURL = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first ?? URL(fileURLWithPath: NSHomeDirectory() + "/Downloads")
@@ -122,7 +123,9 @@ struct DownloadOptions: Codable {
             sponsorBlock: false,
             conversionCodec: ConversionCodec.none,
             forceOverwrite: false,
-            additionalArguments: nil
+            additionalArguments: nil,
+            rawCookies: nil,
+            selectedFormatId: nil
         )
     }
 }
@@ -640,7 +643,8 @@ struct MediaInfo: Codable {
     }
 }
 
-struct MediaFormat: Codable {
+struct MediaFormat: Codable, Identifiable, Hashable {
+    var id: String { formatId }
     let formatId: String
     let ext: String
     let resolution: String?
@@ -659,6 +663,21 @@ struct MediaFormat: Codable {
     
     var isAudioOnly: Bool {
         vcodec == "none" || vcodec == nil
+    }
+
+    var displaySummary: String {
+        var parts: [String] = []
+        if let res = resolution, !res.isEmpty { parts.append(res) }
+        if let fps = fps, fps > 0 { parts.append("\(Int(fps))fps") }
+        if let vcodec = vcodec, vcodec != "none" { parts.append(vcodec) }
+        if let acodec = acodec, acodec != "none" { parts.append(acodec) }
+        if let abr = abr, abr > 0 { parts.append("\(Int(abr))k") }
+        if let size = filesize ?? filesizeApprox, size > 0 {
+            let mb = Double(size) / (1024.0 * 1024.0)
+            parts.append(String(format: "%.1f MB", mb))
+        }
+        if let note = formatNote, !note.isEmpty { parts.append(note) }
+        return parts.joined(separator: " • ")
     }
     
     enum CodingKeys: String, CodingKey {

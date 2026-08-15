@@ -37,6 +37,7 @@ struct PreferencesView: View {
     @AppStorage(UserDefaultsKeys.showNotifications) private var showNotifications: Bool = true
     @AppStorage(UserDefaultsKeys.showMenuBarIcon) private var showMenuBarIcon: Bool = true
     @AppStorage(UserDefaultsKeys.startInBackground) private var startInBackground: Bool = false
+    @AppStorage(UserDefaultsKeys.downloadSpeedLimit) private var downloadSpeedLimit: Int = 0
     
     @EnvironmentObject var languageService: LanguageService
     @EnvironmentObject var updateChecker: UpdateChecker
@@ -403,6 +404,7 @@ struct PreferencesView: View {
             codecSettingsSection
             embedOptionsSection
             concurrentDownloadsSection
+            speedLimiterSection
         }
         .siphonFormStyle()
         .padding()
@@ -566,6 +568,22 @@ struct PreferencesView: View {
     private var concurrentDownloadsSection: some View {
         Section(languageService.s("concurrent_downloads")) {
             Stepper("\(languageService.s("max")): \(maxConcurrentDownloads)", value: $maxConcurrentDownloads, in: 1...10)
+        }
+    }
+
+    private var speedLimiterSection: some View {
+        Section(languageService.s("speed_limiter")) {
+            Picker(languageService.s("max_download_speed"), selection: $downloadSpeedLimit) {
+                Text(languageService.s("unlimited")).tag(0)
+                Text("1 MB/s (1024 KB/s)").tag(1024)
+                Text("5 MB/s (5120 KB/s)").tag(5120)
+                Text("10 MB/s (10240 KB/s)").tag(10240)
+                Text("25 MB/s (25600 KB/s)").tag(25600)
+                Text("50 MB/s (51200 KB/s)").tag(51200)
+            }
+            Text(languageService.s("speed_limiter_desc"))
+                .font(.caption)
+                .foregroundColor(.secondary)
         }
     }
     
