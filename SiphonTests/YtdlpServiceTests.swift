@@ -994,5 +994,64 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertEqual(info.duration, 297)
         XCTAssertEqual(info.thumbnail, "https://cdn77-t.boyfriendtv.com/thumb.jpg")
     }
+
+    func testBoyfriendTVIframeEmbedManifestExtraction() async throws {
+        service.ytdlpPath = URL(fileURLWithPath: "/usr/local/bin/yt-dlp")
+        let capturedArgs = TestBox<[[String]]>([])
+        
+        let mainPageHTML = """
+        <!DOCTYPE html><html><head><title>Big Dick Twink Fuck Muscle Ass | BoyFriendTV</title></head>
+        <body>
+        <iframe src="https://www.boyfriend.tv/embed/1630228/20231/600/338/" width="600" height="338"></iframe>
+        </body></html>
+        """
+        let mainB64 = mainPageHTML.data(using: .utf8)!.base64EncodedString()
+        
+        let embedPageHTML = """
+        <!DOCTYPE html><html><head><title>Embed</title></head><body>
+        <script>
+        var playerConfig = {
+            sources: {"hlsAuto":"https://cdn.boyfriend.tv/key=abc,end=123/media=hls4A/multi=854x480:v480,426x240:v240/2026-04/_TPL_.mp4"},
+            poster: 'https://cdn77-t.boyfriendtv.com/thumb.jpg'
+        };
+        </script></body></html>
+        """
+        let embedB64 = embedPageHTML.data(using: .utf8)!.base64EncodedString()
+        
+        let jsonManifestOutput = """
+        {
+            "id": "_TPL_",
+            "title": "_TPL_",
+            "duration": 1909,
+            "thumbnail": "https://cdn77-t.boyfriendtv.com/thumb.jpg",
+            "formats": [
+                {"format_id": "499", "width": 426, "height": 240, "ext": "mp4", "protocol": "m3u8_native"},
+                {"format_id": "1021", "width": 854, "height": 480, "ext": "mp4", "protocol": "m3u8_native"}
+            ]
+        }
+        """
+
+        service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
+            capturedArgs.value.append(args)
+            if args.contains("--dump-pages") {
+                if args.contains("https://www.boyfriend.tv/videos/1630228/") {
+                    return mainB64
+                } else if args.contains("https://www.boyfriend.tv/embed/1630228/20231/600/338/") {
+                    return embedB64
+                }
+            }
+            if args.contains("--dump-json") {
+                return jsonManifestOutput
+            }
+            return "{}"
+        })
+
+        let info = try await service.fetchInfo(url: "https://www.boyfriendtv.com/videos/1630228/big-dick-twink-fuck-muscle-ass/")
+        XCTAssertEqual(info.title, "Big Dick Twink Fuck Muscle Ass")
+        XCTAssertEqual(info.formats?.count, 2)
+        XCTAssertEqual(info.duration, 1909)
+        XCTAssertEqual(info.thumbnail, "https://cdn77-t.boyfriendtv.com/thumb.jpg")
+    }
 }
+
 
