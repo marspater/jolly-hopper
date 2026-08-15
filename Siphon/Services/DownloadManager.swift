@@ -248,6 +248,9 @@ class DownloadManager: ObservableObject {
 
             let cancelBox = CancellationBox()
             activeCancellations[download.id] = cancelBox
+            defer {
+                activeCancellations.removeValue(forKey: download.id)
+            }
 
             LoggerService.shared.log("Starting download for URL: \(LoggerService.sanitizeURLForLog(download.url))", level: .info)
             let outputPath = try await ytdlpService.download(
