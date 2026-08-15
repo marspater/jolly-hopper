@@ -603,7 +603,26 @@ final class YtdlpServiceTests: XCTestCase {
         }
         XCTAssertFalse(directArgs.contains("--concurrent-fragments"), "Direct MP4 must not have concurrent-fragments flag")
 
-        // Test B: Segmented HLS stream (e.g. BoyfriendTV)
+        // Test B: Generic webpage URL (e.g. YouTube) with metadata-derived isFragmentedStream = true
+        var ytOptions = DownloadOptions.default
+        ytOptions.isFragmentedStream = true
+        _ = try await service.download(
+            url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+            options: ytOptions,
+            onProcessCreated: { _ in },
+            onProgress: { _, _, _ in },
+            onOutput: { _ in }
+        )
+
+        let ytArgs = capturedArgsBox.value
+        XCTAssertTrue(ytArgs.contains("--http-chunk-size"))
+        XCTAssertTrue(ytArgs.contains("--throttled-rate"))
+        XCTAssertTrue(ytArgs.contains("--concurrent-fragments"))
+        if let idx = ytArgs.firstIndex(of: "--concurrent-fragments") {
+            XCTAssertEqual(ytArgs[idx + 1], "8")
+        }
+
+        // Test C: Direct HLS manifest URL (e.g. BoyfriendTV)
         _ = try await service.download(
             url: "https://www.boyfriend.tv/videos/12345/test-hls-stream",
             options: DownloadOptions.default,
@@ -619,5 +638,58 @@ final class YtdlpServiceTests: XCTestCase {
         if let idx = hlsArgs.firstIndex(of: "--concurrent-fragments") {
             XCTAssertEqual(hlsArgs[idx + 1], "8")
         }
+    }
+
+    func testMediaInfoFragmentedStreamDetection() {
+        let jsonHLS = """
+        {
+            "id": "test_video",
+            "title": "HLS Video",
+            "protocol": "m3u8_native",
+            "manifest_url": "https://example.com/master.m3u8"
+        }
+        """.data(using: .utf8)!
+
+        let decoder = JSONDecoder()
+        let infoHLS = try? decoder.decode(MediaInfo.self, from: jsonHLS)
+        XCTAssertNotNil(infoHLS)
+        XCTAssertTrue(infoHLS?.isFragmented == true)
+
+        let jsonDASH = """
+        {
+            "id": "test_dash",
+            "title": "DASH Video",
+            "formats": [
+                {
+                    "format_id": "137",
+                    "ext": "mp4",
+                    "protocol": "http_dash_segments"
+                }
+            ]
+        }
+        """.data(using: .utf8)!
+
+        let infoDASH = try? decoder.decode(MediaInfo.self, from: jsonDASH)
+        XCTAssertNotNil(infoDASH)
+        XCTAssertTrue(infoDASH?.isFragmented == true)
+
+        let jsonDirectMP4 = """
+        {
+            "id": "test_direct",
+            "title": "Direct MP4 Video",
+            "protocol": "https",
+            "formats": [
+                {
+                    "format_id": "http-1080p",
+                    "ext": "mp4",
+                    "protocol": "https"
+                }
+            ]
+        }
+        """.data(using: .utf8)!
+
+        let infoDirect = try? decoder.decode(MediaInfo.self, from: jsonDirectMP4)
+        XCTAssertNotNil(infoDirect)
+        XCTAssertFalse(infoDirect?.isFragmented == true)
     }
 }

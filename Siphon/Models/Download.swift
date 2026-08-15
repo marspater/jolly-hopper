@@ -105,6 +105,7 @@ struct DownloadOptions: Codable {
     var forceOverwrite: Bool?
     var rawCookies: String?
     var selectedFormatId: String?
+    var isFragmentedStream: Bool?
     
     static var `default`: DownloadOptions {
         let saveFolderURL = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first ?? URL(fileURLWithPath: NSHomeDirectory() + "/Downloads")
@@ -123,7 +124,8 @@ struct DownloadOptions: Codable {
             conversionCodec: ConversionCodec.none,
             forceOverwrite: false,
             rawCookies: nil,
-            selectedFormatId: nil
+            selectedFormatId: nil,
+            isFragmentedStream: nil
         )
     }
 }
@@ -554,6 +556,8 @@ struct MediaInfo: Codable {
     let playlistCount: Int?
     let webpageUrl: String?
     let originalUrl: String?
+    let formatProtocol: String?
+    let manifestUrl: String?
     
     init(
         id: String,
@@ -573,7 +577,9 @@ struct MediaInfo: Codable {
         playlistIndex: Int? = nil,
         playlistCount: Int? = nil,
         webpageUrl: String? = nil,
-        originalUrl: String? = nil
+        originalUrl: String? = nil,
+        formatProtocol: String? = nil,
+        manifestUrl: String? = nil
     ) {
         self.id = id
         self.title = title
@@ -593,6 +599,8 @@ struct MediaInfo: Codable {
         self.playlistCount = playlistCount
         self.webpageUrl = webpageUrl
         self.originalUrl = originalUrl
+        self.formatProtocol = formatProtocol
+        self.manifestUrl = manifestUrl
     }
     
     var durationString: String? {
@@ -623,6 +631,23 @@ struct MediaInfo: Codable {
         return nil
     }
 
+    var isFragmented: Bool {
+        if let proto = formatProtocol?.lowercased() {
+            if proto.contains("m3u8") || proto.contains("dash") || proto.contains("fragment") || proto.contains("ism") {
+                return true
+            }
+        }
+        if let manifest = manifestUrl?.lowercased() {
+            if manifest.contains(".m3u8") || manifest.contains(".mpd") || manifest.contains("/manifest") {
+                return true
+            }
+        }
+        if let formats = formats {
+            return formats.contains(where: { $0.isFragmented })
+        }
+        return false
+    }
+
     var resolvedURL: String {
         if let webpage = webpageUrl, !webpage.isEmpty {
             return webpage
@@ -649,6 +674,8 @@ struct MediaInfo: Codable {
         case playlistCount = "playlist_count"
         case webpageUrl = "webpage_url"
         case originalUrl = "original_url"
+        case formatProtocol = "protocol"
+        case manifestUrl = "manifest_url"
     }
 }
 
@@ -665,6 +692,31 @@ struct MediaFormat: Codable, Identifiable, Hashable {
     let filesize: Int64?
     let filesizeApprox: Int64?
     let formatNote: String?
+    let formatProtocol: String?
+    let manifestUrl: String?
+
+    enum CodingKeys: String, CodingKey {
+        case formatId = "format_id"
+        case ext, resolution, fps, vcodec, acodec, abr, vbr, filesize
+        case filesizeApprox = "filesize_approx"
+        case formatNote = "format_note"
+        case formatProtocol = "protocol"
+        case manifestUrl = "manifest_url"
+    }
+
+    var isFragmented: Bool {
+        if let proto = formatProtocol?.lowercased() {
+            if proto.contains("m3u8") || proto.contains("dash") || proto.contains("fragment") || proto.contains("ism") {
+                return true
+            }
+        }
+        if let manifest = manifestUrl?.lowercased() {
+            if manifest.contains(".m3u8") || manifest.contains(".mpd") || manifest.contains("/manifest") {
+                return true
+            }
+        }
+        return false
+    }
     
     var isVideoOnly: Bool {
         acodec == "none" || acodec == nil
@@ -687,13 +739,6 @@ struct MediaFormat: Codable, Identifiable, Hashable {
         }
         if let note = formatNote, !note.isEmpty { parts.append(note) }
         return parts.joined(separator: " • ")
-    }
-    
-    enum CodingKeys: String, CodingKey {
-        case formatId = "format_id"
-        case ext, resolution, fps, vcodec, acodec, abr, vbr, filesize
-        case filesizeApprox = "filesize_approx"
-        case formatNote = "format_note"
     }
 }
 
