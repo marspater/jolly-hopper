@@ -761,4 +761,73 @@ final class YtdlpServiceTests: XCTestCase {
             XCTAssertTrue(error is YtdlpError)
         }
     }
+
+    func testOrderingInvariantExplicitCodecOverridesHigherResolution() {
+        let av1_1080 = MediaFormat(formatId: "av01_1080", ext: "mp4", resolution: "1920x1080", fps: 60, vcodec: "av01.0.08M.08", acodec: "mp4a", abr: 128, vbr: 5000, filesize: 50000000, filesizeApprox: nil, formatNote: "1080p AV1", formatProtocol: "https", manifestUrl: nil)
+        let h264_720 = MediaFormat(formatId: "h264_720", ext: "mp4", resolution: "1280x720", fps: 30, vcodec: "avc1.64002a", acodec: "mp4a", abr: 128, vbr: 2500, filesize: 25000000, filesizeApprox: nil, formatNote: "720p H264", formatProtocol: "https", manifestUrl: nil)
+
+        let mediaInfo = MediaInfo(
+            id: "codec_priority",
+            title: "Codec Priority Video",
+            formats: [av1_1080, h264_720]
+        )
+
+        var options = DownloadOptions.default
+        options.videoCodec = .h264 // Explicit request for H264
+
+        let resolved = mediaInfo.resolveSelectedFormats(options: options)
+        XCTAssertEqual(resolved.count, 1)
+        XCTAssertEqual(resolved.first?.formatId, "h264_720", "Explicit codec request must be strictly satisfied before maximizing quality")
+    }
+
+    func testOrderingInvariantVideoOnlyWithAudioVsCombined() {
+        let videoOnly1080 = MediaFormat(formatId: "137", ext: "mp4", resolution: "1920x1080", fps: 60, vcodec: "avc1.64002a", acodec: "none", abr: nil, vbr: 4000, filesize: 40000000, filesizeApprox: nil, formatNote: "1080p video-only", formatProtocol: "http_dash_segments", manifestUrl: nil)
+        let audio140 = MediaFormat(formatId: "140", ext: "m4a", resolution: nil, fps: nil, vcodec: "none", acodec: "mp4a.40.2", abr: 128, vbr: nil, filesize: 5000000, filesizeApprox: nil, formatNote: "Audio", formatProtocol: "http_dash_segments", manifestUrl: nil)
+        let combined720 = MediaFormat(formatId: "22", ext: "mp4", resolution: "1280x720", fps: 30, vcodec: "avc1.64001f", acodec: "mp4a.40.2", abr: 128, vbr: 2000, filesize: 20000000, filesizeApprox: nil, formatNote: "720p combined", formatProtocol: "https", manifestUrl: nil)
+
+        let mediaInfo = MediaInfo(
+            id: "split_vs_combined",
+            title: "Split vs Combined",
+            formats: [combined720, videoOnly1080, audio140]
+        )
+
+        let options = DownloadOptions.default
+        let resolved = mediaInfo.resolveSelectedFormats(options: options)
+        XCTAssertEqual(resolved.count, 2)
+        XCTAssertEqual(resolved[0].formatId, "137")
+        XCTAssertEqual(resolved[1].formatId, "140", "1080p video-only + audio must rank higher than 720p combined")
+    }
+
+    func testRealThisVidExtractedMetadataFixtureSelection() {
+        let jsonFixture = """
+        {
+            "id": "8504533",
+            "title": "Muscle boy jerks off his big cock and cums huge",
+            "formats": [
+                {
+                    "format_id": "240p",
+                    "resolution": "240p",
+                    "ext": "mp4",
+                    "protocol": "https"
+                },
+                {
+                    "format_id": "HQ",
+                    "ext": "mp4",
+                    "protocol": "https"
+                }
+            ],
+            "webpage_url": "https://thisvid.com/videos/muscle-boy-jerks-off-his-big-cock-and-cums-huge/"
+        }
+        """.data(using: .utf8)!
+
+        let decoder = JSONDecoder()
+        let mediaInfo = try? decoder.decode(MediaInfo.self, from: jsonFixture)
+        XCTAssertNotNil(mediaInfo)
+
+        let options = DownloadOptions.default
+        let resolved = mediaInfo!.resolveSelectedFormats(options: options)
+        XCTAssertEqual(resolved.count, 1)
+        XCTAssertEqual(resolved.first?.formatId, "HQ", "Default selection on ThisVid metadata must select the HQ source stream over 240p")
+        XCTAssertFalse(mediaInfo!.isSelectedFormatFragmented(options: options), "HQ progressive stream must not be treated as fragmented")
+    }
 }

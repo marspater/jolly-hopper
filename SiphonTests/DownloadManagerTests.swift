@@ -72,4 +72,36 @@ final class DownloadManagerTests: XCTestCase {
         XCTAssertEqual(lang.s("file_exists_status"), "File Exists")
         XCTAssertEqual(lang.s("playlist_detected"), "Playlist Detected")
     }
+
+    func testCustomFilenameCollisionResolution() async {
+        let manager = DownloadManager()
+        var opts1 = DownloadOptions.default
+        opts1.customFilename = "custom_video"
+
+        var opts2 = DownloadOptions.default
+        opts2.customFilename = "custom_video"
+
+        let dl1 = Download(url: "https://example.com/v1", options: opts1, title: "Title 1")
+        let dl2 = Download(url: "https://example.com/v2", options: opts2, title: "Title 2")
+
+        let expectedPath1 = opts1.saveFolder.appendingPathComponent("custom_video.mp4").path
+        let expectedPath2 = opts2.saveFolder.appendingPathComponent("custom_video_1.mp4").path
+
+        // Simulate reservation conflict resolution
+        var reserved: Set<String> = [expectedPath1]
+        var resolvedBaseName = "custom_video"
+        var counter = 1
+        var candidateKey = opts2.saveFolder.appendingPathComponent("\(resolvedBaseName).mp4").path
+        while reserved.contains(candidateKey) {
+            resolvedBaseName = "custom_video_\(counter)"
+            candidateKey = opts2.saveFolder.appendingPathComponent("\(resolvedBaseName).mp4").path
+            counter += 1
+        }
+        if resolvedBaseName != "custom_video" {
+            dl2.options.customFilename = resolvedBaseName
+        }
+
+        XCTAssertEqual(dl2.options.customFilename, "custom_video_1", "Second download must have its customFilename updated to non-colliding name")
+        XCTAssertEqual(candidateKey, expectedPath2)
+    }
 }

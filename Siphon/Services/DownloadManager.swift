@@ -234,7 +234,7 @@ class DownloadManager: ObservableObject {
                 candidateKey = folderPath.appendingPathComponent("\(resolvedBaseName).\(download.options.fileType.fileExtension)").path
                 counter += 1
             }
-            if resolvedBaseName != sanitizedBaseName && download.options.customFilename == nil {
+            if resolvedBaseName != sanitizedBaseName {
                 download.options.customFilename = resolvedBaseName
             }
             reservedOutputPaths.insert(candidateKey)
