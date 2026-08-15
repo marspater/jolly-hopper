@@ -16,3 +16,6 @@
 ## 2024-07-21 - Avoiding redundant broadcasts during array mutation
 **Learning:** In SwiftUI applications using `ObservableObject`, triggering `objectWillChange.send()` inside a loop that mutates an array causes redundant, performance-killing UI updates for every iteration.
 **Action:** When mutating arrays (like clearing or stopping multiple items), pass a `skipBroadcast` flag to bypass the per-item UI update and call `objectWillChange.send()` exactly once after the loop completes.
+## 2025-08-15 - Avoiding Intermediate String Allocations
+**Learning:** `components(separatedBy:)` on `String` allocates multiple intermediate string objects which can be expensive inside heavy parsing loops. Converting to `Data` and using `split(separator:)` with bytes bypasses intermediate String allocations and speeds up execution significantly.
+**Action:** When parsing large string outputs line-by-line in Swift, especially before JSON decoding, use `output.data(using: .utf8)?.split(separator: UInt8(ascii: "\n"))` instead of `.components(separatedBy: "\n")`.
