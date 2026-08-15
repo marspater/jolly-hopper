@@ -1,5 +1,5 @@
 # This workflow checks out code, performs a Codacy security scan
-# and integrates the results with the GitHub code scanning feature.
+# and integrates the results with GitHub code scanning.
 
 name: Codacy Security Scan
 
@@ -24,10 +24,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Run Codacy Analysis CLI
-        uses: codacy/codacy-analysis-cli-action@master
+        uses: codacy/codacy-analysis-cli-action@d43360362776a6789b47b99ae8973510854e2d3d # master
         with:
           verbose: true
           output: results.sarif
@@ -35,24 +35,32 @@ jobs:
           severity-cutoff: 1
           fail-if-incomplete: false
 
-      - name: Merge SARIF runs for GitHub Code Scanning
+      - name: Prepare SARIF for GitHub Code Scanning
         run: |
           python3 -c "
           import json, os
           if os.path.exists('results.sarif'):
               with open('results.sarif', 'r') as f:
                   data = json.load(f)
-              if 'runs' in data and len(data['runs']) > 1:
-                  main_run = data['runs'][0]
-                  for r in data['runs'][1:]:
-                      main_run.setdefault('results', []).extend(r.get('results', []))
-                  data['runs'] = [main_run]
-                  with open('results.sarif', 'w') as f:
-                      json.dump(data, f)
+              os.makedirs('sarif-results', exist_ok=True)
+              runs = data.get('runs', [])
+              if runs:
+                  for idx, run in enumerate(runs):
+                      tool_name = run.get('tool', {}).get('driver', {}).get('name', f'tool_{idx}').replace('/', '_')
+                      single_sarif = {
+                          'version': data.get('version', '2.1.0'),
+                          '\$schema': data.get('\$schema', 'https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json'),
+                          'runs': [run]
+                      }
+                      with open(f'sarif-results/{tool_name}_{idx}.sarif', 'w') as out:
+                          json.dump(single_sarif, out)
+              else:
+                  with open('sarif-results/empty.sarif', 'w') as out:
+                      json.dump(data, out)
           "
 
-      - name: Upload SARIF results file
-        uses: github/codeql-action/upload-sarif@v3
+      - name: Upload SARIF results
+        uses: github/codeql-action/upload-sarif@6bb031afdd8eb862ea3fc1848194185e076637e5 # v3.28.11
         if: always()
         with:
-          sarif_file: results.sarif
+          sarif_file: sarif-results
