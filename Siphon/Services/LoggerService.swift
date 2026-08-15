@@ -16,6 +16,16 @@ class LoggerService: ObservableObject {
         return formatter
     }()
     
+    nonisolated static func sanitizeURLForLog(_ urlString: String) -> String {
+        guard let url = URL(string: urlString) else { return urlString }
+        var components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+        components?.query = nil
+        components?.fragment = nil
+        components?.user = nil
+        components?.password = nil
+        return components?.string ?? "\(url.scheme ?? "https")://\(url.host ?? "unknown")"
+    }
+
     private init() {
         let appSupport = (FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first ?? URL(fileURLWithPath: NSHomeDirectory() + "/Library/Application Support"))
             .appendingPathComponent("Siphon")

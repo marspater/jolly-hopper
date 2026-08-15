@@ -294,4 +294,101 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertTrue(capturedArgsBox.value.contains("Referer:https://thisvid.com/"))
         XCTAssertTrue(capturedArgsBox.value.contains("Origin:https://thisvid.com"))
     }
+
+    func testMetadataFlagGatingWhenDisabled() async throws {
+        let capturedArgsBox = TestBox<[String]>([])
+        service.mockDownloadRunner = { args in
+            capturedArgsBox.value = args
+            return "[download] Destination: /tmp/test.mp4\n"
+        }
+
+        var options = DownloadOptions.default
+        options.embedMetadata = false
+
+        _ = try await service.download(
+            url: "https://example.com/video",
+            options: options,
+            onProcessCreated: { _ in },
+            onProgress: { _, _, _ in },
+            onOutput: { _ in }
+        )
+
+        XCTAssertFalse(capturedArgsBox.value.contains("--embed-metadata"))
+        XCTAssertFalse(capturedArgsBox.value.contains("--embed-chapters"))
+        XCTAssertTrue(capturedArgsBox.value.contains("--ignore-config"))
+    }
+
+    func testLoggerServiceSanitizeURLForLog() {
+        let sensitiveURL = "https://example.com/video/12345?token=SECRET123&expires=999999&sig=ABCDEF#section"
+        let sanitized = LoggerService.sanitizeURLForLog(sensitiveURL)
+
+        XCTAssertEqual(sanitized, "https://example.com/video/12345")
+        XCTAssertFalse(sanitized.contains("token"))
+        XCTAssertFalse(sanitized.contains("SECRET123"))
+        XCTAssertFalse(sanitized.contains("sig"))
+    }
+
+    func testThreadSafeOutputStateCandidateHandling() {
+        let state = ThreadSafeOutputState()
+        state.addCandidatePath("   \"/tmp/downloaded_video.mp4\"   ")
+        state.addCandidatePath("'/tmp/converted_video.mp4'")
+        state.addCandidatePath("/tmp/final_video.mp4")
+
+        let candidates = state.getCandidatePaths()
+        XCTAssertEqual(candidates, [
+            "/tmp/downloaded_video.mp4",
+            "/tmp/converted_video.mp4",
+            "/tmp/final_video.mp4"
+        ])
+    }
+
+    func testConcurrentDownloadsWithIdenticalTitlesResolveCorrectly() async throws {
+        let tempDir = FileManager.default.temporaryDirectory
+        let sessionFolder = tempDir.appendingPathComponent("siphon_concurrent_test_\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: sessionFolder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: sessionFolder) }
+
+        let fileA = sessionFolder.appendingPathComponent("SameTitle [idA].mp4")
+        let fileB = sessionFolder.appendingPathComponent("SameTitle [idB].mp4")
+        try "Media Content A".data(using: .utf8)?.write(to: fileA)
+        try "Media Content B".data(using: .utf8)?.write(to: fileB)
+
+        let serviceA = YtdlpService()
+        serviceA.ytdlpPath = URL(fileURLWithPath: "/usr/local/bin/yt-dlp")
+        serviceA.mockDownloadRunner = { args in
+            return fileA.path
+        }
+
+        let serviceB = YtdlpService()
+        serviceB.ytdlpPath = URL(fileURLWithPath: "/usr/local/bin/yt-dlp")
+        serviceB.mockDownloadRunner = { args in
+            return fileB.path
+        }
+
+        var optionsA = DownloadOptions.default
+        optionsA.saveFolder = sessionFolder
+        var optionsB = DownloadOptions.default
+        optionsB.saveFolder = sessionFolder
+
+        async let resultA = serviceA.download(
+            url: "https://example.com/videoA",
+            options: optionsA,
+            onProcessCreated: { _ in },
+            onProgress: { _, _, _ in },
+            onOutput: { _ in }
+        )
+
+        async let resultB = serviceB.download(
+            url: "https://example.com/videoB",
+            options: optionsB,
+            onProcessCreated: { _ in },
+            onProgress: { _, _, _ in },
+            onOutput: { _ in }
+        )
+
+        let (urlA, urlB) = try await (resultA, resultB)
+        XCTAssertEqual(urlA.path, fileA.path)
+        XCTAssertEqual(urlB.path, fileB.path)
+        XCTAssertNotEqual(urlA.path, urlB.path)
+    }
 }

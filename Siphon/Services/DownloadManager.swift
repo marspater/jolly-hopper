@@ -245,7 +245,7 @@ class DownloadManager: ObservableObject {
             updateStatus(for: download, to: .downloading)
             objectWillChange.send()
 
-            LoggerService.shared.log("Starting download for URL: \(download.url)", level: .info)
+            LoggerService.shared.log("Starting download for URL: \(LoggerService.sanitizeURLForLog(download.url))", level: .info)
             let outputPath = try await ytdlpService.download(
                 url: download.url,
                 options: download.options,
@@ -287,20 +287,20 @@ class DownloadManager: ObservableObject {
             download.progress = 1.0
             objectWillChange.send()
 
-            LoggerService.shared.log("Download completed successfully: \(download.title.isEmpty ? download.url : download.title)", level: .info)
+            LoggerService.shared.log("Download completed successfully: \(download.title.isEmpty ? LoggerService.sanitizeURLForLog(download.url) : download.title)", level: .info)
 
             addToHistory(download)
 
             // Send notification
             let lang = languageService ?? LanguageService()
-            NotificationService.shared.sendDownloadCompleted(filename: download.title.isEmpty ? download.url : download.title, languageService: lang)
+            NotificationService.shared.sendDownloadCompleted(filename: download.title.isEmpty ? LoggerService.sanitizeURLForLog(download.url) : download.title, languageService: lang)
 
         } catch let error as YtdlpError {
             // Bug #7 fix: Always clean up process reference on error
             activeProcesses.removeValue(forKey: download.id)
 
             if download.status == .stopped {
-                LoggerService.shared.log("Download stopped by user (\(download.url))", level: .info)
+                LoggerService.shared.log("Download stopped by user (\(LoggerService.sanitizeURLForLog(download.url)))", level: .info)
                 addToHistory(download)
                 return
             }
@@ -327,26 +327,26 @@ class DownloadManager: ObservableObject {
                 download.errorMessage = error.localizedDescription
             }
 
-            LoggerService.shared.log("Download failed (\(download.url)): \(download.errorMessage ?? error.localizedDescription)", level: .error)
+            LoggerService.shared.log("Download failed (\(LoggerService.sanitizeURLForLog(download.url))): \(download.errorMessage ?? error.localizedDescription)", level: .error)
             // Send notification for failure
-            NotificationService.shared.sendDownloadFailed(filename: download.title.isEmpty ? download.url : download.title, languageService: lang)
+            NotificationService.shared.sendDownloadFailed(filename: download.title.isEmpty ? LoggerService.sanitizeURLForLog(download.url) : download.title, languageService: lang)
             addToHistory(download)
         } catch {
             // Bug #7 fix: Always clean up process reference on error
             activeProcesses.removeValue(forKey: download.id)
 
             if download.status == .stopped {
-                LoggerService.shared.log("Download stopped by user (\(download.url))", level: .info)
+                LoggerService.shared.log("Download stopped by user (\(LoggerService.sanitizeURLForLog(download.url)))", level: .info)
                 addToHistory(download)
                 return
             }
             updateStatus(for: download, to: .failed)
             objectWillChange.send()
             download.errorMessage = error.localizedDescription
-            LoggerService.shared.log("Download failed with error (\(download.url)): \(error.localizedDescription)", level: .error)
+            LoggerService.shared.log("Download failed with error (\(LoggerService.sanitizeURLForLog(download.url))): \(error.localizedDescription)", level: .error)
 
             let lang = languageService ?? LanguageService()
-            NotificationService.shared.sendDownloadFailed(filename: download.title.isEmpty ? download.url : download.title, languageService: lang)
+            NotificationService.shared.sendDownloadFailed(filename: download.title.isEmpty ? LoggerService.sanitizeURLForLog(download.url) : download.title, languageService: lang)
 
             addToHistory(download)
         }
@@ -361,16 +361,12 @@ class DownloadManager: ObservableObject {
             return
         }
         updateStatus(for: download, to: .stopped)
-        if let process = activeProcesses[download.id] {
+        if let process = activeProcesses.removeValue(forKey: download.id) {
             process.terminate()
-            let pid = process.processIdentifier
-            activeProcesses.removeValue(forKey: download.id)
-            if pid > 0 {
-                Task.detached {
-                    try? await Task.sleep(nanoseconds: 2_000_000_000)
-                    if kill(pid, 0) == 0 {
-                        kill(pid, SIGKILL)
-                    }
+            Task.detached { [weak process] in
+                try? await Task.sleep(nanoseconds: 1_500_000_000)
+                if let proc = process, proc.isRunning {
+                    proc.terminate()
                 }
             }
         }
@@ -387,7 +383,7 @@ class DownloadManager: ObservableObject {
 
         if !suppressNotification {
             let lang = languageService ?? LanguageService()
-            NotificationService.shared.sendDownloadStopped(filename: download.title.isEmpty ? download.url : download.title, languageService: lang)
+            NotificationService.shared.sendDownloadStopped(filename: download.title.isEmpty ? LoggerService.sanitizeURLForLog(download.url) : download.title, languageService: lang)
         }
     }
 

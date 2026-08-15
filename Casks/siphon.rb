@@ -2,7 +2,7 @@ cask "siphon" do
   version "5.0.0"
   sha256 :no_check
 
-  url "https://github.com/marspater/jolly-hopper/releases/download/v#{version}/Siphon.dmg"
+  url "https://github.com/marspater/jolly-hopper/releases/download/v#{version}/Siphon-v#{version}.dmg"
   name "Siphon"
   desc "Media extractor and downloader powered by yt-dlp"
   homepage "https://github.com/marspater/jolly-hopper"
@@ -12,7 +12,7 @@ cask "siphon" do
     strategy :github_latest
   end
 
-  depends_on macos: :monterey
+  depends_on macos: :sonoma
 
   app "Siphon.app"
 

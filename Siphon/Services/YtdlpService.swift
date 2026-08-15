@@ -47,14 +47,22 @@ class YtdlpService: ObservableObject {
     #endif
 
     init() {
-        Task {
-            await setupBinaries()
-        }
+        // Initialization is explicit: setupBinaries() is called by DownloadManager or test harnesses.
     }
 
     nonisolated static func verifySHA256(fileURL: URL, expectedHash: String) -> Bool {
-        guard let data = try? Data(contentsOf: fileURL, options: .mappedIfSafe) else { return false }
-        let digest = SHA256.hash(data: data)
+        guard let fileHandle = try? FileHandle(forReadingFrom: fileURL) else { return false }
+        defer { try? fileHandle.close() }
+
+        var hasher = SHA256()
+        let bufferSize = 1024 * 1024 // 1 MB buffer for streaming hash calculation
+        while true {
+            guard let data = try? fileHandle.read(upToCount: bufferSize), !data.isEmpty else {
+                break
+            }
+            hasher.update(data: data)
+        }
+        let digest = hasher.finalize()
         let hashString = digest.map { String(format: "%02x", $0) }.joined()
         return hashString.caseInsensitiveCompare(expectedHash) == .orderedSame
     }
@@ -67,6 +75,26 @@ class YtdlpService: ObservableObject {
 
     private func isExecutableBinary(at url: URL) -> Bool {
         FileManager.default.fileExists(atPath: url.path) && FileManager.default.isExecutableFile(atPath: url.path)
+    }
+
+    private func atomicInstall(from source: URL, to destination: URL) throws {
+        let fm = FileManager.default
+        let backupDestination = destination.deletingLastPathComponent().appendingPathComponent(destination.lastPathComponent + ".backup")
+        try? fm.removeItem(at: backupDestination)
+
+        if fm.fileExists(atPath: destination.path) {
+            try fm.moveItem(at: destination, to: backupDestination)
+        }
+
+        do {
+            try fm.moveItem(at: source, to: destination)
+            try? fm.removeItem(at: backupDestination)
+        } catch {
+            if fm.fileExists(atPath: backupDestination.path) && !fm.fileExists(atPath: destination.path) {
+                try? fm.moveItem(at: backupDestination, to: destination)
+            }
+            throw error
+        }
     }
 
     private func repairAppSupportFfmpegPair(ffmpeg: URL, ffprobe: URL) async {
@@ -259,10 +287,7 @@ class YtdlpService: ObservableObject {
 
             try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: extractedBinURL.path)
 
-            if FileManager.default.fileExists(atPath: ffmpegDest.path) {
-                try FileManager.default.removeItem(at: ffmpegDest)
-            }
-            try FileManager.default.moveItem(at: extractedBinURL, to: ffmpegDest)
+            try atomicInstall(from: extractedBinURL, to: ffmpegDest)
 
             if await validateBinary(ffmpegDest, name: "FFmpeg", expectedSHA256: DependencyChecksums.ffmpegExecutableSHA256, context: "download") {
                 ffmpegPath = ffmpegDest
@@ -308,10 +333,7 @@ class YtdlpService: ObservableObject {
 
             try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: extractedBinURL.path)
 
-            if FileManager.default.fileExists(atPath: ffprobeDest.path) {
-                try FileManager.default.removeItem(at: ffprobeDest)
-            }
-            try FileManager.default.moveItem(at: extractedBinURL, to: ffprobeDest)
+            try atomicInstall(from: extractedBinURL, to: ffprobeDest)
 
             if await validateBinary(ffprobeDest, name: "FFprobe", expectedSHA256: DependencyChecksums.ffprobeExecutableSHA256, context: "download") {
                 ffprobePath = ffprobeDest
@@ -366,16 +388,13 @@ class YtdlpService: ObservableObject {
             try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: tempDestination.path)
 
             do {
-                _ = try await runCommandAsync([tempDestination.path, "--version"])
+                _ = try await runCommandAsync([tempDestination.path, "--ignore-config", "--version"])
             } catch {
                 try? FileManager.default.removeItem(at: tempDestination)
                 throw YtdlpUpdateError.validationFailed("yt-dlp exited with error: \(error.localizedDescription)")
             }
 
-            if FileManager.default.fileExists(atPath: destination.path) {
-                try FileManager.default.removeItem(at: destination)
-            }
-            try FileManager.default.moveItem(at: tempDestination, to: destination)
+            try atomicInstall(from: tempDestination, to: destination)
             ytdlpPath = destination
             isAvailable = true
             updateProgress = 0.9
@@ -397,7 +416,7 @@ class YtdlpService: ObservableObject {
         guard let path = ytdlpPath else { return }
 
         do {
-            let output = try await runCommandAsync([path.path, "--version"])
+            let output = try await runCommandAsync([path.path, "--ignore-config", "--version"])
             version = output.trimmingCharacters(in: .whitespacesAndNewlines)
         } catch {
             LoggerService.shared.log("Failed to get yt-dlp version: \(error)", level: .warning)
@@ -432,6 +451,7 @@ class YtdlpService: ObservableObject {
             if let btvMedia = await resolveBoyfriendTVMediaInfo(url: url) {
                 var btvArgs = [
                     path,
+                    "--ignore-config",
                     "--dump-json",
                     "--no-playlist",
                     "--no-warnings"
@@ -485,6 +505,7 @@ class YtdlpService: ObservableObject {
 
         var args = [
             path,
+            "--ignore-config",
             "--dump-json",
             "--no-playlist",
             "--no-warnings"
@@ -536,6 +557,7 @@ class YtdlpService: ObservableObject {
     private func fetchPlaylistSummaryInfo(path: String, url: String) async throws -> MediaInfo {
         var args = [
             path,
+            "--ignore-config",
             "--dump-single-json",
             "--flat-playlist",
             "--no-warnings"
@@ -599,6 +621,7 @@ class YtdlpService: ObservableObject {
 
         var args = [
             path.path,
+            "--ignore-config",
             "--dump-json",
             "--flat-playlist",
             "--no-warnings"
@@ -666,7 +689,7 @@ class YtdlpService: ObservableObject {
             }
         }
 
-        var args = [path.path]
+        var args = [path.path, "--ignore-config"]
         if ffmpegPath == nil || !FileManager.default.fileExists(atPath: ffmpegPath?.path ?? "") {
             await findFfmpeg()
         }
@@ -717,8 +740,10 @@ class YtdlpService: ObservableObject {
             args.append(contentsOf: ["--convert-thumbnails", "jpg"])
         }
 
-        args.append("--embed-metadata")
-        args.append("--embed-chapters")
+        if options.embedMetadata {
+            args.append("--embed-metadata")
+            args.append("--embed-chapters")
+        }
 
         if options.splitChapters {
             args.append("--split-chapters")
@@ -778,7 +803,7 @@ class YtdlpService: ObservableObject {
         }
         onOutput("[COMMAND] \(fullCommand)\n")
         Task { @MainActor in
-            LoggerService.shared.log(fullCommand, level: .command)
+            LoggerService.shared.log(LoggerService.sanitizeURLForLog(fullCommand), level: .command)
         }
 
         defer {
@@ -822,14 +847,6 @@ class YtdlpService: ObservableObject {
             }
         } catch {
             throw mapSiteSpecificError(error, url: normalizedURL)
-        }
-        
-        if options.embedSubtitles && options.downloadSubtitles {
-            cleanupSubtitleFiles(for: outputPath, in: options.saveFolder)
-        }
-
-        if !options.downloadThumbnail {
-            cleanupThumbnailFiles(for: outputPath, in: options.saveFolder)
         }
 
         return URL(fileURLWithPath: outputPath, relativeTo: options.saveFolder).absoluteURL
@@ -1123,21 +1140,14 @@ class YtdlpService: ObservableObject {
         
         var html = ""
         
-        // Build combinations of browser cookies and impersonation flags to try
-        var browsersToTry: [String?] = [nil] // Try without browser cookies first using impersonate (bypasses Cloudflare)
+        var browsersToTry: [String?] = [nil] // Try without browser cookies first
         if let configured = configuredBrowserCookieSource() {
             browsersToTry.append(configured)
-        }
-        let defaultBrowsers = ["safari", "chrome", "firefox", "brave", "edge"]
-        for b in defaultBrowsers {
-            if !browsersToTry.contains(where: { $0 == b }) {
-                browsersToTry.append(b)
-            }
         }
 
         if let ytdlp = ytdlpPath ?? Bundle.main.url(forResource: "yt-dlp", withExtension: nil) {
             for browser in browsersToTry {
-                var args = [ytdlp.path, "--dump-pages"]
+                var args = [ytdlp.path, "--ignore-config", "--dump-pages"]
                 if let browserName = browser {
                     args.append(contentsOf: ["--cookies-from-browser", browserName])
                 }
@@ -1551,7 +1561,6 @@ class YtdlpService: ObservableObject {
             process.environment = createSanitizedEnvironment()
 
             onProcessCreated(process)
-
             let outputState = ThreadSafeOutputState()
 
             let isMediaFilePath: @Sendable (String) -> Bool = { path in
@@ -1573,10 +1582,7 @@ class YtdlpService: ObservableObject {
                 if line.contains("[download] Destination:") {
                     let parts = line.components(separatedBy: "[download] Destination: ")
                     if parts.count > 1 {
-                        let path = parts[1].trimmingCharacters(in: .whitespacesAndNewlines)
-                        if isMediaFilePath(path) {
-                            outputState.setOutputPath(path)
-                        }
+                        outputState.addCandidatePath(parts[1])
                     }
                 }
 
@@ -1585,10 +1591,7 @@ class YtdlpService: ObservableObject {
                     if parts.count > 1 {
                         let pathPart = parts[1].components(separatedBy: " has already been downloaded")
                         if !pathPart.isEmpty {
-                            let path = pathPart[0].trimmingCharacters(in: .whitespacesAndNewlines)
-                            if isMediaFilePath(path) {
-                                outputState.setOutputPath(path)
-                            }
+                            outputState.addCandidatePath(pathPart[0])
                         }
                     }
                 }
@@ -1596,20 +1599,21 @@ class YtdlpService: ObservableObject {
                 if line.contains("[Merger] Merging formats into") {
                     let parts = line.components(separatedBy: "\"")
                     if parts.count > 1 {
-                        let path = parts[1].trimmingCharacters(in: .whitespacesAndNewlines)
-                        if isMediaFilePath(path) {
-                            outputState.setOutputPath(path)
-                        }
+                        outputState.addCandidatePath(parts[1])
+                    }
+                }
+
+                if line.contains("[ExtractAudio] Destination:") {
+                    let parts = line.components(separatedBy: "[ExtractAudio] Destination: ")
+                    if parts.count > 1 {
+                        outputState.addCandidatePath(parts[1])
                     }
                 }
 
                 if line.contains(" to \"") {
                     let parts = line.components(separatedBy: " to \"")
                     if let target = parts.last?.components(separatedBy: "\"").first, !target.isEmpty {
-                        let path = target.trimmingCharacters(in: .whitespacesAndNewlines)
-                        if isMediaFilePath(path) {
-                            outputState.setOutputPath(path)
-                        }
+                        outputState.addCandidatePath(target)
                     }
                 }
 
@@ -1645,22 +1649,23 @@ class YtdlpService: ObservableObject {
                 }
             }
 
+            let outputBuffer = StreamBuffer()
+            let errorBuffer = StreamBuffer()
+
             outputPipe.fileHandleForReading.readabilityHandler = { handle in
                 let data = handle.availableData
                 guard !data.isEmpty, let text = String(data: data, encoding: .utf8) else { return }
-                for line in text.components(separatedBy: .newlines) where !line.isEmpty {
+                for line in outputBuffer.appendAndExtractLines(text) {
                     processOutputLine(line)
                 }
             }
 
             errorPipe.fileHandleForReading.readabilityHandler = { handle in
                 let data = handle.availableData
-                guard !data.isEmpty, let line = String(data: data, encoding: .utf8) else { return }
-
-                outputState.appendError(line)
-
-                DispatchQueue.main.async {
-                    onOutput("[ERROR] \(line)")
+                guard !data.isEmpty, let text = String(data: data, encoding: .utf8) else { return }
+                for line in errorBuffer.appendAndExtractLines(text) {
+                    outputState.appendError(line + "\n")
+                    DispatchQueue.main.async { onOutput("[ERROR] \(line)") }
                 }
             }
 
@@ -1670,76 +1675,55 @@ class YtdlpService: ObservableObject {
 
                 let remainingOutput = outputPipe.fileHandleForReading.readDataToEndOfFile()
                 if !remainingOutput.isEmpty, let text = String(data: remainingOutput, encoding: .utf8) {
-                    for line in text.components(separatedBy: .newlines) where !line.isEmpty {
+                    for line in outputBuffer.appendAndExtractLines(text) {
                         processOutputLine(line)
                     }
+                }
+                for line in outputBuffer.flush() {
+                    processOutputLine(line)
                 }
 
                 let remainingError = errorPipe.fileHandleForReading.readDataToEndOfFile()
                 if !remainingError.isEmpty, let text = String(data: remainingError, encoding: .utf8) {
-                    outputState.appendError(text)
-                    DispatchQueue.main.async { onOutput("[ERROR] \(text)") }
+                    for line in errorBuffer.appendAndExtractLines(text) {
+                        outputState.appendError(line + "\n")
+                        DispatchQueue.main.async { onOutput("[ERROR] \(line)") }
+                    }
+                }
+                for line in errorBuffer.flush() {
+                    outputState.appendError(line + "\n")
+                    DispatchQueue.main.async { onOutput("[ERROR] \(line)") }
                 }
 
-                var currentOutputPath = outputState.getOutputPath()
                 let fm = FileManager.default
-
                 var finalURL: URL? = nil
 
-                if !currentOutputPath.isEmpty {
-                    let rawURL = currentOutputPath.hasPrefix("/") ? URL(fileURLWithPath: currentOutputPath) : saveFolder.appendingPathComponent(currentOutputPath)
-                    if fm.fileExists(atPath: rawURL.path) && isMediaFilePath(rawURL.path) {
-                        finalURL = rawURL
+                // Determine final media path strictly from explicit candidates reported by the process
+                let candidates = outputState.getCandidatePaths()
+                for candidate in candidates.reversed() {
+                    let rawURL = candidate.hasPrefix("/") ? URL(fileURLWithPath: candidate) : saveFolder.appendingPathComponent(candidate)
+                    let resolved = rawURL.standardizedFileURL.resolvingSymlinksInPath()
+
+                    if fm.fileExists(atPath: resolved.path),
+                       let values = try? resolved.resourceValues(forKeys: [.isRegularFileKey]),
+                       values.isRegularFile == true,
+                       isMediaFilePath(resolved.path),
+                       Self.isPathContained(targetURL: resolved, inside: saveFolder) {
+                        finalURL = resolved
+                        break
                     } else {
-                        // Search saveFolder for a file with matching base name (e.g. .mkv instead of .mp4)
+                        // Check if container converted format (e.g. .mp4 instead of intermediate .mkv)
                         let baseName = rawURL.deletingPathExtension().lastPathComponent
-                        if let files = try? fm.contentsOfDirectory(at: saveFolder, includingPropertiesForKeys: [.contentModificationDateKey]) {
-                            if let match = files.first(where: { $0.deletingPathExtension().lastPathComponent == baseName && fm.fileExists(atPath: $0.path) && isMediaFilePath($0.path) }) {
-                                finalURL = match
+                        if let files = try? fm.contentsOfDirectory(at: saveFolder, includingPropertiesForKeys: [.isRegularFileKey]) {
+                            if let match = files.first(where: {
+                                $0.deletingPathExtension().lastPathComponent == baseName &&
+                                fm.fileExists(atPath: $0.path) &&
+                                isMediaFilePath($0.path) &&
+                                Self.isPathContained(targetURL: $0, inside: saveFolder)
+                            }) {
+                                finalURL = match.standardizedFileURL.resolvingSymlinksInPath()
+                                break
                             }
-                        }
-                    }
-                }
-
-                // Fallback: If finalURL is still missing or points to a non-existent/non-media file, find the most recent media file in saveFolder
-                let isResolvedMedia: Bool
-                if let candidate = finalURL, fm.fileExists(atPath: candidate.path), isMediaFilePath(candidate.path) {
-                    isResolvedMedia = true
-                } else {
-                    isResolvedMedia = false
-                }
-
-                if !isResolvedMedia {
-                    if let files = try? fm.contentsOfDirectory(at: saveFolder, includingPropertiesForKeys: [.contentModificationDateKey, .isRegularFileKey]) {
-                        let recentFiles = files.compactMap { url -> (URL, Date)? in
-                            guard let values = try? url.resourceValues(forKeys: [.contentModificationDateKey, .isRegularFileKey]),
-                                  values.isRegularFile == true,
-                                  !url.lastPathComponent.hasPrefix("."),
-                                  isMediaFilePath(url.path),
-                                  let modDate = values.contentModificationDate,
-                                  Date().timeIntervalSince(modDate) < 300 else { return nil }
-                            return (url, modDate)
-                        }.sorted(by: { $1.1 < $0.1 })
-                        
-                        if let newest = recentFiles.first?.0 {
-                            finalURL = newest
-                        }
-                    }
-                }
-
-                if let resolvedURL = finalURL {
-                    guard Self.isPathContained(targetURL: resolvedURL, inside: saveFolder) else {
-                        safeContinuation.resume(throwing: YtdlpError.securityViolation("Resolved output file is outside the designated save directory."))
-                        return
-                    }
-
-                    currentOutputPath = resolvedURL.path
-
-                    // If final URL is .mp4 (or another target format), clean up leftover intermediate .mkv file if present
-                    if resolvedURL.pathExtension.lowercased() == "mp4" {
-                        let intermediateMKV = resolvedURL.deletingPathExtension().appendingPathExtension("mkv")
-                        if fm.fileExists(atPath: intermediateMKV.path) && intermediateMKV.path != resolvedURL.path {
-                            try? fm.removeItem(at: intermediateMKV)
                         }
                     }
                 }
@@ -1747,16 +1731,23 @@ class YtdlpService: ObservableObject {
                 let errorOutput = outputState.getErrorText()
 
                 if proc.terminationStatus == 0 {
-                    safeContinuation.resume(returning: currentOutputPath)
-                } else {
-                    let fileExists = !currentOutputPath.isEmpty && fm.fileExists(atPath: currentOutputPath)
-                    if fileExists, let attrs = try? fm.attributesOfItem(atPath: currentOutputPath), let size = attrs[.size] as? Int64, size > 0 {
-                        Task { @MainActor in LoggerService.shared.log("yt-dlp exited with error but file exists. Ignoring post-processing error.", level: .warning) }
-                        safeContinuation.resume(returning: currentOutputPath)
-                        return
+                    if let resolvedURL = finalURL {
+                        // Intermediate .mkv cleanup if target .mp4 exists
+                        if resolvedURL.pathExtension.lowercased() == "mp4" {
+                            let intermediateMKV = resolvedURL.deletingPathExtension().appendingPathExtension("mkv")
+                            if fm.fileExists(atPath: intermediateMKV.path) && intermediateMKV.path != resolvedURL.path {
+                                try? fm.removeItem(at: intermediateMKV)
+                            }
+                        }
+                        safeContinuation.resume(returning: resolvedURL.path)
+                    } else {
+                        safeContinuation.resume(throwing: YtdlpError.downloadFailed("Download process completed, but no valid media file was verified in the target destination."))
                     }
-
-                    if errorOutput.contains("Cloudflare") || (errorOutput.contains("403") && errorOutput.contains("anti-bot")) {
+                } else {
+                    if let resolvedURL = finalURL {
+                        Task { @MainActor in LoggerService.shared.log("yt-dlp exited with error but file exists. Ignoring post-processing error.", level: .warning) }
+                        safeContinuation.resume(returning: resolvedURL.path)
+                    } else if errorOutput.contains("Cloudflare") || (errorOutput.contains("403") && errorOutput.contains("anti-bot")) {
                         safeContinuation.resume(throwing: YtdlpError.cloudflareBlocked)
                     } else if errorOutput.contains("429") || errorOutput.contains("Too Many Requests") {
                         safeContinuation.resume(throwing: YtdlpError.tooManyRequests)
@@ -1768,7 +1759,7 @@ class YtdlpService: ObservableObject {
                             .last?
                             .replacingOccurrences(of: "ERROR: ", with: "")
                             ?? errorOutput
-                        safeContinuation.resume(throwing: YtdlpError.downloadFailed(cleanError))
+                        safeContinuation.resume(throwing: YtdlpError.downloadFailed(cleanError.isEmpty ? "Process exited with code \(proc.terminationStatus)" : cleanError))
                     }
                 }
             }
@@ -2022,21 +2013,52 @@ final class ThreadSafeDataBuffer: @unchecked Sendable {
     }
 }
 
+final class StreamBuffer: @unchecked Sendable {
+    private var buffer = ""
+    private let lock = NSLock()
+
+    func appendAndExtractLines(_ text: String) -> [String] {
+        lock.lock()
+        defer { lock.unlock() }
+        buffer += text
+        var lines: [String] = []
+        while let newlineRange = buffer.range(of: "\n") {
+            let line = String(buffer[..<newlineRange.lowerBound]).trimmingCharacters(in: CharacterSet(charactersIn: "\r"))
+            buffer.removeSubrange(..<newlineRange.upperBound)
+            if !line.isEmpty {
+                lines.append(line)
+            }
+        }
+        return lines
+    }
+
+    func flush() -> [String] {
+        lock.lock()
+        defer { lock.unlock() }
+        let remaining = buffer
+        buffer = ""
+        return remaining.components(separatedBy: .newlines).filter { !$0.isEmpty }
+    }
+}
+
 final class ThreadSafeOutputState: @unchecked Sendable {
-    private var path: String = ""
+    private var candidatePaths: [String] = []
     private var errorText: String = ""
     private let lock = NSLock()
 
-    func setOutputPath(_ newPath: String) {
+    func addCandidatePath(_ newPath: String) {
+        let cleaned = newPath.trimmingCharacters(in: .whitespacesAndNewlines)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "\"\'"))
+        guard !cleaned.isEmpty else { return }
         lock.lock()
-        path = newPath
+        candidatePaths.append(cleaned)
         lock.unlock()
     }
 
-    func getOutputPath() -> String {
+    func getCandidatePaths() -> [String] {
         lock.lock()
         defer { lock.unlock() }
-        return path
+        return candidatePaths
     }
 
     func appendError(_ text: String) {
