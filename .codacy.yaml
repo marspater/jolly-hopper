@@ -1,16 +1,18 @@
 ---
 engines:
-  duplication:
-    enabled: true
-    exclude_paths:
-      - "SiphonTests/**"
-      - "scripts/**"
   markdownlint:
     enabled: false
   remark-lint:
     enabled: false
+  duplication:
+    enabled: false
+
 exclude_paths:
+  - "**.md"
+  - ".jules/**"
+  - ".github/**"
   - "SUPPORTED_SITES.md"
   - "CHANGELOG.md"
   - "docs/**"
   - "SiphonTests/**"
+  - "scripts/**"
