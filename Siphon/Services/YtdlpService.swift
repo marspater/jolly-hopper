@@ -536,6 +536,7 @@ class YtdlpService: ObservableObject {
                     "--no-warnings"
                 ]
                 appendSiteSpecificArgs(for: btvMedia.embedURL, to: &btvArgs)
+                btvArgs.append("--")
                 btvArgs.append(btvMedia.streamURL)
                 
                 if let output = try? await runCommand(btvArgs),
@@ -605,6 +606,7 @@ class YtdlpService: ObservableObject {
         }
 
         appendSiteSpecificArgs(for: url, to: &args)
+        args.append("--")
         args.append(url)
 
         defer {
@@ -657,6 +659,7 @@ class YtdlpService: ObservableObject {
         }
 
         args.append(contentsOf: ["--extractor-args", "generic:impersonate"])
+        args.append("--")
         args.append(url)
 
         defer {
@@ -720,6 +723,7 @@ class YtdlpService: ObservableObject {
         }
 
         args.append(contentsOf: ["--extractor-args", "generic:impersonate"])
+        args.append("--")
         args.append(url)
 
         defer {
@@ -881,6 +885,7 @@ class YtdlpService: ObservableObject {
         args.append("--progress-template")
         args.append("%(progress._percent_str)s %(progress._speed_str)s %(progress._eta_str)s")
         
+        args.append("--")
         args.append(targetURL)
         
         let sanitizedCommand = LoggerService.sanitizeCommandForLog(args)
@@ -1253,6 +1258,7 @@ class YtdlpService: ObservableObject {
                     args.append(contentsOf: ["--cookies-from-browser", browserName])
                 }
                 appendSiteSpecificArgs(for: targetUrl, to: &args)
+                args.append("--")
                 args.append(targetUrl)
                 
                 var dumpOutput: String? = nil
@@ -1389,6 +1395,7 @@ class YtdlpService: ObservableObject {
                     embedArgs.append(contentsOf: ["--cookies-from-browser", browserName])
                 }
                 appendSiteSpecificArgs(for: embed, to: &embedArgs)
+                embedArgs.append("--")
                 embedArgs.append(embed)
                 
                 var embedDump: String? = nil
@@ -1727,7 +1734,7 @@ class YtdlpService: ObservableObject {
             try? FileManager.default.removeItem(atPath: cookiePath)
         }
 
-        let ytdlpArgs = [path, "--ignore-config", "--cookies-from-browser", browser, "--cookies", cookiePath, "--skip-download", url]
+        let ytdlpArgs = [path, "--ignore-config", "--cookies-from-browser", browser, "--cookies", cookiePath, "--skip-download", "--", url]
         
         // This will create the cookies file, even if it eventually fails with "Unsupported URL"
         _ = try? await runCommand(ytdlpArgs)

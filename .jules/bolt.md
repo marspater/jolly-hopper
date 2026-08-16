@@ -22,3 +22,6 @@
 ## 2026-08-15 - Avoiding Intermediate String Allocations
 **Learning:** `components(separatedBy:)` on `String` allocates multiple intermediate string objects which can be expensive inside heavy parsing loops. Converting to `Data` and using `split(separator:)` with bytes bypasses intermediate String allocations and speeds up execution significantly.
 **Action:** When parsing large string outputs line-by-line in Swift, especially before JSON decoding, use `output.data(using: .utf8)?.split(separator: UInt8(ascii: "\n"))` instead of `.components(separatedBy: "\n")`.
+## 2025-05-15 - Securing External Command Arguments
+**Learning:** Argument injection is a critical vulnerability when executing external commands via `Process`. Appending user-controlled inputs (like URLs) directly to argument arrays allows attackers to inject options (e.g., `--exec`) that are interpreted by the binary.
+**Action:** Always insert `--` before user-controlled inputs in argument arrays passed to external binaries to force them to be parsed as positional arguments, not options.
