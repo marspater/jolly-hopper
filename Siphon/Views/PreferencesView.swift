@@ -320,7 +320,7 @@ struct PreferencesView: View {
                     Text(languageService.s("app_updates"))
                     if let latestVersion = updateChecker.latestVersion {
                         Text("\(languageService.s("latest")): \(latestVersion)")
-                            .font(.caption)
+                            .font(.geistMono(11, weight: .medium))
                             .foregroundColor(updateChecker.hasUpdate ? .orange : .green)
                     }
                 }
@@ -332,7 +332,7 @@ struct PreferencesView: View {
                     updateAvailableView
                 } else if updateChecker.showUpToDateMessage {
                     Text(languageService.s("app_up_to_date"))
-                        .font(.caption)
+                        .font(.geist(11))
                         .foregroundColor(.green)
                 } else {
                     Button(languageService.s("check_updates")) {
@@ -352,16 +352,16 @@ struct PreferencesView: View {
                     ProgressView(value: max(0, min(1, updateChecker.updateProgress)))
                         .controlSize(.small)
                     Text(languageService.s("downloading_update"))
-                        .font(.caption)
+                        .font(.geist(11))
                 }
                 .frame(width: 200)
             } else if updateChecker.isInstalling {
                 Text(languageService.s("installing_update"))
-                    .font(.caption)
+                    .font(.geist(11))
                     .foregroundColor(.orange)
             } else if updateChecker.needsRestart {
                 Text("✅ \(languageService.s("update_ready_title"))")
-                    .font(.caption)
+                    .font(.geist(11))
                     .foregroundColor(.green)
             } else {
                 Button(languageService.s("update_now")) {
@@ -400,7 +400,7 @@ struct PreferencesView: View {
                             Text(preset.title(lang: languageService))
                                 .fontWeight(.medium)
                             Text(preset.description(lang: languageService))
-                                .font(.caption)
+                                .font(.geist(11))
                                 .foregroundColor(.secondary)
                         }
                         Spacer()
@@ -424,7 +424,7 @@ struct PreferencesView: View {
             if customPresets.isEmpty {
                 Text(languageService.s("no_custom_presets"))
                     .foregroundColor(.secondary)
-                    .font(.caption)
+                    .font(.geist(11))
             } else {
                 ForEach(customPresets) { preset in
                     customPresetRow(preset)
@@ -449,13 +449,13 @@ struct PreferencesView: View {
             } label: {
                 HStack {
                     Image(systemName: selectedCustomPresetIdString == preset.id.uuidString ? "largecircle.fill.circle" : "circle")
-                        .foregroundColor(selectedCustomPresetIdString == preset.id.uuidString ? .accentColor : .secondary)
+                        .foregroundColor(selectedCustomPresetIdString == preset.id.uuidString ? SiphonTheme.accent : .secondary)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(preset.name)
                             .fontWeight(.medium)
                             .foregroundColor(.primary)
                         Text("\(preset.videoCodec.title(lang: languageService)) + \(preset.audioCodec.title(lang: languageService)) • \(preset.videoResolution.title(lang: languageService))\(preset.downloadSubtitles == true ? " • CC: \(preset.subtitleLanguage ?? "")" : "")\(preset.splitChapters == true ? " • 📑" : "")\(preset.sponsorBlock == true ? " • 🚫" : "")")
-                            .font(.caption)
+                            .font(.geist(11))
                             .foregroundColor(.secondary)
                     }
                 }
@@ -534,7 +534,7 @@ struct PreferencesView: View {
             }
             
             Text(languageService.s("codec_fallback_note"))
-                .font(.caption)
+                .font(.geist(11))
                 .foregroundColor(.secondary)
         }
     }
@@ -564,7 +564,7 @@ struct PreferencesView: View {
                 Text("50 MB/s (51200 KB/s)").tag(51200)
             }
             Text(languageService.s("speed_limiter_desc"))
-                .font(.caption)
+                .font(.geist(11))
                 .foregroundColor(.secondary)
         }
     }
@@ -572,7 +572,7 @@ struct PreferencesView: View {
     private var createPresetSheet: some View {
         VStack(spacing: 16) {
             Text(editingPreset == nil ? languageService.s("create_preset") : languageService.s("edit_preset"))
-                .font(.headline)
+                .font(.geist(15, weight: .bold))
             
             TextField(languageService.s("preset_name"), text: $newPresetName)
                 .textFieldStyle(.roundedBorder)
@@ -641,9 +641,9 @@ struct PreferencesView: View {
             if presetVideoCodec == .h264 {
                 HStack {
                     Image(systemName: "info.circle.fill")
-                        .foregroundColor(.blue)
+                        .foregroundColor(SiphonTheme.accent)
                     Text(languageService.s("h264_preset_info"))
-                        .font(.caption)
+                        .font(.geist(11))
                         .foregroundColor(.secondary)
                 }
             }
@@ -669,7 +669,7 @@ struct PreferencesView: View {
                 
                 VStack(alignment: .leading, spacing: 4) {
                     Text(languageService.s("languages"))
-                        .font(.caption)
+                        .font(.geist(11))
                         .foregroundColor(.secondary)
                     
                     TextField(languageService.s("subtitle_lang_hint"), text: Binding(
@@ -819,7 +819,7 @@ struct PreferencesView: View {
                     Text("Application & Download Logs")
                         .fontWeight(.medium)
                     Text("View or export debug logs to report issues.")
-                        .font(.caption)
+                        .font(.geist(11))
                         .foregroundColor(.secondary)
                 }
                 Spacer()
@@ -834,7 +834,7 @@ struct PreferencesView: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Text("Debug Logs")
-                    .font(.headline)
+                    .font(.geist(15, weight: .bold))
                 Spacer()
                 Button("Close") {
                     showDebugLogsSheet = false
@@ -877,7 +877,7 @@ struct PreferencesView: View {
                         .fontWeight(.medium)
                     if let version = downloadManager.ytdlpVersion {
                         Text("\(languageService.s("version")): \(version)")
-                            .font(.caption)
+                            .font(.geistMono(11, weight: .medium))
                             .foregroundColor(.secondary)
                     }
                 }
@@ -887,12 +887,12 @@ struct PreferencesView: View {
                         ProgressView(value: max(0, min(1, downloadManager.ytdlpUpdateProgress)))
                             .frame(width: 120)
                         Text("\(Int(downloadManager.ytdlpUpdateProgress * 100))%")
-                            .font(.caption2)
+                            .font(.geistMono(10, weight: .semibold))
                             .foregroundColor(.secondary)
                     }
                 } else if let message = downloadManager.ytdlpUpdateMessage?.message {
                     Text(message)
-                        .font(.caption)
+                        .font(.geist(11))
                         .foregroundColor(.secondary)
                         .lineLimit(2)
                 } else {
@@ -916,7 +916,7 @@ struct PreferencesView: View {
                 .labelsHidden()
                 
                 Text(languageService.s("browser_hint"))
-                    .font(.caption)
+                    .font(.geist(11))
                     .foregroundColor(.secondary)
                 
                 if browserForCookies == "safari" {
@@ -939,13 +939,12 @@ struct PreferencesView: View {
                     Image(systemName: "checkmark.seal.fill")
                         .foregroundColor(.green)
                     Text("Full Disk Access: Granted")
-                        .font(.caption)
-                        .fontWeight(.semibold)
+                        .font(.geist(11, weight: .semibold))
                         .foregroundColor(.green)
                 }
             } else {
                 Text(languageService.s("safari_warning"))
-                    .font(.caption)
+                    .font(.geist(11))
                     .foregroundColor(.orange)
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -1098,11 +1097,11 @@ struct PreferencesView: View {
                             .cornerRadius(8)
                     }
                 }
-                .font(.caption)
+                .font(.geist(11, weight: .medium))
                 .padding(.top, 4)
 
                 Text("© 2026 marspater • All rights reserved")
-                    .font(.caption2)
+                    .font(.geist(10))
                     .foregroundColor(.secondary)
                     .padding(.bottom, 12)
             }

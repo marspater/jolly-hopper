@@ -677,7 +677,7 @@ struct AddDownloadView: View {
                                     VStack(alignment: .leading) {
                                         Text(preset.title(lang: languageService))
                                         Text(preset.description(lang: languageService))
-                                            .font(.caption)
+                                            .font(.geist(11))
                                             .foregroundColor(.secondary)
                                     }
                                     if selectedPreset == preset.rawValue {
@@ -719,7 +719,7 @@ struct AddDownloadView: View {
                             Text(languageService.s("quick_presets"))
                         }
                     }
-                    .font(.caption)
+                    .font(.geist(12, weight: .medium))
                 }
                 .menuStyle(.borderlessButton)
             }

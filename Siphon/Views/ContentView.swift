@@ -399,11 +399,11 @@ struct StatCard: View {
             .padding(.vertical, 8)
             .padding(.horizontal, 6)
             .background(
-                SiphonTheme.cardBackground(cornerRadius: 14, isHovered: isHovered)
+                SiphonTheme.cardBackground(cornerRadius: SiphonTheme.radiusCard, isHovered: isHovered)
             )
-            .cornerRadius(14)
+            .cornerRadius(SiphonTheme.radiusCard)
             .overlay(
-                SiphonTheme.cardBorder(cornerRadius: 14, isHovered: isHovered)
+                SiphonTheme.cardBorder(cornerRadius: SiphonTheme.radiusCard, isHovered: isHovered)
             )
             .shadow(color: Color.black.opacity(isHovered ? 0.08 : 0.03), radius: isHovered ? 8 : 3, x: 0, y: 2)
             .scaleEffect(isHovered ? 1.02 : 1.0)

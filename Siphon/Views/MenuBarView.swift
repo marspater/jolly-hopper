@@ -77,11 +77,11 @@ struct MenuBarView: View {
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
         .background(
-            SiphonTheme.cardBackground(cornerRadius: 10)
+            SiphonTheme.cardBackground(cornerRadius: SiphonTheme.radiusControl)
         )
-        .cornerRadius(10)
+        .cornerRadius(SiphonTheme.radiusControl)
         .overlay(
-            SiphonTheme.cardBorder(cornerRadius: 10)
+            SiphonTheme.cardBorder(cornerRadius: SiphonTheme.radiusControl)
         )
     }
     
@@ -183,11 +183,11 @@ struct MenuBarView: View {
         }
         .padding(10)
         .background(
-            SiphonTheme.cardBackground(cornerRadius: 10)
+            SiphonTheme.cardBackground(cornerRadius: SiphonTheme.radiusCard)
         )
-        .cornerRadius(10)
+        .cornerRadius(SiphonTheme.radiusCard)
         .overlay(
-            SiphonTheme.cardBorder(cornerRadius: 10)
+            SiphonTheme.cardBorder(cornerRadius: SiphonTheme.radiusCard)
         )
     }
     
