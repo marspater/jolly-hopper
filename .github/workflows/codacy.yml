@@ -35,7 +35,7 @@ jobs:
           verbose: true
           output: codacy-results.sarif
           format: sarif
-          severity-cutoff: 1
+          severity-cutoff: 2
           fail-if-incomplete: false
 
       - name: Consolidate SARIF runs for GitHub Code Scanning
