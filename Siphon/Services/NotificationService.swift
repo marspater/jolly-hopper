@@ -1,5 +1,5 @@
 import Foundation
-import UserNotifications
+@preconcurrency import UserNotifications
 import AppKit
 
 final class NotificationService: NSObject, @unchecked Sendable, UNUserNotificationCenterDelegate {
@@ -83,7 +83,8 @@ final class NotificationService: NSObject, @unchecked Sendable, UNUserNotificati
             switch settings.authorizationStatus {
             case .notDetermined:
                 self.logMessage("Notification permission not determined. Requesting permission now...", level: .info)
-                center.requestAuthorization(options: [.alert, .sound, .badge]) { granted, error in
+                center.requestAuthorization(options: [.alert, .sound, .badge]) { [weak self] granted, error in
+                    guard let self = self else { return }
                     if granted {
                         self.logMessage("Notification permission granted upon request. Posting notification...", level: .info)
                         self.postNotificationRequest(center: center, content: content, identifier: identifier, logName: logName)
