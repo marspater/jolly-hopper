@@ -131,7 +131,7 @@ struct PreferencesView: View {
         }
         .padding(.horizontal, 16)
         .padding(.bottom, 16)
-        .frame(minWidth: 460, idealWidth: 480, maxWidth: 560, minHeight: 450, idealHeight: 490, maxHeight: 650)
+        .frame(minWidth: 500, idealWidth: 520, maxWidth: 600, minHeight: 460, idealHeight: 500, maxHeight: 650)
         .preferredColorScheme(theme == "light" ? .light : (theme == "dark" ? .dark : nil))
         .accentColor(SiphonTheme.accent)
         .background(PreferencesWindowConfigurator())
@@ -175,9 +175,11 @@ struct PreferencesView: View {
                     .font(.system(size: 12, weight: .semibold))
                 Text(title)
                     .font(.geist(12, weight: .semibold))
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
             }
             .foregroundColor(selectedTab == tab ? .white : .secondary)
-            .padding(.horizontal, 16)
+            .padding(.horizontal, 12)
             .padding(.vertical, 7)
             .background {
                 if selectedTab == tab {
