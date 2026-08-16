@@ -98,7 +98,16 @@ struct PreferencesView: View {
                 tabSegment(.about, title: languageService.s("about"), icon: "info.circle.fill")
             }
             .padding(4)
-            .background(Color.primary.opacity(0.06))
+            .background(
+                ZStack {
+                    #if os(macOS)
+                    Capsule()
+                        .fill(Color(nsColor: .controlBackgroundColor).opacity(0.75))
+                    #endif
+                    Capsule()
+                        .fill(Color.primary.opacity(0.04))
+                }
+            )
             .clipShape(Capsule())
             .overlay(
                 Capsule()
@@ -177,18 +186,9 @@ struct PreferencesView: View {
             .background {
                 if selectedTab == tab {
                     Capsule()
-                        .fill(
-                            LinearGradient(
-                                colors: [
-                                    Color(.displayP3, red: 0.15, green: 0.55, blue: 1.0, opacity: 0.95),
-                                    Color(.displayP3, red: 0.55, green: 0.25, blue: 0.95, opacity: 0.95)
-                                ],
-                                startPoint: .leading,
-                                endPoint: .trailing
-                            )
-                        )
+                        .fill(SiphonTheme.primaryGradient)
                         .matchedGeometryEffect(id: "activeTabBubble", in: tabNamespace)
-                        .shadow(color: Color(.displayP3, red: 0.2, green: 0.4, blue: 1.0, opacity: 0.45), radius: 8, y: 2)
+                        .shadow(color: SiphonTheme.accent.opacity(0.35), radius: 8, y: 2)
                 }
             }
         }
@@ -252,7 +252,7 @@ struct PreferencesView: View {
             HStack(spacing: 12) {
                 HStack(spacing: 8) {
                     Image(systemName: "folder.fill")
-                        .foregroundColor(Color(.displayP3, red: 0.15, green: 0.55, blue: 1.0))
+                        .foregroundColor(SiphonTheme.accent)
                         .font(.system(size: 14))
 
                     Text(defaultSaveFolder.isEmpty ? "~/Downloads" : defaultSaveFolder)
@@ -278,11 +278,12 @@ struct PreferencesView: View {
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
-                .background(Color.primary.opacity(0.05))
+                .background(
+                    SiphonTheme.cardBackground(cornerRadius: 10)
+                )
                 .cornerRadius(10)
                 .overlay(
-                    RoundedRectangle(cornerRadius: 10)
-                        .stroke(Color.primary.opacity(0.1), lineWidth: 1)
+                    SiphonTheme.cardBorder(cornerRadius: 10)
                 )
 
                 Button {
@@ -293,11 +294,20 @@ struct PreferencesView: View {
                         Text(languageService.s("select"))
                     }
                     .font(.system(size: 12, weight: .semibold))
-                    .padding(.horizontal, 12)
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 14)
                     .padding(.vertical, 6)
+                    .background(
+                        SiphonTheme.primaryGradient
+                    )
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8)
+                            .stroke(Color.white.opacity(0.25), lineWidth: 1)
+                    )
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(Color(.displayP3, red: 0.15, green: 0.55, blue: 1.0))
+                .buttonStyle(.plain)
+                .shadow(color: SiphonTheme.accent.opacity(0.25), radius: 6, y: 2)
             }
             .padding(.vertical, 2)
         }

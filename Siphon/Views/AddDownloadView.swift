@@ -505,8 +505,13 @@ struct AddDownloadView: View {
             Spacer()
         }
         .padding()
-        .background(Color.gray.opacity(0.1))
+        .background(
+            SiphonTheme.cardBackground(cornerRadius: 12)
+        )
         .cornerRadius(12)
+        .overlay(
+            SiphonTheme.cardBorder(cornerRadius: 12)
+        )
     }
 
     private var playlistDetectedBanner: some View {
@@ -523,8 +528,12 @@ struct AddDownloadView: View {
             }
         }
         .padding()
-        .background(Color.blue.opacity(0.1))
+        .background(SiphonTheme.accent.opacity(0.12))
         .cornerRadius(12)
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(SiphonTheme.accent.opacity(0.25), lineWidth: 1)
+        )
     }
 
     private var playlistSelectorSection: some View {

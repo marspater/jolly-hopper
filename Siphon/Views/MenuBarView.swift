@@ -76,11 +76,12 @@ struct MenuBarView: View {
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
-        .background(Color.primary.opacity(0.05))
+        .background(
+            SiphonTheme.cardBackground(cornerRadius: 10)
+        )
         .cornerRadius(10)
         .overlay(
-            RoundedRectangle(cornerRadius: 10)
-                .stroke(Color.primary.opacity(0.1), lineWidth: 1)
+            SiphonTheme.cardBorder(cornerRadius: 10)
         )
     }
     
@@ -136,11 +137,12 @@ struct MenuBarView: View {
             }
         }
         .padding(10)
-        .background(Color.primary.opacity(0.04))
+        .background(
+            SiphonTheme.cardBackground(cornerRadius: 10)
+        )
         .cornerRadius(10)
         .overlay(
-            RoundedRectangle(cornerRadius: 10)
-                .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+            SiphonTheme.cardBorder(cornerRadius: 10)
         )
     }
     
@@ -259,14 +261,15 @@ struct MenuBarView: View {
                 }
                 .lineLimit(1)
                 .fixedSize(horizontal: true, vertical: false)
-                .foregroundColor(.secondary)
-                .padding(.horizontal, 9)
+                .foregroundColor(.primary)
+                .padding(.horizontal, 10)
                 .frame(height: 28)
-                .background(Color.primary.opacity(0.06))
+                .background(
+                    SiphonTheme.pillBackground(isSelected: false)
+                )
                 .clipShape(Capsule())
                 .overlay(
-                    Capsule()
-                        .stroke(Color.primary.opacity(0.12), lineWidth: 1)
+                    SiphonTheme.pillBorder(isSelected: false)
                 )
             }
             .buttonStyle(.plain)
@@ -287,14 +290,14 @@ struct MenuBarView: View {
                 }
                 .lineLimit(1)
                 .fixedSize(horizontal: true, vertical: false)
-                .foregroundColor(.accentColor)
-                .padding(.horizontal, 9)
+                .foregroundColor(SiphonTheme.downloading)
+                .padding(.horizontal, 10)
                 .frame(height: 28)
-                .background(Color.accentColor.opacity(0.12))
+                .background(SiphonTheme.downloading.opacity(0.14))
                 .clipShape(Capsule())
                 .overlay(
                     Capsule()
-                        .stroke(Color.accentColor.opacity(0.25), lineWidth: 1)
+                        .stroke(SiphonTheme.downloading.opacity(0.28), lineWidth: 1)
                 )
             }
             
@@ -312,14 +315,14 @@ struct MenuBarView: View {
                 }
                 .lineLimit(1)
                 .fixedSize(horizontal: true, vertical: false)
-                .foregroundColor(.red)
+                .foregroundColor(SiphonTheme.failed)
                 .padding(.horizontal, 10)
                 .frame(height: 28)
-                .background(Color.red.opacity(0.12))
+                .background(SiphonTheme.failed.opacity(0.12))
                 .clipShape(Capsule())
                 .overlay(
                     Capsule()
-                        .stroke(Color.red.opacity(0.25), lineWidth: 1)
+                        .stroke(SiphonTheme.failed.opacity(0.25), lineWidth: 1)
                 )
             }
             .buttonStyle(.plain)
