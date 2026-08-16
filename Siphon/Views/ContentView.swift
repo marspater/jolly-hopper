@@ -63,6 +63,9 @@ struct ContentView: View {
                 .onChange(of: languageService.selectedLanguage) { _, _ in
                     MenuBarManager.shared.updateMenu()
                 }
+                .onChange(of: theme) { _, _ in
+                    MenuBarManager.shared.updateMenu()
+                }
                 .onChange(of: showMenuBarIcon) { _, newValue in
                     MenuBarManager.shared.setVisible(newValue)
                 }

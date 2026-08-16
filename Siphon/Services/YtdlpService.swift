@@ -1321,7 +1321,7 @@ class YtdlpService: ObservableObject {
                 .replacingOccurrences(of: "(?i) \\| BoyFriendTV", with: "", options: .regularExpression)
                 .trimmingCharacters(in: .whitespacesAndNewlines)
             if !rawTitle.isEmpty {
-                title = rawTitle
+                title = rawTitle.decodingHTMLEntities()
             }
         }
         

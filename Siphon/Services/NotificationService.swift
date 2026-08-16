@@ -115,41 +115,45 @@ final class NotificationService: NSObject, @unchecked Sendable, UNUserNotificati
 
     func sendDownloadCompleted(filename: String, languageService: LanguageService? = nil) {
         Task { @MainActor in
+            let cleanFilename = filename.decodingHTMLEntities()
             let lang = languageService ?? LanguageService()
             let content = UNMutableNotificationContent()
             content.title = lang.s("download_completed_title")
-            content.body = String(format: lang.s("download_completed_body"), filename)
+            content.body = String(format: lang.s("download_completed_body"), cleanFilename)
             content.categoryIdentifier = "download"
-            self.sendNotification(content: content, logName: "Completed: \(filename)")
+            self.sendNotification(content: content, logName: "Completed: \(cleanFilename)")
         }
     }
 
     func sendEncodingCompleted(filename: String, codec: String, languageService: LanguageService? = nil) {
+        let cleanFilename = filename.decodingHTMLEntities()
         let content = UNMutableNotificationContent()
         content.title = "⚡ Video Conversion Complete"
-        content.body = "\(filename) was successfully converted to \(codec) codec."
-        sendNotification(content: content, logName: "Conversion: \(filename)")
+        content.body = "\(cleanFilename) was successfully converted to \(codec) codec."
+        sendNotification(content: content, logName: "Conversion: \(cleanFilename)")
     }
 
     func sendDownloadFailed(filename: String, languageService: LanguageService? = nil) {
         Task { @MainActor in
+            let cleanFilename = filename.decodingHTMLEntities()
             let lang = languageService ?? LanguageService()
             let content = UNMutableNotificationContent()
             content.title = lang.s("download_failed_title")
-            content.body = String(format: lang.s("download_failed_body"), filename)
+            content.body = String(format: lang.s("download_failed_body"), cleanFilename)
             content.categoryIdentifier = "download"
-            self.sendNotification(content: content, logName: "Failed: \(filename)")
+            self.sendNotification(content: content, logName: "Failed: \(cleanFilename)")
         }
     }
 
     func sendDownloadStopped(filename: String, languageService: LanguageService? = nil) {
         Task { @MainActor in
+            let cleanFilename = filename.decodingHTMLEntities()
             let lang = languageService ?? LanguageService()
             let content = UNMutableNotificationContent()
             content.title = lang.s("download_stopped_title")
-            content.body = String(format: lang.s("download_stopped_body"), filename)
+            content.body = String(format: lang.s("download_stopped_body"), cleanFilename)
             content.categoryIdentifier = "download"
-            self.sendNotification(content: content, logName: "Stopped: \(filename)")
+            self.sendNotification(content: content, logName: "Stopped: \(cleanFilename)")
         }
     }
 
