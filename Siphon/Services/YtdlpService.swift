@@ -605,6 +605,7 @@ class YtdlpService: ObservableObject {
         }
 
         appendSiteSpecificArgs(for: url, to: &args)
+        args.append("--")
         args.append(url)
 
         defer {
@@ -657,6 +658,7 @@ class YtdlpService: ObservableObject {
         }
 
         args.append(contentsOf: ["--extractor-args", "generic:impersonate"])
+        args.append("--")
         args.append(url)
 
         defer {
@@ -720,6 +722,7 @@ class YtdlpService: ObservableObject {
         }
 
         args.append(contentsOf: ["--extractor-args", "generic:impersonate"])
+        args.append("--")
         args.append(url)
 
         defer {
@@ -881,6 +884,7 @@ class YtdlpService: ObservableObject {
         args.append("--progress-template")
         args.append("%(progress._percent_str)s %(progress._speed_str)s %(progress._eta_str)s")
         
+        args.append("--")
         args.append(targetURL)
         
         let sanitizedCommand = LoggerService.sanitizeCommandForLog(args)
@@ -1253,6 +1257,7 @@ class YtdlpService: ObservableObject {
                     args.append(contentsOf: ["--cookies-from-browser", browserName])
                 }
                 appendSiteSpecificArgs(for: targetUrl, to: &args)
+                args.append("--")
                 args.append(targetUrl)
                 
                 var dumpOutput: String? = nil
