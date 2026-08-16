@@ -72,15 +72,6 @@ struct SiphonApp: App {
                 .disabled(downloadManager.isUpdatingYtdlp)
             }
         }
-        
-        #if os(macOS)
-        Settings {
-            PreferencesView()
-                .environmentObject(downloadManager)
-                .environmentObject(languageService)
-                .environmentObject(updateChecker)
-        }
-        #endif
     }
     
     private func setupMenuBarIfNeeded() {
