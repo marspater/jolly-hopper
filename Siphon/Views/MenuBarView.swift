@@ -1,5 +1,6 @@
 import SwiftUI
 
+@available(macOS 12.0, *)
 struct MenuBarView: View {
     @EnvironmentObject var downloadManager: DownloadManager
     @EnvironmentObject var languageService: LanguageService
@@ -34,9 +35,16 @@ struct MenuBarView: View {
         .onAppear {
             customPresets = CustomPreset.loadAll()
         }
+        #if swift(>=5.9)
         .onChange(of: customPresetsData) { _, _ in
             customPresets = CustomPreset.loadAll()
         }
+#else
+        .onChange(of: customPresetsData) { _ in
+            customPresets = CustomPreset.loadAll()
+        }
+#endif
+        #if swift(>=5.9)
         .onChange(of: selectedType) { _, newValue in
             if newValue == "audio" {
                 selectedPreset = "audio_only"
@@ -44,6 +52,15 @@ struct MenuBarView: View {
                 selectedPreset = "best_quality"
             }
         }
+#else
+        .onChange(of: selectedType) { newValue in
+            if newValue == "audio" {
+                selectedPreset = "audio_only"
+            } else {
+                selectedPreset = "best_quality"
+            }
+        }
+#endif
     }
     
     private var urlInput: some View {
@@ -161,7 +178,9 @@ struct MenuBarView: View {
                 Picker("", selection: $selectedPreset) {
                     Section(languageService.s("standard")) {
                         ForEach(DownloadPreset.allCases) { preset in
-                            if (selectedType == "video" && preset != .audioOnly) || (selectedType == "audio" && preset == .audioOnly) {
+                            let isVideoMatch = selectedType == "video" && preset != .audioOnly
+                            let isAudioMatch = selectedType == "audio" && preset == .audioOnly
+                            if isVideoMatch || isAudioMatch {
                                 Text(preset.title(lang: languageService)).tag(preset.rawValue)
                             }
                         }

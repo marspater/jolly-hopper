@@ -20,6 +20,7 @@ struct PreferencesWindowConfigurator: NSViewRepresentable {
     func updateNSView(_ nsView: NSView, context: Context) {}
 }
 
+@available(macOS 12.0, *)
 struct PreferencesView: View {
     @AppStorage(UserDefaultsKeys.theme) private var theme: String = "system"
     @AppStorage(UserDefaultsKeys.defaultSaveFolder) private var defaultSaveFolder: String = ""
