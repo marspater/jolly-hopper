@@ -98,11 +98,15 @@ struct PreferencesView: View {
                 tabSegment(.about, title: languageService.s("about"), icon: "info.circle.fill")
             }
             .padding(4)
-            .background(Color.primary.opacity(0.06))
+            .background(
+                Capsule()
+                    .fill(Color.primary.opacity(0.04))
+                    .background(Capsule().fill(.ultraThinMaterial))
+            )
             .clipShape(Capsule())
             .overlay(
                 Capsule()
-                    .stroke(Color.primary.opacity(0.12), lineWidth: 1)
+                    .stroke(Color.primary.opacity(0.08), lineWidth: 1)
             )
             .padding(.top, 14)
             .padding(.bottom, 12)
@@ -127,12 +131,11 @@ struct PreferencesView: View {
         }
         .padding(.horizontal, 16)
         .padding(.bottom, 16)
-        .frame(minWidth: 620, idealWidth: 680, minHeight: 520, idealHeight: 600)
+        .frame(minWidth: 520, idealWidth: 680, maxWidth: .infinity, minHeight: 420, idealHeight: 580, maxHeight: .infinity)
+        .preferredColorScheme(theme == "light" ? .light : (theme == "dark" ? .dark : nil))
+        .accentColor(SiphonTheme.accent)
         .background(PreferencesWindowConfigurator())
         .background(.ultraThinMaterial)
-        .onChange(of: theme) { _, newValue in
-            applyTheme(newValue)
-        }
         .onChange(of: languageService.selectedLanguage) { _, newValue in
             if previousLanguage != nil && previousLanguage != newValue {
                 showLanguageChangeAlert = true
@@ -140,7 +143,6 @@ struct PreferencesView: View {
             previousLanguage = newValue
         }
         .onAppear {
-            applyTheme(theme)
             previousLanguage = languageService.selectedLanguage
             installedBrowsers = BrowserUtils.shared.getInstalledBrowsers()
             customPresets = CustomPreset.loadAll()
@@ -180,48 +182,15 @@ struct PreferencesView: View {
             .background {
                 if selectedTab == tab {
                     Capsule()
-                        .fill(
-                            LinearGradient(
-                                colors: [
-                                    Color(.displayP3, red: 0.15, green: 0.55, blue: 1.0, opacity: 0.95),
-                                    Color(.displayP3, red: 0.55, green: 0.25, blue: 0.95, opacity: 0.95)
-                                ],
-                                startPoint: .leading,
-                                endPoint: .trailing
-                            )
-                        )
+                        .fill(SiphonTheme.primaryGradient)
                         .matchedGeometryEffect(id: "activeTabBubble", in: tabNamespace)
-                        .shadow(color: Color(.displayP3, red: 0.2, green: 0.4, blue: 1.0, opacity: 0.45), radius: 8, y: 2)
+                        .shadow(color: SiphonTheme.accent.opacity(0.35), radius: 8, y: 2)
                 }
             }
         }
         .buttonStyle(.plain)
     }
 
-    
-    static func applyTheme(_ theme: String) {
-        guard let app = NSApp else { return }
-        switch theme {
-        case "light":
-            app.appearance = NSAppearance(named: .aqua)
-        case "dark":
-            app.appearance = NSAppearance(named: .darkAqua)
-        default:
-            app.appearance = nil
-        }
-    }
-
-    static func applyStoredTheme() {
-        let theme = UserDefaults.standard.string(forKey: UserDefaultsKeys.theme) ?? "system"
-        applyTheme(theme)
-    }
-
-    private func applyTheme(_ theme: String) {
-        Self.applyTheme(theme)
-    }
-    
-
-    
     private var generalTab: some View {
         Form {
             themeSection
@@ -244,7 +213,7 @@ struct PreferencesView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Toggle(languageService.s("start_in_background"), isOn: $startInBackground)
                     Text(languageService.s("start_in_background_desc"))
-                        .font(.caption)
+                        .font(.geist(11))
                         .foregroundColor(.secondary)
                 }
                 .padding(.leading, 20)
@@ -271,6 +240,8 @@ struct PreferencesView: View {
                 Text(languageService.s("dark")).tag("dark")
             }
             .pickerStyle(.segmented)
+            .tint(SiphonTheme.accent)
+            .accentColor(SiphonTheme.accent)
         }
     }
 
@@ -279,11 +250,11 @@ struct PreferencesView: View {
             HStack(spacing: 12) {
                 HStack(spacing: 8) {
                     Image(systemName: "folder.fill")
-                        .foregroundColor(Color(.displayP3, red: 0.15, green: 0.55, blue: 1.0))
+                        .foregroundColor(SiphonTheme.accent)
                         .font(.system(size: 14))
 
                     Text(defaultSaveFolder.isEmpty ? "~/Downloads" : defaultSaveFolder)
-                        .font(.system(size: 12, weight: .medium, design: .monospaced))
+                        .font(.geistMono(12, weight: .medium))
                         .foregroundColor(.primary)
                         .lineLimit(1)
                         .truncationMode(.middle)
@@ -305,11 +276,12 @@ struct PreferencesView: View {
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
-                .background(Color.primary.opacity(0.05))
+                .background(
+                    SiphonTheme.cardBackground(cornerRadius: 10)
+                )
                 .cornerRadius(10)
                 .overlay(
-                    RoundedRectangle(cornerRadius: 10)
-                        .stroke(Color.primary.opacity(0.1), lineWidth: 1)
+                    SiphonTheme.cardBorder(cornerRadius: 10)
                 )
 
                 Button {
@@ -320,11 +292,20 @@ struct PreferencesView: View {
                         Text(languageService.s("select"))
                     }
                     .font(.system(size: 12, weight: .semibold))
-                    .padding(.horizontal, 12)
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 14)
                     .padding(.vertical, 6)
+                    .background(
+                        SiphonTheme.primaryGradient
+                    )
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8)
+                            .stroke(Color.white.opacity(0.25), lineWidth: 1)
+                    )
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(Color(.displayP3, red: 0.15, green: 0.55, blue: 1.0))
+                .buttonStyle(.plain)
+                .shadow(color: SiphonTheme.accent.opacity(0.25), radius: 6, y: 2)
             }
             .padding(.vertical, 2)
         }

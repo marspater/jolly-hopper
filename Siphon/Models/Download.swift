@@ -33,7 +33,7 @@ class Download: ObservableObject, Identifiable {
         self.url = url
         self.createdAt = createdAt
         self.options = options
-        self.title = title
+        self.title = title.decodingHTMLEntities()
         self.status = .queued
         self.progress = 0
     }
@@ -558,6 +558,29 @@ struct MediaInfo: Codable {
     let formatProtocol: String?
     let manifestUrl: String?
     
+    enum CodingKeys: String, CodingKey {
+        case id
+        case title
+        case description
+        case thumbnail
+        case duration
+        case uploader
+        case uploadDate = "upload_date"
+        case viewCount = "view_count"
+        case likeCount = "like_count"
+        case formats
+        case subtitles
+        case automaticCaptions = "automatic_captions"
+        case chapters
+        case playlist
+        case playlistIndex = "playlist_index"
+        case playlistCount = "playlist_count"
+        case webpageUrl = "webpage_url"
+        case originalUrl = "original_url"
+        case formatProtocol = "protocol"
+        case manifestUrl = "manifest_url"
+    }
+
     init(
         id: String,
         title: String,
@@ -581,8 +604,8 @@ struct MediaInfo: Codable {
         manifestUrl: String? = nil
     ) {
         self.id = id
-        self.title = title
-        self.description = description
+        self.title = title.decodingHTMLEntities()
+        self.description = description?.decodingHTMLEntities()
         self.thumbnail = thumbnail
         self.duration = duration
         self.uploader = uploader
@@ -600,6 +623,55 @@ struct MediaInfo: Codable {
         self.originalUrl = originalUrl
         self.formatProtocol = formatProtocol
         self.manifestUrl = manifestUrl
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.id = try container.decodeIfPresent(String.self, forKey: .id) ?? ""
+        let rawTitle = try container.decodeIfPresent(String.self, forKey: .title) ?? ""
+        self.title = rawTitle.decodingHTMLEntities()
+        self.description = (try container.decodeIfPresent(String.self, forKey: .description))?.decodingHTMLEntities()
+        self.thumbnail = try container.decodeIfPresent(String.self, forKey: .thumbnail)
+        self.duration = try container.decodeIfPresent(Double.self, forKey: .duration)
+        self.uploader = try container.decodeIfPresent(String.self, forKey: .uploader)
+        self.uploadDate = try container.decodeIfPresent(String.self, forKey: .uploadDate)
+        self.viewCount = try container.decodeIfPresent(Int.self, forKey: .viewCount)
+        self.likeCount = try container.decodeIfPresent(Int.self, forKey: .likeCount)
+        self.formats = try container.decodeIfPresent([MediaFormat].self, forKey: .formats)
+        self.subtitles = try container.decodeIfPresent([String: [SubtitleInfo]].self, forKey: .subtitles)
+        self.automaticCaptions = try container.decodeIfPresent([String: [SubtitleInfo]].self, forKey: .automaticCaptions)
+        self.chapters = try container.decodeIfPresent([ChapterInfo].self, forKey: .chapters)
+        self.playlist = try container.decodeIfPresent(String.self, forKey: .playlist)
+        self.playlistIndex = try container.decodeIfPresent(Int.self, forKey: .playlistIndex)
+        self.playlistCount = try container.decodeIfPresent(Int.self, forKey: .playlistCount)
+        self.webpageUrl = try container.decodeIfPresent(String.self, forKey: .webpageUrl)
+        self.originalUrl = try container.decodeIfPresent(String.self, forKey: .originalUrl)
+        self.formatProtocol = try container.decodeIfPresent(String.self, forKey: .formatProtocol)
+        self.manifestUrl = try container.decodeIfPresent(String.self, forKey: .manifestUrl)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(title, forKey: .title)
+        try container.encodeIfPresent(description, forKey: .description)
+        try container.encodeIfPresent(thumbnail, forKey: .thumbnail)
+        try container.encodeIfPresent(duration, forKey: .duration)
+        try container.encodeIfPresent(uploader, forKey: .uploader)
+        try container.encodeIfPresent(uploadDate, forKey: .uploadDate)
+        try container.encodeIfPresent(viewCount, forKey: .viewCount)
+        try container.encodeIfPresent(likeCount, forKey: .likeCount)
+        try container.encodeIfPresent(formats, forKey: .formats)
+        try container.encodeIfPresent(subtitles, forKey: .subtitles)
+        try container.encodeIfPresent(automaticCaptions, forKey: .automaticCaptions)
+        try container.encodeIfPresent(chapters, forKey: .chapters)
+        try container.encodeIfPresent(playlist, forKey: .playlist)
+        try container.encodeIfPresent(playlistIndex, forKey: .playlistIndex)
+        try container.encodeIfPresent(playlistCount, forKey: .playlistCount)
+        try container.encodeIfPresent(webpageUrl, forKey: .webpageUrl)
+        try container.encodeIfPresent(originalUrl, forKey: .originalUrl)
+        try container.encodeIfPresent(formatProtocol, forKey: .formatProtocol)
+        try container.encodeIfPresent(manifestUrl, forKey: .manifestUrl)
     }
     
     var durationString: String? {
@@ -759,19 +831,70 @@ struct MediaInfo: Codable {
         }
         return id
     }
-    
-    enum CodingKeys: String, CodingKey {
-        case id, title, description, thumbnail, duration, uploader, formats, subtitles, chapters, playlist
-        case automaticCaptions = "automatic_captions"
-        case uploadDate = "upload_date"
-        case viewCount = "view_count"
-        case likeCount = "like_count"
-        case playlistIndex = "playlist_index"
-        case playlistCount = "playlist_count"
-        case webpageUrl = "webpage_url"
-        case originalUrl = "original_url"
-        case formatProtocol = "protocol"
-        case manifestUrl = "manifest_url"
+}
+
+// MARK: - HTML Entity Decoding Extension
+public extension String {
+    /// Decodes named, decimal (e.g. &#039; or &#39;), and hexadecimal (e.g. &#x27;) HTML entities into plain text.
+    func decodingHTMLEntities() -> String {
+        guard self.contains("&") else { return self }
+
+        var result = self
+
+        // Fast replace common named entities
+        let namedEntities: [(String, String)] = [
+            ("&quot;", "\""),
+            ("&apos;", "'"),
+            ("&amp;", "&"),
+            ("&lt;", "<"),
+            ("&gt;", ">"),
+            ("&nbsp;", " "),
+            ("&copy;", "©"),
+            ("&reg;", "®"),
+            ("&trade;", "™"),
+            ("&mdash;", "—"),
+            ("&ndash;", "–"),
+            ("&hellip;", "…"),
+            ("&lsquo;", "‘"),
+            ("&rsquo;", "’"),
+            ("&ldquo;", "“"),
+            ("&rdquo;", "”"),
+            ("&bull;", "•")
+        ]
+
+        // Replace numeric decimal entities (e.g., &#039; or &#39; or &#160;)
+        let decimalPattern = "&#([0-9]{1,7});"
+        if let regex = try? NSRegularExpression(pattern: decimalPattern, options: []) {
+            let nsString = result as NSString
+            let matches = regex.matches(in: result, options: [], range: NSRange(location: 0, length: nsString.length))
+            for match in matches.reversed() {
+                let codeStr = nsString.substring(with: match.range(at: 1))
+                if let codePoint = UInt32(codeStr), let scalar = UnicodeScalar(codePoint) {
+                    let charStr = String(scalar)
+                    result = (result as NSString).replacingCharacters(in: match.range, with: charStr)
+                }
+            }
+        }
+
+        // Replace numeric hexadecimal entities (e.g., &#x27; or &#X27;)
+        let hexPattern = "&#[xX]([0-9a-fA-F]{1,6});"
+        if let regex = try? NSRegularExpression(pattern: hexPattern, options: []) {
+            let nsString = result as NSString
+            let matches = regex.matches(in: result, options: [], range: NSRange(location: 0, length: nsString.length))
+            for match in matches.reversed() {
+                let hexStr = nsString.substring(with: match.range(at: 1))
+                if let codePoint = UInt32(hexStr, radix: 16), let scalar = UnicodeScalar(codePoint) {
+                    let charStr = String(scalar)
+                    result = (result as NSString).replacingCharacters(in: match.range, with: charStr)
+                }
+            }
+        }
+
+        for (entity, replacement) in namedEntities {
+            result = result.replacingOccurrences(of: entity, with: replacement)
+        }
+
+        return result
     }
 }
 

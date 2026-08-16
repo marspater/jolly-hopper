@@ -6,10 +6,12 @@ struct MenuBarView: View {
     @State private var url: String = ""
     @State private var selectedType: String = "video"
     @State private var selectedPreset: String = "best_quality"
+    @AppStorage(UserDefaultsKeys.theme) private var theme: String = "system"
     @AppStorage("customPresets") private var customPresetsData: Data = Data()
     
     // Bug #11 fix: Use State to prevent heavy computation in View body
     @State private var customPresets: [CustomPreset] = []
+    @State private var isPasted: Bool = false
     
     var body: some View {
         VStack(spacing: 12) {
@@ -27,6 +29,7 @@ struct MenuBarView: View {
         }
         .padding(14)
         .frame(width: 360)
+        .preferredColorScheme(theme == "light" ? .light : (theme == "dark" ? .dark : nil))
         .background(.ultraThinMaterial)
         .onAppear {
             customPresets = CustomPreset.loadAll()
@@ -56,11 +59,16 @@ struct MenuBarView: View {
             Button {
                 if let clipboard = NSPasteboard.general.string(forType: .string) {
                     url = clipboard
+                    isPasted = true
+                    Task {
+                        try? await Task.sleep(nanoseconds: 1_500_000_000)
+                        isPasted = false
+                    }
                 }
             } label: {
-                Image(systemName: "doc.on.clipboard")
+                Image(systemName: isPasted ? "checkmark" : "doc.on.clipboard")
                     .font(.system(size: 12))
-                    .foregroundColor(.secondary)
+                    .foregroundColor(isPasted ? .green : .secondary)
             }
             .buttonStyle(.plain)
             .help(languageService.s("paste_from_clipboard"))
@@ -68,11 +76,12 @@ struct MenuBarView: View {
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
-        .background(Color.primary.opacity(0.05))
+        .background(
+            SiphonTheme.cardBackground(cornerRadius: 10)
+        )
         .cornerRadius(10)
         .overlay(
-            RoundedRectangle(cornerRadius: 10)
-                .stroke(Color.primary.opacity(0.1), lineWidth: 1)
+            SiphonTheme.cardBorder(cornerRadius: 10)
         )
     }
     
@@ -85,13 +94,58 @@ struct MenuBarView: View {
                 
                 Spacer()
                 
-                Picker("", selection: $selectedType) {
-                    Text(languageService.s("video")).tag("video")
-                    Text(languageService.s("audio")).tag("audio")
+                HStack(spacing: 2) {
+                    Button {
+                        withAnimation(.spring(response: 0.25, dampingFraction: 0.8)) {
+                            selectedType = "video"
+                        }
+                    } label: {
+                        Text(languageService.s("video"))
+                            .font(.geist(11, weight: .semibold))
+                            .foregroundColor(selectedType == "video" ? .white : .secondary)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 4)
+                            .background {
+                                if selectedType == "video" {
+                                    Capsule()
+                                        .fill(SiphonTheme.primaryGradient)
+                                        .shadow(color: SiphonTheme.accent.opacity(0.35), radius: 4, y: 1)
+                                }
+                            }
+                    }
+                    .buttonStyle(.plain)
+
+                    Button {
+                        withAnimation(.spring(response: 0.25, dampingFraction: 0.8)) {
+                            selectedType = "audio"
+                        }
+                    } label: {
+                        Text(languageService.s("audio"))
+                            .font(.geist(11, weight: .semibold))
+                            .foregroundColor(selectedType == "audio" ? .white : .secondary)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 4)
+                            .background {
+                                if selectedType == "audio" {
+                                    Capsule()
+                                        .fill(SiphonTheme.primaryGradient)
+                                        .shadow(color: SiphonTheme.accent.opacity(0.35), radius: 4, y: 1)
+                                }
+                            }
+                    }
+                    .buttonStyle(.plain)
                 }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .frame(width: 140)
+                .padding(2)
+                .background(
+                    Capsule()
+                        .fill(Color.primary.opacity(0.04))
+                        .background(Capsule().fill(.ultraThinMaterial))
+                )
+                .clipShape(Capsule())
+                .overlay(
+                    Capsule()
+                        .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+                )
             }
             
             Divider()
@@ -128,11 +182,12 @@ struct MenuBarView: View {
             }
         }
         .padding(10)
-        .background(Color.primary.opacity(0.04))
+        .background(
+            SiphonTheme.cardBackground(cornerRadius: 10)
+        )
         .cornerRadius(10)
         .overlay(
-            RoundedRectangle(cornerRadius: 10)
-                .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+            SiphonTheme.cardBorder(cornerRadius: 10)
         )
     }
     
@@ -198,17 +253,27 @@ struct MenuBarView: View {
         } label: {
             HStack(spacing: 6) {
                 Image(systemName: "arrow.down.circle.fill")
-                    .font(.system(size: 14))
+                    .font(.system(size: 14, weight: .semibold))
                 Text(languageService.s("download_btn"))
                     .font(.geist(13, weight: .bold))
             }
+            .foregroundColor(url.isEmpty ? .secondary.opacity(0.6) : .white)
             .frame(maxWidth: .infinity)
             .frame(height: 32)
+            .background(
+                url.isEmpty ?
+                LinearGradient(colors: [Color.primary.opacity(0.08), Color.primary.opacity(0.04)], startPoint: .top, endPoint: .bottom) :
+                SiphonTheme.primaryGradient
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(Color.white.opacity(url.isEmpty ? 0.05 : 0.25), lineWidth: 1)
+            )
         }
-        .buttonStyle(.borderedProminent)
-        .controlSize(.regular)
+        .buttonStyle(.plain)
         .disabled(url.isEmpty)
-        .shadow(color: .blue.opacity(url.isEmpty ? 0.0 : 0.2), radius: 6, y: 2)
+        .shadow(color: url.isEmpty ? .clear : SiphonTheme.accent.opacity(0.35), radius: 6, y: 2)
     }
     
     private func getSaveFolder() -> URL {
@@ -241,14 +306,15 @@ struct MenuBarView: View {
                 }
                 .lineLimit(1)
                 .fixedSize(horizontal: true, vertical: false)
-                .foregroundColor(.secondary)
-                .padding(.horizontal, 9)
+                .foregroundColor(.primary)
+                .padding(.horizontal, 10)
                 .frame(height: 28)
-                .background(Color.primary.opacity(0.06))
+                .background(
+                    SiphonTheme.pillBackground(isSelected: false)
+                )
                 .clipShape(Capsule())
                 .overlay(
-                    Capsule()
-                        .stroke(Color.primary.opacity(0.12), lineWidth: 1)
+                    SiphonTheme.pillBorder(isSelected: false)
                 )
             }
             .buttonStyle(.plain)
@@ -261,21 +327,22 @@ struct MenuBarView: View {
                         .controlSize(.small)
                         .scaleEffect(0.75)
                     Text("\(downloadManager.downloadingDownloads.count)")
-                        .font(.geistMono(11, weight: .bold))
+                        .font(.geist(11, weight: .bold))
+                        .monospacedDigit()
                     Text(languageService.s("downloading"))
                         .font(.geist(11, weight: .medium))
                         .lineLimit(1)
                 }
                 .lineLimit(1)
                 .fixedSize(horizontal: true, vertical: false)
-                .foregroundColor(.accentColor)
-                .padding(.horizontal, 9)
+                .foregroundColor(SiphonTheme.downloading)
+                .padding(.horizontal, 10)
                 .frame(height: 28)
-                .background(Color.accentColor.opacity(0.12))
+                .background(SiphonTheme.downloading.opacity(0.14))
                 .clipShape(Capsule())
                 .overlay(
                     Capsule()
-                        .stroke(Color.accentColor.opacity(0.25), lineWidth: 1)
+                        .stroke(SiphonTheme.downloading.opacity(0.28), lineWidth: 1)
                 )
             }
             
@@ -293,14 +360,14 @@ struct MenuBarView: View {
                 }
                 .lineLimit(1)
                 .fixedSize(horizontal: true, vertical: false)
-                .foregroundColor(.red)
+                .foregroundColor(SiphonTheme.failed)
                 .padding(.horizontal, 10)
                 .frame(height: 28)
-                .background(Color.red.opacity(0.12))
+                .background(SiphonTheme.failed.opacity(0.12))
                 .clipShape(Capsule())
                 .overlay(
                     Capsule()
-                        .stroke(Color.red.opacity(0.25), lineWidth: 1)
+                        .stroke(SiphonTheme.failed.opacity(0.25), lineWidth: 1)
                 )
             }
             .buttonStyle(.plain)

@@ -27,12 +27,13 @@ class MenuBarManager: NSObject {
         
         popover.contentViewController = NSHostingController(rootView: contentView)
         self.popover = popover
+        applyTheme()
         
         // Setup Status Item
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         
         if let button = statusItem?.button {
-            button.image = NSImage(systemSymbolName: "arrow.down.circle.fill", accessibilityDescription: "Siphon")
+            updateStatusItemIcon(button: button)
             button.action = #selector(togglePopover)
             button.target = self
         }
@@ -44,6 +45,28 @@ class MenuBarManager: NSObject {
         }
     }
     
+    private func updateStatusItemIcon(button: NSStatusBarButton) {
+        let symbolConfig = NSImage.SymbolConfiguration(pointSize: 15.5, weight: .semibold, scale: .medium)
+        if let baseImage = NSImage(systemSymbolName: "arrow.down.circle.fill", accessibilityDescription: "Siphon") {
+            let configuredImage = baseImage.withSymbolConfiguration(symbolConfig) ?? baseImage
+            configuredImage.isTemplate = true
+            button.image = configuredImage
+            button.imagePosition = .imageOnly
+        }
+    }
+
+    func applyTheme() {
+        let theme = UserDefaults.standard.string(forKey: UserDefaultsKeys.theme) ?? "system"
+        switch theme {
+        case "dark":
+            popover?.appearance = NSAppearance(named: .darkAqua)
+        case "light":
+            popover?.appearance = NSAppearance(named: .aqua)
+        default:
+            popover?.appearance = nil
+        }
+    }
+
     func setVisible(_ visible: Bool) {
         statusItem?.isVisible = visible
     }
@@ -53,6 +76,7 @@ class MenuBarManager: NSObject {
             if popover?.isShown == true {
                 popover?.performClose(nil)
             } else {
+                applyTheme()
                 popover?.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
                 // Focus the app
                 NSApp.activate(ignoringOtherApps: true)
@@ -65,7 +89,9 @@ class MenuBarManager: NSObject {
     }
     
     func updateMenu() {
-        // Menu is now a SwiftUI view, so it updates automatically via EnvironmentObject
-        // But we can force a resize if needed or other updates here
+        applyTheme()
+        if let button = statusItem?.button {
+            updateStatusItemIcon(button: button)
+        }
     }
 }

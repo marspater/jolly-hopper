@@ -3,7 +3,7 @@ import CoreText
 
 extension Font {
     /// Custom Geist Sans font (Vercel & Basement Studio typeface)
-    public static func geist(_ size: CGFloat, weight: Font.Weight = .regular) -> Font {
+    public static func geist(_ size: CGFloat, weight: Font.Weight = .regular, relativeTo textStyle: Font.TextStyle = .body) -> Font {
         let fontName: String
         switch weight {
         case .black:
@@ -17,11 +17,11 @@ extension Font {
         default:
             fontName = "Geist-Regular"
         }
-        return .custom(fontName, size: size)
+        return .custom(fontName, size: size, relativeTo: textStyle)
     }
 
     /// Custom Geist Mono font (Vercel & Basement Studio monospaced typeface)
-    public static func geistMono(_ size: CGFloat, weight: Font.Weight = .regular) -> Font {
+    public static func geistMono(_ size: CGFloat, weight: Font.Weight = .regular, relativeTo textStyle: Font.TextStyle = .body) -> Font {
         let fontName: String
         switch weight {
         case .bold, .heavy, .black:
@@ -33,7 +33,7 @@ extension Font {
         default:
             fontName = "GeistMono-Regular"
         }
-        return .custom(fontName, size: size)
+        return .custom(fontName, size: size, relativeTo: textStyle)
     }
 }
 

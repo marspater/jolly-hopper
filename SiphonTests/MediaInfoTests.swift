@@ -106,4 +106,27 @@ final class MediaInfoTests: XCTestCase {
         XCTAssertEqual(decoded.webpageUrl, "https://www.bilibili.com/video/BV1xx411c7mD")
         XCTAssertEqual(decoded.resolvedURL, "https://www.bilibili.com/video/BV1xx411c7mD")
     }
+
+    func testDecodingHTMLEntities() {
+        let input = "Riped stud fucks Sam Ledger&#039;s pussy pt.1"
+        XCTAssertEqual(input.decodingHTMLEntities(), "Riped stud fucks Sam Ledger's pussy pt.1")
+
+        let input2 = "Tom &amp; Jerry &#39;The Movie&#39; &quot;Special&quot; &#x27;HD&#x27; &lt;1080p&gt;"
+        XCTAssertEqual(input2.decodingHTMLEntities(), "Tom & Jerry 'The Movie' \"Special\" 'HD' <1080p>")
+
+        let input3 = "No entities here"
+        XCTAssertEqual(input3.decodingHTMLEntities(), "No entities here")
+    }
+
+    func testMediaInfoTitleDecodingHTMLEntities() throws {
+        let json = """
+        {
+            "id": "1689702",
+            "title": "Riped stud fucks Sam Ledger&#039;s pussy pt.1"
+        }
+        """.data(using: .utf8)!
+
+        let decoded = try JSONDecoder().decode(MediaInfo.self, from: json)
+        XCTAssertEqual(decoded.title, "Riped stud fucks Sam Ledger's pussy pt.1")
+    }
 }

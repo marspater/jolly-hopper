@@ -8,6 +8,7 @@ struct AddDownloadView: View {
     @AppStorage("selectedPreset") private var selectedPreset: String = "best_quality"
     @AppStorage("selectedCustomPresetId") private var selectedCustomPresetIdString: String = ""
     @AppStorage("defaultAdditionalArguments") private var defaultAdditionalArguments: String = ""
+    @AppStorage(UserDefaultsKeys.theme) private var selectedTheme: String = "system"
 
     @State private var urlInput: String = ""
     @State private var isLoading: Bool = false
@@ -31,6 +32,7 @@ struct AddDownloadView: View {
 
 
     @State private var downloadSubtitles: Bool = false
+    @State private var isPasted: Bool = false
     @State private var selectedSubtitleLangs: Set<String> = []
     @State private var availableSubtitles: [SubtitleOption] = []
     @State private var embedSubtitles: Bool = true
@@ -131,7 +133,8 @@ struct AddDownloadView: View {
             Divider()
             footer
         }
-        .frame(minWidth: 680, idealWidth: 760, maxWidth: 1000, minHeight: 560, idealHeight: 700, maxHeight: 1000)
+        .frame(minWidth: 520, idealWidth: 740, maxWidth: .infinity, minHeight: 420, idealHeight: 640, maxHeight: .infinity)
+        .preferredColorScheme(selectedTheme == "light" ? .light : (selectedTheme == "dark" ? .dark : nil))
         .background(.ultraThinMaterial)
         .onAppear {
             let loadedPresets = CustomPreset.loadAll()
@@ -231,7 +234,8 @@ struct AddDownloadView: View {
                 let count = extractBatchUrls(from: batchUrlsText).count
                 if count > 0 {
                     Text("\(count) URLs")
-                        .font(.geistMono(11, weight: .bold))
+                        .font(.geist(11, weight: .semibold))
+                        .monospacedDigit()
                         .padding(.horizontal, 8)
                         .padding(.vertical, 3)
                         .background(Color.blue.opacity(0.15))
@@ -240,16 +244,27 @@ struct AddDownloadView: View {
                 }
             }
 
-            TextEditor(text: $batchUrlsText)
-                .font(.geistMono(12))
-                .frame(minHeight: 130, maxHeight: 180)
-                .padding(6)
-                .background(Color.gray.opacity(0.08))
-                .cornerRadius(8)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 8)
-                        .stroke(Color.gray.opacity(0.2), lineWidth: 1)
-                )
+            ZStack(alignment: .topLeading) {
+                if batchUrlsText.isEmpty {
+                    Text("https://example.com/video1\nhttps://example.com/video2\n...")
+                        .font(.geistMono(12, relativeTo: .body))
+                        .foregroundColor(.secondary.opacity(0.4))
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 10)
+                        .allowsHitTesting(false)
+                }
+                TextEditor(text: $batchUrlsText)
+                    .font(.geistMono(12, relativeTo: .body))
+                    .scrollContentBackground(.hidden)
+                    .frame(minHeight: 120, idealHeight: 160, maxHeight: 240)
+                    .padding(6)
+            }
+            .background(Color.primary.opacity(0.035))
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+            )
 
             HStack {
                 Button {
@@ -423,7 +438,7 @@ struct AddDownloadView: View {
 
             HStack(alignment: .firstTextBaseline, spacing: 10) {
                 TextField(languageService.s("url_hint"), text: $urlInput)
-                    .font(.geist(13))
+                    .font(.geistMono(12, relativeTo: .body))
                     .textFieldStyle(.roundedBorder)
                     .onSubmit {
                         fetchInfo()
@@ -432,9 +447,15 @@ struct AddDownloadView: View {
                 Button {
                     if let clipboardString = NSPasteboard.general.string(forType: .string) {
                         urlInput = clipboardString
+                        isPasted = true
+                        Task {
+                            try? await Task.sleep(nanoseconds: 1_500_000_000)
+                            isPasted = false
+                        }
                     }
                 } label: {
-                    Image(systemName: "doc.on.clipboard")
+                    Image(systemName: isPasted ? "checkmark" : "doc.on.clipboard")
+                        .foregroundColor(isPasted ? .green : .primary)
                 }
                 .help(languageService.s("paste_from_clipboard"))
                 .accessibilityLabel(languageService.s("paste_from_clipboard"))
@@ -484,15 +505,20 @@ struct AddDownloadView: View {
             Spacer()
         }
         .padding()
-        .background(Color.gray.opacity(0.1))
+        .background(
+            SiphonTheme.cardBackground(cornerRadius: 12)
+        )
         .cornerRadius(12)
+        .overlay(
+            SiphonTheme.cardBorder(cornerRadius: 12)
+        )
     }
 
     private var playlistDetectedBanner: some View {
         HStack {
             VStack(alignment: .leading, spacing: 4) {
-                Text(languageService.s("playlist_detected")).font(.headline)
-                Text(languageService.s("entire_playlist")).font(.subheadline).foregroundColor(.secondary)
+                Text(languageService.s("playlist_detected")).font(.geist(14, weight: .bold))
+                Text(languageService.s("entire_playlist")).font(.geist(12)).foregroundColor(.secondary)
             }
             Spacer()
             if isLoadingPlaylist {
@@ -502,14 +528,18 @@ struct AddDownloadView: View {
             }
         }
         .padding()
-        .background(Color.blue.opacity(0.1))
+        .background(SiphonTheme.accent.opacity(0.12))
         .cornerRadius(12)
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(SiphonTheme.accent.opacity(0.25), lineWidth: 1)
+        )
     }
 
     private var playlistSelectorSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text(languageService.s("entire_playlist")).font(.headline)
+                Text(languageService.s("entire_playlist")).font(.geist(14, weight: .bold))
                 Spacer()
                 Button(languageService.s("single_video")) {
                     showPlaylistSelector = false
@@ -520,11 +550,11 @@ struct AddDownloadView: View {
 
             HStack(spacing: 12) {
                 Button(languageService.s("select_all")) { selectedPlaylistIds = Set(playlistItems.map { $0.id }) }
-                    .buttonStyle(.plain).foregroundColor(.blue)
+                    .buttonStyle(.plain).foregroundColor(SiphonTheme.accent)
                 Button(languageService.s("deselect_all")) { selectedPlaylistIds.removeAll() }
-                    .buttonStyle(.plain).foregroundColor(.blue)
+                    .buttonStyle(.plain).foregroundColor(SiphonTheme.accent)
                 Spacer()
-                Text("\(selectedPlaylistIds.count) / \(playlistItems.count)").font(.caption).foregroundColor(.secondary)
+                Text("\(selectedPlaylistIds.count) / \(playlistItems.count)").font(.geistMono(11, weight: .semibold)).foregroundColor(.secondary)
             }
 
             ScrollView {
@@ -696,12 +726,12 @@ struct AddDownloadView: View {
             if isVideoTab && selectedCodec == "h264" {
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
                     Image(systemName: "info.circle.fill")
-                        .foregroundColor(.blue)
+                        .foregroundColor(SiphonTheme.accent)
                     Text(languageService.s("h264_preset_info"))
                         .multilineTextAlignment(.leading)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .font(.caption)
+                .font(.geist(11))
                 .foregroundColor(.secondary)
                 .padding(.top, 4)
             }
@@ -711,7 +741,7 @@ struct AddDownloadView: View {
                     Image(systemName: "info.circle")
                     Text(languageService.s("codec_fallback_note"))
                 }
-                .font(.caption)
+                .font(.geist(11))
                 .foregroundColor(.secondary)
                 .padding(.top, 4)
             }
@@ -723,7 +753,7 @@ struct AddDownloadView: View {
                         .multilineTextAlignment(.leading)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .font(.caption)
+                .font(.geist(11))
                 .foregroundColor(.secondary)
                 .padding(.top, 4)
             }
@@ -787,10 +817,10 @@ struct AddDownloadView: View {
         VStack(alignment: .leading, spacing: 12) {
             Text(languageService.s("save_folder")).font(.geist(14, weight: .semibold))
             HStack(alignment: .firstTextBaseline, spacing: 10) {
-                TextField(languageService.s("save_folder"), text: .constant(saveFolder.path)).font(.geist(12)).textFieldStyle(.roundedBorder).disabled(true)
+                TextField(languageService.s("save_folder"), text: .constant(saveFolder.path)).font(.geistMono(12, relativeTo: .body)).textFieldStyle(.roundedBorder).disabled(true)
                 Button(languageService.s("select")) { selectFolder() }
             }
-            TextField(languageService.s("custom_filename_hint"), text: $customFilename).font(.geist(13)).textFieldStyle(.roundedBorder)
+            TextField(languageService.s("custom_filename_hint"), text: $customFilename).font(.geistMono(12, relativeTo: .body)).textFieldStyle(.roundedBorder)
         }
     }
 
@@ -804,7 +834,7 @@ struct AddDownloadView: View {
 
                         if availableSubtitles.isEmpty && mediaInfo != nil {
                             Text(languageService.s("no_subtitles"))
-                                .font(.caption)
+                                .font(.geist(11))
                                 .foregroundColor(.secondary)
                         } else if downloadSubtitles {
                                 Menu {
@@ -1157,12 +1187,10 @@ struct AddDownloadView: View {
             downloadManager.addDownload(url: urlInput, options: finalOptions)
         } else {
             let selectedItems = playlistItems.filter { selectedPlaylistIds.contains($0.id) }
-            for item in selectedItems {
-                let videoUrl = item.resolvedURL
-                var itemOptions = finalOptions
-                itemOptions.customFilename = nil
-                downloadManager.addDownload(url: videoUrl, options: itemOptions)
-            }
+            let urls = selectedItems.map { $0.resolvedURL }
+            var itemOptions = finalOptions
+            itemOptions.customFilename = nil
+            downloadManager.addDownloads(urls: urls, options: itemOptions)
         }
         appState.selectedNavItem = .downloading
         AddDownloadWindowManager.shared.closeWindow()

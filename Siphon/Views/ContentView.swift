@@ -31,10 +31,12 @@ struct ContentView: View {
     @State private var showUpdateAlert = false
     @State private var columnVisibility: NavigationSplitViewVisibility = .automatic
     @AppStorage("showMenuBarIcon") private var showMenuBarIcon: Bool = true
+    @AppStorage(UserDefaultsKeys.theme) private var theme: String = "system"
     
     var body: some View {
         ZStack {
             mainLayout
+                .preferredColorScheme(theme == "light" ? .light : (theme == "dark" ? .dark : nil))
                 .background(MainWindowConfigurator())
                 .onChange(of: appState.showAddDownloadSheet) { _, newValue in
                     if newValue {
@@ -59,6 +61,9 @@ struct ContentView: View {
                     }
                 }
                 .onChange(of: languageService.selectedLanguage) { _, _ in
+                    MenuBarManager.shared.updateMenu()
+                }
+                .onChange(of: theme) { _, _ in
                     MenuBarManager.shared.updateMenu()
                 }
                 .onChange(of: showMenuBarIcon) { _, newValue in
@@ -114,13 +119,13 @@ struct SidebarView: View {
             }
             
             Section(languageService.s("downloading")) {
-                sidebarButton(item: .downloading, badgeCount: downloadManager.downloadingCount, badgeColor: .blue)
-                sidebarButton(item: .queued, badgeCount: downloadManager.queuedCount, badgeColor: .orange)
+                sidebarButton(item: .downloading, badgeCount: downloadManager.downloadingCount, badgeColor: Color(.displayP3, red: 0.15, green: 0.55, blue: 1.0))
+                sidebarButton(item: .queued, badgeCount: downloadManager.queuedCount, badgeColor: Color(.displayP3, red: 0.95, green: 0.55, blue: 0.15))
             }
             
             Section(languageService.s("history")) {
-                sidebarButton(item: .completed, badgeCount: downloadManager.completedCount, badgeColor: .green)
-                sidebarButton(item: .failed, badgeCount: downloadManager.failedCount, badgeColor: .red)
+                sidebarButton(item: .completed, badgeCount: downloadManager.completedCount, badgeColor: Color(.displayP3, red: 0.20, green: 0.65, blue: 0.35))
+                sidebarButton(item: .failed, badgeCount: downloadManager.failedCount, badgeColor: Color(.displayP3, red: 0.90, green: 0.25, blue: 0.35))
             }
         }
         .listStyle(.sidebar)
@@ -142,7 +147,7 @@ struct SidebarView: View {
                             .font(.geist(13, weight: .medium))
                         Spacer()
                         Text("⌘,")
-                            .font(.geistMono(10, weight: .medium))
+                            .font(.geist(10, weight: .medium))
                             .foregroundColor(.secondary)
                     }
                     .padding(.horizontal, 12)
@@ -170,26 +175,27 @@ struct SidebarView: View {
     private func sidebarButton(item: NavigationItem, badgeCount: Int = 0, badgeColor: Color = .blue) -> some View {
         let isSelected = appState.selectedNavItem == item
         Button {
-            withAnimation(.spring(response: 0.25, dampingFraction: 0.8)) {
+            withAnimation(.smooth(duration: 0.22)) {
                 appState.selectedNavItem = item
             }
         } label: {
             HStack(spacing: 8) {
                 Image(systemName: item.icon)
-                    .font(.system(size: 13, weight: isSelected ? .semibold : .medium))
+                    .font(.system(size: 13, weight: .medium))
                     .frame(width: 18, alignment: .center)
-                    .foregroundColor(isSelected ? .accentColor : .secondary)
+                    .foregroundColor(isSelected ? SiphonTheme.accent : .secondary)
                 Text(item.title(lang: languageService))
                     .font(.geist(13, weight: isSelected ? .semibold : .medium))
+                    .foregroundColor(isSelected ? .primary : .secondary)
                 Spacer()
                 if badgeCount > 0 {
                     Text("\(badgeCount)")
-                        .font(.geistMono(10, weight: .bold))
+                        .font(.geist(10, weight: .bold))
                         .monospacedDigit()
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2)
-                        .background(badgeColor)
-                        .foregroundColor(.white)
+                        .background(badgeColor.opacity(0.18))
+                        .foregroundColor(badgeColor)
                         .clipShape(Capsule())
                 }
             }
@@ -197,10 +203,9 @@ struct SidebarView: View {
         }
         .buttonStyle(.plain)
         .padding(.vertical, 2)
-        .foregroundColor(isSelected ? .accentColor : .primary)
         .listRowBackground(
             RoundedRectangle(cornerRadius: 8)
-                .fill(isSelected ? Color.accentColor.opacity(0.12) : Color.clear)
+                .fill(isSelected ? SiphonTheme.accent.opacity(0.12) : Color.clear)
                 .padding(.horizontal, 4)
                 .padding(.vertical, 1)
         )
@@ -220,27 +225,42 @@ struct DetailView: View {
     @EnvironmentObject var languageService: LanguageService
     
     var body: some View {
-        currentView
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .id(appState.selectedNavItem)
-            .transition(.opacity)
-            .animation(.easeInOut(duration: 0.2), value: appState.selectedNavItem)
-    }
-    
-    @ViewBuilder
-    private var currentView: some View {
-        switch appState.selectedNavItem {
-        case .home:
-            HomeView()
-        case .downloading:
-            DownloadListView(downloads: downloadManager.downloadingDownloads, emptyMessage: languageService.s("empty_downloading"), showStop: true)
-        case .queued:
-            DownloadListView(downloads: downloadManager.queuedDownloads, emptyMessage: languageService.s("empty_queued"), showStop: true)
-        case .completed:
-            DownloadListView(downloads: downloadManager.completedDownloads, emptyMessage: languageService.s("empty_completed"), showStop: false)
-        case .failed:
-            DownloadListView(downloads: downloadManager.failedDownloads, emptyMessage: languageService.s("empty_failed"), showStop: false)
+        ZStack {
+            switch appState.selectedNavItem {
+            case .home:
+                HomeView()
+                    .transition(.asymmetric(
+                        insertion: .opacity.combined(with: .scale(scale: 0.99)),
+                        removal: .opacity
+                    ))
+            case .downloading:
+                DownloadListView(downloads: downloadManager.downloadingDownloads, emptyMessage: languageService.s("empty_downloading"), showStop: true)
+                    .transition(.asymmetric(
+                        insertion: .opacity.combined(with: .scale(scale: 0.99)),
+                        removal: .opacity
+                    ))
+            case .queued:
+                DownloadListView(downloads: downloadManager.queuedDownloads, emptyMessage: languageService.s("empty_queued"), showStop: true)
+                    .transition(.asymmetric(
+                        insertion: .opacity.combined(with: .scale(scale: 0.99)),
+                        removal: .opacity
+                    ))
+            case .completed:
+                DownloadListView(downloads: downloadManager.completedDownloads, emptyMessage: languageService.s("empty_completed"), showStop: false)
+                    .transition(.asymmetric(
+                        insertion: .opacity.combined(with: .scale(scale: 0.99)),
+                        removal: .opacity
+                    ))
+            case .failed:
+                DownloadListView(downloads: downloadManager.failedDownloads, emptyMessage: languageService.s("empty_failed"), showStop: false)
+                    .transition(.asymmetric(
+                        insertion: .opacity.combined(with: .scale(scale: 0.99)),
+                        removal: .opacity
+                    ))
+            }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .animation(.smooth(duration: 0.22), value: appState.selectedNavItem)
     }
 }
 
@@ -287,18 +307,33 @@ struct HomeView: View {
                 } label: {
                     HStack(spacing: 10) {
                         Image(systemName: "plus.circle.fill")
-                            .font(.title3)
+                            .font(.system(size: 16, weight: .semibold))
                         Text(languageService.s("new_download"))
                             .font(.geist(15, weight: .semibold))
                     }
-                    .padding(.horizontal, 32)
-                    .padding(.vertical, 14)
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 28)
+                    .padding(.vertical, 12)
+                    .background(
+                        LinearGradient(
+                            colors: [
+                                Color(red: 0.20, green: 0.50, blue: 1.0),
+                                Color(red: 0.12, green: 0.40, blue: 0.95)
+                            ],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    )
+                    .clipShape(Capsule())
+                    .overlay(
+                        Capsule()
+                            .stroke(Color.white.opacity(0.25), lineWidth: 1)
+                    )
                 }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
+                .buttonStyle(.plain)
                 .keyboardShortcut("n", modifiers: .command)
                 .scaleEffect(isButtonHovered ? 1.03 : 1.0)
-                .shadow(color: .blue.opacity(isButtonHovered ? 0.45 : 0.3), radius: isButtonHovered ? 14 : 10, y: isButtonHovered ? 6 : 4)
+                .shadow(color: Color.blue.opacity(isButtonHovered ? 0.5 : 0.3), radius: isButtonHovered ? 14 : 10, y: isButtonHovered ? 6 : 4)
                 .animation(.spring(response: 0.3, dampingFraction: 0.75), value: isButtonHovered)
                 .onHover { hovering in
                     isButtonHovered = hovering
@@ -306,16 +341,16 @@ struct HomeView: View {
                 
                 // Stats Grid
                 LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 16), count: 4), spacing: 16) {
-                    StatCard(title: languageService.s("stat_downloading"), count: downloadManager.downloadingCount, color: Color(.displayP3, red: 0.15, green: 0.55, blue: 1.0)) {
+                    StatCard(title: languageService.s("stat_downloading"), count: downloadManager.downloadingCount, color: SiphonTheme.downloading) {
                         appState.selectedNavItem = .downloading
                     }
-                    StatCard(title: languageService.s("stat_queued"), count: downloadManager.queuedCount, color: Color(.displayP3, red: 1.0, green: 0.55, blue: 0.1)) {
+                    StatCard(title: languageService.s("stat_queued"), count: downloadManager.queuedCount, color: SiphonTheme.queued) {
                         appState.selectedNavItem = .queued
                     }
-                    StatCard(title: languageService.s("stat_completed"), count: downloadManager.completedCount, color: Color(.displayP3, red: 0.15, green: 0.85, blue: 0.45)) {
+                    StatCard(title: languageService.s("stat_completed"), count: downloadManager.completedCount, color: SiphonTheme.completed) {
                         appState.selectedNavItem = .completed
                     }
-                    StatCard(title: languageService.s("stat_failed"), count: downloadManager.failedCount, color: Color(.displayP3, red: 1.0, green: 0.28, blue: 0.38)) {
+                    StatCard(title: languageService.s("stat_failed"), count: downloadManager.failedCount, color: SiphonTheme.failed) {
                         appState.selectedNavItem = .failed
                     }
                 }
@@ -363,37 +398,31 @@ struct StatCard: View {
     
     var body: some View {
         Button(action: action) {
-            VStack(spacing: 8) {
+            VStack(spacing: 6) {
                 Text("\(count)")
-                    .font(.geistMono(34, weight: .bold))
+                    .font(.geist(30, weight: .bold))
+                    .monospacedDigit()
                     .foregroundColor(color)
-                    .shadow(color: color.opacity(isHovered ? 0.6 : 0.2), radius: isHovered ? 10 : 3, x: 0, y: 1)
                 Text(title)
                     .font(.geist(12, weight: .semibold))
-                    .foregroundColor(.secondary)
+                    .foregroundColor(.primary.opacity(0.75))
                     .multilineTextAlignment(.center)
                     .lineLimit(2)
             }
             .frame(maxWidth: .infinity)
-            .frame(height: 102)
+            .frame(height: 96)
             .padding(.vertical, 8)
-            .padding(.horizontal, 4)
-            .background(.ultraThinMaterial)
-            .cornerRadius(16)
-            .overlay(
-                RoundedRectangle(cornerRadius: 16)
-                    .stroke(
-                        LinearGradient(
-                            colors: [color.opacity(isHovered ? 0.7 : 0.25), Color.white.opacity(isHovered ? 0.2 : 0.08)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        ),
-                        lineWidth: isHovered ? 1.5 : 1
-                    )
+            .padding(.horizontal, 6)
+            .background(
+                SiphonTheme.cardBackground(cornerRadius: 14, isHovered: isHovered)
             )
-            .shadow(color: color.opacity(isHovered ? 0.28 : 0.06), radius: isHovered ? 14 : 4, x: 0, y: isHovered ? 6 : 2)
-            .scaleEffect(isHovered ? 1.035 : 1.0)
-            .animation(.spring(response: 0.32, dampingFraction: 0.75), value: isHovered)
+            .cornerRadius(14)
+            .overlay(
+                SiphonTheme.cardBorder(cornerRadius: 14, isHovered: isHovered)
+            )
+            .shadow(color: Color.black.opacity(isHovered ? 0.08 : 0.03), radius: isHovered ? 8 : 3, x: 0, y: 2)
+            .scaleEffect(isHovered ? 1.02 : 1.0)
+            .animation(.spring(response: 0.25, dampingFraction: 0.8), value: isHovered)
         }
         .buttonStyle(.plain)
         .onHover { hovering in
@@ -412,12 +441,13 @@ struct SponsorView: View {
                 NSWorkspace.shared.open(url)
             }
         } label: {
-            HStack {
+            HStack(spacing: 8) {
                 Image(systemName: "star.fill")
-                    .foregroundColor(.yellow)
-                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(.orange)
+                    .font(.system(size: 12, weight: .semibold))
                 Text(languageService.s("star_github"))
-                    .font(.geist(12, weight: .bold))
+                    .font(.geist(12, weight: .medium))
+                    .foregroundColor(.primary)
                 Spacer()
                 Image(systemName: "arrow.up.right")
                     .font(.system(size: 10))
@@ -426,14 +456,25 @@ struct SponsorView: View {
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
             .background(
-                RoundedRectangle(cornerRadius: 10)
-                    .fill(isHovered ? Color.yellow.opacity(0.2) : Color.yellow.opacity(0.1))
+                ZStack {
+                    #if os(macOS)
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(Color(nsColor: .controlBackgroundColor).opacity(0.6))
+                    #endif
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(isHovered ? Color.primary.opacity(0.08) : Color.primary.opacity(0.03))
+                }
+            )
+            .cornerRadius(8)
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(isHovered ? Color.primary.opacity(0.18) : Color.primary.opacity(0.08), lineWidth: 1)
             )
         }
         .buttonStyle(.plain)
         .padding(.horizontal, 8)
         .onHover { hovering in
-            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+            withAnimation(.spring(response: 0.25, dampingFraction: 0.8)) {
                 isHovered = hovering
             }
         }

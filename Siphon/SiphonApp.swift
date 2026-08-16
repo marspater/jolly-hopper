@@ -7,6 +7,7 @@ struct SiphonApp: App {
     @StateObject private var languageService = LanguageService()
     @StateObject private var updateChecker = UpdateChecker()
     @AppStorage("startInBackground") private var startInBackground: Bool = false
+    @AppStorage(UserDefaultsKeys.theme) private var theme: String = "system"
     @State private var hasAppliedBackgroundMode = false
     
     init() {
@@ -22,8 +23,8 @@ struct SiphonApp: App {
                 .environmentObject(appState)
                 .environmentObject(languageService)
                 .environmentObject(updateChecker)
+                .preferredColorScheme(theme == "light" ? .light : (theme == "dark" ? .dark : nil))
                 .onAppear {
-                    PreferencesView.applyStoredTheme()
                     setupMenuBarIfNeeded()
                     applyBackgroundModeIfNeeded()
                 }
@@ -71,15 +72,6 @@ struct SiphonApp: App {
                 .disabled(downloadManager.isUpdatingYtdlp)
             }
         }
-        
-        #if os(macOS)
-        Settings {
-            PreferencesView()
-                .environmentObject(downloadManager)
-                .environmentObject(languageService)
-                .environmentObject(updateChecker)
-        }
-        #endif
     }
     
     private func setupMenuBarIfNeeded() {
