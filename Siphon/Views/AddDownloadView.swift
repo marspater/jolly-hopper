@@ -32,6 +32,7 @@ struct AddDownloadView: View {
 
 
     @State private var downloadSubtitles: Bool = false
+    @State private var isPasted: Bool = false
     @State private var selectedSubtitleLangs: Set<String> = []
     @State private var availableSubtitles: [SubtitleOption] = []
     @State private var embedSubtitles: Bool = true
@@ -446,9 +447,15 @@ struct AddDownloadView: View {
                 Button {
                     if let clipboardString = NSPasteboard.general.string(forType: .string) {
                         urlInput = clipboardString
+                        isPasted = true
+                        Task {
+                            try? await Task.sleep(nanoseconds: 1_500_000_000)
+                            isPasted = false
+                        }
                     }
                 } label: {
-                    Image(systemName: "doc.on.clipboard")
+                    Image(systemName: isPasted ? "checkmark" : "doc.on.clipboard")
+                        .foregroundColor(isPasted ? .green : .primary)
                 }
                 .help(languageService.s("paste_from_clipboard"))
                 .accessibilityLabel(languageService.s("paste_from_clipboard"))
@@ -1171,12 +1178,10 @@ struct AddDownloadView: View {
             downloadManager.addDownload(url: urlInput, options: finalOptions)
         } else {
             let selectedItems = playlistItems.filter { selectedPlaylistIds.contains($0.id) }
-            for item in selectedItems {
-                let videoUrl = item.resolvedURL
-                var itemOptions = finalOptions
-                itemOptions.customFilename = nil
-                downloadManager.addDownload(url: videoUrl, options: itemOptions)
-            }
+            let urls = selectedItems.map { $0.resolvedURL }
+            var itemOptions = finalOptions
+            itemOptions.customFilename = nil
+            downloadManager.addDownloads(urls: urls, options: itemOptions)
         }
         appState.selectedNavItem = .downloading
         AddDownloadWindowManager.shared.closeWindow()

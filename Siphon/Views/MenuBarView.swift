@@ -11,6 +11,7 @@ struct MenuBarView: View {
     
     // Bug #11 fix: Use State to prevent heavy computation in View body
     @State private var customPresets: [CustomPreset] = []
+    @State private var isPasted: Bool = false
     
     var body: some View {
         VStack(spacing: 12) {
@@ -58,11 +59,16 @@ struct MenuBarView: View {
             Button {
                 if let clipboard = NSPasteboard.general.string(forType: .string) {
                     url = clipboard
+                    isPasted = true
+                    Task {
+                        try? await Task.sleep(nanoseconds: 1_500_000_000)
+                        isPasted = false
+                    }
                 }
             } label: {
-                Image(systemName: "doc.on.clipboard")
+                Image(systemName: isPasted ? "checkmark" : "doc.on.clipboard")
                     .font(.system(size: 12))
-                    .foregroundColor(.secondary)
+                    .foregroundColor(isPasted ? .green : .secondary)
             }
             .buttonStyle(.plain)
             .help(languageService.s("paste_from_clipboard"))
