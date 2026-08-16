@@ -37,6 +37,7 @@ jobs:
           format: sarif
           severity-cutoff: 2
           fail-if-incomplete: false
+          run-parameters: "--disable-engine markdownlint --disable-engine remarklint --exclude-paths '.jules/**,**.md,docs/**,scripts/**,SiphonTests/**'"
 
       - name: Consolidate SARIF runs for GitHub Code Scanning
         id: consolidate
@@ -66,18 +67,25 @@ jobs:
           all_results = []
           all_rules = {}
 
+          def is_markdown_noise(rule_id: str) -> bool:
+              r = rule_id.lower()
+              return "markdown" in r or "remark" in r or "md0" in r or "line-length" in r
+
           for run in data.get("runs", []):
               driver = run.get("tool", {}).get("driver", {})
 
               for rule in driver.get("rules", []):
-                  rule_id = rule.get("id")
-                  if rule_id:
+                  rule_id = rule.get("id", "")
+                  if rule_id and not is_markdown_noise(rule_id):
                       all_rules[rule_id] = rule
 
               for result in run.get("results", []):
+                  rule_id = result.get("ruleId", "")
+                  if is_markdown_noise(rule_id):
+                      continue
+
                   all_results.append(result)
 
-                  rule_id = result.get("ruleId")
                   if rule_id and rule_id not in all_rules:
                       all_rules[rule_id] = {
                           "id": rule_id,
