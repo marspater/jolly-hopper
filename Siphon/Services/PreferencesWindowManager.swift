@@ -22,7 +22,7 @@ final class PreferencesWindowManager: NSObject, NSWindowDelegate {
         let hostingController = NSHostingController(rootView: prefsView)
         
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 480, height: 490),
+            contentRect: NSRect(x: 0, y: 0, width: 520, height: 500),
             styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
             backing: .buffered,
             defer: false
@@ -34,7 +34,7 @@ final class PreferencesWindowManager: NSObject, NSWindowDelegate {
         window.center()
         window.isReleasedWhenClosed = false
         window.title = languageService.s("preferences")
-        window.minSize = NSSize(width: 460, height: 450)
+        window.minSize = NSSize(width: 500, height: 460)
         window.contentViewController = hostingController
         window.delegate = self
         
