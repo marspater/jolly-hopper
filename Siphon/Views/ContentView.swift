@@ -191,7 +191,7 @@ struct SidebarView: View {
                 if badgeCount > 0 {
                     Text("\(badgeCount)")
                         .font(.geist(10, weight: .bold))
-                        .monospacedDigit()
+                        .font(.system(size: 10, design: .monospaced))
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2)
                         .background(badgeColor.opacity(0.18))
@@ -215,7 +215,7 @@ struct SidebarView: View {
 extension View {
     @ViewBuilder
     func siphonSidebarWidth() -> some View {
-        self.navigationSplitViewColumnWidth(min: 200, ideal: 220)
+        self.frame(minWidth: 200, idealWidth: 220, maxWidth: .infinity)
     }
 }
 
@@ -374,16 +374,18 @@ struct HomeView: View {
             .frame(maxWidth: .infinity, minHeight: 520)
             .padding(.vertical, 20)
         }
-        .background(.ultraThinMaterial)
-        .alert(languageService.s("whats_new_title"), isPresented: $downloadManager.showWhatsNew) {
-            Button(languageService.s("star_github")) {
-                if let url = URL(string: "https://github.com/marspater/jolly-hopper") {
-                    NSWorkspace.shared.open(url)
-                }
-            }
-            Button(languageService.s("ok")) { }
-        } message: {
-            Text(languageService.s("whats_new_message"))
+        .background(Color(NSColor.windowBackgroundColor).opacity(0.8))
+        .alert(isPresented: $downloadManager.showWhatsNew) {
+            Alert(
+                title: Text(languageService.s("whats_new_title")),
+                message: Text(languageService.s("whats_new_message")),
+                primaryButton: .default(Text(languageService.s("star_github"))) {
+                    if let url = URL(string: "https://github.com/marspater/jolly-hopper") {
+                        NSWorkspace.shared.open(url)
+                    }
+                },
+                secondaryButton: .default(Text(languageService.s("ok")))
+            )
         }
     }
 }
@@ -401,7 +403,7 @@ struct StatCard: View {
             VStack(spacing: 6) {
                 Text("\(count)")
                     .font(.geist(30, weight: .bold))
-                    .monospacedDigit()
+                    .font(.system(size: 30, weight: .bold, design: .monospaced))
                     .foregroundColor(color)
                 Text(title)
                     .font(.geist(12, weight: .semibold))
@@ -459,7 +461,7 @@ struct SponsorView: View {
                 ZStack {
                     #if os(macOS)
                     RoundedRectangle(cornerRadius: 8)
-                        .fill(Color(nsColor: .controlBackgroundColor).opacity(0.6))
+                        .fill(Color(NSColor.controlBackgroundColor).opacity(0.6))
                     #endif
                     RoundedRectangle(cornerRadius: 8)
                         .fill(isHovered ? Color.primary.opacity(0.08) : Color.primary.opacity(0.03))
