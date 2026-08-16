@@ -175,17 +175,18 @@ struct SidebarView: View {
     private func sidebarButton(item: NavigationItem, badgeCount: Int = 0, badgeColor: Color = .blue) -> some View {
         let isSelected = appState.selectedNavItem == item
         Button {
-            withAnimation(.spring(response: 0.25, dampingFraction: 0.8)) {
+            withAnimation(.smooth(duration: 0.22)) {
                 appState.selectedNavItem = item
             }
         } label: {
             HStack(spacing: 8) {
                 Image(systemName: item.icon)
-                    .font(.system(size: 13, weight: isSelected ? .semibold : .medium))
+                    .font(.system(size: 13, weight: .medium))
                     .frame(width: 18, alignment: .center)
-                    .foregroundColor(isSelected ? .accentColor : .secondary)
+                    .foregroundColor(isSelected ? SiphonTheme.accent : .secondary)
                 Text(item.title(lang: languageService))
                     .font(.geist(13, weight: isSelected ? .semibold : .medium))
+                    .foregroundColor(isSelected ? .primary : .secondary)
                 Spacer()
                 if badgeCount > 0 {
                     Text("\(badgeCount)")
@@ -202,10 +203,9 @@ struct SidebarView: View {
         }
         .buttonStyle(.plain)
         .padding(.vertical, 2)
-        .foregroundColor(isSelected ? .accentColor : .primary)
         .listRowBackground(
             RoundedRectangle(cornerRadius: 8)
-                .fill(isSelected ? Color.accentColor.opacity(0.12) : Color.clear)
+                .fill(isSelected ? SiphonTheme.accent.opacity(0.12) : Color.clear)
                 .padding(.horizontal, 4)
                 .padding(.vertical, 1)
         )
@@ -225,27 +225,42 @@ struct DetailView: View {
     @EnvironmentObject var languageService: LanguageService
     
     var body: some View {
-        currentView
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .id(appState.selectedNavItem)
-            .transition(.opacity)
-            .animation(.easeInOut(duration: 0.2), value: appState.selectedNavItem)
-    }
-    
-    @ViewBuilder
-    private var currentView: some View {
-        switch appState.selectedNavItem {
-        case .home:
-            HomeView()
-        case .downloading:
-            DownloadListView(downloads: downloadManager.downloadingDownloads, emptyMessage: languageService.s("empty_downloading"), showStop: true)
-        case .queued:
-            DownloadListView(downloads: downloadManager.queuedDownloads, emptyMessage: languageService.s("empty_queued"), showStop: true)
-        case .completed:
-            DownloadListView(downloads: downloadManager.completedDownloads, emptyMessage: languageService.s("empty_completed"), showStop: false)
-        case .failed:
-            DownloadListView(downloads: downloadManager.failedDownloads, emptyMessage: languageService.s("empty_failed"), showStop: false)
+        ZStack {
+            switch appState.selectedNavItem {
+            case .home:
+                HomeView()
+                    .transition(.asymmetric(
+                        insertion: .opacity.combined(with: .scale(scale: 0.99)),
+                        removal: .opacity
+                    ))
+            case .downloading:
+                DownloadListView(downloads: downloadManager.downloadingDownloads, emptyMessage: languageService.s("empty_downloading"), showStop: true)
+                    .transition(.asymmetric(
+                        insertion: .opacity.combined(with: .scale(scale: 0.99)),
+                        removal: .opacity
+                    ))
+            case .queued:
+                DownloadListView(downloads: downloadManager.queuedDownloads, emptyMessage: languageService.s("empty_queued"), showStop: true)
+                    .transition(.asymmetric(
+                        insertion: .opacity.combined(with: .scale(scale: 0.99)),
+                        removal: .opacity
+                    ))
+            case .completed:
+                DownloadListView(downloads: downloadManager.completedDownloads, emptyMessage: languageService.s("empty_completed"), showStop: false)
+                    .transition(.asymmetric(
+                        insertion: .opacity.combined(with: .scale(scale: 0.99)),
+                        removal: .opacity
+                    ))
+            case .failed:
+                DownloadListView(downloads: downloadManager.failedDownloads, emptyMessage: languageService.s("empty_failed"), showStop: false)
+                    .transition(.asymmetric(
+                        insertion: .opacity.combined(with: .scale(scale: 0.99)),
+                        removal: .opacity
+                    ))
+            }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .animation(.smooth(duration: 0.22), value: appState.selectedNavItem)
     }
 }
 

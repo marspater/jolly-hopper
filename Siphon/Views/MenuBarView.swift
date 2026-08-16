@@ -94,13 +94,58 @@ struct MenuBarView: View {
                 
                 Spacer()
                 
-                Picker("", selection: $selectedType) {
-                    Text(languageService.s("video")).tag("video")
-                    Text(languageService.s("audio")).tag("audio")
+                HStack(spacing: 2) {
+                    Button {
+                        withAnimation(.spring(response: 0.25, dampingFraction: 0.8)) {
+                            selectedType = "video"
+                        }
+                    } label: {
+                        Text(languageService.s("video"))
+                            .font(.geist(11, weight: .semibold))
+                            .foregroundColor(selectedType == "video" ? .white : .secondary)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 4)
+                            .background {
+                                if selectedType == "video" {
+                                    Capsule()
+                                        .fill(SiphonTheme.primaryGradient)
+                                        .shadow(color: SiphonTheme.accent.opacity(0.35), radius: 4, y: 1)
+                                }
+                            }
+                    }
+                    .buttonStyle(.plain)
+                    
+                    Button {
+                        withAnimation(.spring(response: 0.25, dampingFraction: 0.8)) {
+                            selectedType = "audio"
+                        }
+                    } label: {
+                        Text(languageService.s("audio"))
+                            .font(.geist(11, weight: .semibold))
+                            .foregroundColor(selectedType == "audio" ? .white : .secondary)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 4)
+                            .background {
+                                if selectedType == "audio" {
+                                    Capsule()
+                                        .fill(SiphonTheme.primaryGradient)
+                                        .shadow(color: SiphonTheme.accent.opacity(0.35), radius: 4, y: 1)
+                                }
+                            }
+                    }
+                    .buttonStyle(.plain)
                 }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .frame(width: 140)
+                .padding(2)
+                .background(
+                    Capsule()
+                        .fill(Color.primary.opacity(0.04))
+                        .background(Capsule().fill(.ultraThinMaterial))
+                )
+                .clipShape(Capsule())
+                .overlay(
+                    Capsule()
+                        .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+                )
             }
             
             Divider()
@@ -212,13 +257,13 @@ struct MenuBarView: View {
                 Text(languageService.s("download_btn"))
                     .font(.geist(13, weight: .bold))
             }
-            .foregroundColor(.white)
+            .foregroundColor(url.isEmpty ? .secondary.opacity(0.6) : .white)
             .frame(maxWidth: .infinity)
             .frame(height: 32)
             .background(
                 url.isEmpty ?
-                LinearGradient(colors: [Color.gray.opacity(0.35), Color.gray.opacity(0.25)], startPoint: .top, endPoint: .bottom) :
-                LinearGradient(colors: [Color(red: 0.20, green: 0.50, blue: 1.0), Color(red: 0.12, green: 0.40, blue: 0.95)], startPoint: .top, endPoint: .bottom)
+                LinearGradient(colors: [Color.primary.opacity(0.08), Color.primary.opacity(0.04)], startPoint: .top, endPoint: .bottom) :
+                SiphonTheme.primaryGradient
             )
             .clipShape(RoundedRectangle(cornerRadius: 8))
             .overlay(
@@ -228,7 +273,7 @@ struct MenuBarView: View {
         }
         .buttonStyle(.plain)
         .disabled(url.isEmpty)
-        .shadow(color: .blue.opacity(url.isEmpty ? 0.0 : 0.3), radius: 6, y: 2)
+        .shadow(color: url.isEmpty ? .clear : SiphonTheme.accent.opacity(0.35), radius: 6, y: 2)
     }
     
     private func getSaveFolder() -> URL {
