@@ -238,10 +238,6 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
         
         let script = """
         (
-            PKG_PATH="$1"
-            APP_PATH="$2"
-            WORK_DIR="$3"
-            
             sleep 2
             
             if file "$PKG_PATH" | grep -q "Zip archive"; then
@@ -272,7 +268,13 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
         
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/bash")
-        process.arguments = ["-c", script, "bash", packagePath, appPath, tempDir.path]
+        process.arguments = ["-c", script]
+
+        var env = ProcessInfo.processInfo.environment
+        env["PKG_PATH"] = packagePath
+        env["APP_PATH"] = appPath
+        env["WORK_DIR"] = tempDir.path
+        process.environment = env
         
         do {
             try process.run()
