@@ -30,14 +30,14 @@ struct MenuBarView: View {
         .padding(14)
         .frame(width: 360)
         .preferredColorScheme(theme == "light" ? .light : (theme == "dark" ? .dark : nil))
-        .background(.ultraThinMaterial)
+        .background(Color(NSColor.windowBackgroundColor).opacity(0.8))
         .onAppear {
             customPresets = CustomPreset.loadAll()
         }
-        .onChange(of: customPresetsData) { _, _ in
+        .onChange(of: customPresetsData) { _ in
             customPresets = CustomPreset.loadAll()
         }
-        .onChange(of: selectedType) { _, newValue in
+        .onChange(of: selectedType) { newValue in
             if newValue == "audio" {
                 selectedPreset = "audio_only"
             } else {
@@ -328,7 +328,7 @@ struct MenuBarView: View {
                         .scaleEffect(0.75)
                     Text("\(downloadManager.downloadingDownloads.count)")
                         .font(.geist(11, weight: .bold))
-                        .monospacedDigit()
+                        .font(.system(size: 13, design: .monospaced))
                     Text(languageService.s("downloading"))
                         .font(.geist(11, weight: .medium))
                         .lineLimit(1)

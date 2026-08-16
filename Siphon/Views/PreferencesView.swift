@@ -135,8 +135,8 @@ struct PreferencesView: View {
         .preferredColorScheme(theme == "light" ? .light : (theme == "dark" ? .dark : nil))
         .accentColor(SiphonTheme.accent)
         .background(PreferencesWindowConfigurator())
-        .background(.ultraThinMaterial)
-        .onChange(of: languageService.selectedLanguage) { _, newValue in
+        .background(Color(NSColor.windowBackgroundColor).opacity(0.8))
+        .onChange(of: languageService.selectedLanguage) { newValue in
             if previousLanguage != nil && previousLanguage != newValue {
                 showLanguageChangeAlert = true
             }
@@ -1009,7 +1009,7 @@ struct PreferencesView: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 .padding(14)
-                .background(.ultraThinMaterial)
+                .background(Color(NSColor.windowBackgroundColor).opacity(0.8))
                 .cornerRadius(12)
                 .overlay(
                     RoundedRectangle(cornerRadius: 12)
@@ -1042,7 +1042,7 @@ struct PreferencesView: View {
                     .font(.geist(11))
                 }
                 .padding(14)
-                .background(.ultraThinMaterial)
+                .background(Color(NSColor.windowBackgroundColor).opacity(0.8))
                 .cornerRadius(12)
                 .overlay(
                     RoundedRectangle(cornerRadius: 12)
@@ -1063,7 +1063,7 @@ struct PreferencesView: View {
                 }
                 .padding(14)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(.ultraThinMaterial)
+                .background(Color(NSColor.windowBackgroundColor).opacity(0.8))
                 .cornerRadius(12)
                 .overlay(
                     RoundedRectangle(cornerRadius: 12)
@@ -1083,7 +1083,7 @@ struct PreferencesView: View {
                         Label("README", systemImage: "doc.text")
                             .padding(.horizontal, 14)
                             .padding(.vertical, 8)
-                            .background(Color.indigo.opacity(0.1))
+                            .background(Color.blue.opacity(0.1))
                             .cornerRadius(8)
                     }
                     Link(destination: URL(string: "https://github.com/marspater/jolly-hopper/blob/main/SUPPORTED_SITES.md") ?? URL(fileURLWithPath: "/")) {
