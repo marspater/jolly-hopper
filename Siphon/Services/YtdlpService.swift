@@ -733,10 +733,14 @@ class YtdlpService: ObservableObject {
         var results: [MediaInfo] = []
         let decoder = JSONDecoder()
 
-        for line in output.components(separatedBy: "\n") where !line.isEmpty {
-            if let data = line.data(using: .utf8),
-               let info = try? decoder.decode(MediaInfo.self, from: data) {
-                results.append(info)
+        // Bolt Performance Optimization: Avoid intermediate String allocations when splitting
+        if let data = output.data(using: .utf8) {
+            let newline = UInt8(ascii: "\n")
+            data.split(separator: newline).forEach { lineData in
+                if !lineData.isEmpty,
+                   let info = try? decoder.decode(MediaInfo.self, from: Data(lineData)) {
+                    results.append(info)
+                }
             }
         }
 
