@@ -218,11 +218,12 @@ struct DownloadRowView: View {
             }
         }
         .padding(14)
-        .background(.ultraThinMaterial)
-        .cornerRadius(14)
+        .background(
+            SiphonTheme.cardBackground(cornerRadius: SiphonTheme.radiusCard, isHovered: isHovering)
+        )
+        .cornerRadius(SiphonTheme.radiusCard)
         .overlay(
-            RoundedRectangle(cornerRadius: 14)
-                .stroke(isHovering ? Color.accentColor.opacity(0.4) : Color.primary.opacity(0.06), lineWidth: 1)
+            SiphonTheme.cardBorder(cornerRadius: SiphonTheme.radiusCard, isHovered: isHovering)
         )
         .shadow(color: Color.black.opacity(isHovering ? 0.08 : 0.02), radius: isHovering ? 8 : 4, y: 2)
         .scaleEffect(isHovering ? 1.006 : 1.0)
@@ -376,22 +377,22 @@ struct FileThumbnailView: View {
 
     private var badgeBackgroundColor: Color {
         switch download.status {
-        case .downloading, .fetching: return Color.blue.opacity(0.15)
-        case .completed: return Color.green.opacity(0.15)
-        case .failed: return Color.red.opacity(0.15)
-        case .queued: return Color.orange.opacity(0.15)
-        case .paused: return Color.yellow.opacity(0.15)
+        case .downloading, .fetching: return SiphonTheme.statusDownloading.opacity(0.15)
+        case .completed: return SiphonTheme.statusCompleted.opacity(0.15)
+        case .failed: return SiphonTheme.statusFailed.opacity(0.15)
+        case .queued: return SiphonTheme.statusQueued.opacity(0.15)
+        case .paused: return SiphonTheme.statusQueued.opacity(0.15)
         default: return Color.gray.opacity(0.15)
         }
     }
 
     private var badgeForegroundColor: Color {
         switch download.status {
-        case .downloading, .fetching: return .blue
-        case .completed: return .green
-        case .failed: return .red
-        case .queued: return .orange
-        case .paused: return .yellow
+        case .downloading, .fetching: return SiphonTheme.statusDownloading
+        case .completed: return SiphonTheme.statusCompleted
+        case .failed: return SiphonTheme.statusFailed
+        case .queued: return SiphonTheme.statusQueued
+        case .paused: return SiphonTheme.statusQueued
         default: return .secondary
         }
     }
@@ -408,7 +409,7 @@ struct FileThumbnailView: View {
                         .font(.system(size: 18))
                 }
                 .buttonStyle(.plain)
-                .foregroundColor(.blue)
+                .foregroundColor(SiphonTheme.accent)
                 .help(languageService.s("play"))
                 .accessibilityLabel(languageService.s("play"))
                 
@@ -446,7 +447,7 @@ struct FileThumbnailView: View {
                         .font(.system(size: 18))
                 }
                 .buttonStyle(.plain)
-                .foregroundColor(.orange)
+                .foregroundColor(SiphonTheme.statusQueued)
                 .help(languageService.s("retry"))
                 .accessibilityLabel(languageService.s("retry"))
                 

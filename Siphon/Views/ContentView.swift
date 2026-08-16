@@ -119,13 +119,13 @@ struct SidebarView: View {
             }
             
             Section(languageService.s("downloading")) {
-                sidebarButton(item: .downloading, badgeCount: downloadManager.downloadingCount, badgeColor: Color(.displayP3, red: 0.15, green: 0.55, blue: 1.0))
-                sidebarButton(item: .queued, badgeCount: downloadManager.queuedCount, badgeColor: Color(.displayP3, red: 0.95, green: 0.55, blue: 0.15))
+                sidebarButton(item: .downloading, badgeCount: downloadManager.downloadingCount, badgeColor: SiphonTheme.statusDownloading)
+                sidebarButton(item: .queued, badgeCount: downloadManager.queuedCount, badgeColor: SiphonTheme.statusQueued)
             }
             
             Section(languageService.s("history")) {
-                sidebarButton(item: .completed, badgeCount: downloadManager.completedCount, badgeColor: Color(.displayP3, red: 0.20, green: 0.65, blue: 0.35))
-                sidebarButton(item: .failed, badgeCount: downloadManager.failedCount, badgeColor: Color(.displayP3, red: 0.90, green: 0.25, blue: 0.35))
+                sidebarButton(item: .completed, badgeCount: downloadManager.completedCount, badgeColor: SiphonTheme.statusCompleted)
+                sidebarButton(item: .failed, badgeCount: downloadManager.failedCount, badgeColor: SiphonTheme.statusFailed)
             }
         }
         .listStyle(.sidebar)
@@ -175,8 +175,10 @@ struct SidebarView: View {
     private func sidebarButton(item: NavigationItem, badgeCount: Int = 0, badgeColor: Color = .blue) -> some View {
         let isSelected = appState.selectedNavItem == item
         Button {
-            withAnimation(.smooth(duration: 0.22)) {
-                appState.selectedNavItem = item
+            if appState.selectedNavItem != item {
+                withAnimation(.spring(response: 0.32, dampingFraction: 0.75)) {
+                    appState.selectedNavItem = item
+                }
             }
         } label: {
             HStack(spacing: 8) {
@@ -184,6 +186,7 @@ struct SidebarView: View {
                     .font(.system(size: 13, weight: .medium))
                     .frame(width: 18, alignment: .center)
                     .foregroundColor(isSelected ? SiphonTheme.accent : .secondary)
+                    .scaleEffect(isSelected ? 1.05 : 1.0)
                 Text(item.title(lang: languageService))
                     .font(.geist(13, weight: isSelected ? .semibold : .medium))
                     .foregroundColor(isSelected ? .primary : .secondary)
@@ -204,7 +207,7 @@ struct SidebarView: View {
         .buttonStyle(.plain)
         .padding(.vertical, 2)
         .listRowBackground(
-            RoundedRectangle(cornerRadius: 8)
+            RoundedRectangle(cornerRadius: SiphonTheme.radiusControl)
                 .fill(isSelected ? SiphonTheme.accent.opacity(0.12) : Color.clear)
                 .padding(.horizontal, 4)
                 .padding(.vertical, 1)
@@ -225,42 +228,24 @@ struct DetailView: View {
     @EnvironmentObject var languageService: LanguageService
     
     var body: some View {
-        ZStack {
+        Group {
             switch appState.selectedNavItem {
             case .home:
                 HomeView()
-                    .transition(.asymmetric(
-                        insertion: .opacity.combined(with: .scale(scale: 0.99)),
-                        removal: .opacity
-                    ))
             case .downloading:
                 DownloadListView(downloads: downloadManager.downloadingDownloads, emptyMessage: languageService.s("empty_downloading"), showStop: true)
-                    .transition(.asymmetric(
-                        insertion: .opacity.combined(with: .scale(scale: 0.99)),
-                        removal: .opacity
-                    ))
             case .queued:
                 DownloadListView(downloads: downloadManager.queuedDownloads, emptyMessage: languageService.s("empty_queued"), showStop: true)
-                    .transition(.asymmetric(
-                        insertion: .opacity.combined(with: .scale(scale: 0.99)),
-                        removal: .opacity
-                    ))
             case .completed:
                 DownloadListView(downloads: downloadManager.completedDownloads, emptyMessage: languageService.s("empty_completed"), showStop: false)
-                    .transition(.asymmetric(
-                        insertion: .opacity.combined(with: .scale(scale: 0.99)),
-                        removal: .opacity
-                    ))
             case .failed:
                 DownloadListView(downloads: downloadManager.failedDownloads, emptyMessage: languageService.s("empty_failed"), showStop: false)
-                    .transition(.asymmetric(
-                        insertion: .opacity.combined(with: .scale(scale: 0.99)),
-                        removal: .opacity
-                    ))
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .animation(.smooth(duration: 0.22), value: appState.selectedNavItem)
+        .compositingGroup()
+        .transition(.opacity)
+        .animation(.spring(response: 0.32, dampingFraction: 0.75), value: appState.selectedNavItem)
     }
 }
 

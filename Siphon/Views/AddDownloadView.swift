@@ -215,12 +215,58 @@ struct AddDownloadView: View {
 
             Spacer()
 
-            Picker("", selection: $inputMode) {
-                Text(languageService.s("single_mode")).tag(InputMode.single)
-                Text(languageService.s("batch_import")).tag(InputMode.batch)
+            HStack(spacing: 2) {
+                Button {
+                    withAnimation(.spring(response: 0.25, dampingFraction: 0.8)) {
+                        inputMode = .single
+                    }
+                } label: {
+                    Text(languageService.s("single_mode"))
+                        .font(.geist(11, weight: .semibold))
+                        .foregroundColor(inputMode == .single ? .white : .secondary)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 4)
+                        .background {
+                            if inputMode == .single {
+                                Capsule()
+                                    .fill(SiphonTheme.primaryGradient)
+                                    .shadow(color: SiphonTheme.accent.opacity(0.35), radius: 4, y: 1)
+                            }
+                        }
+                }
+                .buttonStyle(.plain)
+
+                Button {
+                    withAnimation(.spring(response: 0.25, dampingFraction: 0.8)) {
+                        inputMode = .batch
+                    }
+                } label: {
+                    Text(languageService.s("batch_import"))
+                        .font(.geist(11, weight: .semibold))
+                        .foregroundColor(inputMode == .batch ? .white : .secondary)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 4)
+                        .background {
+                            if inputMode == .batch {
+                                Capsule()
+                                    .fill(SiphonTheme.primaryGradient)
+                                    .shadow(color: SiphonTheme.accent.opacity(0.35), radius: 4, y: 1)
+                            }
+                        }
+                }
+                .buttonStyle(.plain)
             }
-            .pickerStyle(.segmented)
-            .frame(width: 220)
+            .padding(2)
+            .background(
+                Capsule()
+                    .fill(Color.primary.opacity(0.04))
+                    .background(Capsule().fill(.ultraThinMaterial))
+            )
+            .clipShape(Capsule())
+            .overlay(
+                Capsule()
+                    .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+            )
         }
         .padding()
     }
@@ -436,7 +482,7 @@ struct AddDownloadView: View {
             Text(languageService.s("video_url"))
                 .font(.geist(14, weight: .semibold))
 
-            HStack(alignment: .firstTextBaseline, spacing: 10) {
+            HStack(spacing: 8) {
                 TextField(languageService.s("url_hint"), text: $urlInput)
                     .font(.geistMono(12, relativeTo: .body))
                     .textFieldStyle(.roundedBorder)
@@ -455,22 +501,42 @@ struct AddDownloadView: View {
                     }
                 } label: {
                     Image(systemName: isPasted ? "checkmark" : "doc.on.clipboard")
-                        .foregroundColor(isPasted ? .green : .primary)
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundColor(isPasted ? SiphonTheme.statusCompleted : .primary)
+                        .frame(width: 26, height: 22)
+                        .background(SiphonTheme.pillBackground())
+                        .clipShape(RoundedRectangle(cornerRadius: 6))
+                        .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.primary.opacity(0.1), lineWidth: 1))
                 }
+                .buttonStyle(.plain)
                 .help(languageService.s("paste_from_clipboard"))
                 .accessibilityLabel(languageService.s("paste_from_clipboard"))
 
                 Button {
                     fetchInfo()
                 } label: {
-                    if isLoading {
-                        ProgressView()
-                            .controlSize(.small)
-                    } else {
-                        Image(systemName: "arrow.right.circle.fill")
+                    Group {
+                        if isLoading {
+                            ProgressView()
+                                .controlSize(.small)
+                        } else {
+                            Image(systemName: "arrow.right")
+                                .font(.system(size: 12, weight: .bold))
+                        }
                     }
+                    .foregroundColor(urlInput.isEmpty ? .secondary.opacity(0.5) : .white)
+                    .frame(width: 26, height: 22)
+                    .background(
+                        urlInput.isEmpty ?
+                        LinearGradient(colors: [Color.primary.opacity(0.06), Color.primary.opacity(0.04)], startPoint: .top, endPoint: .bottom) :
+                        SiphonTheme.primaryGradient
+                    )
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                    .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.white.opacity(urlInput.isEmpty ? 0.05 : 0.25), lineWidth: 1))
                 }
+                .buttonStyle(.plain)
                 .disabled(urlInput.isEmpty || isLoading)
+                .shadow(color: urlInput.isEmpty ? .clear : SiphonTheme.accent.opacity(0.35), radius: 4, y: 1)
                 .help(languageService.s("fetch_info"))
                 .accessibilityLabel(languageService.s("fetch_info"))
             }
@@ -658,14 +724,60 @@ struct AddDownloadView: View {
                 .menuStyle(.borderlessButton)
             }
 
-            Picker("", selection: $isVideoTab) {
-                Text(languageService.s("video")).tag(true)
-                Text(languageService.s("audio")).tag(false)
+            HStack(spacing: 2) {
+                Button {
+                    withAnimation(.spring(response: 0.25, dampingFraction: 0.8)) {
+                        isVideoTab = true
+                        fileType = .mp4
+                    }
+                } label: {
+                    Text(languageService.s("video"))
+                        .font(.geist(11, weight: .semibold))
+                        .foregroundColor(isVideoTab ? .white : .secondary)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 4)
+                        .background {
+                            if isVideoTab {
+                                Capsule()
+                                    .fill(SiphonTheme.primaryGradient)
+                                    .shadow(color: SiphonTheme.accent.opacity(0.35), radius: 4, y: 1)
+                            }
+                        }
+                }
+                .buttonStyle(.plain)
+
+                Button {
+                    withAnimation(.spring(response: 0.25, dampingFraction: 0.8)) {
+                        isVideoTab = false
+                        fileType = .mp3
+                    }
+                } label: {
+                    Text(languageService.s("audio"))
+                        .font(.geist(11, weight: .semibold))
+                        .foregroundColor(!isVideoTab ? .white : .secondary)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 4)
+                        .background {
+                            if !isVideoTab {
+                                Capsule()
+                                    .fill(SiphonTheme.primaryGradient)
+                                    .shadow(color: SiphonTheme.accent.opacity(0.35), radius: 4, y: 1)
+                            }
+                        }
+                }
+                .buttonStyle(.plain)
             }
-            .pickerStyle(.segmented)
-            .onChange(of: isVideoTab) { _, isVideo in
-                if isVideo { fileType = .mp4 } else { fileType = .mp3 }
-            }
+            .padding(2)
+            .background(
+                Capsule()
+                    .fill(Color.primary.opacity(0.04))
+                    .background(Capsule().fill(.ultraThinMaterial))
+            )
+            .clipShape(Capsule())
+            .overlay(
+                Capsule()
+                    .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+            )
 
             HStack(alignment: .firstTextBaseline, spacing: 24) {
                 Picker(languageService.s("file_type"), selection: $fileType) {
@@ -936,29 +1048,85 @@ struct AddDownloadView: View {
     }
 
     private var footer: some View {
-        HStack {
+        HStack(spacing: 12) {
             Spacer()
-            Button(languageService.s("cancel")) {
+            Button {
                 AddDownloadWindowManager.shared.closeWindow()
                 dismiss()
-            }.keyboardShortcut(.escape)
+            } label: {
+                Text(languageService.s("cancel"))
+                    .font(.geist(13, weight: .medium))
+                    .foregroundColor(.primary)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 5)
+                    .background(SiphonTheme.pillBackground())
+                    .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusControl))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: SiphonTheme.radiusControl)
+                            .stroke(Color.primary.opacity(0.1), lineWidth: 1)
+                    )
+            }
+            .buttonStyle(.plain)
+            .keyboardShortcut(.escape)
 
             if inputMode == .batch {
                 let count = extractBatchUrls(from: batchUrlsText).count
-                Button(String(format: languageService.s("queue_batch"), count)) {
+                let isDisabled = count == 0
+                Button {
                     startDownload()
+                } label: {
+                    Text(String(format: languageService.s("queue_batch"), count))
+                        .font(.geist(13, weight: .bold))
+                        .foregroundColor(isDisabled ? .secondary.opacity(0.6) : .white)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 5)
+                        .background(
+                            isDisabled ?
+                            LinearGradient(colors: [Color.primary.opacity(0.08), Color.primary.opacity(0.04)], startPoint: .top, endPoint: .bottom) :
+                            SiphonTheme.primaryGradient
+                        )
+                        .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusControl))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: SiphonTheme.radiusControl)
+                                .stroke(Color.white.opacity(isDisabled ? 0.05 : 0.25), lineWidth: 1)
+                        )
                 }
-                .buttonStyle(.borderedProminent)
-                .disabled(count == 0)
+                .buttonStyle(.plain)
+                .disabled(isDisabled)
+                .shadow(color: isDisabled ? .clear : SiphonTheme.accent.opacity(0.35), radius: 6, y: 2)
                 .keyboardShortcut(.return)
             } else {
                 let downloadTitle = downloadMode == .playlist ?
                     String(format: languageService.s("download_selected"), selectedPlaylistIds.count) :
                     languageService.s("download_btn")
+                let isDisabled = mediaInfo == nil || (downloadMode == .playlist && selectedPlaylistIds.isEmpty)
 
-                Button(downloadTitle) { startDownload() }
-                .buttonStyle(.borderedProminent)
-                .disabled(mediaInfo == nil || (downloadMode == .playlist && selectedPlaylistIds.isEmpty))
+                Button {
+                    startDownload()
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "arrow.down.circle.fill")
+                            .font(.system(size: 13, weight: .semibold))
+                        Text(downloadTitle)
+                            .font(.geist(13, weight: .bold))
+                    }
+                    .foregroundColor(isDisabled ? .secondary.opacity(0.6) : .white)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 5)
+                    .background(
+                        isDisabled ?
+                        LinearGradient(colors: [Color.primary.opacity(0.08), Color.primary.opacity(0.04)], startPoint: .top, endPoint: .bottom) :
+                        SiphonTheme.primaryGradient
+                    )
+                    .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusControl))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: SiphonTheme.radiusControl)
+                            .stroke(Color.white.opacity(isDisabled ? 0.05 : 0.25), lineWidth: 1)
+                    )
+                }
+                .buttonStyle(.plain)
+                .disabled(isDisabled)
+                .shadow(color: isDisabled ? .clear : SiphonTheme.accent.opacity(0.35), radius: 6, y: 2)
                 .keyboardShortcut(.return)
             }
         }

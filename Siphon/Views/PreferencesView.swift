@@ -224,12 +224,14 @@ struct PreferencesView: View {
                 Button(languageService.s("test_notification")) {
                     NotificationService.shared.sendDownloadCompleted(filename: "Siphon Test", languageService: languageService)
                 }
-                .buttonStyle(.link)
-                .controlSize(.small)
+                .buttonStyle(.plain)
+                .font(.geist(12, weight: .medium))
+                .foregroundColor(SiphonTheme.accent)
             }
             
             Toggle(languageService.s("show_menubar_icon"), isOn: $showMenuBarIcon)
         }
+        .tint(SiphonTheme.accent)
     }
 
     private var themeSection: some View {
@@ -542,6 +544,7 @@ struct PreferencesView: View {
             Toggle(languageService.s("embed_thumbnail"), isOn: $embedThumbnail)
             Toggle(languageService.s("embed_metadata"), isOn: $embedMetadata)
         }
+        .tint(SiphonTheme.accent)
     }
 
     private var concurrentDownloadsSection: some View {
@@ -796,6 +799,7 @@ struct PreferencesView: View {
             Section("SponsorBlock") {
                 Toggle(languageService.s("sponsorblock_desc"), isOn: $sponsorBlock)
             }
+            .tint(SiphonTheme.accent)
             
             ytdlpUpdateSection
             browserCookiesSection

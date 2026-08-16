@@ -38,25 +38,35 @@ extension View {
 // MARK: - Standardized Siphon Design System & Theme
 public enum SiphonTheme {
     // Primary Accent & Gradients
-    public static let accent = Color(red: 0.12, green: 0.48, blue: 1.0)
+    public static let accent = Color(red: 0.10, green: 0.48, blue: 1.0)
     public static let primaryGradient = LinearGradient(
         colors: [
-            Color(red: 0.20, green: 0.52, blue: 1.0),
-            Color(red: 0.08, green: 0.40, blue: 0.94)
+            Color(red: 0.18, green: 0.52, blue: 1.0),
+            Color(red: 0.06, green: 0.40, blue: 0.94)
         ],
         startPoint: .topLeading,
         endPoint: .bottomTrailing
     )
     
-    // Status Colors (WCAG AA compliant contrast in both Light & Dark modes)
-    public static let downloading = Color(red: 0.08, green: 0.48, blue: 0.98)
-    public static let queued = Color(red: 0.94, green: 0.52, blue: 0.08)
-    public static let completed = Color(red: 0.14, green: 0.65, blue: 0.35)
-    public static let failed = Color(red: 0.90, green: 0.25, blue: 0.32)
+    // Semantic Status Colors (Consistent contrast across Light & Dark modes)
+    public static let statusDownloading = Color(red: 0.08, green: 0.48, blue: 0.98)
+    public static let statusQueued = Color(red: 0.96, green: 0.55, blue: 0.10)
+    public static let statusCompleted = Color(red: 0.18, green: 0.72, blue: 0.38)
+    public static let statusFailed = Color(red: 0.94, green: 0.26, blue: 0.30)
+    
+    public static let downloading = statusDownloading
+    public static let queued = statusQueued
+    public static let completed = statusCompleted
+    public static let failed = statusFailed
+    
+    // Radii Tokens
+    public static let radiusControl: CGFloat = 8
+    public static let radiusCard: CGFloat = 12
+    public static let radiusSheet: CGFloat = 14
     
     // Elevated Card & Tile Backgrounds
     @ViewBuilder
-    public static func cardBackground(cornerRadius: CGFloat = 14, isHovered: Bool = false) -> some View {
+    public static func cardBackground(cornerRadius: CGFloat = radiusCard, isHovered: Bool = false) -> some View {
         RoundedRectangle(cornerRadius: cornerRadius)
             .fill(isHovered ? Color.primary.opacity(0.06) : Color.primary.opacity(0.03))
             .background(
@@ -66,7 +76,7 @@ public enum SiphonTheme {
     }
     
     @ViewBuilder
-    public static func cardBorder(cornerRadius: CGFloat = 14, isHovered: Bool = false) -> some View {
+    public static func cardBorder(cornerRadius: CGFloat = radiusCard, isHovered: Bool = false) -> some View {
         RoundedRectangle(cornerRadius: cornerRadius)
             .stroke(isHovered ? Color.primary.opacity(0.14) : Color.primary.opacity(0.07), lineWidth: 1)
     }
