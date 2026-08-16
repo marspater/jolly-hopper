@@ -326,16 +326,16 @@ struct HomeView: View {
                 
                 // Stats Grid
                 LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 16), count: 4), spacing: 16) {
-                    StatCard(title: languageService.s("stat_downloading"), count: downloadManager.downloadingCount, color: Color(.displayP3, red: 0.15, green: 0.55, blue: 1.0)) {
+                    StatCard(title: languageService.s("stat_downloading"), count: downloadManager.downloadingCount, color: SiphonTheme.downloading) {
                         appState.selectedNavItem = .downloading
                     }
-                    StatCard(title: languageService.s("stat_queued"), count: downloadManager.queuedCount, color: Color(.displayP3, red: 0.95, green: 0.55, blue: 0.15)) {
+                    StatCard(title: languageService.s("stat_queued"), count: downloadManager.queuedCount, color: SiphonTheme.queued) {
                         appState.selectedNavItem = .queued
                     }
-                    StatCard(title: languageService.s("stat_completed"), count: downloadManager.completedCount, color: Color(.displayP3, red: 0.20, green: 0.70, blue: 0.40)) {
+                    StatCard(title: languageService.s("stat_completed"), count: downloadManager.completedCount, color: SiphonTheme.completed) {
                         appState.selectedNavItem = .completed
                     }
-                    StatCard(title: languageService.s("stat_failed"), count: downloadManager.failedCount, color: Color(.displayP3, red: 0.92, green: 0.30, blue: 0.38)) {
+                    StatCard(title: languageService.s("stat_failed"), count: downloadManager.failedCount, color: SiphonTheme.failed) {
                         appState.selectedNavItem = .failed
                     }
                 }
@@ -389,8 +389,8 @@ struct StatCard: View {
                     .monospacedDigit()
                     .foregroundColor(color)
                 Text(title)
-                    .font(.geist(12, weight: .medium))
-                    .foregroundColor(.secondary)
+                    .font(.geist(12, weight: .semibold))
+                    .foregroundColor(.primary.opacity(0.75))
                     .multilineTextAlignment(.center)
                     .lineLimit(2)
             }
@@ -398,13 +398,14 @@ struct StatCard: View {
             .frame(height: 96)
             .padding(.vertical, 8)
             .padding(.horizontal, 6)
-            .background(isHovered ? Color.primary.opacity(0.06) : Color.primary.opacity(0.025))
+            .background(
+                SiphonTheme.cardBackground(cornerRadius: 14, isHovered: isHovered)
+            )
             .cornerRadius(14)
             .overlay(
-                RoundedRectangle(cornerRadius: 14)
-                    .stroke(isHovered ? Color.primary.opacity(0.14) : Color.primary.opacity(0.07), lineWidth: 1)
+                SiphonTheme.cardBorder(cornerRadius: 14, isHovered: isHovered)
             )
-            .shadow(color: Color.black.opacity(isHovered ? 0.08 : 0.02), radius: isHovered ? 8 : 2, x: 0, y: 2)
+            .shadow(color: Color.black.opacity(isHovered ? 0.08 : 0.03), radius: isHovered ? 8 : 3, x: 0, y: 2)
             .scaleEffect(isHovered ? 1.02 : 1.0)
             .animation(.spring(response: 0.25, dampingFraction: 0.8), value: isHovered)
         }
@@ -425,12 +426,13 @@ struct SponsorView: View {
                 NSWorkspace.shared.open(url)
             }
         } label: {
-            HStack {
+            HStack(spacing: 8) {
                 Image(systemName: "star.fill")
-                    .foregroundColor(.yellow)
-                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(.orange)
+                    .font(.system(size: 12, weight: .semibold))
                 Text(languageService.s("star_github"))
-                    .font(.geist(12, weight: .bold))
+                    .font(.geist(12, weight: .medium))
+                    .foregroundColor(.primary)
                 Spacer()
                 Image(systemName: "arrow.up.right")
                     .font(.system(size: 10))
@@ -439,14 +441,25 @@ struct SponsorView: View {
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
             .background(
-                RoundedRectangle(cornerRadius: 10)
-                    .fill(isHovered ? Color.yellow.opacity(0.2) : Color.yellow.opacity(0.1))
+                ZStack {
+                    #if os(macOS)
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(Color(nsColor: .controlBackgroundColor).opacity(0.6))
+                    #endif
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(isHovered ? Color.primary.opacity(0.08) : Color.primary.opacity(0.03))
+                }
+            )
+            .cornerRadius(8)
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(isHovered ? Color.primary.opacity(0.18) : Color.primary.opacity(0.08), lineWidth: 1)
             )
         }
         .buttonStyle(.plain)
         .padding(.horizontal, 8)
         .onHover { hovering in
-            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+            withAnimation(.spring(response: 0.25, dampingFraction: 0.8)) {
                 isHovered = hovering
             }
         }

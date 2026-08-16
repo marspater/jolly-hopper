@@ -147,8 +147,13 @@ struct DownloadRowView: View {
                             .foregroundColor(.secondary)
                             .padding(.horizontal, 6)
                             .padding(.vertical, 2)
-                            .background(Color.primary.opacity(0.04))
+                            .background(
+                                SiphonTheme.pillBackground(isSelected: false)
+                            )
                             .clipShape(Capsule())
+                            .overlay(
+                                SiphonTheme.pillBorder(isSelected: false)
+                            )
                         }
                     }
                     
@@ -599,18 +604,9 @@ struct LinearProgressBar: View {
                 Capsule()
                     .fill(Color.primary.opacity(0.08))
                 Capsule()
-                    .fill(
-                        LinearGradient(
-                            colors: [
-                                Color(.displayP3, red: 0.12, green: 0.52, blue: 0.98),
-                                Color(.displayP3, red: 0.18, green: 0.72, blue: 0.98)
-                            ],
-                            startPoint: .leading,
-                            endPoint: .trailing
-                        )
-                    )
+                    .fill(SiphonTheme.primaryGradient)
                     .frame(width: max(0, geometry.size.width * CGFloat(safeValue)))
-                    .shadow(color: Color.blue.opacity(0.3), radius: 3, y: 1)
+                    .shadow(color: SiphonTheme.accent.opacity(0.35), radius: 3, y: 1)
                     .animation(.linear(duration: 0.2), value: safeValue)
             }
         }
