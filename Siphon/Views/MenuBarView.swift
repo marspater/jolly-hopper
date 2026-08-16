@@ -6,6 +6,7 @@ struct MenuBarView: View {
     @State private var url: String = ""
     @State private var selectedType: String = "video"
     @State private var selectedPreset: String = "best_quality"
+    @AppStorage(UserDefaultsKeys.theme) private var theme: String = "system"
     @AppStorage("customPresets") private var customPresetsData: Data = Data()
     
     // Bug #11 fix: Use State to prevent heavy computation in View body
@@ -27,6 +28,7 @@ struct MenuBarView: View {
         }
         .padding(14)
         .frame(width: 360)
+        .preferredColorScheme(theme == "light" ? .light : (theme == "dark" ? .dark : nil))
         .background(.ultraThinMaterial)
         .onAppear {
             customPresets = CustomPreset.loadAll()
