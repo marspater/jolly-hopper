@@ -131,7 +131,7 @@ struct PreferencesView: View {
         }
         .padding(.horizontal, 16)
         .padding(.bottom, 16)
-        .frame(minWidth: 520, idealWidth: 680, maxWidth: .infinity, minHeight: 420, idealHeight: 580, maxHeight: .infinity)
+        .frame(minWidth: 460, idealWidth: 480, maxWidth: 560, minHeight: 450, idealHeight: 490, maxHeight: 650)
         .preferredColorScheme(theme == "light" ? .light : (theme == "dark" ? .dark : nil))
         .accentColor(SiphonTheme.accent)
         .background(PreferencesWindowConfigurator())

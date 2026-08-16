@@ -133,7 +133,7 @@ struct AddDownloadView: View {
             Divider()
             footer
         }
-        .frame(minWidth: 520, idealWidth: 740, maxWidth: .infinity, minHeight: 420, idealHeight: 640, maxHeight: .infinity)
+        .frame(minWidth: 480, idealWidth: 520, maxWidth: 620, minHeight: 560, idealHeight: 700, maxHeight: .infinity)
         .preferredColorScheme(selectedTheme == "light" ? .light : (selectedTheme == "dark" ? .dark : nil))
         .background(.ultraThinMaterial)
         .onAppear {
@@ -329,11 +329,10 @@ struct AddDownloadView: View {
                         }
                         .padding(.horizontal, 12)
                         .padding(.vertical, 5)
-                        .background(SiphonTheme.pillBackground())
+                        .background(SiphonTheme.controlBackground(cornerRadius: SiphonTheme.radiusControl))
                         .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusControl))
                         .overlay(
-                            RoundedRectangle(cornerRadius: SiphonTheme.radiusControl)
-                                .stroke(Color.primary.opacity(0.1), lineWidth: 1)
+                            SiphonTheme.controlBorder(cornerRadius: SiphonTheme.radiusControl)
                         )
                     }
                     .buttonStyle(.plain)
@@ -533,11 +532,10 @@ struct AddDownloadView: View {
                     .foregroundColor(isPasted ? SiphonTheme.statusCompleted : .primary)
                     .padding(.horizontal, 10)
                     .padding(.vertical, 7)
-                    .background(SiphonTheme.pillBackground())
+                    .background(SiphonTheme.controlBackground(cornerRadius: SiphonTheme.radiusControl))
                     .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusControl))
                     .overlay(
-                        RoundedRectangle(cornerRadius: SiphonTheme.radiusControl)
-                            .stroke(Color.primary.opacity(0.1), lineWidth: 1)
+                        SiphonTheme.controlBorder(cornerRadius: SiphonTheme.radiusControl)
                     )
                 }
                 .buttonStyle(.plain)
@@ -547,10 +545,11 @@ struct AddDownloadView: View {
                 Button {
                     fetchInfo()
                 } label: {
-                    HStack(spacing: 5) {
+                    HStack(spacing: 6) {
                         if isLoading {
-                            ProgressView()
-                                .controlSize(.small)
+                            SiphonSpinner(size: 12, color: .white, lineWidth: 2)
+                            Text(languageService.s("fetching"))
+                                .font(.geist(12, weight: .semibold))
                         } else {
                             Text(languageService.s("fetch"))
                                 .font(.geist(12, weight: .semibold))
@@ -1060,11 +1059,10 @@ struct AddDownloadView: View {
                             .font(.geist(12, weight: .medium))
                             .padding(.horizontal, 12)
                             .padding(.vertical, 5)
-                            .background(SiphonTheme.pillBackground())
+                            .background(SiphonTheme.controlBackground(cornerRadius: SiphonTheme.radiusControl))
                             .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusControl))
                             .overlay(
-                                RoundedRectangle(cornerRadius: SiphonTheme.radiusControl)
-                                    .stroke(Color.primary.opacity(0.1), lineWidth: 1)
+                                SiphonTheme.controlBorder(cornerRadius: SiphonTheme.radiusControl)
                             )
                     }
                     .buttonStyle(.plain)
@@ -1285,11 +1283,10 @@ struct AddDownloadView: View {
                     .foregroundColor(.primary)
                     .padding(.horizontal, 14)
                     .padding(.vertical, 5)
-                    .background(SiphonTheme.pillBackground())
+                    .background(SiphonTheme.controlBackground(cornerRadius: SiphonTheme.radiusControl))
                     .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusControl))
                     .overlay(
-                        RoundedRectangle(cornerRadius: SiphonTheme.radiusControl)
-                            .stroke(Color.primary.opacity(0.1), lineWidth: 1)
+                        SiphonTheme.controlBorder(cornerRadius: SiphonTheme.radiusControl)
                     )
             }
             .buttonStyle(.plain)

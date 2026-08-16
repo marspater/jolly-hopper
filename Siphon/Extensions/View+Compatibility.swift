@@ -81,7 +81,7 @@ public enum SiphonTheme {
             .stroke(isHovered ? Color.primary.opacity(0.14) : Color.primary.opacity(0.07), lineWidth: 1)
     }
     
-    // Pill / Badge Backgrounds
+    // Pill / Badge Backgrounds (Capsule)
     @ViewBuilder
     public static func pillBackground(isSelected: Bool = false, isHovered: Bool = false) -> some View {
         if isSelected {
@@ -107,5 +107,59 @@ public enum SiphonTheme {
             Capsule()
                 .stroke(isHovered ? Color.primary.opacity(0.14) : Color.primary.opacity(0.07), lineWidth: 1)
         }
+    }
+    
+    // Control / Button Backgrounds (RoundedRectangle)
+    @ViewBuilder
+    public static func controlBackground(cornerRadius: CGFloat = radiusControl, isHovered: Bool = false) -> some View {
+        RoundedRectangle(cornerRadius: cornerRadius)
+            .fill(isHovered ? Color.primary.opacity(0.08) : Color.primary.opacity(0.04))
+            .background(
+                RoundedRectangle(cornerRadius: cornerRadius)
+                    .fill(.ultraThinMaterial)
+            )
+    }
+    
+    @ViewBuilder
+    public static func controlBorder(cornerRadius: CGFloat = radiusControl, isHovered: Bool = false) -> some View {
+        RoundedRectangle(cornerRadius: cornerRadius)
+            .stroke(isHovered ? Color.primary.opacity(0.18) : Color.primary.opacity(0.09), lineWidth: 1)
+    }
+}
+
+// MARK: - Modern Smooth Spinner
+public struct SiphonSpinner: View {
+    public var size: CGFloat
+    public var color: Color
+    public var lineWidth: CGFloat
+    
+    @State private var isSpinning = false
+    
+    public init(size: CGFloat = 14, color: Color = .white, lineWidth: CGFloat = 2) {
+        self.size = size
+        self.color = color
+        self.lineWidth = lineWidth
+    }
+    
+    public var body: some View {
+        Circle()
+            .trim(from: 0.15, to: 0.85)
+            .stroke(
+                AngularGradient(
+                    gradient: Gradient(colors: [color.opacity(0.2), color]),
+                    center: .center
+                ),
+                style: StrokeStyle(lineWidth: lineWidth, lineCap: .round)
+            )
+            .frame(width: size, height: size)
+            .rotationEffect(Angle(degrees: isSpinning ? 360 : 0))
+            .onAppear {
+                withAnimation(
+                    .linear(duration: 0.85)
+                    .repeatForever(autoreverses: false)
+                ) {
+                    isSpinning = true
+                }
+            }
     }
 }
