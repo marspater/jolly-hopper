@@ -99,19 +99,14 @@ struct PreferencesView: View {
             }
             .padding(4)
             .background(
-                ZStack {
-                    #if os(macOS)
-                    Capsule()
-                        .fill(Color(nsColor: .controlBackgroundColor).opacity(0.75))
-                    #endif
-                    Capsule()
-                        .fill(Color.primary.opacity(0.04))
-                }
+                Capsule()
+                    .fill(Color.primary.opacity(0.04))
+                    .background(Capsule().fill(.ultraThinMaterial))
             )
             .clipShape(Capsule())
             .overlay(
                 Capsule()
-                    .stroke(Color.primary.opacity(0.12), lineWidth: 1)
+                    .stroke(Color.primary.opacity(0.08), lineWidth: 1)
             )
             .padding(.top, 14)
             .padding(.bottom, 12)
@@ -138,6 +133,8 @@ struct PreferencesView: View {
         .padding(.bottom, 16)
         .frame(minWidth: 520, idealWidth: 680, maxWidth: .infinity, minHeight: 420, idealHeight: 580, maxHeight: .infinity)
         .preferredColorScheme(theme == "light" ? .light : (theme == "dark" ? .dark : nil))
+        .tint(SiphonTheme.accent)
+        .accentColor(SiphonTheme.accent)
         .background(PreferencesWindowConfigurator())
         .background(.ultraThinMaterial)
         .onChange(of: languageService.selectedLanguage) { _, newValue in
@@ -244,6 +241,8 @@ struct PreferencesView: View {
                 Text(languageService.s("dark")).tag("dark")
             }
             .pickerStyle(.segmented)
+            .tint(SiphonTheme.accent)
+            .accentColor(SiphonTheme.accent)
         }
     }
 

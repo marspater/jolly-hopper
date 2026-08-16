@@ -57,23 +57,18 @@ public enum SiphonTheme {
     // Elevated Card & Tile Backgrounds
     @ViewBuilder
     public static func cardBackground(cornerRadius: CGFloat = 14, isHovered: Bool = false) -> some View {
-        ZStack {
-            #if os(macOS)
-            RoundedRectangle(cornerRadius: cornerRadius)
-                .fill(Color(nsColor: .controlBackgroundColor).opacity(0.85))
-            #else
-            RoundedRectangle(cornerRadius: cornerRadius)
-                .fill(Color(.secondarySystemBackground))
-            #endif
-            RoundedRectangle(cornerRadius: cornerRadius)
-                .fill(isHovered ? Color.primary.opacity(0.06) : Color.primary.opacity(0.02))
-        }
+        RoundedRectangle(cornerRadius: cornerRadius)
+            .fill(isHovered ? Color.primary.opacity(0.06) : Color.primary.opacity(0.03))
+            .background(
+                RoundedRectangle(cornerRadius: cornerRadius)
+                    .fill(.ultraThinMaterial)
+            )
     }
     
     @ViewBuilder
     public static func cardBorder(cornerRadius: CGFloat = 14, isHovered: Bool = false) -> some View {
         RoundedRectangle(cornerRadius: cornerRadius)
-            .stroke(isHovered ? Color.primary.opacity(0.18) : Color.primary.opacity(0.10), lineWidth: 1)
+            .stroke(isHovered ? Color.primary.opacity(0.14) : Color.primary.opacity(0.07), lineWidth: 1)
     }
     
     // Pill / Badge Backgrounds
@@ -84,17 +79,12 @@ public enum SiphonTheme {
                 .fill(primaryGradient)
                 .shadow(color: accent.opacity(0.35), radius: 6, y: 2)
         } else {
-            ZStack {
-                #if os(macOS)
-                Capsule()
-                    .fill(Color(nsColor: .controlBackgroundColor).opacity(0.75))
-                #else
-                Capsule()
-                    .fill(Color(.secondarySystemBackground))
-                #endif
-                Capsule()
-                    .fill(isHovered ? Color.primary.opacity(0.08) : Color.primary.opacity(0.03))
-            }
+            Capsule()
+                .fill(isHovered ? Color.primary.opacity(0.07) : Color.primary.opacity(0.03))
+                .background(
+                    Capsule()
+                        .fill(.ultraThinMaterial)
+                )
         }
     }
     
@@ -105,7 +95,7 @@ public enum SiphonTheme {
                 .stroke(Color.white.opacity(0.25), lineWidth: 1)
         } else {
             Capsule()
-                .stroke(isHovered ? Color.primary.opacity(0.20) : Color.primary.opacity(0.12), lineWidth: 1)
+                .stroke(isHovered ? Color.primary.opacity(0.14) : Color.primary.opacity(0.07), lineWidth: 1)
         }
     }
 }
