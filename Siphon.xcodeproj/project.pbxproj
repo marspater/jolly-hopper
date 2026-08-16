@@ -43,6 +43,7 @@
 		E0001040 /* DownloadManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000040 /* DownloadManagerTests.swift */; };
 		E0001041 /* MediaInfoTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000041 /* MediaInfoTests.swift */; };
 		E0001042 /* YtdlpServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000042 /* YtdlpServiceTests.swift */; };
+		ABCDEF000000000000000002 /* NetworkUtils.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABCDEF000000000000000001 /* NetworkUtils.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -85,6 +86,7 @@
 		E0000041 /* MediaInfoTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaInfoTests.swift; sourceTree = "<group>"; };
 		E0000042 /* YtdlpServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YtdlpServiceTests.swift; sourceTree = "<group>"; };
 		E0000043 /* SiphonTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SiphonTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		ABCDEF000000000000000001 /* NetworkUtils.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkUtils.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -161,6 +163,7 @@
 		E0003005 /* Services */ = {
 			isa = PBXGroup;
 			children = (
+				ABCDEF000000000000000001 /* NetworkUtils.swift */,
 				E0000004 /* YtdlpService.swift */,
 				E0000008 /* YtdlpProcessRunner.swift */,
 				E0000005 /* DownloadManager.swift */,
@@ -332,6 +335,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				ABCDEF000000000000000002 /* NetworkUtils.swift in Sources */,
 				E0001050 /* Font+Geist.swift in Sources */,
 				E0001003 /* Download.swift in Sources */,
 				E0001028 /* View+Compatibility.swift in Sources */,
