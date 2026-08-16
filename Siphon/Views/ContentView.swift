@@ -60,13 +60,13 @@ struct ContentView: View {
                         showUpdateAlert = true
                     }
                 }
-                .onChange(of: languageService.selectedLanguage) { _, _ in
+                .onChange(of: languageService.selectedLanguage) { _ in
                     MenuBarManager.shared.updateMenu()
                 }
-                .onChange(of: theme) { _, _ in
+                .onChange(of: theme) { _ in
                     MenuBarManager.shared.updateMenu()
                 }
-                .onChange(of: showMenuBarIcon) { _, newValue in
+                .onChange(of: showMenuBarIcon) { newValue in
                     MenuBarManager.shared.setVisible(newValue)
                 }
                 .alert(item: $downloadManager.ytdlpUpdateMessage) { status in
@@ -77,25 +77,34 @@ struct ContentView: View {
                     )
                 }
         }
-        .alert(languageService.s("update_available_title"), isPresented: $showUpdateAlert) {
-            Button(languageService.s("update_now")) {
-                showNativeSettingsWindow()
-            }
-            Button(languageService.s("later"), role: .cancel) { }
-        } message: {
-            Text(String(format: languageService.s("update_available_message"), updateChecker.latestVersion ?? ""))
+        .alert(isPresented: $showUpdateAlert) {
+            Alert(
+                title: Text(languageService.s("update_available_title")),
+                message: Text(String(format: languageService.s("update_available_message"), updateChecker.latestVersion ?? "")),
+                primaryButton: .default(Text(languageService.s("update_now"))) {
+                    showNativeSettingsWindow()
+                },
+                secondaryButton: .cancel(Text(languageService.s("later")))
+            )
         }
         .frame(minWidth: 900, minHeight: 600)
     }
     
     @ViewBuilder
     private var mainLayout: some View {
-        NavigationSplitView(columnVisibility: $columnVisibility) {
-            SidebarView()
-        } detail: {
-            DetailView()
+        if #available(macOS 13.0, *) {
+            NavigationSplitView(columnVisibility: $columnVisibility) {
+                SidebarView()
+            } detail: {
+                DetailView()
+            }
+            .navigationSplitViewStyle(.balanced)
+        } else {
+            NavigationView {
+                SidebarView()
+                DetailView()
+            }
         }
-        .navigationSplitViewStyle(.balanced)
     }
 }
 
@@ -118,19 +127,19 @@ struct SidebarView: View {
                 sidebarButton(item: .home)
             }
             
-            Section(languageService.s("downloading")) {
+            Section(header: Text(languageService.s("downloading"))) {
                 sidebarButton(item: .downloading, badgeCount: downloadManager.downloadingCount, badgeColor: Color(.displayP3, red: 0.15, green: 0.55, blue: 1.0))
                 sidebarButton(item: .queued, badgeCount: downloadManager.queuedCount, badgeColor: Color(.displayP3, red: 0.95, green: 0.55, blue: 0.15))
             }
             
-            Section(languageService.s("history")) {
+            Section(header: Text(languageService.s("history"))) {
                 sidebarButton(item: .completed, badgeCount: downloadManager.completedCount, badgeColor: Color(.displayP3, red: 0.20, green: 0.65, blue: 0.35))
                 sidebarButton(item: .failed, badgeCount: downloadManager.failedCount, badgeColor: Color(.displayP3, red: 0.90, green: 0.25, blue: 0.35))
             }
         }
         .listStyle(.sidebar)
         .siphonSidebarWidth()
-        .safeAreaInset(edge: .bottom) {
+        .overlay(
             VStack(spacing: 8) {
                 SponsorView()
                 
@@ -159,7 +168,10 @@ struct SidebarView: View {
                 .padding(.horizontal, 8)
             }
             .padding(.bottom, 8)
-        }
+            .padding(.top, 8)
+            .background(Color(NSColor.windowBackgroundColor))
+            , alignment: .bottom
+        )
         .toolbar {
             ToolbarItem {
                 Button {
