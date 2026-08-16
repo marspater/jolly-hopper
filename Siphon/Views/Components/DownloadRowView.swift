@@ -78,14 +78,31 @@ struct DownloadListView: View {
             } label: {
                 HStack(spacing: 6) {
                     Image(systemName: "plus.circle.fill")
+                        .font(.system(size: 13, weight: .semibold))
                     Text(languageService.s("new_download"))
                         .font(.geist(13, weight: .semibold))
                 }
-                .padding(.horizontal, 16)
+                .foregroundColor(.white)
+                .padding(.horizontal, 18)
                 .padding(.vertical, 8)
+                .background(
+                    LinearGradient(
+                        colors: [
+                            Color(red: 0.20, green: 0.50, blue: 1.0),
+                            Color(red: 0.12, green: 0.40, blue: 0.95)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
+                .clipShape(Capsule())
+                .overlay(
+                    Capsule()
+                        .stroke(Color.white.opacity(0.25), lineWidth: 1)
+                )
             }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.regular)
+            .buttonStyle(.plain)
+            .shadow(color: Color.blue.opacity(0.35), radius: 8, y: 3)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(32)

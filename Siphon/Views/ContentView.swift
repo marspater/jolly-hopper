@@ -292,18 +292,33 @@ struct HomeView: View {
                 } label: {
                     HStack(spacing: 10) {
                         Image(systemName: "plus.circle.fill")
-                            .font(.title3)
+                            .font(.system(size: 16, weight: .semibold))
                         Text(languageService.s("new_download"))
                             .font(.geist(15, weight: .semibold))
                     }
-                    .padding(.horizontal, 32)
-                    .padding(.vertical, 14)
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 28)
+                    .padding(.vertical, 12)
+                    .background(
+                        LinearGradient(
+                            colors: [
+                                Color(red: 0.20, green: 0.50, blue: 1.0),
+                                Color(red: 0.12, green: 0.40, blue: 0.95)
+                            ],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    )
+                    .clipShape(Capsule())
+                    .overlay(
+                        Capsule()
+                            .stroke(Color.white.opacity(0.25), lineWidth: 1)
+                    )
                 }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
+                .buttonStyle(.plain)
                 .keyboardShortcut("n", modifiers: .command)
                 .scaleEffect(isButtonHovered ? 1.03 : 1.0)
-                .shadow(color: .blue.opacity(isButtonHovered ? 0.45 : 0.3), radius: isButtonHovered ? 14 : 10, y: isButtonHovered ? 6 : 4)
+                .shadow(color: Color.blue.opacity(isButtonHovered ? 0.5 : 0.3), radius: isButtonHovered ? 14 : 10, y: isButtonHovered ? 6 : 4)
                 .animation(.spring(response: 0.3, dampingFraction: 0.75), value: isButtonHovered)
                 .onHover { hovering in
                     isButtonHovered = hovering
