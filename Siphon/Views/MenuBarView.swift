@@ -200,17 +200,27 @@ struct MenuBarView: View {
         } label: {
             HStack(spacing: 6) {
                 Image(systemName: "arrow.down.circle.fill")
-                    .font(.system(size: 14))
+                    .font(.system(size: 14, weight: .semibold))
                 Text(languageService.s("download_btn"))
                     .font(.geist(13, weight: .bold))
             }
+            .foregroundColor(.white)
             .frame(maxWidth: .infinity)
             .frame(height: 32)
+            .background(
+                url.isEmpty ?
+                LinearGradient(colors: [Color.gray.opacity(0.35), Color.gray.opacity(0.25)], startPoint: .top, endPoint: .bottom) :
+                LinearGradient(colors: [Color(red: 0.20, green: 0.50, blue: 1.0), Color(red: 0.12, green: 0.40, blue: 0.95)], startPoint: .top, endPoint: .bottom)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(Color.white.opacity(url.isEmpty ? 0.05 : 0.25), lineWidth: 1)
+            )
         }
-        .buttonStyle(.borderedProminent)
-        .controlSize(.regular)
+        .buttonStyle(.plain)
         .disabled(url.isEmpty)
-        .shadow(color: .blue.opacity(url.isEmpty ? 0.0 : 0.2), radius: 6, y: 2)
+        .shadow(color: .blue.opacity(url.isEmpty ? 0.0 : 0.3), radius: 6, y: 2)
     }
     
     private func getSaveFolder() -> URL {
