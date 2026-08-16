@@ -517,8 +517,8 @@ struct AddDownloadView: View {
     private var playlistDetectedBanner: some View {
         HStack {
             VStack(alignment: .leading, spacing: 4) {
-                Text(languageService.s("playlist_detected")).font(.headline)
-                Text(languageService.s("entire_playlist")).font(.subheadline).foregroundColor(.secondary)
+                Text(languageService.s("playlist_detected")).font(.geist(14, weight: .bold))
+                Text(languageService.s("entire_playlist")).font(.geist(12)).foregroundColor(.secondary)
             }
             Spacer()
             if isLoadingPlaylist {
@@ -539,7 +539,7 @@ struct AddDownloadView: View {
     private var playlistSelectorSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text(languageService.s("entire_playlist")).font(.headline)
+                Text(languageService.s("entire_playlist")).font(.geist(14, weight: .bold))
                 Spacer()
                 Button(languageService.s("single_video")) {
                     showPlaylistSelector = false
@@ -550,11 +550,11 @@ struct AddDownloadView: View {
 
             HStack(spacing: 12) {
                 Button(languageService.s("select_all")) { selectedPlaylistIds = Set(playlistItems.map { $0.id }) }
-                    .buttonStyle(.plain).foregroundColor(.blue)
+                    .buttonStyle(.plain).foregroundColor(SiphonTheme.accent)
                 Button(languageService.s("deselect_all")) { selectedPlaylistIds.removeAll() }
-                    .buttonStyle(.plain).foregroundColor(.blue)
+                    .buttonStyle(.plain).foregroundColor(SiphonTheme.accent)
                 Spacer()
-                Text("\(selectedPlaylistIds.count) / \(playlistItems.count)").font(.caption).foregroundColor(.secondary)
+                Text("\(selectedPlaylistIds.count) / \(playlistItems.count)").font(.geistMono(11, weight: .semibold)).foregroundColor(.secondary)
             }
 
             ScrollView {
@@ -726,12 +726,12 @@ struct AddDownloadView: View {
             if isVideoTab && selectedCodec == "h264" {
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
                     Image(systemName: "info.circle.fill")
-                        .foregroundColor(.blue)
+                        .foregroundColor(SiphonTheme.accent)
                     Text(languageService.s("h264_preset_info"))
                         .multilineTextAlignment(.leading)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .font(.caption)
+                .font(.geist(11))
                 .foregroundColor(.secondary)
                 .padding(.top, 4)
             }
@@ -741,7 +741,7 @@ struct AddDownloadView: View {
                     Image(systemName: "info.circle")
                     Text(languageService.s("codec_fallback_note"))
                 }
-                .font(.caption)
+                .font(.geist(11))
                 .foregroundColor(.secondary)
                 .padding(.top, 4)
             }
@@ -753,7 +753,7 @@ struct AddDownloadView: View {
                         .multilineTextAlignment(.leading)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .font(.caption)
+                .font(.geist(11))
                 .foregroundColor(.secondary)
                 .padding(.top, 4)
             }
@@ -834,7 +834,7 @@ struct AddDownloadView: View {
 
                         if availableSubtitles.isEmpty && mediaInfo != nil {
                             Text(languageService.s("no_subtitles"))
-                                .font(.caption)
+                                .font(.geist(11))
                                 .foregroundColor(.secondary)
                         } else if downloadSubtitles {
                                 Menu {

@@ -213,7 +213,7 @@ struct PreferencesView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Toggle(languageService.s("start_in_background"), isOn: $startInBackground)
                     Text(languageService.s("start_in_background_desc"))
-                        .font(.caption)
+                        .font(.geist(11))
                         .foregroundColor(.secondary)
                 }
                 .padding(.leading, 20)
@@ -254,7 +254,7 @@ struct PreferencesView: View {
                         .font(.system(size: 14))
 
                     Text(defaultSaveFolder.isEmpty ? "~/Downloads" : defaultSaveFolder)
-                        .font(.system(size: 12, weight: .medium, design: .monospaced))
+                        .font(.geistMono(12, weight: .medium))
                         .foregroundColor(.primary)
                         .lineLimit(1)
                         .truncationMode(.middle)
