@@ -161,7 +161,10 @@ struct MenuBarView: View {
                 Picker("", selection: $selectedPreset) {
                     Section(languageService.s("standard")) {
                         ForEach(DownloadPreset.allCases) { preset in
-                            if (selectedType == "video" && preset != .audioOnly) || (selectedType == "audio" && preset == .audioOnly) {
+                            let isVideo = selectedType == "video"
+                            let isAudio = selectedType == "audio"
+                            let isAudioPreset = preset == .audioOnly
+                            if (isVideo && !isAudioPreset) || (isAudio && isAudioPreset) {
                                 Text(preset.title(lang: languageService)).tag(preset.rawValue)
                             }
                         }
