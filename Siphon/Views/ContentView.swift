@@ -38,7 +38,7 @@ struct ContentView: View {
             mainLayout
                 .preferredColorScheme(theme == "light" ? .light : (theme == "dark" ? .dark : nil))
                 .background(MainWindowConfigurator())
-                .onChange(of: appState.showAddDownloadSheet) { _, newValue in
+                .onChange(of: appState.showAddDownloadSheet) { newValue in
                     if newValue {
                         AddDownloadWindowManager.shared.showAddDownloadWindow(downloadManager: downloadManager, appState: appState, languageService: languageService)
                         appState.showAddDownloadSheet = false
@@ -60,13 +60,13 @@ struct ContentView: View {
                         showUpdateAlert = true
                     }
                 }
-                .onChange(of: languageService.selectedLanguage) { _, _ in
+                .onChange(of: languageService.selectedLanguage) { _ in
                     MenuBarManager.shared.updateMenu()
                 }
-                .onChange(of: theme) { _, _ in
+                .onChange(of: theme) { _ in
                     MenuBarManager.shared.updateMenu()
                 }
-                .onChange(of: showMenuBarIcon) { _, newValue in
+                .onChange(of: showMenuBarIcon) { newValue in
                     MenuBarManager.shared.setVisible(newValue)
                 }
                 .alert(item: $downloadManager.ytdlpUpdateMessage) { status in

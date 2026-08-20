@@ -34,10 +34,10 @@ struct MenuBarView: View {
         .onAppear {
             customPresets = CustomPreset.loadAll()
         }
-        .onChange(of: customPresetsData) { _, _ in
+        .onChange(of: customPresetsData) { _ in
             customPresets = CustomPreset.loadAll()
         }
-        .onChange(of: selectedType) { _, newValue in
+        .onChange(of: selectedType) { newValue in
             if newValue == "audio" {
                 selectedPreset = "audio_only"
             } else {
