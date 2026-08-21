@@ -745,6 +745,12 @@ struct MediaInfo: Codable {
         // 3. Video formats: filter by hard constraints (codec & resolution), then rank by quality
         var candidateVideos = formats.filter { !$0.isAudioOnly }
 
+        // Filter out untested formats if candidates with verified/tested streams exist
+        let testedVideos = candidateVideos.filter { $0.needsTesting != true }
+        if !testedVideos.isEmpty {
+            candidateVideos = testedVideos
+        }
+
         // Hard constraint: Video Codec filter (first satisfy codec requirement)
         if let requestedCodec = options.videoCodec, requestedCodec != .auto {
             let matchingCodec = candidateVideos.filter { fmt in
@@ -908,19 +914,56 @@ struct MediaFormat: Codable, Identifiable, Hashable {
     let acodec: String?
     let abr: Double?
     let vbr: Double?
+    let tbr: Double?
     let filesize: Int64?
     let filesizeApprox: Int64?
     let formatNote: String?
     let formatProtocol: String?
     let manifestUrl: String?
+    let needsTesting: Bool?
 
     enum CodingKeys: String, CodingKey {
         case formatId = "format_id"
-        case ext, resolution, fps, vcodec, acodec, abr, vbr, filesize
+        case ext, resolution, fps, vcodec, acodec, abr, vbr, tbr, filesize
         case filesizeApprox = "filesize_approx"
         case formatNote = "format_note"
         case formatProtocol = "protocol"
         case manifestUrl = "manifest_url"
+        case needsTesting = "__needs_testing"
+    }
+
+    init(
+        formatId: String,
+        ext: String,
+        resolution: String? = nil,
+        fps: Double? = nil,
+        vcodec: String? = nil,
+        acodec: String? = nil,
+        abr: Double? = nil,
+        vbr: Double? = nil,
+        tbr: Double? = nil,
+        filesize: Int64? = nil,
+        filesizeApprox: Int64? = nil,
+        formatNote: String? = nil,
+        formatProtocol: String? = nil,
+        manifestUrl: String? = nil,
+        needsTesting: Bool? = nil
+    ) {
+        self.formatId = formatId
+        self.ext = ext
+        self.resolution = resolution
+        self.fps = fps
+        self.vcodec = vcodec
+        self.acodec = acodec
+        self.abr = abr
+        self.vbr = vbr
+        self.tbr = tbr
+        self.filesize = filesize
+        self.filesizeApprox = filesizeApprox
+        self.formatNote = formatNote
+        self.formatProtocol = formatProtocol
+        self.manifestUrl = manifestUrl
+        self.needsTesting = needsTesting
     }
 
     var isFragmented: Bool {
@@ -964,7 +1007,7 @@ struct MediaFormat: Codable, Identifiable, Hashable {
         let h = parsedHeight ?? 0
         score += Double(h) * 10000.0
         
-        if let bitrate = vbr ?? abr {
+        if let bitrate = tbr ?? vbr ?? abr {
             score += bitrate
         }
         if let size = filesize ?? filesizeApprox {
@@ -972,6 +1015,9 @@ struct MediaFormat: Codable, Identifiable, Hashable {
         }
         if let fps = fps {
             score += fps
+        }
+        if needsTesting == true {
+            score -= 1_000_000.0
         }
         return score
     }
@@ -1002,7 +1048,11 @@ struct MediaFormat: Codable, Identifiable, Hashable {
         if let fps = fps, fps > 0 { parts.append("\(Int(fps))fps") }
         if let vcodec = vcodec, vcodec != "none" { parts.append(vcodec) }
         if let acodec = acodec, acodec != "none" { parts.append(acodec) }
-        if let abr = abr, abr > 0 { parts.append("\(Int(abr))k") }
+        if let abr = abr, abr > 0 {
+            parts.append("\(Int(abr))k")
+        } else if let tbr = tbr, tbr > 0, (vbr == nil || vbr == 0) {
+            parts.append("\(Int(tbr))k")
+        }
         if let size = filesize ?? filesizeApprox, size > 0 {
             let mb = Double(size) / (1024.0 * 1024.0)
             parts.append(String(format: "%.1f MB", mb))

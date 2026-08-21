@@ -427,7 +427,8 @@ struct AddDownloadView: View {
 
                             ScrollView {
                                 VStack(spacing: 4) {
-                                    ForEach(formats) { fmt in
+                                    let displayFormats = formats.filter { $0.needsTesting != true }.isEmpty ? formats : formats.filter { $0.needsTesting != true }
+                                    ForEach(displayFormats) { fmt in
                                         Button {
                                             selectedFormatId = fmt.formatId
                                         } label: {
