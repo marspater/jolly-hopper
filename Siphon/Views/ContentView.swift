@@ -167,6 +167,8 @@ struct SidebarView: View {
                 } label: {
                     Label(languageService.s("new_download"), systemImage: "plus")
                 }
+                .help(languageService.s("new_download"))
+                .accessibilityLabel(languageService.s("new_download"))
             }
         }
     }
