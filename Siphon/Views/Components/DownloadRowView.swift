@@ -37,6 +37,8 @@ struct DownloadListView: View {
                             } label: {
                                 Label(languageService.s("stop_all"), systemImage: "stop.circle")
                             }
+                            .help(languageService.s("stop_all"))
+                            .accessibilityLabel(languageService.s("stop_all"))
                         } else {
                             Button {
                                 downloadManager.clearDownloads(downloads)
@@ -44,6 +46,7 @@ struct DownloadListView: View {
                                 Label(languageService.s("clear_history"), systemImage: "trash")
                             }
                             .help(languageService.s("clear_history_help"))
+                            .accessibilityLabel(languageService.s("clear_history"))
                         }
                     }
                 }
