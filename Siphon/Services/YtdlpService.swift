@@ -1965,28 +1965,17 @@ final class StreamBuffer: @unchecked Sendable {
         buffer.append(chunk)
         var lines: [String] = []
 
-        var searchStartIndex = buffer.startIndex
-        while let newlineIndex = buffer[searchStartIndex...].firstIndex(of: 0x0A) { // 0x0A is '\n'
-            let lineData = buffer.subdata(in: searchStartIndex..<newlineIndex)
-            searchStartIndex = newlineIndex + 1
+        while let newlineIndex = buffer.firstIndex(of: 0x0A) { // 0x0A is '\n'
+            let lineData = buffer.subdata(in: buffer.startIndex..<newlineIndex)
+            buffer.removeSubrange(buffer.startIndex...newlineIndex)
 
             if let line = String(data: lineData, encoding: .utf8) {
-                // Bolt Performance Optimization: Replace CharacterSet creation with fast prefix/suffix drops
-                var trimmed = line[...]
-                while trimmed.hasSuffix("\r") { trimmed = trimmed.dropLast() }
-                while trimmed.hasPrefix("\r") { trimmed = trimmed.dropFirst() }
-
+                let trimmed = line.trimmingCharacters(in: CharacterSet(charactersIn: "\r"))
                 if !trimmed.isEmpty {
-                    lines.append(String(trimmed))
+                    lines.append(trimmed)
                 }
             }
         }
-
-        // Bolt Performance Optimization: Batch memory removal to avoid O(N^2) buffer shifting
-        if searchStartIndex > buffer.startIndex {
-            buffer.removeSubrange(buffer.startIndex..<searchStartIndex)
-        }
-
         return lines
     }
 
