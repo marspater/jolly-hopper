@@ -1514,7 +1514,29 @@ class YtdlpService: ObservableObject {
             }
         }
 
+        // 3. xHamster normalization
+        if isXHamsterURL(host) {
+            components.scheme = "https"
+            let trackingPrefixes = ["utm_"]
+            let trackingNames = Set(["from", "promo", "ref", "source", "reftag"])
+            components.queryItems = components.queryItems?.filter { item in
+                let name = item.name.lowercased()
+                return !trackingNames.contains(name) && !trackingPrefixes.contains { name.hasPrefix($0) }
+            }
+            if components.queryItems?.isEmpty == true { components.queryItems = nil }
+
+            if host.hasSuffix("xhamster.com") {
+                components.host = "xhamster.com"
+            }
+            return components.url?.absoluteString ?? components.string ?? urlString
+        }
+
         return components.string ?? urlString
+    }
+
+    private func isXHamsterURL(_ url: String) -> Bool {
+        let lower = url.lowercased()
+        return lower.contains("xhamster.com") || lower.contains("xhamster.desi") || lower.contains("xhamster.one") || lower.contains("xhamster2.com") || lower.contains("xhamster3.com") || lower.contains("xhcdn.com") || lower.contains("ahcdn.com") || lower.contains("xhvid.com")
     }
 
     private func isThisVidURL(_ url: String) -> Bool {
@@ -1574,6 +1596,7 @@ class YtdlpService: ObservableObject {
 
         let isYouTube = lowerUrl.contains("youtube.com") || lowerUrl.contains("youtu.be")
         let isThisVid = lowerUrl.contains("thisvid.com") || lowerUrl.contains("thisvid")
+        let isXHamster = isXHamsterURL(lowerUrl)
         let isFragmented: Bool
         if let info = mediaInfo, let opts = options {
             isFragmented = info.isSelectedFormatFragmented(options: opts)
@@ -1584,7 +1607,8 @@ class YtdlpService: ObservableObject {
                 lowerUrl.contains(".mpd") ||
                 lowerUrl.contains("boyfriend.tv") ||
                 lowerUrl.contains("boyfriendtv.com") ||
-                lowerUrl.contains("cdn.boyfriend.tv")
+                lowerUrl.contains("cdn.boyfriend.tv") ||
+                isXHamster
         }
 
         // Universal baseline transport optimization:
@@ -1611,6 +1635,10 @@ class YtdlpService: ObservableObject {
             args.append(contentsOf: ["--add-header", "Accept:*/*"])
             let referer = lowerUrl.contains("/embed/") ? url : "https://www.boyfriend.tv/"
             args.append(contentsOf: ["--add-header", "Referer:\(referer)"])
+            args.append(contentsOf: ["--hls-use-mpegts"])
+        } else if isXHamster {
+            args.append(contentsOf: ["--add-header", "Referer:https://xhamster.com/"])
+            args.append(contentsOf: ["--add-header", "Origin:https://xhamster.com"])
             args.append(contentsOf: ["--hls-use-mpegts"])
         } else if lowerUrl.contains("justthegays.com") || lowerUrl.contains("justthegays.tv") {
             args.append(contentsOf: ["--add-header", "Referer:https://justthegays.com/"])

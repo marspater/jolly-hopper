@@ -1052,6 +1052,93 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertEqual(info.duration, 1909)
         XCTAssertEqual(info.thumbnail, "https://cdn77-t.boyfriendtv.com/thumb.jpg")
     }
+
+    func testMediaFormatDecodesTBRAndNeedsTesting() throws {
+        let json = """
+        {
+            "format_id": "h264-720p",
+            "ext": "mp4",
+            "resolution": "720p",
+            "vcodec": "h264",
+            "tbr": 1250.5,
+            "__needs_testing": true
+        }
+        """.data(using: .utf8)!
+
+        let format = try JSONDecoder().decode(MediaFormat.self, from: json)
+        XCTAssertEqual(format.formatId, "h264-720p")
+        XCTAssertEqual(format.tbr, 1250.5)
+        XCTAssertEqual(format.needsTesting, true)
+    }
+
+    func testResolveSelectedFormatsFiltersUntestedFormatsWhenTestedExist() throws {
+        let json = """
+        {
+            "id": "xhQvXns",
+            "title": "Cam Cum: Big Fat Cock Erupts",
+            "formats": [
+                {
+                    "format_id": "h264-720p",
+                    "ext": "mp4",
+                    "resolution": "720p",
+                    "height": 720,
+                    "vcodec": "h264",
+                    "protocol": "https",
+                    "__needs_testing": true
+                },
+                {
+                    "format_id": "hls-537-1",
+                    "ext": "mp4",
+                    "resolution": "1280x720",
+                    "height": 720,
+                    "vcodec": "avc1.4d4015",
+                    "acodec": "mp4a.40.2",
+                    "tbr": 537.143,
+                    "protocol": "m3u8_native"
+                }
+            ]
+        }
+        """.data(using: .utf8)!
+
+        let mediaInfo = try JSONDecoder().decode(MediaInfo.self, from: json)
+        var options = DownloadOptions.default
+        options.fileType = .mp4
+        options.videoResolution = .r720p
+        options.videoCodec = .h264
+
+        let resolved = mediaInfo.resolveSelectedFormats(options: options)
+        XCTAssertEqual(resolved.count, 1)
+        XCTAssertEqual(resolved.first?.formatId, "hls-537-1", "resolveSelectedFormats must select the working verified HLS stream over the untested progressive format")
+    }
+
+    func testXHamsterURLNormalizationAndHeaders() async throws {
+        service.ytdlpPath = URL(fileURLWithPath: "/usr/local/bin/yt-dlp")
+        let capturedArgsBox = TestBox<[String]>([])
+        service.processRunner = MockYtdlpProcessRunner(
+            mockCommand: { _ in "{}" },
+            mockDownload: { args in
+                capturedArgsBox.value = args
+                return "[download] Destination: /tmp/test.mp4\n"
+            }
+        )
+
+        _ = try await service.download(
+            url: "https://de.xhamster.com/videos/cam-cum-big-fat-cock-erupts-xhQvXns?from=search",
+            options: DownloadOptions.default,
+            onProcessCreated: { _ in },
+            onProgress: { _, _, _ in },
+            onOutput: { _ in }
+        )
+
+        let args = capturedArgsBox.value
+        let targetUrl = args.last ?? ""
+        XCTAssertTrue(targetUrl.contains("xhamster.com/videos/cam-cum-big-fat-cock-erupts-xhQvXns"), "xHamster URL must be normalized")
+        XCTAssertTrue(args.contains("Origin:https://xhamster.com"))
+        XCTAssertTrue(args.contains(where: { $0.contains("Referer:https://xhamster.com/") }))
+        XCTAssertTrue(args.contains("--hls-use-mpegts"))
+        XCTAssertTrue(args.contains(where: { $0 == "--concurrent-fragments" }))
+    }
 }
+
 
 
