@@ -1138,7 +1138,41 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertTrue(args.contains("--hls-use-mpegts"))
         XCTAssertTrue(args.contains(where: { $0 == "--concurrent-fragments" }))
     }
+
+    func testArgumentInjectionProtectionWithDoubleDash() async throws {
+        service.ytdlpPath = URL(fileURLWithPath: "/usr/local/bin/yt-dlp")
+        let capturedArgsBox = TestBox<[String]>([])
+        service.processRunner = MockYtdlpProcessRunner(
+            mockCommand: { args in
+                capturedArgsBox.value = args
+                return "{}"
+            }
+        )
+
+        _ = try? await service.fetchInfo(url: "--exec=calc")
+        let args = capturedArgsBox.value
+        if let dashIdx = args.lastIndex(of: "--") {
+            XCTAssertEqual(args[dashIdx + 1], "--exec=calc", "Double dash must precede the URL argument to prevent argument injection")
+        } else {
+            XCTFail("Expected double dash '--' argument delimiter before URL")
+        }
+    }
+
+    func testStreamBufferBatchExtractionAndCRTrimming() {
+        let streamBuffer = StreamBuffer()
+        let chunk = "line 1\r\nline 2\nline 3\r\nincomplete".data(using: .utf8)!
+        let extracted = streamBuffer.appendAndExtractLines(chunk)
+        XCTAssertEqual(extracted, ["line 1", "line 2", "line 3"])
+
+        let secondChunk = " line finished\n".data(using: .utf8)!
+        let secondExtracted = streamBuffer.appendAndExtractLines(secondChunk)
+        XCTAssertEqual(secondExtracted, ["incomplete line finished"])
+
+        let flushLines = streamBuffer.flush()
+        XCTAssertTrue(flushLines.isEmpty)
+    }
 }
+
 
 
 

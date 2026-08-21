@@ -536,11 +536,12 @@ class YtdlpService: ObservableObject {
                     "--no-warnings"
                 ]
                 appendSiteSpecificArgs(for: btvMedia.embedURL, to: &btvArgs)
+                btvArgs.append("--")
                 btvArgs.append(btvMedia.streamURL)
                 
                 if let output = try? await runCommand(btvArgs),
-                   let data = output.data(using: .utf8),
-                   let parsedInfo = try? JSONDecoder().decode(MediaInfo.self, from: data) {
+                    let data = output.data(using: .utf8),
+                    let parsedInfo = try? JSONDecoder().decode(MediaInfo.self, from: data) {
                     return MediaInfo(
                         id: url,
                         title: btvMedia.title,
@@ -605,6 +606,7 @@ class YtdlpService: ObservableObject {
         }
 
         appendSiteSpecificArgs(for: url, to: &args)
+        args.append("--")
         args.append(url)
 
         defer {
@@ -657,6 +659,7 @@ class YtdlpService: ObservableObject {
         }
 
         args.append(contentsOf: ["--extractor-args", "generic:impersonate"])
+        args.append("--")
         args.append(url)
 
         defer {
@@ -720,6 +723,7 @@ class YtdlpService: ObservableObject {
         }
 
         args.append(contentsOf: ["--extractor-args", "generic:impersonate"])
+        args.append("--")
         args.append(url)
 
         defer {
@@ -880,7 +884,7 @@ class YtdlpService: ObservableObject {
         args.append("--newline")
         args.append("--progress-template")
         args.append("%(progress._percent_str)s %(progress._speed_str)s %(progress._eta_str)s")
-        
+        args.append("--")
         args.append(targetURL)
         
         let sanitizedCommand = LoggerService.sanitizeCommandForLog(args)
@@ -1253,6 +1257,7 @@ class YtdlpService: ObservableObject {
                     args.append(contentsOf: ["--cookies-from-browser", browserName])
                 }
                 appendSiteSpecificArgs(for: targetUrl, to: &args)
+                args.append("--")
                 args.append(targetUrl)
                 
                 var dumpOutput: String? = nil
@@ -1389,6 +1394,7 @@ class YtdlpService: ObservableObject {
                     embedArgs.append(contentsOf: ["--cookies-from-browser", browserName])
                 }
                 appendSiteSpecificArgs(for: embed, to: &embedArgs)
+                embedArgs.append("--")
                 embedArgs.append(embed)
                 
                 var embedDump: String? = nil
@@ -1755,7 +1761,7 @@ class YtdlpService: ObservableObject {
             try? FileManager.default.removeItem(atPath: cookiePath)
         }
 
-        let ytdlpArgs = [path, "--ignore-config", "--cookies-from-browser", browser, "--cookies", cookiePath, "--skip-download", url]
+        let ytdlpArgs = [path, "--ignore-config", "--cookies-from-browser", browser, "--cookies", cookiePath, "--skip-download", "--", url]
         
         // This will create the cookies file, even if it eventually fails with "Unsupported URL"
         _ = try? await runCommand(ytdlpArgs)
@@ -1993,17 +1999,25 @@ final class StreamBuffer: @unchecked Sendable {
         buffer.append(chunk)
         var lines: [String] = []
 
-        while let newlineIndex = buffer.firstIndex(of: 0x0A) { // 0x0A is '\n'
-            let lineData = buffer.subdata(in: buffer.startIndex..<newlineIndex)
-            buffer.removeSubrange(buffer.startIndex...newlineIndex)
+        var searchStartIndex = buffer.startIndex
+        while let newlineIndex = buffer[searchStartIndex...].firstIndex(of: 0x0A) { // 0x0A is '\n'
+            let lineData = buffer.subdata(in: searchStartIndex..<newlineIndex)
+            searchStartIndex = newlineIndex + 1
 
             if let line = String(data: lineData, encoding: .utf8) {
-                let trimmed = line.trimmingCharacters(in: CharacterSet(charactersIn: "\r"))
+                var trimmed = line[...]
+                while trimmed.hasSuffix("\r") { trimmed = trimmed.dropLast() }
+                while trimmed.hasPrefix("\r") { trimmed = trimmed.dropFirst() }
                 if !trimmed.isEmpty {
-                    lines.append(trimmed)
+                    lines.append(String(trimmed))
                 }
             }
         }
+
+        if searchStartIndex > buffer.startIndex {
+            buffer.removeSubrange(buffer.startIndex..<searchStartIndex)
+        }
+
         return lines
     }
 
@@ -2013,9 +2027,11 @@ final class StreamBuffer: @unchecked Sendable {
         var lines: [String] = []
         if !buffer.isEmpty {
             if let line = String(data: buffer, encoding: .utf8) {
-                let trimmed = line.trimmingCharacters(in: CharacterSet(charactersIn: "\r\n"))
+                var trimmed = line[...]
+                while trimmed.hasSuffix("\r") || trimmed.hasSuffix("\n") { trimmed = trimmed.dropLast() }
+                while trimmed.hasPrefix("\r") || trimmed.hasPrefix("\n") { trimmed = trimmed.dropFirst() }
                 if !trimmed.isEmpty {
-                    lines.append(trimmed)
+                    lines.append(String(trimmed))
                 }
             }
             buffer.removeAll()
