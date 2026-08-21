@@ -109,7 +109,6 @@ struct DownloadListView: View {
     }
 }
 
-@available(macOS 12.0, *)
 struct DownloadRowView: View {
     @ObservedObject var download: Download
     @EnvironmentObject var downloadManager: DownloadManager
@@ -281,7 +280,6 @@ struct DownloadRowView: View {
             }
     }
 
-@available(macOS 12.0, *)
 struct FileThumbnailView: View {
     let fileURL: URL
     @State private var thumbnailImage: NSImage? = nil
