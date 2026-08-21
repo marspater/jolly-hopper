@@ -55,6 +55,15 @@ final class NotificationService: NSObject, @unchecked Sendable, UNUserNotificati
     }
 
     func setup() {
+        guard let center = notificationCenter else { return }
+        center.delegate = self
+        center.getNotificationSettings { [weak self] settings in
+            if settings.authorizationStatus == .notDetermined {
+                self?.requestPermission()
+            } else if settings.authorizationStatus == .authorized {
+                self?.logMessage("Notification permission already authorized.", level: .info)
+            }
+        }
         logMessage("NotificationService initialized, delegate registered.", level: .info)
     }
 
@@ -88,6 +97,8 @@ final class NotificationService: NSObject, @unchecked Sendable, UNUserNotificati
                     if granted {
                         self.logMessage("Notification permission granted upon request. Posting notification...", level: .info)
                         self.postNotificationRequest(center: center, content: content, identifier: identifier, logName: logName)
+                    } else if let error = error {
+                        self.logMessage("Notification permission error: \(error.localizedDescription)", level: .error)
                     } else {
                         self.logMessage("Notification permission denied by user upon request.", level: .warning)
                     }
