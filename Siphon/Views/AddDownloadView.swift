@@ -503,6 +503,8 @@ struct AddDownloadView: View {
                                 .foregroundColor(.secondary)
                         }
                         .buttonStyle(.plain)
+                        .help(languageService.s("clear"))
+                        .accessibilityLabel(languageService.s("clear"))
                     }
                 }
                 .padding(.horizontal, 10)
