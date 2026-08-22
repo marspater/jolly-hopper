@@ -165,12 +165,12 @@ struct AddDownloadView: View {
                 appState.urlToDownload = ""
             }
         }
-        .onChange(of: urlInput) { _, newValue in
+        .onChange(of: urlInput) { newValue in
             if newValue.hasPrefix("http") && mediaInfo == nil && !isLoading {
                 fetchInfo()
             }
         }
-        .onChange(of: appState.urlToDownload) { _, newUrl in
+        .onChange(of: appState.urlToDownload) { newUrl in
             if !newUrl.isEmpty {
                 urlInput = newUrl
                 appState.urlToDownload = ""
@@ -872,7 +872,7 @@ struct AddDownloadView: View {
                                 .labelsHidden()
                                 .pickerStyle(.menu)
                                 .frame(maxWidth: .infinity, alignment: .leading)
-                                .onChange(of: selectedCodec) { _, newCodec in
+                                .onChange(of: selectedCodec) { newCodec in
                                     if newCodec == "h264" && (videoResolution == .r1440p || videoResolution == .r2160p || videoResolution == .best) {
                                         videoResolution = .r1080p
                                     }
