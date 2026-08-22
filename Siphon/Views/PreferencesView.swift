@@ -136,7 +136,7 @@ struct PreferencesView: View {
         .accentColor(SiphonTheme.accent)
         .background(PreferencesWindowConfigurator())
         .background(.ultraThinMaterial)
-        .onChange(of: languageService.selectedLanguage) { _, newValue in
+        .onChange(of: languageService.selectedLanguage) { newValue in
             if previousLanguage != nil && previousLanguage != newValue {
                 showLanguageChangeAlert = true
             }
@@ -412,7 +412,7 @@ struct PreferencesView: View {
             }
             .pickerStyle(.radioGroup)
             .labelsHidden()
-            .onChange(of: selectedPreset) { _, newValue in
+            .onChange(of: selectedPreset) { newValue in
                 if let preset = DownloadPreset(rawValue: newValue) {
                     selectedCustomPresetIdString = ""
                     applyPreset(preset)
