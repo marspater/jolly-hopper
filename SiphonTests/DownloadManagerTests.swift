@@ -117,6 +117,7 @@ final class DownloadManagerTests: XCTestCase {
         }
 
         let manager = DownloadManager()
+        manager.loadHistory()
 
         XCTAssertEqual(manager.downloads.count, 1)
         guard let restored = manager.downloads.first else {
