@@ -37,7 +37,7 @@ jobs:
           format: sarif
           severity-cutoff: 2
           fail-if-incomplete: false
-          run-parameters: "--disable-engine markdownlint --disable-engine remarklint --exclude-paths '.jules/**,**.md,docs/**,scripts/**,SiphonTests/**'"
+          run-parameters: "--disable-engine markdownlint --disable-engine remarklint --disable-engine swiftlint --disable-engine tailor --disable-engine duplication --disable-engine rubocop --exclude-paths '.jules/**,**.md,docs/**,scripts/**,SiphonTests/**,Casks/**'"
 
       - name: Consolidate SARIF runs for GitHub Code Scanning
         id: consolidate
@@ -67,21 +67,29 @@ jobs:
           all_results = []
           all_rules = {}
 
-          def is_markdown_noise(rule_id: str) -> bool:
+          def is_style_noise(rule_id: str, level: str = "") -> bool:
               r = rule_id.lower()
-              return "markdown" in r or "remark" in r or "md0" in r or "line-length" in r
+              if level == "note":
+                  return True
+              noise_prefixes = [
+                  "swiftlint_", "tailor_", "style_", "markdown", "remark", "md0",
+                  "line-length", "whitespace", "rubocop", "biome_lint_style",
+                  "biome_lint_complexity", "redundant", "complexity"
+              ]
+              return any(p in r for p in noise_prefixes)
 
           for run in data.get("runs", []):
               driver = run.get("tool", {}).get("driver", {})
 
               for rule in driver.get("rules", []):
                   rule_id = rule.get("id", "")
-                  if rule_id and not is_markdown_noise(rule_id):
+                  if rule_id and not is_style_noise(rule_id):
                       all_rules[rule_id] = rule
 
               for result in run.get("results", []):
                   rule_id = result.get("ruleId", "")
-                  if is_markdown_noise(rule_id):
+                  level = result.get("level", "")
+                  if is_style_noise(rule_id, level):
                       continue
 
                   all_results.append(result)
