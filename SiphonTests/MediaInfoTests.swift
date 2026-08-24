@@ -129,5 +129,97 @@ final class MediaInfoTests: XCTestCase {
         let decoded = try JSONDecoder().decode(MediaInfo.self, from: json)
         XCTAssertEqual(decoded.title, "Riped stud fucks Sam Ledger's pussy pt.1")
     }
+
+    // MARK: - MediaFormat.displaySummary Tests
+
+    func testMediaFormatDisplaySummary_MinimalFormat_ReturnsEmptyString() {
+        let format = MediaFormat(formatId: "f1", ext: "mp4")
+        XCTAssertEqual(format.displaySummary, "")
+    }
+
+    func testMediaFormatDisplaySummary_FullFormat_ReturnsFormattedSummary() {
+        let format = MediaFormat(
+            formatId: "137",
+            ext: "mp4",
+            resolution: "1920x1080",
+            fps: 60.0,
+            vcodec: "avc1.64002a",
+            acodec: "mp4a.40.2",
+            abr: 128.0,
+            filesize: 52428800, // 50.0 MB
+            formatNote: "1080p60"
+        )
+        XCTAssertEqual(format.displaySummary, "1920x1080 • 60fps • avc1.64002a • mp4a.40.2 • 128k • 50.0 MB • 1080p60")
+    }
+
+    func testMediaFormatDisplaySummary_IgnoresNoneCodecs() {
+        let format = MediaFormat(
+            formatId: "137",
+            ext: "mp4",
+            resolution: "1920x1080",
+            fps: 30.0,
+            vcodec: "avc1.64002a",
+            acodec: "none",
+            filesize: 10485760
+        )
+        XCTAssertEqual(format.displaySummary, "1920x1080 • 30fps • avc1.64002a • 10.0 MB")
+    }
+
+    func testMediaFormatDisplaySummary_TbrFallbackWhenAbrNilAndVbrZeroOrNil() {
+        let formatWithNilVbr = MediaFormat(
+            formatId: "f1",
+            ext: "mp4",
+            resolution: "1280x720",
+            vbr: nil,
+            tbr: 1500.0,
+            filesize: 15728640
+        )
+        XCTAssertEqual(formatWithNilVbr.displaySummary, "1280x720 • 1500k • 15.0 MB")
+
+        let formatWithZeroVbr = MediaFormat(
+            formatId: "f2",
+            ext: "mp4",
+            resolution: "1280x720",
+            vbr: 0,
+            tbr: 1500.0,
+            filesize: 15728640
+        )
+        XCTAssertEqual(formatWithZeroVbr.displaySummary, "1280x720 • 1500k • 15.0 MB")
+    }
+
+    func testMediaFormatDisplaySummary_DoesNotUseTbrWhenVbrIsGreaterThanZero() {
+        let format = MediaFormat(
+            formatId: "f1",
+            ext: "mp4",
+            resolution: "1280x720",
+            vbr: 1200.0,
+            tbr: 1500.0,
+            filesize: 15728640
+        )
+        XCTAssertEqual(format.displaySummary, "1280x720 • 15.0 MB")
+    }
+
+    func testMediaFormatDisplaySummary_FilesizeApproxFallbackWhenFilesizeNil() {
+        let format = MediaFormat(
+            formatId: "f1",
+            ext: "mp4",
+            filesize: nil,
+            filesizeApprox: 20971520
+        )
+        XCTAssertEqual(format.displaySummary, "20.0 MB")
+    }
+
+    func testMediaFormatDisplaySummary_FiltersZeroAndNegativeValues() {
+        let format = MediaFormat(
+            formatId: "f1",
+            ext: "mp4",
+            resolution: "",
+            fps: 0,
+            abr: 0,
+            filesize: -500,
+            formatNote: ""
+        )
+        XCTAssertEqual(format.displaySummary, "")
+    }
 }
 
