@@ -129,5 +129,112 @@ final class MediaInfoTests: XCTestCase {
         let decoded = try JSONDecoder().decode(MediaInfo.self, from: json)
         XCTAssertEqual(decoded.title, "Riped stud fucks Sam Ledger's pussy pt.1")
     }
+
+    // MARK: - MediaFormat videoQualityScore Tests
+
+    func testVideoQualityScore_WithFullProperties_CalculatesCorrectScore() {
+        let options = DownloadOptions.default
+        let format = MediaFormat(
+            formatId: "1080p_60",
+            ext: "mp4",
+            resolution: "1920x1080",
+            fps: 60.0,
+            vcodec: "avc1",
+            acodec: "mp4a",
+            abr: 128.0,
+            vbr: 4000.0,
+            tbr: 5000.0,
+            filesize: 52428800,
+            filesizeApprox: 104857600,
+            formatNote: "1080p60",
+            needsTesting: false
+        )
+
+        let score = format.videoQualityScore(options: options)
+        XCTAssertEqual(score, 10805110.0, accuracy: 0.001)
+    }
+
+    func testVideoQualityScore_BitrateFallbackHierarchy() {
+        let options = DownloadOptions.default
+
+        let formatVbr = MediaFormat(
+            formatId: "vbr_fmt",
+            ext: "mp4",
+            resolution: "1280x720",
+            vbr: 2500.0,
+            abr: 128.0
+        )
+        XCTAssertEqual(formatVbr.videoQualityScore(options: options), 7202500.0, accuracy: 0.001)
+
+        let formatAbr = MediaFormat(
+            formatId: "abr_fmt",
+            ext: "mp4",
+            resolution: "1280x720",
+            abr: 320.0
+        )
+        XCTAssertEqual(formatAbr.videoQualityScore(options: options), 7200320.0, accuracy: 0.001)
+
+        let formatNoBitrate = MediaFormat(
+            formatId: "nobitrate_fmt",
+            ext: "mp4",
+            resolution: "1280x720"
+        )
+        XCTAssertEqual(formatNoBitrate.videoQualityScore(options: options), 7200000.0, accuracy: 0.001)
+    }
+
+    func testVideoQualityScore_FilesizeFallbackHierarchy() {
+        let options = DownloadOptions.default
+
+        let formatApprox = MediaFormat(
+            formatId: "approx_fmt",
+            ext: "mp4",
+            resolution: "1280x720",
+            filesizeApprox: 10485760
+        )
+        XCTAssertEqual(formatApprox.videoQualityScore(options: options), 7200010.0, accuracy: 0.001)
+
+        let formatNoSize = MediaFormat(
+            formatId: "nosize_fmt",
+            ext: "mp4",
+            resolution: "1280x720"
+        )
+        XCTAssertEqual(formatNoSize.videoQualityScore(options: options), 7200000.0, accuracy: 0.001)
+    }
+
+    func testVideoQualityScore_ParsedHeightFallbacks() {
+        let options = DownloadOptions.default
+
+        let formatTagNote = MediaFormat(
+            formatId: "fmt_note",
+            ext: "mp4",
+            formatNote: "2160p 4K ULTRA HD"
+        )
+        XCTAssertEqual(formatTagNote.videoQualityScore(options: options), 21600000.0, accuracy: 0.001)
+
+        let formatKeywordId = MediaFormat(
+            formatId: "hd",
+            ext: "mp4"
+        )
+        XCTAssertEqual(formatKeywordId.videoQualityScore(options: options), 10800000.0, accuracy: 0.001)
+
+        let formatUnknown = MediaFormat(
+            formatId: "audio_only",
+            ext: "m4a"
+        )
+        XCTAssertEqual(formatUnknown.videoQualityScore(options: options), 0.0, accuracy: 0.001)
+    }
+
+    func testVideoQualityScore_NeedsTestingPenalty() {
+        let options = DownloadOptions.default
+
+        let formatNeedsTesting = MediaFormat(
+            formatId: "test_fmt",
+            ext: "mp4",
+            resolution: "1920x1080",
+            needsTesting: true
+        )
+
+        XCTAssertEqual(formatNeedsTesting.videoQualityScore(options: options), 9800000.0, accuracy: 0.001)
+    }
 }
 
