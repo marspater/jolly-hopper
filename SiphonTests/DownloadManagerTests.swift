@@ -81,7 +81,6 @@ final class DownloadManagerTests: XCTestCase {
         var opts2 = DownloadOptions.default
         opts2.customFilename = "custom_video"
 
-        let dl1 = Download(url: "https://example.com/v1", options: opts1, title: "Title 1")
         let dl2 = Download(url: "https://example.com/v2", options: opts2, title: "Title 2")
 
         let expectedPath1 = opts1.saveFolder.appendingPathComponent("custom_video.mp4").path
