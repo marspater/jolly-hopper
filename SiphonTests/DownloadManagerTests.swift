@@ -104,4 +104,48 @@ final class DownloadManagerTests: XCTestCase {
         XCTAssertEqual(dl2.options.customFilename, "custom_video_1", "Second download must have its customFilename updated to non-colliding name")
         XCTAssertEqual(candidateKey, expectedPath2)
     }
+
+    func testRetryDownloadEligibleStatuses() {
+        let manager = DownloadManager()
+        let options = DownloadOptions.default
+
+        let eligibleStatuses: [DownloadStatus] = [.failed, .stopped, .fileExists]
+
+        for status in eligibleStatuses {
+            let download = Download(url: "https://example.com/test_\(status)", options: options)
+            download.status = status
+            download.progress = 0.8
+            download.errorMessage = "Failed due to network timeout"
+            download.log = "Line 1\nLine 2\nError occurred"
+
+            manager.retryDownload(download)
+
+            XCTAssertEqual(download.status, .queued, "Status should be updated to .queued for status \(status)")
+            XCTAssertEqual(download.progress, 0, "Progress should be reset to 0 for status \(status)")
+            XCTAssertNil(download.errorMessage, "ErrorMessage should be reset to nil for status \(status)")
+            XCTAssertEqual(download.log, "", "Log should be reset to empty string for status \(status)")
+        }
+    }
+
+    func testRetryDownloadIneligibleStatuses() {
+        let manager = DownloadManager()
+        let options = DownloadOptions.default
+
+        let ineligibleStatuses: [DownloadStatus] = [.downloading, .queued, .completed, .fetching, .processing]
+
+        for status in ineligibleStatuses {
+            let download = Download(url: "https://example.com/test_\(status)", options: options)
+            download.status = status
+            download.progress = 0.5
+            download.errorMessage = "Some existing message"
+            download.log = "Some log content"
+
+            manager.retryDownload(download)
+
+            XCTAssertEqual(download.status, status, "Status should remain unchanged for ineligible status \(status)")
+            XCTAssertEqual(download.progress, 0.5, "Progress should remain unchanged for ineligible status \(status)")
+            XCTAssertEqual(download.errorMessage, "Some existing message", "ErrorMessage should remain unchanged for ineligible status \(status)")
+            XCTAssertEqual(download.log, "Some log content", "Log should remain unchanged for ineligible status \(status)")
+        }
+    }
 }
