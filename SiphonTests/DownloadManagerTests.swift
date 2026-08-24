@@ -104,4 +104,15 @@ final class DownloadManagerTests: XCTestCase {
         XCTAssertEqual(dl2.options.customFilename, "custom_video_1", "Second download must have its customFilename updated to non-colliding name")
         XCTAssertEqual(candidateKey, expectedPath2)
     }
+
+    func testNaNProgressGuarding() {
+        let computeSafeProgress: (Double) -> Double = { progress in
+            progress.isNaN ? 0 : max(0, min(1, progress))
+        }
+
+        XCTAssertEqual(computeSafeProgress(Double.nan), 0.0, "NaN progress should evaluate to 0.0")
+        XCTAssertEqual(computeSafeProgress(-0.5), 0.0, "Negative progress should be clamped to 0.0")
+        XCTAssertEqual(computeSafeProgress(1.5), 1.0, "Progress greater than 1.0 should be clamped to 1.0")
+        XCTAssertEqual(computeSafeProgress(0.75), 0.75, "Valid progress between 0.0 and 1.0 should remain unchanged")
+    }
 }
