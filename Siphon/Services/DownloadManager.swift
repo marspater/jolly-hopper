@@ -35,6 +35,7 @@ class DownloadManager: ObservableObject {
             .assign(to: &$isUpdatingYtdlp)
         ytdlpService.$updateProgress
             .assign(to: &$ytdlpUpdateProgress)
+        loadHistory()
     }
 
     var downloadingDownloads: [Download] {
@@ -67,9 +68,6 @@ class DownloadManager: ObservableObject {
         // Wait a bit for version to be populated if needed, or better, fetch it explicitly
         await ytdlpService.getVersion()
         ytdlpVersion = ytdlpService.version
-
-
-        loadHistory()
 
 
         if !userDefaults.bool(forKey: UserDefaultsKeys.disclaimerAcknowledged) && !languageService.isFirstLaunch {
@@ -580,7 +578,7 @@ class DownloadManager: ObservableObject {
 
 
 
-    private func loadHistory() {
+    func loadHistory() {
         if let data = userDefaults.data(forKey: UserDefaultsKeys.downloadHistory),
            let decoded = try? JSONDecoder().decode([HistoricDownload].self, from: data) {
             history = decoded
