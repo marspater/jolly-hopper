@@ -201,7 +201,7 @@ class DownloadManager: ObservableObject {
 
 
 
-    private func processDownload(_ download: Download) async {
+    func processDownload(_ download: Download) async {
 
         while downloadingCount >= maxConcurrentDownloads {
             try? await Task.sleep(nanoseconds: 500_000_000)
