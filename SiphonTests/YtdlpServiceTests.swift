@@ -117,8 +117,6 @@ final class YtdlpServiceTests: XCTestCase {
 
     func testFetchInfoParseError() async throws {
         // 🎯 What: Test that invalid JSON response throws a parseError.
-        let invalidJSON = "This is not valid JSON"
-
         service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
             return "invalid json response"
         })
