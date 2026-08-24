@@ -104,4 +104,50 @@ final class DownloadManagerTests: XCTestCase {
         XCTAssertEqual(dl2.options.customFilename, "custom_video_1", "Second download must have its customFilename updated to non-colliding name")
         XCTAssertEqual(candidateKey, expectedPath2)
     }
+
+    func testProcessDownloadAbortsIfCancelledDuringFetchInfo() async {
+        let manager = DownloadManager()
+        manager.ytdlpService.ytdlpPath = URL(fileURLWithPath: "/usr/local/bin/yt-dlp")
+
+        let fetchStartedExpectation = expectation(description: "Fetch info started")
+        let fetchCompletedExpectation = expectation(description: "Fetch info completed")
+
+        let mockJSON = """
+        {
+            "id": "test_cancel_id",
+            "title": "Fetched Title Should Not Be Set",
+            "duration": 60.0
+        }
+        """
+
+        manager.ytdlpService.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
+            fetchStartedExpectation.fulfill()
+            // Simulate delay during network fetch
+            try? await Task.sleep(nanoseconds: 100_000_000)
+            fetchCompletedExpectation.fulfill()
+            return mockJSON
+        })
+
+        let download = Download(url: "https://example.com/cancel-test", options: DownloadOptions.default)
+        manager.downloads.append(download)
+
+        // Trigger processing
+        let processTask = Task {
+            await manager.processDownload(download)
+        }
+
+        // Wait for fetchInfo to begin
+        await fulfillment(of: [fetchStartedExpectation], timeout: 1.0)
+
+        // Simulate user cancellation while in fetching state
+        manager.stopDownload(download)
+
+        // Wait for fetchInfo completion in mock
+        await fulfillment(of: [fetchCompletedExpectation], timeout: 1.0)
+        await processTask.value
+
+        // Assert download title was NOT updated and status remains .stopped
+        XCTAssertEqual(download.status, .stopped, "Status should remain stopped")
+        XCTAssertEqual(download.title, "___FETCHING___", "Title should not be overwritten with fetched title after cancellation")
+    }
 }
