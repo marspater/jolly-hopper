@@ -204,6 +204,8 @@ class DownloadManager: ObservableObject {
     private func processDownload(_ download: Download) async {
 
         while downloadingCount >= maxConcurrentDownloads {
+            // Bug #2 fix: If user cancelled while waiting in queue, exit early
+            guard download.status == .queued else { return }
             try? await Task.sleep(nanoseconds: 500_000_000)
         }
 

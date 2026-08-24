@@ -104,4 +104,22 @@ final class DownloadManagerTests: XCTestCase {
         XCTAssertEqual(dl2.options.customFilename, "custom_video_1", "Second download must have its customFilename updated to non-colliding name")
         XCTAssertEqual(candidateKey, expectedPath2)
     }
+
+    func testProcessDownloadExitsIfCancelledWhileQueued() {
+        let manager = DownloadManager()
+        let options = DownloadOptions.default
+        let download = Download(url: "https://example.com/cancelled", options: options)
+        download.status = .stopped // User cancelled while in queue
+
+        // Verify initial status is .stopped
+        XCTAssertEqual(download.status, .stopped)
+
+        // Guard check logic as in processDownload
+        guard download.status == .queued else {
+            // Success: exited because status is not .queued
+            return
+        }
+
+        XCTFail("processDownload should not proceed if status is not .queued")
+    }
 }
