@@ -298,7 +298,7 @@ class DownloadManager: ObservableObject {
                     // Bug #3 fix: Guard against NaN progress values
                     // Bug #4 fix: Dispatch to main actor for @Published property writes
                     let safeProgress = progress.isNaN ? 0 : max(0, min(1, progress))
-                    DispatchQueue.main.async {
+                    Task { @MainActor in
                         download.progress = safeProgress
                         download.speed = speed
                         download.eta = eta
@@ -306,7 +306,7 @@ class DownloadManager: ObservableObject {
                 },
                 onOutput: { line in
                     // Bug #4 fix: Dispatch to main actor for @Published property writes
-                    DispatchQueue.main.async {
+                    Task { @MainActor in
                         download.log += line + "\n"
                         if line.contains("[EmbedThumbnail]") || line.contains("[Metadata]") || line.contains("[Merger]") || line.contains("[VideoConvertor]") || line.contains("[ThumbnailsConvertor]") || line.contains("[EmbedSubtitle]") {
                             if download.status == .downloading {
