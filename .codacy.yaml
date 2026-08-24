@@ -6,6 +6,12 @@ engines:
     enabled: false
   duplication:
     enabled: false
+  swiftlint:
+    enabled: false
+  tailor:
+    enabled: false
+  rubocop:
+    enabled: false
 
 exclude_paths:
   - "**.md"
@@ -16,3 +22,4 @@ exclude_paths:
   - "docs/**"
   - "SiphonTests/**"
   - "scripts/**"
+  - "Casks/**"

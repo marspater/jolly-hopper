@@ -44,9 +44,12 @@ jobs:
     - if: matrix.build-mode == 'manual'
       name: Build Siphon with Xcode
       run: |
-        xcodebuild -scheme Siphon \
+        xcodebuild -project Siphon.xcodeproj \
+          -scheme Siphon \
           -destination "generic/platform=macOS" \
           build \
+          MACOSX_DEPLOYMENT_TARGET=14.0 \
+          CODE_SIGN_IDENTITY="" \
           CODE_SIGNING_REQUIRED=NO \
           CODE_SIGNING_ALLOWED=NO
 
