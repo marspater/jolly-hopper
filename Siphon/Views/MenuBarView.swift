@@ -56,6 +56,19 @@ struct MenuBarView: View {
                 .textFieldStyle(.plain)
                 .font(.geist(12))
             
+            if !url.isEmpty {
+                Button {
+                    url = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 12))
+                        .foregroundColor(.secondary)
+                }
+                .buttonStyle(.plain)
+                .help(languageService.s("clear"))
+                .accessibilityLabel(languageService.s("clear"))
+            }
+            
             Button {
                 if let clipboard = NSPasteboard.general.string(forType: .string) {
                     url = clipboard
