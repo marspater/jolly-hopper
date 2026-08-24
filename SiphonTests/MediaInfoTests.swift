@@ -161,8 +161,8 @@ final class MediaInfoTests: XCTestCase {
             formatId: "vbr_fmt",
             ext: "mp4",
             resolution: "1280x720",
-            vbr: 2500.0,
-            abr: 128.0
+            abr: 128.0,
+            vbr: 2500.0
         )
         XCTAssertEqual(formatVbr.videoQualityScore(options: options), 7202500.0, accuracy: 0.001)
 
