@@ -104,4 +104,30 @@ final class DownloadManagerTests: XCTestCase {
         XCTAssertEqual(dl2.options.customFilename, "custom_video_1", "Second download must have its customFilename updated to non-colliding name")
         XCTAssertEqual(candidateKey, expectedPath2)
     }
+
+    func testLoadHistoryMarksActiveDownloadsAsStopped() {
+        let userDefaultsKey = UserDefaultsKeys.downloadHistory
+        let options = DownloadOptions.default
+        let activeDownload = Download(url: "https://example.com/active", options: options)
+        activeDownload.status = .downloading
+
+        let historic = HistoricDownload(download: activeDownload)
+        if let encoded = try? JSONEncoder().encode([historic]) {
+            UserDefaults.standard.set(encoded, forKey: userDefaultsKey)
+        }
+
+        let manager = DownloadManager()
+
+        XCTAssertEqual(manager.downloads.count, 1)
+        guard let restored = manager.downloads.first else {
+            XCTFail("Restored download missing")
+            return
+        }
+
+        XCTAssertEqual(restored.status, .stopped, "Active downloads should be reset to stopped on relaunch")
+        XCTAssertEqual(manager.failedDownloads.count, 1, "Stopped downloads should be tracked in failedDownloads")
+
+        // Clean up
+        UserDefaults.standard.removeObject(forKey: userDefaultsKey)
+    }
 }

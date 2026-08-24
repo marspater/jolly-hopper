@@ -594,7 +594,8 @@ class DownloadManager: ObservableObject {
                 switch download.status {
                 case .downloading, .fetching, .processing, .queued:
                     download.status = .stopped
-                case .failed:
+                    failedDownloadsMap[download.id] = download
+                case .failed, .stopped, .fileExists:
                     failedDownloadsMap[download.id] = download
                 default:
                     break
