@@ -1181,7 +1181,19 @@ enum SupportedBrowser: String, CaseIterable, Identifiable {
 final class BrowserUtils: Sendable {
     static let shared = BrowserUtils()
     
+    private let lock = NSLock()
+    private nonisolated(unsafe) var cachedBrowsers: [SupportedBrowser]?
+
     func getInstalledBrowsers() -> [SupportedBrowser] {
+        lock.lock()
+        if let cached = cachedBrowsers {
+            lock.unlock()
+            return cached
+        }
+        lock.unlock()
+
+        // Bolt Performance Optimization: Querying NSWorkspace for installed applications
+        // is expensive I/O. Cache the result in memory thread-safely to avoid redundant disk/workspace lookups.
         let workspace = NSWorkspace.shared
         var installed: [SupportedBrowser] = []
         
@@ -1191,6 +1203,16 @@ final class BrowserUtils: Sendable {
             }
         }
         
+        lock.lock()
+        cachedBrowsers = installed
+        lock.unlock()
+
         return installed
+    }
+
+    func clearCache() {
+        lock.lock()
+        cachedBrowsers = nil
+        lock.unlock()
     }
 }
