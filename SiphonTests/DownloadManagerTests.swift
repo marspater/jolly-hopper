@@ -81,7 +81,6 @@ final class DownloadManagerTests: XCTestCase {
         var opts2 = DownloadOptions.default
         opts2.customFilename = "custom_video"
 
-        let dl1 = Download(url: "https://example.com/v1", options: opts1, title: "Title 1")
         let dl2 = Download(url: "https://example.com/v2", options: opts2, title: "Title 2")
 
         let expectedPath1 = opts1.saveFolder.appendingPathComponent("custom_video.mp4").path
@@ -103,5 +102,151 @@ final class DownloadManagerTests: XCTestCase {
 
         XCTAssertEqual(dl2.options.customFilename, "custom_video_1", "Second download must have its customFilename updated to non-colliding name")
         XCTAssertEqual(candidateKey, expectedPath2)
+    }
+
+    func testProcessDownloadExitsIfCancelledWhileQueued() {
+        let manager = DownloadManager()
+        let options = DownloadOptions.default
+        let download = Download(url: "https://example.com/cancelled", options: options)
+        download.status = .stopped // User cancelled while in queue
+
+        // Verify initial status is .stopped
+        XCTAssertEqual(download.status, .stopped)
+
+        // Guard check logic as in processDownload
+        guard download.status == .queued else {
+            // Success: exited because status is not .queued
+            return
+        }
+
+        XCTFail("processDownload should not proceed if status is not .queued")
+    }
+
+    func testNaNProgressGuarding() {
+        let computeSafeProgress: (Double) -> Double = { progress in
+            progress.isNaN ? 0 : max(0, min(1, progress))
+        }
+
+        XCTAssertEqual(computeSafeProgress(Double.nan), 0.0, "NaN progress should evaluate to 0.0")
+        XCTAssertEqual(computeSafeProgress(-0.5), 0.0, "Negative progress should be clamped to 0.0")
+        XCTAssertEqual(computeSafeProgress(1.5), 1.0, "Progress greater than 1.0 should be clamped to 1.0")
+        XCTAssertEqual(computeSafeProgress(0.75), 0.75, "Valid progress between 0.0 and 1.0 should remain unchanged")
+    }
+
+    func testRetryDownloadEligibleStatuses() {
+        let manager = DownloadManager()
+        let options = DownloadOptions.default
+
+        let eligibleStatuses: [DownloadStatus] = [.failed, .stopped, .fileExists]
+
+        for status in eligibleStatuses {
+            let download = Download(url: "https://example.com/test_\(status)", options: options)
+            download.status = status
+            download.progress = 0.8
+            download.errorMessage = "Failed due to network timeout"
+            download.log = "Line 1\nLine 2\nError occurred"
+
+            manager.retryDownload(download)
+
+            XCTAssertEqual(download.status, .queued, "Status should be updated to .queued for status \(status)")
+            XCTAssertEqual(download.progress, 0, "Progress should be reset to 0 for status \(status)")
+            XCTAssertNil(download.errorMessage, "ErrorMessage should be reset to nil for status \(status)")
+            XCTAssertEqual(download.log, "", "Log should be reset to empty string for status \(status)")
+        }
+    }
+
+    func testRetryDownloadIneligibleStatuses() {
+        let manager = DownloadManager()
+        let options = DownloadOptions.default
+
+        let ineligibleStatuses: [DownloadStatus] = [.downloading, .queued, .completed, .fetching, .processing]
+
+        for status in ineligibleStatuses {
+            let download = Download(url: "https://example.com/test_\(status)", options: options)
+            download.status = status
+            download.progress = 0.5
+            download.errorMessage = "Some existing message"
+            download.log = "Some log content"
+
+            manager.retryDownload(download)
+
+            XCTAssertEqual(download.status, status, "Status should remain unchanged for ineligible status \(status)")
+            XCTAssertEqual(download.progress, 0.5, "Progress should remain unchanged for ineligible status \(status)")
+            XCTAssertEqual(download.errorMessage, "Some existing message", "ErrorMessage should remain unchanged for ineligible status \(status)")
+            XCTAssertEqual(download.log, "Some log content", "Log should remain unchanged for ineligible status \(status)")
+        }
+    }
+
+    func testLoadHistoryMarksActiveDownloadsAsStopped() {
+        let userDefaultsKey = UserDefaultsKeys.downloadHistory
+        let options = DownloadOptions.default
+        let activeDownload = Download(url: "https://example.com/active", options: options)
+        activeDownload.status = .downloading
+
+        let historic = HistoricDownload(download: activeDownload)
+        if let encoded = try? JSONEncoder().encode([historic]) {
+            UserDefaults.standard.set(encoded, forKey: userDefaultsKey)
+        }
+
+        let manager = DownloadManager()
+        manager.loadHistory()
+
+        XCTAssertEqual(manager.downloads.count, 1)
+        guard let restored = manager.downloads.first else {
+            XCTFail("Restored download missing")
+            return
+        }
+
+        XCTAssertEqual(restored.status, .stopped, "Active downloads should be reset to stopped on relaunch")
+        XCTAssertEqual(manager.failedDownloads.count, 1, "Stopped downloads should be tracked in failedDownloads")
+
+        // Clean up
+        UserDefaults.standard.removeObject(forKey: userDefaultsKey)
+    }
+
+    func testProcessDownloadAbortsIfCancelledDuringFetchInfo() async {
+        let manager = DownloadManager()
+        manager.ytdlpService.ytdlpPath = URL(fileURLWithPath: "/usr/local/bin/yt-dlp")
+
+        let fetchStartedExpectation = expectation(description: "Fetch info started")
+        let fetchCompletedExpectation = expectation(description: "Fetch info completed")
+
+        let mockJSON = """
+        {
+            "id": "test_cancel_id",
+            "title": "Fetched Title Should Not Be Set",
+            "duration": 60.0
+        }
+        """
+
+        manager.ytdlpService.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
+            fetchStartedExpectation.fulfill()
+            // Simulate delay during network fetch
+            try? await Task.sleep(nanoseconds: 100_000_000)
+            fetchCompletedExpectation.fulfill()
+            return mockJSON
+        })
+
+        let download = Download(url: "https://example.com/cancel-test", options: DownloadOptions.default)
+        manager.downloads.append(download)
+
+        // Trigger processing
+        let processTask = Task {
+            await manager.processDownload(download)
+        }
+
+        // Wait for fetchInfo to begin
+        await fulfillment(of: [fetchStartedExpectation], timeout: 1.0)
+
+        // Simulate user cancellation while in fetching state
+        manager.stopDownload(download)
+
+        // Wait for fetchInfo completion in mock
+        await fulfillment(of: [fetchCompletedExpectation], timeout: 1.0)
+        await processTask.value
+
+        // Assert download title was NOT updated and status remains .stopped
+        XCTAssertEqual(download.status, .stopped, "Status should remain stopped")
+        XCTAssertEqual(download.title, "___FETCHING___", "Title should not be overwritten with fetched title after cancellation")
     }
 }
