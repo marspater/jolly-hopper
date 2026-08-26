@@ -249,4 +249,107 @@ final class DownloadManagerTests: XCTestCase {
         XCTAssertEqual(download.status, .stopped, "Status should remain stopped")
         XCTAssertEqual(download.title, "___FETCHING___", "Title should not be overwritten with fetched title after cancellation")
     }
+
+    func testProcessDownloadHandlesYtdlpErrorCases() async {
+        let manager = DownloadManager()
+        let languageService = LanguageService()
+        manager.languageService = languageService
+        manager.ytdlpService.ytdlpPath = URL(fileURLWithPath: "/usr/local/bin/yt-dlp")
+
+        let mockJSON = """
+        {
+            "id": "test_error_id",
+            "title": "Error Video Test",
+            "duration": 60.0
+        }
+        """
+
+        // Test Cloudflare blocked error mapping
+        manager.ytdlpService.processRunner = MockYtdlpProcessRunner(
+            mockCommand: { _ in mockJSON },
+            mockDownload: { _ in
+                throw YtdlpError.cloudflareBlocked
+            }
+        )
+
+        let dl1 = Download(url: "https://example.com/cf-test", options: DownloadOptions.default)
+        await manager.processDownload(dl1)
+        XCTAssertEqual(dl1.status, .failed)
+        XCTAssertEqual(dl1.errorMessage, languageService.s("cloudflare_blocked"))
+
+        // Test DRM protected error mapping
+        manager.ytdlpService.processRunner = MockYtdlpProcessRunner(
+            mockCommand: { _ in mockJSON },
+            mockDownload: { _ in
+                throw YtdlpError.downloadFailed("ERROR: This video is protected by DRM encryption")
+            }
+        )
+
+        let dl2 = Download(url: "https://example.com/drm-test", options: DownloadOptions.default)
+        await manager.processDownload(dl2)
+        XCTAssertEqual(dl2.status, .failed)
+        XCTAssertEqual(dl2.errorMessage, languageService.s("drm_protected"))
+
+        // Test Disk full error mapping
+        manager.ytdlpService.processRunner = MockYtdlpProcessRunner(
+            mockCommand: { _ in mockJSON },
+            mockDownload: { _ in
+                throw YtdlpError.downloadFailed("ERROR: No space left on device")
+            }
+        )
+
+        let dl3 = Download(url: "https://example.com/disk-test", options: DownloadOptions.default)
+        await manager.processDownload(dl3)
+        XCTAssertEqual(dl3.status, .failed)
+        XCTAssertEqual(dl3.errorMessage, languageService.s("disk_full"))
+
+        // Test Permission denied error mapping
+        manager.ytdlpService.processRunner = MockYtdlpProcessRunner(
+            mockCommand: { _ in mockJSON },
+            mockDownload: { _ in
+                throw YtdlpError.downloadFailed("ERROR: Permission denied writing to disk")
+            }
+        )
+
+        let dl4 = Download(url: "https://example.com/perm-test", options: DownloadOptions.default)
+        await manager.processDownload(dl4)
+        XCTAssertEqual(dl4.status, .failed)
+        XCTAssertEqual(dl4.errorMessage, languageService.s("permission_denied"))
+
+        // Test Private video / Login required error mapping
+        manager.ytdlpService.processRunner = MockYtdlpProcessRunner(
+            mockCommand: { _ in mockJSON },
+            mockDownload: { _ in
+                throw YtdlpError.downloadFailed("ERROR: Private video. Sign in if you've been granted access")
+            }
+        )
+
+        let dl5 = Download(url: "https://example.com/private-test", options: DownloadOptions.default)
+        await manager.processDownload(dl5)
+        XCTAssertEqual(dl5.status, .failed)
+        XCTAssertEqual(dl5.errorMessage, languageService.s("login_required"))
+    }
+
+    func testLoadHistoryCorruptedDataGracefullyHandled() {
+        let userDefaultsKey = UserDefaultsKeys.downloadHistory
+        UserDefaults.standard.set("corrupted_non_json_data".data(using: .utf8)!, forKey: userDefaultsKey)
+
+        let manager = DownloadManager()
+        manager.loadHistory()
+
+        // Should not crash and should leave downloads empty
+        XCTAssertEqual(manager.downloads.count, 0)
+
+        UserDefaults.standard.removeObject(forKey: userDefaultsKey)
+    }
+
+    func testCustomPresetLoadCorruptedDataGracefullyHandled() {
+        let userDefaultsKey = UserDefaultsKeys.customPresets
+        UserDefaults.standard.set("corrupted_data".data(using: .utf8)!, forKey: userDefaultsKey)
+
+        let presets = CustomPreset.loadAll()
+        XCTAssertEqual(presets.count, 0, "Corrupted presets should return empty list without crash")
+
+        UserDefaults.standard.removeObject(forKey: userDefaultsKey)
+    }
 }

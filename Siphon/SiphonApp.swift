@@ -188,6 +188,7 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
                 }
             }
         } catch {
+            LoggerService.shared.log("Failed to check for app updates: \(error.localizedDescription)", level: .warning)
             latestVersion = currentVersion
             hasUpdate = false
         }
@@ -218,23 +219,49 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
             }
         }
     }
+
+    nonisolated func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+        if let error = error {
+            Task { @MainActor in
+                LoggerService.shared.log("Update package download failed: \(error.localizedDescription)", level: .error)
+                self.isDownloading = false
+                self.isInstalling = false
+            }
+        }
+    }
     
     nonisolated func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {
         let tempUpdate = FileManager.default.temporaryDirectory.appendingPathComponent("Siphon_Update_Package")
-        try? FileManager.default.removeItem(at: tempUpdate)
-        try? FileManager.default.moveItem(at: location, to: tempUpdate)
-        
-        Task { @MainActor in
-            isDownloading = false
-            isInstalling = true
-            installUpdate(packagePath: tempUpdate.path)
+        do {
+            if FileManager.default.fileExists(atPath: tempUpdate.path) {
+                try FileManager.default.removeItem(at: tempUpdate)
+            }
+            try FileManager.default.moveItem(at: location, to: tempUpdate)
+            
+            Task { @MainActor in
+                isDownloading = false
+                isInstalling = true
+                installUpdate(packagePath: tempUpdate.path)
+            }
+        } catch {
+            Task { @MainActor in
+                LoggerService.shared.log("Failed to stage downloaded update package: \(error.localizedDescription)", level: .error)
+                isDownloading = false
+                isInstalling = false
+            }
         }
     }
     
     private func installUpdate(packagePath: String) {
         let appPath = Bundle.main.bundlePath
         let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
-        try? FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        do {
+            try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        } catch {
+            LoggerService.shared.log("Failed to create temporary directory for update installation: \(error.localizedDescription)", level: .error)
+            isInstalling = false
+            return
+        }
         
         let script = """
         (

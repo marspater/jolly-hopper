@@ -526,8 +526,11 @@ struct CustomPreset: Codable, Identifiable, Equatable {
     }
     
     static func saveAll(_ presets: [CustomPreset]) {
-        if let data = try? JSONEncoder().encode(presets) {
+        do {
+            let data = try JSONEncoder().encode(presets)
             UserDefaults.standard.set(data, forKey: UserDefaultsKeys.customPresets)
+        } catch {
+            logger.error("Failed to encode custom presets: \(error.localizedDescription)")
         }
     }
 }

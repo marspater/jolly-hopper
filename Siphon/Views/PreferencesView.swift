@@ -358,9 +358,13 @@ struct PreferencesView: View {
                 }
                 .frame(width: 200)
             } else if updateChecker.isInstalling {
-                Text(languageService.s("installing_update"))
-                    .font(.geist(11))
-                    .foregroundColor(.orange)
+                HStack(spacing: 6) {
+                    ProgressView()
+                        .controlSize(.small)
+                    Text(languageService.s("installing_update"))
+                        .font(.geist(11))
+                        .foregroundColor(.orange)
+                }
             } else if updateChecker.needsRestart {
                 Text("✅ \(languageService.s("update_ready_title"))")
                     .font(.geist(11))

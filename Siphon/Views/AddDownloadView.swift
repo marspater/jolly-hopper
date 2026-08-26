@@ -1442,7 +1442,9 @@ struct AddDownloadView: View {
                     selectedSubtitleLangs.removeAll()
                 }
 
-            } catch { errorMessage = error.localizedDescription }
+            } catch {
+                errorMessage = formatErrorMessage(error)
+            }
             isLoading = false
         }
     }
@@ -1457,9 +1459,54 @@ struct AddDownloadView: View {
                 selectedPlaylistIds = Set(items.map { $0.id })
                 showPlaylistSelector = true
                 downloadMode = .playlist
-            } catch { errorMessage = error.localizedDescription }
+            } catch {
+                errorMessage = formatErrorMessage(error)
+            }
             isLoadingPlaylist = false
         }
+    }
+
+    private func formatErrorMessage(_ error: Error) -> String {
+        if let ytdlpError = error as? YtdlpError {
+            switch ytdlpError {
+            case .tooManyRequests:
+                return languageService.s("too_many_requests")
+            case .cloudflareBlocked:
+                return languageService.s("cloudflare_blocked")
+            case .notFound:
+                return languageService.s("ytdlp_not_found")
+            case .parseError:
+                return languageService.s("parse_error")
+            case .boyfriendTVNeedsBrowserCookies:
+                return "This site requires signed-in browser cookies. Open Settings > Advanced > Browser Cookies, choose your browser, then try again."
+            case .boyfriendTVLoginRequired:
+                return languageService.s("login_required")
+            case .subtitleError(let details):
+                return String(format: languageService.s("subtitle_download_failed"), details)
+            case .ffmpegInstallationFailed:
+                return languageService.s("ffmpeg_error")
+            case .securityViolation(let message):
+                return "Security violation: \(message)"
+            case .downloadFailed(let reason), .commandFailed(let reason):
+                let lower = reason.lowercased()
+                if lower.contains("cloudflare") || lower.contains("403") || lower.contains("anti-bot") || lower.contains("captcha") {
+                    return languageService.s("cloudflare_blocked")
+                } else if lower.contains("sign in") || lower.contains("private video") || lower.contains("login") {
+                    return languageService.s("login_required")
+                } else if lower.contains("drm") || lower.contains("encrypted") {
+                    return languageService.s("drm_protected")
+                } else if lower.contains("unavailable") || lower.contains("removed") || lower.contains("404") {
+                    return languageService.s("video_unavailable")
+                } else if lower.contains("unsupported url") {
+                    return languageService.s("unsupported_url")
+                } else if lower.contains("timed out") || lower.contains("timeout") {
+                    return languageService.s("network_timeout")
+                } else {
+                    return reason.isEmpty ? languageService.s("parse_error") : reason
+                }
+            }
+        }
+        return error.localizedDescription
     }
 
     private func startDownload() {
