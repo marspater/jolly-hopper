@@ -371,49 +371,65 @@ struct WelcomeView: View {
     @Environment(\.dismiss) var dismiss
     
     var body: some View {
-        VStack(spacing: 30) {
-            VStack(spacing: 15) {
+        VStack(spacing: 24) {
+            VStack(spacing: 12) {
                 Image(systemName: "hand.wave.fill")
-                    .font(.system(size: 60))
-                    .foregroundColor(.accentColor)
+                    .font(.geist(48, weight: .bold))
+                    .foregroundColor(SiphonTheme.accent)
                 
-                Text("Welcome to Siphon")
-                    .font(.largeTitle)
-                    .fontWeight(.bold)
+                Text(languageService.s("welcome_to_siphon"))
+                    .font(.geist(26, weight: .bold))
             }
             
-            VStack(alignment: .leading, spacing: 12) {
-                Text("Legal Disclaimer")
-                    .font(.headline)
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 6) {
+                    Image(systemName: "exclamationmark.shield.fill")
+                        .foregroundColor(SiphonTheme.statusQueued)
+                    Text(languageService.s("legal_disclaimer"))
+                        .font(.geist(14, weight: .bold))
+                }
                 
                 ScrollView {
                     Text(languageService.s("legal_disclaimer_message"))
-                        .font(.subheadline)
+                        .font(.geist(12))
                         .foregroundColor(.secondary)
+                        .lineSpacing(3)
                         .multilineTextAlignment(.leading)
                 }
-                .frame(maxHeight: 200)
-                .padding(10)
-                .background(Color.secondary.opacity(0.1))
-                .cornerRadius(8)
+                .frame(maxHeight: 180)
+                .padding(12)
+                .background(
+                    SiphonTheme.cardBackground(cornerRadius: SiphonTheme.radiusControl)
+                )
+                .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusControl))
+                .overlay(
+                    SiphonTheme.cardBorder(cornerRadius: SiphonTheme.radiusControl)
+                )
             }
-            .padding(.horizontal, 40)
+            .padding(.horizontal, 36)
             
             Button {
                 UserDefaults.standard.set(true, forKey: UserDefaultsKeys.disclaimerAcknowledged)
                 languageService.isFirstLaunch = false
                 dismiss()
             } label: {
-                Text("Start Using")
-                    .font(.headline)
+                Text(languageService.s("start_using"))
+                    .font(.geist(14, weight: .bold))
+                    .foregroundColor(.white)
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 10)
+                    .padding(.vertical, 8)
+                    .background(SiphonTheme.primaryGradient)
+                    .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusControl))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: SiphonTheme.radiusControl)
+                            .stroke(Color.white.opacity(0.25), lineWidth: 1)
+                    )
             }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
-            .padding(.horizontal, 40)
+            .buttonStyle(.plain)
+            .shadow(color: SiphonTheme.accent.opacity(0.35), radius: 6, y: 2)
+            .padding(.horizontal, 36)
         }
-        .padding(.vertical, 40)
-        .frame(width: 500)
+        .padding(.vertical, 32)
+        .frame(width: 480)
     }
 }

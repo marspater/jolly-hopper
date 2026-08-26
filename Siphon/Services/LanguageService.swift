@@ -23,6 +23,9 @@ class LanguageService: ObservableObject {
     }
     
     private let translations: [String: String] = [
+        "welcome_to_siphon": "Welcome to Siphon",
+        "start_using": "Start Using",
+        "legal_disclaimer": "Legal Disclaimer",
         "about_app": "About Siphon",
         "home": "Home",
         "downloading": "Downloading",

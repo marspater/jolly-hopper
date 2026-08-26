@@ -172,7 +172,7 @@ struct PreferencesView: View {
         } label: {
             HStack(spacing: 6) {
                 Image(systemName: icon)
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(.geist(12, weight: .semibold))
                 Text(title)
                     .font(.geist(12, weight: .semibold))
                     .lineLimit(1)
@@ -245,7 +245,6 @@ struct PreferencesView: View {
             }
             .pickerStyle(.segmented)
             .tint(SiphonTheme.accent)
-            .accentColor(SiphonTheme.accent)
         }
     }
 
@@ -255,7 +254,7 @@ struct PreferencesView: View {
                 HStack(spacing: 8) {
                     Image(systemName: "folder.fill")
                         .foregroundColor(SiphonTheme.accent)
-                        .font(.system(size: 14))
+                        .font(.geist(14))
 
                     Text(defaultSaveFolder.isEmpty ? "~/Downloads" : defaultSaveFolder)
                         .font(.geistMono(12, weight: .medium))
@@ -270,7 +269,7 @@ struct PreferencesView: View {
                             defaultSaveFolder = ""
                         } label: {
                             Image(systemName: "xmark.circle.fill")
-                                .font(.system(size: 14))
+                                .font(.geist(14))
                                 .foregroundColor(.secondary)
                         }
                         .buttonStyle(.plain)
@@ -281,11 +280,11 @@ struct PreferencesView: View {
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
                 .background(
-                    SiphonTheme.cardBackground(cornerRadius: 10)
+                    SiphonTheme.cardBackground(cornerRadius: SiphonTheme.radiusControl)
                 )
-                .cornerRadius(10)
+                .cornerRadius(SiphonTheme.radiusControl)
                 .overlay(
-                    SiphonTheme.cardBorder(cornerRadius: 10)
+                    SiphonTheme.cardBorder(cornerRadius: SiphonTheme.radiusControl)
                 )
 
                 Button {
@@ -295,16 +294,16 @@ struct PreferencesView: View {
                         Image(systemName: "folder.badge.plus")
                         Text(languageService.s("select"))
                     }
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(.geist(12, weight: .semibold))
                     .foregroundColor(.white)
                     .padding(.horizontal, 14)
                     .padding(.vertical, 6)
                     .background(
                         SiphonTheme.primaryGradient
                     )
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                    .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusControl))
                     .overlay(
-                        RoundedRectangle(cornerRadius: 8)
+                        RoundedRectangle(cornerRadius: SiphonTheme.radiusControl)
                             .stroke(Color.white.opacity(0.25), lineWidth: 1)
                     )
                 }
@@ -475,7 +474,7 @@ struct PreferencesView: View {
                     startEditingPreset(preset)
                 } label: {
                     Image(systemName: "pencil")
-                        .foregroundColor(.blue)
+                        .foregroundColor(SiphonTheme.accent)
                 }
                 .buttonStyle(.borderless)
                 .help(languageService.s("edit_preset"))
@@ -485,7 +484,7 @@ struct PreferencesView: View {
                     deleteCustomPreset(preset)
                 } label: {
                     Image(systemName: "trash")
-                        .foregroundColor(.red)
+                        .foregroundColor(SiphonTheme.statusFailed)
                 }
                 .buttonStyle(.borderless)
                 .help(languageService.s("delete_preset"))
@@ -943,15 +942,15 @@ struct PreferencesView: View {
             if hasFullDiskAccess {
                 HStack(spacing: 6) {
                     Image(systemName: "checkmark.seal.fill")
-                        .foregroundColor(.green)
+                        .foregroundColor(SiphonTheme.statusCompleted)
                     Text("Full Disk Access: Granted")
                         .font(.geist(11, weight: .semibold))
-                        .foregroundColor(.green)
+                        .foregroundColor(SiphonTheme.statusCompleted)
                 }
             } else {
                 Text(languageService.s("safari_warning"))
                     .font(.geist(11))
-                    .foregroundColor(.orange)
+                    .foregroundColor(SiphonTheme.statusQueued)
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 
@@ -961,7 +960,7 @@ struct PreferencesView: View {
                     }
                 }
                 .buttonStyle(.borderedProminent)
-                .tint(.orange)
+                .tint(SiphonTheme.statusQueued)
                 .controlSize(.small)
             }
         }
@@ -989,13 +988,13 @@ struct PreferencesView: View {
                             .font(.geistMono(11, weight: .semibold))
                             .padding(.horizontal, 10)
                             .padding(.vertical, 3)
-                            .background(Color.blue.opacity(0.15))
-                            .foregroundColor(.blue)
+                            .background(SiphonTheme.accent.opacity(0.15))
+                            .foregroundColor(SiphonTheme.accent)
                             .clipShape(Capsule())
                     }
                     
                     Text(languageService.s("app_desc"))
-                        .font(.subheadline)
+                        .font(.geist(13))
                         .foregroundColor(.secondary)
                         .multilineTextAlignment(.center)
                         .padding(.horizontal, 24)
@@ -1006,7 +1005,7 @@ struct PreferencesView: View {
                 VStack(alignment: .leading, spacing: 8) {
                     HStack(spacing: 6) {
                         Image(systemName: "exclamationmark.shield.fill")
-                            .foregroundColor(.orange)
+                            .foregroundColor(SiphonTheme.statusQueued)
                         Text(languageService.s("legal_disclaimer_title"))
                             .font(.geist(13, weight: .bold))
                     }
@@ -1018,11 +1017,13 @@ struct PreferencesView: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 .padding(14)
-                .background(.ultraThinMaterial)
-                .cornerRadius(12)
+                .background(
+                    SiphonTheme.cardBackground(cornerRadius: SiphonTheme.radiusCard)
+                )
+                .cornerRadius(SiphonTheme.radiusCard)
                 .overlay(
-                    RoundedRectangle(cornerRadius: 12)
-                        .stroke(Color.orange.opacity(0.3), lineWidth: 1)
+                    RoundedRectangle(cornerRadius: SiphonTheme.radiusCard)
+                        .stroke(SiphonTheme.statusQueued.opacity(0.3), lineWidth: 1)
                 )
 
                 // Credits & Details Card

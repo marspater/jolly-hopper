@@ -185,7 +185,7 @@ struct SidebarView: View {
         } label: {
             HStack(spacing: 8) {
                 Image(systemName: item.icon)
-                    .font(.system(size: 13, weight: .medium))
+                    .font(.geist(13, weight: .medium))
                     .frame(width: 18, alignment: .center)
                     .foregroundColor(isSelected ? SiphonTheme.accent : .secondary)
                     .scaleEffect(isSelected ? 1.05 : 1.0)
@@ -294,7 +294,7 @@ struct HomeView: View {
                 } label: {
                     HStack(spacing: 10) {
                         Image(systemName: "plus.circle.fill")
-                            .font(.system(size: 16, weight: .semibold))
+                            .font(.geist(16, weight: .semibold))
                         Text(languageService.s("new_download"))
                             .font(.geist(15, weight: .semibold))
                     }
@@ -302,14 +302,7 @@ struct HomeView: View {
                     .padding(.horizontal, 28)
                     .padding(.vertical, 12)
                     .background(
-                        LinearGradient(
-                            colors: [
-                                Color(red: 0.20, green: 0.50, blue: 1.0),
-                                Color(red: 0.12, green: 0.40, blue: 0.95)
-                            ],
-                            startPoint: .top,
-                            endPoint: .bottom
-                        )
+                        SiphonTheme.primaryGradient
                     )
                     .clipShape(Capsule())
                     .overlay(
@@ -320,7 +313,7 @@ struct HomeView: View {
                 .buttonStyle(.plain)
                 .keyboardShortcut("n", modifiers: .command)
                 .scaleEffect(isButtonHovered ? 1.03 : 1.0)
-                .shadow(color: Color.blue.opacity(isButtonHovered ? 0.5 : 0.3), radius: isButtonHovered ? 14 : 10, y: isButtonHovered ? 6 : 4)
+                .shadow(color: SiphonTheme.accent.opacity(isButtonHovered ? 0.45 : 0.25), radius: isButtonHovered ? 14 : 10, y: isButtonHovered ? 6 : 4)
                 .animation(.spring(response: 0.3, dampingFraction: 0.75), value: isButtonHovered)
                 .onHover { hovering in
                     isButtonHovered = hovering
@@ -350,7 +343,7 @@ struct HomeView: View {
                 if let version = downloadManager.ytdlpVersion {
                     HStack(spacing: 6) {
                         Image(systemName: "terminal.fill")
-                            .font(.system(size: 10))
+                            .font(.geist(10))
                         Text("yt-dlp \(version)")
                             .font(.geistMono(11, weight: .medium))
                     }
@@ -430,14 +423,14 @@ struct SponsorView: View {
         } label: {
             HStack(spacing: 8) {
                 Image(systemName: "star.fill")
-                    .foregroundColor(.orange)
-                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(SiphonTheme.statusQueued)
+                    .font(.geist(12, weight: .semibold))
                 Text(languageService.s("star_github"))
                     .font(.geist(12, weight: .medium))
                     .foregroundColor(.primary)
                 Spacer()
                 Image(systemName: "arrow.up.right")
-                    .font(.system(size: 10))
+                    .font(.geist(10))
                     .foregroundColor(.secondary)
             }
             .padding(.horizontal, 12)
@@ -445,16 +438,16 @@ struct SponsorView: View {
             .background(
                 ZStack {
                     #if os(macOS)
-                    RoundedRectangle(cornerRadius: 8)
+                    RoundedRectangle(cornerRadius: SiphonTheme.radiusControl)
                         .fill(Color(nsColor: .controlBackgroundColor).opacity(0.6))
                     #endif
-                    RoundedRectangle(cornerRadius: 8)
+                    RoundedRectangle(cornerRadius: SiphonTheme.radiusControl)
                         .fill(isHovered ? Color.primary.opacity(0.08) : Color.primary.opacity(0.03))
                 }
             )
-            .cornerRadius(8)
+            .cornerRadius(SiphonTheme.radiusControl)
             .overlay(
-                RoundedRectangle(cornerRadius: 8)
+                RoundedRectangle(cornerRadius: SiphonTheme.radiusControl)
                     .stroke(isHovered ? Color.primary.opacity(0.18) : Color.primary.opacity(0.08), lineWidth: 1)
             )
         }
