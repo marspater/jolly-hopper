@@ -155,15 +155,17 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
                     onOutput(line)
 
                     if line.contains("%") {
-                        let components = line.trimmingCharacters(in: .whitespacesAndNewlines)
-                            .components(separatedBy: .whitespaces)
-                            .filter { !$0.isEmpty }
+                        // Bolt Performance Optimization: Replace allocations of intermediate strings
+                        // and arrays during high-frequency parsing with substring mapping
+                        let components = line.split(whereSeparator: \.isWhitespace).map(String.init)
 
-                        if let percentStr = components.first,
-                           let percent = Double(percentStr.replacingOccurrences(of: "%", with: "")) {
-                            let speed = components.count > 1 ? components[1] : nil
-                            let eta = components.count > 2 ? components[2] : nil
-                            onProgress(percent / 100.0, speed, eta)
+                        if let percentStr = components.first {
+                            let cleanPercent = percentStr.hasSuffix("%") ? String(percentStr.dropLast()) : percentStr
+                            if let percent = Double(cleanPercent) {
+                                let speed = components.count > 1 ? components[1] : nil
+                                let eta = components.count > 2 ? components[2] : nil
+                                onProgress(percent / 100.0, speed, eta)
+                            }
                         }
                     } else if line.contains("[EmbedThumbnail]") {
                         onProgress(0.99, "Embedding thumbnail...", "Finalizing file")
@@ -256,7 +258,8 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
                         safeContinuation.resume(throwing: YtdlpError.downloadFailed("Download process completed, but no valid media file was verified in the target destination."))
                     }
                 } else {
-                    if errorOutput.contains("Cloudflare") || (errorOutput.contains("403") && errorOutput.contains("anti-bot")) {
+                    let lower = errorOutput.lowercased()
+                    if errorOutput.contains("Cloudflare") || (errorOutput.contains("403") && (errorOutput.contains("anti-bot") || errorOutput.contains("Forbidden") || lower.contains("bot"))) || lower.contains("sign in to confirm you're not a bot") || lower.contains("sign in to confirm you’re not a bot") {
                         safeContinuation.resume(throwing: YtdlpError.cloudflareBlocked)
                     } else if errorOutput.contains("429") || errorOutput.contains("Too Many Requests") {
                         safeContinuation.resume(throwing: YtdlpError.tooManyRequests)

@@ -26,7 +26,7 @@ class DownloadManager: ObservableObject {
     private let userDefaults = UserDefaults.standard
     private var activeProcesses: [UUID: Process] = [:]
     private var activeCancellations: [UUID: CancellationBox] = [:]
-    private var languageService: LanguageService?
+    var languageService: LanguageService?
     private var failedDownloadsMap: [UUID: Download] = [:]
     private var reservedOutputPaths: Set<String> = []
 
@@ -352,19 +352,42 @@ class DownloadManager: ObservableObject {
             case .tooManyRequests:
                 download.errorMessage = lang.s("too_many_requests")
             case .cloudflareBlocked:
-                download.errorMessage = "Blocked by Cloudflare anti-bot protection. Please select your browser as cookie source in Settings > Advanced and try again."
+                download.errorMessage = lang.s("cloudflare_blocked")
             case .boyfriendTVNeedsBrowserCookies:
                 download.errorMessage = "This site requires signed-in browser cookies. Open Settings > Advanced > Browser Cookies, choose your browser, then try again."
+            case .boyfriendTVLoginRequired:
+                download.errorMessage = lang.s("login_required")
+            case .notFound:
+                download.errorMessage = lang.s("ytdlp_not_found")
+            case .parseError:
+                download.errorMessage = lang.s("parse_error")
+            case .ffmpegInstallationFailed:
+                download.errorMessage = lang.s("ffmpeg_error")
+            case .securityViolation(let message):
+                download.errorMessage = "Security violation: \(message)"
             case .subtitleError(let details):
                 download.errorMessage = String(format: lang.s("subtitle_download_failed"), details)
-            case .downloadFailed(let reason):
-                if reason.contains("Cloudflare") || reason.contains("403") {
-                    download.errorMessage = "Blocked by anti-bot protection. Please select your browser as cookie source in Settings > Advanced and try again."
+            case .downloadFailed(let reason), .commandFailed(let reason):
+                let lower = reason.lowercased()
+                if lower.contains("cloudflare") || lower.contains("403") || lower.contains("anti-bot") || lower.contains("captcha") {
+                    download.errorMessage = lang.s("cloudflare_blocked")
+                } else if lower.contains("sign in") || lower.contains("private video") || lower.contains("login") || lower.contains("members-only") {
+                    download.errorMessage = lang.s("login_required")
+                } else if lower.contains("drm") || lower.contains("encrypted") || lower.contains("protected") {
+                    download.errorMessage = lang.s("drm_protected")
+                } else if lower.contains("unavailable") || lower.contains("removed") || lower.contains("404") {
+                    download.errorMessage = lang.s("video_unavailable")
+                } else if lower.contains("no space left") || lower.contains("disk full") {
+                    download.errorMessage = lang.s("disk_full")
+                } else if lower.contains("permission denied") {
+                    download.errorMessage = lang.s("permission_denied")
+                } else if lower.contains("unsupported url") {
+                    download.errorMessage = lang.s("unsupported_url")
+                } else if lower.contains("timed out") || lower.contains("timeout") {
+                    download.errorMessage = lang.s("network_timeout")
                 } else {
                     download.errorMessage = String(format: lang.s("download_failed_error"), reason)
                 }
-            default:
-                download.errorMessage = error.localizedDescription
             }
 
             LoggerService.shared.log("Download failed (\(LoggerService.sanitizeURLForLog(download.url))): \(download.errorMessage ?? error.localizedDescription)", level: .error)
@@ -382,10 +405,21 @@ class DownloadManager: ObservableObject {
             }
             updateStatus(for: download, to: .failed)
             objectWillChange.send()
-            download.errorMessage = error.localizedDescription
-            LoggerService.shared.log("Download failed with error (\(LoggerService.sanitizeURLForLog(download.url))): \(error.localizedDescription)", level: .error)
 
             let lang = languageService ?? LanguageService()
+            let errorText = error.localizedDescription
+            let lower = errorText.lowercased()
+            if lower.contains("no space left") || lower.contains("disk full") {
+                download.errorMessage = lang.s("disk_full")
+            } else if lower.contains("permission denied") {
+                download.errorMessage = lang.s("permission_denied")
+            } else if lower.contains("timed out") || lower.contains("timeout") {
+                download.errorMessage = lang.s("network_timeout")
+            } else {
+                download.errorMessage = String(format: lang.s("download_failed_error"), errorText)
+            }
+            LoggerService.shared.log("Download failed with error (\(LoggerService.sanitizeURLForLog(download.url))): \(error.localizedDescription)", level: .error)
+
             NotificationService.shared.sendDownloadFailed(filename: download.title.isEmpty ? LoggerService.sanitizeURLForLog(download.url) : download.title, languageService: lang)
 
             addToHistory(download)
@@ -583,32 +617,39 @@ class DownloadManager: ObservableObject {
 
 
     func loadHistory() {
-        if let data = userDefaults.data(forKey: UserDefaultsKeys.downloadHistory),
-           let decoded = try? JSONDecoder().decode([HistoricDownload].self, from: data) {
-            history = decoded
-            // Restore as Download objects for UI, reversing so newest is at the top
-            let restored = decoded.reversed().map { $0.toDownload() }
-            downloads.append(contentsOf: restored)
+        if let data = userDefaults.data(forKey: UserDefaultsKeys.downloadHistory) {
+            do {
+                let decoded = try JSONDecoder().decode([HistoricDownload].self, from: data)
+                history = decoded
+                // Restore as Download objects for UI, reversing so newest is at the top
+                let restored = decoded.reversed().map { $0.toDownload() }
+                downloads.append(contentsOf: restored)
 
-            for download in restored {
-                // Bug #8 fix: Mark any "active" status as stopped on relaunch
-                // (no backend process exists for them anymore)
-                switch download.status {
-                case .downloading, .fetching, .processing, .queued:
-                    download.status = .stopped
-                    failedDownloadsMap[download.id] = download
-                case .failed, .stopped, .fileExists:
-                    failedDownloadsMap[download.id] = download
-                default:
-                    break
+                for download in restored {
+                    // Bug #8 fix: Mark any "active" status as stopped on relaunch
+                    // (no backend process exists for them anymore)
+                    switch download.status {
+                    case .downloading, .fetching, .processing, .queued:
+                        download.status = .stopped
+                        failedDownloadsMap[download.id] = download
+                    case .failed, .stopped, .fileExists:
+                        failedDownloadsMap[download.id] = download
+                    default:
+                        break
+                    }
                 }
+            } catch {
+                LoggerService.shared.log("Failed to decode download history: \(error.localizedDescription)", level: .error)
             }
         }
     }
 
     private func saveHistory() {
-        if let encoded = try? JSONEncoder().encode(history) {
+        do {
+            let encoded = try JSONEncoder().encode(history)
             userDefaults.set(encoded, forKey: UserDefaultsKeys.downloadHistory)
+        } catch {
+            LoggerService.shared.log("Failed to encode download history: \(error.localizedDescription)", level: .error)
         }
     }
 
