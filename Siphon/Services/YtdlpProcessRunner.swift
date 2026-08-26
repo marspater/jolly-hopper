@@ -155,15 +155,17 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
                     onOutput(line)
 
                     if line.contains("%") {
-                        let components = line.trimmingCharacters(in: .whitespacesAndNewlines)
-                            .components(separatedBy: .whitespaces)
-                            .filter { !$0.isEmpty }
+                        // Bolt Performance Optimization: Replace allocations of intermediate strings
+                        // and arrays during high-frequency parsing with substring mapping
+                        let components = line.split(whereSeparator: \.isWhitespace).map(String.init)
 
-                        if let percentStr = components.first,
-                           let percent = Double(percentStr.replacingOccurrences(of: "%", with: "")) {
-                            let speed = components.count > 1 ? components[1] : nil
-                            let eta = components.count > 2 ? components[2] : nil
-                            onProgress(percent / 100.0, speed, eta)
+                        if let percentStr = components.first {
+                            let cleanPercent = percentStr.hasSuffix("%") ? String(percentStr.dropLast()) : percentStr
+                            if let percent = Double(cleanPercent) {
+                                let speed = components.count > 1 ? components[1] : nil
+                                let eta = components.count > 2 ? components[2] : nil
+                                onProgress(percent / 100.0, speed, eta)
+                            }
                         }
                     } else if line.contains("[EmbedThumbnail]") {
                         onProgress(0.99, "Embedding thumbnail...", "Finalizing file")

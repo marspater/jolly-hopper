@@ -1273,8 +1273,9 @@ class YtdlpService: ObservableObject {
                 
                 if let output = dumpOutput, !output.isEmpty {
                     var browserHtml = ""
-                    for line in output.components(separatedBy: .newlines) {
-                        let trimmed = line.trimmingCharacters(in: .whitespaces)
+                    // Bolt Performance Optimization: Use Substring iteration instead of allocating a large intermediate string array
+                    for line in output.split(whereSeparator: \.isNewline) {
+                        let trimmed = String(line).trimmingCharacters(in: .whitespaces)
                         if !trimmed.starts(with: "#") && !trimmed.starts(with: "[") && !trimmed.starts(with: "WARNING") && !trimmed.starts(with: "ERROR") {
                             if let decodedData = Data(base64Encoded: trimmed, options: .ignoreUnknownCharacters) {
                                 let decodedString = String(decoding: decodedData, as: UTF8.self)
@@ -1408,8 +1409,9 @@ class YtdlpService: ObservableObject {
                 
                 if let output = embedDump, !output.isEmpty {
                     var embedHtml = ""
-                    for line in output.components(separatedBy: .newlines) {
-                        let trimmed = line.trimmingCharacters(in: .whitespaces)
+                    // Bolt Performance Optimization: Use Substring iteration instead of allocating a large intermediate string array
+                    for line in output.split(whereSeparator: \.isNewline) {
+                        let trimmed = String(line).trimmingCharacters(in: .whitespaces)
                         if !trimmed.starts(with: "#") && !trimmed.starts(with: "[") && !trimmed.starts(with: "WARNING") && !trimmed.starts(with: "ERROR") {
                             if let decodedData = Data(base64Encoded: trimmed, options: .ignoreUnknownCharacters) {
                                 let decodedString = String(decoding: decodedData, as: UTF8.self)
