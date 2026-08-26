@@ -1,4 +1,5 @@
 import SwiftUI
+import CryptoKit
 
 @main
 struct SiphonApp: App {
@@ -146,6 +147,8 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
     private let repoOwner = "marspater"
     private let repoName = "jolly-hopper"
     private var downloadURL: URL?
+    private var expectedChecksum: String?
+    private var checksumURL: URL?
     
     @Published var releasePageURL: URL? = URL(string: "https://github.com/marspater/jolly-hopper/releases/latest")
     
@@ -172,12 +175,24 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
                     releasePageURL = htmlUrl
                 }
                 
+                expectedChecksum = nil
+                checksumURL = nil
+                
                 if let assets = json["assets"] as? [[String: Any]] {
                     if let dlpAsset = assets.first(where: {
                         let name = ($0["name"] as? String)?.lowercased() ?? ""
                         return name.hasSuffix(".dmg") || name.hasSuffix(".zip") || name.hasSuffix(".app.zip") || name.hasSuffix(".tar.gz")
                     }), let downloadUrlStr = dlpAsset["browser_download_url"] as? String {
                         downloadURL = URL(string: downloadUrlStr)
+                        let assetName = (dlpAsset["name"] as? String) ?? ""
+                        
+                        // Check if a corresponding sha256 checksum asset exists
+                        if let sumAsset = assets.first(where: {
+                            let name = ($0["name"] as? String)?.lowercased() ?? ""
+                            return name == "\(assetName.lowercased()).sha256" || name == "sha256sums.txt" || name == "checksums.txt"
+                        }), let sumUrlStr = sumAsset["browser_download_url"] as? String {
+                            checksumURL = URL(string: sumUrlStr)
+                        }
                     }
                 }
                 
@@ -202,6 +217,23 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
             }
             return
         }
+        
+        // Fetch checksum in background if available
+        if let cURL = checksumURL {
+            if let (cData, _) = try? await URLSession.shared.data(from: cURL),
+               let text = String(data: cData, encoding: .utf8) {
+                // Parse sha256 hex string (64 hex characters)
+                let lines = text.components(separatedBy: .newlines)
+                for line in lines {
+                    let parts = line.split(separator: " ", omittingEmptySubsequences: true)
+                    if let first = parts.first, first.count == 64 {
+                        expectedChecksum = String(first).lowercased()
+                        break
+                    }
+                }
+            }
+        }
+        
         isDownloading = true
         updateProgress = 0
         
@@ -231,7 +263,7 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
     }
     
     nonisolated func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {
-        let tempUpdate = FileManager.default.temporaryDirectory.appendingPathComponent("Siphon_Update_Package")
+        let tempUpdate = FileManager.default.temporaryDirectory.appendingPathComponent("Siphon_Update_Package_\(UUID().uuidString)")
         do {
             if FileManager.default.fileExists(atPath: tempUpdate.path) {
                 try FileManager.default.removeItem(at: tempUpdate)
@@ -240,6 +272,19 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
             
             Task { @MainActor in
                 isDownloading = false
+                
+                // Cryptographic checksum verification if expected checksum was retrieved
+                if let expected = expectedChecksum {
+                    let computed = computeSHA256(for: tempUpdate)
+                    if computed == nil || computed?.lowercased() != expected.lowercased() {
+                        LoggerService.shared.log("Update checksum verification failed: expected \(expected), got \(computed ?? "nil")", level: .error)
+                        try? FileManager.default.removeItem(at: tempUpdate)
+                        isInstalling = false
+                        return
+                    }
+                    LoggerService.shared.log("Cryptographic SHA256 checksum verified successfully", level: .info)
+                }
+                
                 isInstalling = true
                 installUpdate(packagePath: tempUpdate.path)
             }
@@ -252,9 +297,28 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
         }
     }
     
+    nonisolated static func computeSHA256(for fileURL: URL) -> String? {
+        guard let handle = try? FileHandle(forReadingFrom: fileURL) else { return nil }
+        defer { try? handle.close() }
+        var hasher = SHA256()
+        while autoreleasepool(invoking: {
+            let data = handle.readData(ofLength: 64 * 1024)
+            guard !data.isEmpty else { return false }
+            hasher.update(data: data)
+            return true
+        }) {}
+        let digest = hasher.finalize()
+        return digest.map { String(format: "%02hhx", $0) }.joined()
+    }
+    
+    private func computeSHA256(for fileURL: URL) -> String? {
+        return Self.computeSHA256(for: fileURL)
+    }
+    
     private func installUpdate(packagePath: String) {
         let appPath = Bundle.main.bundlePath
-        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let bundleId = Bundle.main.bundleIdentifier ?? "com.siphon.Siphon"
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent("Siphon_Staging_\(UUID().uuidString)")
         do {
             try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
         } catch {
@@ -265,30 +329,77 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
         
         let script = """
         (
+            set -e
             sleep 2
             
+            # Step 1: Unpack into staging directory
             if file "$PKG_PATH" | grep -q "Zip archive"; then
                 /usr/bin/unzip -q "$PKG_PATH" -d "$WORK_DIR"
             else
-                hdiutil mount "$PKG_PATH" -mountpoint "$WORK_DIR" -quiet
+                hdiutil mount "$PKG_PATH" -mountpoint "$WORK_DIR" -quiet || exit 1
             fi
             
             NEW_APP="$(find "$WORK_DIR" -maxdepth 2 -name "*.app" | head -n 1)"
             
-            if [ -n "$NEW_APP" ] && [ -d "$NEW_APP" ]; then
-                if /usr/bin/codesign --verify --deep --strict "$NEW_APP" 2>/dev/null; then
-                    rm -rf "$APP_PATH"
-                    ditto "$NEW_APP" "$APP_PATH"
+            if [ -z "$NEW_APP" ] || [ ! -d "$NEW_APP" ]; then
+                echo "No application bundle found in update payload"
+                hdiutil unmount "$WORK_DIR" -quiet 2>/dev/null || true
+                rm -rf "$WORK_DIR" "$PKG_PATH"
+                exit 1
+            fi
+            
+            # Step 2: Verify Code Signature Integrity
+            if ! /usr/bin/codesign --verify --deep --strict --verbose=2 "$NEW_APP" 2>/dev/null; then
+                echo "Code signature verification failed on new app payload"
+                hdiutil unmount "$WORK_DIR" -quiet 2>/dev/null || true
+                rm -rf "$WORK_DIR" "$PKG_PATH"
+                exit 1
+            fi
+            
+            # Step 3: Verify Bundle Identifier matches
+            NEW_BUNDLE_ID="$(/usr/libexec/PlistBuddy -c "Print CFBundleIdentifier" "$NEW_APP/Contents/Info.plist" 2>/dev/null || true)"
+            if [ -n "$EXPECTED_BUNDLE_ID" ] && [ "$NEW_BUNDLE_ID" != "$EXPECTED_BUNDLE_ID" ]; then
+                echo "Bundle identifier mismatch: expected $EXPECTED_BUNDLE_ID, got $NEW_BUNDLE_ID"
+                hdiutil unmount "$WORK_DIR" -quiet 2>/dev/null || true
+                rm -rf "$WORK_DIR" "$PKG_PATH"
+                exit 1
+            fi
+            
+            # Step 4: Atomic Swap with Backup and Rollback
+            BACKUP_PATH="${APP_PATH}.backup.$$"
+            
+            # Move existing app to backup
+            if ! mv "$APP_PATH" "$BACKUP_PATH"; then
+                echo "Failed to create atomic backup of existing app bundle"
+                hdiutil unmount "$WORK_DIR" -quiet 2>/dev/null || true
+                rm -rf "$WORK_DIR" "$PKG_PATH"
+                exit 1
+            fi
+            
+            # Copy new app to target location
+            if ditto "$NEW_APP" "$APP_PATH"; then
+                # Verify that installed app is present and intact
+                if [ -d "$APP_PATH" ] && /usr/bin/codesign --verify --deep --strict "$APP_PATH" 2>/dev/null; then
+                    # Success: remove backup and clean up staging
+                    rm -rf "$BACKUP_PATH"
                     hdiutil unmount "$WORK_DIR" -quiet 2>/dev/null || true
-                    rm -rf "$WORK_DIR"
+                    rm -rf "$WORK_DIR" "$PKG_PATH"
                     open "$APP_PATH"
+                    exit 0
                 else
+                    # Verification of installed target failed -> rollback
+                    rm -rf "$APP_PATH"
+                    mv "$BACKUP_PATH" "$APP_PATH"
                     hdiutil unmount "$WORK_DIR" -quiet 2>/dev/null || true
-                    rm -rf "$WORK_DIR"
+                    rm -rf "$WORK_DIR" "$PKG_PATH"
+                    exit 1
                 fi
             else
+                # Copy failed -> rollback
+                mv "$BACKUP_PATH" "$APP_PATH"
                 hdiutil unmount "$WORK_DIR" -quiet 2>/dev/null || true
-                rm -rf "$WORK_DIR"
+                rm -rf "$WORK_DIR" "$PKG_PATH"
+                exit 1
             fi
         ) & disown
         """
@@ -300,6 +411,7 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
         env["PKG_PATH"] = packagePath
         env["APP_PATH"] = appPath
         env["WORK_DIR"] = tempDir.path
+        env["EXPECTED_BUNDLE_ID"] = bundleId
         process.environment = env
         
         do {
@@ -310,7 +422,7 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
                 self.needsRestart = true
             }
         } catch {
-            LoggerService.shared.log("Update error: \(error)", level: .error)
+            LoggerService.shared.log("Update process run error: \(error)", level: .error)
             isInstalling = false
         }
     }

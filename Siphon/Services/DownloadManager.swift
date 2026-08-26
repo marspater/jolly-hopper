@@ -476,6 +476,64 @@ class DownloadManager: ObservableObject {
         }
     }
 
+    func pauseDownload(_ download: Download) {
+        guard download.status == .downloading || download.status == .fetching || download.status == .processing || download.status == .queued else {
+            return
+        }
+        updateStatus(for: download, to: .paused)
+        activeCancellations.removeValue(forKey: download.id)?.cancel()
+        if let process = activeProcesses.removeValue(forKey: download.id) {
+            process.terminate()
+            Task.detached { [weak process] in
+                try? await Task.sleep(nanoseconds: 1_000_000_000)
+                if let proc = process, proc.isRunning {
+                    proc.terminate()
+                }
+            }
+        }
+        objectWillChange.send()
+    }
+
+    func resumeDownload(_ download: Download) {
+        guard download.status == .paused else { return }
+        updateStatus(for: download, to: .queued)
+        objectWillChange.send()
+        Task {
+            await processDownload(download)
+        }
+    }
+
+    func moveDownloadUp(_ download: Download) {
+        guard let index = downloads.firstIndex(where: { $0.id == download.id }), index > 0 else { return }
+        downloads.swapAt(index, index - 1)
+        objectWillChange.send()
+    }
+
+    func moveDownloadDown(_ download: Download) {
+        guard let index = downloads.firstIndex(where: { $0.id == download.id }), index < downloads.count - 1 else { return }
+        downloads.swapAt(index, index + 1)
+        objectWillChange.send()
+    }
+
+    func moveDownloadToTop(_ download: Download) {
+        guard let index = downloads.firstIndex(where: { $0.id == download.id }), index > 0 else { return }
+        let item = downloads.remove(at: index)
+        downloads.insert(item, at: 0)
+        objectWillChange.send()
+    }
+
+    func moveDownloadToBottom(_ download: Download) {
+        guard let index = downloads.firstIndex(where: { $0.id == download.id }), index < downloads.count - 1 else { return }
+        let item = downloads.remove(at: index)
+        downloads.append(item)
+        objectWillChange.send()
+    }
+
+    func moveDownload(from source: IndexSet, to destination: Int) {
+        downloads.move(fromOffsets: source, toOffset: destination)
+        objectWillChange.send()
+    }
+
 
     func resumeWithOverwrite(_ download: Download) {
         download.options.forceOverwrite = true
