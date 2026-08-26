@@ -277,7 +277,7 @@ struct AddDownloadView: View {
                 HStack {
                     HStack(spacing: 6) {
                         Image(systemName: "list.bullet.rectangle.portrait.fill")
-                            .font(.system(size: 13, weight: .semibold))
+                            .font(.geist(13, weight: .semibold))
                             .foregroundColor(SiphonTheme.accent)
                         Text(languageService.s("paste_multiple_urls"))
                             .font(.geist(14, weight: .bold))
@@ -323,7 +323,7 @@ struct AddDownloadView: View {
                     } label: {
                         HStack(spacing: 5) {
                             Image(systemName: "doc.badge.plus")
-                                .font(.system(size: 12))
+                                .font(.geist(12))
                             Text(languageService.s("import_file"))
                                 .font(.geist(12, weight: .medium))
                         }
@@ -380,8 +380,8 @@ struct AddDownloadView: View {
                     } label: {
                         HStack {
                             Image(systemName: showStreamInspector ? "chevron.down" : "chevron.right")
-                                .font(.system(size: 11, weight: .bold))
-                                .foregroundColor(.accentColor)
+                                .font(.geist(11, weight: .bold))
+                                .foregroundColor(SiphonTheme.accent)
                             Text(languageService.s("stream_inspector"))
                                 .font(.geist(13, weight: .medium))
                                 .foregroundColor(.primary)
@@ -391,15 +391,20 @@ struct AddDownloadView: View {
                                     .font(.geistMono(11, weight: .semibold))
                                     .padding(.horizontal, 6)
                                     .padding(.vertical, 2)
-                                    .background(Color.blue.opacity(0.15))
-                                    .foregroundColor(.blue)
-                                    .cornerRadius(4)
+                                    .background(SiphonTheme.accent.opacity(0.15))
+                                    .foregroundColor(SiphonTheme.accent)
+                                    .clipShape(RoundedRectangle(cornerRadius: 4))
                             }
                         }
                         .padding(.horizontal, 14)
                         .padding(.vertical, 10)
-                        .background(RoundedRectangle(cornerRadius: 8).fill(Color.gray.opacity(0.1)))
-                        .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.gray.opacity(0.3), lineWidth: 1))
+                        .background(
+                            SiphonTheme.cardBackground(cornerRadius: SiphonTheme.radiusControl)
+                        )
+                        .cornerRadius(SiphonTheme.radiusControl)
+                        .overlay(
+                            SiphonTheme.cardBorder(cornerRadius: SiphonTheme.radiusControl)
+                        )
                     }
                     .buttonStyle(.plain)
 
@@ -479,7 +484,7 @@ struct AddDownloadView: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 6) {
                 Image(systemName: "link")
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.geist(13, weight: .semibold))
                     .foregroundColor(SiphonTheme.accent)
                 Text(languageService.s("video_url"))
                     .font(.geist(14, weight: .bold))
@@ -499,7 +504,7 @@ struct AddDownloadView: View {
                             urlInput = ""
                         } label: {
                             Image(systemName: "xmark.circle.fill")
-                                .font(.system(size: 12))
+                                .font(.geist(12))
                                 .foregroundColor(.secondary)
                         }
                         .buttonStyle(.plain)
@@ -528,7 +533,7 @@ struct AddDownloadView: View {
                 } label: {
                     HStack(spacing: 4) {
                         Image(systemName: isPasted ? "checkmark" : "doc.on.clipboard")
-                            .font(.system(size: 12, weight: .medium))
+                            .font(.geist(12, weight: .medium))
                         Text(languageService.s("paste"))
                             .font(.geist(12, weight: .medium))
                     }
@@ -557,7 +562,7 @@ struct AddDownloadView: View {
                             Text(languageService.s("fetch"))
                                 .font(.geist(12, weight: .semibold))
                             Image(systemName: "arrow.right")
-                                .font(.system(size: 11, weight: .bold))
+                                .font(.geist(11, weight: .bold))
                         }
                     }
                     .foregroundColor(urlInput.isEmpty ? .secondary.opacity(0.5) : .white)
@@ -712,7 +717,7 @@ struct AddDownloadView: View {
             HStack(alignment: .center) {
                 HStack(spacing: 6) {
                     Image(systemName: "slider.horizontal.3")
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(.geist(13, weight: .semibold))
                         .foregroundColor(SiphonTheme.accent)
                     Text(languageService.s("format_and_quality"))
                         .font(.geist(14, weight: .bold))
@@ -770,15 +775,15 @@ struct AddDownloadView: View {
                 } label: {
                     HStack(spacing: 5) {
                         Image(systemName: "bolt.fill")
-                            .font(.system(size: 11))
-                            .foregroundColor(.orange)
+                            .font(.geist(11))
+                            .foregroundColor(SiphonTheme.statusQueued)
                         if let presetName = selectedPresetName {
                             Text("\(languageService.s("quick_presets")): \(presetName)")
                         } else {
                             Text(languageService.s("quick_presets"))
                         }
                         Image(systemName: "chevron.down")
-                            .font(.system(size: 9, weight: .semibold))
+                            .font(.geist(9, weight: .semibold))
                     }
                     .font(.geist(11, weight: .semibold))
                     .foregroundColor(.primary)
@@ -949,7 +954,7 @@ struct AddDownloadView: View {
                 HStack(alignment: .top, spacing: 6) {
                     Image(systemName: "info.circle.fill")
                         .foregroundColor(SiphonTheme.accent)
-                        .font(.system(size: 11))
+                        .font(.geist(11))
                     Text(languageService.s("h264_preset_info"))
                         .font(.geist(11))
                         .foregroundColor(.secondary)
@@ -1027,7 +1032,7 @@ struct AddDownloadView: View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(spacing: 6) {
                 Image(systemName: "folder.fill")
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.geist(13, weight: .semibold))
                     .foregroundColor(SiphonTheme.accent)
                 Text(languageService.s("save_folder"))
                     .font(.geist(14, weight: .bold))
@@ -1038,7 +1043,7 @@ struct AddDownloadView: View {
                 HStack(spacing: 8) {
                     HStack(spacing: 6) {
                         Image(systemName: "folder")
-                            .font(.system(size: 12))
+                            .font(.geist(12))
                             .foregroundColor(.secondary)
                         Text(saveFolder.path)
                             .font(.geistMono(11, weight: .medium))
@@ -1074,7 +1079,7 @@ struct AddDownloadView: View {
                 // Custom Filename Row
                 HStack(spacing: 8) {
                     Image(systemName: "pencil")
-                        .font(.system(size: 12))
+                        .font(.geist(12))
                         .foregroundColor(.secondary)
                         .frame(width: 14)
                     TextField(languageService.s("custom_filename_hint"), text: $customFilename)
@@ -1110,7 +1115,7 @@ struct AddDownloadView: View {
             } label: {
                 HStack(spacing: 8) {
                     Image(systemName: showAdvancedOptions ? "chevron.down" : "chevron.right")
-                        .font(.system(size: 11, weight: .bold))
+                        .font(.geist(11, weight: .bold))
                         .foregroundColor(SiphonTheme.accent)
                         .frame(width: 12)
                     Text(languageService.s("extra_settings"))
@@ -1261,17 +1266,23 @@ struct AddDownloadView: View {
     private func errorSection(_ error: String) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 10) {
             Image(systemName: "exclamationmark.triangle.fill")
-                .foregroundColor(.red)
+                .foregroundColor(SiphonTheme.statusFailed)
+                .font(.geist(13))
             Text(error)
-                .foregroundColor(.red)
+                .font(.geist(12, weight: .medium))
+                .foregroundColor(SiphonTheme.statusFailed)
                 .multilineTextAlignment(.leading)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(.horizontal, 18)
-        .padding(.vertical, 14)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.red.opacity(0.1))
-        .cornerRadius(8)
+        .background(SiphonTheme.statusFailed.opacity(0.10))
+        .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusControl))
+        .overlay(
+            RoundedRectangle(cornerRadius: SiphonTheme.radiusControl)
+                .stroke(SiphonTheme.statusFailed.opacity(0.25), lineWidth: 1)
+        )
     }
 
     private var footer: some View {
@@ -1332,7 +1343,7 @@ struct AddDownloadView: View {
                 } label: {
                     HStack(spacing: 6) {
                         Image(systemName: "arrow.down.circle.fill")
-                            .font(.system(size: 13, weight: .semibold))
+                            .font(.geist(13, weight: .semibold))
                         Text(downloadTitle)
                             .font(.geist(13, weight: .bold))
                     }

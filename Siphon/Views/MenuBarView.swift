@@ -49,7 +49,7 @@ struct MenuBarView: View {
     private var urlInput: some View {
         HStack(spacing: 8) {
             Image(systemName: "link")
-                .font(.system(size: 12))
+                .font(.geist(12))
                 .foregroundColor(.secondary)
             
             TextField(languageService.s("url_hint"), text: $url)
@@ -61,7 +61,7 @@ struct MenuBarView: View {
                     url = ""
                 } label: {
                     Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 12))
+                        .font(.geist(12))
                         .foregroundColor(.secondary)
                 }
                 .buttonStyle(.plain)
@@ -80,8 +80,8 @@ struct MenuBarView: View {
                 }
             } label: {
                 Image(systemName: isPasted ? "checkmark" : "doc.on.clipboard")
-                    .font(.system(size: 12))
-                    .foregroundColor(isPasted ? .green : .secondary)
+                    .font(.geist(12))
+                    .foregroundColor(isPasted ? SiphonTheme.statusCompleted : .secondary)
             }
             .buttonStyle(.plain)
             .help(languageService.s("paste_from_clipboard"))
@@ -266,7 +266,7 @@ struct MenuBarView: View {
         } label: {
             HStack(spacing: 6) {
                 Image(systemName: "arrow.down.circle.fill")
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(.geist(14, weight: .semibold))
                 Text(languageService.s("download_btn"))
                     .font(.geist(13, weight: .bold))
             }
@@ -278,9 +278,9 @@ struct MenuBarView: View {
                 LinearGradient(colors: [Color.primary.opacity(0.08), Color.primary.opacity(0.04)], startPoint: .top, endPoint: .bottom) :
                 SiphonTheme.primaryGradient
             )
-            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusControl))
             .overlay(
-                RoundedRectangle(cornerRadius: 8)
+                RoundedRectangle(cornerRadius: SiphonTheme.radiusControl)
                     .stroke(Color.white.opacity(url.isEmpty ? 0.05 : 0.25), lineWidth: 1)
             )
         }
@@ -312,7 +312,7 @@ struct MenuBarView: View {
             } label: {
                 HStack(spacing: 5) {
                     Image(systemName: "macwindow")
-                        .font(.system(size: 11, weight: .semibold))
+                        .font(.geist(11, weight: .semibold))
                     Text(languageService.s("show_main_window"))
                         .font(.geist(11, weight: .medium))
                         .lineLimit(1)
@@ -366,7 +366,7 @@ struct MenuBarView: View {
             } label: {
                 HStack(spacing: 4) {
                     Image(systemName: "power")
-                        .font(.system(size: 11, weight: .bold))
+                        .font(.geist(11, weight: .bold))
                     Text(languageService.s("quit"))
                         .font(.geist(11, weight: .semibold))
                         .lineLimit(1)
