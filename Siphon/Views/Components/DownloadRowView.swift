@@ -116,89 +116,65 @@ struct DownloadRowView: View {
     @State private var isHovering = false
     @State private var showLog = false
     @State private var isCopiedLog = false
+    @State private var showRawError = false
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 14) {
-
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top, spacing: 14) {
                 thumbnailView
                 
-
-                VStack(alignment: .leading, spacing: 5) {
+                VStack(alignment: .leading, spacing: 4) {
+                    // Line 1: Title
                     Text(download.status == .fetching ? languageService.s("fetching") : download.title)
                         .font(.geist(14, weight: .semibold))
                         .lineLimit(2)
                         .fixedSize(horizontal: false, vertical: true)
                     
-                    HStack(spacing: 8) {
-                        statusBadge
-                        
-                        if let duration = download.duration {
-                            HStack(spacing: 3) {
-                                Image(systemName: "timer")
-                                    .font(.geist(9))
-                                Text(duration)
-                                    .font(.geistMono(11, weight: .medium))
-                            }
-                            .foregroundColor(.secondary)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(
-                                SiphonTheme.pillBackground(isSelected: false)
-                            )
-                            .clipShape(Capsule())
-                            .overlay(
-                                SiphonTheme.pillBorder(isSelected: false)
-                            )
-                        }
-                    }
+                    // Line 2: Subtitle (Domain • Quality • Format • Duration)
+                    Text(download.formatSubtitle(lang: languageService))
+                        .font(.geist(12, weight: .medium))
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
                     
-                    if download.status == .downloading {
-                        HStack(spacing: 10) {
-                            Text("\(Int(download.progress * 100))%")
-                                .font(.geistMono(12, weight: .bold))
-                                .foregroundColor(SiphonTheme.accent)
+                    // Line 3: Status / Progress / Metrics
+                    if download.status == .downloading || download.status == .processing || download.status == .fetching {
+                        HStack(spacing: 8) {
+                            statusBadge
                             
-                            if let speed = download.speed, !speed.isEmpty {
-                                HStack(spacing: 3) {
-                                    Image(systemName: "arrow.down")
-                                        .font(.geist(9, weight: .semibold))
-                                    Text(speed)
-                                        .font(.geistMono(11, weight: .medium))
+                            if download.status == .downloading {
+                                HStack(spacing: 8) {
+                                    Text("\(Int(download.progress * 100))%")
+                                        .font(.geistMono(12, weight: .bold))
+                                        .foregroundColor(SiphonTheme.accent)
+                                    
+                                    if let speed = download.speed, !speed.isEmpty {
+                                        Text("•")
+                                            .foregroundColor(.secondary.opacity(0.4))
+                                        Text(speed)
+                                            .font(.geistMono(11, weight: .medium))
+                                            .foregroundColor(.secondary)
+                                    }
+                                    
+                                    if let eta = download.eta, !eta.isEmpty {
+                                        Text("•")
+                                            .foregroundColor(.secondary.opacity(0.4))
+                                        Text("~\(eta)")
+                                            .font(.geistMono(11, weight: .medium))
+                                            .foregroundColor(.secondary.opacity(0.8))
+                                    }
                                 }
-                                .foregroundColor(.secondary)
-                            }
-                            
-                            if let eta = download.eta, !eta.isEmpty {
-                                HStack(spacing: 3) {
-                                    Image(systemName: "clock")
-                                        .font(.geist(9, weight: .regular))
-                                    Text(eta)
-                                        .font(.geistMono(11, weight: .medium))
-                                }
-                                .foregroundColor(.secondary.opacity(0.8))
                             }
                         }
-                    }
-                    
-                    if let error = download.errorMessage {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(error)
-                                .font(.geist(11))
-                                .foregroundColor(SiphonTheme.statusFailed)
-                                .lineLimit(4)
-                                .fixedSize(horizontal: false, vertical: true)
+                    } else if download.status == .failed || download.status == .stopped || download.errorMessage != nil {
+                        errorSection
+                    } else {
+                        HStack(spacing: 8) {
+                            statusBadge
                             
-                            if error.contains("Sign in to confirm you're not a bot") {
-                                Button(languageService.s("fix_signin_error")) {
-                                    PreferencesWindowManager.shared.showPreferencesWindow(
-                                        languageService: languageService,
-                                        updateChecker: updateChecker,
-                                        downloadManager: downloadManager
-                                    )
-                                }
-                                .buttonStyle(.borderedProminent)
-                                .controlSize(.mini)
+                            if download.status == .paused && download.progress > 0 {
+                                Text("\(Int(download.progress * 100))%")
+                                    .font(.geistMono(11, weight: .semibold))
+                                    .foregroundColor(SiphonTheme.statusQueued)
                             }
                         }
                     }
@@ -222,13 +198,140 @@ struct DownloadRowView: View {
             SiphonTheme.cardBorder(cornerRadius: SiphonTheme.radiusCard, isHovered: isHovering)
         )
         .shadow(color: Color.black.opacity(isHovering ? 0.08 : 0.02), radius: isHovering ? 8 : 4, y: 2)
-        .scaleEffect(isHovering ? 1.006 : 1.0)
+        .scaleEffect(isHovering ? 1.004 : 1.0)
         .animation(.spring(response: 0.3, dampingFraction: 0.75), value: isHovering)
         .onHover { hovering in
             isHovering = hovering
         }
+        .contextMenu {
+            rowContextMenu
+        }
         .sheet(isPresented: $showLog) {
             logSheet
+        }
+    }
+    
+    private var errorSection: some View {
+        Group {
+            if let info = download.errorUXInfo(lang: languageService) {
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .font(.geist(12))
+                            .foregroundColor(SiphonTheme.statusFailed)
+                        Text(info.headline)
+                            .font(.geist(13, weight: .bold))
+                            .foregroundColor(SiphonTheme.statusFailed)
+                        
+                        Text("—")
+                            .foregroundColor(SiphonTheme.statusFailed.opacity(0.5))
+                        
+                        Text(info.description)
+                            .font(.geist(12))
+                            .foregroundColor(.secondary)
+                    }
+                    
+                    HStack(spacing: 8) {
+                        switch info.actionType {
+                        case .fixInSettings:
+                            Button {
+                                PreferencesWindowManager.shared.showPreferencesWindow(
+                                    languageService: languageService,
+                                    updateChecker: updateChecker,
+                                    downloadManager: downloadManager
+                                )
+                            } label: {
+                                Text(languageService.s("fix_signin_error"))
+                                    .font(.geist(11, weight: .semibold))
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .tint(SiphonTheme.accent)
+                            .controlSize(.small)
+                            
+                        case .retry:
+                            Button {
+                                downloadManager.retryDownload(download)
+                            } label: {
+                                Text(languageService.s("retry"))
+                                    .font(.geist(11, weight: .semibold))
+                            }
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
+                            
+                        case .changeFolder:
+                            Button {
+                                PreferencesWindowManager.shared.showPreferencesWindow(
+                                    languageService: languageService,
+                                    updateChecker: updateChecker,
+                                    downloadManager: downloadManager
+                                )
+                            } label: {
+                                Text(languageService.s("change_folder"))
+                                    .font(.geist(11, weight: .semibold))
+                            }
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
+                            
+                        case .noAction:
+                            EmptyView()
+                        }
+                        
+                        Button {
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                showRawError.toggle()
+                            }
+                        } label: {
+                            HStack(spacing: 3) {
+                                Text(showRawError ? languageService.s("hide_details") : languageService.s("details"))
+                                    .font(.geist(11, weight: .medium))
+                                Image(systemName: showRawError ? "chevron.up" : "chevron.down")
+                                    .font(.geist(9))
+                            }
+                            .foregroundColor(.secondary)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    
+                    if showRawError {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(info.rawError)
+                                .font(.geistMono(10))
+                                .foregroundColor(.secondary)
+                                .lineLimit(6)
+                                .padding(8)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .background(Color.black.opacity(0.15))
+                                .cornerRadius(6)
+                            
+                            HStack {
+                                Button {
+                                    NSPasteboard.general.clearContents()
+                                    NSPasteboard.general.setString(info.rawError, forType: .string)
+                                } label: {
+                                    Text(languageService.s("copy_error"))
+                                        .font(.geist(10, weight: .medium))
+                                }
+                                .buttonStyle(.plain)
+                                .foregroundColor(SiphonTheme.accent)
+                                
+                                Spacer()
+                                
+                                Button {
+                                    showLog = true
+                                } label: {
+                                    Text(languageService.s("download_log"))
+                                        .font(.geist(10, weight: .medium))
+                                }
+                                .buttonStyle(.plain)
+                                .foregroundColor(.secondary)
+                            }
+                            .padding(.horizontal, 2)
+                        }
+                        .transition(.opacity.combined(with: .move(edge: .top)))
+                    }
+                }
+                .padding(.top, 2)
+            }
         }
     }
     
@@ -393,6 +496,7 @@ struct FileThumbnailView: View {
     
     private var actionButtons: some View {
         HStack(spacing: 8) {
+            // Completed state: Primary Play button + Single More Menu
             if download.status == .completed {
                 Button {
                     if let path = download.filePath {
@@ -400,39 +504,217 @@ struct FileThumbnailView: View {
                     }
                 } label: {
                     Image(systemName: "play.circle.fill")
-                        .font(.geist(18))
+                        .font(.geist(20))
                 }
                 .buttonStyle(.plain)
                 .foregroundColor(SiphonTheme.accent)
                 .help(languageService.s("play"))
                 .accessibilityLabel(languageService.s("play"))
                 
-                Button {
+                Menu {
+                    Button {
+                        if let path = download.filePath {
+                            downloadManager.openFile(path)
+                        }
+                    } label: {
+                        Label(languageService.s("play"), systemImage: "play.fill")
+                    }
+                    
                     if let path = download.filePath {
-                        downloadManager.showInFinder(path)
+                        Button {
+                            downloadManager.showInFinder(path)
+                        } label: {
+                            Label(languageService.s("show_in_finder"), systemImage: "folder")
+                        }
+                    }
+                    
+                    Button {
+                        appState.urlToDownload = download.url
+                        appState.showAddDownloadSheet = true
+                    } label: {
+                        Label(languageService.s("redownload"), systemImage: "arrow.down.circle")
+                    }
+                    
+                    Button {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(download.url, forType: .string)
+                    } label: {
+                        Label(languageService.s("copy_url"), systemImage: "link")
+                    }
+                    
+                    Button {
+                        showLog = true
+                    } label: {
+                        Label(languageService.s("log"), systemImage: "doc.text")
+                    }
+                    
+                    Divider()
+                    
+                    Button(role: .destructive) {
+                        downloadManager.removeDownload(download)
+                    } label: {
+                        Label(languageService.s("remove"), systemImage: "trash")
                     }
                 } label: {
-                    Image(systemName: "folder.fill")
-                        .font(.geist(16))
+                    Image(systemName: "ellipsis.circle")
+                        .font(.geist(18))
+                        .foregroundColor(.secondary)
                 }
-                .buttonStyle(.plain)
-                .foregroundColor(.secondary)
-                .help(languageService.s("finder"))
-                .accessibilityLabel(languageService.s("finder"))
-                
-                Button {
-                    appState.urlToDownload = download.url
-                    appState.showAddDownloadSheet = true
-                } label: {
-                    Image(systemName: "arrow.down.circle")
-                        .font(.geist(16))
-                }
-                .buttonStyle(.plain)
-                .foregroundColor(.secondary)
-                .help(languageService.s("redownload"))
-                .accessibilityLabel(languageService.s("redownload"))
+                .menuStyle(.borderlessButton)
+                .help(languageService.s("more_actions"))
             }
             
+            // Downloading / Fetching / Processing state: Pause + Stop (revealed on hover) + More Menu
+            if download.status == .downloading || download.status == .fetching || download.status == .processing {
+                Button {
+                    downloadManager.pauseDownload(download)
+                } label: {
+                    Image(systemName: "pause.circle.fill")
+                        .font(.geist(18))
+                }
+                .buttonStyle(.plain)
+                .foregroundColor(SiphonTheme.statusQueued)
+                .help(languageService.s("pause"))
+                
+                if isHovering {
+                    Button {
+                        downloadManager.stopDownload(download)
+                    } label: {
+                        Image(systemName: "stop.circle.fill")
+                            .font(.geist(18))
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundColor(SiphonTheme.statusFailed)
+                    .help(languageService.s("stop"))
+                    .transition(.opacity)
+                }
+                
+                Menu {
+                    Button {
+                        downloadManager.pauseDownload(download)
+                    } label: {
+                        Label(languageService.s("pause"), systemImage: "pause.fill")
+                    }
+                    
+                    Button {
+                        downloadManager.stopDownload(download)
+                    } label: {
+                        Label(languageService.s("stop"), systemImage: "stop.fill")
+                    }
+                    
+                    Button {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(download.url, forType: .string)
+                    } label: {
+                        Label(languageService.s("copy_url"), systemImage: "link")
+                    }
+                    
+                    Button {
+                        showLog = true
+                    } label: {
+                        Label(languageService.s("log"), systemImage: "doc.text")
+                    }
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                        .font(.geist(18))
+                        .foregroundColor(.secondary)
+                }
+                .menuStyle(.borderlessButton)
+            }
+            
+            // Queued state: Pause + Reorder + More Menu
+            if download.status == .queued {
+                Button {
+                    downloadManager.pauseDownload(download)
+                } label: {
+                    Image(systemName: "pause.circle")
+                        .font(.geist(18))
+                }
+                .buttonStyle(.plain)
+                .foregroundColor(SiphonTheme.statusQueued)
+                .help(languageService.s("pause"))
+                
+                Menu {
+                    Button {
+                        downloadManager.moveDownloadToTop(download)
+                    } label: {
+                        Label(languageService.s("move_to_top"), systemImage: "arrow.up.to.line")
+                    }
+                    
+                    Button {
+                        downloadManager.moveDownloadUp(download)
+                    } label: {
+                        Label(languageService.s("move_up"), systemImage: "arrow.up")
+                    }
+                    
+                    Button {
+                        downloadManager.moveDownloadDown(download)
+                    } label: {
+                        Label(languageService.s("move_down"), systemImage: "arrow.down")
+                    }
+                    
+                    Button {
+                        downloadManager.moveDownloadToBottom(download)
+                    } label: {
+                        Label(languageService.s("move_to_bottom"), systemImage: "arrow.down.to.line")
+                    }
+                    
+                    Divider()
+                    
+                    Button {
+                        downloadManager.stopDownload(download)
+                    } label: {
+                        Label(languageService.s("stop"), systemImage: "stop.fill")
+                    }
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                        .font(.geist(18))
+                        .foregroundColor(.secondary)
+                }
+                .menuStyle(.borderlessButton)
+            }
+            
+            // Paused state: Resume + More Menu
+            if download.status == .paused {
+                Button {
+                    downloadManager.resumeDownload(download)
+                } label: {
+                    Image(systemName: "play.circle.fill")
+                        .font(.geist(18))
+                }
+                .buttonStyle(.plain)
+                .foregroundColor(SiphonTheme.accent)
+                .help(languageService.s("resume"))
+                
+                Menu {
+                    Button {
+                        downloadManager.resumeDownload(download)
+                    } label: {
+                        Label(languageService.s("resume"), systemImage: "play.fill")
+                    }
+                    
+                    Button {
+                        downloadManager.stopDownload(download)
+                    } label: {
+                        Label(languageService.s("stop"), systemImage: "stop.fill")
+                    }
+                    
+                    Divider()
+                    
+                    Button(role: .destructive) {
+                        downloadManager.removeDownload(download)
+                    } label: {
+                        Label(languageService.s("remove"), systemImage: "trash")
+                    }
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                        .font(.geist(18))
+                        .foregroundColor(.secondary)
+                }
+                .menuStyle(.borderlessButton)
+            }
+            
+            // Failed / Stopped state: Retry + More Menu
             if download.status == .failed || download.status == .stopped {
                 Button {
                     downloadManager.retryDownload(download)
@@ -443,21 +725,50 @@ struct FileThumbnailView: View {
                 .buttonStyle(.plain)
                 .foregroundColor(SiphonTheme.statusQueued)
                 .help(languageService.s("retry"))
-                .accessibilityLabel(languageService.s("retry"))
                 
-                Button {
-                    appState.urlToDownload = download.url
-                    appState.showAddDownloadSheet = true
+                Menu {
+                    Button {
+                        downloadManager.retryDownload(download)
+                    } label: {
+                        Label(languageService.s("retry"), systemImage: "arrow.clockwise")
+                    }
+                    
+                    Button {
+                        appState.urlToDownload = download.url
+                        appState.showAddDownloadSheet = true
+                    } label: {
+                        Label(languageService.s("redownload"), systemImage: "arrow.down.circle")
+                    }
+                    
+                    Button {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(download.url, forType: .string)
+                    } label: {
+                        Label(languageService.s("copy_url"), systemImage: "link")
+                    }
+                    
+                    Button {
+                        showLog = true
+                    } label: {
+                        Label(languageService.s("log"), systemImage: "doc.text")
+                    }
+                    
+                    Divider()
+                    
+                    Button(role: .destructive) {
+                        downloadManager.removeDownload(download)
+                    } label: {
+                        Label(languageService.s("remove"), systemImage: "trash")
+                    }
                 } label: {
-                    Image(systemName: "arrow.down.circle")
-                        .font(.geist(16))
+                    Image(systemName: "ellipsis.circle")
+                        .font(.geist(18))
+                        .foregroundColor(.secondary)
                 }
-                .buttonStyle(.plain)
-                .foregroundColor(.secondary)
-                .help(languageService.s("redownload"))
-                .accessibilityLabel(languageService.s("redownload"))
+                .menuStyle(.borderlessButton)
             }
             
+            // FileExists state
             if download.status == .fileExists {
                 Button {
                     downloadManager.resumeWithOverwrite(download)
@@ -468,7 +779,6 @@ struct FileThumbnailView: View {
                 .buttonStyle(.plain)
                 .foregroundColor(SiphonTheme.statusQueued)
                 .help(languageService.s("overwrite"))
-                .accessibilityLabel(languageService.s("overwrite"))
                 
                 Button {
                     downloadManager.resumeWithNewName(download)
@@ -479,45 +789,117 @@ struct FileThumbnailView: View {
                 .buttonStyle(.plain)
                 .foregroundColor(SiphonTheme.accent)
                 .help(languageService.s("download_new_name"))
-                .accessibilityLabel(languageService.s("download_new_name"))
             }
-            
-            if showStop && (download.status == .downloading || download.status == .queued) {
-                Button {
-                    downloadManager.stopDownload(download)
-                } label: {
-                    Image(systemName: "stop.circle.fill")
-                        .font(.geist(18))
-                }
-                .buttonStyle(.plain)
-                .foregroundColor(SiphonTheme.statusFailed)
-                .help(languageService.s("stop"))
-                .accessibilityLabel(languageService.s("stop"))
+        }
+    }
+    
+    @ViewBuilder
+    private var rowContextMenu: some View {
+        if let path = download.filePath {
+            Button {
+                downloadManager.showInFinder(path)
+            } label: {
+                Label(languageService.s("show_in_finder"), systemImage: "folder")
             }
             
             Button {
-                showLog = true
+                downloadManager.openFile(path)
             } label: {
-                Image(systemName: "doc.text")
-                    .font(.geist(16))
+                Label(languageService.s("play"), systemImage: "play.fill")
             }
-            .buttonStyle(.plain)
-            .foregroundColor(.secondary)
-            .help(languageService.s("log"))
-            .accessibilityLabel(languageService.s("log"))
             
-            if download.status == .completed || download.status == .failed || download.status == .stopped {
-                Button {
-                    downloadManager.removeDownload(download)
-                } label: {
-                    Image(systemName: "xmark.circle")
-                        .font(.geist(16))
-                }
-                .buttonStyle(.plain)
-                .foregroundColor(.secondary.opacity(0.7))
-                .help(languageService.s("remove"))
-                .accessibilityLabel(languageService.s("remove"))
+            Divider()
+        }
+        
+        if download.status == .downloading || download.status == .fetching || download.status == .processing {
+            Button {
+                downloadManager.pauseDownload(download)
+            } label: {
+                Label(languageService.s("pause"), systemImage: "pause.fill")
             }
+            
+            Button {
+                downloadManager.stopDownload(download)
+            } label: {
+                Label(languageService.s("stop"), systemImage: "stop.fill")
+            }
+            
+            Divider()
+        } else if download.status == .paused {
+            Button {
+                downloadManager.resumeDownload(download)
+            } label: {
+                Label(languageService.s("resume"), systemImage: "play.fill")
+            }
+            
+            Button {
+                downloadManager.stopDownload(download)
+            } label: {
+                Label(languageService.s("stop"), systemImage: "stop.fill")
+            }
+            
+            Divider()
+        } else if download.status == .queued {
+            Button {
+                downloadManager.pauseDownload(download)
+            } label: {
+                Label(languageService.s("pause"), systemImage: "pause.fill")
+            }
+            
+            Button {
+                downloadManager.moveDownloadToTop(download)
+            } label: {
+                Label(languageService.s("move_to_top"), systemImage: "arrow.up.to.line")
+            }
+            
+            Button {
+                downloadManager.moveDownloadUp(download)
+            } label: {
+                Label(languageService.s("move_up"), systemImage: "arrow.up")
+            }
+            
+            Button {
+                downloadManager.moveDownloadDown(download)
+            } label: {
+                Label(languageService.s("move_down"), systemImage: "arrow.down")
+            }
+            
+            Button {
+                downloadManager.moveDownloadToBottom(download)
+            } label: {
+                Label(languageService.s("move_to_bottom"), systemImage: "arrow.down.to.line")
+            }
+            
+            Divider()
+        } else if download.status == .failed || download.status == .stopped {
+            Button {
+                downloadManager.retryDownload(download)
+            } label: {
+                Label(languageService.s("retry"), systemImage: "arrow.clockwise")
+            }
+            
+            Divider()
+        }
+        
+        Button {
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(download.url, forType: .string)
+        } label: {
+            Label(languageService.s("copy_url"), systemImage: "link")
+        }
+        
+        Button {
+            showLog = true
+        } label: {
+            Label(languageService.s("log"), systemImage: "doc.text")
+        }
+        
+        Divider()
+        
+        Button(role: .destructive) {
+            downloadManager.removeDownload(download)
+        } label: {
+            Label(languageService.s("remove"), systemImage: "trash")
         }
     }
     

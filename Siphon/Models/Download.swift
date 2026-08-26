@@ -28,6 +28,142 @@ class Download: ObservableObject, Identifiable {
         return "\(percentage)%"
     }
     
+    var sourceDomain: String {
+        guard let urlObj = URL(string: url), let host = urlObj.host?.lowercased() else {
+            return "Web"
+        }
+        if host.contains("youtube.com") || host.contains("youtu.be") {
+            return "YouTube"
+        } else if host.contains("twitter.com") || host.contains("x.com") {
+            return "X (Twitter)"
+        } else if host.contains("instagram.com") {
+            return "Instagram"
+        } else if host.contains("tiktok.com") {
+            return "TikTok"
+        } else if host.contains("vimeo.com") {
+            return "Vimeo"
+        } else if host.contains("reddit.com") {
+            return "Reddit"
+        } else if host.contains("facebook.com") || host.contains("fb.watch") {
+            return "Facebook"
+        } else if host.contains("twitch.tv") {
+            return "Twitch"
+        } else if host.contains("soundcloud.com") {
+            return "SoundCloud"
+        } else if host.contains("dailymotion.com") {
+            return "Dailymotion"
+        }
+        
+        let cleaned = host.replacingOccurrences(of: "^www\\.", with: "", options: .regularExpression)
+        guard let first = cleaned.first else { return cleaned }
+        return String(first).uppercased() + cleaned.dropFirst()
+    }
+    
+    func formatSubtitle(lang: LanguageService) -> String {
+        var parts: [String] = [sourceDomain]
+        
+        if options.fileType.isVideo {
+            if let res = options.videoResolution, res != .best, res != .worst {
+                parts.append(res.rawValue.replacingOccurrences(of: "r", with: ""))
+            } else if let h = mediaInfo?.formats?.compactMap({ $0.parsedHeight }).max() {
+                parts.append("\(h)p")
+            }
+        } else {
+            if let quality = options.audioQuality, quality != .best {
+                parts.append(quality.rawValue)
+            }
+        }
+        
+        parts.append(options.fileType.rawValue)
+        
+        if let dur = duration, !dur.isEmpty {
+            parts.append(dur)
+        }
+        
+        return parts.joined(separator: " • ")
+    }
+    
+    enum ErrorActionType: Equatable {
+        case fixInSettings
+        case retry
+        case changeFolder
+        case noAction
+    }
+
+    struct ErrorUXInfo {
+        let headline: String
+        let description: String
+        let actionType: ErrorActionType
+        let rawError: String
+    }
+
+    func errorUXInfo(lang: LanguageService) -> ErrorUXInfo? {
+        guard let error = errorMessage ?? (status == .failed ? lang.s("generic_error_desc") : nil) else {
+            return nil
+        }
+        
+        let lower = error.lowercased()
+        let rawError = log.isEmpty ? error : log
+        
+        if lower.contains("sign in to confirm") || lower.contains("bot") || lower.contains("cloudflare") || lower.contains("login") || lower.contains("cookies") {
+            return ErrorUXInfo(
+                headline: lang.s("couldnt_download"),
+                description: lang.s("youtube_auth_required"),
+                actionType: .fixInSettings,
+                rawError: rawError
+            )
+        } else if lower.contains("drm") {
+            return ErrorUXInfo(
+                headline: lang.s("couldnt_download"),
+                description: lang.s("drm_protected_desc"),
+                actionType: .noAction,
+                rawError: rawError
+            )
+        } else if lower.contains("unavailable") || lower.contains("private") || lower.contains("removed") || lower.contains("404") || lower.contains("not found") {
+            return ErrorUXInfo(
+                headline: lang.s("couldnt_download"),
+                description: lang.s("video_unavailable_desc"),
+                actionType: .retry,
+                rawError: rawError
+            )
+        } else if lower.contains("no space left") || lower.contains("disk full") {
+            return ErrorUXInfo(
+                headline: lang.s("couldnt_download"),
+                description: lang.s("disk_full_desc"),
+                actionType: .changeFolder,
+                rawError: rawError
+            )
+        } else if lower.contains("permission denied") {
+            return ErrorUXInfo(
+                headline: lang.s("couldnt_download"),
+                description: lang.s("permission_denied_desc"),
+                actionType: .changeFolder,
+                rawError: rawError
+            )
+        } else if lower.contains("timed out") || lower.contains("timeout") || lower.contains("connection") {
+            return ErrorUXInfo(
+                headline: lang.s("couldnt_download"),
+                description: lang.s("network_timeout_desc"),
+                actionType: .retry,
+                rawError: rawError
+            )
+        } else if lower.contains("unsupported url") {
+            return ErrorUXInfo(
+                headline: lang.s("couldnt_download"),
+                description: lang.s("unsupported_url_desc"),
+                actionType: .noAction,
+                rawError: rawError
+            )
+        } else {
+            return ErrorUXInfo(
+                headline: lang.s("couldnt_download"),
+                description: error.count > 60 ? lang.s("generic_error_desc") : error,
+                actionType: .retry,
+                rawError: rawError
+            )
+        }
+    }
+    
     init(url: String, options: DownloadOptions, title: String = "___FETCHING___", id: UUID = UUID(), createdAt: Date = Date()) {
         self.id = id
         self.url = url
