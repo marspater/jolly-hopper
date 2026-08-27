@@ -968,86 +968,41 @@ struct MediaInfo: Codable {
     func resolveSelectedFormats(options: DownloadOptions) -> [MediaFormat] {
         guard let formats = formats, !formats.isEmpty else { return [] }
         
-        // 1. If explicit selectedFormatId is specified (can be combined like "137+140"):
-        if let customId = options.selectedFormatId, !customId.isEmpty {
-            let ids = customId.components(separatedBy: "+").map { $0.trimmingCharacters(in: .whitespaces) }
-            return formats.filter { ids.contains($0.formatId) }
+        // 1. If explicit selectedFormatId is specified (can be single like "137" or combined like "137+140"):
+        if let customId = options.selectedFormatId?.trimmingCharacters(in: .whitespacesAndNewlines), !customId.isEmpty {
+            let ids = customId.components(separatedBy: "+").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+            let matched = ids.compactMap { id in formats.first(where: { $0.formatId == id }) }
+            if matched.count == ids.count && !matched.isEmpty {
+                if matched.count == 2 {
+                    let hasVideo = matched.contains(where: { !$0.isAudioOnly })
+                    let hasAudio = matched.contains(where: { $0.isAudioOnly || $0.vcodec == "none" || $0.vcodec == nil })
+                    if hasVideo && hasAudio {
+                        return matched
+                    }
+                } else if matched.count == 1 {
+                    return matched
+                }
+            }
         }
         
         // 2. If audio-only download:
         if options.fileType.isAudio {
-            var audioFormats = formats.filter { $0.isAudioOnly || ($0.vcodec == "none" || $0.vcodec == nil) }
-            if let requestedAudioCodec = options.audioCodec, requestedAudioCodec != .auto {
-                let matching = audioFormats.filter { fmt in
-                    guard let acodec = fmt.acodec?.lowercased() else { return false }
-                    return acodec.contains(requestedAudioCodec.rawValue.lowercased())
-                }
-                if !matching.isEmpty {
-                    audioFormats = matching
-                }
-            }
-            audioFormats.sort { $0.audioQualityScore(options: options) > $1.audioQualityScore(options: options) }
-            if let best = audioFormats.first {
+            let audioFormats = formats.filter { $0.isAudioOnly || ($0.vcodec == "none" || $0.vcodec == nil) }
+            let sorted = audioFormats.sorted { MediaFormat.compareAudioFormats($0, $1, options: options) }
+            if let best = sorted.first {
                 return [best]
             }
         }
         
-        // 3. Video formats: filter by hard constraints (codec & resolution), then rank by quality
-        var candidateVideos = formats.filter { !$0.isAudioOnly }
-
-        // Filter out untested formats if candidates with verified/tested streams exist
-        let testedVideos = candidateVideos.filter { $0.needsTesting != true }
-        if !testedVideos.isEmpty {
-            candidateVideos = testedVideos
-        }
-
-        // Hard constraint: Video Codec filter (first satisfy codec requirement)
-        if let requestedCodec = options.videoCodec, requestedCodec != .auto {
-            let matchingCodec = candidateVideos.filter { fmt in
-                guard let vcodec = fmt.vcodec?.lowercased() else { return false }
-                switch requestedCodec {
-                case .h264: return vcodec.hasPrefix("avc1") || vcodec.contains("h264")
-                case .h265: return vcodec.hasPrefix("hev1") || vcodec.hasPrefix("hvc1") || vcodec.contains("h265") || vcodec.contains("hevc")
-                case .vp9: return vcodec.hasPrefix("vp9") || vcodec.contains("vp9")
-                case .av1: return vcodec.hasPrefix("av01") || vcodec.contains("av1")
-                case .auto: return true
-                }
-            }
-            if !matchingCodec.isEmpty {
-                candidateVideos = matchingCodec
-            }
-        }
-
-        // Hard constraint: Maximum resolution ceiling
-        let maxHeight = options.videoResolution?.maxHeight
-        if let maxH = maxHeight {
-            let matchingHeight = candidateVideos.filter { fmt in
-                if let h = fmt.parsedHeight {
-                    return h <= maxH
-                }
-                return true
-            }
-            if !matchingHeight.isEmpty {
-                candidateVideos = matchingHeight
-            }
-        }
+        // 3. Video formats: filter by hard constraints (codec & resolution), then rank deterministically
+        let candidateVideos = formats.filter { !$0.isAudioOnly }
+        let sortedVideos = candidateVideos.sorted { MediaFormat.compareVideoFormats($0, $1, options: options) }
         
-        candidateVideos.sort { $0.videoQualityScore(options: options) > $1.videoQualityScore(options: options) }
-        
-        if let bestVideo = candidateVideos.first {
+        if let bestVideo = sortedVideos.first {
             if bestVideo.isVideoOnly {
-                var audioFormats = formats.filter { $0.isAudioOnly || ($0.vcodec == "none" || $0.vcodec == nil) }
-                if let requestedAudioCodec = options.audioCodec, requestedAudioCodec != .auto {
-                    let matchingAudio = audioFormats.filter { fmt in
-                        guard let acodec = fmt.acodec?.lowercased() else { return false }
-                        return acodec.contains(requestedAudioCodec.rawValue.lowercased())
-                    }
-                    if !matchingAudio.isEmpty {
-                        audioFormats = matchingAudio
-                    }
-                }
-                audioFormats.sort { $0.audioQualityScore(options: options) > $1.audioQualityScore(options: options) }
-                if let bestAudio = audioFormats.first {
+                let audioFormats = formats.filter { $0.isAudioOnly || ($0.vcodec == "none" || $0.vcodec == nil) }
+                let sortedAudio = audioFormats.sorted { MediaFormat.compareAudioFormats($0, $1, options: options) }
+                if let bestAudio = sortedAudio.first {
                     return [bestVideo, bestAudio]
                 }
             }
@@ -1270,6 +1225,147 @@ struct MediaFormat: Codable, Identifiable, Hashable {
             return 1080
         }
         return nil
+    }
+
+    // MARK: - Deterministic Format Ranking & Selection
+    
+    struct AudioRank {
+        let isOriginal: Bool
+        let matchesCodec: Bool
+        let langPref: Int
+        let preference: Int
+        let tested: Bool
+        let bitrate: Double
+        let channels: Int
+    }
+    
+    func audioRank(options: DownloadOptions) -> AudioRank {
+        let isOrig = isOriginalOrPrimaryAudio
+        let matchesCodec: Bool = {
+            guard let req = options.audioCodec, req != .auto else { return true }
+            guard let ac = acodec?.lowercased() else { return false }
+            return ac.contains(req.rawValue.lowercased())
+        }()
+        let lPref = languagePreference ?? (isOrig ? 0 : -1)
+        let pref = preference ?? (sourcePreference ?? 0)
+        let br = abr ?? (tbr ?? 0.0)
+        let ch = audioChannels ?? 2
+        let isTested = (needsTesting != true)
+        return AudioRank(
+            isOriginal: isOrig,
+            matchesCodec: matchesCodec,
+            langPref: lPref,
+            preference: pref,
+            tested: isTested,
+            bitrate: br,
+            channels: ch
+        )
+    }
+    
+    static func compareAudioFormats(_ a: MediaFormat, _ b: MediaFormat, options: DownloadOptions) -> Bool {
+        let ra = a.audioRank(options: options)
+        let rb = b.audioRank(options: options)
+        
+        // 1. Original / Primary audio track outranks foreign dubbed tracks
+        if ra.isOriginal != rb.isOriginal {
+            return ra.isOriginal
+        }
+        // 2. Matching requested codec outranks non-matching
+        if ra.matchesCodec != rb.matchesCodec {
+            return ra.matchesCodec
+        }
+        // 3. Language preference (extractor declared)
+        if ra.langPref != rb.langPref {
+            return ra.langPref > rb.langPref
+        }
+        // 4. Extractor preference
+        if ra.preference != rb.preference {
+            return ra.preference > rb.preference
+        }
+        // 5. Tested status (tested stream preferred over untested for same specs)
+        if ra.tested != rb.tested {
+            return ra.tested
+        }
+        // 6. Bitrate
+        if abs(ra.bitrate - rb.bitrate) > 0.5 {
+            return ra.bitrate > rb.bitrate
+        }
+        // 7. Channels
+        return ra.channels > rb.channels
+    }
+    
+    struct VideoRank {
+        let matchesCodec: Bool
+        let meetsResolution: Bool
+        let height: Int
+        let tested: Bool
+        let bitrate: Double
+        let fps: Double
+        let size: Int64
+    }
+    
+    func videoRank(options: DownloadOptions) -> VideoRank {
+        let matchesCodec: Bool = {
+            guard let req = options.videoCodec, req != .auto else { return true }
+            guard let vc = vcodec?.lowercased() else { return false }
+            switch req {
+            case .h264: return vc.hasPrefix("avc1") || vc.contains("h264")
+            case .h265: return vc.hasPrefix("hev1") || vc.hasPrefix("hvc1") || vc.contains("h265") || vc.contains("hevc")
+            case .vp9: return vc.hasPrefix("vp9") || vc.contains("vp9")
+            case .av1: return vc.hasPrefix("av01") || vc.contains("av1")
+            case .auto: return true
+            }
+        }()
+        let h = parsedHeight ?? 0
+        let meetsRes: Bool = {
+            guard let maxH = options.videoResolution?.maxHeight else { return true }
+            return h <= maxH
+        }()
+        let br = tbr ?? (vbr ?? (abr ?? 0.0))
+        let f = fps ?? 0.0
+        let isTested = (needsTesting != true)
+        let sz = filesize ?? (filesizeApprox ?? 0)
+        return VideoRank(
+            matchesCodec: matchesCodec,
+            meetsResolution: meetsRes,
+            height: h,
+            tested: isTested,
+            bitrate: br,
+            fps: f,
+            size: sz
+        )
+    }
+    
+    static func compareVideoFormats(_ a: MediaFormat, _ b: MediaFormat, options: DownloadOptions) -> Bool {
+        let ra = a.videoRank(options: options)
+        let rb = b.videoRank(options: options)
+        
+        // 1. Hard constraint: requested codec match
+        if ra.matchesCodec != rb.matchesCodec {
+            return ra.matchesCodec
+        }
+        // 2. Hard constraint: resolution ceiling
+        if ra.meetsResolution != rb.meetsResolution {
+            return ra.meetsResolution
+        }
+        // 3. Resolution height
+        if ra.height != rb.height {
+            return ra.height > rb.height
+        }
+        // 4. Tested status as a tie-breaker factor
+        if ra.tested != rb.tested {
+            return ra.tested
+        }
+        // 5. Bitrate
+        if abs(ra.bitrate - rb.bitrate) > 5.0 {
+            return ra.bitrate > rb.bitrate
+        }
+        // 6. FPS
+        if ra.fps != rb.fps {
+            return ra.fps > rb.fps
+        }
+        // 7. File size
+        return ra.size > rb.size
     }
 
     func videoQualityScore(options: DownloadOptions) -> Double {

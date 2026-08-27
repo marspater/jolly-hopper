@@ -271,7 +271,7 @@ final class QueueAndErrorUXTests: XCTestCase {
         })
 
         let result = try await service.download(
-            url: "https://example.com/live-stream.m3u8",
+            url: "https://example.com/live-channel",
             options: DownloadOptions.default,
             onProgress: { _, _, _ in },
             onOutput: { _ in }
@@ -284,6 +284,27 @@ final class QueueAndErrorUXTests: XCTestCase {
         }
         XCTAssertTrue(capturedArgs.value[1].contains("--hls-use-mpegts"))
         XCTAssertEqual(result.lastPathComponent, "hls_stream_success.mp4")
+    }
+
+    func testProactiveHlsDownloaderAppendedOnM3u8URL() async throws {
+        let service = YtdlpService()
+        service.ytdlpPath = URL(fileURLWithPath: "/usr/local/bin/yt-dlp")
+        let capturedArgs = TestBox<[String]>([])
+
+        service.processRunner = MockYtdlpProcessRunner(mockDownload: { args in
+            capturedArgs.value = args
+            return "/tmp/hls_stream_success.mp4"
+        })
+
+        _ = try await service.download(
+            url: "https://example.com/live-stream.m3u8",
+            options: DownloadOptions.default,
+            onProgress: { _, _, _ in },
+            onOutput: { _ in }
+        )
+
+        XCTAssertTrue(capturedArgs.value.contains("--downloader"), "Metadata-first detection must add --downloader ffmpeg on attempt 1 for .m3u8 streams")
+        XCTAssertTrue(capturedArgs.value.contains("--hls-use-mpegts"))
     }
 
     func testChecksumManifestTokenExactParsing() {
