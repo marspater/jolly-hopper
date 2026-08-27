@@ -77,31 +77,31 @@ final class DownloadManagerTests: XCTestCase {
         let manager = DownloadManager()
         var opts1 = DownloadOptions.default
         opts1.customFilename = "custom_video"
+        opts1.fileType = .mp4
 
         var opts2 = DownloadOptions.default
         opts2.customFilename = "custom_video"
+        opts2.fileType = .mp4
 
+        let dl1 = Download(url: "https://example.com/v1", options: opts1, title: "Title 1")
         let dl2 = Download(url: "https://example.com/v2", options: opts2, title: "Title 2")
 
         let expectedPath1 = opts1.saveFolder.appendingPathComponent("custom_video.mp4").path
         let expectedPath2 = opts2.saveFolder.appendingPathComponent("custom_video_1.mp4").path
 
-        // Simulate reservation conflict resolution
-        var reserved: Set<String> = [expectedPath1]
-        var resolvedBaseName = "custom_video"
-        var counter = 1
-        var candidateKey = opts2.saveFolder.appendingPathComponent("\(resolvedBaseName).mp4").path
-        while reserved.contains(candidateKey) {
-            resolvedBaseName = "custom_video_\(counter)"
-            candidateKey = opts2.saveFolder.appendingPathComponent("\(resolvedBaseName).mp4").path
-            counter += 1
-        }
-        if resolvedBaseName != "custom_video" {
-            dl2.options.customFilename = resolvedBaseName
-        }
+        // Reserve path for dl1 through DownloadManager
+        let (name1, path1) = manager.resolveUniqueOutputPath(for: dl1)
+        XCTAssertEqual(name1, "custom_video")
+        XCTAssertEqual(path1, expectedPath1)
+        manager.reserveOutputPath(path1)
+        defer { manager.unreserveOutputPath(path1) }
 
-        XCTAssertEqual(dl2.options.customFilename, "custom_video_1", "Second download must have its customFilename updated to non-colliding name")
-        XCTAssertEqual(candidateKey, expectedPath2)
+        // Act: Resolve unique output path for dl2 using real production DownloadManager logic
+        let (name2, path2) = manager.resolveUniqueOutputPath(for: dl2)
+
+        // Assert: Production method resolved the conflict
+        XCTAssertEqual(name2, "custom_video_1", "Second download must have resolved name updated to non-colliding name")
+        XCTAssertEqual(path2, expectedPath2)
     }
 
     func testProcessDownloadExitsIfCancelledWhileQueued() async {
