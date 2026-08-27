@@ -1,8 +1,33 @@
 import SwiftUI
 import CryptoKit
+@preconcurrency import UserNotifications
+
+final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        UNUserNotificationCenter.current().delegate = NotificationService.shared
+        NotificationService.shared.setup()
+    }
+
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        willPresent notification: UNNotification,
+        withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
+    ) {
+        NotificationService.shared.userNotificationCenter(center, willPresent: notification, withCompletionHandler: completionHandler)
+    }
+
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        didReceive response: UNNotificationResponse,
+        withCompletionHandler completionHandler: @escaping () -> Void
+    ) {
+        NotificationService.shared.userNotificationCenter(center, didReceive: response, withCompletionHandler: completionHandler)
+    }
+}
 
 @main
 struct SiphonApp: App {
+    @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @StateObject private var downloadManager = DownloadManager()
     @StateObject private var appState = AppState()
     @StateObject private var languageService = LanguageService()
