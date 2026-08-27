@@ -1235,9 +1235,10 @@ class YtdlpService: ObservableObject {
         URL(string: url)?.host ?? "unknown host"
     }
     
-    private func isBoyfriendTVURL(_ url: String) -> Bool {
-        let lower = url.lowercased()
-        return lower.contains("boyfriend.tv") || lower.contains("boyfriendtv.com")
+    private func isBoyfriendTVURL(_ urlOrHost: String) -> Bool {
+        let host = (URL(string: urlOrHost)?.host ?? urlOrHost).lowercased()
+        return host == "boyfriend.tv" || host.hasSuffix(".boyfriend.tv") ||
+               host == "boyfriendtv.com" || host.hasSuffix(".boyfriendtv.com")
     }
 
     struct BoyfriendTVExtractedMedia {
@@ -1559,14 +1560,15 @@ class YtdlpService: ObservableObject {
         return components.string ?? urlString
     }
 
-    private func isXHamsterURL(_ url: String) -> Bool {
-        let lower = url.lowercased()
-        return lower.contains("xhamster.com") || lower.contains("xhamster.desi") || lower.contains("xhamster.one") || lower.contains("xhamster2.com") || lower.contains("xhamster3.com") || lower.contains("xhcdn.com") || lower.contains("ahcdn.com") || lower.contains("xhvid.com")
+    private func isXHamsterURL(_ urlOrHost: String) -> Bool {
+        let host = (URL(string: urlOrHost)?.host ?? urlOrHost).lowercased()
+        let domains = ["xhamster.com", "xhamster.desi", "xhamster.one", "xhamster2.com", "xhamster3.com", "xhcdn.com", "ahcdn.com", "xhvid.com"]
+        return domains.contains { host == $0 || host.hasSuffix("." + $0) }
     }
 
-    private func isThisVidURL(_ url: String) -> Bool {
-        let lower = url.lowercased()
-        return lower.contains("thisvid.com") || lower.contains("thisvid")
+    private func isThisVidURL(_ urlOrHost: String) -> Bool {
+        let host = (URL(string: urlOrHost)?.host ?? urlOrHost).lowercased()
+        return host == "thisvid.com" || host.hasSuffix(".thisvid.com")
     }
 
     private func shouldRetryWithBrowserCookies(error _: Error, url: String, usingBrowserCookies: Bool, forceBrowserCookies: Bool) -> Bool {
@@ -1600,6 +1602,7 @@ class YtdlpService: ObservableObject {
 
     private func appendSiteSpecificArgs(for url: String, options: DownloadOptions? = nil, mediaInfo: MediaInfo? = nil, to args: inout [String]) {
         let lowerUrl = url.lowercased()
+        let parsedHost = (URL(string: url)?.host ?? url).lowercased()
 
         // Common modern browser headers & Cloudflare extraction options
         let defaultUA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
@@ -1619,9 +1622,11 @@ class YtdlpService: ObservableObject {
         args.append(contentsOf: ["--socket-timeout", "15"])
         args.append("--no-mtime")
 
-        let isYouTube = lowerUrl.contains("youtube.com") || lowerUrl.contains("youtu.be")
-        let isThisVid = lowerUrl.contains("thisvid.com") || lowerUrl.contains("thisvid")
-        let isXHamster = isXHamsterURL(lowerUrl)
+        let isYouTube = parsedHost == "youtube.com" || parsedHost.hasSuffix(".youtube.com") || parsedHost == "youtu.be" || parsedHost.hasSuffix(".youtu.be")
+        let isThisVid = isThisVidURL(parsedHost)
+        let isXHamster = isXHamsterURL(parsedHost)
+        let isBoyfriendTV = isBoyfriendTVURL(parsedHost) || parsedHost == "cdn.boyfriend.tv" || parsedHost.hasSuffix(".boyfriend.tv")
+
         let isFragmented: Bool
         if let info = mediaInfo, let opts = options {
             isFragmented = info.isSelectedFormatFragmented(options: opts)
@@ -1630,9 +1635,7 @@ class YtdlpService: ObservableObject {
         } else {
             isFragmented = lowerUrl.contains(".m3u8") ||
                 lowerUrl.contains(".mpd") ||
-                lowerUrl.contains("boyfriend.tv") ||
-                lowerUrl.contains("boyfriendtv.com") ||
-                lowerUrl.contains("cdn.boyfriend.tv") ||
+                isBoyfriendTV ||
                 isXHamster
         }
 
@@ -1654,7 +1657,7 @@ class YtdlpService: ObservableObject {
             args.append(contentsOf: ["--concurrent-fragments", "8"])
         }
 
-        if lowerUrl.contains("boyfriend.tv") || lowerUrl.contains("boyfriendtv.com") || lowerUrl.contains("cdn.boyfriend.tv") {
+        if isBoyfriendTV {
             if let uaIdx = args.firstIndex(of: "--user-agent") {
                 args[uaIdx + 1] = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
             } else {
@@ -1670,16 +1673,16 @@ class YtdlpService: ObservableObject {
             args.append(contentsOf: ["--add-header", "Referer:https://xhamster.com/"])
             args.append(contentsOf: ["--add-header", "Origin:https://xhamster.com"])
             args.append(contentsOf: ["--hls-use-mpegts"])
-        } else if lowerUrl.contains("justthegays.com") || lowerUrl.contains("justthegays.tv") {
+        } else if parsedHost == "justthegays.com" || parsedHost.hasSuffix(".justthegays.com") || parsedHost == "justthegays.tv" || parsedHost.hasSuffix(".justthegays.tv") {
             args.append(contentsOf: ["--add-header", "Referer:https://justthegays.com/"])
-        } else if lowerUrl.contains("thisvid.com") || lowerUrl.contains("thisvid") {
+        } else if isThisVid {
             args.append(contentsOf: ["--add-header", "Referer:https://thisvid.com/"])
             args.append(contentsOf: ["--add-header", "Origin:https://thisvid.com"])
-        } else if lowerUrl.contains("single-stream video site.com") {
+        } else if parsedHost == "single-stream video site.com" || parsedHost.hasSuffix(".single-stream video site.com") {
             args.append(contentsOf: ["--add-header", "Referer:https://single-stream video site.com/"])
         } else if lowerUrl.contains(".m3u8") || lowerUrl.contains(".mpd") {
             args.append(contentsOf: ["--hls-use-mpegts"])
-        } else if let components = URLComponents(string: url), let host = components.host, !host.isEmpty {
+        } else if let components = URLComponents(string: url), let host = components.host, !host.isEmpty, !host.contains("\r"), !host.contains("\n") {
             // Universal Referer and Origin auto-injection for anti-hotlinking CDN protection
             let scheme = components.scheme ?? "https"
             let origin = "\(scheme)://\(host)"
@@ -1692,8 +1695,6 @@ class YtdlpService: ObservableObject {
             }
         }
     }
-
-
 
     private func isCookieFailureError(_ errorOutput: String) -> Bool {
         let lower = errorOutput.lowercased()

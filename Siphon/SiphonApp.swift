@@ -112,12 +112,22 @@ struct SiphonApp: App {
         let videoUrl = queryItems?.first(where: { $0.name == "url" })?.value
         let rawCookies = queryItems?.first(where: { $0.name == "cookies" })?.value
         
-        guard let rawVideoUrl = videoUrl?.trimmingCharacters(in: .whitespacesAndNewlines), !rawVideoUrl.isEmpty,
-              let targetURL = URL(string: rawVideoUrl), targetURL.scheme == "http" || targetURL.scheme == "https" else { return }
+        guard let rawVideoUrl = videoUrl?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !rawVideoUrl.isEmpty,
+              !rawVideoUrl.contains("\r") && !rawVideoUrl.contains("\n") && !rawVideoUrl.contains("\0"),
+              let targetURL = URL(string: rawVideoUrl),
+              let host = targetURL.host, !host.isEmpty,
+              targetURL.scheme == "http" || targetURL.scheme == "https" else { return }
         
+        // Sanitize incoming cookies: cap payload size to 64KB and filter out illegal control chars
+        let sanitizedCookies: String? = {
+            guard let cookies = rawCookies, !cookies.isEmpty, cookies.count <= 64 * 1024 else { return nil }
+            return cookies.components(separatedBy: CharacterSet.controlCharacters.subtracting(CharacterSet(charactersIn: "\t"))).joined()
+        }()
+
         if url.host == "download" || url.host == "fast-download" {
             appState.urlToDownload = rawVideoUrl
-            appState.rawCookiesToDownload = rawCookies
+            appState.rawCookiesToDownload = sanitizedCookies
             appState.showAddDownloadSheet = true
         }
         
@@ -280,9 +290,12 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
                     }
 
                     // Multi-entry manifest (e.g. SHA256SUMS.txt): must strictly match targeted asset name
-                    if !targetAssetName.isEmpty && line.lowercased().contains(targetAssetName) {
-                        expectedChecksum = hash
-                        break
+                    if parts.count >= 2 {
+                        let manifestFilename = parts.dropFirst().joined(separator: " ").trimmingCharacters(in: .whitespacesAndNewlines).replacingOccurrences(of: "^\\*", with: "", options: .regularExpression).lowercased()
+                        if manifestFilename == targetAssetName || URL(fileURLWithPath: manifestFilename).lastPathComponent.lowercased() == targetAssetName {
+                            expectedChecksum = hash
+                            break
+                        }
                     }
                 }
             }

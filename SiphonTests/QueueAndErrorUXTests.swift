@@ -285,4 +285,32 @@ final class QueueAndErrorUXTests: XCTestCase {
         XCTAssertTrue(capturedArgs.value[1].contains("--hls-use-mpegts"))
         XCTAssertEqual(result.lastPathComponent, "hls_stream_success.mp4")
     }
+
+    func testChecksumManifestTokenExactParsing() {
+        let manifest = """
+        aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa  bad-Siphon-arm64.dmg
+        bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb  Siphon-arm64.dmg.bad.zip
+        cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc *Siphon-arm64.dmg
+        dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd  Siphon-x86_64.dmg
+        """
+        let lines = manifest.components(separatedBy: .newlines)
+        let targetAssetName = "siphon-arm64.dmg"
+
+        var parsedHash: String? = nil
+        for line in lines {
+            let parts = line.split(separator: " ", omittingEmptySubsequences: true)
+            guard let first = parts.first, first.count == 64 else { continue }
+            let hash = String(first).lowercased()
+
+            if parts.count >= 2 {
+                let manifestFilename = parts.dropFirst().joined(separator: " ").trimmingCharacters(in: .whitespacesAndNewlines).replacingOccurrences(of: "^\\*", with: "", options: .regularExpression).lowercased()
+                if manifestFilename == targetAssetName || URL(fileURLWithPath: manifestFilename).lastPathComponent.lowercased() == targetAssetName {
+                    parsedHash = hash
+                    break
+                }
+            }
+        }
+
+        XCTAssertEqual(parsedHash, "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc", "Must strictly parse exact asset line without matching substrings or suffixes")
+    }
 }
