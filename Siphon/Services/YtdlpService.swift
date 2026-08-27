@@ -2,9 +2,9 @@ import Foundation
 import CryptoKit
 
 struct DependencyChecksums {
-    static let ytdlpVersion = "2026.07.04"
-    static let ytdlpURL = URL(string: "https://github.com/yt-dlp/yt-dlp/releases/download/2026.07.04/yt-dlp_macos")!
-    static let ytdlpExecutableSHA256 = "498bd0dae17855c599d371d68ec5bafc439a9d8640e838be25c765a9792f261b"
+    static let ytdlpVersion = "2026.08.19"
+    static let ytdlpURL = URL(string: "https://github.com/yt-dlp/yt-dlp/releases/download/2026.08.19/yt-dlp_macos")!
+    static let ytdlpExecutableSHA256 = "0f192b7ec147ab6288885d6351d9ab67367640029b4377576ef46dd79cf7b202"
 
     #if arch(arm64)
     static let ffmpegURL = URL(string: "https://github.com/eugeneware/ffmpeg-static/releases/download/b6.1.1/ffmpeg-darwin-arm64.gz")!
