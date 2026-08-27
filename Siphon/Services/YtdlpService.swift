@@ -1127,7 +1127,7 @@ class YtdlpService: ObservableObject {
         }
 
         args.append(contentsOf: ["-f", selector])
-        args.append(contentsOf: ["-S", "res,height,fps,hdr:12,vbr,abr,quality,filesize"])
+        args.append(contentsOf: ["-S", "lang,quality,res,height,fps,hdr:12,vbr,abr,filesize"])
 
         var finalMergeFormat = compatibleMergeOutputFormat(for: options)
 

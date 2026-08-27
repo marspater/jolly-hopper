@@ -976,17 +976,18 @@ struct MediaInfo: Codable {
         
         // 2. If audio-only download:
         if options.fileType.isAudio {
-            let audioFormats = formats.filter { $0.isAudioOnly || ($0.vcodec == "none" || $0.vcodec == nil) }
+            var audioFormats = formats.filter { $0.isAudioOnly || ($0.vcodec == "none" || $0.vcodec == nil) }
             if let requestedAudioCodec = options.audioCodec, requestedAudioCodec != .auto {
                 let matching = audioFormats.filter { fmt in
                     guard let acodec = fmt.acodec?.lowercased() else { return false }
                     return acodec.contains(requestedAudioCodec.rawValue.lowercased())
                 }
-                if let best = matching.max(by: { ($0.abr ?? 0) < ($1.abr ?? 0) }) {
-                    return [best]
+                if !matching.isEmpty {
+                    audioFormats = matching
                 }
             }
-            if let best = audioFormats.max(by: { ($0.abr ?? 0) < ($1.abr ?? 0) }) {
+            audioFormats.sort { $0.audioQualityScore(options: options) > $1.audioQualityScore(options: options) }
+            if let best = audioFormats.first {
                 return [best]
             }
         }
@@ -1045,7 +1046,7 @@ struct MediaInfo: Codable {
                         audioFormats = matchingAudio
                     }
                 }
-                audioFormats.sort { ($0.abr ?? 0) > ($1.abr ?? 0) }
+                audioFormats.sort { $0.audioQualityScore(options: options) > $1.audioQualityScore(options: options) }
                 if let bestAudio = audioFormats.first {
                     return [bestVideo, bestAudio]
                 }
@@ -1170,6 +1171,11 @@ struct MediaFormat: Codable, Identifiable, Hashable {
     let formatProtocol: String?
     let manifestUrl: String?
     let needsTesting: Bool?
+    let language: String?
+    let languagePreference: Int?
+    let preference: Int?
+    let sourcePreference: Int?
+    let audioChannels: Int?
 
     enum CodingKeys: String, CodingKey {
         case formatId = "format_id"
@@ -1179,6 +1185,11 @@ struct MediaFormat: Codable, Identifiable, Hashable {
         case formatProtocol = "protocol"
         case manifestUrl = "manifest_url"
         case needsTesting = "__needs_testing"
+        case language
+        case languagePreference = "language_preference"
+        case preference
+        case sourcePreference = "source_preference"
+        case audioChannels = "audio_channels"
     }
 
     init(
@@ -1196,7 +1207,12 @@ struct MediaFormat: Codable, Identifiable, Hashable {
         formatNote: String? = nil,
         formatProtocol: String? = nil,
         manifestUrl: String? = nil,
-        needsTesting: Bool? = nil
+        needsTesting: Bool? = nil,
+        language: String? = nil,
+        languagePreference: Int? = nil,
+        preference: Int? = nil,
+        sourcePreference: Int? = nil,
+        audioChannels: Int? = nil
     ) {
         self.formatId = formatId
         self.ext = ext
@@ -1213,6 +1229,11 @@ struct MediaFormat: Codable, Identifiable, Hashable {
         self.formatProtocol = formatProtocol
         self.manifestUrl = manifestUrl
         self.needsTesting = needsTesting
+        self.language = language
+        self.languagePreference = languagePreference
+        self.preference = preference
+        self.sourcePreference = sourcePreference
+        self.audioChannels = audioChannels
     }
 
     var isFragmented: Bool {
@@ -1270,6 +1291,69 @@ struct MediaFormat: Codable, Identifiable, Hashable {
         }
         return score
     }
+
+    var isOriginalOrPrimaryAudio: Bool {
+        // 1. Language preference explicitly set by extractor (>= 0 is original/default, < 0 is dubbed)
+        if let lp = languagePreference {
+            return lp >= 0
+        }
+        // 2. Format note explicitly indicates original/default/main
+        let lowerNote = (formatNote ?? "").lowercased()
+        if lowerNote.contains("original") || lowerNote.contains("default") || lowerNote.contains("main") {
+            return true
+        }
+        // 3. Format note contains "dubbed"
+        if lowerNote.contains("dubbed") {
+            return false
+        }
+        return true
+    }
+
+    func audioQualityScore(options: DownloadOptions) -> Double {
+        var score: Double = 0.0
+        
+        // Huge preference for original track over dubbed foreign language tracks
+        if isOriginalOrPrimaryAudio {
+            score += 10_000_000.0
+        } else {
+            score -= 5_000_000.0
+        }
+        
+        if let lp = languagePreference {
+            score += Double(lp) * 100_000.0
+        }
+        
+        if let pref = preference {
+            score += Double(pref) * 10_000.0
+        }
+        
+        if let sp = sourcePreference {
+            score += Double(sp) * 1_000.0
+        }
+        
+        // Codec match preference if requested
+        if let requestedCodec = options.audioCodec, requestedCodec != .auto {
+            if let ac = acodec?.lowercased(), ac.contains(requestedCodec.rawValue.lowercased()) {
+                score += 500_000.0
+            }
+        }
+        
+        // Bitrate
+        if let bitrate = abr ?? tbr {
+            score += bitrate * 10.0
+        }
+        
+        // Channels
+        if let channels = audioChannels {
+            score += Double(channels) * 5.0
+        }
+        
+        if needsTesting == true {
+            score -= 1_000_000.0
+        }
+        
+        return score
+    }
     
     var isVideoOnly: Bool {
         if acodec == "none" { return true }
@@ -1297,6 +1381,7 @@ struct MediaFormat: Codable, Identifiable, Hashable {
         if let fps = fps, fps > 0 { parts.append("\(Int(fps))fps") }
         if let vcodec = vcodec, vcodec != "none" { parts.append(vcodec) }
         if let acodec = acodec, acodec != "none" { parts.append(acodec) }
+        if let lang = language, !lang.isEmpty { parts.append("[\(lang)]") }
         if let abr = abr, abr > 0 {
             parts.append("\(Int(abr))k")
         } else if let tbr = tbr, tbr > 0, (vbr == nil || vbr == 0) {
