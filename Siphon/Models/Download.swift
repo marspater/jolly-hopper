@@ -294,7 +294,7 @@ struct DownloadOptions: Codable {
         customFilename: String? = nil,
         videoCodec: VideoCodec? = nil,
         audioCodec: AudioCodec? = nil,
-        conversionCodec: ConversionCodec? = .none,
+        conversionCodec: ConversionCodec? = nil,
         forceOverwrite: Bool? = false,
         rawCookies: String? = nil,
         selectedFormatId: String? = nil

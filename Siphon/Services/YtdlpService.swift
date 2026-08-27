@@ -899,11 +899,13 @@ class YtdlpService: ObservableObject {
         var targetURL = normalizedURL
         var customResolvedTitle: String? = nil
         var customEmbedURL: String? = nil
+        var customThumbnailURL: String? = nil
         if isBoyfriendTVURL(url) {
             if let btvMedia = await resolveBoyfriendTVMediaInfo(url: url) {
                 targetURL = btvMedia.streamURL
                 customResolvedTitle = btvMedia.title
                 customEmbedURL = btvMedia.embedURL
+                customThumbnailURL = btvMedia.thumbnailURL
             }
         }
 
@@ -1027,6 +1029,13 @@ class YtdlpService: ObservableObject {
             }
         }
         
+        // Prepare local scratch thumbnail if available to guarantee embedding for direct stream downloads
+        let thumbnailCandidateURL = customThumbnailURL ?? mediaInfo?.thumbnail
+        let scratchThumbnailURL = scratchDirectory.appendingPathComponent("custom_cover.jpg")
+        if (options.embedThumbnail || options.downloadThumbnail), let thumbStr = thumbnailCandidateURL, !thumbStr.isEmpty {
+            _ = await downloadThumbnailLocally(from: thumbStr, to: scratchThumbnailURL)
+        }
+
         appendSiteSpecificArgs(for: customEmbedURL ?? targetURL, options: options, mediaInfo: mediaInfo, to: &args)
 
         args.append("--no-color")
@@ -1145,7 +1154,155 @@ class YtdlpService: ObservableObject {
         guard let finalOutputPath = outputPath else {
             throw YtdlpError.downloadFailed("Download failed across all recovery strategies.")
         }
-        return URL(fileURLWithPath: finalOutputPath, relativeTo: options.saveFolder).absoluteURL
+        let finalFileURL = URL(fileURLWithPath: finalOutputPath, relativeTo: options.saveFolder).absoluteURL
+
+        // Post-download cover art fallback: if the output file lacks an embedded thumbnail and we have a local cover image, embed it via FFmpeg
+        if options.embedThumbnail && FileManager.default.fileExists(atPath: scratchThumbnailURL.path) {
+            let hasThumb = await hasAttachedThumbnail(mediaFile: finalFileURL, ffmpegDir: ffmpegDir)
+            if !hasThumb {
+                _ = await embedThumbnailWithFfmpeg(imageFile: scratchThumbnailURL, mediaFile: finalFileURL, ffmpegDir: ffmpegDir)
+            }
+        }
+
+        // If user requested downloading thumbnail as a standalone file, save to folder
+        if options.downloadThumbnail && FileManager.default.fileExists(atPath: scratchThumbnailURL.path) {
+            let standaloneThumbURL = finalFileURL.deletingPathExtension().appendingPathExtension("jpg")
+            if !FileManager.default.fileExists(atPath: standaloneThumbURL.path) {
+                try? FileManager.default.copyItem(at: scratchThumbnailURL, to: standaloneThumbURL)
+            }
+        }
+
+        return finalFileURL
+    }
+
+    private func downloadThumbnailLocally(from urlString: String, to destinationURL: URL) async -> Bool {
+        guard let url = URL(string: urlString) else { return false }
+        var request = URLRequest(url: url)
+        request.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36", forHTTPHeaderField: "User-Agent")
+        request.setValue("https://www.boyfriend.tv/", forHTTPHeaderField: "Referer")
+        
+        do {
+            let (tempLocal, response) = try await URLSession.shared.download(for: request)
+            guard let httpResponse = response as? HTTPURLResponse, (200...299).contains(httpResponse.statusCode) else {
+                return false
+            }
+            if FileManager.default.fileExists(atPath: destinationURL.path) {
+                try? FileManager.default.removeItem(at: destinationURL)
+            }
+            try FileManager.default.moveItem(at: tempLocal, to: destinationURL)
+            return true
+        } catch {
+            return false
+        }
+    }
+
+    private func embedThumbnailWithFfmpeg(imageFile: URL, mediaFile: URL, ffmpegDir: String) async -> Bool {
+        let ext = mediaFile.pathExtension.lowercased()
+        let fm = FileManager.default
+        guard fm.fileExists(atPath: mediaFile.path), fm.fileExists(atPath: imageFile.path) else { return false }
+
+        let ffmpegBin = URL(fileURLWithPath: ffmpegDir).appendingPathComponent("ffmpeg")
+        guard fm.isExecutableFile(atPath: ffmpegBin.path) else { return false }
+
+        let tempOutput = mediaFile.deletingLastPathComponent().appendingPathComponent("thumb_temp_\(UUID().uuidString).\(ext)")
+
+        var procArgs = [
+            "-nostdin",
+            "-y",
+            "-i", mediaFile.path,
+            "-i", imageFile.path
+        ]
+
+        if ext == "mp4" || ext == "m4v" || ext == "mov" {
+            procArgs.append(contentsOf: [
+                "-map", "0",
+                "-map", "1",
+                "-c", "copy",
+                "-c:v:1", "mjpeg",
+                "-disposition:v:1", "attached_pic",
+                "-movflags", "+faststart",
+                tempOutput.path
+            ])
+        } else if ext == "mkv" || ext == "webm" {
+            procArgs.append(contentsOf: [
+                "-map", "0",
+                "-map", "1",
+                "-c", "copy",
+                "-disposition:v:1", "attached_pic",
+                tempOutput.path
+            ])
+        } else if ext == "mp3" || ext == "m4a" || ext == "flac" {
+            procArgs.append(contentsOf: [
+                "-map", "0:a",
+                "-map", "1",
+                "-c", "copy",
+                "-disposition:v:0", "attached_pic",
+                tempOutput.path
+            ])
+        } else {
+            return false
+        }
+
+        let proc = Process()
+        proc.executableURL = ffmpegBin
+        proc.arguments = procArgs
+        proc.environment = Self.createSanitizedEnvironment()
+        let pipe = Pipe()
+        proc.standardOutput = pipe
+        proc.standardError = pipe
+
+        do {
+            try proc.run()
+            proc.waitUntilExit()
+            if proc.terminationStatus == 0 && fm.fileExists(atPath: tempOutput.path), ((try? tempOutput.resourceValues(forKeys: [.fileSizeKey]))?.fileSize ?? 0) > 0 {
+                let backupURL = mediaFile.deletingLastPathComponent().appendingPathComponent("thumb_orig_\(UUID().uuidString).\(ext)")
+                try fm.moveItem(at: mediaFile, to: backupURL)
+                do {
+                    try fm.moveItem(at: tempOutput, to: mediaFile)
+                    try? fm.removeItem(at: backupURL)
+                    return true
+                } catch {
+                    try? fm.moveItem(at: backupURL, to: mediaFile)
+                    try? fm.removeItem(at: tempOutput)
+                    return false
+                }
+            } else {
+                try? fm.removeItem(at: tempOutput)
+                return false
+            }
+        } catch {
+            try? fm.removeItem(at: tempOutput)
+            return false
+        }
+    }
+
+    private func hasAttachedThumbnail(mediaFile: URL, ffmpegDir: String) async -> Bool {
+        let ffprobeBin = URL(fileURLWithPath: ffmpegDir).appendingPathComponent("ffprobe")
+        guard FileManager.default.isExecutableFile(atPath: ffprobeBin.path) else { return false }
+
+        let proc = Process()
+        proc.executableURL = ffprobeBin
+        proc.arguments = [
+            "-v", "error",
+            "-select_streams", "v",
+            "-show_entries", "stream_disposition=attached_pic",
+            "-of", "csv=p=0",
+            mediaFile.path
+        ]
+        proc.environment = Self.createSanitizedEnvironment()
+        let pipe = Pipe()
+        proc.standardOutput = pipe
+        proc.standardError = pipe
+
+        do {
+            try proc.run()
+            proc.waitUntilExit()
+            let data = pipe.fileHandleForReading.readDataToEndOfFile()
+            let output = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            return output.components(separatedBy: .newlines).contains("1")
+        } catch {
+            return false
+        }
     }
 
     private func isLiveHlsError(_ text: String) -> Bool {
