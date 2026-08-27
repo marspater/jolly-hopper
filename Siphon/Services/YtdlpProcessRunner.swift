@@ -37,6 +37,10 @@ public final class DownloadProcessController: @unchecked Sendable {
 
         if shouldTerminate {
             proc.terminate()
+            let pid = proc.processIdentifier
+            if pid > 0 {
+                kill(-pid, SIGTERM)
+            }
         }
         return success
     }
@@ -62,6 +66,10 @@ public final class DownloadProcessController: @unchecked Sendable {
 
         if case .attached(let proc) = previousState, proc.isRunning {
             proc.terminate()
+            let pid = proc.processIdentifier
+            if pid > 0 {
+                kill(-pid, SIGTERM)
+            }
         }
     }
 
