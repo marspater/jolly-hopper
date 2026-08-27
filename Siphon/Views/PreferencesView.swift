@@ -934,21 +934,34 @@ struct PreferencesView: View {
     }
 
     private var hasFullDiskAccess: Bool {
-        let cookiesPath = NSHomeDirectory() + "/Library/Containers/com.apple.Safari/Data/Library/Cookies/Cookies.binarycookies"
-        let bookmarksPath = NSHomeDirectory() + "/Library/Safari/Bookmarks.plist"
-        return FileManager.default.isReadableFile(atPath: cookiesPath) || FileManager.default.isReadableFile(atPath: bookmarksPath)
+        let candidatePaths = [
+            NSHomeDirectory() + "/Library/Containers/com.apple.Safari/Data/Library/Cookies/Cookies.binarycookies",
+            NSHomeDirectory() + "/Library/Cookies/Cookies.binarycookies",
+            NSHomeDirectory() + "/Library/Safari/Bookmarks.plist",
+            NSHomeDirectory() + "/Library/Safari/History.db"
+        ]
+        return candidatePaths.contains(where: { FileManager.default.isReadableFile(atPath: $0) })
     }
 
     private var safariWarningView: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 8) {
             if hasFullDiskAccess {
-                HStack(spacing: 6) {
+                HStack(spacing: 8) {
                     Image(systemName: "checkmark.seal.fill")
                         .foregroundColor(SiphonTheme.statusCompleted)
-                    Text("Full Disk Access: Granted")
+                        .font(.geist(13))
+                    Text("Full Disk Access: Granted (Safari cookies enabled)")
                         .font(.geist(11, weight: .semibold))
                         .foregroundColor(SiphonTheme.statusCompleted)
                 }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(SiphonTheme.statusCompleted.opacity(0.10))
+                .cornerRadius(SiphonTheme.radiusControl)
+                .overlay(
+                    RoundedRectangle(cornerRadius: SiphonTheme.radiusControl)
+                        .stroke(SiphonTheme.statusCompleted.opacity(0.25), lineWidth: 1)
+                )
             } else {
                 Text(languageService.s("safari_warning"))
                     .font(.geist(11))
@@ -962,7 +975,7 @@ struct PreferencesView: View {
                     }
                 }
                 .buttonStyle(.borderedProminent)
-                .tint(SiphonTheme.statusQueued)
+                .tint(SiphonTheme.accent)
                 .controlSize(.small)
             }
         }
