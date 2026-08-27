@@ -179,14 +179,15 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
                     if parts.count > 1 {
                         let fields = parts[1].components(separatedBy: "|")
                         let percentStr = fields.first?.trimmingCharacters(in: .whitespaces) ?? ""
-                        let cleanPercent = percentStr.hasSuffix("%") ? String(percentStr.dropLast()) : percentStr
+                        let stripped = percentStr.hasSuffix("%") ? String(percentStr.dropLast()) : percentStr
+                        let normalized = stripped.trimmingCharacters(in: .whitespaces).replacingOccurrences(of: ",", with: ".")
                         let speed = fields.count > 1 ? fields[1].trimmingCharacters(in: .whitespaces) : nil
                         let eta = fields.count > 2 ? fields[2].trimmingCharacters(in: .whitespaces) : nil
-                        if let percent = Double(cleanPercent) {
+                        if normalized != "NA" && !normalized.isEmpty, let percent = Double(normalized), !percent.isNaN && !percent.isInfinite {
                             let safeSpeed = (speed == "NA" || speed?.isEmpty == true) ? nil : speed
                             let safeEta = (eta == "NA" || eta?.isEmpty == true) ? nil : eta
                             DispatchQueue.main.async {
-                                onProgress(percent / 100.0, safeSpeed, safeEta)
+                                onProgress(max(0.0, min(1.0, percent / 100.0)), safeSpeed, safeEta)
                             }
                         }
                     }
