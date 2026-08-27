@@ -224,30 +224,22 @@ class DownloadManager: ObservableObject {
             download.duration = info.durationString
             download.thumbnailURL = info.thumbnailURL
             download.mediaInfo = info
+            let (resolvedBaseName, candidateKey) = resolveUniqueOutputPath(for: download)
             let sanitize: (String) -> String = { input in
                 let invalidChars = CharacterSet(charactersIn: "\\/:*?\"<>|")
                 return input.components(separatedBy: invalidChars).joined(separator: "_")
             }
             let rawBaseName = download.options.customFilename ?? download.title
             let sanitizedBaseName = sanitize(rawBaseName)
-            
-            let folderPath = download.options.saveFolder
-            var resolvedBaseName = sanitizedBaseName
-            var counter = 1
-            var candidateKey = folderPath.appendingPathComponent("\(resolvedBaseName).\(download.options.fileType.fileExtension)").path
-            while reservedOutputPaths.contains(candidateKey) {
-                resolvedBaseName = "\(sanitizedBaseName)_\(counter)"
-                candidateKey = folderPath.appendingPathComponent("\(resolvedBaseName).\(download.options.fileType.fileExtension)").path
-                counter += 1
-            }
             if resolvedBaseName != sanitizedBaseName {
                 download.options.customFilename = resolvedBaseName
             }
-            reservedOutputPaths.insert(candidateKey)
+            reserveOutputPath(candidateKey)
             defer {
-                reservedOutputPaths.remove(candidateKey)
+                unreserveOutputPath(candidateKey)
             }
 
+            let folderPath = download.options.saveFolder
             let fileExists = await Task.detached {
                 if let contents = try? FileManager.default.contentsOfDirectory(at: folderPath, includingPropertiesForKeys: nil) {
                     let matches = contents.filter { file in
@@ -513,6 +505,34 @@ class DownloadManager: ObservableObject {
         Task {
             await processDownload(download)
         }
+    }
+
+    func resolveUniqueOutputPath(for download: Download) -> (resolvedBaseName: String, candidatePath: String) {
+        let sanitize: (String) -> String = { input in
+            let invalidChars = CharacterSet(charactersIn: "\\/:*?\"<>|")
+            return input.components(separatedBy: invalidChars).joined(separator: "_")
+        }
+        let rawBaseName = download.options.customFilename ?? download.title
+        let sanitizedBaseName = sanitize(rawBaseName)
+
+        let folderPath = download.options.saveFolder
+        var resolvedBaseName = sanitizedBaseName
+        var counter = 1
+        var candidateKey = folderPath.appendingPathComponent("\(resolvedBaseName).\(download.options.fileType.fileExtension)").path
+        while reservedOutputPaths.contains(candidateKey) {
+            resolvedBaseName = "\(sanitizedBaseName)_\(counter)"
+            candidateKey = folderPath.appendingPathComponent("\(resolvedBaseName).\(download.options.fileType.fileExtension)").path
+            counter += 1
+        }
+        return (resolvedBaseName, candidateKey)
+    }
+
+    func reserveOutputPath(_ path: String) {
+        reservedOutputPaths.insert(path)
+    }
+
+    func unreserveOutputPath(_ path: String) {
+        reservedOutputPaths.remove(path)
     }
     
     func stopAllDownloads() {

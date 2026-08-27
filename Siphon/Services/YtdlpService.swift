@@ -802,7 +802,9 @@ class YtdlpService: ObservableObject {
             outputTemplate = options.saveFolder.appendingPathComponent("%(title)s.%(ext)s").path
         }
         args.append("--windows-filenames")
+        args.append("--continue")
         args.append(contentsOf: ["-o", outputTemplate])
+        args.append(contentsOf: ["--print", "after_video:SIPHON_FINAL_PATH:%(filepath)s"])
         args.append(contentsOf: ["--print", "after_move:SIPHON_FINAL_PATH:%(filepath)s"])
 
         args.append(contentsOf: buildFormatArgs(options: options, mediaInfo: mediaInfo))

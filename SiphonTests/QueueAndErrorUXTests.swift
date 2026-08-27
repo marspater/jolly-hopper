@@ -166,21 +166,36 @@ final class QueueAndErrorUXTests: XCTestCase {
     }
 
     func testDownloadProcessControllerCancellationLifecycle() {
-        let controller = DownloadProcessController()
-        XCTAssertFalse(controller.isCancelled)
+        // Lifecycle Test 1: Normal attach -> detach
+        let normalController = DownloadProcessController()
+        XCTAssertFalse(normalController.isCancelled)
 
-        // Cancel before attach
-        controller.cancel()
-        XCTAssertTrue(controller.isCancelled)
+        let mockProcess1 = Process()
+        let attachedNormal = normalController.attachProcess(mockProcess1)
+        XCTAssertTrue(attachedNormal)
+        XCTAssertFalse(normalController.isCancelled)
 
-        // Attach a mock process after cancel
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/bin/sleep")
-        process.arguments = ["10"]
-        controller.attachProcess(process)
+        normalController.detach()
+        XCTAssertFalse(normalController.isCancelled)
 
-        // Verify attach terminates immediately when cancelled
-        XCTAssertTrue(controller.isCancelled)
+        // Lifecycle Test 2: Cancel before attach
+        let cancelledController = DownloadProcessController()
+        cancelledController.cancel()
+        XCTAssertTrue(cancelledController.isCancelled)
+
+        let mockProcess2 = Process()
+        let attachedCancelled = cancelledController.attachProcess(mockProcess2)
+        XCTAssertFalse(attachedCancelled, "attachProcess must return false when controller was already cancelled")
+        XCTAssertTrue(cancelledController.isCancelled)
+
+        // Lifecycle Test 3: Cancel while attached
+        let activeController = DownloadProcessController()
+        let mockProcess3 = Process()
+        let attachedActive = activeController.attachProcess(mockProcess3)
+        XCTAssertTrue(attachedActive)
+
+        activeController.cancel()
+        XCTAssertTrue(activeController.isCancelled)
     }
 
     func testEphemeralRawCookiesNotPersistedInCodable() throws {

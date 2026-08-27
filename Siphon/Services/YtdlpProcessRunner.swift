@@ -6,40 +6,61 @@
 import Foundation
 
 public final class DownloadProcessController: @unchecked Sendable {
-    private var process: Process?
-    private var isCancelledFlag = false
+    private enum State {
+        case idle
+        case attached(Process)
+        case cancelled
+    }
+
+    private var state: State = .idle
     private let lock = NSLock()
 
     public init() {}
 
-    public func attachProcess(_ proc: Process) {
+    /// Registers the process with the controller.
+    /// Returns `true` if successfully attached and uncancelled, or `false` if already cancelled.
+    @discardableResult
+    public func attachProcess(_ proc: Process) -> Bool {
         lock.lock()
-        if isCancelledFlag {
-            lock.unlock()
+        defer { lock.unlock() }
+        switch state {
+        case .cancelled:
             if proc.isRunning {
                 proc.terminate()
             }
-            return
+            return false
+        case .idle, .attached:
+            state = .attached(proc)
+            return true
         }
-        self.process = proc
-        lock.unlock()
     }
 
+    /// Detaches the process upon completion or cleanup.
+    public func detach() {
+        lock.lock()
+        defer { lock.unlock() }
+        if case .attached = state {
+            state = .idle
+        }
+    }
+
+    /// Requests cancellation of the process and any active child process.
     public func cancel() {
         lock.lock()
-        isCancelledFlag = true
-        let proc = process
-        process = nil
+        let previousState = state
+        state = .cancelled
         lock.unlock()
-        if let p = proc, p.isRunning {
-            p.terminate()
+
+        if case .attached(let proc) = previousState, proc.isRunning {
+            proc.terminate()
         }
     }
 
     public var isCancelled: Bool {
         lock.lock()
         defer { lock.unlock() }
-        return isCancelledFlag
+        if case .cancelled = state { return true }
+        return false
     }
 }
 
@@ -114,7 +135,7 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
             let safeContinuation = SafeContinuation(continuation)
 
             if processController?.isCancelled == true {
-                safeContinuation.resume(throwing: YtdlpError.downloadFailed("Download was cancelled."))
+                safeContinuation.resume(throwing: YtdlpError.downloadFailed("Download was stopped."))
                 return
             }
 
@@ -129,13 +150,6 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
             process.standardOutput = outputPipe
             process.standardError = errorPipe
             process.environment = YtdlpService.createSanitizedEnvironment()
-
-            processController?.attachProcess(process)
-
-            if processController?.isCancelled == true {
-                safeContinuation.resume(throwing: YtdlpError.downloadFailed("Download was cancelled."))
-                return
-            }
 
             let outputState = ThreadSafeOutputState()
 
@@ -252,6 +266,7 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
             }
 
             process.terminationHandler = { proc in
+                processController?.detach()
                 outputPipe.fileHandleForReading.readabilityHandler = nil
                 errorPipe.fileHandleForReading.readabilityHandler = nil
 
@@ -343,9 +358,18 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
                 }
             }
 
+            let attached = processController?.attachProcess(process) ?? true
+            guard attached else {
+                outputPipe.fileHandleForReading.readabilityHandler = nil
+                errorPipe.fileHandleForReading.readabilityHandler = nil
+                safeContinuation.resume(throwing: YtdlpError.downloadFailed("Download was stopped."))
+                return
+            }
+
             do {
                 try process.run()
             } catch {
+                processController?.detach()
                 outputPipe.fileHandleForReading.readabilityHandler = nil
                 errorPipe.fileHandleForReading.readabilityHandler = nil
                 safeContinuation.resume(throwing: error)
