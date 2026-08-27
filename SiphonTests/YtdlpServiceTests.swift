@@ -1152,6 +1152,36 @@ final class YtdlpServiceTests: XCTestCase {
         let flushLines = streamBuffer.flush()
         XCTAssertTrue(flushLines.isEmpty)
     }
+
+    func testSanitizedEnvironmentIncludesPackageManagersAndHomebrew() {
+        let env = YtdlpService.createSanitizedEnvironment()
+        guard let path = env["PATH"] else {
+            XCTFail("Environment must have PATH set")
+            return
+        }
+        XCTAssertTrue(path.contains("/opt/homebrew/bin"), "PATH must include Homebrew Apple Silicon bin")
+        XCTAssertTrue(path.contains("/usr/local/bin"), "PATH must include Homebrew Intel bin")
+        XCTAssertTrue(path.contains("/usr/bin"), "PATH must include standard system binaries")
+    }
+
+    func testJsRuntimeArgsAppendedInDownload() async throws {
+        let capturedArgsBox = TestBox<[String]>([])
+        service.processRunner = MockYtdlpProcessRunner(mockDownload: { args in
+            capturedArgsBox.value = args
+            return "[download] Destination: /tmp/test.mp4\n"
+        })
+
+        _ = try await service.download(
+            url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+            options: DownloadOptions.default,
+            onProgress: { _, _, _ in },
+            onOutput: { _ in }
+        )
+
+        let args = capturedArgsBox.value
+        XCTAssertTrue(args.contains("--js-runtimes"), "Download command must pass --js-runtimes for YouTube challenge solving")
+        XCTAssertFalse(args.contains("generic:impersonate"), "YouTube downloads must not pass generic:impersonate")
+    }
 }
 
 

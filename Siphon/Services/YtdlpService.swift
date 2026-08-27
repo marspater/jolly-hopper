@@ -161,8 +161,20 @@ class YtdlpService: ObservableObject {
         let isolatedHome = appSupport.appendingPathComponent("SandboxHome")
         try? FileManager.default.createDirectory(at: isolatedHome, withIntermediateDirectories: true)
 
+        let homeDir = NSHomeDirectory()
+        let searchPaths = [
+            "/opt/homebrew/bin",
+            "/usr/local/bin",
+            "\(homeDir)/.bun/bin",
+            "\(homeDir)/.deno/bin",
+            "/usr/bin",
+            "/bin",
+            "/usr/sbin",
+            "/sbin"
+        ]
+
         var env: [String: String] = [:]
-        env["PATH"] = "/usr/bin:/bin:/usr/sbin:/sbin"
+        env["PATH"] = searchPaths.joined(separator: ":")
         env["HOME"] = isolatedHome.path
         env["TMPDIR"] = FileManager.default.temporaryDirectory.path
         env["XDG_CONFIG_HOME"] = isolatedHome.appendingPathComponent(".config").path
@@ -590,6 +602,7 @@ class YtdlpService: ObservableObject {
             "--no-playlist",
             "--no-warnings"
         ]
+        appendJsRuntimeArgs(to: &args)
         
         let usingBrowserCookies = appendCookieArgs(for: url, to: &args, force: forceBrowserCookies)
         logCookieUsage(for: url, usingBrowserCookies: usingBrowserCookies)
@@ -628,7 +641,7 @@ class YtdlpService: ObservableObject {
             throw err
         } catch {
             if shouldRetryWithBrowserCookies(error: error, url: url, usingBrowserCookies: usingBrowserCookies, forceBrowserCookies: forceBrowserCookies) {
-                LoggerService.shared.log("Retrying boyfriend.tv metadata with configured browser cookies", level: .info)
+                LoggerService.shared.log("Retrying metadata extraction with configured browser cookies", level: .info)
                 return try await fetchSingleVideoInfo(path: path, url: url, forceBrowserCookies: true)
             }
             throw mapSiteSpecificError(error, url: url)
@@ -643,6 +656,7 @@ class YtdlpService: ObservableObject {
             "--flat-playlist",
             "--no-warnings"
         ]
+        appendJsRuntimeArgs(to: &args)
         
         let usingBrowserCookies = appendCookieArgs(for: url, to: &args)
         logCookieUsage(for: url, usingBrowserCookies: usingBrowserCookies)
@@ -708,6 +722,7 @@ class YtdlpService: ObservableObject {
             "--flat-playlist",
             "--no-warnings"
         ]
+        appendJsRuntimeArgs(to: &args)
         let usingBrowserCookies = appendCookieArgs(for: url, to: &args)
         logCookieUsage(for: url, usingBrowserCookies: usingBrowserCookies)
 
@@ -722,7 +737,11 @@ class YtdlpService: ObservableObject {
             }
         }
 
-        args.append(contentsOf: ["--extractor-args", "generic:impersonate"])
+        let parsedHost = (URL(string: url)?.host ?? url).lowercased()
+        let isYouTube = parsedHost == "youtube.com" || parsedHost.hasSuffix(".youtube.com") || parsedHost == "youtu.be" || parsedHost.hasSuffix(".youtu.be")
+        if !isYouTube {
+            args.append(contentsOf: ["--extractor-args", "generic:impersonate"])
+        }
         args.append("--")
         args.append(url)
 
@@ -778,6 +797,7 @@ class YtdlpService: ObservableObject {
         }
 
         var args = [path.path, "--ignore-config"]
+        appendJsRuntimeArgs(to: &args)
         if ffmpegPath == nil || !FileManager.default.fileExists(atPath: ffmpegPath?.path ?? "") {
             await findFfmpeg()
         }
@@ -961,6 +981,18 @@ class YtdlpService: ObservableObject {
                 }
                 outputPath = try await runDownloadProcess(
                     args: ffmpegArgs,
+                    saveFolder: options.saveFolder,
+                    processController: processController,
+                    onProgress: onProgress,
+                    onOutput: onOutput
+                )
+            } else if !errText.isEmpty, (normalizedURL.contains("youtube.com") || normalizedURL.contains("youtu.be")), (errText.contains("403") || errText.contains("Sign in") || errText.contains("bot") || errText.contains("login_required")), !args.contains("--cookies-from-browser"), let browser = configuredBrowserCookieSource() {
+                LoggerService.shared.log("YouTube 403 / bot challenge encountered. Retrying download with browser cookies from \(browser)...", level: .warning)
+                onOutput("[Siphon Info] YouTube authentication required. Retrying download with browser cookies from \(browser)...\n")
+                var cookieArgs = args
+                _ = appendCookieArgs(for: normalizedURL, to: &cookieArgs, force: true)
+                outputPath = try await runDownloadProcess(
+                    args: cookieArgs,
                     saveFolder: options.saveFolder,
                     processController: processController,
                     onProgress: onProgress,
@@ -1233,6 +1265,37 @@ class YtdlpService: ObservableObject {
 
     private func hostForLog(_ url: String) -> String {
         URL(string: url)?.host ?? "unknown host"
+    }
+
+    private func appendJsRuntimeArgs(to args: inout [String]) {
+        guard !args.contains("--js-runtimes") else { return }
+
+        let fileManager = FileManager.default
+        let homeDir = NSHomeDirectory()
+
+        // Discover JS runtimes in order of preference for yt-dlp EJS challenge solving
+        let candidatePaths: [(engine: String, path: String)] = [
+            ("node", "/opt/homebrew/bin/node"),
+            ("node", "/usr/local/bin/node"),
+            ("bun", "\(homeDir)/.bun/bin/bun"),
+            ("bun", "/opt/homebrew/bin/bun"),
+            ("bun", "/usr/local/bin/bun"),
+            ("deno", "/opt/homebrew/bin/deno"),
+            ("deno", "/usr/local/bin/deno"),
+            ("deno", "\(homeDir)/.deno/bin/deno"),
+            ("quickjs", "/opt/homebrew/bin/qjs"),
+            ("quickjs", "/usr/local/bin/qjs")
+        ]
+
+        for candidate in candidatePaths {
+            if fileManager.isExecutableFile(atPath: candidate.path) {
+                args.append(contentsOf: ["--js-runtimes", "\(candidate.engine):\(candidate.path)"])
+                return
+            }
+        }
+
+        // Fallback: declare available engines for PATH discovery
+        args.append(contentsOf: ["--js-runtimes", "node", "--js-runtimes", "bun", "--js-runtimes", "deno"])
     }
     
     private func isBoyfriendTVURL(_ urlOrHost: String) -> Bool {
@@ -1583,6 +1646,18 @@ class YtdlpService: ObservableObject {
                 return YtdlpError.boyfriendTVLoginRequired
             }
         }
+
+        let parsedHost = (URL(string: url)?.host ?? url).lowercased()
+        let isYouTube = parsedHost == "youtube.com" || parsedHost.hasSuffix(".youtube.com") || parsedHost == "youtu.be" || parsedHost.hasSuffix(".youtu.be")
+        if isYouTube {
+            let errString = "\(error)"
+            if errString.contains("403") || errString.contains("Sign in") || errString.contains("bot") || errString.contains("login_required") {
+                if configuredBrowserCookieSource() == nil {
+                    return YtdlpError.downloadFailed("YouTube requires authentication or browser cookies. Go to Settings > Advanced > Browser Cookies to select your browser.")
+                }
+            }
+        }
+
         return error
     }
 
@@ -1603,18 +1678,10 @@ class YtdlpService: ObservableObject {
     private func appendSiteSpecificArgs(for url: String, options: DownloadOptions? = nil, mediaInfo: MediaInfo? = nil, to args: inout [String]) {
         let lowerUrl = url.lowercased()
         let parsedHost = (URL(string: url)?.host ?? url).lowercased()
-
-        // Common modern browser headers & Cloudflare extraction options
-        let defaultUA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
-        let secChUa = "\"Chromium\";v=\"124\", \"Google Chrome\";v=\"124\", \"Not-A.Brand\";v=\"99\""
-
-        // Anti-bot flags for Cloudflare & rate limits
-        args.append(contentsOf: ["--user-agent", defaultUA])
-        args.append(contentsOf: ["--add-header", "Sec-Ch-Ua:\(secChUa)"])
-        args.append(contentsOf: ["--add-header", "Sec-Ch-Ua-Mobile:?0"])
-        args.append(contentsOf: ["--add-header", "Sec-Ch-Ua-Platform:\"macOS\""])
-        args.append(contentsOf: ["--add-header", "Accept-Language:en-US,en;q=0.9"])
-        args.append(contentsOf: ["--extractor-args", "generic:impersonate"])
+        let isYouTube = parsedHost == "youtube.com" || parsedHost.hasSuffix(".youtube.com") || parsedHost == "youtu.be" || parsedHost.hasSuffix(".youtu.be")
+        let isThisVid = isThisVidURL(parsedHost)
+        let isXHamster = isXHamsterURL(parsedHost)
+        let isBoyfriendTV = isBoyfriendTVURL(parsedHost) || parsedHost == "cdn.boyfriend.tv" || parsedHost.hasSuffix(".boyfriend.tv")
 
         // Retries, socket timeouts & performance optimization flags
         args.append(contentsOf: ["--retries", "10"])
@@ -1622,10 +1689,19 @@ class YtdlpService: ObservableObject {
         args.append(contentsOf: ["--socket-timeout", "15"])
         args.append("--no-mtime")
 
-        let isYouTube = parsedHost == "youtube.com" || parsedHost.hasSuffix(".youtube.com") || parsedHost == "youtu.be" || parsedHost.hasSuffix(".youtu.be")
-        let isThisVid = isThisVidURL(parsedHost)
-        let isXHamster = isXHamsterURL(parsedHost)
-        let isBoyfriendTV = isBoyfriendTVURL(parsedHost) || parsedHost == "cdn.boyfriend.tv" || parsedHost.hasSuffix(".boyfriend.tv")
+        if !isYouTube {
+            // Common modern browser headers & Cloudflare extraction options
+            let defaultUA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+            let secChUa = "\"Chromium\";v=\"124\", \"Google Chrome\";v=\"124\", \"Not-A.Brand\";v=\"99\""
+
+            // Anti-bot flags for Cloudflare & rate limits
+            args.append(contentsOf: ["--user-agent", defaultUA])
+            args.append(contentsOf: ["--add-header", "Sec-Ch-Ua:\(secChUa)"])
+            args.append(contentsOf: ["--add-header", "Sec-Ch-Ua-Mobile:?0"])
+            args.append(contentsOf: ["--add-header", "Sec-Ch-Ua-Platform:\"macOS\""])
+            args.append(contentsOf: ["--add-header", "Accept-Language:en-US,en;q=0.9"])
+            args.append(contentsOf: ["--extractor-args", "generic:impersonate"])
+        }
 
         let isFragmented: Bool
         if let info = mediaInfo, let opts = options {
