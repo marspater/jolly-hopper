@@ -40,11 +40,14 @@
 		E0001030 /* AppIcon.icns in Resources */ = {isa = PBXBuildFile; fileRef = E0000030 /* AppIcon.icns */; };
 		E0001031 /* UserDefaultsKeys.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000031 /* UserDefaultsKeys.swift */; };
 		E0001032 /* ReadOnlyLogView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000032 /* ReadOnlyLogView.swift */; };
+		E0001033 /* DebugLogWindowManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000033 /* DebugLogWindowManager.swift */; };
+		E0001034 /* DebugLogView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000034 /* DebugLogView.swift */; };
 		E0001040 /* DownloadManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000040 /* DownloadManagerTests.swift */; };
 		E0001041 /* MediaInfoTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000041 /* MediaInfoTests.swift */; };
 		E0001042 /* YtdlpServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000042 /* YtdlpServiceTests.swift */; };
 		E0001044 /* BrowserUtilsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000044 /* BrowserUtilsTests.swift */; };
 		E0001045 /* QueueAndErrorUXTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000045 /* QueueAndErrorUXTests.swift */; };
+		E0001046 /* AdversarialAndPropertyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000046 /* AdversarialAndPropertyTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -83,11 +86,14 @@
 		E0000030 /* AppIcon.icns */ = {isa = PBXFileReference; lastKnownFileType = image.icns; path = AppIcon.icns; sourceTree = "<group>"; };
 		E0000031 /* UserDefaultsKeys.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserDefaultsKeys.swift; sourceTree = "<group>"; };
 		E0000032 /* ReadOnlyLogView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReadOnlyLogView.swift; sourceTree = "<group>"; };
+		E0000033 /* DebugLogWindowManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugLogWindowManager.swift; sourceTree = "<group>"; };
+		E0000034 /* DebugLogView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugLogView.swift; sourceTree = "<group>"; };
 		E0000040 /* DownloadManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DownloadManagerTests.swift; sourceTree = "<group>"; };
 		E0000041 /* MediaInfoTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaInfoTests.swift; sourceTree = "<group>"; };
 		E0000042 /* YtdlpServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YtdlpServiceTests.swift; sourceTree = "<group>"; };
 		E0000044 /* BrowserUtilsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowserUtilsTests.swift; sourceTree = "<group>"; };
 		E0000045 /* QueueAndErrorUXTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QueueAndErrorUXTests.swift; sourceTree = "<group>"; };
+		E0000046 /* AdversarialAndPropertyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdversarialAndPropertyTests.swift; sourceTree = "<group>"; };
 		E0000043 /* SiphonTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SiphonTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -143,6 +149,7 @@
 				E0000042 /* YtdlpServiceTests.swift */,
 				E0000044 /* BrowserUtilsTests.swift */,
 				E0000045 /* QueueAndErrorUXTests.swift */,
+				E0000046 /* AdversarialAndPropertyTests.swift */,
 			);
 			path = SiphonTests;
 			sourceTree = "<group>";
@@ -177,6 +184,7 @@
 				E0000025 /* AddDownloadWindowManager.swift */,
 				E0000026 /* LanguageService.swift */,
 				E0000029 /* PreferencesWindowManager.swift */,
+				E0000033 /* DebugLogWindowManager.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -188,6 +196,7 @@
 				E0000006 /* AddDownloadView.swift */,
 				E0000009 /* PreferencesView.swift */,
 				E0000023 /* MenuBarView.swift */,
+				E0000034 /* DebugLogView.swift */,
 				E0003008 /* Components */,
 			);
 			path = Views;
@@ -359,6 +368,8 @@
 				E0001029 /* PreferencesWindowManager.swift in Sources */,
 				E0001031 /* UserDefaultsKeys.swift in Sources */,
 				E0001032 /* ReadOnlyLogView.swift in Sources */,
+				E0001033 /* DebugLogWindowManager.swift in Sources */,
+				E0001034 /* DebugLogView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -371,6 +382,7 @@
 				E0001042 /* YtdlpServiceTests.swift in Sources */,
 				E0001044 /* BrowserUtilsTests.swift in Sources */,
 				E0001045 /* QueueAndErrorUXTests.swift in Sources */,
+				E0001046 /* AdversarialAndPropertyTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

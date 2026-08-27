@@ -21,7 +21,8 @@ struct ReadOnlyLogView: NSViewRepresentable {
         textView.isHorizontallyResizable = false
         textView.textContainer?.containerSize = NSSize(width: scrollView.contentSize.width, height: .greatestFiniteMagnitude)
         textView.textContainer?.widthTracksTextView = true
-        textView.font = NSFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
+        let geistFont = NSFont(name: "GeistMono-Regular", size: fontSize) ?? NSFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
+        textView.font = geistFont
         textView.textColor = NSColor.labelColor
         textView.backgroundColor = NSColor.clear
         textView.drawsBackground = false
@@ -37,7 +38,8 @@ struct ReadOnlyLogView: NSViewRepresentable {
 
         if textView.string != text {
             textView.string = text
-            textView.font = NSFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
+            let geistFont = NSFont(name: "GeistMono-Regular", size: fontSize) ?? NSFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
+            textView.font = geistFont
             textView.textColor = NSColor.labelColor
 
             // Auto-scroll to bottom on update

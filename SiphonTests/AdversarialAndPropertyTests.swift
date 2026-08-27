@@ -1,6 +1,7 @@
 import XCTest
 @testable import Siphon
 
+@MainActor
 final class AdversarialAndPropertyTests: XCTestCase {
 
     // MARK: - 1. Hostname Spoofing & Canonical Domain Tests

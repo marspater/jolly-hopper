@@ -931,7 +931,7 @@ class YtdlpService: ObservableObject {
 
         let outputTemplate: String
         if let customFilename = options.customFilename ?? customResolvedTitle, !customFilename.isEmpty {
-            let safeName = sanitizeFilename(customFilename)
+            let safeName = Self.sanitizeFilename(customFilename)
             outputTemplate = options.saveFolder.appendingPathComponent("\(safeName).%(ext)s").path
         } else {
             outputTemplate = options.saveFolder.appendingPathComponent("%(title)s.%(ext)s").path
@@ -941,15 +941,14 @@ class YtdlpService: ObservableObject {
         args.append(contentsOf: ["-o", outputTemplate])
         args.append(contentsOf: ["--print", "after_move:SIPHON_FINAL_PATH:%(filepath)s"])
 
-        // Metadata-first HLS detection: configure FFmpeg downloader up-front rather than reacting to errors
+        // Metadata-first HLS detection: configure FFmpeg downloader up-front for standalone .m3u8 streams
+        // (YouTube and DASH formats must ALWAYS use yt-dlp's native downloader)
         let isHlsOrStream: Bool = {
-            if let mediaInfo = mediaInfo {
-                if mediaInfo.isSelectedFormatFragmented(options: options) { return true }
-                let resolved = mediaInfo.resolveSelectedFormats(options: options)
-                if resolved.contains(where: { $0.isFragmented }) { return true }
-            }
             let lower = targetURL.lowercased()
-            return lower.contains(".m3u8") || lower.contains("/manifest") || lower.contains(".mpd")
+            let parsedHost = (URL(string: targetURL)?.host ?? targetURL).lowercased()
+            let isYouTube = parsedHost == "youtube.com" || parsedHost.hasSuffix(".youtube.com") || parsedHost == "youtu.be" || parsedHost.hasSuffix(".youtu.be")
+            if isYouTube { return false }
+            return lower.contains(".m3u8")
         }()
         if isHlsOrStream && !args.contains("--downloader") {
             args.append(contentsOf: ["--downloader", "ffmpeg", "--hls-use-mpegts"])
@@ -2028,7 +2027,7 @@ class YtdlpService: ObservableObject {
         return nil
     }
 
-    private func sanitizeFilename(_ filename: String) -> String {
+    nonisolated static func sanitizeFilename(_ filename: String) -> String {
         let invalidCharacters = CharacterSet(charactersIn: "/\\?%*|\"<>:")
         let components = filename.components(separatedBy: invalidCharacters)
         let cleaned = components.joined(separator: "_")

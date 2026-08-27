@@ -47,7 +47,6 @@ struct PreferencesView: View {
     @State private var previousLanguage: Language? = nil
     @State private var installedBrowsers: [SupportedBrowser] = []
     @ObservedObject private var logger = LoggerService.shared
-    @State private var showDebugLogsSheet = false
     @State private var customPresets: [CustomPreset] = []
     @State private var showCreatePresetSheet = false
     @State private var newPresetName = ""
@@ -813,9 +812,6 @@ struct PreferencesView: View {
         }
         .siphonFormStyle()
         .padding()
-        .sheet(isPresented: $showDebugLogsSheet) {
-            debugLogsSheet
-        }
     }
 
     private var debugLogsSection: some View {
@@ -830,50 +826,10 @@ struct PreferencesView: View {
                 }
                 Spacer()
                 Button("View Debug Logs") {
-                    showDebugLogsSheet = true
+                    DebugLogWindowManager.shared.showDebugLogWindow()
                 }
             }
         }
-    }
-    
-    private var debugLogsSheet: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text("Debug Logs")
-                    .font(.geist(15, weight: .bold))
-                Spacer()
-                Button("Close") {
-                    showDebugLogsSheet = false
-                }
-                .keyboardShortcut(.cancelAction)
-            }
-            
-            ReadOnlyLogView(text: logger.logs.joined(separator: "\n").isEmpty ? "No logs available." : logger.logs.joined(separator: "\n"))
-                .padding(4)
-                .background(Color(NSColor.textBackgroundColor))
-                .cornerRadius(6)
-            
-            HStack {
-                Button("Copy All") {
-                    let pasteboard = NSPasteboard.general
-                    pasteboard.clearContents()
-                    pasteboard.setString(logger.logs.joined(separator: "\n"), forType: .string)
-                }
-                
-                Button("Clear Logs") {
-                    logger.clearLogs()
-                }
-                
-                Spacer()
-                
-                Button("Show in Finder") {
-                    NSWorkspace.shared.activateFileViewerSelecting([logger.exportLogs()])
-                }
-            }
-        }
-        .padding()
-        .frame(width: 650, height: 450)
-        .background(.ultraThinMaterial)
     }
 
     private var ytdlpUpdateSection: some View {
