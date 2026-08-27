@@ -24,10 +24,8 @@ class DownloadManager: ObservableObject {
         return val > 0 ? val : 3
     }
     private let userDefaults = UserDefaults.standard
-    private var activeProcesses: [UUID: Process] = [:]
-    private var activeCancellations: [UUID: CancellationBox] = [:]
+    private var activeControllers: [UUID: DownloadProcessController] = [:]
     var languageService: LanguageService?
-    private var failedDownloadsMap: [UUID: Download] = [:]
     private var reservedOutputPaths: Set<String> = []
 
     init() {
@@ -254,7 +252,7 @@ class DownloadManager: ObservableObject {
                 if let contents = try? FileManager.default.contentsOfDirectory(at: folderPath, includingPropertiesForKeys: nil) {
                     let matches = contents.filter { file in
                         let nameWithoutExt = file.deletingPathExtension().lastPathComponent
-                        let isExactMatch = nameWithoutExt == resolvedBaseName || nameWithoutExt == rawBaseName
+                        let isExactMatch = nameWithoutExt == resolvedBaseName
                         let isPart = file.lastPathComponent.hasSuffix(".part") || file.lastPathComponent.hasSuffix(".ytdl")
                         return isExactMatch && !isPart
                     }
@@ -272,10 +270,10 @@ class DownloadManager: ObservableObject {
             updateStatus(for: download, to: .downloading)
             objectWillChange.send()
 
-            let cancelBox = CancellationBox()
-            activeCancellations[download.id] = cancelBox
+            let controller = DownloadProcessController()
+            activeControllers[download.id] = controller
             defer {
-                activeCancellations.removeValue(forKey: download.id)
+                activeControllers.removeValue(forKey: download.id)
             }
 
             LoggerService.shared.log("Starting download for URL: \(LoggerService.sanitizeURLForLog(download.url))", level: .info)
@@ -283,22 +281,8 @@ class DownloadManager: ObservableObject {
                 url: download.url,
                 options: download.options,
                 mediaInfo: download.mediaInfo,
-                isCancelled: {
-                    cancelBox.isCancelled
-                },
-                onProcessCreated: { [weak self, weak download] process in
-                    Task { @MainActor in
-                        guard let self = self, let download = download else { return }
-                        if download.status == .stopped || cancelBox.isCancelled {
-                            process.terminate()
-                        } else {
-                            self.activeProcesses[download.id] = process
-                        }
-                    }
-                },
+                processController: controller,
                 onProgress: { progress, speed, eta in
-                    // Bug #3 fix: Guard against NaN progress values
-                    // Bug #4 fix: Dispatch to main actor for @Published property writes
                     let safeProgress = progress.isNaN ? 0 : max(0, min(1, progress))
                     Task { @MainActor in
                         download.progress = safeProgress
@@ -307,7 +291,6 @@ class DownloadManager: ObservableObject {
                     }
                 },
                 onOutput: { line in
-                    // Bug #4 fix: Dispatch to main actor for @Published property writes
                     Task { @MainActor in
                         download.log += line + "\n"
                         if line.contains("[EmbedThumbnail]") || line.contains("[Metadata]") || line.contains("[Merger]") || line.contains("[VideoConvertor]") || line.contains("[ThumbnailsConvertor]") || line.contains("[EmbedSubtitle]") {
@@ -318,9 +301,6 @@ class DownloadManager: ObservableObject {
                     }
                 }
             )
-
-            // Bug #7 fix: Always clean up process reference (moved from only success path)
-            activeProcesses.removeValue(forKey: download.id)
 
             download.filePath = outputPath
             updateStatus(for: download, to: .completed)
@@ -336,12 +316,11 @@ class DownloadManager: ObservableObject {
             NotificationService.shared.sendDownloadCompleted(filename: download.title.isEmpty ? LoggerService.sanitizeURLForLog(download.url) : download.title, languageService: lang)
 
         } catch let error as YtdlpError {
-            // Bug #7 fix: Always clean up process reference on error
-            activeProcesses.removeValue(forKey: download.id)
-
-            if download.status == .stopped {
-                LoggerService.shared.log("Download stopped by user (\(LoggerService.sanitizeURLForLog(download.url)))", level: .info)
-                addToHistory(download)
+            if download.status == .stopped || download.status == .paused {
+                LoggerService.shared.log("Download stopped or paused by user (\(LoggerService.sanitizeURLForLog(download.url)))", level: .info)
+                if download.status == .stopped {
+                    addToHistory(download)
+                }
                 return
             }
             updateStatus(for: download, to: .failed)
@@ -395,12 +374,11 @@ class DownloadManager: ObservableObject {
             NotificationService.shared.sendDownloadFailed(filename: download.title.isEmpty ? LoggerService.sanitizeURLForLog(download.url) : download.title, languageService: lang)
             addToHistory(download)
         } catch {
-            // Bug #7 fix: Always clean up process reference on error
-            activeProcesses.removeValue(forKey: download.id)
-
-            if download.status == .stopped {
-                LoggerService.shared.log("Download stopped by user (\(LoggerService.sanitizeURLForLog(download.url)))", level: .info)
-                addToHistory(download)
+            if download.status == .stopped || download.status == .paused {
+                LoggerService.shared.log("Download stopped or paused by user (\(LoggerService.sanitizeURLForLog(download.url)))", level: .info)
+                if download.status == .stopped {
+                    addToHistory(download)
+                }
                 return
             }
             updateStatus(for: download, to: .failed)
@@ -435,16 +413,7 @@ class DownloadManager: ObservableObject {
             return
         }
         updateStatus(for: download, to: .stopped)
-        activeCancellations.removeValue(forKey: download.id)?.cancel()
-        if let process = activeProcesses.removeValue(forKey: download.id) {
-            process.terminate()
-            Task.detached { [weak process] in
-                try? await Task.sleep(nanoseconds: 1_500_000_000)
-                if let proc = process, proc.isRunning {
-                    proc.terminate()
-                }
-            }
-        }
+        activeControllers.removeValue(forKey: download.id)?.cancel()
         if !skipSaveAndBroadcast {
             objectWillChange.send()
         }
@@ -481,16 +450,7 @@ class DownloadManager: ObservableObject {
             return
         }
         updateStatus(for: download, to: .paused)
-        activeCancellations.removeValue(forKey: download.id)?.cancel()
-        if let process = activeProcesses.removeValue(forKey: download.id) {
-            process.terminate()
-            Task.detached { [weak process] in
-                try? await Task.sleep(nanoseconds: 1_000_000_000)
-                if let proc = process, proc.isRunning {
-                    proc.terminate()
-                }
-            }
-        }
+        activeControllers.removeValue(forKey: download.id)?.cancel()
         objectWillChange.send()
     }
 
@@ -597,7 +557,6 @@ class DownloadManager: ObservableObject {
             if item.status == .downloading || item.status == .fetching || item.status == .processing || item.status == .queued {
                 stopDownload(item, suppressNotification: true, skipSaveAndBroadcast: true)
             }
-            failedDownloadsMap.removeValue(forKey: item.id)
         }
 
         downloads.removeAll { itemIds.contains($0.id) }
@@ -681,19 +640,17 @@ class DownloadManager: ObservableObject {
                 history = decoded
                 // Restore as Download objects for UI, reversing so newest is at the top
                 let restored = decoded.reversed().map { $0.toDownload() }
-                downloads.append(contentsOf: restored)
-
+                
+                let existingIds = Set(downloads.map { $0.id })
                 for download in restored {
-                    // Bug #8 fix: Mark any "active" status as stopped on relaunch
-                    // (no backend process exists for them anymore)
-                    switch download.status {
-                    case .downloading, .fetching, .processing, .queued:
-                        download.status = .stopped
-                        failedDownloadsMap[download.id] = download
-                    case .failed, .stopped, .fileExists:
-                        failedDownloadsMap[download.id] = download
-                    default:
-                        break
+                    if !existingIds.contains(download.id) {
+                        switch download.status {
+                        case .downloading, .fetching, .processing, .queued:
+                            download.status = .stopped
+                        default:
+                            break
+                        }
+                        downloads.append(download)
                     }
                 }
             } catch {
@@ -751,11 +708,6 @@ class DownloadManager: ObservableObject {
 
     private func updateStatus(for download: Download, to status: DownloadStatus) {
         download.status = status
-        if status == .failed {
-            failedDownloadsMap[download.id] = download
-        } else {
-            failedDownloadsMap.removeValue(forKey: download.id)
-        }
     }
 }
 

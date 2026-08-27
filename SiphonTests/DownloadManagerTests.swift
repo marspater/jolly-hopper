@@ -104,22 +104,17 @@ final class DownloadManagerTests: XCTestCase {
         XCTAssertEqual(candidateKey, expectedPath2)
     }
 
-    func testProcessDownloadExitsIfCancelledWhileQueued() {
+    func testProcessDownloadExitsIfCancelledWhileQueued() async {
         let manager = DownloadManager()
         let options = DownloadOptions.default
         let download = Download(url: "https://example.com/cancelled", options: options)
         download.status = .stopped // User cancelled while in queue
 
-        // Verify initial status is .stopped
-        XCTAssertEqual(download.status, .stopped)
+        // Act: Execute actual processDownload
+        await manager.processDownload(download)
 
-        // Guard check logic as in processDownload
-        guard download.status == .queued else {
-            // Success: exited because status is not .queued
-            return
-        }
-
-        XCTFail("processDownload should not proceed if status is not .queued")
+        // Assert: Production method respected status != .queued and did not transition to fetching/downloading
+        XCTAssertEqual(download.status, .stopped, "processDownload must exit immediately without mutating status when status is not .queued")
     }
 
     func testNaNProgressGuarding() {

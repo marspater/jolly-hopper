@@ -5,13 +5,50 @@
 
 import Foundation
 
+public final class DownloadProcessController: @unchecked Sendable {
+    private var process: Process?
+    private var isCancelledFlag = false
+    private let lock = NSLock()
+
+    public init() {}
+
+    public func attachProcess(_ proc: Process) {
+        lock.lock()
+        if isCancelledFlag {
+            lock.unlock()
+            if proc.isRunning {
+                proc.terminate()
+            }
+            return
+        }
+        self.process = proc
+        lock.unlock()
+    }
+
+    public func cancel() {
+        lock.lock()
+        isCancelledFlag = true
+        let proc = process
+        process = nil
+        lock.unlock()
+        if let p = proc, p.isRunning {
+            p.terminate()
+        }
+    }
+
+    public var isCancelled: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return isCancelledFlag
+    }
+}
+
 public protocol YtdlpProcessRunning: Sendable {
     func runCommand(_ args: [String]) async throws -> String
     func runDownloadProcess(
         args: [String],
         saveFolder: URL,
-        isCancelled: (@Sendable () -> Bool)?,
-        onProcessCreated: @escaping @Sendable (Process) -> Void,
+        processController: DownloadProcessController?,
         onProgress: @escaping @Sendable (Double, String?, String?) -> Void,
         onOutput: @escaping @Sendable (String) -> Void
     ) async throws -> String
@@ -69,16 +106,15 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
     public func runDownloadProcess(
         args: [String],
         saveFolder: URL,
-        isCancelled: (@Sendable () -> Bool)?,
-        onProcessCreated: @escaping @Sendable (Process) -> Void,
+        processController: DownloadProcessController?,
         onProgress: @escaping @Sendable (Double, String?, String?) -> Void,
         onOutput: @escaping @Sendable (String) -> Void
     ) async throws -> String {
         try await withCheckedThrowingContinuation { continuation in
             let safeContinuation = SafeContinuation(continuation)
 
-            if isCancelled?() == true {
-                safeContinuation.resume(throwing: YtdlpError.downloadFailed("Download was cancelled before process initialization."))
+            if processController?.isCancelled == true {
+                safeContinuation.resume(throwing: YtdlpError.downloadFailed("Download was cancelled."))
                 return
             }
 
@@ -94,15 +130,27 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
             process.standardError = errorPipe
             process.environment = YtdlpService.createSanitizedEnvironment()
 
-            onProcessCreated(process)
+            processController?.attachProcess(process)
 
-            if isCancelled?() == true {
-                safeContinuation.resume(throwing: YtdlpError.downloadFailed("Download was cancelled before process launch."))
+            if processController?.isCancelled == true {
+                safeContinuation.resume(throwing: YtdlpError.downloadFailed("Download was cancelled."))
                 return
             }
+
             let outputState = ThreadSafeOutputState()
 
             let processOutputLine: @Sendable (String) -> Void = { line in
+                if line.contains("SIPHON_FINAL_PATH:") {
+                    let parts = line.components(separatedBy: "SIPHON_FINAL_PATH:")
+                    if parts.count > 1 {
+                        let extracted = parts[1].trimmingCharacters(in: .whitespacesAndNewlines)
+                        if !extracted.isEmpty {
+                            outputState.setFinalPath(extracted)
+                        }
+                    }
+                    return
+                }
+
                 if line.contains("[info] Writing video thumbnail") ||
                    line.contains("[info] Writing video subtitle") ||
                    line.contains("[info] Writing video description") ||
@@ -155,8 +203,6 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
                     onOutput(line)
 
                     if line.contains("%") {
-                        // Bolt Performance Optimization: Replace allocations of intermediate strings
-                        // and arrays during high-frequency parsing with substring mapping
                         let components = line.split(whereSeparator: \.isWhitespace).map(String.init)
 
                         if let percentStr = components.first {
@@ -231,21 +277,42 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
                     DispatchQueue.main.async { onOutput("[ERROR] \(line)") }
                 }
 
+                // If user requested cancellation or process was terminated via signal, resume with cancelled error
+                if processController?.isCancelled == true || proc.terminationReason == .uncaughtSignal {
+                    safeContinuation.resume(throwing: YtdlpError.downloadFailed("Download was stopped."))
+                    return
+                }
+
                 let fm = FileManager.default
                 var finalURL: URL? = nil
 
-                let candidates = outputState.getCandidatePaths()
-                for candidate in candidates.reversed() {
-                    let rawURL = candidate.hasPrefix("/") ? URL(fileURLWithPath: candidate) : saveFolder.appendingPathComponent(candidate)
+                // 1. Check deterministic final path emitted by yt-dlp
+                if let directPath = outputState.getFinalPath() {
+                    let rawURL = directPath.hasPrefix("/") ? URL(fileURLWithPath: directPath) : saveFolder.appendingPathComponent(directPath)
                     let resolved = rawURL.standardizedFileURL.resolvingSymlinksInPath()
-
                     if fm.fileExists(atPath: resolved.path),
                        let values = try? resolved.resourceValues(forKeys: [.isRegularFileKey]),
                        values.isRegularFile == true,
-                       YtdlpService.isMediaFilePath(resolved.path),
                        YtdlpService.isPathContained(targetURL: resolved, inside: saveFolder) {
                         finalURL = resolved
-                        break
+                    }
+                }
+
+                // 2. Fallback to candidate paths parsed from output
+                if finalURL == nil {
+                    let candidates = outputState.getCandidatePaths()
+                    for candidate in candidates.reversed() {
+                        let rawURL = candidate.hasPrefix("/") ? URL(fileURLWithPath: candidate) : saveFolder.appendingPathComponent(candidate)
+                        let resolved = rawURL.standardizedFileURL.resolvingSymlinksInPath()
+
+                        if fm.fileExists(atPath: resolved.path),
+                           let values = try? resolved.resourceValues(forKeys: [.isRegularFileKey]),
+                           values.isRegularFile == true,
+                           YtdlpService.isMediaFilePath(resolved.path),
+                           YtdlpService.isPathContained(targetURL: resolved, inside: saveFolder) {
+                            finalURL = resolved
+                            break
+                        }
                     }
                 }
 
@@ -278,11 +345,6 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
 
             do {
                 try process.run()
-                if isCancelled?() == true {
-                    process.terminate()
-                    safeContinuation.resume(throwing: YtdlpError.downloadFailed("Download was cancelled immediately after process launch."))
-                    return
-                }
             } catch {
                 outputPipe.fileHandleForReading.readabilityHandler = nil
                 errorPipe.fileHandleForReading.readabilityHandler = nil

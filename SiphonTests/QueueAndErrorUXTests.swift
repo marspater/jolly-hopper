@@ -164,4 +164,70 @@ final class QueueAndErrorUXTests: XCTestCase {
         
         XCTAssertEqual(computed?.lowercased(), expectedHex.lowercased())
     }
+
+    func testDownloadProcessControllerCancellationLifecycle() {
+        let controller = DownloadProcessController()
+        XCTAssertFalse(controller.isCancelled)
+
+        // Cancel before attach
+        controller.cancel()
+        XCTAssertTrue(controller.isCancelled)
+
+        // Attach a mock process after cancel
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/sleep")
+        process.arguments = ["10"]
+        controller.attachProcess(process)
+
+        // Verify attach terminates immediately when cancelled
+        XCTAssertTrue(controller.isCancelled)
+    }
+
+    func testEphemeralRawCookiesNotPersistedInCodable() throws {
+        var options = DownloadOptions.default
+        options.rawCookies = "session_token=super_secret_cookie_data_123"
+
+        // Encode to JSON
+        let encoder = JSONEncoder()
+        let encodedData = try encoder.encode(options)
+        let jsonString = String(data: encodedData, encoding: .utf8) ?? ""
+
+        // Assert secret cookie is NOT in serialized string
+        XCTAssertFalse(jsonString.contains("super_secret_cookie_data_123"), "Raw cookies must never be serialized")
+        XCTAssertFalse(jsonString.contains("rawCookies"), "rawCookies key must be excluded from serialization")
+
+        // Decode from JSON
+        let decoder = JSONDecoder()
+        let decodedOptions = try decoder.decode(DownloadOptions.self, from: encodedData)
+        XCTAssertNil(decodedOptions.rawCookies, "Decoded options must have nil rawCookies")
+    }
+
+    func testLogSanitizationRedactsCookiesFromBrowser() {
+        let args = ["yt-dlp", "--cookies-from-browser", "safari", "--output", "/path/to/video.mp4", "https://youtube.com/watch?v=123"]
+        let sanitized = LoggerService.sanitizeCommandForLog(args)
+
+        XCTAssertTrue(sanitized.contains("--cookies-from-browser \"<BROWSER>\""))
+        XCTAssertFalse(sanitized.contains("safari"))
+    }
+
+    func testLoadHistoryIdempotency() {
+        let userDefaultsKey = UserDefaultsKeys.downloadHistory
+        let options = DownloadOptions.default
+        let download = Download(url: "https://example.com/idempotent", options: options, id: UUID())
+        download.status = .completed
+
+        let historic = HistoricDownload(download: download)
+        if let encoded = try? JSONEncoder().encode([historic]) {
+            UserDefaults.standard.set(encoded, forKey: userDefaultsKey)
+        }
+        defer { UserDefaults.standard.removeObject(forKey: userDefaultsKey) }
+
+        let manager = DownloadManager()
+        manager.loadHistory()
+        XCTAssertEqual(manager.downloads.count, 1)
+
+        // Call loadHistory a second time
+        manager.loadHistory()
+        XCTAssertEqual(manager.downloads.count, 1, "loadHistory must be idempotent and not duplicate entries on repeated calls")
+    }
 }

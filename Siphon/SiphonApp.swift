@@ -147,6 +147,7 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
     private let repoOwner = "marspater"
     private let repoName = "jolly-hopper"
     private var downloadURL: URL?
+    private var downloadAssetName: String?
     private var expectedChecksum: String?
     private var checksumURL: URL?
     
@@ -175,21 +176,32 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
                     releasePageURL = htmlUrl
                 }
                 
+                downloadURL = nil
+                downloadAssetName = nil
                 expectedChecksum = nil
                 checksumURL = nil
                 
                 if let assets = json["assets"] as? [[String: Any]] {
-                    if let dlpAsset = assets.first(where: {
+                    // Prefer .dmg packages, fallback to .zip/.app.zip
+                    let sortedAssets = assets.sorted { a, b in
+                        let nameA = (a["name"] as? String)?.lowercased() ?? ""
+                        let nameB = (b["name"] as? String)?.lowercased() ?? ""
+                        if nameA.hasSuffix(".dmg") && !nameB.hasSuffix(".dmg") { return true }
+                        return false
+                    }
+
+                    if let dlpAsset = sortedAssets.first(where: {
                         let name = ($0["name"] as? String)?.lowercased() ?? ""
-                        return name.hasSuffix(".dmg") || name.hasSuffix(".zip") || name.hasSuffix(".app.zip") || name.hasSuffix(".tar.gz")
+                        return name.hasSuffix(".dmg") || name.hasSuffix(".zip") || name.hasSuffix(".app.zip")
                     }), let downloadUrlStr = dlpAsset["browser_download_url"] as? String {
                         downloadURL = URL(string: downloadUrlStr)
                         let assetName = (dlpAsset["name"] as? String) ?? ""
+                        downloadAssetName = assetName
                         
                         // Check if a corresponding sha256 checksum asset exists
                         if let sumAsset = assets.first(where: {
                             let name = ($0["name"] as? String)?.lowercased() ?? ""
-                            return name == "\(assetName.lowercased()).sha256" || name == "sha256sums.txt" || name == "checksums.txt"
+                            return name == "\(assetName.lowercased()).sha256" || name == "sha256sums.txt" || name == "checksums.txt" || name.hasSuffix(".sha256")
                         }), let sumUrlStr = sumAsset["browser_download_url"] as? String {
                             checksumURL = URL(string: sumUrlStr)
                         }
@@ -222,14 +234,26 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
         if let cURL = checksumURL {
             if let (cData, _) = try? await URLSession.shared.data(from: cURL),
                let text = String(data: cData, encoding: .utf8) {
-                // Parse sha256 hex string (64 hex characters)
+                // Parse sha256 hex string (64 hex characters) specifically matching downloaded asset
                 let lines = text.components(separatedBy: .newlines)
+                let targetAssetName = downloadAssetName?.lowercased()
+                
+                var fallbackHash: String? = nil
                 for line in lines {
                     let parts = line.split(separator: " ", omittingEmptySubsequences: true)
-                    if let first = parts.first, first.count == 64 {
-                        expectedChecksum = String(first).lowercased()
+                    guard let first = parts.first, first.count == 64 else { continue }
+                    let hash = String(first).lowercased()
+                    
+                    if let target = targetAssetName, line.lowercased().contains(target) {
+                        expectedChecksum = hash
                         break
                     }
+                    if fallbackHash == nil {
+                        fallbackHash = hash
+                    }
+                }
+                if expectedChecksum == nil {
+                    expectedChecksum = fallbackHash
                 }
             }
         }

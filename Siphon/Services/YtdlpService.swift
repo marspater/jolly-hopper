@@ -758,8 +758,7 @@ class YtdlpService: ObservableObject {
         url: String,
         options: DownloadOptions,
         mediaInfo: MediaInfo? = nil,
-        isCancelled: (@Sendable () -> Bool)? = nil,
-        onProcessCreated: @escaping @Sendable (Process) -> Void,
+        processController: DownloadProcessController? = nil,
         onProgress: @escaping @Sendable (Double, String?, String?) -> Void,
         onOutput: @escaping @Sendable (String) -> Void
     ) async throws -> URL {
@@ -804,6 +803,7 @@ class YtdlpService: ObservableObject {
         }
         args.append("--windows-filenames")
         args.append(contentsOf: ["-o", outputTemplate])
+        args.append(contentsOf: ["--print", "after_move:SIPHON_FINAL_PATH:%(filepath)s"])
 
         args.append(contentsOf: buildFormatArgs(options: options, mediaInfo: mediaInfo))
         let codecFallbackWarnings = codecFallbackOutputWarnings(options: options)
@@ -907,8 +907,7 @@ class YtdlpService: ObservableObject {
             outputPath = try await runDownloadProcess(
                 args: args,
                 saveFolder: options.saveFolder,
-                isCancelled: isCancelled,
-                onProcessCreated: onProcessCreated,
+                processController: processController,
                 onProgress: onProgress,
                 onOutput: onOutput
             )
@@ -931,8 +930,7 @@ class YtdlpService: ObservableObject {
                 outputPath = try await runDownloadProcess(
                     args: cleanArgs,
                     saveFolder: options.saveFolder,
-                    isCancelled: isCancelled,
-                    onProcessCreated: onProcessCreated,
+                    processController: processController,
                     onProgress: onProgress,
                     onOutput: onOutput
                 )
@@ -949,8 +947,7 @@ class YtdlpService: ObservableObject {
                 outputPath = try await runDownloadProcess(
                     args: unchunkedArgs,
                     saveFolder: options.saveFolder,
-                    isCancelled: isCancelled,
-                    onProcessCreated: onProcessCreated,
+                    processController: processController,
                     onProgress: onProgress,
                     onOutput: onOutput
                 )
@@ -1717,16 +1714,14 @@ class YtdlpService: ObservableObject {
     private func runDownloadProcess(
         args: [String],
         saveFolder: URL,
-        isCancelled: (@Sendable () -> Bool)? = nil,
-        onProcessCreated: @escaping @Sendable (Process) -> Void,
+        processController: DownloadProcessController? = nil,
         onProgress: @escaping @Sendable (Double, String?, String?) -> Void,
         onOutput: @escaping @Sendable (String) -> Void
     ) async throws -> String {
         try await processRunner.runDownloadProcess(
             args: args,
             saveFolder: saveFolder,
-            isCancelled: isCancelled,
-            onProcessCreated: onProcessCreated,
+            processController: processController,
             onProgress: onProgress,
             onOutput: onOutput
         )
@@ -2043,9 +2038,25 @@ final class StreamBuffer: @unchecked Sendable {
 }
 
 final class ThreadSafeOutputState: @unchecked Sendable {
+    private var finalPath: String?
     private var candidatePaths: [String] = []
     private var errorText: String = ""
     private let lock = NSLock()
+
+    func setFinalPath(_ path: String) {
+        let cleaned = path.trimmingCharacters(in: .whitespacesAndNewlines)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "\"\'"))
+        guard !cleaned.isEmpty else { return }
+        lock.lock()
+        finalPath = cleaned
+        lock.unlock()
+    }
+
+    func getFinalPath() -> String? {
+        lock.lock()
+        defer { lock.unlock() }
+        return finalPath
+    }
 
     func addCandidatePath(_ newPath: String) {
         let cleaned = newPath.trimmingCharacters(in: .whitespacesAndNewlines)
