@@ -55,6 +55,9 @@ struct MenuBarView: View {
             TextField(languageService.s("url_hint"), text: $url)
                 .textFieldStyle(.plain)
                 .font(.geist(12))
+                .onSubmit {
+                    initiateDownload()
+                }
             
             if !url.isEmpty {
                 Button {
@@ -206,63 +209,7 @@ struct MenuBarView: View {
     
     private var downloadButton: some View {
         Button {
-            guard !url.isEmpty else { return }
-            
-            if selectedPreset.hasPrefix("custom_") {
-                let idString = String(selectedPreset.dropFirst(7))
-                if let preset = customPresets.first(where: { $0.id.uuidString == idString }) {
-                    downloadManager.addDownload(url: url, options: DownloadOptions(
-                        saveFolder: getSaveFolder(),
-                        fileType: preset.fileType,
-                        videoFormat: nil,
-                        audioFormat: nil,
-                        videoResolution: preset.videoResolution,
-                        audioQuality: .best,
-                        downloadSubtitles: preset.downloadSubtitles ?? false,
-                        subtitleLanguages: [(preset.subtitleLanguage ?? "en").replacingOccurrences(of: "embed:", with: "")],
-                        subtitleFormat: preset.subtitleFormat ?? .srt,
-                        embedSubtitles: preset.downloadSubtitles ?? false,
-                        downloadThumbnail: false,
-                        embedThumbnail: true,
-                        embedMetadata: true,
-                        splitChapters: preset.splitChapters ?? false,
-                        sponsorBlock: preset.sponsorBlock ?? false,
-                        timeFrameStart: nil,
-                        timeFrameEnd: nil,
-                        customFilename: nil,
-                        videoCodec: preset.videoCodec,
-                        audioCodec: preset.audioCodec,
-                        forceOverwrite: false
-                    ))
-                }
-            } else if let preset = DownloadPreset(rawValue: selectedPreset) {
-                downloadManager.addDownload(url: url, options: DownloadOptions(
-                    saveFolder: getSaveFolder(),
-                    fileType: preset.fileType,
-                    videoFormat: nil,
-                    audioFormat: nil,
-                    videoResolution: preset.videoResolution,
-                    audioQuality: .best,
-                    downloadSubtitles: false,
-                    subtitleLanguages: ["en"],
-                    subtitleFormat: .srt,
-                    embedSubtitles: false,
-                    downloadThumbnail: false,
-                    embedThumbnail: true,
-                    embedMetadata: true,
-                    splitChapters: false,
-                    sponsorBlock: UserDefaults.standard.bool(forKey: UserDefaultsKeys.sponsorBlock),
-                    timeFrameStart: nil,
-                    timeFrameEnd: nil,
-                    customFilename: nil,
-                    videoCodec: preset.videoCodec,
-                    audioCodec: preset.audioCodec,
-                    forceOverwrite: false
-                ))
-            }
-            
-            url = ""
-            MenuBarManager.shared.closePopover()
+            initiateDownload()
         } label: {
             HStack(spacing: 6) {
                 Image(systemName: "arrow.down.circle.fill")
@@ -287,6 +234,66 @@ struct MenuBarView: View {
         .buttonStyle(.plain)
         .disabled(url.isEmpty)
         .shadow(color: url.isEmpty ? .clear : SiphonTheme.accent.opacity(0.35), radius: 6, y: 2)
+    }
+
+    private func initiateDownload() {
+        guard !url.isEmpty else { return }
+        
+        if selectedPreset.hasPrefix("custom_") {
+            let idString = String(selectedPreset.dropFirst(7))
+            if let preset = customPresets.first(where: { $0.id.uuidString == idString }) {
+                downloadManager.addDownload(url: url, options: DownloadOptions(
+                    saveFolder: getSaveFolder(),
+                    fileType: preset.fileType,
+                    videoFormat: nil,
+                    audioFormat: nil,
+                    videoResolution: preset.videoResolution,
+                    audioQuality: .best,
+                    downloadSubtitles: preset.downloadSubtitles ?? false,
+                    subtitleLanguages: [(preset.subtitleLanguage ?? "en").replacingOccurrences(of: "embed:", with: "")],
+                    subtitleFormat: preset.subtitleFormat ?? .srt,
+                    embedSubtitles: preset.downloadSubtitles ?? false,
+                    downloadThumbnail: false,
+                    embedThumbnail: true,
+                    embedMetadata: true,
+                    splitChapters: preset.splitChapters ?? false,
+                    sponsorBlock: preset.sponsorBlock ?? false,
+                    timeFrameStart: nil,
+                    timeFrameEnd: nil,
+                    customFilename: nil,
+                    videoCodec: preset.videoCodec,
+                    audioCodec: preset.audioCodec,
+                    forceOverwrite: false
+                ))
+            }
+        } else if let preset = DownloadPreset(rawValue: selectedPreset) {
+            downloadManager.addDownload(url: url, options: DownloadOptions(
+                saveFolder: getSaveFolder(),
+                fileType: preset.fileType,
+                videoFormat: nil,
+                audioFormat: nil,
+                videoResolution: preset.videoResolution,
+                audioQuality: .best,
+                downloadSubtitles: false,
+                subtitleLanguages: ["en"],
+                subtitleFormat: .srt,
+                embedSubtitles: false,
+                downloadThumbnail: false,
+                embedThumbnail: true,
+                embedMetadata: true,
+                splitChapters: false,
+                sponsorBlock: UserDefaults.standard.bool(forKey: UserDefaultsKeys.sponsorBlock),
+                timeFrameStart: nil,
+                timeFrameEnd: nil,
+                customFilename: nil,
+                videoCodec: preset.videoCodec,
+                audioCodec: preset.audioCodec,
+                forceOverwrite: false
+            ))
+        }
+        
+        url = ""
+        MenuBarManager.shared.closePopover()
     }
     
     private func getSaveFolder() -> URL {
