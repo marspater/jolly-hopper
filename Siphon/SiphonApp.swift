@@ -219,10 +219,17 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
                         let assetName = (dlpAsset["name"] as? String) ?? ""
                         downloadAssetName = assetName
                         
-                        // Check if a corresponding sha256 checksum asset exists
+                        // Check if an exact corresponding sha256 checksum asset or central manifest exists
+                        let lowerAssetName = assetName.lowercased()
                         if let sumAsset = assets.first(where: {
                             let name = ($0["name"] as? String)?.lowercased() ?? ""
-                            return name == "\(assetName.lowercased()).sha256" || name == "sha256sums.txt" || name == "checksums.txt" || name.hasSuffix(".sha256")
+                            return name == "\(lowerAssetName).sha256" ||
+                                   name == "\(lowerAssetName).sha256.txt" ||
+                                   name == "\(lowerAssetName).sha256sum" ||
+                                   name == "sha256sums.txt" ||
+                                   name == "checksums.txt" ||
+                                   name == "sha256sum.txt" ||
+                                   name == "checksums.sha256"
                         }), let sumUrlStr = sumAsset["browser_download_url"] as? String {
                             checksumURL = URL(string: sumUrlStr)
                         }
@@ -257,21 +264,23 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
                let text = String(data: cData, encoding: .utf8) {
                 // Parse sha256 hex string (64 hex characters) specifically matching downloaded asset
                 let lines = text.components(separatedBy: .newlines)
-                let targetAssetName = downloadAssetName?.lowercased()
+                let targetAssetName = downloadAssetName?.lowercased() ?? ""
+                let cURLName = cURL.lastPathComponent.lowercased()
+                let isAssetSpecificChecksumFile = !targetAssetName.isEmpty && cURLName.hasPrefix(targetAssetName)
                 
                 for line in lines {
                     let parts = line.split(separator: " ", omittingEmptySubsequences: true)
                     guard let first = parts.first, first.count == 64 else { continue }
                     let hash = String(first).lowercased()
                     
-                    // Single-hash file (e.g. package.dmg.sha256 containing just the hash)
-                    if parts.count == 1 && lines.filter({ !$0.trimmingCharacters(in: .whitespaces).isEmpty }).count == 1 {
+                    // Single-hash file specifically named for this asset (e.g. Siphon-arm64.dmg.sha256)
+                    if isAssetSpecificChecksumFile && parts.count <= 2 {
                         expectedChecksum = hash
                         break
                     }
 
                     // Multi-entry manifest (e.g. SHA256SUMS.txt): must strictly match targeted asset name
-                    if let target = targetAssetName, line.lowercased().contains(target) {
+                    if !targetAssetName.isEmpty && line.lowercased().contains(targetAssetName) {
                         expectedChecksum = hash
                         break
                     }
