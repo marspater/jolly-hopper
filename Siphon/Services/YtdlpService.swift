@@ -288,6 +288,20 @@ class YtdlpService: ObservableObject {
         return supportedMediaExtensions.contains(ext)
     }
 
+    nonisolated static func findAria2cPath() -> String? {
+        let candidates = [
+            "/opt/homebrew/bin/aria2c",
+            "/usr/local/bin/aria2c",
+            "/usr/bin/aria2c"
+        ]
+        for candidate in candidates {
+            if FileManager.default.isExecutableFile(atPath: candidate) {
+                return candidate
+            }
+        }
+        return nil
+    }
+
     private func isExecutableBinary(at url: URL) -> Bool {
         FileManager.default.fileExists(atPath: url.path) && FileManager.default.isExecutableFile(atPath: url.path)
     }
@@ -1065,6 +1079,7 @@ class YtdlpService: ObservableObject {
             case useFfmpegHls
             case injectBrowserCookies(browser: String)
             case retryTransientNetworkError
+            case disableAria2c
         }
 
         var triedStrategies = Set<DownloadRecoveryStrategy>()
@@ -1152,6 +1167,24 @@ class YtdlpService: ObservableObject {
                     LoggerService.shared.log("Transient CDN connection refusal encountered (\(errText.trimmingCharacters(in: .whitespacesAndNewlines))). Retrying download with fresh connection...", level: .warning)
                     onOutput("[Siphon Info] CDN edge server refused connection. Retrying with fresh stream endpoint...\n")
                     try? await Task.sleep(nanoseconds: 1_000_000_000)
+                    continue
+                }
+
+                // Strategy 6: aria2c download error -> Fallback to native downloader
+                if !errText.isEmpty, (errText.contains("aria2c") || errText.contains("aria2")), currentArgs.contains("aria2c"), !triedStrategies.contains(.disableAria2c) {
+                    triedStrategies.insert(.disableAria2c)
+                    LoggerService.shared.log("Aria2c multi-connection download error encountered (\(errText.trimmingCharacters(in: .whitespacesAndNewlines))). Falling back to native downloader...", level: .warning)
+                    onOutput("[Siphon Info] Aria2c multi-connection unavailable. Retrying with native downloader...\n")
+                    var cleanArgs = currentArgs
+                    if let idx = cleanArgs.firstIndex(of: "--downloader"), idx + 1 < cleanArgs.count, cleanArgs[idx + 1] == "aria2c" {
+                        cleanArgs.remove(at: idx + 1)
+                        cleanArgs.remove(at: idx)
+                    }
+                    if let idx = cleanArgs.firstIndex(of: "--downloader-args") {
+                        cleanArgs.remove(at: idx + 1)
+                        cleanArgs.remove(at: idx)
+                    }
+                    currentArgs = cleanArgs
                     continue
                 }
 
@@ -2006,6 +2039,12 @@ class YtdlpService: ObservableObject {
         } else if isThisVid {
             args.append(contentsOf: ["--add-header", "Referer:https://thisvid.com/"])
             args.append(contentsOf: ["--add-header", "Origin:https://thisvid.com"])
+            if Self.findAria2cPath() != nil {
+                args.append(contentsOf: [
+                    "--downloader", "aria2c",
+                    "--downloader-args", "aria2c:-s 16 -x 16 -k 1M -j 16 --min-split-size=1M --summary-interval=1"
+                ])
+            }
         } else if parsedHost == "single-stream video site.com" || parsedHost.hasSuffix(".single-stream video site.com") {
             args.append(contentsOf: ["--add-header", "Referer:https://single-stream video site.com/"])
         } else if lowerUrl.contains(".m3u8") || lowerUrl.contains(".mpd") {

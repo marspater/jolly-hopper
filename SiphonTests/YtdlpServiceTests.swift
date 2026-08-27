@@ -1182,7 +1182,34 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertTrue(args.contains("--js-runtimes"), "Download command must pass --js-runtimes for YouTube challenge solving")
         XCTAssertFalse(args.contains("generic:impersonate"), "YouTube downloads must not pass generic:impersonate")
     }
+
+    func testThisVidAria2cAppendedWhenAvailable() async throws {
+        let capturedArgsBox = TestBox<[String]>([])
+        service.processRunner = MockYtdlpProcessRunner(mockDownload: { args in
+            capturedArgsBox.value = args
+            return "[download] Destination: /tmp/test_thisvid.mp4\n"
+        })
+
+        _ = try await service.download(
+            url: "https://thisvid.com/videos/hung-bodybuilder-jerk-flex-and-shoot-a-huge-load/",
+            options: DownloadOptions.default,
+            onProgress: { _, _, _ in },
+            onOutput: { _ in }
+        )
+
+        let args = capturedArgsBox.value
+        XCTAssertTrue(args.contains("Referer:https://thisvid.com/"))
+        XCTAssertTrue(args.contains("Origin:https://thisvid.com"))
+        if YtdlpService.findAria2cPath() != nil {
+            XCTAssertTrue(args.contains("--downloader"))
+            if let idx = args.firstIndex(of: "--downloader") {
+                XCTAssertEqual(args[idx + 1], "aria2c")
+            }
+            XCTAssertTrue(args.contains("--downloader-args"))
+        }
+    }
 }
+
 
 
 
