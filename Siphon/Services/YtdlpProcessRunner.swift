@@ -207,6 +207,39 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
                     return
                 }
 
+                // Parse aria2c multi-connection progress lines (e.g. "[#50a1f3 18MiB/220MiB(8%) CN:16 DL:27MiB ETA:7s]")
+                if (line.hasPrefix("[#") || line.contains("CN:")) && line.contains("DL:") {
+                    if let openParen = line.range(of: "("),
+                       let closeParen = line.range(of: "%)", range: openParen.upperBound..<line.endIndex) {
+                        let percentStr = String(line[openParen.upperBound..<closeParen.lowerBound]).trimmingCharacters(in: .whitespaces)
+                        if let percentVal = Double(percentStr), !percentVal.isNaN && !percentVal.isInfinite {
+                            let safePercent = max(0.0, min(1.0, percentVal / 100.0))
+
+                            var speedStr: String? = nil
+                            if let dlRange = line.range(of: "DL:") {
+                                let afterDl = line[dlRange.upperBound...]
+                                if let token = afterDl.split(whereSeparator: { $0.isWhitespace || $0 == "]" }).first {
+                                    speedStr = String(token) + "/s"
+                                }
+                            }
+
+                            var etaStr: String? = nil
+                            if let etaRange = line.range(of: "ETA:") {
+                                let afterEta = line[etaRange.upperBound...]
+                                if let token = afterEta.split(whereSeparator: { $0.isWhitespace || $0 == "]" }).first {
+                                    etaStr = String(token)
+                                }
+                            }
+
+                            DispatchQueue.main.async {
+                                onOutput(line)
+                                onProgress(safePercent, speedStr, etaStr)
+                            }
+                            return
+                        }
+                    }
+                }
+
                 if line.contains("[info] Writing video thumbnail") ||
                    line.contains("[info] Writing video subtitle") ||
                    line.contains("[info] Writing video description") ||
