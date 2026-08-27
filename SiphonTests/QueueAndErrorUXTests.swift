@@ -334,4 +334,66 @@ final class QueueAndErrorUXTests: XCTestCase {
 
         XCTAssertEqual(parsedHash, "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc", "Must strictly parse exact asset line without matching substrings or suffixes")
     }
+
+    func testTransientConnectionRefusedRetry() async throws {
+        let service = YtdlpService()
+        service.ytdlpPath = URL(fileURLWithPath: "/usr/local/bin/yt-dlp")
+        let callCountBox = TestBox<Int>(0)
+
+        service.processRunner = MockYtdlpProcessRunner(mockDownload: { _ in
+            callCountBox.value += 1
+            if callCountBox.value == 1 {
+                throw YtdlpError.downloadFailed("ERROR: [download] Got error: HTTPSConnection(host='ip410264893.ahcdn.com', port=443): Failed to establish a new connection: [Errno 61] Connection refused. Giving up after 10 retries")
+            }
+            return "/tmp/cdn_retry_success.mp4"
+        })
+
+        let result = try await service.download(
+            url: "https://thisvid.com/videos/test-slug/",
+            options: DownloadOptions.default,
+            onProgress: { _, _, _ in },
+            onOutput: { _ in }
+        )
+
+        XCTAssertEqual(callCountBox.value, 2, "Must retry download when transient CDN connection refused is encountered")
+        XCTAssertEqual(result.lastPathComponent, "cdn_retry_success.mp4")
+    }
+
+    func testFileExistsIgnoresNonMediaCompanionFiles() {
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try? FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let baseName = "Hung bodybuilder jerk flex and shoot a huge load"
+        let thumbFile = tempDir.appendingPathComponent("\(baseName).jpg")
+        let partFile = tempDir.appendingPathComponent("\(baseName).mp4.part")
+        try? "thumb".data(using: .utf8)?.write(to: thumbFile)
+        try? "part".data(using: .utf8)?.write(to: partFile)
+
+        let contents = (try? FileManager.default.contentsOfDirectory(at: tempDir, includingPropertiesForKeys: nil)) ?? []
+        let matches = contents.filter { file in
+            let nameWithoutExt = file.deletingPathExtension().lastPathComponent
+            let isExactMatch = nameWithoutExt == baseName
+            let isPart = file.lastPathComponent.hasSuffix(".part") || file.lastPathComponent.hasSuffix(".ytdl")
+            let isMedia = YtdlpService.isMediaFilePath(file.path)
+            return isExactMatch && !isPart && isMedia
+        }
+
+        XCTAssertTrue(matches.isEmpty, "Companion .jpg and .part files must NOT trigger fileExists match")
+
+        let mediaFile = tempDir.appendingPathComponent("\(baseName).mp4")
+        try? "video".data(using: .utf8)?.write(to: mediaFile)
+
+        let updatedContents = (try? FileManager.default.contentsOfDirectory(at: tempDir, includingPropertiesForKeys: nil)) ?? []
+        let updatedMatches = updatedContents.filter { file in
+            let nameWithoutExt = file.deletingPathExtension().lastPathComponent
+            let isExactMatch = nameWithoutExt == baseName
+            let isPart = file.lastPathComponent.hasSuffix(".part") || file.lastPathComponent.hasSuffix(".ytdl")
+            let isMedia = YtdlpService.isMediaFilePath(file.path)
+            return isExactMatch && !isPart && isMedia
+        }
+
+        XCTAssertEqual(updatedMatches.count, 1, "Real media file must trigger fileExists match")
+    }
 }
+
