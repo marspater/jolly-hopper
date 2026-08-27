@@ -242,6 +242,112 @@ struct DownloadOptions: Codable {
     var forceOverwrite: Bool?
     var rawCookies: String?
     var selectedFormatId: String?
+
+    enum CodingKeys: String, CodingKey {
+        case saveFolder
+        case fileType
+        case videoFormat
+        case audioFormat
+        case videoResolution
+        case audioQuality
+        case downloadSubtitles
+        case subtitleLanguages
+        case subtitleFormat
+        case embedSubtitles
+        case downloadThumbnail
+        case embedThumbnail
+        case embedMetadata
+        case splitChapters
+        case sponsorBlock
+        case timeFrameStart
+        case timeFrameEnd
+        case customFilename
+        case videoCodec
+        case audioCodec
+        case conversionCodec
+        case forceOverwrite
+        case selectedFormatId
+    }
+
+    init(
+        saveFolder: URL,
+        fileType: MediaFileType,
+        videoFormat: VideoFormat? = nil,
+        audioFormat: AudioFormat? = nil,
+        videoResolution: VideoResolution? = nil,
+        audioQuality: AudioQuality? = nil,
+        downloadSubtitles: Bool = false,
+        subtitleLanguages: [String] = ["en"],
+        subtitleFormat: SubtitleFormat? = .srt,
+        embedSubtitles: Bool = false,
+        downloadThumbnail: Bool = false,
+        embedThumbnail: Bool = true,
+        embedMetadata: Bool = true,
+        splitChapters: Bool = false,
+        sponsorBlock: Bool = false,
+        timeFrameStart: String? = nil,
+        timeFrameEnd: String? = nil,
+        customFilename: String? = nil,
+        videoCodec: VideoCodec? = nil,
+        audioCodec: AudioCodec? = nil,
+        conversionCodec: ConversionCodec? = .none,
+        forceOverwrite: Bool? = false,
+        rawCookies: String? = nil,
+        selectedFormatId: String? = nil
+    ) {
+        self.saveFolder = saveFolder
+        self.fileType = fileType
+        self.videoFormat = videoFormat
+        self.audioFormat = audioFormat
+        self.videoResolution = videoResolution
+        self.audioQuality = audioQuality
+        self.downloadSubtitles = downloadSubtitles
+        self.subtitleLanguages = subtitleLanguages
+        self.subtitleFormat = subtitleFormat
+        self.embedSubtitles = embedSubtitles
+        self.downloadThumbnail = downloadThumbnail
+        self.embedThumbnail = embedThumbnail
+        self.embedMetadata = embedMetadata
+        self.splitChapters = splitChapters
+        self.sponsorBlock = sponsorBlock
+        self.timeFrameStart = timeFrameStart
+        self.timeFrameEnd = timeFrameEnd
+        self.customFilename = customFilename
+        self.videoCodec = videoCodec
+        self.audioCodec = audioCodec
+        self.conversionCodec = conversionCodec
+        self.forceOverwrite = forceOverwrite
+        self.rawCookies = rawCookies
+        self.selectedFormatId = selectedFormatId
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.saveFolder = try container.decode(URL.self, forKey: .saveFolder)
+        self.fileType = try container.decode(MediaFileType.self, forKey: .fileType)
+        self.videoFormat = try container.decodeIfPresent(VideoFormat.self, forKey: .videoFormat)
+        self.audioFormat = try container.decodeIfPresent(AudioFormat.self, forKey: .audioFormat)
+        self.videoResolution = try container.decodeIfPresent(VideoResolution.self, forKey: .videoResolution)
+        self.audioQuality = try container.decodeIfPresent(AudioQuality.self, forKey: .audioQuality)
+        self.downloadSubtitles = try container.decodeIfPresent(Bool.self, forKey: .downloadSubtitles) ?? false
+        self.subtitleLanguages = try container.decodeIfPresent([String].self, forKey: .subtitleLanguages) ?? ["en"]
+        self.subtitleFormat = try container.decodeIfPresent(SubtitleFormat.self, forKey: .subtitleFormat)
+        self.embedSubtitles = try container.decodeIfPresent(Bool.self, forKey: .embedSubtitles) ?? false
+        self.downloadThumbnail = try container.decodeIfPresent(Bool.self, forKey: .downloadThumbnail) ?? false
+        self.embedThumbnail = try container.decodeIfPresent(Bool.self, forKey: .embedThumbnail) ?? true
+        self.embedMetadata = try container.decodeIfPresent(Bool.self, forKey: .embedMetadata) ?? true
+        self.splitChapters = try container.decodeIfPresent(Bool.self, forKey: .splitChapters) ?? false
+        self.sponsorBlock = try container.decodeIfPresent(Bool.self, forKey: .sponsorBlock) ?? false
+        self.timeFrameStart = try container.decodeIfPresent(String.self, forKey: .timeFrameStart)
+        self.timeFrameEnd = try container.decodeIfPresent(String.self, forKey: .timeFrameEnd)
+        self.customFilename = try container.decodeIfPresent(String.self, forKey: .customFilename)
+        self.videoCodec = try container.decodeIfPresent(VideoCodec.self, forKey: .videoCodec)
+        self.audioCodec = try container.decodeIfPresent(AudioCodec.self, forKey: .audioCodec)
+        self.conversionCodec = try container.decodeIfPresent(ConversionCodec.self, forKey: .conversionCodec)
+        self.forceOverwrite = try container.decodeIfPresent(Bool.self, forKey: .forceOverwrite)
+        self.rawCookies = nil // Ephemeral only, never loaded from persistent history/json
+        self.selectedFormatId = try container.decodeIfPresent(String.self, forKey: .selectedFormatId)
+    }
     
     static var `default`: DownloadOptions {
         let saveFolderURL = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first ?? URL(fileURLWithPath: NSHomeDirectory() + "/Downloads")
@@ -394,7 +500,7 @@ enum VideoResolution: String, Codable, CaseIterable, Identifiable {
     
     var ytdlpValue: String {
         switch self {
-        case .best: return "bestvideo"
+        case .best: return "bestvideo*+bestaudio/best"
         case .r2160p: return "bestvideo[height<=2160]"
         case .r1440p: return "bestvideo[height<=1440]"
         case .r1080p: return "bestvideo[height<=1080]"
@@ -402,7 +508,7 @@ enum VideoResolution: String, Codable, CaseIterable, Identifiable {
         case .r480p: return "bestvideo[height<=480]"
         case .r360p: return "bestvideo[height<=360]"
         case .r240p: return "bestvideo[height<=240]"
-        case .worst: return "worstvideo"
+        case .worst: return "worstvideo*+worstaudio/worst"
         }
     }
     

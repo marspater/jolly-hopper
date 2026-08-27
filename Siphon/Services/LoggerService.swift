@@ -32,6 +32,7 @@ class LoggerService: ObservableObject {
 
         let sensitiveValueFlags: [String: String] = [
             "--cookies": "\"<COOKIE_FILE>\"",
+            "--cookies-from-browser": "\"<BROWSER>\"",
             "--add-header": "\"<REDACTED_HEADER>\"",
             "--header": "\"<REDACTED_HEADER>\"",
             "--username": "\"<USERNAME>\"",

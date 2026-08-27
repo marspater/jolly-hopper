@@ -28,8 +28,7 @@ final class MockYtdlpProcessRunner: YtdlpProcessRunning, @unchecked Sendable {
     func runDownloadProcess(
         args: [String],
         saveFolder: URL,
-        isCancelled: (@Sendable () -> Bool)?,
-        onProcessCreated: @escaping @Sendable (Process) -> Void,
+        processController: DownloadProcessController?,
         onProgress: @escaping @Sendable (Double, String?, String?) -> Void,
         onOutput: @escaping @Sendable (String) -> Void
     ) async throws -> String {
@@ -239,7 +238,6 @@ final class YtdlpServiceTests: XCTestCase {
         _ = try await service.download(
             url: "https://example.com/video",
             options: options,
-            onProcessCreated: { _ in },
             onProgress: { _, _, _ in },
             onOutput: { _ in }
         )
@@ -263,7 +261,6 @@ final class YtdlpServiceTests: XCTestCase {
         _ = try await service.download(
             url: "https://example.com/video",
             options: options,
-            onProcessCreated: { _ in },
             onProgress: { _, _, _ in },
             onOutput: { _ in }
         )
@@ -289,7 +286,6 @@ final class YtdlpServiceTests: XCTestCase {
         _ = try await service.download(
             url: "https://example.com/audio",
             options: options,
-            onProcessCreated: { _ in },
             onProgress: { _, _, _ in },
             onOutput: { _ in }
         )
@@ -314,7 +310,6 @@ final class YtdlpServiceTests: XCTestCase {
         _ = try await service.download(
             url: "https://thisvid.com/playlist/461301/video/huge-butt5/",
             options: options,
-            onProcessCreated: { _ in },
             onProgress: { _, _, _ in },
             onOutput: { _ in }
         )
@@ -338,7 +333,6 @@ final class YtdlpServiceTests: XCTestCase {
         _ = try await service.download(
             url: "https://example.com/video",
             options: options,
-            onProcessCreated: { _ in },
             onProgress: { _, _, _ in },
             onOutput: { _ in }
         )
@@ -405,7 +399,6 @@ final class YtdlpServiceTests: XCTestCase {
         async let resultA = serviceA.download(
             url: "https://example.com/videoA",
             options: optionsA,
-            onProcessCreated: { _ in },
             onProgress: { _, _, _ in },
             onOutput: { _ in }
         )
@@ -413,7 +406,6 @@ final class YtdlpServiceTests: XCTestCase {
         async let resultB = serviceB.download(
             url: "https://example.com/videoB",
             options: optionsB,
-            onProcessCreated: { _ in },
             onProgress: { _, _, _ in },
             onOutput: { _ in }
         )
@@ -619,7 +611,6 @@ final class YtdlpServiceTests: XCTestCase {
         _ = try await service.download(
             url: "https://example.com/videos/test-progressive-stream.mp4",
             options: DownloadOptions.default,
-            onProcessCreated: { _ in },
             onProgress: { _, _, _ in },
             onOutput: { _ in }
         )
@@ -640,7 +631,6 @@ final class YtdlpServiceTests: XCTestCase {
         _ = try await service.download(
             url: "https://thisvid.com/videos/test-rate-limited-stream",
             options: DownloadOptions.default,
-            onProcessCreated: { _ in },
             onProgress: { _, _, _ in },
             onOutput: { _ in }
         )
@@ -672,7 +662,6 @@ final class YtdlpServiceTests: XCTestCase {
             url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
             options: directOptions,
             mediaInfo: mixedInfo,
-            onProcessCreated: { _ in },
             onProgress: { _, _, _ in },
             onOutput: { _ in }
         )
@@ -690,7 +679,6 @@ final class YtdlpServiceTests: XCTestCase {
             url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
             options: dashOptions,
             mediaInfo: mixedInfo,
-            onProcessCreated: { _ in },
             onProgress: { _, _, _ in },
             onOutput: { _ in }
         )
@@ -708,7 +696,6 @@ final class YtdlpServiceTests: XCTestCase {
         _ = try await service.download(
             url: "https://www.boyfriend.tv/videos/12345/test-hls-stream",
             options: DownloadOptions.default,
-            onProcessCreated: { _ in },
             onProgress: { _, _, _ in },
             onOutput: { _ in }
         )
@@ -736,7 +723,6 @@ final class YtdlpServiceTests: XCTestCase {
         let result = try await service.download(
             url: "https://example.com/legacy-server-no-range.mp4",
             options: DownloadOptions.default,
-            onProcessCreated: { _ in },
             onProgress: { _, _, _ in },
             onOutput: { _ in }
         )
@@ -832,7 +818,6 @@ final class YtdlpServiceTests: XCTestCase {
             _ = try await service.download(
                 url: "https://example.com/test",
                 options: DownloadOptions.default,
-                onProcessCreated: { _ in },
                 onProgress: { _, _, _ in },
                 onOutput: { _ in }
             )
@@ -925,7 +910,6 @@ final class YtdlpServiceTests: XCTestCase {
         _ = try await service.download(
             url: "https://www.boyfriendtv.com/videos/1140993/horus-scat-piss-chute/",
             options: DownloadOptions.default,
-            onProcessCreated: { _ in },
             onProgress: { _, _, _ in },
             onOutput: { _ in }
         )
@@ -1123,7 +1107,6 @@ final class YtdlpServiceTests: XCTestCase {
         _ = try await service.download(
             url: "https://de.xhamster.com/videos/cam-cum-big-fat-cock-erupts-xhQvXns?from=search",
             options: DownloadOptions.default,
-            onProcessCreated: { _ in },
             onProgress: { _, _, _ in },
             onOutput: { _ in }
         )
