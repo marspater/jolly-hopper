@@ -328,5 +328,109 @@ final class MediaInfoTests: XCTestCase {
         )
         XCTAssertEqual(format.displaySummary, "")
     }
+
+    func testResolveSelectedFormats_PrioritizesOriginalAudioTrackOverDubbedAudio() {
+        let videoFormat = MediaFormat(
+            formatId: "270",
+            ext: "mp4",
+            resolution: "1920x1080",
+            fps: 60,
+            vcodec: "avc1.64002a",
+            acodec: "none",
+            abr: nil,
+            vbr: 4500,
+            filesize: 50000000,
+            filesizeApprox: nil,
+            formatNote: "1080p",
+            formatProtocol: "https"
+        )
+        let arabicDubbedAudio = MediaFormat(
+            formatId: "140-0",
+            ext: "m4a",
+            resolution: nil,
+            fps: nil,
+            vcodec: "none",
+            acodec: "mp4a.40.2",
+            abr: 135.0,
+            vbr: nil,
+            filesize: 6000000,
+            filesizeApprox: nil,
+            formatNote: "Arabic, medium - dubbed",
+            formatProtocol: "https",
+            language: "ar",
+            languagePreference: -1
+        )
+        let englishOriginalAudio = MediaFormat(
+            formatId: "140-23",
+            ext: "m4a",
+            resolution: nil,
+            fps: nil,
+            vcodec: "none",
+            acodec: "mp4a.40.2",
+            abr: 125.0,
+            vbr: nil,
+            filesize: 5000000,
+            filesizeApprox: nil,
+            formatNote: "English (US) original (default), medium",
+            formatProtocol: "https",
+            language: "en-US",
+            languagePreference: 10
+        )
+        let mediaInfo = MediaInfo(
+            id: "test1234",
+            title: "Multi-Language Test Video",
+            formats: [videoFormat, arabicDubbedAudio, englishOriginalAudio]
+        )
+        let options = DownloadOptions.default
+        let resolved = mediaInfo.resolveSelectedFormats(options: options)
+
+        XCTAssertEqual(resolved.count, 2)
+        XCTAssertEqual(resolved[0].formatId, "270")
+        XCTAssertEqual(resolved[1].formatId, "140-23", "Should select original English audio track (140-23) over higher-bitrate Arabic dubbed audio (140-0)")
+    }
+
+    func testResolveSelectedFormats_AudioOnlyPrioritizesOriginalTrack() {
+        let arabicDubbedAudio = MediaFormat(
+            formatId: "140-0",
+            ext: "m4a",
+            resolution: nil,
+            fps: nil,
+            vcodec: "none",
+            acodec: "mp4a.40.2",
+            abr: 135.0,
+            vbr: nil,
+            filesize: 6000000,
+            filesizeApprox: nil,
+            formatNote: "Arabic - dubbed",
+            language: "ar",
+            languagePreference: -1
+        )
+        let englishOriginalAudio = MediaFormat(
+            formatId: "140-23",
+            ext: "m4a",
+            resolution: nil,
+            fps: nil,
+            vcodec: "none",
+            acodec: "mp4a.40.2",
+            abr: 125.0,
+            vbr: nil,
+            filesize: 5000000,
+            filesizeApprox: nil,
+            formatNote: "English original (default)",
+            language: "en",
+            languagePreference: 10
+        )
+        let mediaInfo = MediaInfo(
+            id: "test1234",
+            title: "Audio Only Test",
+            formats: [arabicDubbedAudio, englishOriginalAudio]
+        )
+        var options = DownloadOptions.default
+        options.fileType = .m4a
+        let resolved = mediaInfo.resolveSelectedFormats(options: options)
+
+        XCTAssertEqual(resolved.count, 1)
+        XCTAssertEqual(resolved[0].formatId, "140-23", "Audio-only download should pick original track over dubbed track")
+    }
 }
 
