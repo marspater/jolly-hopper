@@ -6,7 +6,7 @@ final class NotificationService: NSObject, @unchecked Sendable, UNUserNotificati
     static let shared = NotificationService()
 
     private func logMessage(_ message: String, level: LoggerService.LogLevel) {
-        Task { @MainActor in
+        DispatchQueue.main.async {
             LoggerService.shared.log(message, level: level)
         }
     }
@@ -126,15 +126,13 @@ final class NotificationService: NSObject, @unchecked Sendable, UNUserNotificati
     }
 
     func sendDownloadCompleted(filename: String, languageService: LanguageService? = nil) {
-        Task { @MainActor in
-            let cleanFilename = filename.decodingHTMLEntities()
-            let lang = languageService ?? LanguageService()
-            let content = UNMutableNotificationContent()
-            content.title = lang.s("download_completed_title")
-            content.body = String(format: lang.s("download_completed_body"), cleanFilename)
-            content.categoryIdentifier = "download"
-            self.sendNotification(content: content, logName: "Completed: \(cleanFilename)")
-        }
+        let cleanFilename = filename.decodingHTMLEntities()
+        let lang = languageService ?? LanguageService()
+        let content = UNMutableNotificationContent()
+        content.title = lang.s("download_completed_title")
+        content.body = String(format: lang.s("download_completed_body"), cleanFilename)
+        content.categoryIdentifier = "download"
+        self.sendNotification(content: content, logName: "Completed: \(cleanFilename)")
     }
 
     func sendEncodingCompleted(filename: String, codec: String, languageService: LanguageService? = nil) {
@@ -146,27 +144,23 @@ final class NotificationService: NSObject, @unchecked Sendable, UNUserNotificati
     }
 
     func sendDownloadFailed(filename: String, languageService: LanguageService? = nil) {
-        Task { @MainActor in
-            let cleanFilename = filename.decodingHTMLEntities()
-            let lang = languageService ?? LanguageService()
-            let content = UNMutableNotificationContent()
-            content.title = lang.s("download_failed_title")
-            content.body = String(format: lang.s("download_failed_body"), cleanFilename)
-            content.categoryIdentifier = "download"
-            self.sendNotification(content: content, logName: "Failed: \(cleanFilename)")
-        }
+        let cleanFilename = filename.decodingHTMLEntities()
+        let lang = languageService ?? LanguageService()
+        let content = UNMutableNotificationContent()
+        content.title = lang.s("download_failed_title")
+        content.body = String(format: lang.s("download_failed_body"), cleanFilename)
+        content.categoryIdentifier = "download"
+        self.sendNotification(content: content, logName: "Failed: \(cleanFilename)")
     }
 
     func sendDownloadStopped(filename: String, languageService: LanguageService? = nil) {
-        Task { @MainActor in
-            let cleanFilename = filename.decodingHTMLEntities()
-            let lang = languageService ?? LanguageService()
-            let content = UNMutableNotificationContent()
-            content.title = lang.s("download_stopped_title")
-            content.body = String(format: lang.s("download_stopped_body"), cleanFilename)
-            content.categoryIdentifier = "download"
-            self.sendNotification(content: content, logName: "Stopped: \(cleanFilename)")
-        }
+        let cleanFilename = filename.decodingHTMLEntities()
+        let lang = languageService ?? LanguageService()
+        let content = UNMutableNotificationContent()
+        content.title = lang.s("download_stopped_title")
+        content.body = String(format: lang.s("download_stopped_body"), cleanFilename)
+        content.categoryIdentifier = "download"
+        self.sendNotification(content: content, logName: "Stopped: \(cleanFilename)")
     }
 
     func sendYtdlpUpdateSucceeded(version: String) {
