@@ -562,6 +562,7 @@ struct FileThumbnailView: View {
                 }
                 .menuStyle(.borderlessButton)
                 .help(languageService.s("more_actions"))
+                .accessibilityLabel(languageService.s("more_actions"))
             }
             
             // Downloading / Fetching / Processing state: Pause + Stop (revealed on hover) + More Menu
@@ -575,6 +576,7 @@ struct FileThumbnailView: View {
                 .buttonStyle(.plain)
                 .foregroundColor(SiphonTheme.statusQueued)
                 .help(languageService.s("pause"))
+                .accessibilityLabel(languageService.s("pause"))
                 
                 if isHovering {
                     Button {
@@ -586,6 +588,7 @@ struct FileThumbnailView: View {
                     .buttonStyle(.plain)
                     .foregroundColor(SiphonTheme.statusFailed)
                     .help(languageService.s("stop"))
+                    .accessibilityLabel(languageService.s("stop"))
                     .transition(.opacity)
                 }
                 
@@ -633,6 +636,7 @@ struct FileThumbnailView: View {
                 .buttonStyle(.plain)
                 .foregroundColor(SiphonTheme.statusQueued)
                 .help(languageService.s("pause"))
+                .accessibilityLabel(languageService.s("pause"))
                 
                 Menu {
                     Button {
@@ -685,6 +689,7 @@ struct FileThumbnailView: View {
                 .buttonStyle(.plain)
                 .foregroundColor(SiphonTheme.accent)
                 .help(languageService.s("resume"))
+                .accessibilityLabel(languageService.s("resume"))
                 
                 Menu {
                     Button {
@@ -725,6 +730,7 @@ struct FileThumbnailView: View {
                 .buttonStyle(.plain)
                 .foregroundColor(SiphonTheme.statusQueued)
                 .help(languageService.s("retry"))
+                .accessibilityLabel(languageService.s("retry"))
                 
                 Menu {
                     Button {
@@ -779,6 +785,7 @@ struct FileThumbnailView: View {
                 .buttonStyle(.plain)
                 .foregroundColor(SiphonTheme.statusQueued)
                 .help(languageService.s("overwrite"))
+                .accessibilityLabel(languageService.s("overwrite"))
                 
                 Button {
                     downloadManager.resumeWithNewName(download)
@@ -789,6 +796,7 @@ struct FileThumbnailView: View {
                 .buttonStyle(.plain)
                 .foregroundColor(SiphonTheme.accent)
                 .help(languageService.s("download_new_name"))
+                .accessibilityLabel(languageService.s("download_new_name"))
             }
         }
     }
