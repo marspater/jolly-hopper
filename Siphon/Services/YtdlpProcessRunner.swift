@@ -22,24 +22,33 @@ public final class DownloadProcessController: @unchecked Sendable {
     @discardableResult
     public func attachProcess(_ proc: Process) -> Bool {
         lock.lock()
-        defer { lock.unlock() }
+        let shouldTerminate: Bool
+        let success: Bool
         switch state {
         case .cancelled:
-            if proc.isRunning {
-                proc.terminate()
-            }
-            return false
+            shouldTerminate = proc.isRunning
+            success = false
         case .idle, .attached:
             state = .attached(proc)
-            return true
+            shouldTerminate = false
+            success = true
         }
+        lock.unlock()
+
+        if shouldTerminate {
+            proc.terminate()
+        }
+        return success
     }
 
     /// Detaches the process upon completion or cleanup.
     public func detach() {
         lock.lock()
         defer { lock.unlock() }
-        if case .attached = state {
+        switch state {
+        case .idle, .cancelled:
+            break
+        case .attached:
             state = .idle
         }
     }
@@ -160,6 +169,25 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
                         let extracted = parts[1].trimmingCharacters(in: .whitespacesAndNewlines)
                         if !extracted.isEmpty {
                             outputState.setFinalPath(extracted)
+                        }
+                    }
+                    return
+                }
+
+                if line.contains("SIPHON_PROG:") {
+                    let parts = line.components(separatedBy: "SIPHON_PROG:")
+                    if parts.count > 1 {
+                        let fields = parts[1].components(separatedBy: "|")
+                        let percentStr = fields.first?.trimmingCharacters(in: .whitespaces) ?? ""
+                        let cleanPercent = percentStr.hasSuffix("%") ? String(percentStr.dropLast()) : percentStr
+                        let speed = fields.count > 1 ? fields[1].trimmingCharacters(in: .whitespaces) : nil
+                        let eta = fields.count > 2 ? fields[2].trimmingCharacters(in: .whitespaces) : nil
+                        if let percent = Double(cleanPercent) {
+                            let safeSpeed = (speed == "NA" || speed?.isEmpty == true) ? nil : speed
+                            let safeEta = (eta == "NA" || eta?.isEmpty == true) ? nil : eta
+                            DispatchQueue.main.async {
+                                onProgress(percent / 100.0, safeSpeed, safeEta)
+                            }
                         }
                     }
                     return

@@ -32,25 +32,29 @@ class Download: ObservableObject, Identifiable {
         guard let urlObj = URL(string: url), let host = urlObj.host?.lowercased() else {
             return "Web"
         }
-        if host.contains("youtube.com") || host.contains("youtu.be") {
+        let matchesDomain: (String) -> Bool = { domain in
+            host == domain || host.hasSuffix("." + domain)
+        }
+
+        if matchesDomain("youtube.com") || matchesDomain("youtu.be") {
             return "YouTube"
-        } else if host.contains("twitter.com") || host.contains("x.com") {
+        } else if matchesDomain("twitter.com") || matchesDomain("x.com") {
             return "X (Twitter)"
-        } else if host.contains("instagram.com") {
+        } else if matchesDomain("instagram.com") {
             return "Instagram"
-        } else if host.contains("tiktok.com") {
+        } else if matchesDomain("tiktok.com") {
             return "TikTok"
-        } else if host.contains("vimeo.com") {
+        } else if matchesDomain("vimeo.com") {
             return "Vimeo"
-        } else if host.contains("reddit.com") {
+        } else if matchesDomain("reddit.com") {
             return "Reddit"
-        } else if host.contains("facebook.com") || host.contains("fb.watch") {
+        } else if matchesDomain("facebook.com") || matchesDomain("fb.watch") {
             return "Facebook"
-        } else if host.contains("twitch.tv") {
+        } else if matchesDomain("twitch.tv") {
             return "Twitch"
-        } else if host.contains("soundcloud.com") {
+        } else if matchesDomain("soundcloud.com") {
             return "SoundCloud"
-        } else if host.contains("dailymotion.com") {
+        } else if matchesDomain("dailymotion.com") {
             return "Dailymotion"
         }
         

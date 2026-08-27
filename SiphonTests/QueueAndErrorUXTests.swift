@@ -13,6 +13,15 @@ final class QueueAndErrorUXTests: XCTestCase {
         
         let youtuDownload = Download(url: "https://youtu.be/dQw4w9WgXcQ", options: options)
         XCTAssertEqual(youtuDownload.sourceDomain, "YouTube")
+
+        let mYtDownload = Download(url: "https://m.youtube.com/watch?v=123", options: options)
+        XCTAssertEqual(mYtDownload.sourceDomain, "YouTube")
+
+        let evilYtDownload = Download(url: "https://evil-youtube.com/video", options: options)
+        XCTAssertEqual(evilYtDownload.sourceDomain, "Evil-youtube.com", "Must not misclassify evil-youtube.com as YouTube")
+
+        let subEvilYtDownload = Download(url: "https://youtube.com.attacker.com/video", options: options)
+        XCTAssertEqual(subEvilYtDownload.sourceDomain, "Youtube.com.attacker.com", "Must not misclassify youtube.com.attacker.com as YouTube")
         
         let xDownload = Download(url: "https://x.com/user/status/123456", options: options)
         XCTAssertEqual(xDownload.sourceDomain, "X (Twitter)")
@@ -244,5 +253,36 @@ final class QueueAndErrorUXTests: XCTestCase {
         // Call loadHistory a second time
         manager.loadHistory()
         XCTAssertEqual(manager.downloads.count, 1, "loadHistory must be idempotent and not duplicate entries on repeated calls")
+    }
+
+    func testLiveHlsErrorRetryWithFFmpegDownloader() async throws {
+        let service = YtdlpService()
+        service.ytdlpPath = URL(fileURLWithPath: "/usr/local/bin/yt-dlp")
+        let callCountBox = TestBox<Int>(0)
+        let capturedArgs = TestBox<[[String]]>([])
+
+        service.processRunner = MockYtdlpProcessRunner(mockDownload: { args in
+            callCountBox.value += 1
+            capturedArgs.value.append(args)
+            if callCountBox.value == 1 {
+                throw YtdlpError.downloadFailed("WARNING: Live HLS streams are not supported by the native downloader. If this is a livestream, please add \"--downloader ffmpeg --hls-use-mpegts\" to your command.")
+            }
+            return "/tmp/hls_stream_success.mp4"
+        })
+
+        let result = try await service.download(
+            url: "https://example.com/live-stream.m3u8",
+            options: DownloadOptions.default,
+            onProgress: { _, _, _ in },
+            onOutput: { _ in }
+        )
+
+        XCTAssertEqual(callCountBox.value, 2, "Must retry download when native downloader fails on live HLS stream")
+        XCTAssertTrue(capturedArgs.value[1].contains("--downloader"))
+        if let idx = capturedArgs.value[1].firstIndex(of: "--downloader") {
+            XCTAssertEqual(capturedArgs.value[1][idx + 1], "ffmpeg")
+        }
+        XCTAssertTrue(capturedArgs.value[1].contains("--hls-use-mpegts"))
+        XCTAssertEqual(result.lastPathComponent, "hls_stream_success.mp4")
     }
 }

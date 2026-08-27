@@ -182,10 +182,31 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
                 checksumURL = nil
                 
                 if let assets = json["assets"] as? [[String: Any]] {
-                    // Prefer .dmg packages, fallback to .zip/.app.zip
+                    #if arch(arm64)
+                    let targetArch = "arm64"
+                    let altArch = "aarch64"
+                    let nonTargetArch = "x86_64"
+                    #else
+                    let targetArch = "x86_64"
+                    let altArch = "intel"
+                    let nonTargetArch = "arm64"
+                    #endif
+
+                    // Prefer packages matching current architecture, then universal, and prefer .dmg over .zip
                     let sortedAssets = assets.sorted { a, b in
                         let nameA = (a["name"] as? String)?.lowercased() ?? ""
                         let nameB = (b["name"] as? String)?.lowercased() ?? ""
+
+                        let aMatchesTarget = nameA.contains(targetArch) || nameA.contains(altArch) || nameA.contains("universal")
+                        let bMatchesTarget = nameB.contains(targetArch) || nameB.contains(altArch) || nameB.contains("universal")
+                        let aMatchesNonTarget = nameA.contains(nonTargetArch)
+                        let bMatchesNonTarget = nameB.contains(nonTargetArch)
+
+                        if aMatchesTarget && !bMatchesTarget { return true }
+                        if !aMatchesTarget && bMatchesTarget { return false }
+                        if !aMatchesNonTarget && bMatchesNonTarget { return true }
+                        if aMatchesNonTarget && !bMatchesNonTarget { return false }
+
                         if nameA.hasSuffix(".dmg") && !nameB.hasSuffix(".dmg") { return true }
                         return false
                     }
@@ -238,22 +259,22 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
                 let lines = text.components(separatedBy: .newlines)
                 let targetAssetName = downloadAssetName?.lowercased()
                 
-                var fallbackHash: String? = nil
                 for line in lines {
                     let parts = line.split(separator: " ", omittingEmptySubsequences: true)
                     guard let first = parts.first, first.count == 64 else { continue }
                     let hash = String(first).lowercased()
                     
+                    // Single-hash file (e.g. package.dmg.sha256 containing just the hash)
+                    if parts.count == 1 && lines.filter({ !$0.trimmingCharacters(in: .whitespaces).isEmpty }).count == 1 {
+                        expectedChecksum = hash
+                        break
+                    }
+
+                    // Multi-entry manifest (e.g. SHA256SUMS.txt): must strictly match targeted asset name
                     if let target = targetAssetName, line.lowercased().contains(target) {
                         expectedChecksum = hash
                         break
                     }
-                    if fallbackHash == nil {
-                        fallbackHash = hash
-                    }
-                }
-                if expectedChecksum == nil {
-                    expectedChecksum = fallbackHash
                 }
             }
         }
