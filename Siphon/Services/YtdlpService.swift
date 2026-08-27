@@ -804,7 +804,6 @@ class YtdlpService: ObservableObject {
         args.append("--windows-filenames")
         args.append("--continue")
         args.append(contentsOf: ["-o", outputTemplate])
-        args.append(contentsOf: ["--print", "after_video:SIPHON_FINAL_PATH:%(filepath)s"])
         args.append(contentsOf: ["--print", "after_move:SIPHON_FINAL_PATH:%(filepath)s"])
 
         args.append(contentsOf: buildFormatArgs(options: options, mediaInfo: mediaInfo))
@@ -884,8 +883,7 @@ class YtdlpService: ObservableObject {
 
         args.append("--no-color")
         args.append("--newline")
-        args.append("--progress-template")
-        args.append("%(progress._percent_str)s %(progress._speed_str)s %(progress._eta_str)s")
+        args.append(contentsOf: ["--progress-template", "download:SIPHON_PROG:%(progress._percent_str)s|%(progress._speed_str)s|%(progress._eta_str)s"])
         args.append("--")
         args.append(targetURL)
         
@@ -953,6 +951,21 @@ class YtdlpService: ObservableObject {
                     onProgress: onProgress,
                     onOutput: onOutput
                 )
+            } else if !errText.isEmpty, isLiveHlsError(errText), !args.contains("--downloader") {
+                LoggerService.shared.log("Live HLS / stream format detected. Retrying download with FFmpeg downloader...", level: .warning)
+                onOutput("[Siphon Info] HLS stream requires FFmpeg downloader. Retrying with FFmpeg downloader...\n")
+                var ffmpegArgs = args
+                ffmpegArgs.append(contentsOf: ["--downloader", "ffmpeg"])
+                if !ffmpegArgs.contains("--hls-use-mpegts") {
+                    ffmpegArgs.append(contentsOf: ["--hls-use-mpegts"])
+                }
+                outputPath = try await runDownloadProcess(
+                    args: ffmpegArgs,
+                    saveFolder: options.saveFolder,
+                    processController: processController,
+                    onProgress: onProgress,
+                    onOutput: onOutput
+                )
             } else {
                 throw mapSiteSpecificError(error, url: normalizedURL)
             }
@@ -961,6 +974,11 @@ class YtdlpService: ObservableObject {
         }
 
         return URL(fileURLWithPath: outputPath, relativeTo: options.saveFolder).absoluteURL
+    }
+
+    private func isLiveHlsError(_ text: String) -> Bool {
+        let lower = text.lowercased()
+        return lower.contains("live hls") || lower.contains("livestream") || lower.contains("native downloader")
     }
 
     private func cleanupSubtitleFiles(for videoPath: String, in folder: URL) {
@@ -1637,11 +1655,16 @@ class YtdlpService: ObservableObject {
         }
 
         if lowerUrl.contains("boyfriend.tv") || lowerUrl.contains("boyfriendtv.com") || lowerUrl.contains("cdn.boyfriend.tv") {
-            args.append(contentsOf: ["--user-agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"])
+            if let uaIdx = args.firstIndex(of: "--user-agent") {
+                args[uaIdx + 1] = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+            } else {
+                args.append(contentsOf: ["--user-agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"])
+            }
             args.append(contentsOf: ["--add-header", "Origin:https://www.boyfriend.tv"])
             args.append(contentsOf: ["--add-header", "Accept:*/*"])
             let referer = lowerUrl.contains("/embed/") ? url : "https://www.boyfriend.tv/"
             args.append(contentsOf: ["--add-header", "Referer:\(referer)"])
+            args.append(contentsOf: ["--downloader", "ffmpeg"])
             args.append(contentsOf: ["--hls-use-mpegts"])
         } else if isXHamster {
             args.append(contentsOf: ["--add-header", "Referer:https://xhamster.com/"])

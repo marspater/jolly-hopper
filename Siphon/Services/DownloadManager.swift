@@ -661,7 +661,7 @@ class DownloadManager: ObservableObject {
                 // Restore as Download objects for UI, reversing so newest is at the top
                 let restored = decoded.reversed().map { $0.toDownload() }
                 
-                let existingIds = Set(downloads.map { $0.id })
+                var existingIds = Set(downloads.map { $0.id })
                 for download in restored {
                     if !existingIds.contains(download.id) {
                         switch download.status {
@@ -671,6 +671,7 @@ class DownloadManager: ObservableObject {
                             break
                         }
                         downloads.append(download)
+                        existingIds.insert(download.id)
                     }
                 }
             } catch {
