@@ -274,16 +274,20 @@ class DownloadManager: ObservableObject {
                 options: download.options,
                 mediaInfo: download.mediaInfo,
                 processController: controller,
-                onProgress: { progress, speed, eta in
+                onProgress: { [weak download] progress, speed, eta in
                     let safeProgress = progress.isNaN ? 0 : max(0, min(1, progress))
-                    Task { @MainActor in
-                        download.progress = safeProgress
-                        download.speed = speed
-                        download.eta = eta
+                    DispatchQueue.main.async {
+                        download?.progress = safeProgress
+                        download?.speed = speed
+                        download?.eta = eta
                     }
                 },
-                onOutput: { line in
-                    Task { @MainActor in
+                onOutput: { [weak download] line in
+                    DispatchQueue.main.async {
+                        guard let download = download else { return }
+                        if download.log.count > 50_000 {
+                            download.log = String(download.log.suffix(25_000))
+                        }
                         download.log += line + "\n"
                         if line.contains("[EmbedThumbnail]") || line.contains("[Metadata]") || line.contains("[Merger]") || line.contains("[VideoConvertor]") || line.contains("[ThumbnailsConvertor]") || line.contains("[EmbedSubtitle]") {
                             if download.status == .downloading {

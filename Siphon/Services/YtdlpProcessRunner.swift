@@ -119,6 +119,9 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
                 pipe.fileHandleForReading.readabilityHandler = nil
 
                 let remainingData = pipe.fileHandleForReading.readDataToEndOfFile()
+                try? pipe.fileHandleForReading.close()
+                proc.terminationHandler = nil
+
                 if !remainingData.isEmpty {
                     outputBuffer.append(remainingData)
                 }
@@ -136,6 +139,8 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
                 try process.run()
             } catch {
                 pipe.fileHandleForReading.readabilityHandler = nil
+                try? pipe.fileHandleForReading.close()
+                process.terminationHandler = nil
                 safeContinuation.resume(throwing: error)
             }
         }
@@ -318,6 +323,10 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
                 }
 
                 let remainingError = errorPipe.fileHandleForReading.readDataToEndOfFile()
+                try? outputPipe.fileHandleForReading.close()
+                try? errorPipe.fileHandleForReading.close()
+                proc.terminationHandler = nil
+
                 if !remainingError.isEmpty {
                     for line in errorBuffer.appendAndExtractLines(remainingError) {
                         outputState.appendError(line + "\n")
@@ -399,6 +408,9 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
             guard attached else {
                 outputPipe.fileHandleForReading.readabilityHandler = nil
                 errorPipe.fileHandleForReading.readabilityHandler = nil
+                try? outputPipe.fileHandleForReading.close()
+                try? errorPipe.fileHandleForReading.close()
+                process.terminationHandler = nil
                 safeContinuation.resume(throwing: YtdlpError.downloadFailed("Download was stopped."))
                 return
             }
@@ -409,6 +421,9 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
                 processController?.detach()
                 outputPipe.fileHandleForReading.readabilityHandler = nil
                 errorPipe.fileHandleForReading.readabilityHandler = nil
+                try? outputPipe.fileHandleForReading.close()
+                try? errorPipe.fileHandleForReading.close()
+                process.terminationHandler = nil
                 safeContinuation.resume(throwing: error)
             }
         }

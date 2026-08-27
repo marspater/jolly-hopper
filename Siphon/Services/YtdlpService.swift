@@ -1049,9 +1049,7 @@ class YtdlpService: ObservableObject {
             onOutput("\(warning)\n")
         }
         onOutput("[COMMAND] \(sanitizedCommand)\n")
-        Task { @MainActor in
-            LoggerService.shared.log(sanitizedCommand, level: .command)
-        }
+        LoggerService.shared.log(sanitizedCommand, level: .command)
 
         defer {
             for fileURL in tempCookieFiles {

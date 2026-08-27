@@ -320,6 +320,7 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
     }
 
     nonisolated func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+        session.finishTasksAndInvalidate()
         if let error = error {
             Task { @MainActor in
                 LoggerService.shared.log("Update package download failed: \(error.localizedDescription)", level: .error)
@@ -330,6 +331,7 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
     }
     
     nonisolated func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {
+        session.finishTasksAndInvalidate()
         let tempUpdate = FileManager.default.temporaryDirectory.appendingPathComponent("Siphon_Update_Package_\(UUID().uuidString)")
         do {
             if FileManager.default.fileExists(atPath: tempUpdate.path) {

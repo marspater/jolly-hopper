@@ -133,10 +133,12 @@ class LoggerService: ObservableObject {
     }
     
     nonisolated private static func trimLogFile(at logFileURL: URL, maxEntries: Int) {
-        guard let content = try? String(contentsOf: logFileURL, encoding: .utf8) else { return }
-        let lines = content.components(separatedBy: .newlines).filter { !$0.isEmpty }
-        let trimmed = lines.suffix(maxEntries).joined(separator: "\n") + "\n"
-        try? trimmed.write(to: logFileURL, atomically: true, encoding: .utf8)
+        autoreleasepool {
+            guard let content = try? String(contentsOf: logFileURL, encoding: .utf8) else { return }
+            let lines = content.components(separatedBy: .newlines).filter { !$0.isEmpty }
+            let trimmed = lines.suffix(maxEntries).joined(separator: "\n") + "\n"
+            try? trimmed.write(to: logFileURL, atomically: true, encoding: .utf8)
+        }
     }
     
     func clearLogs() {
