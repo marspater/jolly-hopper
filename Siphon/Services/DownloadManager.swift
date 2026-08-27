@@ -246,7 +246,8 @@ class DownloadManager: ObservableObject {
                         let nameWithoutExt = file.deletingPathExtension().lastPathComponent
                         let isExactMatch = nameWithoutExt == resolvedBaseName
                         let isPart = file.lastPathComponent.hasSuffix(".part") || file.lastPathComponent.hasSuffix(".ytdl")
-                        return isExactMatch && !isPart
+                        let isMedia = YtdlpService.isMediaFilePath(file.path)
+                        return isExactMatch && !isPart && isMedia
                     }
                     return !matches.isEmpty
                 }

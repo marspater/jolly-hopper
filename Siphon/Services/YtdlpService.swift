@@ -1064,6 +1064,7 @@ class YtdlpService: ObservableObject {
             case disableRangeChunking
             case useFfmpegHls
             case injectBrowserCookies(browser: String)
+            case retryTransientNetworkError
         }
 
         var triedStrategies = Set<DownloadRecoveryStrategy>()
@@ -1142,6 +1143,15 @@ class YtdlpService: ObservableObject {
                     var cookieArgs = currentArgs
                     _ = appendCookieArgs(for: normalizedURL, to: &cookieArgs, force: true)
                     currentArgs = cookieArgs
+                    continue
+                }
+
+                // Strategy 5: Transient CDN connection refusal / reset -> Retry with fresh connection
+                if !errText.isEmpty, (errText.contains("Connection refused") || errText.contains("Failed to establish a new connection") || errText.contains("Connection reset")), !triedStrategies.contains(.retryTransientNetworkError) {
+                    triedStrategies.insert(.retryTransientNetworkError)
+                    LoggerService.shared.log("Transient CDN connection refusal encountered (\(errText.trimmingCharacters(in: .whitespacesAndNewlines))). Retrying download with fresh connection...", level: .warning)
+                    onOutput("[Siphon Info] CDN edge server refused connection. Retrying with fresh stream endpoint...\n")
+                    try? await Task.sleep(nanoseconds: 1_000_000_000)
                     continue
                 }
 
