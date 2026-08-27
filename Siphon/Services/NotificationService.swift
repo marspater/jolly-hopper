@@ -27,7 +27,7 @@ final class NotificationService: NSObject, @unchecked Sendable, UNUserNotificati
     }
 
     // Foreground notification presentation handler for macOS
-    func userNotificationCenter(
+    @objc func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         willPresent notification: UNNotification,
         withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
@@ -39,7 +39,7 @@ final class NotificationService: NSObject, @unchecked Sendable, UNUserNotificati
         }
     }
 
-    func userNotificationCenter(
+    @objc func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         didReceive response: UNNotificationResponse,
         withCompletionHandler completionHandler: @escaping () -> Void
@@ -131,8 +131,12 @@ final class NotificationService: NSObject, @unchecked Sendable, UNUserNotificati
         let content = UNMutableNotificationContent()
         content.title = lang.s("download_completed_title")
         content.body = String(format: lang.s("download_completed_body"), cleanFilename)
+        content.sound = .default
         content.categoryIdentifier = "download"
         self.sendNotification(content: content, logName: "Completed: \(cleanFilename)")
+        DispatchQueue.main.async {
+            NSSound(named: "Glass")?.play()
+        }
     }
 
     func sendEncodingCompleted(filename: String, codec: String, languageService: LanguageService? = nil) {
@@ -140,7 +144,11 @@ final class NotificationService: NSObject, @unchecked Sendable, UNUserNotificati
         let content = UNMutableNotificationContent()
         content.title = "⚡ Video Conversion Complete"
         content.body = "\(cleanFilename) was successfully converted to \(codec) codec."
+        content.sound = .default
         sendNotification(content: content, logName: "Conversion: \(cleanFilename)")
+        DispatchQueue.main.async {
+            NSSound(named: "Glass")?.play()
+        }
     }
 
     func sendDownloadFailed(filename: String, languageService: LanguageService? = nil) {
@@ -149,8 +157,12 @@ final class NotificationService: NSObject, @unchecked Sendable, UNUserNotificati
         let content = UNMutableNotificationContent()
         content.title = lang.s("download_failed_title")
         content.body = String(format: lang.s("download_failed_body"), cleanFilename)
+        content.sound = .default
         content.categoryIdentifier = "download"
         self.sendNotification(content: content, logName: "Failed: \(cleanFilename)")
+        DispatchQueue.main.async {
+            NSSound(named: "Basso")?.play()
+        }
     }
 
     func sendDownloadStopped(filename: String, languageService: LanguageService? = nil) {
@@ -159,6 +171,7 @@ final class NotificationService: NSObject, @unchecked Sendable, UNUserNotificati
         let content = UNMutableNotificationContent()
         content.title = lang.s("download_stopped_title")
         content.body = String(format: lang.s("download_stopped_body"), cleanFilename)
+        content.sound = .default
         content.categoryIdentifier = "download"
         self.sendNotification(content: content, logName: "Stopped: \(cleanFilename)")
     }
