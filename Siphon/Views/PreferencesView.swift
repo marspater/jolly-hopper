@@ -611,6 +611,7 @@ struct PreferencesView: View {
         }
         .padding()
         .frame(width: 450, height: 500)
+        .background(.ultraThinMaterial)
     }
 
     private var presetFormatSection: some View {
@@ -872,6 +873,7 @@ struct PreferencesView: View {
         }
         .padding()
         .frame(width: 650, height: 450)
+        .background(.ultraThinMaterial)
     }
 
     private var ytdlpUpdateSection: some View {
@@ -1052,11 +1054,12 @@ struct PreferencesView: View {
                     .font(.geist(11))
                 }
                 .padding(14)
-                .background(.ultraThinMaterial)
-                .cornerRadius(12)
+                .background(
+                    SiphonTheme.cardBackground(cornerRadius: SiphonTheme.radiusCard)
+                )
+                .cornerRadius(SiphonTheme.radiusCard)
                 .overlay(
-                    RoundedRectangle(cornerRadius: 12)
-                        .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+                    SiphonTheme.cardBorder(cornerRadius: SiphonTheme.radiusCard)
                 )
 
                 // License Card
@@ -1073,38 +1076,59 @@ struct PreferencesView: View {
                 }
                 .padding(14)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(.ultraThinMaterial)
-                .cornerRadius(12)
+                .background(
+                    SiphonTheme.cardBackground(cornerRadius: SiphonTheme.radiusCard)
+                )
+                .cornerRadius(SiphonTheme.radiusCard)
                 .overlay(
-                    RoundedRectangle(cornerRadius: 12)
-                        .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+                    SiphonTheme.cardBorder(cornerRadius: SiphonTheme.radiusCard)
                 )
 
                 // Quick links
-                HStack(spacing: 12) {
+                HStack(spacing: 10) {
                     Link(destination: URL(string: "https://github.com/marspater/jolly-hopper") ?? URL(fileURLWithPath: "/")) {
                         Label("GitHub", systemImage: "link")
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 8)
-                            .background(Color.blue.opacity(0.1))
-                            .cornerRadius(8)
+                            .font(.geist(11, weight: .medium))
+                            .foregroundColor(.primary)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6)
+                            .background(
+                                SiphonTheme.pillBackground(isSelected: false)
+                            )
+                            .clipShape(Capsule())
+                            .overlay(
+                                SiphonTheme.pillBorder(isSelected: false)
+                            )
                     }
                     Link(destination: URL(string: "https://github.com/marspater/jolly-hopper/blob/main/README.md") ?? URL(fileURLWithPath: "/")) {
                         Label("README", systemImage: "doc.text")
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 8)
-                            .background(Color.indigo.opacity(0.1))
-                            .cornerRadius(8)
+                            .font(.geist(11, weight: .medium))
+                            .foregroundColor(.primary)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6)
+                            .background(
+                                SiphonTheme.pillBackground(isSelected: false)
+                            )
+                            .clipShape(Capsule())
+                            .overlay(
+                                SiphonTheme.pillBorder(isSelected: false)
+                            )
                     }
                     Link(destination: URL(string: "https://github.com/marspater/jolly-hopper/blob/main/SUPPORTED_SITES.md") ?? URL(fileURLWithPath: "/")) {
                         Label(languageService.s("supported_sites"), systemImage: "globe")
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 8)
-                            .background(Color.purple.opacity(0.1))
-                            .cornerRadius(8)
+                            .font(.geist(11, weight: .medium))
+                            .foregroundColor(.primary)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6)
+                            .background(
+                                SiphonTheme.pillBackground(isSelected: false)
+                            )
+                            .clipShape(Capsule())
+                            .overlay(
+                                SiphonTheme.pillBorder(isSelected: false)
+                            )
                     }
                 }
-                .font(.geist(11, weight: .medium))
                 .padding(.top, 4)
 
                 Text("© 2026 marspater • All rights reserved")

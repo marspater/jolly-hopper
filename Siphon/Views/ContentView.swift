@@ -152,8 +152,13 @@ struct SidebarView: View {
                     }
                     .padding(.horizontal, 12)
                     .padding(.vertical, 8)
-                    .background(Color.gray.opacity(0.1))
-                    .cornerRadius(8)
+                    .background(
+                        SiphonTheme.controlBackground(cornerRadius: SiphonTheme.radiusControl)
+                    )
+                    .cornerRadius(SiphonTheme.radiusControl)
+                    .overlay(
+                        SiphonTheme.controlBorder(cornerRadius: SiphonTheme.radiusControl)
+                    )
                 }
                 .buttonStyle(.plain)
                 .padding(.horizontal, 8)

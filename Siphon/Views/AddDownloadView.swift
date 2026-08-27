@@ -471,8 +471,13 @@ struct AddDownloadView: View {
                             .frame(maxHeight: 180)
                         }
                         .padding(12)
-                        .background(Color.gray.opacity(0.05))
-                        .cornerRadius(8)
+                        .background(
+                            SiphonTheme.controlBackground(cornerRadius: SiphonTheme.radiusControl)
+                        )
+                        .cornerRadius(SiphonTheme.radiusControl)
+                        .overlay(
+                            SiphonTheme.controlBorder(cornerRadius: SiphonTheme.radiusControl)
+                        )
                     }
                 }
             }
@@ -625,11 +630,11 @@ struct AddDownloadView: View {
         }
         .padding()
         .background(
-            SiphonTheme.cardBackground(cornerRadius: 12)
+            SiphonTheme.cardBackground(cornerRadius: SiphonTheme.radiusCard)
         )
-        .cornerRadius(12)
+        .cornerRadius(SiphonTheme.radiusCard)
         .overlay(
-            SiphonTheme.cardBorder(cornerRadius: 12)
+            SiphonTheme.cardBorder(cornerRadius: SiphonTheme.radiusCard)
         )
     }
 
@@ -648,9 +653,9 @@ struct AddDownloadView: View {
         }
         .padding()
         .background(SiphonTheme.accent.opacity(0.12))
-        .cornerRadius(12)
+        .cornerRadius(SiphonTheme.radiusCard)
         .overlay(
-            RoundedRectangle(cornerRadius: 12)
+            RoundedRectangle(cornerRadius: SiphonTheme.radiusCard)
                 .stroke(SiphonTheme.accent.opacity(0.25), lineWidth: 1)
         )
     }
@@ -700,15 +705,27 @@ struct AddDownloadView: View {
                             }
                             Spacer()
                         }
-                        .padding(8).background(Color.gray.opacity(0.05)).cornerRadius(8)
+                        .padding(8)
+                        .background(
+                            SiphonTheme.controlBackground(cornerRadius: SiphonTheme.radiusControl)
+                        )
+                        .cornerRadius(SiphonTheme.radiusControl)
+                        .overlay(
+                            SiphonTheme.controlBorder(cornerRadius: SiphonTheme.radiusControl)
+                        )
                     }
                 }
             }
             .frame(height: 250)
         }
         .padding()
-        .background(Color.gray.opacity(0.05))
-        .cornerRadius(12)
+        .background(
+            SiphonTheme.cardBackground(cornerRadius: SiphonTheme.radiusCard)
+        )
+        .cornerRadius(SiphonTheme.radiusCard)
+        .overlay(
+            SiphonTheme.cardBorder(cornerRadius: SiphonTheme.radiusCard)
+        )
     }
 
     private var formatSection: some View {
@@ -1264,15 +1281,38 @@ struct AddDownloadView: View {
     }
 
     private func errorSection(_ error: String) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 10) {
-            Image(systemName: "exclamationmark.triangle.fill")
-                .foregroundColor(SiphonTheme.statusFailed)
-                .font(.geist(13))
-            Text(error)
-                .font(.geist(12, weight: .medium))
-                .foregroundColor(SiphonTheme.statusFailed)
-                .multilineTextAlignment(.leading)
-                .frame(maxWidth: .infinity, alignment: .leading)
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline, spacing: 10) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundColor(SiphonTheme.statusFailed)
+                    .font(.geist(13))
+                Text(error)
+                    .font(.geist(12, weight: .medium))
+                    .foregroundColor(SiphonTheme.statusFailed)
+                    .multilineTextAlignment(.leading)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            
+            let isAuthOrCookieError = error.contains("Settings") || error.contains("Browser Cookies") || error.contains("cookies") || error.contains("sign in") || error.contains("login")
+            if isAuthOrCookieError {
+                HStack {
+                    Spacer()
+                    Button {
+                        PreferencesWindowManager.shared.showPreferencesWindow(
+                            languageService: languageService,
+                            updateChecker: UpdateChecker(),
+                            downloadManager: downloadManager,
+                            initialTab: .advanced
+                        )
+                    } label: {
+                        Text(languageService.s("settings"))
+                            .font(.geist(11, weight: .semibold))
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(SiphonTheme.accent)
+                    .controlSize(.small)
+                }
+            }
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)

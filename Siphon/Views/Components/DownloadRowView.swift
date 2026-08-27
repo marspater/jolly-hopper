@@ -300,8 +300,13 @@ struct DownloadRowView: View {
                                 .lineLimit(6)
                                 .padding(8)
                                 .frame(maxWidth: .infinity, alignment: .leading)
-                                .background(Color.black.opacity(0.15))
+                                .background(
+                                    SiphonTheme.controlBackground(cornerRadius: 6)
+                                )
                                 .cornerRadius(6)
+                                .overlay(
+                                    SiphonTheme.controlBorder(cornerRadius: 6)
+                                )
                             
                             HStack {
                                 Button {
