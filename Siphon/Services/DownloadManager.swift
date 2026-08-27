@@ -632,11 +632,14 @@ class DownloadManager: ObservableObject {
 
                     if matchesPrefix || matchesId {
                         let lower = fileName.lowercased()
-                        let isTemp = lower.contains(".part") ||
-                                     lower.contains(".ytdl") ||
-                                     lower.contains(".temp") ||
-                                     lower.contains(".tmp") ||
-                                     (lower.range(of: #"\.f\d+\."#, options: .regularExpression) != nil)
+                        let isTemp = lower.hasSuffix(".part") ||
+                                     lower.hasSuffix(".ytdl") ||
+                                     lower.hasSuffix(".temp") ||
+                                     lower.hasSuffix(".tmp") ||
+                                     (lower.range(of: #"\.f\d+\.part$"#, options: .regularExpression) != nil) ||
+                                     (lower.range(of: #"\.f\d+\.ytdl$"#, options: .regularExpression) != nil) ||
+                                     (lower.range(of: #"\.f\d+\.temp$"#, options: .regularExpression) != nil) ||
+                                     (lower.range(of: #"\.f\d+\.tmp$"#, options: .regularExpression) != nil)
 
                         if isTemp {
                             try? fileManager.removeItem(at: file)
