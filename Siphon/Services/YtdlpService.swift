@@ -1681,10 +1681,12 @@ class YtdlpService: ObservableObject {
                         let hasMediaData = browserHtml.contains("hlsAuto") ||
                                            browserHtml.contains("videoPlayerData") ||
                                            browserHtml.contains("sources") ||
-                                           browserHtml.contains("cdn.boyfriend.tv") ||
-                                           browserHtml.contains("boyfriendtv") ||
+                                           browserHtml.contains("cdn.boyfriend") ||
+                                           browserHtml.contains("boyfriend") ||
                                            browserHtml.contains("embedUrl") ||
-                                           browserHtml.contains("/embed/")
+                                           browserHtml.contains("/embed/") ||
+                                           browserHtml.contains("<title>") ||
+                                           browserHtml.contains("playerConfig")
                         if hasMediaData {
                             html = browserHtml
                             let sourceLog = browser == nil ? "impersonated HTTP request" : "browser cookies from '\(browser!)'"
@@ -2015,7 +2017,7 @@ class YtdlpService: ObservableObject {
             if lowerErr.contains("cloudflare") || lowerErr.contains("403") || lowerErr.contains("anti-bot") || lowerErr.contains("captcha") || lowerErr.contains("challenge") {
                 return YtdlpError.cloudflareBlocked
             }
-            if lowerErr.contains("unavailable") || lowerErr.contains("removed") || lowerErr.contains("404") || lowerErr.contains("not found") {
+            if (lowerErr.contains("video is unavailable") || lowerErr.contains("video unavailable") || lowerErr.contains("video has been removed") || lowerErr.contains("video removed") || lowerErr.contains("404 not found") || lowerErr.contains("page not found") || lowerErr.contains("http error 404")) && !lowerErr.contains("cookie") {
                 return YtdlpError.downloadFailed("This video is unavailable, private, or has been removed.")
             }
             if lowerErr.contains("sign in") || lowerErr.contains("private video") || lowerErr.contains("login") || lowerErr.contains("members-only") || lowerErr.contains("unsupported url") {
