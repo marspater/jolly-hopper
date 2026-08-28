@@ -325,6 +325,8 @@ class DownloadManager: ObservableObject {
 
             let lang = languageService ?? LanguageService()
             switch error {
+            case .safariCookiesFullDiskAccessRequired:
+                download.errorMessage = lang.s("safari_fda_required")
             case .tooManyRequests:
                 download.errorMessage = lang.s("too_many_requests")
             case .cloudflareBlocked:

@@ -1293,24 +1293,55 @@ struct AddDownloadView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             
+            let isFDAError = error.contains("Full Disk Access") || error.contains("Privacy & Security")
             let isAuthOrCookieError = error.contains("Settings") || error.contains("Browser Cookies") || error.contains("cookies") || error.contains("sign in") || error.contains("login")
-            if isAuthOrCookieError {
-                HStack {
+            if isFDAError || isAuthOrCookieError {
+                HStack(spacing: 8) {
                     Spacer()
-                    Button {
-                        PreferencesWindowManager.shared.showPreferencesWindow(
-                            languageService: languageService,
-                            updateChecker: UpdateChecker(),
-                            downloadManager: downloadManager,
-                            initialTab: .advanced
-                        )
-                    } label: {
-                        Text(languageService.s("settings"))
-                            .font(.geist(11, weight: .semibold))
+                    if isFDAError {
+                        Button {
+                            if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles") {
+                                NSWorkspace.shared.open(url)
+                            }
+                        } label: {
+                            Text(languageService.s("open_system_settings"))
+                                .font(.geist(11, weight: .semibold))
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(SiphonTheme.accent)
+                        .controlSize(.small)
                     }
-                    .buttonStyle(.borderedProminent)
-                    .tint(SiphonTheme.accent)
-                    .controlSize(.small)
+
+                    if isFDAError {
+                        Button {
+                            PreferencesWindowManager.shared.showPreferencesWindow(
+                                languageService: languageService,
+                                updateChecker: UpdateChecker(),
+                                downloadManager: downloadManager,
+                                initialTab: .advanced
+                            )
+                        } label: {
+                            Text(languageService.s("settings"))
+                                .font(.geist(11, weight: .semibold))
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                    } else {
+                        Button {
+                            PreferencesWindowManager.shared.showPreferencesWindow(
+                                languageService: languageService,
+                                updateChecker: UpdateChecker(),
+                                downloadManager: downloadManager,
+                                initialTab: .advanced
+                            )
+                        } label: {
+                            Text(languageService.s("settings"))
+                                .font(.geist(11, weight: .semibold))
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(SiphonTheme.accent)
+                        .controlSize(.small)
+                    }
                 }
             }
         }
@@ -1520,6 +1551,8 @@ struct AddDownloadView: View {
     private func formatErrorMessage(_ error: Error) -> String {
         if let ytdlpError = error as? YtdlpError {
             switch ytdlpError {
+            case .safariCookiesFullDiskAccessRequired:
+                return languageService.s("safari_fda_required")
             case .tooManyRequests:
                 return languageService.s("too_many_requests")
             case .cloudflareBlocked:
@@ -1540,7 +1573,9 @@ struct AddDownloadView: View {
                 return "Security violation: \(message)"
             case .downloadFailed(let reason), .commandFailed(let reason):
                 let lower = reason.lowercased()
-                if lower.contains("cloudflare") || lower.contains("403") || lower.contains("anti-bot") || lower.contains("captcha") {
+                if lower.contains("safari") && (lower.contains("full disk access") || lower.contains("operation not permitted") || lower.contains("cookies.binarycookies")) {
+                    return languageService.s("safari_fda_required")
+                } else if lower.contains("cloudflare") || lower.contains("403") || lower.contains("anti-bot") || lower.contains("captcha") {
                     return languageService.s("cloudflare_blocked")
                 } else if lower.contains("sign in") || lower.contains("private video") || lower.contains("login") {
                     return languageService.s("login_required")

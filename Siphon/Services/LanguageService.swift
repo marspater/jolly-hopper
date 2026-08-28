@@ -207,6 +207,7 @@ class LanguageService: ObservableObject {
         "browser_hint": "Select your browser (Safari recommended for macOS) to access login session cookies for protected videos and accounts.",
         "fix_signin_error": "Fix in Settings",
         "safari_warning": "To allow Siphon to access Safari cookies for authenticated downloads on macOS, grant Full Disk Access in System Settings > Privacy & Security > Full Disk Access.",
+        "safari_fda_required": "Safari cookies require Full Disk Access on macOS. Please grant Full Disk Access to Siphon in System Settings > Privacy & Security > Full Disk Access, or choose another browser in Settings > Advanced.",
         "open_system_settings": "Open System Settings",
         "video_codec": "Video Codec",
         "audio_codec": "Audio Codec",

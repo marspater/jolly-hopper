@@ -89,3 +89,5 @@ DerivedData/
 # Local Case Studies & Scratch Docs
 local_case_studies/
 
+# Swift Package Manager & Xcode Builds
+.build/

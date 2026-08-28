@@ -890,13 +890,7 @@ struct PreferencesView: View {
     }
 
     private var hasFullDiskAccess: Bool {
-        let candidatePaths = [
-            NSHomeDirectory() + "/Library/Containers/com.apple.Safari/Data/Library/Cookies/Cookies.binarycookies",
-            NSHomeDirectory() + "/Library/Cookies/Cookies.binarycookies",
-            NSHomeDirectory() + "/Library/Safari/Bookmarks.plist",
-            NSHomeDirectory() + "/Library/Safari/History.db"
-        ]
-        return candidatePaths.contains(where: { FileManager.default.isReadableFile(atPath: $0) })
+        YtdlpService.hasFullDiskAccess
     }
 
     private var safariWarningView: some View {
