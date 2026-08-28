@@ -1135,10 +1135,13 @@ class YtdlpService: ObservableObject {
                 // Strategy 3: HLS / stream error -> FFmpeg downloader
                 if !errText.isEmpty, isLiveHlsError(errText), !currentArgs.contains("--downloader"), !triedStrategies.contains(.useFfmpegHls) {
                     triedStrategies.insert(.useFfmpegHls)
-                    LoggerService.shared.log("Live HLS / stream format detected. Retrying download with FFmpeg downloader...", level: .warning)
+                    LoggerService.shared.log("Live HLS / stream format detected (\(errText.trimmingCharacters(in: .whitespacesAndNewlines))). Retrying download with FFmpeg downloader...", level: .warning)
                     onOutput("[Siphon Info] HLS stream requires FFmpeg downloader. Retrying with FFmpeg downloader...\n")
                     var ffmpegArgs = currentArgs
                     ffmpegArgs.append(contentsOf: ["--downloader", "ffmpeg"])
+                    if !ffmpegArgs.contains("--downloader-args") {
+                        ffmpegArgs.append(contentsOf: ["--downloader-args", "ffmpeg_i:-analyzeduration 20M -probesize 20M"])
+                    }
                     if !ffmpegArgs.contains("--hls-use-mpegts") {
                         ffmpegArgs.append(contentsOf: ["--hls-use-mpegts"])
                     }
@@ -1348,7 +1351,13 @@ class YtdlpService: ObservableObject {
 
     private func isLiveHlsError(_ text: String) -> Bool {
         let lower = text.lowercased()
-        return lower.contains("live hls") || lower.contains("livestream") || lower.contains("native downloader")
+        return lower.contains("live hls") ||
+               lower.contains("livestream") ||
+               lower.contains("native downloader") ||
+               lower.contains("postprocessing: stream") ||
+               lower.contains("could not find codec parameters") ||
+               lower.contains("malformed aac bitstream") ||
+               lower.contains("hlsnative")
     }
 
 
@@ -2036,6 +2045,9 @@ class YtdlpService: ObservableObject {
             args.append(contentsOf: ["--hls-use-mpegts"])
         } else if parsedHost == "justthegays.com" || parsedHost.hasSuffix(".justthegays.com") || parsedHost == "justthegays.tv" || parsedHost.hasSuffix(".justthegays.tv") {
             args.append(contentsOf: ["--add-header", "Referer:https://justthegays.com/"])
+            args.append(contentsOf: ["--downloader", "ffmpeg"])
+            args.append(contentsOf: ["--downloader-args", "ffmpeg_i:-analyzeduration 20M -probesize 20M"])
+            args.append(contentsOf: ["--hls-use-mpegts"])
         } else if isThisVid {
             args.append(contentsOf: ["--add-header", "Referer:https://thisvid.com/"])
             args.append(contentsOf: ["--add-header", "Origin:https://thisvid.com"])

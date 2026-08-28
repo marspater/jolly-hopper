@@ -1208,7 +1208,61 @@ final class YtdlpServiceTests: XCTestCase {
             XCTAssertTrue(args.contains("--downloader-args"))
         }
     }
+
+    func testJustTheGaysHlsDownloaderArgs() async throws {
+        let capturedArgsBox = TestBox<[String]>([])
+        service.processRunner = MockYtdlpProcessRunner(mockDownload: { args in
+            capturedArgsBox.value = args
+            return "[download] Destination: /tmp/test_jtg.mp4\n"
+        })
+
+        _ = try await service.download(
+            url: "https://justthegays.tv/video/valentinoboy-fucks-romeo-twink-yet-again-100",
+            options: DownloadOptions.default,
+            onProgress: { _, _, _ in },
+            onOutput: { _ in }
+        )
+
+        let args = capturedArgsBox.value
+        XCTAssertTrue(args.contains("Referer:https://justthegays.com/"))
+        XCTAssertTrue(args.contains("--downloader"))
+        if let idx = args.firstIndex(of: "--downloader") {
+            XCTAssertEqual(args[idx + 1], "ffmpeg")
+        }
+        XCTAssertTrue(args.contains("--downloader-args"))
+        XCTAssertTrue(args.contains("--hls-use-mpegts"))
+    }
+
+    func testHlsPostprocessingRecoveryRetriesWithFfmpeg() async throws {
+        service.ytdlpPath = URL(fileURLWithPath: "/usr/local/bin/yt-dlp")
+        let callCountBox = TestBox<Int>(0)
+        let capturedArgsBox = TestBox<[String]>([])
+
+        service.processRunner = MockYtdlpProcessRunner(mockDownload: { args in
+            callCountBox.value += 1
+            if callCountBox.value == 1 {
+                throw YtdlpError.downloadFailed("ERROR: Postprocessing: Stream #0:1 -> #0:1 (copy)")
+            }
+            capturedArgsBox.value = args
+            return "/tmp/hls_recovered.mp4"
+        })
+
+        let result = try await service.download(
+            url: "https://example.com/video-hls-stream",
+            options: DownloadOptions.default,
+            onProgress: { _, _, _ in },
+            onOutput: { _ in }
+        )
+
+        XCTAssertEqual(callCountBox.value, 2, "Must retry download when HLS postprocessing stream error is encountered")
+        XCTAssertTrue(capturedArgsBox.value.contains("--downloader"), "Retried attempt must include --downloader")
+        if let idx = capturedArgsBox.value.firstIndex(of: "--downloader") {
+            XCTAssertEqual(capturedArgsBox.value[idx + 1], "ffmpeg")
+        }
+        XCTAssertEqual(result.lastPathComponent, "hls_recovered.mp4")
+    }
 }
+
 
 
 
