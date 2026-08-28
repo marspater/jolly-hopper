@@ -676,49 +676,33 @@ class YtdlpService: ObservableObject {
                 btvArgs.append("--")
                 btvArgs.append(btvMedia.streamURL)
                 
-                let output: String
+                var parsedInfo: MediaInfo? = nil
                 do {
-                    output = try await runCommand(btvArgs)
-                } catch let err as YtdlpError {
-                    throw mapSiteSpecificError(err, url: url)
+                    let output = try await runCommand(btvArgs)
+                    if let data = output.data(using: .utf8) {
+                        parsedInfo = try? JSONDecoder().decode(MediaInfo.self, from: data)
+                    }
+                } catch {
+                    // If yt-dlp dump-json fails on the stream template, synthesize MediaInfo directly
                 }
 
-                if let data = output.data(using: .utf8),
-                   let parsedInfo = try? JSONDecoder().decode(MediaInfo.self, from: data) {
-                    return MediaInfo(
-                        id: url,
-                        title: btvMedia.title,
-                        description: parsedInfo.description,
-                        thumbnail: parsedInfo.thumbnail ?? btvMedia.thumbnailURL,
-                        duration: parsedInfo.duration,
-                        uploader: "BoyfriendTV",
-                        uploadDate: parsedInfo.uploadDate,
-                        viewCount: parsedInfo.viewCount,
-                        likeCount: parsedInfo.likeCount,
-                        formats: parsedInfo.formats,
-                        subtitles: parsedInfo.subtitles,
-                        automaticCaptions: parsedInfo.automaticCaptions,
-                        chapters: parsedInfo.chapters,
-                        playlist: nil,
-                        playlistIndex: nil,
-                        playlistCount: nil
-                    )
-                }
+                let synthesizedFormats = parseBoyfriendTVFormats(from: btvMedia.streamURL)
+                let resolvedFormats = (parsedInfo?.formats?.isEmpty == false) ? parsedInfo?.formats : synthesizedFormats
 
                 return MediaInfo(
                     id: url,
                     title: btvMedia.title,
-                    description: nil,
-                    thumbnail: btvMedia.thumbnailURL,
-                    duration: nil,
-                    uploader: "BoyfriendTV",
-                    uploadDate: nil,
-                    viewCount: nil,
-                    likeCount: nil,
-                    formats: nil,
-                    subtitles: nil,
-                    automaticCaptions: nil,
-                    chapters: nil,
+                    description: parsedInfo?.description,
+                    thumbnail: parsedInfo?.thumbnail ?? btvMedia.thumbnailURL,
+                    duration: parsedInfo?.duration,
+                    uploader: parsedInfo?.uploader ?? "BoyfriendTV",
+                    uploadDate: parsedInfo?.uploadDate,
+                    viewCount: parsedInfo?.viewCount,
+                    likeCount: parsedInfo?.likeCount,
+                    formats: resolvedFormats,
+                    subtitles: parsedInfo?.subtitles,
+                    automaticCaptions: parsedInfo?.automaticCaptions,
+                    chapters: parsedInfo?.chapters,
                     playlist: nil,
                     playlistIndex: nil,
                     playlistCount: nil
@@ -1900,6 +1884,36 @@ class YtdlpService: ObservableObject {
             }
         }
         return nil
+    }
+
+    private func parseBoyfriendTVFormats(from streamURL: String) -> [MediaFormat]? {
+        guard let range = streamURL.range(of: "multi=([^/]+)", options: .regularExpression) else {
+            return [MediaFormat(formatId: "best", ext: "mp4", resolution: "1920x1080", formatNote: "HD")]
+        }
+        let multiChunk = String(streamURL[range]).replacingOccurrences(of: "multi=", with: "")
+        let entries = multiChunk.components(separatedBy: ",")
+        var formats: [MediaFormat] = []
+        for entry in entries {
+            let parts = entry.components(separatedBy: ":")
+            guard let res = parts.first, res.contains("x") else { continue }
+            let dims = res.components(separatedBy: "x")
+            if dims.count == 2, let _ = Int(dims[0]), let h = Int(dims[1]) {
+                formats.append(MediaFormat(
+                    formatId: "\(h)",
+                    ext: "mp4",
+                    resolution: res,
+                    fps: 30,
+                    vcodec: "h264",
+                    acodec: "aac",
+                    formatNote: "\(h)p"
+                ))
+            }
+        }
+        return formats.isEmpty ? nil : formats.sorted(by: {
+            let h0 = Int($0.resolution?.components(separatedBy: "x").last ?? "0") ?? 0
+            let h1 = Int($1.resolution?.components(separatedBy: "x").last ?? "0") ?? 0
+            return h0 > h1
+        })
     }
 
     private func normalizeURLForYtdlp(_ urlString: String) -> String {
