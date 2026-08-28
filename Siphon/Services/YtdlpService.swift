@@ -2020,7 +2020,7 @@ class YtdlpService: ObservableObject {
         let lowerErr = errString.lowercased()
         let configuredBrowser = configuredBrowserCookieSource()
 
-        if isSafariPermissionError(errString) || (configuredBrowser == "safari" && isCookieFailureError(errString) && !Self.hasFullDiskAccess) {
+        if configuredBrowser == "safari" && isSafariPermissionError(errString) && !Self.hasFullDiskAccess {
             return YtdlpError.safariCookiesFullDiskAccessRequired
         }
 
@@ -2216,12 +2216,10 @@ class YtdlpService: ObservableObject {
 
     private func isSafariPermissionError(_ errorOutput: String) -> Bool {
         let lower = errorOutput.lowercased()
-        return (lower.contains("safari") || lower.contains("cookies.binarycookies")) &&
-               (lower.contains("operation not permitted") ||
-                lower.contains("errno 1") ||
-                lower.contains("permission denied") ||
-                (lower.contains("could not find") && lower.contains("cookies database")) ||
-                (lower.contains("unable to extract") && lower.contains("cookies")))
+        guard lower.contains("safari") || lower.contains("cookies.binarycookies") else { return false }
+        return lower.contains("operation not permitted") ||
+               lower.contains("errno 1") ||
+               lower.contains("permission denied")
     }
 
     private func stripCookieArgs(from args: [String]) -> [String] {
@@ -2241,7 +2239,7 @@ class YtdlpService: ObservableObject {
         } catch let error as YtdlpError {
             if case .commandFailed(let output) = error, isCookieFailureError(output), let idx = args.firstIndex(of: "--cookies-from-browser"), idx + 1 < args.count {
                 let browser = args[idx + 1]
-                if isSafariPermissionError(output) || (browser == "safari" && !Self.hasFullDiskAccess) {
+                if browser == "safari" && isSafariPermissionError(output) && !Self.hasFullDiskAccess {
                     throw YtdlpError.safariCookiesFullDiskAccessRequired
                 }
                 if let urlArg = args.last, isBoyfriendTVURL(urlArg) {
