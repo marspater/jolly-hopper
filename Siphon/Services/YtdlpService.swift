@@ -1112,11 +1112,8 @@ class YtdlpService: ObservableObject {
 
                 // Strategy 1: Cookie failure -> handle FDA or strip browser cookies
                 if !errText.isEmpty, isCookieFailureError(errText), currentArgs.contains("--cookies-from-browser"), !triedStrategies.contains(.stripCookies) {
-                    if isSafariPermissionError(errText) || (configuredBrowserCookieSource() == "safari" && !Self.hasFullDiskAccess) {
+                    if isSafariPermissionError(errText) && !Self.hasFullDiskAccess {
                         throw YtdlpError.safariCookiesFullDiskAccessRequired
-                    }
-                    if isBoyfriendTVURL(normalizedURL) {
-                        throw mapSiteSpecificError(error, url: normalizedURL)
                     }
                     triedStrategies.insert(.stripCookies)
                     LoggerService.shared.log("Browser cookie access failed or database missing (\(errText.trimmingCharacters(in: .whitespacesAndNewlines))). Retrying download without browser cookies...", level: .warning)
@@ -2069,7 +2066,9 @@ class YtdlpService: ObservableObject {
         let isYouTube = parsedHost == "youtube.com" || parsedHost.hasSuffix(".youtube.com") || parsedHost == "youtu.be" || parsedHost.hasSuffix(".youtu.be")
         let isThisVid = isThisVidURL(parsedHost)
         let isXHamster = isXHamsterURL(parsedHost)
-        let isBoyfriendTV = isBoyfriendTVURL(parsedHost) || parsedHost == "cdn.boyfriend.tv" || parsedHost.hasSuffix(".boyfriend.tv")
+        let isBoyfriendTV = isBoyfriendTVURL(parsedHost) ||
+                            parsedHost == "cdn.boyfriend.tv" || parsedHost.hasSuffix(".boyfriend.tv") ||
+                            parsedHost == "cdn.boyfriendtv.com" || parsedHost.hasSuffix(".boyfriendtv.com")
 
         // Retries, socket timeouts & performance optimization flags
         args.append(contentsOf: ["--retries", "10"])
@@ -2127,9 +2126,10 @@ class YtdlpService: ObservableObject {
             } else {
                 args.append(contentsOf: ["--user-agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"])
             }
-            args.append(contentsOf: ["--add-header", "Origin:https://www.boyfriend.tv"])
+            let baseDomain = (parsedHost.contains("boyfriendtv.com") || lowerUrl.contains("boyfriendtv.com")) ? "https://www.boyfriendtv.com" : "https://www.boyfriend.tv"
+            args.append(contentsOf: ["--add-header", "Origin:\(baseDomain)"])
             args.append(contentsOf: ["--add-header", "Accept:*/*"])
-            let referer = lowerUrl.contains("/embed/") ? url : "https://www.boyfriend.tv/"
+            let referer = lowerUrl.contains("/embed/") ? url : "\(baseDomain)/"
             args.append(contentsOf: ["--add-header", "Referer:\(referer)"])
             args.append(contentsOf: ["--downloader", "ffmpeg"])
             args.append(contentsOf: ["--hls-use-mpegts"])

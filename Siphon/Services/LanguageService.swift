@@ -29,6 +29,7 @@ class LanguageService: ObservableObject {
         "about_app": "About Siphon",
         "couldnt_download": "Couldn't download",
         "youtube_auth_required": "YouTube requires authentication",
+        "login_required_desc": "Sign in or browser cookies required",
         "drm_protected_desc": "Media is protected by DRM encryption",
         "video_unavailable_desc": "Video is private, removed, or unavailable",
         "disk_full_desc": "No space left on destination disk",

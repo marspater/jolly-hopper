@@ -110,9 +110,11 @@ class Download: ObservableObject, Identifiable {
         let rawError = log.isEmpty ? error : log
         
         if lower.contains("sign in to confirm") || lower.contains("bot") || lower.contains("cloudflare") || lower.contains("login") || lower.contains("cookies") {
+            let isYouTube = url.lowercased().contains("youtube.com") || url.lowercased().contains("youtu.be")
+            let desc = isYouTube ? lang.s("youtube_auth_required") : lang.s("login_required_desc")
             return ErrorUXInfo(
                 headline: lang.s("couldnt_download"),
-                description: lang.s("youtube_auth_required"),
+                description: desc,
                 actionType: .fixInSettings,
                 rawError: rawError
             )
