@@ -1161,6 +1161,88 @@ final class YtdlpServiceTests: XCTestCase {
         }
     }
 
+    func testBoyfriendTVFiltersPreviewTeaserClips() async throws {
+        service.ytdlpPath = URL(fileURLWithPath: "/usr/local/bin/yt-dlp")
+        
+        // HTML containing BOTH a rollover preview (pv_*.mp4) and a full stream (_TPL_.mp4)
+        let pageWithBoth = """
+        <!DOCTYPE html><html><head><title>Full Video Title | BoyFriendTV</title>
+        <video data-preview="https://cc.boyfriend.tv/pv/bftv/2026-07/pv_dd623e903325da07577e495cec98575b.mp4"></video>
+        <script>
+        var playerConfig = {
+            sources: {"hlsAuto":"https://cdn.boyfriend.tv/key=abc,end=123/media=hls4A/multi=854x480:v480,1280x720:v720/2026-08/_TPL_.mp4"},
+            poster: 'https://cdn77-t.boyfriendtv.com/thumb.jpg'
+        };
+        </script>
+        </head><body></body></html>
+        """
+        let bothB64 = pageWithBoth.data(using: .utf8)!.base64EncodedString()
+        
+        let jsonManifestOutput = """
+        {
+            "id": "_TPL_",
+            "title": "Full Video Title",
+            "duration": 793,
+            "thumbnail": "https://cdn77-t.boyfriendtv.com/thumb.jpg",
+            "formats": [
+                {"format_id": "720", "width": 1280, "height": 720, "ext": "mp4", "protocol": "m3u8_native"}
+            ]
+        }
+        """
+
+        service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
+            if args.contains("--dump-pages") {
+                return bothB64
+            }
+            if args.contains("--dump-json") {
+                // Verify that the args target the full stream, NOT the preview pv_ clip!
+                XCTAssertFalse(args.contains(where: { $0.contains("pv_") || $0.contains("/pv/") }), "yt-dlp args should never target preview pv_ clips")
+                XCTAssertTrue(args.contains(where: { $0.contains("_TPL_.mp4") }), "yt-dlp args should target the full video stream")
+                return jsonManifestOutput
+            }
+            return "{}"
+        })
+
+        let info = try await service.fetchInfo(url: "https://www.boyfriendtv.com/videos/1032217/video_1000_sanninred/")
+        XCTAssertEqual(info.title, "Full Video Title")
+        XCTAssertEqual(info.duration, 793)
+
+        // Now test page with ONLY preview clip and loginProtected (unauthenticated / missing FDA)
+        let loginProtectedHTML = """
+        <!DOCTYPE html><html><head><title>Video_1000_SanninRed | BoyFriendTV</title>
+        <video data-preview="https://cc.boyfriend.tv/pv/bftv/2026-07/pv_dd623e903325da07577e495cec98575b.mp4"></video>
+        </head><body>
+        <div class="videoContainer"><div class="loginProtected">To watch this video please Login</div></div>
+        </body></html>
+        """
+        let loginB64 = loginProtectedHTML.data(using: .utf8)!.base64EncodedString()
+
+        UserDefaults.standard.set("safari", forKey: UserDefaultsKeys.browserForCookies)
+        defer { UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.browserForCookies) }
+
+        service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
+            if args.contains("--dump-pages") {
+                return loginB64
+            }
+            if args.contains("--dump-json") {
+                throw YtdlpError.commandFailed("ERROR: Unsupported URL")
+            }
+            return "{}"
+        })
+
+        do {
+            _ = try await service.fetchInfo(url: "https://www.boyfriendtv.com/videos/1032217/video_1000_sanninred/")
+            XCTFail("Should not succeed or download a preview clip on a login-protected video")
+        } catch let err as YtdlpError {
+            switch err {
+            case .safariCookiesFullDiskAccessRequired, .boyfriendTVLoginRequired, .boyfriendTVNeedsBrowserCookies:
+                break // Expected
+            default:
+                XCTFail("Unexpected error: \(err)")
+            }
+        }
+    }
+
     func testMediaFormatDecodesTBRAndNeedsTesting() throws {
         let json = """
         {

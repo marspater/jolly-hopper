@@ -1110,8 +1110,14 @@ class YtdlpService: ObservableObject {
                     errText = ""
                 }
 
-                // Strategy 1: Cookie failure -> strip browser cookies
+                // Strategy 1: Cookie failure -> handle FDA or strip browser cookies
                 if !errText.isEmpty, isCookieFailureError(errText), currentArgs.contains("--cookies-from-browser"), !triedStrategies.contains(.stripCookies) {
+                    if isSafariPermissionError(errText) || (configuredBrowserCookieSource() == "safari" && !Self.hasFullDiskAccess) {
+                        throw YtdlpError.safariCookiesFullDiskAccessRequired
+                    }
+                    if isBoyfriendTVURL(normalizedURL) {
+                        throw mapSiteSpecificError(error, url: normalizedURL)
+                    }
                     triedStrategies.insert(.stripCookies)
                     LoggerService.shared.log("Browser cookie access failed or database missing (\(errText.trimmingCharacters(in: .whitespacesAndNewlines))). Retrying download without browser cookies...", level: .warning)
                     if let browser = configuredBrowserCookieSource() {
@@ -1855,12 +1861,23 @@ class YtdlpService: ObservableObject {
             "(https?:\\\\?/\\\\?/[^\\s\"'<>]+\\.boyfriend\\.tv[^\\s\"'<>]+?\\.mp4)"
         ]
         for pattern in streamPatterns {
-            if let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive),
-               let match = regex.firstMatch(in: html, options: [], range: NSRange(location: 0, length: (html as NSString).length)),
-               match.numberOfRanges > 1 {
-                let rawVal = (html as NSString).substring(with: match.range(at: 1)).replacingOccurrences(of: "\\/", with: "/")
-                if rawVal.hasPrefix("http") {
-                    return rawVal
+            if let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive) {
+                let matches = regex.matches(in: html, options: [], range: NSRange(location: 0, length: (html as NSString).length))
+                for match in matches where match.numberOfRanges > 1 {
+                    let rawVal = (html as NSString).substring(with: match.range(at: 1)).replacingOccurrences(of: "\\/", with: "/")
+                    if rawVal.hasPrefix("http") {
+                        let lowerVal = rawVal.lowercased()
+                        // Ignore teaser / preview / rollover clips
+                        if lowerVal.contains("/pv/") ||
+                           lowerVal.contains("pv_") ||
+                           lowerVal.contains("/preview/") ||
+                           lowerVal.contains("preview_") ||
+                           lowerVal.contains("trailer") ||
+                           lowerVal.contains("teaser") {
+                            continue
+                        }
+                        return rawVal
+                    }
                 }
             }
         }
@@ -1970,7 +1987,7 @@ class YtdlpService: ObservableObject {
         let lowerErr = errString.lowercased()
         let configuredBrowser = configuredBrowserCookieSource()
 
-        if isSafariPermissionError(errString) {
+        if isSafariPermissionError(errString) || (configuredBrowser == "safari" && isCookieFailureError(errString) && !Self.hasFullDiskAccess) {
             return YtdlpError.safariCookiesFullDiskAccessRequired
         }
 
@@ -1981,7 +1998,7 @@ class YtdlpService: ObservableObject {
             if lowerErr.contains("unavailable") || lowerErr.contains("removed") || lowerErr.contains("404") || lowerErr.contains("not found") {
                 return YtdlpError.downloadFailed("This video is unavailable, private, or has been removed.")
             }
-            if lowerErr.contains("sign in") || lowerErr.contains("private video") || lowerErr.contains("login") || lowerErr.contains("members-only") {
+            if lowerErr.contains("sign in") || lowerErr.contains("private video") || lowerErr.contains("login") || lowerErr.contains("members-only") || lowerErr.contains("unsupported url") {
                 if configuredBrowser == "safari" && !Self.hasFullDiskAccess {
                     return YtdlpError.safariCookiesFullDiskAccessRequired
                 }
@@ -1990,12 +2007,6 @@ class YtdlpService: ObservableObject {
                 } else {
                     return YtdlpError.boyfriendTVLoginRequired
                 }
-            }
-            if isCookieFailureError(errString) && configuredBrowser == "safari" && !Self.hasFullDiskAccess {
-                return YtdlpError.safariCookiesFullDiskAccessRequired
-            }
-            if lowerErr.contains("unsupported url") {
-                return YtdlpError.downloadFailed("Could not extract video stream from this BoyfriendTV URL. Please verify the video link and try again.")
             }
             return error
         }
@@ -2143,7 +2154,15 @@ class YtdlpService: ObservableObject {
             NSHomeDirectory() + "/Library/Safari/Bookmarks.plist",
             NSHomeDirectory() + "/Library/Safari/History.db"
         ]
-        return candidatePaths.contains(where: { FileManager.default.isReadableFile(atPath: $0) })
+        for path in candidatePaths {
+            if FileManager.default.fileExists(atPath: path) {
+                if let fileHandle = FileHandle(forReadingAtPath: path) {
+                    try? fileHandle.close()
+                    return true
+                }
+            }
+        }
+        return false
     }
 
     private func isCookieFailureError(_ errorOutput: String) -> Bool {
@@ -2162,7 +2181,11 @@ class YtdlpService: ObservableObject {
     private func isSafariPermissionError(_ errorOutput: String) -> Bool {
         let lower = errorOutput.lowercased()
         return (lower.contains("safari") || lower.contains("cookies.binarycookies")) &&
-               (lower.contains("operation not permitted") || lower.contains("errno 1") || lower.contains("permission denied") || (lower.contains("could not find") && lower.contains("cookies database")))
+               (lower.contains("operation not permitted") ||
+                lower.contains("errno 1") ||
+                lower.contains("permission denied") ||
+                (lower.contains("could not find") && lower.contains("cookies database")) ||
+                (lower.contains("unable to extract") && lower.contains("cookies")))
     }
 
     private func stripCookieArgs(from args: [String]) -> [String] {
