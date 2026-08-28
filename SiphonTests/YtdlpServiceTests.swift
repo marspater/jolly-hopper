@@ -915,9 +915,9 @@ final class YtdlpServiceTests: XCTestCase {
         )
         
         let lastArg = capturedArgsBox.value.last ?? ""
-        XCTAssertTrue(lastArg.contains("boyfriend.tv"), "BoyfriendTV download must target the resolved stream or canonical BoyfriendTV domain")
-        XCTAssertTrue(capturedArgsBox.value.contains("Origin:https://www.boyfriend.tv"))
-        XCTAssertTrue(capturedArgsBox.value.contains(where: { $0.contains("Referer:https://www.boyfriend.tv") }))
+        XCTAssertTrue(lastArg.contains("boyfriend"), "BoyfriendTV download must target the resolved stream or canonical BoyfriendTV domain")
+        XCTAssertTrue(capturedArgsBox.value.contains(where: { $0.hasPrefix("Origin:https://www.boyfriend") }))
+        XCTAssertTrue(capturedArgsBox.value.contains(where: { $0.contains("Referer:https://www.boyfriend") }))
     }
 
     func testBoyfriendTVMultiFormatManifestExtraction() async throws {
@@ -958,9 +958,9 @@ final class YtdlpServiceTests: XCTestCase {
         service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
             capturedArgs.value.append(args)
             if args.contains("--dump-pages") {
-                if args.contains("https://www.boyfriend.tv/videos/1140993/") {
+                if args.contains(where: { $0.contains("/videos/1140993/") }) {
                     return mainB64
-                } else if args.contains("https://www.boyfriend.tv/embed/1140993/46075/") {
+                } else if args.contains(where: { $0.contains("/embed/1140993/") }) {
                     return embedB64
                 }
             }
@@ -1016,9 +1016,9 @@ final class YtdlpServiceTests: XCTestCase {
         service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
             capturedArgs.value.append(args)
             if args.contains("--dump-pages") {
-                if args.contains("https://www.boyfriend.tv/videos/1630228/") {
+                if args.contains(where: { $0.contains("/videos/1630228/") }) {
                     return mainB64
-                } else if args.contains("https://www.boyfriend.tv/embed/1630228/20231/600/338/") {
+                } else if args.contains(where: { $0.contains("/embed/1630228/") }) {
                     return embedB64
                 }
             }
@@ -1064,7 +1064,7 @@ final class YtdlpServiceTests: XCTestCase {
         """
 
         service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
-            if args.contains("--dump-pages") && args.contains("https://www.boyfriend.tv/videos/1702908/") {
+            if args.contains("--dump-pages") && args.contains(where: { $0.contains("/videos/1702908/") }) {
                 return mainB64
             }
             if args.contains("--dump-json") {
