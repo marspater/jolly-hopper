@@ -249,7 +249,14 @@ final class DownloadManagerTests: XCTestCase {
         let manager = DownloadManager()
         let languageService = LanguageService()
         manager.languageService = languageService
-        manager.ytdlpService.ytdlpPath = URL(fileURLWithPath: "/usr/local/bin/yt-dlp")
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try? FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        let dummyYtdlp = tempDir.appendingPathComponent("yt-dlp")
+        let dummyFfmpeg = tempDir.appendingPathComponent("ffmpeg")
+        FileManager.default.createFile(atPath: dummyYtdlp.path, contents: Data("#!/bin/sh\n".utf8), attributes: [.posixPermissions: 0o755])
+        FileManager.default.createFile(atPath: dummyFfmpeg.path, contents: Data("#!/bin/sh\n".utf8), attributes: [.posixPermissions: 0o755])
+        manager.ytdlpService.ytdlpPath = dummyYtdlp
+        manager.ytdlpService.ffmpegPath = dummyFfmpeg
 
         let mockJSON = """
         {

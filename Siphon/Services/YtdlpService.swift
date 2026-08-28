@@ -676,9 +676,15 @@ class YtdlpService: ObservableObject {
                 btvArgs.append("--")
                 btvArgs.append(btvMedia.streamURL)
                 
-                if let output = try? await runCommand(btvArgs),
-                    let data = output.data(using: .utf8),
-                    let parsedInfo = try? JSONDecoder().decode(MediaInfo.self, from: data) {
+                let output: String
+                do {
+                    output = try await runCommand(btvArgs)
+                } catch let err as YtdlpError {
+                    throw mapSiteSpecificError(err, url: url)
+                }
+
+                if let data = output.data(using: .utf8),
+                   let parsedInfo = try? JSONDecoder().decode(MediaInfo.self, from: data) {
                     return MediaInfo(
                         id: url,
                         title: btvMedia.title,
@@ -1613,9 +1619,14 @@ class YtdlpService: ObservableObject {
         
         var browsersToTry: [String?] = []
         if let configured = configuredBrowserCookieSource() {
-            browsersToTry.append(configured)
+            if configured != "safari" || Self.hasFullDiskAccess {
+                browsersToTry.append(configured)
+            }
         }
         for candidate in ["safari", "chrome", "brave", "firefox", "edge"] {
+            if candidate == "safari" && !Self.hasFullDiskAccess {
+                continue
+            }
             if !browsersToTry.contains(where: { $0 == candidate }) {
                 browsersToTry.append(candidate)
             }
@@ -1679,11 +1690,13 @@ class YtdlpService: ObservableObject {
             }
         }
         
-        // Fallback to URLSession if browser dump output was empty
-        if html.isEmpty {
+        // Fallback to URLSession if browser dump output was empty or didn't contain stream
+        if html.isEmpty && (processRunner is DefaultYtdlpProcessRunner) {
             var request = URLRequest(url: pageURL)
+            request.timeoutInterval = 3.0
             request.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36", forHTTPHeaderField: "User-Agent")
             request.setValue("https://www.boyfriend.tv/", forHTTPHeaderField: "Referer")
+            request.setValue("https://www.boyfriend.tv", forHTTPHeaderField: "Origin")
             
             if let (data, response) = try? await URLSession.shared.data(for: request),
                let httpResponse = response as? HTTPURLResponse,
@@ -1763,44 +1776,64 @@ class YtdlpService: ObservableObject {
         var streamUrl = extractStreamURLFromHTML(html)
         
         // If stream URL is not found on main page, fetch embed URL page
-        if streamUrl == nil, let embed = embedUrl, let ytdlp = ytdlpBinary {
-            for browser in browsersToTry {
-                var embedArgs = [ytdlp.path, "--ignore-config", "--dump-pages"]
-                if let browserName = browser {
-                    embedArgs.append(contentsOf: ["--cookies-from-browser", browserName])
-                }
-                appendSiteSpecificArgs(for: embed, to: &embedArgs)
-                embedArgs.append("--")
-                embedArgs.append(embed)
-                
-                var embedDump: String? = nil
-                do {
-                    embedDump = try await processRunner.runCommand(embedArgs)
-                } catch let error as YtdlpError {
-                    if case .commandFailed(let output) = error {
-                        embedDump = output
+        if streamUrl == nil, let embed = embedUrl {
+            if let ytdlp = ytdlpBinary {
+                for browser in browsersToTry {
+                    var embedArgs = [ytdlp.path, "--ignore-config", "--dump-pages"]
+                    if let browserName = browser {
+                        embedArgs.append(contentsOf: ["--cookies-from-browser", browserName])
                     }
-                } catch {}
-                
-                if let output = embedDump, !output.isEmpty {
-                    var embedHtml = ""
-                    // Bolt Performance Optimization: Use Substring iteration instead of allocating a large intermediate string array
-                    for line in output.split(whereSeparator: \.isNewline) {
-                        let trimmed = String(line).trimmingCharacters(in: .whitespaces)
-                        if !trimmed.starts(with: "#") && !trimmed.starts(with: "[") && !trimmed.starts(with: "WARNING") && !trimmed.starts(with: "ERROR") {
-                            if let decodedData = Data(base64Encoded: trimmed, options: .ignoreUnknownCharacters) {
-                                let decodedString = String(decoding: decodedData, as: UTF8.self)
-                                if !decodedString.isEmpty {
-                                    embedHtml += decodedString
+                    appendSiteSpecificArgs(for: embed, to: &embedArgs)
+                    embedArgs.append("--")
+                    embedArgs.append(embed)
+                    
+                    var embedDump: String? = nil
+                    do {
+                        embedDump = try await processRunner.runCommand(embedArgs)
+                    } catch let error as YtdlpError {
+                        if case .commandFailed(let output) = error {
+                            embedDump = output
+                        }
+                    } catch {}
+                    
+                    if let output = embedDump, !output.isEmpty {
+                        var embedHtml = ""
+                        // Bolt Performance Optimization: Use Substring iteration instead of allocating a large intermediate string array
+                        for line in output.split(whereSeparator: \.isNewline) {
+                            let trimmed = String(line).trimmingCharacters(in: .whitespaces)
+                            if !trimmed.starts(with: "#") && !trimmed.starts(with: "[") && !trimmed.starts(with: "WARNING") && !trimmed.starts(with: "ERROR") {
+                                if let decodedData = Data(base64Encoded: trimmed, options: .ignoreUnknownCharacters) {
+                                    let decodedString = String(decoding: decodedData, as: UTF8.self)
+                                    if !decodedString.isEmpty {
+                                        embedHtml += decodedString
+                                    }
                                 }
                             }
                         }
-                    }
-                    if !embedHtml.isEmpty {
-                        if let extracted = extractStreamURLFromHTML(embedHtml) {
-                            streamUrl = extracted
-                            break
+                        if !embedHtml.isEmpty {
+                            if let extracted = extractStreamURLFromHTML(embedHtml) {
+                                streamUrl = extracted
+                                break
+                            }
                         }
+                    }
+                }
+            }
+
+            // HTTP fallback for embed URL if yt-dlp did not extract stream
+            if streamUrl == nil, let embedPageURL = URL(string: embed), (processRunner is DefaultYtdlpProcessRunner) {
+                var embedRequest = URLRequest(url: embedPageURL)
+                embedRequest.timeoutInterval = 3.0
+                embedRequest.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36", forHTTPHeaderField: "User-Agent")
+                embedRequest.setValue("https://www.boyfriend.tv/", forHTTPHeaderField: "Referer")
+                embedRequest.setValue("https://www.boyfriend.tv", forHTTPHeaderField: "Origin")
+
+                if let (data, response) = try? await URLSession.shared.data(for: embedRequest),
+                   let httpResponse = response as? HTTPURLResponse,
+                   httpResponse.statusCode == 200,
+                   let fetchedEmbed = String(data: data, encoding: .utf8) {
+                    if let extracted = extractStreamURLFromHTML(fetchedEmbed) {
+                        streamUrl = extracted
                     }
                 }
             }
@@ -1817,7 +1850,9 @@ class YtdlpService: ObservableObject {
         let streamPatterns = [
             "\"(?:hlsAuto|hls|videoUrl|media|src|file|video_url)\"\\s*:\\s*\"(https?:[^\"]+)\"",
             "(https?:\\\\?/\\\\?/cdn\\.boyfriend\\.tv[^\\s\"'<>]+?\\.mp4)",
-            "(https?:\\\\?/\\\\?/cdn\\.boyfriend\\.tv[^\\s\"'<>]+?\\.m3u8)"
+            "(https?:\\\\?/\\\\?/cdn\\.boyfriend\\.tv[^\\s\"'<>]+?\\.m3u8)",
+            "(https?:\\\\?/\\\\?/[^\\s\"'<>]+\\.boyfriend\\.tv[^\\s\"'<>]+?\\.m3u8)",
+            "(https?:\\\\?/\\\\?/[^\\s\"'<>]+\\.boyfriend\\.tv[^\\s\"'<>]+?\\.mp4)"
         ]
         for pattern in streamPatterns {
             if let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive),
@@ -1852,25 +1887,23 @@ class YtdlpService: ObservableObject {
             }
             if components.queryItems?.isEmpty == true { components.queryItems = nil }
             
-            // Strip localized language path prefixes like /ru/, /de/, /fr/, /es/, /it/, /pt/, /pl/, /ja/, /zh/, /ko/, etc.
-            var path = components.path
-            let langRegex = "^/([a-z]{2})/"
-            if let range = path.range(of: langRegex, options: [.regularExpression, .caseInsensitive]) {
-                let matched = String(path[range])
-                let reservedPaths = ["/v/", "/u/", "/b/", "/p/"]
-                if !reservedPaths.contains(matched.lowercased()) {
-                    path = "/" + String(path.dropFirst(matched.count))
-                    components.path = path
+            let path = components.path
+            // Extract video ID from path or query across all language/subdomain variations
+            let videoId: String? = {
+                if let regex = try? NSRegularExpression(pattern: "(?:^|/)(?:videos|embed|v)/(\\d+)", options: .caseInsensitive),
+                   let match = regex.firstMatch(in: path, options: [], range: NSRange(location: 0, length: (path as NSString).length)),
+                   match.numberOfRanges > 1 {
+                    return (path as NSString).substring(with: match.range(at: 1))
                 }
-            }
+                if let queryId = components.queryItems?.first(where: { ["id", "v", "video_id"].contains($0.name.lowercased()) })?.value,
+                   queryId.allSatisfy(\.isNumber), !queryId.isEmpty {
+                    return queryId
+                }
+                return nil
+            }()
 
-            // Normalize video paths with ID to canonical host www.boyfriend.tv and path /videos/<id>/
-            let videoIdPattern = "^/(?:videos|embed)/(\\d+)"
-            if let regex = try? NSRegularExpression(pattern: videoIdPattern, options: .caseInsensitive),
-               let match = regex.firstMatch(in: path, options: [], range: NSRange(location: 0, length: (path as NSString).length)),
-               match.numberOfRanges > 1 {
-                let videoId = (path as NSString).substring(with: match.range(at: 1))
-                return "https://www.boyfriend.tv/videos/\(videoId)/"
+            if let id = videoId {
+                return "https://www.boyfriend.tv/videos/\(id)/"
             }
 
             components.host = "www.boyfriend.tv"
@@ -1933,20 +1966,48 @@ class YtdlpService: ObservableObject {
     }
 
     private func mapSiteSpecificError(_ error: Error, url: String) -> Error {
+        let errString = "\(error)"
+        let lowerErr = errString.lowercased()
+        let configuredBrowser = configuredBrowserCookieSource()
+
+        if isSafariPermissionError(errString) {
+            return YtdlpError.safariCookiesFullDiskAccessRequired
+        }
+
         if isBoyfriendTVURL(url) {
-            if configuredBrowserCookieSource() == nil {
-                return YtdlpError.boyfriendTVNeedsBrowserCookies
-            } else {
-                return YtdlpError.boyfriendTVLoginRequired
+            if lowerErr.contains("cloudflare") || lowerErr.contains("403") || lowerErr.contains("anti-bot") || lowerErr.contains("captcha") || lowerErr.contains("challenge") {
+                return YtdlpError.cloudflareBlocked
             }
+            if lowerErr.contains("unavailable") || lowerErr.contains("removed") || lowerErr.contains("404") || lowerErr.contains("not found") {
+                return YtdlpError.downloadFailed("This video is unavailable, private, or has been removed.")
+            }
+            if lowerErr.contains("sign in") || lowerErr.contains("private video") || lowerErr.contains("login") || lowerErr.contains("members-only") {
+                if configuredBrowser == "safari" && !Self.hasFullDiskAccess {
+                    return YtdlpError.safariCookiesFullDiskAccessRequired
+                }
+                if configuredBrowser == nil {
+                    return YtdlpError.boyfriendTVNeedsBrowserCookies
+                } else {
+                    return YtdlpError.boyfriendTVLoginRequired
+                }
+            }
+            if isCookieFailureError(errString) && configuredBrowser == "safari" && !Self.hasFullDiskAccess {
+                return YtdlpError.safariCookiesFullDiskAccessRequired
+            }
+            if lowerErr.contains("unsupported url") {
+                return YtdlpError.downloadFailed("Could not extract video stream from this BoyfriendTV URL. Please verify the video link and try again.")
+            }
+            return error
         }
 
         let parsedHost = (URL(string: url)?.host ?? url).lowercased()
         let isYouTube = parsedHost == "youtube.com" || parsedHost.hasSuffix(".youtube.com") || parsedHost == "youtu.be" || parsedHost.hasSuffix(".youtu.be")
         if isYouTube {
-            let errString = "\(error)"
-            if errString.contains("403") || errString.contains("Sign in") || errString.contains("bot") || errString.contains("login_required") {
-                if configuredBrowserCookieSource() == nil {
+            if lowerErr.contains("403") || lowerErr.contains("sign in") || lowerErr.contains("bot") || lowerErr.contains("login_required") {
+                if configuredBrowser == "safari" && !Self.hasFullDiskAccess {
+                    return YtdlpError.safariCookiesFullDiskAccessRequired
+                }
+                if configuredBrowser == nil {
                     return YtdlpError.downloadFailed("YouTube requires authentication or browser cookies. Go to Settings > Advanced > Browser Cookies to select your browser.")
                 }
             }
@@ -2075,6 +2136,16 @@ class YtdlpService: ObservableObject {
         }
     }
 
+    static var hasFullDiskAccess: Bool {
+        let candidatePaths = [
+            NSHomeDirectory() + "/Library/Containers/com.apple.Safari/Data/Library/Cookies/Cookies.binarycookies",
+            NSHomeDirectory() + "/Library/Cookies/Cookies.binarycookies",
+            NSHomeDirectory() + "/Library/Safari/Bookmarks.plist",
+            NSHomeDirectory() + "/Library/Safari/History.db"
+        ]
+        return candidatePaths.contains(where: { FileManager.default.isReadableFile(atPath: $0) })
+    }
+
     private func isCookieFailureError(_ errorOutput: String) -> Bool {
         let lower = errorOutput.lowercased()
         if lower.contains("extracted") && lower.contains("cookies") {
@@ -2086,6 +2157,12 @@ class YtdlpService: ObservableObject {
                (lower.contains("could not find") && lower.contains("cookies database")) ||
                lower.contains("failed to decrypt") ||
                (lower.contains("unable to extract") && lower.contains("cookies"))
+    }
+
+    private func isSafariPermissionError(_ errorOutput: String) -> Bool {
+        let lower = errorOutput.lowercased()
+        return (lower.contains("safari") || lower.contains("cookies.binarycookies")) &&
+               (lower.contains("operation not permitted") || lower.contains("errno 1") || lower.contains("permission denied") || (lower.contains("could not find") && lower.contains("cookies database")))
     }
 
     private func stripCookieArgs(from args: [String]) -> [String] {
@@ -2189,8 +2266,12 @@ class YtdlpService: ObservableObject {
     }
 
     private func resolveSucuriCookie(for url: String) async -> (name: String, value: String)? {
-        guard let url = URL(string: url) else { return nil }
-        var request = URLRequest(url: url)
+        guard let parsedURL = URL(string: url), let host = parsedURL.host?.lowercased() else { return nil }
+        let sucuriDomains = ["thisvid.com"]
+        guard sucuriDomains.contains(where: { host == $0 || host.hasSuffix("." + $0) }) else { return nil }
+
+        var request = URLRequest(url: parsedURL)
+        request.timeoutInterval = 3.0
         request.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36", forHTTPHeaderField: "User-Agent")
 
         do {
@@ -2327,6 +2408,7 @@ enum YtdlpError: LocalizedError {
     case ffmpegInstallationFailed(String)
     case boyfriendTVNeedsBrowserCookies
     case boyfriendTVLoginRequired
+    case safariCookiesFullDiskAccessRequired
     case securityViolation(String)
 
     var errorDescription: String? {
@@ -2351,6 +2433,8 @@ enum YtdlpError: LocalizedError {
             return "This video site requires signed-in browser cookies. Open Settings > Advanced > Browser Cookies, choose your browser, then try again."
         case .boyfriendTVLoginRequired:
             return "Could not extract video stream. This specific video may require a login (premium/private). Siphon cannot automatically access logged-in videos."
+        case .safariCookiesFullDiskAccessRequired:
+            return "Safari cookies require Full Disk Access on macOS. Please grant Full Disk Access to Siphon in System Settings > Privacy & Security > Full Disk Access, or choose another browser in Settings > Advanced."
         case .securityViolation(let message):
             return "Security violation: \(message)"
         }

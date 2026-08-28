@@ -1035,6 +1035,132 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertEqual(info.thumbnail, "https://cdn77-t.boyfriendtv.com/thumb.jpg")
     }
 
+    func testBoyfriendTVLocalizedPathPrefixAndUrlVariations() async throws {
+        service.ytdlpPath = URL(fileURLWithPath: "/usr/local/bin/yt-dlp")
+        
+        let mainPageHTML = """
+        <!DOCTYPE html><html><head><title>Hot Brazilian Threesome | BoyFriendTV</title>
+        <script>
+        var playerConfig = {
+            sources: {"hlsAuto":"https://cdn.boyfriend.tv/key=abc,end=123/media=hls4A/multi=854x480:v480,1280x720:v720/2026-08/_TPL_.mp4"},
+            poster: 'https://cdn77-t.boyfriendtv.com/thumb.jpg'
+        };
+        </script>
+        </head><body></body></html>
+        """
+        let mainB64 = mainPageHTML.data(using: .utf8)!.base64EncodedString()
+        
+        let jsonManifestOutput = """
+        {
+            "id": "_TPL_",
+            "title": "_TPL_",
+            "duration": 2992,
+            "thumbnail": "https://cdn77-t.boyfriendtv.com/thumb.jpg",
+            "formats": [
+                {"format_id": "480", "width": 854, "height": 480, "ext": "mp4", "protocol": "m3u8_native"},
+                {"format_id": "720", "width": 1280, "height": 720, "ext": "mp4", "protocol": "m3u8_native"}
+            ]
+        }
+        """
+
+        service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
+            if args.contains("--dump-pages") && args.contains("https://www.boyfriend.tv/videos/1702908/") {
+                return mainB64
+            }
+            if args.contains("--dump-json") {
+                return jsonManifestOutput
+            }
+            return "{}"
+        })
+
+        // Test with /ru/ prefix on boyfriendtv.com
+        let info = try await service.fetchInfo(url: "https://www.boyfriendtv.com/ru/videos/1702908/hot-brazilian-threesome/")
+        XCTAssertEqual(info.title, "Hot Brazilian Threesome")
+        XCTAssertEqual(info.formats?.count, 2)
+        XCTAssertEqual(info.duration, 2992)
+    }
+
+    func testBoyfriendTVErrorMappingDistinguishesCloudflareAndUnsupportedURL() async throws {
+        service.ytdlpPath = URL(fileURLWithPath: "/usr/local/bin/yt-dlp")
+        UserDefaults.standard.set("safari", forKey: UserDefaultsKeys.browserForCookies)
+        defer { UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.browserForCookies) }
+
+        // 1. Cloudflare error
+        service.processRunner = MockYtdlpProcessRunner(mockCommand: { _ in
+            throw YtdlpError.commandFailed("ERROR: Cloudflare 403 Forbidden captcha challenge")
+        })
+        do {
+            _ = try await service.fetchInfo(url: "https://www.boyfriendtv.com/videos/1702908/test/")
+            XCTFail("Expected cloudflare error to be thrown")
+        } catch let err as YtdlpError {
+            if case .cloudflareBlocked = err {
+                // Expected
+            } else {
+                XCTFail("Expected .cloudflareBlocked but got \(err)")
+            }
+        }
+
+        // 2. Unsupported URL / extraction failure should NOT report login required
+        service.processRunner = MockYtdlpProcessRunner(mockCommand: { _ in
+            throw YtdlpError.commandFailed("ERROR: Unsupported URL: https://www.boyfriend.tv/r")
+        })
+        do {
+            _ = try await service.fetchInfo(url: "https://www.boyfriendtv.com/r")
+            XCTFail("Expected error to be thrown")
+        } catch let err as YtdlpError {
+            if case .boyfriendTVLoginRequired = err {
+                XCTFail("Should not falsely report boyfriendTVLoginRequired for an invalid/unsupported URL")
+            }
+        }
+
+        // 3. Safari permission denied (Operation not permitted) maps to safariCookiesFullDiskAccessRequired
+        service.processRunner = MockYtdlpProcessRunner(mockCommand: { _ in
+            throw YtdlpError.commandFailed("ERROR: [Cookies] Failed to extract cookies from Safari: [Errno 1] Operation not permitted: '/Users/test/Library/Containers/com.apple.Safari/Data/Library/Cookies/Cookies.binarycookies'")
+        })
+        do {
+            _ = try await service.fetchInfo(url: "https://www.boyfriendtv.com/videos/1702908/test/")
+            XCTFail("Expected error to be thrown")
+        } catch let err as YtdlpError {
+            if case .safariCookiesFullDiskAccessRequired = err {
+                // Expected
+            } else {
+                XCTFail("Expected .safariCookiesFullDiskAccessRequired but got \(err)")
+            }
+        }
+
+        // 4. No cookies configured and sign in required maps to boyfriendTVNeedsBrowserCookies
+        UserDefaults.standard.set("none", forKey: UserDefaultsKeys.browserForCookies)
+        service.processRunner = MockYtdlpProcessRunner(mockCommand: { _ in
+            throw YtdlpError.commandFailed("ERROR: Private video. Sign in to view this video")
+        })
+        do {
+            _ = try await service.fetchInfo(url: "https://www.boyfriendtv.com/videos/1702908/test/")
+            XCTFail("Expected error to be thrown")
+        } catch let err as YtdlpError {
+            if case .boyfriendTVNeedsBrowserCookies = err {
+                // Expected
+            } else {
+                XCTFail("Expected .boyfriendTVNeedsBrowserCookies but got \(err)")
+            }
+        }
+
+        // 5. Chrome cookies configured and sign in required maps to boyfriendTVLoginRequired
+        UserDefaults.standard.set("chrome", forKey: UserDefaultsKeys.browserForCookies)
+        service.processRunner = MockYtdlpProcessRunner(mockCommand: { _ in
+            throw YtdlpError.commandFailed("ERROR: Private video. Sign in to view this video")
+        })
+        do {
+            _ = try await service.fetchInfo(url: "https://www.boyfriendtv.com/videos/1702908/test/")
+            XCTFail("Expected error to be thrown")
+        } catch let err as YtdlpError {
+            if case .boyfriendTVLoginRequired = err {
+                // Expected
+            } else {
+                XCTFail("Expected .boyfriendTVLoginRequired but got \(err)")
+            }
+        }
+    }
+
     func testMediaFormatDecodesTBRAndNeedsTesting() throws {
         let json = """
         {
