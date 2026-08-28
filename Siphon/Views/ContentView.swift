@@ -96,6 +96,7 @@ struct ContentView: View {
             DetailView()
         }
         .navigationSplitViewStyle(.balanced)
+        .background(.ultraThinMaterial)
     }
 }
 
@@ -183,9 +184,7 @@ struct SidebarView: View {
         let isSelected = appState.selectedNavItem == item
         Button {
             if appState.selectedNavItem != item {
-                withAnimation(.spring(response: 0.32, dampingFraction: 0.75)) {
-                    appState.selectedNavItem = item
-                }
+                appState.selectedNavItem = item
             }
         } label: {
             HStack(spacing: 8) {
@@ -193,7 +192,6 @@ struct SidebarView: View {
                     .font(.geist(13, weight: .medium))
                     .frame(width: 18, alignment: .center)
                     .foregroundColor(isSelected ? SiphonTheme.accent : .secondary)
-                    .scaleEffect(isSelected ? 1.05 : 1.0)
                 Text(item.title(lang: languageService))
                     .font(.geist(13, weight: isSelected ? .semibold : .medium))
                     .foregroundColor(isSelected ? .primary : .secondary)
@@ -209,15 +207,16 @@ struct SidebarView: View {
                         .clipShape(Capsule())
                 }
             }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 5)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .padding(.vertical, 2)
+        .listRowInsets(EdgeInsets(top: 2, leading: 6, bottom: 2, trailing: 6))
         .listRowBackground(
             RoundedRectangle(cornerRadius: SiphonTheme.radiusControl)
                 .fill(isSelected ? SiphonTheme.accent.opacity(0.12) : Color.clear)
-                .padding(.horizontal, 4)
-                .padding(.vertical, 1)
+                .padding(.horizontal, 2)
         )
     }
 }
@@ -235,7 +234,7 @@ struct DetailView: View {
     @EnvironmentObject var languageService: LanguageService
     
     var body: some View {
-        Group {
+        ZStack {
             switch appState.selectedNavItem {
             case .home:
                 HomeView()
@@ -250,9 +249,6 @@ struct DetailView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .compositingGroup()
-        .transition(.opacity)
-        .animation(.spring(response: 0.32, dampingFraction: 0.75), value: appState.selectedNavItem)
     }
 }
 

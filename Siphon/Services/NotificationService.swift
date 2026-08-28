@@ -134,9 +134,6 @@ final class NotificationService: NSObject, @unchecked Sendable, UNUserNotificati
         content.sound = .default
         content.categoryIdentifier = "download"
         self.sendNotification(content: content, logName: "Completed: \(cleanFilename)")
-        DispatchQueue.main.async {
-            NSSound(named: "Glass")?.play()
-        }
     }
 
     func sendEncodingCompleted(filename: String, codec: String, languageService: LanguageService? = nil) {
@@ -146,9 +143,6 @@ final class NotificationService: NSObject, @unchecked Sendable, UNUserNotificati
         content.body = "\(cleanFilename) was successfully converted to \(codec) codec."
         content.sound = .default
         sendNotification(content: content, logName: "Conversion: \(cleanFilename)")
-        DispatchQueue.main.async {
-            NSSound(named: "Glass")?.play()
-        }
     }
 
     func sendDownloadFailed(filename: String, languageService: LanguageService? = nil) {
@@ -160,9 +154,6 @@ final class NotificationService: NSObject, @unchecked Sendable, UNUserNotificati
         content.sound = .default
         content.categoryIdentifier = "download"
         self.sendNotification(content: content, logName: "Failed: \(cleanFilename)")
-        DispatchQueue.main.async {
-            NSSound(named: "Basso")?.play()
-        }
     }
 
     func sendDownloadStopped(filename: String, languageService: LanguageService? = nil) {
