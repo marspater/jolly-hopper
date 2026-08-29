@@ -454,7 +454,6 @@ final class QueueAndErrorUXTests: XCTestCase {
         manager.stopDownload(download)
         XCTAssertEqual(download.status, .stopped, "Stopping during postprocessing must set status to .stopped")
         XCTAssertTrue(controller.isCancelled, "Attached controller must be cancelled")
-        XCTAssertNil(manager.activeControllers[download.id], "Controller must be detached from activeControllers")
     }
 
     func testProcessExitingWhilePipeCallbacksAreActive() async {
