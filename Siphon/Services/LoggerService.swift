@@ -94,8 +94,24 @@ class LoggerService: ObservableObject {
         let fileURL = logFileURL
         let maxEntries = maxLogEntries
         Task.detached {
-            guard let content = try? String(contentsOf: fileURL, encoding: .utf8) else { return }
-            let lines = content.components(separatedBy: .newlines).filter { !$0.isEmpty }
+            guard let handle = FileHandle(forReadingAtPath: fileURL.path) else { return }
+            defer { try? handle.close() }
+            
+            let fileSize = (try? handle.seekToEnd()) ?? 0
+            guard fileSize > 0 else { return }
+
+            let readSize = min(fileSize, 256 * 1024)
+            let seekPos = fileSize - readSize
+            try? handle.seek(toOffset: seekPos)
+            let data = handle.readData(ofLength: Int(readSize))
+            guard !data.isEmpty else { return }
+
+            var text = String(decoding: data, as: UTF8.self)
+            if seekPos > 0, let firstNewline = text.firstIndex(of: "\n") {
+                text = String(text[text.index(after: firstNewline)...])
+            }
+
+            let lines = text.components(separatedBy: .newlines).filter { !$0.isEmpty }
             let initialLogs = Array(lines.suffix(maxEntries))
             await MainActor.run {
                 self.logs = initialLogs
@@ -139,8 +155,24 @@ class LoggerService: ObservableObject {
     
     nonisolated private static func trimLogFile(at logFileURL: URL, maxEntries: Int) {
         autoreleasepool {
-            guard let content = try? String(contentsOf: logFileURL, encoding: .utf8) else { return }
-            let lines = content.components(separatedBy: .newlines).filter { !$0.isEmpty }
+            guard let handle = FileHandle(forReadingAtPath: logFileURL.path) else { return }
+            defer { try? handle.close() }
+            
+            let fileSize = (try? handle.seekToEnd()) ?? 0
+            guard fileSize > 0 else { return }
+
+            let readSize = min(fileSize, 256 * 1024)
+            let seekPos = fileSize - readSize
+            try? handle.seek(toOffset: seekPos)
+            let data = handle.readData(ofLength: Int(readSize))
+            guard !data.isEmpty else { return }
+
+            var text = String(decoding: data, as: UTF8.self)
+            if seekPos > 0, let firstNewline = text.firstIndex(of: "\n") {
+                text = String(text[text.index(after: firstNewline)...])
+            }
+
+            let lines = text.components(separatedBy: .newlines).filter { !$0.isEmpty }
             let trimmed = lines.suffix(maxEntries).joined(separator: "\n") + "\n"
             try? trimmed.write(to: logFileURL, atomically: true, encoding: .utf8)
         }

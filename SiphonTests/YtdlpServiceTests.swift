@@ -1497,6 +1497,64 @@ final class YtdlpServiceTests: XCTestCase {
         let res480 = service.resolveBoyfriendTVStreamURLForDownload(streamURL: streamTemplate, options: options480)
         XCTAssertTrue(res480.contains("1490652_480p.mp4"), "Must resolve _TPL_ to _480p.mp4 for 480p resolution")
     }
+
+    func testDownloadProcessControllerSingleOwnerAttachment() {
+        let controller = DownloadProcessController()
+        let proc1 = Process()
+        let proc2 = Process()
+
+        let attached1 = controller.attachProcess(proc1)
+        XCTAssertTrue(attached1, "First process must attach successfully")
+
+        let attached2 = controller.attachProcess(proc2)
+        XCTAssertFalse(attached2, "Second process attachment must be rejected to enforce single-owner invariant")
+
+        controller.cancel()
+        let proc3 = Process()
+        let attached3 = controller.attachProcess(proc3)
+        XCTAssertFalse(attached3, "Attachment to cancelled controller must be rejected")
+    }
+
+    func testMediaInfoPrunedForCompletion() {
+        let fullFormats = [MediaFormat(formatId: "1080", ext: "mp4", resolution: "1920x1080")]
+        let fullInfo = MediaInfo(
+            id: "test-id",
+            title: "Test Video",
+            description: "A very long detailed description",
+            thumbnail: "https://example.com/thumb.jpg",
+            duration: 120.0,
+            uploader: "Test Uploader",
+            formats: fullFormats
+        )
+
+        let pruned = fullInfo.prunedForCompletion()
+        XCTAssertEqual(pruned.id, "test-id")
+        XCTAssertEqual(pruned.title, "Test Video")
+        XCTAssertNil(pruned.description, "Description must be stripped on completion")
+        XCTAssertNil(pruned.formats, "Heavy format lists must be stripped on completion")
+    }
+
+    func testDownloadEventCoalescerFlushing() {
+        let flushedProgressBox = TestBox<Double?>(nil)
+        let flushedLinesBox = TestBox<[String]>([])
+
+        let coalescer = DownloadEventCoalescer { progress, _, _, lines in
+            if let progress {
+                flushedProgressBox.value = progress
+            }
+            if !lines.isEmpty {
+                flushedLinesBox.value.append(contentsOf: lines)
+            }
+        }
+
+        coalescer.recordProgress(progress: 0.5, speed: "5MB/s", eta: "10s")
+        coalescer.recordLogLine("line 1")
+        coalescer.recordLogLine("line 2")
+        coalescer.flushRemaining()
+
+        XCTAssertEqual(flushedProgressBox.value, 0.5)
+        XCTAssertEqual(flushedLinesBox.value, ["line 1", "line 2"])
+    }
 }
 
 

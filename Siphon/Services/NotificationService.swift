@@ -54,7 +54,11 @@ final class NotificationService: NSObject, @unchecked Sendable, UNUserNotificati
         completionHandler()
     }
 
+    private var isSetup = false
+
     func setup() {
+        guard !isSetup else { return }
+        isSetup = true
         guard let center = notificationCenter else { return }
         center.delegate = self
         center.getNotificationSettings { [weak self] settings in

@@ -3,6 +3,69 @@ import AppKit
 import Combine
 
 
+final class DownloadEventCoalescer: @unchecked Sendable {
+    private let lock = NSLock()
+    private var pendingProgress: (progress: Double, speed: String?, eta: String?)?
+    private var pendingLogLines: [String] = []
+    private var lastProgressFlush = Date.distantPast
+    private var lastLogFlush = Date.distantPast
+    private let onFlush: @Sendable (Double?, String?, String?, [String]) -> Void
+    
+    init(onFlush: @escaping @Sendable (Double?, String?, String?, [String]) -> Void) {
+        self.onFlush = onFlush
+    }
+
+    func recordProgress(progress: Double, speed: String?, eta: String?) {
+        lock.lock()
+        pendingProgress = (progress, speed, eta)
+        let now = Date()
+        let shouldFlush = now.timeIntervalSince(lastProgressFlush) >= 0.100 // 100ms
+        if shouldFlush {
+            lastProgressFlush = now
+        }
+        let currentProgress = pendingProgress
+        if shouldFlush {
+            pendingProgress = nil
+        }
+        lock.unlock()
+
+        if shouldFlush, let p = currentProgress {
+            onFlush(p.progress, p.speed, p.eta, [])
+        }
+    }
+
+    func recordLogLine(_ line: String) {
+        lock.lock()
+        pendingLogLines.append(line)
+        let now = Date()
+        let shouldFlush = now.timeIntervalSince(lastLogFlush) >= 0.200 // 200ms
+        var linesToFlush: [String] = []
+        if shouldFlush {
+            lastLogFlush = now
+            linesToFlush = pendingLogLines
+            pendingLogLines.removeAll(keepingCapacity: true)
+        }
+        lock.unlock()
+
+        if !linesToFlush.isEmpty {
+            onFlush(nil, nil, nil, linesToFlush)
+        }
+    }
+
+    func flushRemaining() {
+        lock.lock()
+        let p = pendingProgress
+        let lines = pendingLogLines
+        pendingProgress = nil
+        pendingLogLines.removeAll()
+        lock.unlock()
+
+        if p != nil || !lines.isEmpty {
+            onFlush(p?.progress, p?.speed, p?.eta, lines)
+        }
+    }
+}
+
 @MainActor
 class DownloadManager: ObservableObject {
 
@@ -24,7 +87,9 @@ class DownloadManager: ObservableObject {
         return val > 0 ? val : 3
     }
     private let userDefaults = UserDefaults.standard
-    private var activeControllers: [UUID: DownloadProcessController] = [:]
+    var activeControllers: [UUID: DownloadProcessController] = [:]
+    var activeTasks: [UUID: Task<Void, Never>] = [:]
+    private var isProcessingQueue = false
     var languageService: LanguageService?
     private var reservedOutputPaths: Set<String> = []
 
@@ -51,10 +116,18 @@ class DownloadManager: ObservableObject {
         downloads.filter { $0.status == .failed || $0.status == .stopped || $0.status == .fileExists }
     }
 
-    var downloadingCount: Int { downloadingDownloads.count }
-    var queuedCount: Int { queuedDownloads.count }
-    var completedCount: Int { completedDownloads.count }
-    var failedCount: Int { failedDownloads.count }
+    var downloadingCount: Int {
+        downloads.reduce(0) { $0 + (($1.status == .downloading || $1.status == .fetching || $1.status == .processing) ? 1 : 0) }
+    }
+    var queuedCount: Int {
+        downloads.reduce(0) { $0 + ($1.status == .queued ? 1 : 0) }
+    }
+    var completedCount: Int {
+        downloads.reduce(0) { $0 + ($1.status == .completed ? 1 : 0) }
+    }
+    var failedCount: Int {
+        downloads.reduce(0) { $0 + (($1.status == .failed || $1.status == .stopped || $1.status == .fileExists) ? 1 : 0) }
+    }
 
 
 
@@ -115,23 +188,14 @@ class DownloadManager: ObservableObject {
     func addDownload(url: String, options: DownloadOptions) {
         let download = Download(url: url, options: options)
         downloads.append(download)
-
-        Task {
-            await processDownload(download)
-        }
+        processQueue()
     }
 
 
     func addDownloads(urls: [String], options: DownloadOptions) {
-        // Bolt Performance Optimization: Batch array mutation to avoid synchronous UI broadcasts and redundant layout passes
         let newDownloads = urls.map { Download(url: $0, options: options) }
         downloads.append(contentsOf: newDownloads)
-
-        for download in newDownloads {
-            Task {
-                await processDownload(download)
-            }
-        }
+        processQueue()
     }
 
     func menuDownload(url: String, type: String, quality: String) {
@@ -197,27 +261,63 @@ class DownloadManager: ObservableObject {
         addDownload(url: url, options: options)
     }
 
+    /// Event-driven queue dispatcher: schedules queued downloads whenever a concurrent slot becomes available.
+    func processQueue() {
+        guard !isProcessingQueue else { return }
+        isProcessingQueue = true
+        defer { isProcessingQueue = false }
 
+        let limit = maxConcurrentDownloads
+        let currentActive = downloadingCount
+        let availableSlots = max(0, limit - currentActive)
+        guard availableSlots > 0 else { return }
+
+        var started = 0
+        for download in downloads where download.status == .queued {
+            if started >= availableSlots { break }
+            startDownloadTask(download)
+            started += 1
+        }
+    }
+
+    private func startDownloadTask(_ download: Download) {
+        guard download.status == .queued else { return }
+        guard activeTasks[download.id] == nil else { return }
+
+        let downloadId = download.id
+        let task = Task { [weak self, weak download] in
+            guard let self, let download else { return }
+            await self.executeDownload(download)
+
+            self.activeTasks.removeValue(forKey: downloadId)
+            self.activeControllers.removeValue(forKey: downloadId)
+            self.processQueue()
+        }
+        activeTasks[downloadId] = task
+    }
 
     func processDownload(_ download: Download) async {
-
-        while downloadingCount >= maxConcurrentDownloads {
-            // Bug #2 fix: If user cancelled while waiting in queue, exit early
-            guard download.status == .queued else { return }
-            try? await Task.sleep(nanoseconds: 500_000_000)
-        }
-
-        // Bug #2 fix: If user cancelled while queued, don't proceed
         guard download.status == .queued else { return }
+        if !downloads.contains(where: { $0.id == download.id }) {
+            downloads.append(download)
+        }
+        await executeDownload(download)
+        activeTasks.removeValue(forKey: download.id)
+        activeControllers.removeValue(forKey: download.id)
+        processQueue()
+    }
+
+    private func executeDownload(_ download: Download) async {
+        guard !Task.isCancelled else { return }
+        guard download.status == .queued || download.status == .fetching else { return }
 
         updateStatus(for: download, to: .fetching)
         objectWillChange.send()
 
         do {
-
             let info = try await ytdlpService.fetchInfo(url: download.url, rawCookies: download.options.rawCookies)
 
-            // Bug #5 fix: If user cancelled during fetchInfo, don't proceed
+            guard !Task.isCancelled else { return }
             guard download.status == .fetching else { return }
 
             download.title = info.title
@@ -254,10 +354,13 @@ class DownloadManager: ObservableObject {
                 return false
             }.value
 
+            guard !Task.isCancelled else { return }
+            guard download.status == .fetching else { return }
+
             if fileExists && download.options.forceOverwrite != true {
                 updateStatus(for: download, to: .fileExists)
                 objectWillChange.send()
-                return // Pause here. The UI will show a button to resume with forceOverwrite = true or add a number.
+                return // Paused: UI will show button to resume with overwrite or add a number
             }
 
             updateStatus(for: download, to: .downloading)
@@ -270,38 +373,57 @@ class DownloadManager: ObservableObject {
             }
 
             LoggerService.shared.log("Starting download for URL: \(LoggerService.sanitizeURLForLog(download.url))", level: .info)
+
+            let coalescer = DownloadEventCoalescer { [weak download] progress, speed, eta, lines in
+                Task { @MainActor [weak download] in
+                    guard let download else { return }
+                    if let progress {
+                        download.progress = progress
+                        download.speed = speed
+                        download.eta = eta
+                    }
+                    if !lines.isEmpty {
+                        let combined = lines.joined(separator: "\n") + "\n"
+                        if download.log.count + combined.count > 50_000 {
+                            download.log = String(download.log.suffix(25_000))
+                        }
+                        download.log += combined
+                        for line in lines {
+                            if line.contains("[EmbedThumbnail]") || line.contains("[Metadata]") || line.contains("[Merger]") || line.contains("[VideoConvertor]") || line.contains("[ThumbnailsConvertor]") || line.contains("[EmbedSubtitle]") {
+                                if download.status == .downloading {
+                                    download.status = .processing
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             let outputPath = try await ytdlpService.download(
                 url: download.url,
                 options: download.options,
                 mediaInfo: download.mediaInfo,
                 processController: controller,
-                onProgress: { [weak download] progress, speed, eta in
+                onProgress: { progress, speed, eta in
                     let safeProgress = progress.isNaN ? 0 : max(0, min(1, progress))
-                    DispatchQueue.main.async {
-                        download?.progress = safeProgress
-                        download?.speed = speed
-                        download?.eta = eta
-                    }
+                    coalescer.recordProgress(progress: safeProgress, speed: speed, eta: eta)
                 },
-                onOutput: { [weak download] line in
-                    DispatchQueue.main.async {
-                        guard let download = download else { return }
-                        if download.log.count > 50_000 {
-                            download.log = String(download.log.suffix(25_000))
-                        }
-                        download.log += line + "\n"
-                        if line.contains("[EmbedThumbnail]") || line.contains("[Metadata]") || line.contains("[Merger]") || line.contains("[VideoConvertor]") || line.contains("[ThumbnailsConvertor]") || line.contains("[EmbedSubtitle]") {
-                            if download.status == .downloading {
-                                download.status = .processing
-                            }
-                        }
-                    }
+                onOutput: { line in
+                    coalescer.recordLogLine(line)
                 }
             )
+
+            coalescer.flushRemaining()
 
             download.filePath = outputPath
             updateStatus(for: download, to: .completed)
             download.progress = 1.0
+
+            // Memory optimization: Prune large formats/subtitles and bound log for completed download
+            download.mediaInfo = download.mediaInfo?.prunedForCompletion()
+            if download.log.count > 2000 {
+                download.log = String(download.log.suffix(2000))
+            }
             objectWillChange.send()
 
             LoggerService.shared.log("Download completed successfully: \(download.title.isEmpty ? LoggerService.sanitizeURLForLog(download.url) : download.title)", level: .info)
@@ -313,7 +435,7 @@ class DownloadManager: ObservableObject {
             NotificationService.shared.sendDownloadCompleted(filename: download.title.isEmpty ? LoggerService.sanitizeURLForLog(download.url) : download.title, languageService: lang)
 
         } catch let error as YtdlpError {
-            if download.status == .stopped || download.status == .paused {
+            if download.status == .stopped || download.status == .paused || Task.isCancelled {
                 LoggerService.shared.log("Download stopped or paused by user (\(LoggerService.sanitizeURLForLog(download.url)))", level: .info)
                 if download.status == .stopped {
                     addToHistory(download)
@@ -369,11 +491,10 @@ class DownloadManager: ObservableObject {
             }
 
             LoggerService.shared.log("Download failed (\(LoggerService.sanitizeURLForLog(download.url))): \(download.errorMessage ?? error.localizedDescription)", level: .error)
-            // Send notification for failure
             NotificationService.shared.sendDownloadFailed(filename: download.title.isEmpty ? LoggerService.sanitizeURLForLog(download.url) : download.title, languageService: lang)
             addToHistory(download)
         } catch {
-            if download.status == .stopped || download.status == .paused {
+            if download.status == .stopped || download.status == .paused || Task.isCancelled {
                 LoggerService.shared.log("Download stopped or paused by user (\(LoggerService.sanitizeURLForLog(download.url)))", level: .info)
                 if download.status == .stopped {
                     addToHistory(download)
@@ -412,6 +533,7 @@ class DownloadManager: ObservableObject {
             return
         }
         updateStatus(for: download, to: .stopped)
+        activeTasks.removeValue(forKey: download.id)?.cancel()
         activeControllers.removeValue(forKey: download.id)?.cancel()
         if !skipSaveAndBroadcast {
             objectWillChange.send()
@@ -428,6 +550,7 @@ class DownloadManager: ObservableObject {
             let lang = languageService ?? LanguageService()
             NotificationService.shared.sendDownloadStopped(filename: download.title.isEmpty ? LoggerService.sanitizeURLForLog(download.url) : download.title, languageService: lang)
         }
+        processQueue()
     }
 
 
@@ -439,9 +562,7 @@ class DownloadManager: ObservableObject {
         download.errorMessage = nil
         download.log = ""
 
-        Task {
-            await processDownload(download)
-        }
+        processQueue()
     }
 
     func pauseDownload(_ download: Download) {
@@ -449,17 +570,17 @@ class DownloadManager: ObservableObject {
             return
         }
         updateStatus(for: download, to: .paused)
+        activeTasks.removeValue(forKey: download.id)?.cancel()
         activeControllers.removeValue(forKey: download.id)?.cancel()
         objectWillChange.send()
+        processQueue()
     }
 
     func resumeDownload(_ download: Download) {
         guard download.status == .paused else { return }
         updateStatus(for: download, to: .queued)
         objectWillChange.send()
-        Task {
-            await processDownload(download)
-        }
+        processQueue()
     }
 
     func moveDownloadUp(_ download: Download) {
@@ -498,9 +619,7 @@ class DownloadManager: ObservableObject {
         download.options.forceOverwrite = true
         updateStatus(for: download, to: .queued)
         objectWillChange.send()
-        Task {
-            await processDownload(download)
-        }
+        processQueue()
     }
     
     func resumeWithNewName(_ download: Download) {
@@ -509,9 +628,18 @@ class DownloadManager: ObservableObject {
         download.options.customFilename = "\(base)\(uniqueSuffix)"
         updateStatus(for: download, to: .queued)
         objectWillChange.send()
-        Task {
-            await processDownload(download)
+        processQueue()
+    }
+
+    func shutdown() {
+        for (_, task) in activeTasks {
+            task.cancel()
         }
+        for (_, controller) in activeControllers {
+            controller.cancel()
+        }
+        activeTasks.removeAll()
+        activeControllers.removeAll()
     }
 
     func resolveUniqueOutputPath(for download: Download) -> (resolvedBaseName: String, candidatePath: String) {

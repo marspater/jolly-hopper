@@ -56,6 +56,7 @@ struct SiphonApp: App {
                 }
                 .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in
                     downloadManager.stopAllDownloads()
+                    downloadManager.shutdown()
                 }
                 .onOpenURL { url in
                     handleIncomingURL(url)
@@ -189,6 +190,7 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
     @Published var releasePageURL: URL? = URL(string: "https://github.com/marspater/jolly-hopper/releases/latest")
     
     func checkForUpdates() async {
+        guard !isChecking else { return }
         isChecking = true
         guard let url = URL(string: "https://api.github.com/repos/\(repoOwner)/\(repoName)/releases/latest") else {
             isChecking = false

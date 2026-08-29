@@ -57,6 +57,8 @@ struct AddDownloadView: View {
     @State private var batchUrlsText: String = ""
     @State private var selectedFormatId: String? = nil
     @State private var showStreamInspector: Bool = false
+    @State private var fetchTask: Task<Void, Never>? = nil
+    @State private var playlistTask: Task<Void, Never>? = nil
 
     enum InputMode: String, CaseIterable, Identifiable {
         case single = "single"
@@ -205,6 +207,12 @@ struct AddDownloadView: View {
                     selectedPresetName = customPreset.name
                 }
             }
+        }
+        .onDisappear {
+            fetchTask?.cancel()
+            fetchTask = nil
+            playlistTask?.cancel()
+            playlistTask = nil
         }
     }
 
@@ -1443,13 +1451,15 @@ struct AddDownloadView: View {
 
     private func fetchInfo() {
         guard !urlInput.isEmpty else { return }
+        fetchTask?.cancel()
         isLoading = true
         errorMessage = nil
         mediaInfo = nil
         selectedFormatId = nil
-        Task {
+        fetchTask = Task {
             do {
                 let info = try await downloadManager.ytdlpService.fetchInfo(url: urlInput, rawCookies: appState.rawCookiesToDownload)
+                guard !Task.isCancelled else { return }
                 mediaInfo = info
                 customFilename = info.title
 
@@ -1525,26 +1535,36 @@ struct AddDownloadView: View {
                 }
 
             } catch {
-                errorMessage = formatErrorMessage(error)
+                if !Task.isCancelled {
+                    errorMessage = formatErrorMessage(error)
+                }
             }
-            isLoading = false
+            if !Task.isCancelled {
+                isLoading = false
+            }
         }
     }
 
     private func loadPlaylist() {
+        playlistTask?.cancel()
         isLoadingPlaylist = true
         errorMessage = nil
-        Task {
+        playlistTask = Task {
             do {
                 let items = try await downloadManager.ytdlpService.fetchPlaylistInfo(url: urlInput)
+                guard !Task.isCancelled else { return }
                 playlistItems = items
                 selectedPlaylistIds = Set(items.map { $0.id })
                 showPlaylistSelector = true
                 downloadMode = .playlist
             } catch {
-                errorMessage = formatErrorMessage(error)
+                if !Task.isCancelled {
+                    errorMessage = formatErrorMessage(error)
+                }
             }
-            isLoadingPlaylist = false
+            if !Task.isCancelled {
+                isLoadingPlaylist = false
+            }
         }
     }
 
@@ -1664,9 +1684,11 @@ struct AddDownloadView: View {
     private func extractBatchUrls(from text: String) -> [String] {
         let lines = text.components(separatedBy: CharacterSet.newlines.union(CharacterSet.whitespaces))
         var valid: [String] = []
+        var seen = Set<String>()
         for line in lines {
             let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
-            if (trimmed.hasPrefix("http://") || trimmed.hasPrefix("https://")) && !valid.contains(trimmed) {
+            if (trimmed.hasPrefix("http://") || trimmed.hasPrefix("https://")) && !seen.contains(trimmed) {
+                seen.insert(trimmed)
                 valid.append(trimmed)
             }
         }

@@ -37,10 +37,27 @@ struct ReadOnlyLogView: NSViewRepresentable {
         guard let textView = nsView.documentView as? NSTextView else { return }
 
         if textView.string != text {
-            textView.string = text
-            let geistFont = NSFont(name: "GeistMono-Regular", size: fontSize) ?? NSFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
-            textView.font = geistFont
-            textView.textColor = NSColor.labelColor
+            let oldLen = textView.string.count
+            if oldLen > 0 && text.hasPrefix(textView.string) {
+                let suffixIndex = text.index(text.startIndex, offsetBy: oldLen)
+                let appendText = String(text[suffixIndex...])
+                if let storage = textView.textStorage {
+                    let geistFont = NSFont(name: "GeistMono-Regular", size: fontSize) ?? NSFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
+                    let attrs: [NSAttributedString.Key: Any] = [
+                        .font: geistFont,
+                        .foregroundColor: NSColor.labelColor
+                    ]
+                    let attrString = NSAttributedString(string: appendText, attributes: attrs)
+                    storage.append(attrString)
+                } else {
+                    textView.string = text
+                }
+            } else {
+                textView.string = text
+                let geistFont = NSFont(name: "GeistMono-Regular", size: fontSize) ?? NSFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
+                textView.font = geistFont
+                textView.textColor = NSColor.labelColor
+            }
 
             // Auto-scroll to bottom on update
             let range = NSRange(location: text.utf16.count, length: 0)

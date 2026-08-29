@@ -28,10 +28,13 @@ public final class DownloadProcessController: @unchecked Sendable {
         case .cancelled:
             shouldTerminate = proc.isRunning
             success = false
-        case .idle, .attached:
+        case .idle:
             state = .attached(proc)
             shouldTerminate = false
             success = true
+        case .attached:
+            shouldTerminate = false
+            success = false
         }
         lock.unlock()
 

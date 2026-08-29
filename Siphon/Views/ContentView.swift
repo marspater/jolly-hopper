@@ -50,10 +50,6 @@ struct ContentView: View {
                         .interactiveDismissDisabled()
                 }
                 .task {
-                    await MainActor.run {
-                        NotificationService.shared.requestPermission()
-                    }
-                    
                     await downloadManager.initialize(languageService: languageService)
                     await updateChecker.checkForUpdates()
                     if updateChecker.hasUpdate {
