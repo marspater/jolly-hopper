@@ -1449,7 +1449,7 @@ struct AddDownloadView: View {
         selectedFormatId = nil
         Task {
             do {
-                let info = try await downloadManager.ytdlpService.fetchInfo(url: urlInput)
+                let info = try await downloadManager.ytdlpService.fetchInfo(url: urlInput, rawCookies: appState.rawCookiesToDownload)
                 mediaInfo = info
                 customFilename = info.title
 

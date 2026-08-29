@@ -642,18 +642,18 @@ class YtdlpService: ObservableObject {
 
 
 
-    func fetchInfo(url: String) async throws -> MediaInfo {
+    func fetchInfo(url: String, rawCookies: String? = nil) async throws -> MediaInfo {
         guard let path = ytdlpPath else {
             throw YtdlpError.notFound
         }
         
         let normalizedURL = normalizeURLForYtdlp(url)
         do {
-             return try await fetchSingleVideoInfo(path: path.path, url: normalizedURL)
+             return try await fetchSingleVideoInfo(path: path.path, url: normalizedURL, rawCookies: rawCookies)
         } catch {
             if (normalizedURL.contains("list=") || normalizedURL.contains("/playlist/")) && !normalizedURL.contains("/videos/") {
                 do {
-                    return try await fetchPlaylistSummaryInfo(path: path.path, url: normalizedURL)
+                    return try await fetchPlaylistSummaryInfo(path: path.path, url: normalizedURL, rawCookies: rawCookies)
                 } catch {
                     throw mapSiteSpecificError(error, url: normalizedURL)
                 }
@@ -662,9 +662,9 @@ class YtdlpService: ObservableObject {
         }
     }
 
-    private func fetchSingleVideoInfo(path: String, url: String, forceBrowserCookies: Bool = false) async throws -> MediaInfo {
+    private func fetchSingleVideoInfo(path: String, url: String, forceBrowserCookies: Bool = false, rawCookies: String? = nil) async throws -> MediaInfo {
         if isBoyfriendTVURL(url) {
-            if let btvMedia = await resolveBoyfriendTVMediaInfo(url: url) {
+            if let btvMedia = await resolveBoyfriendTVMediaInfo(url: url, rawCookies: rawCookies) {
                 var btvArgs = [
                     path,
                     "--ignore-config",
@@ -719,8 +719,16 @@ class YtdlpService: ObservableObject {
         ]
         appendJsRuntimeArgs(to: &args)
         
-        let usingBrowserCookies = appendCookieArgs(for: url, to: &args, force: forceBrowserCookies)
-        logCookieUsage(for: url, usingBrowserCookies: usingBrowserCookies)
+        var tempRawCookieFile: URL? = nil
+        if let raw = rawCookies, !raw.isEmpty {
+            if let tempFile = createTempCookiesFileFromHeader(url: url, cookieHeader: raw) {
+                tempRawCookieFile = tempFile
+                args.append(contentsOf: ["--cookies", tempFile.path])
+            }
+        } else {
+            let usingBrowserCookies = appendCookieArgs(for: url, to: &args, force: forceBrowserCookies)
+            logCookieUsage(for: url, usingBrowserCookies: usingBrowserCookies)
+        }
 
         // Handle Sucuri bypass
         var tempCookieFile: URL? = nil
@@ -741,6 +749,9 @@ class YtdlpService: ObservableObject {
             if let fileURL = tempCookieFile {
                 try? FileManager.default.removeItem(at: fileURL)
             }
+            if let fileURL = tempRawCookieFile {
+                try? FileManager.default.removeItem(at: fileURL)
+            }
         }
         
         do {
@@ -755,15 +766,16 @@ class YtdlpService: ObservableObject {
         } catch let err as YtdlpError {
             throw err
         } catch {
+            let usingBrowserCookies = args.contains("--cookies-from-browser")
             if shouldRetryWithBrowserCookies(error: error, url: url, usingBrowserCookies: usingBrowserCookies, forceBrowserCookies: forceBrowserCookies) {
                 LoggerService.shared.log("Retrying metadata extraction with configured browser cookies", level: .info)
-                return try await fetchSingleVideoInfo(path: path, url: url, forceBrowserCookies: true)
+                return try await fetchSingleVideoInfo(path: path, url: url, forceBrowserCookies: true, rawCookies: rawCookies)
             }
             throw mapSiteSpecificError(error, url: url)
         }
     }
 
-    private func fetchPlaylistSummaryInfo(path: String, url: String) async throws -> MediaInfo {
+    private func fetchPlaylistSummaryInfo(path: String, url: String, rawCookies: String? = nil) async throws -> MediaInfo {
         var args = [
             path,
             "--ignore-config",
@@ -773,8 +785,16 @@ class YtdlpService: ObservableObject {
         ]
         appendJsRuntimeArgs(to: &args)
         
-        let usingBrowserCookies = appendCookieArgs(for: url, to: &args)
-        logCookieUsage(for: url, usingBrowserCookies: usingBrowserCookies)
+        var tempRawCookieFile: URL? = nil
+        if let raw = rawCookies, !raw.isEmpty {
+            if let tempFile = createTempCookiesFileFromHeader(url: url, cookieHeader: raw) {
+                tempRawCookieFile = tempFile
+                args.append(contentsOf: ["--cookies", tempFile.path])
+            }
+        } else {
+            let usingBrowserCookies = appendCookieArgs(for: url, to: &args)
+            logCookieUsage(for: url, usingBrowserCookies: usingBrowserCookies)
+        }
 
         // Handle Sucuri bypass
         var tempCookieFile: URL? = nil
@@ -793,6 +813,9 @@ class YtdlpService: ObservableObject {
 
         defer {
             if let fileURL = tempCookieFile {
+                try? FileManager.default.removeItem(at: fileURL)
+            }
+            if let fileURL = tempRawCookieFile {
                 try? FileManager.default.removeItem(at: fileURL)
             }
         }
@@ -825,7 +848,7 @@ class YtdlpService: ObservableObject {
     }
 
 
-    func fetchPlaylistInfo(url: String) async throws -> [MediaInfo] {
+    func fetchPlaylistInfo(url: String, rawCookies: String? = nil) async throws -> [MediaInfo] {
         guard let path = ytdlpPath else {
             throw YtdlpError.notFound
         }
@@ -838,8 +861,17 @@ class YtdlpService: ObservableObject {
             "--no-warnings"
         ]
         appendJsRuntimeArgs(to: &args)
-        let usingBrowserCookies = appendCookieArgs(for: url, to: &args)
-        logCookieUsage(for: url, usingBrowserCookies: usingBrowserCookies)
+        
+        var tempRawCookieFile: URL? = nil
+        if let raw = rawCookies, !raw.isEmpty {
+            if let tempFile = createTempCookiesFileFromHeader(url: url, cookieHeader: raw) {
+                tempRawCookieFile = tempFile
+                args.append(contentsOf: ["--cookies", tempFile.path])
+            }
+        } else {
+            let usingBrowserCookies = appendCookieArgs(for: url, to: &args)
+            logCookieUsage(for: url, usingBrowserCookies: usingBrowserCookies)
+        }
 
         // Handle Sucuri bypass
         var tempCookieFile: URL? = nil
@@ -862,6 +894,9 @@ class YtdlpService: ObservableObject {
 
         defer {
             if let fileURL = tempCookieFile {
+                try? FileManager.default.removeItem(at: fileURL)
+            }
+            if let fileURL = tempRawCookieFile {
                 try? FileManager.default.removeItem(at: fileURL)
             }
         }
@@ -905,8 +940,8 @@ class YtdlpService: ObservableObject {
         var customEmbedURL: String? = nil
         var customThumbnailURL: String? = nil
         if isBoyfriendTVURL(url) {
-            if let btvMedia = await resolveBoyfriendTVMediaInfo(url: url) {
-                targetURL = btvMedia.streamURL
+            if let btvMedia = await resolveBoyfriendTVMediaInfo(url: url, rawCookies: options.rawCookies) {
+                targetURL = resolveBoyfriendTVStreamURLForDownload(streamURL: btvMedia.streamURL, options: options)
                 customResolvedTitle = btvMedia.title
                 customEmbedURL = btvMedia.embedURL
                 customThumbnailURL = btvMedia.thumbnailURL
@@ -1378,8 +1413,11 @@ class YtdlpService: ObservableObject {
         if let info = mediaInfo {
             let resolved = info.resolveSelectedFormats(options: options)
             if !resolved.isEmpty {
+                let isSynthesizedBtv = (info.uploader == "BoyfriendTV" || isBoyfriendTVURL(info.id)) && resolved.allSatisfy { $0.formatId == "1080" || $0.formatId == "720" || $0.formatId == "480" || $0.formatId == "240" || $0.formatId == "best" }
                 let formatId: String
-                if resolved.count == 2 {
+                if isSynthesizedBtv {
+                    formatId = "best"
+                } else if resolved.count == 2 {
                     formatId = "\(resolved[0].formatId)+\(resolved[1].formatId)"
                 } else {
                     formatId = resolved[0].formatId
@@ -1598,12 +1636,64 @@ class YtdlpService: ObservableObject {
         let thumbnailURL: String?
     }
 
-    private func resolveBoyfriendTVMediaInfo(url: String) async -> BoyfriendTVExtractedMedia? {
+    private func resolveBoyfriendTVMediaInfo(url: String, rawCookies: String? = nil) async -> BoyfriendTVExtractedMedia? {
         let targetUrl = normalizeURLForYtdlp(url)
         guard let pageURL = URL(string: targetUrl) else { return nil }
         
         var html = ""
         
+        let appSupportYtdlp = Self.getAppSupportDirectory().appendingPathComponent("yt-dlp")
+        let ytdlpBinary = ytdlpPath ?? Bundle.main.url(forResource: "yt-dlp", withExtension: nil) ?? (FileManager.default.fileExists(atPath: appSupportYtdlp.path) ? appSupportYtdlp : nil)
+
+        // Try raw session cookies if provided (e.g. from browser extension)
+        if let raw = rawCookies, !raw.isEmpty, let ytdlp = ytdlpBinary,
+           let tempFile = createTempCookiesFileFromHeader(url: targetUrl, cookieHeader: raw) {
+            defer { try? FileManager.default.removeItem(at: tempFile) }
+            var rawArgs = [ytdlp.path, "--ignore-config", "--dump-pages", "--cookies", tempFile.path]
+            appendSiteSpecificArgs(for: targetUrl, to: &rawArgs)
+            rawArgs.append("--")
+            rawArgs.append(targetUrl)
+            
+            var dumpOutput: String? = nil
+            do {
+                dumpOutput = try await processRunner.runCommand(rawArgs)
+            } catch let error as YtdlpError {
+                if case .commandFailed(let output) = error {
+                    dumpOutput = output
+                }
+            } catch {}
+            
+            if let output = dumpOutput, !output.isEmpty {
+                var rawHtml = ""
+                for line in output.split(whereSeparator: \.isNewline) {
+                    let trimmed = String(line).trimmingCharacters(in: .whitespaces)
+                    if !trimmed.starts(with: "#") && !trimmed.starts(with: "[") && !trimmed.starts(with: "WARNING") && !trimmed.starts(with: "ERROR") {
+                        if let decodedData = Data(base64Encoded: trimmed, options: .ignoreUnknownCharacters) {
+                            let decodedString = String(decoding: decodedData, as: UTF8.self)
+                            if !decodedString.isEmpty {
+                                rawHtml += decodedString
+                            }
+                        }
+                    }
+                }
+                if !rawHtml.isEmpty {
+                    let hasMediaData = rawHtml.contains("hlsAuto") ||
+                                       rawHtml.contains("videoPlayerData") ||
+                                       rawHtml.contains("sources") ||
+                                       rawHtml.contains("cdn.boyfriend") ||
+                                       rawHtml.contains("boyfriend") ||
+                                       rawHtml.contains("embedUrl") ||
+                                       rawHtml.contains("/embed/") ||
+                                       rawHtml.contains("<title>") ||
+                                       rawHtml.contains("playerConfig")
+                    if hasMediaData {
+                        html = rawHtml
+                        LoggerService.shared.log("Successfully extracted BoyfriendTV page dump using session cookies", level: .info)
+                    }
+                }
+            }
+        }
+
         var browsersToTry: [String?] = []
         if let configured = configuredBrowserCookieSource() {
             if configured != "safari" || Self.hasFullDiskAccess {
@@ -1620,10 +1710,7 @@ class YtdlpService: ObservableObject {
         }
         browsersToTry.append(nil)
 
-        let appSupportYtdlp = Self.getAppSupportDirectory().appendingPathComponent("yt-dlp")
-        let ytdlpBinary = ytdlpPath ?? Bundle.main.url(forResource: "yt-dlp", withExtension: nil) ?? (FileManager.default.fileExists(atPath: appSupportYtdlp.path) ? appSupportYtdlp : nil)
-
-        if let ytdlp = ytdlpBinary {
+        if html.isEmpty, let ytdlp = ytdlpBinary {
             for browser in browsersToTry {
                 var args = [ytdlp.path, "--ignore-config", "--dump-pages"]
                 if let browserName = browser {
@@ -1914,6 +2001,65 @@ class YtdlpService: ObservableObject {
             let h1 = Int($1.resolution?.components(separatedBy: "x").last ?? "0") ?? 0
             return h0 > h1
         })
+    }
+
+    func resolveBoyfriendTVStreamURLForDownload(streamURL: String, options: DownloadOptions) -> String {
+        guard streamURL.contains("_TPL_") || streamURL.contains("_TPL") else {
+            return streamURL
+        }
+        
+        var targetTag = "1080p"
+        if let range = streamURL.range(of: "multi=([^/&]+)", options: .regularExpression) {
+            let multiChunk = String(streamURL[range]).replacingOccurrences(of: "multi=", with: "")
+            let entries = multiChunk.components(separatedBy: ",")
+            var tagMap: [(height: Int, tag: String)] = []
+            for entry in entries {
+                let parts = entry.components(separatedBy: ":")
+                let res = parts.first ?? ""
+                let tag = parts.count > 1 ? parts[1] : res
+                let h: Int? = {
+                    if res.contains("x") {
+                        let dims = res.components(separatedBy: "x")
+                        if dims.count == 2 { return Int(dims[1]) }
+                    }
+                    return Int(res.replacingOccurrences(of: "p", with: ""))
+                }()
+                if let height = h {
+                    tagMap.append((height: height, tag: tag))
+                }
+            }
+            tagMap.sort(by: { $0.height > $1.height })
+            
+            // Choose tag based on options
+            if let chosenFormatId = options.selectedFormatId, let chosenHeight = Int(chosenFormatId) {
+                if let match = tagMap.first(where: { $0.height == chosenHeight }) {
+                    targetTag = match.tag
+                }
+            } else if let res = options.videoResolution {
+                let desiredHeight: Int
+                switch res {
+                case .r2160p, .r1440p, .r1080p, .best: desiredHeight = 1080
+                case .r720p: desiredHeight = 720
+                case .r480p: desiredHeight = 480
+                case .r360p: desiredHeight = 360
+                case .r240p, .worst: desiredHeight = 240
+                }
+                if let match = tagMap.first(where: { $0.height <= desiredHeight }) ?? tagMap.last {
+                    targetTag = match.tag
+                }
+            } else if let best = tagMap.first {
+                targetTag = best.tag
+            }
+        }
+        
+        let cleanTag = targetTag.hasPrefix("_") ? String(targetTag.dropFirst()) : targetTag
+        var resolved = streamURL
+        if resolved.contains("_TPL_") {
+            resolved = resolved.replacingOccurrences(of: "_TPL_", with: "_\(cleanTag)")
+        } else if resolved.contains("_TPL") {
+            resolved = resolved.replacingOccurrences(of: "_TPL", with: "_\(cleanTag)")
+        }
+        return resolved
     }
 
     private func normalizeURLForYtdlp(_ urlString: String) -> String {
