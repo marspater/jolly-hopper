@@ -42,6 +42,7 @@
 		E0001032 /* ReadOnlyLogView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000032 /* ReadOnlyLogView.swift */; };
 		E0001033 /* DebugLogWindowManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000033 /* DebugLogWindowManager.swift */; };
 		E0001034 /* DebugLogView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000034 /* DebugLogView.swift */; };
+		E0001035 /* DownloadDiagnosticsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000035 /* DownloadDiagnosticsView.swift */; };
 		E0001040 /* DownloadManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000040 /* DownloadManagerTests.swift */; };
 		E0001041 /* MediaInfoTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000041 /* MediaInfoTests.swift */; };
 		E0001042 /* YtdlpServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000042 /* YtdlpServiceTests.swift */; };
@@ -88,6 +89,7 @@
 		E0000032 /* ReadOnlyLogView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReadOnlyLogView.swift; sourceTree = "<group>"; };
 		E0000033 /* DebugLogWindowManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugLogWindowManager.swift; sourceTree = "<group>"; };
 		E0000034 /* DebugLogView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugLogView.swift; sourceTree = "<group>"; };
+		E0000035 /* DownloadDiagnosticsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DownloadDiagnosticsView.swift; sourceTree = "<group>"; };
 		E0000040 /* DownloadManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DownloadManagerTests.swift; sourceTree = "<group>"; };
 		E0000041 /* MediaInfoTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaInfoTests.swift; sourceTree = "<group>"; };
 		E0000042 /* YtdlpServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YtdlpServiceTests.swift; sourceTree = "<group>"; };
@@ -197,6 +199,7 @@
 				E0000009 /* PreferencesView.swift */,
 				E0000023 /* MenuBarView.swift */,
 				E0000034 /* DebugLogView.swift */,
+				E0000035 /* DownloadDiagnosticsView.swift */,
 				E0003008 /* Components */,
 			);
 			path = Views;
@@ -370,6 +373,7 @@
 				E0001032 /* ReadOnlyLogView.swift in Sources */,
 				E0001033 /* DebugLogWindowManager.swift in Sources */,
 				E0001034 /* DebugLogView.swift in Sources */,
+				E0001035 /* DownloadDiagnosticsView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

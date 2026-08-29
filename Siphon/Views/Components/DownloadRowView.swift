@@ -1,6 +1,38 @@
 import SwiftUI
 import QuickLookThumbnailing
+import QuickLookUI
 import AVFoundation
+
+final class QuickLookPreviewHelper: NSObject, QLPreviewPanelDataSource, QLPreviewPanelDelegate, @unchecked Sendable {
+    static let shared = QuickLookPreviewHelper()
+    private var currentURL: URL?
+    private let lock = NSLock()
+
+    func preview(url: URL) {
+        lock.lock()
+        currentURL = url
+        lock.unlock()
+        DispatchQueue.main.async {
+            guard let panel = QLPreviewPanel.shared() else { return }
+            panel.dataSource = self
+            panel.delegate = self
+            panel.makeKeyAndOrderFront(nil)
+            panel.reloadData()
+        }
+    }
+
+    nonisolated func numberOfPreviewItems(in panel: QLPreviewPanel!) -> Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return currentURL != nil ? 1 : 0
+    }
+
+    nonisolated func previewPanel(_ panel: QLPreviewPanel!, previewItemAt index: Int) -> QLPreviewItem! {
+        lock.lock()
+        defer { lock.unlock() }
+        return (currentURL as NSURL?)
+    }
+}
 
 struct DownloadListView: View {
     let downloads: [Download]
@@ -115,6 +147,7 @@ struct DownloadRowView: View {
     
     @State private var isHovering = false
     @State private var showLog = false
+    @State private var showDiagnostics = false
     @State private var isCopiedLog = false
     @State private var showRawError = false
     
@@ -173,7 +206,7 @@ struct DownloadRowView: View {
                             
                             if download.status == .paused && download.progress > 0 {
                                 Text("\(Int(download.progress * 100))%")
-                                    .font(.geistMono(11, weight: .semibold))
+                                        .font(.geistMono(11, weight: .semibold))
                                     .foregroundColor(SiphonTheme.statusQueued)
                             }
                         }
@@ -208,6 +241,10 @@ struct DownloadRowView: View {
         }
         .sheet(isPresented: $showLog) {
             logSheet
+        }
+        .sheet(isPresented: $showDiagnostics) {
+            DownloadDiagnosticsView(download: download)
+                .environmentObject(languageService)
         }
     }
     
@@ -341,38 +378,86 @@ struct DownloadRowView: View {
     }
     
     private var thumbnailView: some View {
-        Group {
-            if let url = download.thumbnailURL, let scheme = url.scheme?.lowercased(), (scheme == "http" || scheme == "https") {
-                AsyncImage(url: url) { phase in
-                    switch phase {
-                    case .success(let image):
-                        image
-                            .resizable()
-                            .aspectRatio(contentMode: .fill)
-                    case .failure, .empty:
-                        if let filePath = download.filePath, FileManager.default.fileExists(atPath: filePath.path) {
-                            FileThumbnailView(fileURL: filePath)
-                        } else {
+        ZStack(alignment: .bottomTrailing) {
+            Group {
+                if let url = download.thumbnailURL, let scheme = url.scheme?.lowercased(), (scheme == "http" || scheme == "https") {
+                    AsyncImage(url: url) { phase in
+                        switch phase {
+                        case .success(let image):
+                            image
+                                .resizable()
+                                .aspectRatio(contentMode: .fill)
+                        case .failure, .empty:
+                            if let filePath = download.filePath, FileManager.default.fileExists(atPath: filePath.path) {
+                                FileThumbnailView(fileURL: filePath)
+                            } else {
+                                thumbnailPlaceholder
+                            }
+                        @unknown default:
                             thumbnailPlaceholder
                         }
-                    @unknown default:
-                        thumbnailPlaceholder
                     }
+                } else if let filePath = download.filePath, FileManager.default.fileExists(atPath: filePath.path) {
+                    FileThumbnailView(fileURL: filePath)
+                } else {
+                    thumbnailPlaceholder
                 }
-            } else if let filePath = download.filePath, FileManager.default.fileExists(atPath: filePath.path) {
-                FileThumbnailView(fileURL: filePath)
-            } else {
-                thumbnailPlaceholder
+            }
+            .frame(width: 120, height: 68)
+            .contentShape(Rectangle())
+            .clipped()
+            .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusControl))
+            
+            // Hover play/quicklook overlay for completed files
+            if download.status == .completed, let path = download.filePath, FileManager.default.fileExists(atPath: path.path) {
+                if isHovering {
+                    ZStack {
+                        Color.black.opacity(0.35)
+                        Image(systemName: "eye.fill")
+                            .font(.system(size: 18, weight: .bold))
+                            .foregroundColor(.white)
+                            .shadow(radius: 3)
+                    }
+                    .transition(.opacity)
+                }
+            }
+            
+            // HDR Badge tag on thumbnail if HDR detected
+            if let hdr = download.diagnostics.hdrSummary ?? download.mediaInfo?.formats?.first(where: { $0.isHDR })?.hdrSummary {
+                VStack {
+                    HStack {
+                        Text(hdr.components(separatedBy: " • ").first ?? "HDR")
+                            .font(.geist(8, weight: .bold))
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 4)
+                            .padding(.vertical, 1.5)
+                            .background(
+                                LinearGradient(
+                                    colors: [SiphonTheme.statusHdr, Color.orange],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
+                            )
+                            .clipShape(RoundedRectangle(cornerRadius: 3))
+                            .padding(4)
+                        
+                        Spacer()
+                    }
+                    Spacer()
+                }
             }
         }
         .frame(width: 120, height: 68)
-        .contentShape(Rectangle())
-        .clipped()
-        .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusControl))
         .overlay(
             RoundedRectangle(cornerRadius: SiphonTheme.radiusControl)
                 .stroke(Color.primary.opacity(0.08), lineWidth: 1)
         )
+        .onTapGesture {
+            if download.status == .completed, let path = download.filePath, FileManager.default.fileExists(atPath: path.path) {
+                QuickLookPreviewHelper.shared.preview(url: path)
+            }
+        }
+        .help(download.status == .completed ? "Click to Quick Look" : "")
     }
     
     private var thumbnailPlaceholder: some View {
@@ -503,6 +588,19 @@ struct FileThumbnailView: View {
         HStack(spacing: 8) {
             // Completed state: Primary Play button + Single More Menu
             if download.status == .completed {
+                if let path = download.filePath, FileManager.default.fileExists(atPath: path.path) {
+                    Button {
+                        QuickLookPreviewHelper.shared.preview(url: path)
+                    } label: {
+                        Image(systemName: "eye.circle.fill")
+                            .font(.geist(20))
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundColor(SiphonTheme.accent)
+                    .help("Quick Look")
+                    .accessibilityLabel("Quick Look")
+                }
+                
                 Button {
                     if let path = download.filePath {
                         downloadManager.openFile(path)
@@ -517,6 +615,14 @@ struct FileThumbnailView: View {
                 .accessibilityLabel(languageService.s("play"))
                 
                 Menu {
+                    if let path = download.filePath, FileManager.default.fileExists(atPath: path.path) {
+                        Button {
+                            QuickLookPreviewHelper.shared.preview(url: path)
+                        } label: {
+                            Label("Quick Look", systemImage: "eye")
+                        }
+                    }
+
                     Button {
                         if let path = download.filePath {
                             downloadManager.openFile(path)
@@ -531,6 +637,19 @@ struct FileThumbnailView: View {
                         } label: {
                             Label(languageService.s("show_in_finder"), systemImage: "folder")
                         }
+                        
+                        Button {
+                            NSPasteboard.general.clearContents()
+                            NSPasteboard.general.setString(path.path, forType: .string)
+                        } label: {
+                            Label("Copy File Path", systemImage: "doc.on.doc")
+                        }
+                    }
+                    
+                    Button {
+                        showDiagnostics = true
+                    } label: {
+                        Label("View Diagnostics", systemImage: "cpu")
                     }
                     
                     Button {
@@ -816,11 +935,11 @@ struct FileThumbnailView: View {
     
     @ViewBuilder
     private var rowContextMenu: some View {
-        if let path = download.filePath {
+        if let path = download.filePath, FileManager.default.fileExists(atPath: path.path) {
             Button {
-                downloadManager.showInFinder(path)
+                QuickLookPreviewHelper.shared.preview(url: path)
             } label: {
-                Label(languageService.s("show_in_finder"), systemImage: "folder")
+                Label("Quick Look", systemImage: "eye")
             }
             
             Button {
@@ -828,8 +947,27 @@ struct FileThumbnailView: View {
             } label: {
                 Label(languageService.s("play"), systemImage: "play.fill")
             }
+
+            Button {
+                downloadManager.showInFinder(path)
+            } label: {
+                Label(languageService.s("show_in_finder"), systemImage: "folder")
+            }
+
+            Button {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(path.path, forType: .string)
+            } label: {
+                Label("Copy File Path", systemImage: "doc.on.doc")
+            }
             
             Divider()
+        }
+        
+        Button {
+            showDiagnostics = true
+        } label: {
+            Label("View Diagnostics", systemImage: "cpu")
         }
         
         if download.status == .downloading || download.status == .fetching || download.status == .processing {

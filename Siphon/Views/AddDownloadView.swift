@@ -26,6 +26,7 @@ struct AddDownloadView: View {
     @State private var selectedCodec: String = "auto"
     @State private var selectedConversionCodec: String = "none"
     @State private var selectedAudioCodec: String = "auto"
+    @State private var selectedHDRAction: String = HDRAction.preserveHDR.rawValue
     @State private var customPresets: [CustomPreset] = []
     @State private var selectedPresetName: String? = nil
     @State private var presetSubtitleLanguage: String = ""
@@ -967,8 +968,19 @@ struct AddDownloadView: View {
                                 .frame(maxWidth: .infinity, alignment: .leading)
                             }
                             
-                            Color.clear
-                                .gridCellUnsizedAxes([.horizontal, .vertical])
+                            VStack(alignment: .leading, spacing: 5) {
+                                Text("HDR / Dynamic Range")
+                                    .font(.geist(11, weight: .medium))
+                                    .foregroundColor(.secondary)
+                                Picker("", selection: $selectedHDRAction) {
+                                    ForEach(HDRAction.allCases) { action in
+                                        Text(action.title(lang: languageService)).tag(action.rawValue)
+                                    }
+                                }
+                                .labelsHidden()
+                                .pickerStyle(.menu)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                            }
                         }
                     }
                 }
@@ -1645,7 +1657,8 @@ struct AddDownloadView: View {
             conversionCodec: conversionCodecEnum,
             forceOverwrite: false,
             rawCookies: nil,
-            selectedFormatId: inputMode == .single ? selectedFormatId : nil
+            selectedFormatId: inputMode == .single ? selectedFormatId : nil,
+            hdrAction: isVideoTab ? (HDRAction(rawValue: selectedHDRAction) ?? .preserveHDR) : nil
         )
 
         if inputMode == .batch {

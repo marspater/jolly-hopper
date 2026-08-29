@@ -393,6 +393,22 @@ class DownloadManager: ObservableObject {
             download.duration = info.durationString
             download.thumbnailURL = info.thumbnailURL
             download.mediaInfo = info
+            
+            let selectedFormats = info.resolveSelectedFormats(options: download.options)
+            let primaryFormat = selectedFormats.first(where: { !$0.isAudioOnly }) ?? selectedFormats.first
+            download.diagnostics.ytdlpVersion = self.ytdlpVersion
+            download.diagnostics.extractor = info.uploader ?? download.sourceDomain
+            download.diagnostics.formatId = download.options.selectedFormatId ?? primaryFormat?.formatId
+            download.diagnostics.videoCodec = primaryFormat?.vcodec ?? download.options.videoCodec?.rawValue
+            download.diagnostics.audioCodec = selectedFormats.first(where: { $0.isAudioOnly || $0.acodec != "none" })?.acodec ?? download.options.audioCodec?.rawValue
+            download.diagnostics.container = download.options.fileType.rawValue
+            download.diagnostics.resolution = primaryFormat?.resolution
+            download.diagnostics.fps = primaryFormat?.fps
+            download.diagnostics.dynamicRange = primaryFormat?.dynamicRange
+            download.diagnostics.colorSpace = primaryFormat?.colorSpace
+            download.diagnostics.bitDepth = primaryFormat?.bitDepth
+            download.diagnostics.duration = info.durationString
+
             let (resolvedBaseName, candidateKey) = resolveUniqueOutputPath(for: download)
             let sanitize: (String) -> String = { input in
                 let invalidChars = CharacterSet(charactersIn: "\\/:*?\"<>|")
@@ -447,6 +463,9 @@ class DownloadManager: ObservableObject {
                         download.progress = progress
                         download.speed = speed
                         download.eta = eta
+                        if let speed, !speed.isEmpty {
+                            download.diagnostics.peakSpeed = speed
+                        }
                     }
                     if !lines.isEmpty {
                         let combined = lines.joined(separator: "\n") + "\n"
@@ -482,6 +501,7 @@ class DownloadManager: ObservableObject {
             coalescer.flushRemaining()
 
             download.filePath = outputPath
+            download.diagnostics.exitStatus = "Completed (0)"
             updateStatus(for: download, to: .completed)
             download.progress = 1.0
 
@@ -503,11 +523,13 @@ class DownloadManager: ObservableObject {
         } catch let error as YtdlpError {
             if download.status == .stopped || download.status == .paused || Task.isCancelled {
                 LoggerService.shared.log("Download stopped or paused by user (\(LoggerService.sanitizeURLForLog(download.url)))", level: .info)
+                download.diagnostics.exitStatus = "Stopped by user"
                 if download.status == .stopped {
                     addToHistory(download)
                 }
                 return
             }
+            download.diagnostics.exitStatus = "Failed: \(error.localizedDescription)"
             updateStatus(for: download, to: .failed)
             objectWillChange.send()
 

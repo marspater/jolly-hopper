@@ -1086,6 +1086,10 @@ class YtdlpService: ObservableObject {
             args.append("--force-overwrites")
         }
 
+        if options.hdrAction == .convertToSDR {
+            args.append(contentsOf: ["--postprocessor-args", "ffmpeg:-vf tonemap=hable:desat=0,zscale=t=bt709:m=bt709:r=tv,format=yuv420p"])
+        }
+
         let speedLimit = UserDefaults.standard.integer(forKey: UserDefaultsKeys.downloadSpeedLimit)
         if speedLimit > 0 {
             args.append(contentsOf: ["--limit-rate", "\(speedLimit)K"])
@@ -2433,9 +2437,6 @@ class YtdlpService: ObservableObject {
                 let browser = args[idx + 1]
                 if browser == "safari" && isSafariPermissionError(output) && !Self.hasFullDiskAccess {
                     throw YtdlpError.safariCookiesFullDiskAccessRequired
-                }
-                if let urlArg = args.last, isBoyfriendTVURL(urlArg) {
-                    throw mapSiteSpecificError(error, url: urlArg)
                 }
                 LoggerService.shared.log("Browser cookie access failed for '\(browser)' or database missing. Automatically retrying command without browser cookies...", level: .info)
                 if let urlArg = args.last {

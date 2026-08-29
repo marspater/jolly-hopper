@@ -1575,6 +1575,94 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertEqual(flushedLinesBox.value.first, "line_100")
         XCTAssertEqual(flushedLinesBox.value.last, "line_599")
     }
+
+    func testMediaFormatHDR10AndColorSpaceDecoding() throws {
+        let json = """
+        {
+            "format_id": "313",
+            "ext": "webm",
+            "resolution": "3840x2160",
+            "fps": 60,
+            "vcodec": "vp09.02.51.10.01.09.18.00.00",
+            "dynamic_range": "HDR10",
+            "color_space": "bt2020",
+            "bit_depth": 10,
+            "format_note": "2160p60 HDR"
+        }
+        """.data(using: .utf8)!
+
+        let format = try JSONDecoder().decode(MediaFormat.self, from: json)
+        XCTAssertTrue(format.isHDR, "Format with HDR10 dynamic_range and 10-bit depth must be marked as isHDR")
+        XCTAssertEqual(format.dynamicRange, "HDR10")
+        XCTAssertEqual(format.colorSpace, "bt2020")
+        XCTAssertEqual(format.bitDepth, 10)
+        XCTAssertNotNil(format.hdrSummary)
+        XCTAssertTrue(format.hdrSummary?.contains("HDR10") == true)
+        XCTAssertTrue(format.hdrSummary?.contains("10-bit") == true)
+        XCTAssertTrue(format.hdrSummary?.contains("BT.2020") == true)
+    }
+
+    func testMediaFormatDisplaySummaryIncludesHDR() {
+        let format = MediaFormat(
+            formatId: "313",
+            ext: "webm",
+            resolution: "3840x2160",
+            fps: 60,
+            vcodec: "av01",
+            acodec: "none",
+            dynamicRange: "HDR10",
+            colorSpace: "bt2020",
+            bitDepth: 10
+        )
+        let summary = format.displaySummary
+        XCTAssertTrue(summary.contains("HDR10"), "displaySummary must include HDR tags")
+        XCTAssertTrue(summary.contains("10-bit"), "displaySummary must include bit depth")
+        XCTAssertTrue(summary.contains("BT.2020"), "displaySummary must include color space")
+    }
+
+    func testDownloadDiagnosticsTelemetryCapture() {
+        var diag = DownloadDiagnostics()
+        diag.pid = 12345
+        diag.ytdlpVersion = "2026.08.29"
+        diag.ffmpegVersion = "7.0.1"
+        diag.extractor = "YouTube"
+        diag.formatId = "313+140"
+        diag.videoCodec = "av01"
+        diag.audioCodec = "aac"
+        diag.container = "mp4"
+        diag.dynamicRange = "HDR10"
+        diag.bitDepth = 10
+        diag.colorSpace = "bt2020"
+        diag.exitStatus = "Success (0)"
+
+        XCTAssertEqual(diag.pid, 12345)
+        XCTAssertEqual(diag.hdrSummary, "HDR10 • 10-bit • BT2020")
+        XCTAssertEqual(diag.exitStatus, "Success (0)")
+    }
+
+    func testHDRToSDRToneMappingArguments() async throws {
+        let capturedArgsBox = TestBox<[String]>([])
+        service.processRunner = MockYtdlpProcessRunner(mockDownload: { args in
+            capturedArgsBox.value = args
+            return "[download] Destination: /tmp/test_hdr.mp4\n"
+        })
+
+        var options = DownloadOptions.default
+        options.hdrAction = .convertToSDR
+
+        _ = try await service.download(
+            url: "https://example.com/hdr-video",
+            options: options,
+            onProgress: { _, _, _ in },
+            onOutput: { _ in }
+        )
+
+        XCTAssertTrue(capturedArgsBox.value.contains("--postprocessor-args"))
+        if let idx = capturedArgsBox.value.firstIndex(of: "--postprocessor-args") {
+            XCTAssertTrue(capturedArgsBox.value[idx + 1].contains("tonemap=hable"))
+            XCTAssertTrue(capturedArgsBox.value[idx + 1].contains("zscale=t=bt709"))
+        }
+    }
 }
 
 
