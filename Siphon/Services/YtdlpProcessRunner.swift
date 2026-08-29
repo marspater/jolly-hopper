@@ -17,6 +17,15 @@ public final class DownloadProcessController: @unchecked Sendable {
 
     public init() {}
 
+    private static func terminateProcessTree(_ proc: Process) {
+        guard proc.isRunning else { return }
+        let pid = proc.processIdentifier
+        proc.terminate()
+        if pid > 0 && proc.isRunning {
+            kill(-pid, SIGTERM)
+        }
+    }
+
     /// Registers the process with the controller.
     /// Returns `true` if successfully attached and uncancelled, or `false` if already cancelled.
     @discardableResult
@@ -39,11 +48,7 @@ public final class DownloadProcessController: @unchecked Sendable {
         lock.unlock()
 
         if shouldTerminate {
-            proc.terminate()
-            let pid = proc.processIdentifier
-            if pid > 0 {
-                kill(-pid, SIGTERM)
-            }
+            Self.terminateProcessTree(proc)
         }
         return success
     }
@@ -67,12 +72,8 @@ public final class DownloadProcessController: @unchecked Sendable {
         state = .cancelled
         lock.unlock()
 
-        if case .attached(let proc) = previousState, proc.isRunning {
-            proc.terminate()
-            let pid = proc.processIdentifier
-            if pid > 0 {
-                kill(-pid, SIGTERM)
-            }
+        if case .attached(let proc) = previousState {
+            Self.terminateProcessTree(proc)
         }
     }
 

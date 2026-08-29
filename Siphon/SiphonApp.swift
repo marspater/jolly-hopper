@@ -186,8 +186,20 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
     private var downloadAssetName: String?
     private var expectedChecksum: String?
     private var checksumURL: URL?
+    private var currentDownloadTask: URLSessionDownloadTask?
+    private var activeSession: URLSession?
     
     @Published var releasePageURL: URL? = URL(string: "https://github.com/marspater/jolly-hopper/releases/latest")
+    
+    func cancelUpdate() {
+        currentDownloadTask?.cancel()
+        currentDownloadTask = nil
+        activeSession?.invalidateAndCancel()
+        activeSession = nil
+        isDownloading = false
+        isInstalling = false
+        updateProgress = 0
+    }
     
     func checkForUpdates() async {
         guard !isChecking else { return }
@@ -332,7 +344,9 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
         updateProgress = 0
         
         let session = URLSession(configuration: .default, delegate: self, delegateQueue: .main)
+        self.activeSession = session
         let downloadTask = session.downloadTask(with: url)
+        self.currentDownloadTask = downloadTask
         downloadTask.resume()
     }
     
@@ -348,8 +362,10 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
 
     nonisolated func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
         session.finishTasksAndInvalidate()
-        if let error = error {
-            Task { @MainActor in
+        Task { @MainActor in
+            self.currentDownloadTask = nil
+            self.activeSession = nil
+            if let error = error {
                 LoggerService.shared.log("Update package download failed: \(error.localizedDescription)", level: .error)
                 self.isDownloading = false
                 self.isInstalling = false
@@ -367,6 +383,8 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
             try FileManager.default.moveItem(at: location, to: tempUpdate)
             
             Task { @MainActor in
+                self.currentDownloadTask = nil
+                self.activeSession = nil
                 isDownloading = false
                 
                 // Cryptographic checksum verification if expected checksum was retrieved

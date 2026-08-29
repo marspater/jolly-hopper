@@ -1555,6 +1555,26 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertEqual(flushedProgressBox.value, 0.5)
         XCTAssertEqual(flushedLinesBox.value, ["line 1", "line 2"])
     }
+
+    func testDownloadEventCoalescerBoundedQueueDropsOldest() {
+        let flushedLinesBox = TestBox<[String]>([])
+        let coalescer = DownloadEventCoalescer { _, _, _, lines in
+            if !lines.isEmpty {
+                flushedLinesBox.value.append(contentsOf: lines)
+            }
+        }
+
+        // Push 600 lines (exceeding maxPendingLines = 500)
+        for i in 0..<600 {
+            coalescer.recordLogLine("line_\(i)")
+        }
+        coalescer.flushRemaining()
+
+        // Should drop first 100 oldest lines and retain last 500
+        XCTAssertEqual(flushedLinesBox.value.count, 500)
+        XCTAssertEqual(flushedLinesBox.value.first, "line_100")
+        XCTAssertEqual(flushedLinesBox.value.last, "line_599")
+    }
 }
 
 
