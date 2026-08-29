@@ -437,6 +437,7 @@ struct DownloadRowView: View {
                                     startPoint: .topLeading,
                                     endPoint: .bottomTrailing
                                 )
+                                .allowedDynamicRange(AdaptiveRenderingEnvironment.shared.capabilities.supportsEDR ? .high : .standard)
                             )
                             .clipShape(RoundedRectangle(cornerRadius: 3))
                             .padding(4)

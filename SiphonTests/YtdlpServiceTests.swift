@@ -1663,6 +1663,23 @@ final class YtdlpServiceTests: XCTestCase {
             XCTAssertTrue(capturedArgsBox.value[idx + 1].contains("zscale=t=bt709"))
         }
     }
+
+    @MainActor
+    func testAdaptiveRenderingCapabilitiesAndDerivations() {
+        let caps1 = RenderingCapabilities(supportsEDR: true, supportsP3: true, reduceTransparency: false)
+        XCTAssertTrue(caps1.supportsEDR)
+        XCTAssertTrue(caps1.supportsP3)
+        XCTAssertFalse(caps1.reduceTransparency)
+
+        let caps2 = RenderingCapabilities(supportsEDR: false, supportsP3: false, reduceTransparency: true)
+        XCTAssertFalse(caps2.supportsEDR)
+        XCTAssertFalse(caps2.supportsP3)
+        XCTAssertTrue(caps2.reduceTransparency)
+
+        let env = AdaptiveRenderingEnvironment.shared
+        XCTAssertNotNil(env.materialMode)
+        XCTAssertNotNil(env.colorGamut)
+    }
 }
 
 

@@ -89,14 +89,15 @@ struct PreferencesView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // Fluid Glass Segmented Tab Bar
-            HStack(spacing: 4) {
+            // Fluid Glass Segmented Tab Bar (38px height with targeted EDR accent glow)
+            HStack(spacing: 3) {
                 tabSegment(.general, title: languageService.s("general"), icon: "gearshape.fill")
                 tabSegment(.download, title: languageService.s("download"), icon: "arrow.down.circle.fill")
                 tabSegment(.advanced, title: languageService.s("advanced"), icon: "wrench.and.screwdriver.fill")
                 tabSegment(.about, title: languageService.s("about"), icon: "info.circle.fill")
             }
-            .padding(4)
+            .padding(3)
+            .frame(height: 38)
             .background(
                 Capsule()
                     .fill(Color.primary.opacity(0.04))
@@ -105,12 +106,20 @@ struct PreferencesView: View {
             .clipShape(Capsule())
             .overlay(
                 Capsule()
-                    .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+                    .strokeBorder(
+                        LinearGradient(
+                            colors: [Color.white.opacity(0.18), Color.white.opacity(0.04), Color.clear],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        ),
+                        lineWidth: 1
+                    )
             )
-            .padding(.top, 14)
-            .padding(.bottom, 12)
+            .padding(.top, 10)
+            .padding(.bottom, 10)
 
             Divider()
+                .opacity(0.20)
 
             // Active Tab Content View
             Group {
@@ -169,23 +178,34 @@ struct PreferencesView: View {
         Button {
             selectedTab = tab
         } label: {
-            HStack(spacing: 6) {
+            HStack(spacing: 5) {
                 Image(systemName: icon)
-                    .font(.geist(12, weight: .semibold))
+                    .font(.system(size: 11, weight: .semibold))
                 Text(title)
                     .font(.geist(12, weight: .semibold))
                     .lineLimit(1)
                     .fixedSize(horizontal: true, vertical: false)
             }
             .foregroundColor(selectedTab == tab ? .white : .secondary)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 7)
+            .padding(.horizontal, 11)
+            .padding(.vertical, 5)
             .background {
                 if selectedTab == tab {
-                    Capsule()
-                        .fill(SiphonTheme.primaryGradient)
-                        .matchedGeometryEffect(id: "activeTabBubble", in: tabNamespace)
-                        .shadow(color: SiphonTheme.accent.opacity(0.35), radius: 8, y: 2)
+                    ZStack {
+                        Capsule()
+                            .fill(SiphonTheme.accent.opacity(0.30))
+                            .blur(radius: 8)
+                            .padding(-2)
+                            .allowedDynamicRange(AdaptiveRenderingEnvironment.shared.capabilities.supportsEDR ? .high : .standard)
+
+                        Capsule()
+                            .fill(SiphonTheme.primaryGradient)
+                            .overlay(
+                                Capsule()
+                                    .strokeBorder(Color.white.opacity(0.25), lineWidth: 1)
+                            )
+                    }
+                    .matchedGeometryEffect(id: "activeTabBubble", in: tabNamespace)
                 }
             }
         }
@@ -205,32 +225,67 @@ struct PreferencesView: View {
 
     private var launchAtLoginSection: some View {
         Section(languageService.s("other")) {
-            Toggle(languageService.s("launch_at_login"), isOn: Binding(
-                get: { LoginItemHelper.shared.isEnabled },
-                set: { LoginItemHelper.shared.setEnabled($0) }
-            ))
+            HStack {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(languageService.s("launch_at_login"))
+                        .font(.geist(13, weight: .medium))
+                }
+                Spacer()
+                Toggle("", isOn: Binding(
+                    get: { LoginItemHelper.shared.isEnabled },
+                    set: { LoginItemHelper.shared.setEnabled($0) }
+                ))
+                .labelsHidden()
+                .toggleStyle(.switch)
+            }
             
             if LoginItemHelper.shared.isEnabled {
-                VStack(alignment: .leading, spacing: 2) {
-                    Toggle(languageService.s("start_in_background"), isOn: $startInBackground)
-                    Text(languageService.s("start_in_background_desc"))
-                        .font(.geist(11))
-                        .foregroundColor(.secondary)
+                HStack {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(languageService.s("start_in_background"))
+                            .font(.geist(13, weight: .medium))
+                        Text(languageService.s("start_in_background_desc"))
+                            .font(.geist(11))
+                            .foregroundColor(.secondary)
+                    }
+                    Spacer()
+                    Toggle("", isOn: $startInBackground)
+                        .labelsHidden()
+                        .toggleStyle(.switch)
                 }
-                .padding(.leading, 20)
+                .padding(.leading, 12)
             }
             
-            Toggle(languageService.s("notifications"), isOn: $showNotifications)
-            if showNotifications {
-                Button(languageService.s("test_notification")) {
-                    NotificationService.shared.sendDownloadCompleted(filename: "Siphon Test", languageService: languageService)
+            HStack {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(languageService.s("notifications"))
+                        .font(.geist(13, weight: .medium))
                 }
-                .buttonStyle(.plain)
-                .font(.geist(12, weight: .medium))
-                .foregroundColor(SiphonTheme.accent)
+                Spacer()
+                if showNotifications {
+                    Button(languageService.s("test_notification")) {
+                        NotificationService.shared.sendDownloadCompleted(filename: "Siphon Test", languageService: languageService)
+                    }
+                    .buttonStyle(.plain)
+                    .font(.geist(11, weight: .medium))
+                    .foregroundColor(SiphonTheme.accent)
+                    .padding(.trailing, 8)
+                }
+                Toggle("", isOn: $showNotifications)
+                    .labelsHidden()
+                    .toggleStyle(.switch)
             }
             
-            Toggle(languageService.s("show_menubar_icon"), isOn: $showMenuBarIcon)
+            HStack {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(languageService.s("show_menubar_icon"))
+                        .font(.geist(13, weight: .medium))
+                }
+                Spacer()
+                Toggle("", isOn: $showMenuBarIcon)
+                    .labelsHidden()
+                    .toggleStyle(.switch)
+            }
         }
         .tint(SiphonTheme.accent)
     }
@@ -316,11 +371,13 @@ struct PreferencesView: View {
     private var appUpdatesSection: some View {
         Section(languageService.s("updates")) {
             HStack {
-                VStack(alignment: .leading) {
+                VStack(alignment: .leading, spacing: 6) {
                     Text(languageService.s("app_updates"))
+                        .font(.geist(13, weight: .medium))
+                        .foregroundColor(.primary)
                     if let latestVersion = updateChecker.latestVersion {
                         Text("\(languageService.s("latest")): \(latestVersion)")
-                            .font(.geistMono(11, weight: .medium))
+                            .font(.geistMono(11, weight: .semibold))
                             .foregroundColor(updateChecker.hasUpdate ? .orange : .green)
                     }
                 }
@@ -332,7 +389,7 @@ struct PreferencesView: View {
                     updateAvailableView
                 } else if updateChecker.showUpToDateMessage {
                     Text(languageService.s("app_up_to_date"))
-                        .font(.geist(11))
+                        .font(.geist(11, weight: .medium))
                         .foregroundColor(.green)
                 } else {
                     Button(languageService.s("check_updates")) {
@@ -1005,7 +1062,7 @@ struct PreferencesView: View {
                     }
                     .font(.geist(11))
                     
-                    Divider()
+                    SiphonTheme.subtleDivider
                     
                     HStack {
                         Text(languageService.s("video_downloading"))

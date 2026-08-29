@@ -185,7 +185,7 @@ struct SidebarView: View {
         } label: {
             HStack(spacing: 8) {
                 Image(systemName: item.icon)
-                    .font(.geist(13, weight: .medium))
+                    .font(.system(size: 13, weight: .medium))
                     .frame(width: 18, alignment: .center)
                     .foregroundColor(isSelected ? SiphonTheme.accent : .secondary)
                 Text(item.title(lang: languageService))
@@ -204,7 +204,7 @@ struct SidebarView: View {
                 }
             }
             .padding(.horizontal, 8)
-            .padding(.vertical, 5)
+            .padding(.vertical, 6)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)

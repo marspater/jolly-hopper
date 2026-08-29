@@ -35,6 +35,85 @@ extension View {
     }
 }
 
+// MARK: - Adaptive Rendering Environment & Display Capabilities
+public struct RenderingCapabilities: Sendable, Equatable {
+    public let supportsEDR: Bool
+    public let supportsP3: Bool
+    public let reduceTransparency: Bool
+}
+
+public enum MaterialMode: Sendable, Equatable {
+    case glass      // Standard liquid glass with restrained translucency
+    case opaque     // Accessibility Reduce Transparency fallback
+}
+
+public enum ColorGamut: Sendable, Equatable {
+    case p3         // Wide Display P3 color gamut
+    case sRGB       // Standard sRGB color fallback
+}
+
+@MainActor
+public final class AdaptiveRenderingEnvironment: ObservableObject {
+    public static let shared = AdaptiveRenderingEnvironment()
+    
+    @Published public private(set) var capabilities: RenderingCapabilities
+    
+    public var materialMode: MaterialMode {
+        capabilities.reduceTransparency ? .opaque : .glass
+    }
+    
+    public var colorGamut: ColorGamut {
+        capabilities.supportsP3 ? .p3 : .sRGB
+    }
+    
+    private init() {
+        self.capabilities = Self.detectCapabilities()
+        NotificationCenter.default.addObserver(
+            forName: NSApplication.didChangeScreenParametersNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.refresh()
+        }
+        NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.refresh()
+        }
+    }
+    
+    public func refresh() {
+        self.capabilities = Self.detectCapabilities()
+    }
+    
+    public static func detectCapabilities() -> RenderingCapabilities {
+        let reduceTransparency = NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency
+        var supportsEDR = false
+        var supportsP3 = false
+        
+        for screen in NSScreen.screens {
+            if screen.maximumExtendedDynamicRangeColorComponentValue > 1.0 || screen.maximumPotentialExtendedDynamicRangeColorComponentValue > 1.0 {
+                supportsEDR = true
+            }
+            if screen.canRepresent(.p3) || screen.colorSpace == .displayP3 {
+                supportsP3 = true
+            }
+        }
+        
+        if NSScreen.main?.canRepresent(.p3) == true {
+            supportsP3 = true
+        }
+        
+        return RenderingCapabilities(
+            supportsEDR: supportsEDR,
+            supportsP3: supportsP3,
+            reduceTransparency: reduceTransparency
+        )
+    }
+}
+
 // MARK: - Standardized Siphon Design System & Theme
 public enum SiphonTheme {
     // Primary Accent & Gradients with Display P3 wide color gamut support
@@ -66,21 +145,32 @@ public enum SiphonTheme {
     public static let radiusCard: CGFloat = 12
     public static let radiusSheet: CGFloat = 14
     
-    // Elevated Card & Tile Backgrounds
+    // Elevated Card & Tile Backgrounds (Less transparency on cards, solid separation from window)
     @ViewBuilder
     public static func cardBackground(cornerRadius: CGFloat = radiusCard, isHovered: Bool = false) -> some View {
-        RoundedRectangle(cornerRadius: cornerRadius)
-            .fill(isHovered ? Color.primary.opacity(0.06) : Color.primary.opacity(0.03))
-            .background(
-                RoundedRectangle(cornerRadius: cornerRadius)
-                    .fill(.ultraThinMaterial)
-            )
+        if NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency {
+            RoundedRectangle(cornerRadius: cornerRadius)
+                .fill(Color(nsColor: .controlBackgroundColor))
+        } else {
+            RoundedRectangle(cornerRadius: cornerRadius)
+                .fill(Color(nsColor: .controlBackgroundColor).opacity(isHovered ? 0.92 : 0.84))
+                .background(
+                    RoundedRectangle(cornerRadius: cornerRadius)
+                        .fill(.regularMaterial)
+                )
+        }
     }
     
     @ViewBuilder
     public static func cardBorder(cornerRadius: CGFloat = radiusCard, isHovered: Bool = false) -> some View {
+        let isOpaque = NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency
         RoundedRectangle(cornerRadius: cornerRadius)
-            .stroke(isHovered ? Color.primary.opacity(0.14) : Color.primary.opacity(0.07), lineWidth: 1)
+            .stroke(
+                isOpaque
+                    ? Color.primary.opacity(isHovered ? 0.24 : 0.14)
+                    : Color.primary.opacity(isHovered ? 0.12 : 0.06),
+                lineWidth: 1
+            )
     }
     
     // Pill / Badge Backgrounds (Capsule)
@@ -89,14 +179,19 @@ public enum SiphonTheme {
         if isSelected {
             Capsule()
                 .fill(primaryGradient)
-                .shadow(color: accent.opacity(0.35), radius: 6, y: 2)
+                .shadow(color: accent.opacity(0.30), radius: 6, y: 2)
         } else {
-            Capsule()
-                .fill(isHovered ? Color.primary.opacity(0.07) : Color.primary.opacity(0.03))
-                .background(
-                    Capsule()
-                        .fill(.ultraThinMaterial)
-                )
+            if NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency {
+                Capsule()
+                    .fill(Color(nsColor: .controlBackgroundColor))
+            } else {
+                Capsule()
+                    .fill(Color.primary.opacity(isHovered ? 0.08 : 0.04))
+                    .background(
+                        Capsule()
+                            .fill(.thinMaterial)
+                    )
+            }
         }
     }
     
@@ -107,25 +202,37 @@ public enum SiphonTheme {
                 .stroke(Color.white.opacity(0.25), lineWidth: 1)
         } else {
             Capsule()
-                .stroke(isHovered ? Color.primary.opacity(0.14) : Color.primary.opacity(0.07), lineWidth: 1)
+                .stroke(Color.primary.opacity(isHovered ? 0.12 : 0.06), lineWidth: 1)
         }
     }
     
-    // Control / Button Backgrounds (RoundedRectangle)
+    // Control / Button Backgrounds (Solid, tactile surfaces)
     @ViewBuilder
     public static func controlBackground(cornerRadius: CGFloat = radiusControl, isHovered: Bool = false) -> some View {
-        RoundedRectangle(cornerRadius: cornerRadius)
-            .fill(isHovered ? Color.primary.opacity(0.08) : Color.primary.opacity(0.04))
-            .background(
-                RoundedRectangle(cornerRadius: cornerRadius)
-                    .fill(.ultraThinMaterial)
-            )
+        if NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency {
+            RoundedRectangle(cornerRadius: cornerRadius)
+                .fill(Color(nsColor: .controlColor))
+        } else {
+            RoundedRectangle(cornerRadius: cornerRadius)
+                .fill(Color(nsColor: .controlColor).opacity(isHovered ? 0.95 : 0.88))
+                .background(
+                    RoundedRectangle(cornerRadius: cornerRadius)
+                        .fill(.regularMaterial)
+                )
+        }
     }
     
     @ViewBuilder
     public static func controlBorder(cornerRadius: CGFloat = radiusControl, isHovered: Bool = false) -> some View {
         RoundedRectangle(cornerRadius: cornerRadius)
-            .stroke(isHovered ? Color.primary.opacity(0.18) : Color.primary.opacity(0.09), lineWidth: 1)
+            .stroke(Color.primary.opacity(isHovered ? 0.16 : 0.08), lineWidth: 1)
+    }
+    
+    // Settings & Diagnostics Subtle Divider
+    @ViewBuilder
+    public static var subtleDivider: some View {
+        Divider()
+            .opacity(0.20)
     }
 }
 
