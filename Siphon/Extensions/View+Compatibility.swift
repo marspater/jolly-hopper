@@ -164,13 +164,24 @@ public enum SiphonTheme {
     @ViewBuilder
     public static func cardBorder(cornerRadius: CGFloat = radiusCard, isHovered: Bool = false) -> some View {
         let isOpaque = NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency
-        RoundedRectangle(cornerRadius: cornerRadius)
-            .stroke(
-                isOpaque
-                    ? Color.primary.opacity(isHovered ? 0.24 : 0.14)
-                    : Color.primary.opacity(isHovered ? 0.12 : 0.06),
-                lineWidth: 1
-            )
+        if isOpaque {
+            RoundedRectangle(cornerRadius: cornerRadius)
+                .stroke(Color.primary.opacity(isHovered ? 0.24 : 0.14), lineWidth: 1)
+        } else {
+            RoundedRectangle(cornerRadius: cornerRadius)
+                .strokeBorder(
+                    LinearGradient(
+                        colors: [
+                            Color.white.opacity(isHovered ? 0.28 : 0.18),
+                            Color.white.opacity(isHovered ? 0.08 : 0.04),
+                            Color.clear
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    ),
+                    lineWidth: 1
+                )
+        }
     }
     
     // Pill / Badge Backgrounds (Capsule)

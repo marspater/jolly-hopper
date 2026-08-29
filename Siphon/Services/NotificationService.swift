@@ -179,6 +179,13 @@ final class NotificationService: NSObject, @unchecked Sendable, UNUserNotificati
         sendYtdlpUpdateNotification(title: "yt-dlp Update Failed", body: reason)
     }
 
+    func sendAppUpdateNotification(title: String, body: String) {
+        let content = UNMutableNotificationContent()
+        content.title = title
+        content.body = body
+        sendNotification(content: content, logName: title)
+    }
+
     private func sendYtdlpUpdateNotification(title: String, body: String) {
         let content = UNMutableNotificationContent()
         content.title = title

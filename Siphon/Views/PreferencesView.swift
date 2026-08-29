@@ -176,7 +176,9 @@ struct PreferencesView: View {
     @ViewBuilder
     private func tabSegment(_ tab: PreferenceTab, title: String, icon: String) -> some View {
         Button {
-            selectedTab = tab
+            withAnimation(.easeInOut(duration: 0.18)) {
+                selectedTab = tab
+            }
         } label: {
             HStack(spacing: 5) {
                 Image(systemName: icon)
@@ -187,15 +189,15 @@ struct PreferencesView: View {
                     .fixedSize(horizontal: true, vertical: false)
             }
             .foregroundColor(selectedTab == tab ? .white : .secondary)
-            .padding(.horizontal, 11)
-            .padding(.vertical, 5)
+            .padding(.horizontal, 12)
+            .frame(maxHeight: .infinity)
             .background {
                 if selectedTab == tab {
                     ZStack {
                         Capsule()
                             .fill(SiphonTheme.accent.opacity(0.30))
-                            .blur(radius: 8)
-                            .padding(-2)
+                            .blur(radius: 6)
+                            .padding(-1)
                             .allowedDynamicRange(AdaptiveRenderingEnvironment.shared.capabilities.supportsEDR ? .high : .standard)
 
                         Capsule()
@@ -208,6 +210,7 @@ struct PreferencesView: View {
                     .matchedGeometryEffect(id: "activeTabBubble", in: tabNamespace)
                 }
             }
+            .contentShape(Capsule())
         }
         .buttonStyle(.plain)
     }
@@ -394,7 +397,7 @@ struct PreferencesView: View {
                 } else {
                     Button(languageService.s("check_updates")) {
                         Task {
-                            await updateChecker.checkForUpdates()
+                            await updateChecker.checkForUpdates(manual: true)
                         }
                     }
                 }
@@ -1108,46 +1111,81 @@ struct PreferencesView: View {
                 HStack(spacing: 10) {
                     Link(destination: URL(string: "https://github.com/marspater/jolly-hopper") ?? URL(fileURLWithPath: "/")) {
                         Label("GitHub", systemImage: "link")
-                            .font(.geist(11, weight: .medium))
-                            .foregroundColor(.primary)
-                            .padding(.horizontal, 12)
+                            .font(.geist(11, weight: .semibold))
+                            .foregroundColor(SiphonTheme.accent)
+                            .padding(.horizontal, 14)
                             .padding(.vertical, 6)
                             .background(
-                                SiphonTheme.pillBackground(isSelected: false)
+                                Capsule()
+                                    .fill(SiphonTheme.accent.opacity(0.12))
+                                    .background(Capsule().fill(.ultraThinMaterial))
                             )
                             .clipShape(Capsule())
                             .overlay(
-                                SiphonTheme.pillBorder(isSelected: false)
+                                Capsule()
+                                    .strokeBorder(
+                                        LinearGradient(
+                                            colors: [SiphonTheme.accent.opacity(0.45), SiphonTheme.accent.opacity(0.18)],
+                                            startPoint: .topLeading,
+                                            endPoint: .bottomTrailing
+                                        ),
+                                        lineWidth: 1
+                                    )
                             )
                     }
+                    .buttonStyle(.plain)
+                    
                     Link(destination: URL(string: "https://github.com/marspater/jolly-hopper/blob/main/README.md") ?? URL(fileURLWithPath: "/")) {
                         Label("README", systemImage: "doc.text")
-                            .font(.geist(11, weight: .medium))
-                            .foregroundColor(.primary)
-                            .padding(.horizontal, 12)
+                            .font(.geist(11, weight: .semibold))
+                            .foregroundColor(SiphonTheme.accent)
+                            .padding(.horizontal, 14)
                             .padding(.vertical, 6)
                             .background(
-                                SiphonTheme.pillBackground(isSelected: false)
+                                Capsule()
+                                    .fill(SiphonTheme.accent.opacity(0.12))
+                                    .background(Capsule().fill(.ultraThinMaterial))
                             )
                             .clipShape(Capsule())
                             .overlay(
-                                SiphonTheme.pillBorder(isSelected: false)
+                                Capsule()
+                                    .strokeBorder(
+                                        LinearGradient(
+                                            colors: [SiphonTheme.accent.opacity(0.45), SiphonTheme.accent.opacity(0.18)],
+                                            startPoint: .topLeading,
+                                            endPoint: .bottomTrailing
+                                        ),
+                                        lineWidth: 1
+                                    )
                             )
                     }
+                    .buttonStyle(.plain)
+                    
                     Link(destination: URL(string: "https://github.com/marspater/jolly-hopper/blob/main/SUPPORTED_SITES.md") ?? URL(fileURLWithPath: "/")) {
                         Label(languageService.s("supported_sites"), systemImage: "globe")
-                            .font(.geist(11, weight: .medium))
-                            .foregroundColor(.primary)
-                            .padding(.horizontal, 12)
+                            .font(.geist(11, weight: .semibold))
+                            .foregroundColor(SiphonTheme.accent)
+                            .padding(.horizontal, 14)
                             .padding(.vertical, 6)
                             .background(
-                                SiphonTheme.pillBackground(isSelected: false)
+                                Capsule()
+                                    .fill(SiphonTheme.accent.opacity(0.12))
+                                    .background(Capsule().fill(.ultraThinMaterial))
                             )
                             .clipShape(Capsule())
                             .overlay(
-                                SiphonTheme.pillBorder(isSelected: false)
+                                Capsule()
+                                    .strokeBorder(
+                                        LinearGradient(
+                                            colors: [SiphonTheme.accent.opacity(0.45), SiphonTheme.accent.opacity(0.18)],
+                                            startPoint: .topLeading,
+                                            endPoint: .bottomTrailing
+                                        ),
+                                        lineWidth: 1
+                                    )
                             )
                     }
+                    .buttonStyle(.plain)
                 }
                 .padding(.top, 4)
 
