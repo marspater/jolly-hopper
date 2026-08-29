@@ -7,12 +7,53 @@ final class DownloadEventCoalescer: @unchecked Sendable {
     private let lock = NSLock()
     private var pendingProgress: (progress: Double, speed: String?, eta: String?)?
     private var pendingLogLines: [String] = []
-    private var lastProgressFlush = Date.distantPast
-    private var lastLogFlush = Date.distantPast
+    private var pendingLogBytes: Int = 0
+    private let maxPendingLines = 500
+    private let maxPendingBytes = 1_048_576 // 1MB
+    
+    private var lastProgressFlush = Date()
+    private var lastLogFlush = Date()
+    private var timer: DispatchSourceTimer?
     private let onFlush: @Sendable (Double?, String?, String?, [String]) -> Void
     
     init(onFlush: @escaping @Sendable (Double?, String?, String?, [String]) -> Void) {
         self.onFlush = onFlush
+        
+        let t = DispatchSource.makeTimerSource(queue: DispatchQueue.global(qos: .utility))
+        t.schedule(deadline: .now() + 0.1, repeating: 0.1)
+        t.setEventHandler { [weak self] in
+            self?.checkPeriodicFlush()
+        }
+        t.resume()
+        self.timer = t
+    }
+
+    deinit {
+        timer?.cancel()
+    }
+
+    private func checkPeriodicFlush() {
+        lock.lock()
+        let now = Date()
+        var progressToFlush: (progress: Double, speed: String?, eta: String?)? = nil
+        if pendingProgress != nil && now.timeIntervalSince(lastProgressFlush) >= 0.100 {
+            lastProgressFlush = now
+            progressToFlush = pendingProgress
+            pendingProgress = nil
+        }
+        
+        var linesToFlush: [String] = []
+        if !pendingLogLines.isEmpty && now.timeIntervalSince(lastLogFlush) >= 0.200 {
+            lastLogFlush = now
+            linesToFlush = pendingLogLines
+            pendingLogLines.removeAll(keepingCapacity: true)
+            pendingLogBytes = 0
+        }
+        lock.unlock()
+
+        if progressToFlush != nil || !linesToFlush.isEmpty {
+            onFlush(progressToFlush?.progress, progressToFlush?.speed, progressToFlush?.eta, linesToFlush)
+        }
     }
 
     func recordProgress(progress: Double, speed: String?, eta: String?) {
@@ -20,16 +61,15 @@ final class DownloadEventCoalescer: @unchecked Sendable {
         pendingProgress = (progress, speed, eta)
         let now = Date()
         let shouldFlush = now.timeIntervalSince(lastProgressFlush) >= 0.100 // 100ms
+        var toFlush: (progress: Double, speed: String?, eta: String?)? = nil
         if shouldFlush {
             lastProgressFlush = now
-        }
-        let currentProgress = pendingProgress
-        if shouldFlush {
+            toFlush = pendingProgress
             pendingProgress = nil
         }
         lock.unlock()
 
-        if shouldFlush, let p = currentProgress {
+        if let p = toFlush {
             onFlush(p.progress, p.speed, p.eta, [])
         }
     }
@@ -37,6 +77,18 @@ final class DownloadEventCoalescer: @unchecked Sendable {
     func recordLogLine(_ line: String) {
         lock.lock()
         pendingLogLines.append(line)
+        pendingLogBytes += line.utf8.count
+        
+        // Bounded queue: drop oldest lines if exceeding line cap or byte cap
+        while pendingLogLines.count > maxPendingLines || pendingLogBytes > maxPendingBytes {
+            if let dropped = pendingLogLines.first {
+                pendingLogBytes -= dropped.utf8.count
+                pendingLogLines.removeFirst()
+            } else {
+                break
+            }
+        }
+
         let now = Date()
         let shouldFlush = now.timeIntervalSince(lastLogFlush) >= 0.200 // 200ms
         var linesToFlush: [String] = []
@@ -44,6 +96,7 @@ final class DownloadEventCoalescer: @unchecked Sendable {
             lastLogFlush = now
             linesToFlush = pendingLogLines
             pendingLogLines.removeAll(keepingCapacity: true)
+            pendingLogBytes = 0
         }
         lock.unlock()
 
@@ -54,10 +107,13 @@ final class DownloadEventCoalescer: @unchecked Sendable {
 
     func flushRemaining() {
         lock.lock()
+        timer?.cancel()
+        timer = nil
         let p = pendingProgress
         let lines = pendingLogLines
         pendingProgress = nil
         pendingLogLines.removeAll()
+        pendingLogBytes = 0
         lock.unlock()
 
         if p != nil || !lines.isEmpty {
@@ -288,10 +344,6 @@ class DownloadManager: ObservableObject {
         let task = Task { [weak self, weak download] in
             guard let self, let download else { return }
             await self.executeDownload(download)
-
-            self.activeTasks.removeValue(forKey: downloadId)
-            self.activeControllers.removeValue(forKey: downloadId)
-            self.processQueue()
         }
         activeTasks[downloadId] = task
     }
@@ -302,12 +354,16 @@ class DownloadManager: ObservableObject {
             downloads.append(download)
         }
         await executeDownload(download)
-        activeTasks.removeValue(forKey: download.id)
-        activeControllers.removeValue(forKey: download.id)
-        processQueue()
     }
 
     private func executeDownload(_ download: Download) async {
+        let downloadId = download.id
+        defer {
+            activeTasks.removeValue(forKey: downloadId)
+            activeControllers.removeValue(forKey: downloadId)
+            processQueue()
+        }
+
         guard !Task.isCancelled else { return }
         guard download.status == .queued || download.status == .fetching else { return }
 
@@ -368,14 +424,11 @@ class DownloadManager: ObservableObject {
 
             let controller = DownloadProcessController()
             activeControllers[download.id] = controller
-            defer {
-                activeControllers.removeValue(forKey: download.id)
-            }
 
             LoggerService.shared.log("Starting download for URL: \(LoggerService.sanitizeURLForLog(download.url))", level: .info)
 
             let coalescer = DownloadEventCoalescer { [weak download] progress, speed, eta, lines in
-                Task { @MainActor [weak download] in
+                DispatchQueue.main.async { [weak download] in
                     guard let download else { return }
                     if let progress {
                         download.progress = progress

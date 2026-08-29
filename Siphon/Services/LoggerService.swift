@@ -106,17 +106,37 @@ class LoggerService: ObservableObject {
             let data = handle.readData(ofLength: Int(readSize))
             guard !data.isEmpty else { return }
 
-            var text = String(decoding: data, as: UTF8.self)
-            if seekPos > 0, let firstNewline = text.firstIndex(of: "\n") {
-                text = String(text[text.index(after: firstNewline)...])
-            }
-
-            let lines = text.components(separatedBy: .newlines).filter { !$0.isEmpty }
-            let initialLogs = Array(lines.suffix(maxEntries))
+            let initialLogs = Self.extractTailLines(from: data, maxEntries: maxEntries)
             await MainActor.run {
                 self.logs = initialLogs
             }
         }
+    }
+
+    nonisolated private static func extractTailLines(from data: Data, maxEntries: Int) -> [String] {
+        guard !data.isEmpty else { return [] }
+        var lineStarts: [Int] = [0]
+        for (i, byte) in data.enumerated() {
+            if byte == 0x0A && i + 1 < data.count {
+                lineStarts.append(i + 1)
+            }
+        }
+
+        let neededStarts = lineStarts.suffix(maxEntries + 1)
+        var result: [String] = []
+        result.reserveCapacity(min(maxEntries, neededStarts.count))
+
+        for idx in neededStarts {
+            let nextNewline = data[idx...].firstIndex(of: 0x0A) ?? data.endIndex
+            if idx < nextNewline {
+                let slice = data[idx..<nextNewline]
+                let line = String(decoding: slice, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
+                if !line.isEmpty {
+                    result.append(line)
+                }
+            }
+        }
+        return Array(result.suffix(maxEntries))
     }
     
     func log(_ message: String, level: LogLevel = .info) {
@@ -167,13 +187,9 @@ class LoggerService: ObservableObject {
             let data = handle.readData(ofLength: Int(readSize))
             guard !data.isEmpty else { return }
 
-            var text = String(decoding: data, as: UTF8.self)
-            if seekPos > 0, let firstNewline = text.firstIndex(of: "\n") {
-                text = String(text[text.index(after: firstNewline)...])
-            }
-
-            let lines = text.components(separatedBy: .newlines).filter { !$0.isEmpty }
-            let trimmed = lines.suffix(maxEntries).joined(separator: "\n") + "\n"
+            let lines = extractTailLines(from: data, maxEntries: maxEntries)
+            guard !lines.isEmpty else { return }
+            let trimmed = lines.joined(separator: "\n") + "\n"
             try? trimmed.write(to: logFileURL, atomically: true, encoding: .utf8)
         }
     }
