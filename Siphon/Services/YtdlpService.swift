@@ -2567,6 +2567,14 @@ final class StreamBuffer: @unchecked Sendable {
             buffer.removeSubrange(buffer.startIndex..<searchStartIndex)
         }
 
+        // Safety bound: If continuous stream chunk exceeds 512KB without newline, extract and clear to prevent memory growth
+        if buffer.count > 512 * 1024 {
+            if let line = String(data: buffer, encoding: .utf8) {
+                lines.append(line)
+            }
+            buffer.removeAll()
+        }
+
         return lines
     }
 
@@ -2628,6 +2636,10 @@ final class ThreadSafeOutputState: @unchecked Sendable {
     func appendError(_ text: String) {
         lock.lock()
         errorText += text
+        // Bound error buffer to prevent unbounded memory growth during long-running error outputs
+        if errorText.count > 100_000 {
+            errorText = String(errorText.suffix(50_000))
+        }
         lock.unlock()
     }
 
