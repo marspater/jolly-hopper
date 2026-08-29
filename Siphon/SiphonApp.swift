@@ -201,7 +201,7 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
         updateProgress = 0
     }
     
-    func checkForUpdates() async {
+    func checkForUpdates(manual: Bool = false) async {
         guard !isChecking else { return }
         isChecking = true
         guard let url = URL(string: "https://api.github.com/repos/\(repoOwner)/\(repoName)/releases/latest") else {
@@ -209,17 +209,21 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
             return
         }
         
+        var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 15)
+        request.setValue("Siphon-App/\(currentVersion)", forHTTPHeaderField: "User-Agent")
+        request.setValue("application/vnd.github.v3+json", forHTTPHeaderField: "Accept")
+        
         do {
-            let (data, _) = try await URLSession.shared.data(from: url)
+            let (data, response) = try await URLSession.shared.data(for: request)
+            if let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode != 200 {
+                throw NSError(domain: "UpdateChecker", code: httpResponse.statusCode, userInfo: [NSLocalizedDescriptionKey: "GitHub returned HTTP \(httpResponse.statusCode)"])
+            }
             if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
                let tagName = json["tag_name"] as? String {
                 
-                latestVersion = tagName.replacingOccurrences(of: "v", with: "")
-                if let latest = latestVersion {
-                    hasUpdate = latest.compare(currentVersion, options: .numeric) == .orderedDescending
-                } else {
-                    hasUpdate = false
-                }
+                let cleanTag = tagName.replacingOccurrences(of: "v", with: "")
+                latestVersion = cleanTag
+                hasUpdate = cleanTag.compare(currentVersion, options: .numeric) == .orderedDescending
                 
                 if let htmlUrlStr = json["html_url"] as? String, let htmlUrl = URL(string: htmlUrlStr) {
                     releasePageURL = htmlUrl
@@ -287,14 +291,33 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
                 
                 if !hasUpdate {
                     showUpToDateMessage = true
+                    if manual {
+                        NotificationService.shared.sendAppUpdateNotification(
+                            title: "Siphon is Up to Date",
+                            body: "Version \(currentVersion) is the latest version available."
+                        )
+                    }
                     try? await Task.sleep(nanoseconds: 3 * 1_000_000_000)
                     showUpToDateMessage = false
+                } else if manual {
+                    NotificationService.shared.sendAppUpdateNotification(
+                        title: "Update Available",
+                        body: "Siphon v\(cleanTag) is now available."
+                    )
                 }
             }
         } catch {
             LoggerService.shared.log("Failed to check for app updates: \(error.localizedDescription)", level: .warning)
-            latestVersion = currentVersion
+            if latestVersion == nil {
+                latestVersion = currentVersion
+            }
             hasUpdate = false
+            if manual {
+                NotificationService.shared.sendAppUpdateNotification(
+                    title: "Update Check Failed",
+                    body: error.localizedDescription
+                )
+            }
         }
         isChecking = false
     }

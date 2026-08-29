@@ -410,6 +410,7 @@ struct StatCard: View {
 
 struct SponsorView: View {
     @EnvironmentObject var languageService: LanguageService
+    @Environment(\.colorScheme) var colorScheme
     @State private var isHovered = false
     
     var body: some View {
@@ -433,19 +434,21 @@ struct SponsorView: View {
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
             .background(
-                ZStack {
-                    #if os(macOS)
-                    RoundedRectangle(cornerRadius: SiphonTheme.radiusControl)
-                        .fill(Color(nsColor: .controlBackgroundColor).opacity(0.6))
-                    #endif
-                    RoundedRectangle(cornerRadius: SiphonTheme.radiusControl)
-                        .fill(isHovered ? Color.primary.opacity(0.08) : Color.primary.opacity(0.03))
-                }
+                RoundedRectangle(cornerRadius: SiphonTheme.radiusControl)
+                    .fill(
+                        colorScheme == .light
+                            ? (isHovered ? Color(white: 0.91) : Color(white: 0.96))
+                            : (isHovered ? Color.white.opacity(0.12) : Color.white.opacity(0.06))
+                    )
             )
-            .cornerRadius(SiphonTheme.radiusControl)
             .overlay(
                 RoundedRectangle(cornerRadius: SiphonTheme.radiusControl)
-                    .stroke(isHovered ? Color.primary.opacity(0.18) : Color.primary.opacity(0.08), lineWidth: 1)
+                    .strokeBorder(
+                        colorScheme == .light
+                            ? Color.black.opacity(isHovered ? 0.14 : 0.08)
+                            : Color.white.opacity(isHovered ? 0.20 : 0.10),
+                        lineWidth: 1
+                    )
             )
         }
         .buttonStyle(.plain)
