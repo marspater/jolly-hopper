@@ -215,7 +215,7 @@ class DownloadManager: ObservableObject {
 
         do {
 
-            let info = try await ytdlpService.fetchInfo(url: download.url)
+            let info = try await ytdlpService.fetchInfo(url: download.url, rawCookies: download.options.rawCookies)
 
             // Bug #5 fix: If user cancelled during fetchInfo, don't proceed
             guard download.status == .fetching else { return }

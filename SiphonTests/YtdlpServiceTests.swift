@@ -1478,6 +1478,25 @@ final class YtdlpServiceTests: XCTestCase {
         }
         XCTAssertEqual(result.lastPathComponent, "hls_recovered.mp4")
     }
+
+    func testResolveBoyfriendTVStreamURLForDownload() {
+        let streamTemplate = "https://cdn.boyfriendtv.com/contents/videos_sources/1490000/1490652/1490652_TPL_.mp4?multi=1920x1080:1080p,1280x720:720p,854x480:480p"
+        
+        var options1080 = DownloadOptions.default
+        options1080.videoResolution = .r1080p
+        let res1080 = service.resolveBoyfriendTVStreamURLForDownload(streamURL: streamTemplate, options: options1080)
+        XCTAssertTrue(res1080.contains("1490652_1080p.mp4"), "Must resolve _TPL_ to _1080p.mp4 for 1080p resolution")
+
+        var options720 = DownloadOptions.default
+        options720.videoResolution = .r720p
+        let res720 = service.resolveBoyfriendTVStreamURLForDownload(streamURL: streamTemplate, options: options720)
+        XCTAssertTrue(res720.contains("1490652_720p.mp4"), "Must resolve _TPL_ to _720p.mp4 for 720p resolution")
+
+        var options480 = DownloadOptions.default
+        options480.videoResolution = .r480p
+        let res480 = service.resolveBoyfriendTVStreamURLForDownload(streamURL: streamTemplate, options: options480)
+        XCTAssertTrue(res480.contains("1490652_480p.mp4"), "Must resolve _TPL_ to _480p.mp4 for 480p resolution")
+    }
 }
 
 
