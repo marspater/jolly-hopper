@@ -19,6 +19,7 @@ class Download: ObservableObject, Identifiable {
     @Published var errorMessage: String?
     @Published var log: String = ""
     @Published var mediaInfo: MediaInfo? = nil
+    @Published var diagnostics: DownloadDiagnostics = DownloadDiagnostics()
     
     var displayProgress: String {
         let percentage = Int(progress * 100)
@@ -72,9 +73,18 @@ class Download: ObservableObject, Identifiable {
             } else if let h = mediaInfo?.formats?.compactMap({ $0.parsedHeight }).max() {
                 parts.append("\(h)p")
             }
+            if let codec = options.videoCodec, codec != .auto {
+                parts.append(codec.rawValue.uppercased())
+            }
+            if let hdr = diagnostics.hdrSummary ?? mediaInfo?.formats?.first(where: { $0.isHDR })?.hdrSummary {
+                parts.append(hdr)
+            }
         } else {
             if let quality = options.audioQuality, quality != .best {
                 parts.append(quality.rawValue)
+            }
+            if let codec = options.audioCodec, codec != .auto {
+                parts.append(codec.rawValue.uppercased())
             }
         }
         
@@ -223,6 +233,59 @@ enum DownloadStatus: String, Codable {
 }
 
 
+enum HDRAction: String, Codable, CaseIterable, Identifiable {
+    case preserveHDR = "preserve_hdr"
+    case convertToSDR = "convert_to_sdr"
+
+    var id: String { rawValue }
+
+    func title(lang: LanguageService) -> String {
+        switch self {
+        case .preserveHDR:
+            return "Preserve HDR (Original)"
+        case .convertToSDR:
+            return "Convert HDR to SDR (Tone-mapped)"
+        }
+    }
+}
+
+public struct DownloadDiagnostics: Codable, Hashable {
+    public var pid: Int32?
+    public var ytdlpVersion: String?
+    public var ffmpegVersion: String?
+    public var extractor: String?
+    public var formatId: String?
+    public var videoCodec: String?
+    public var audioCodec: String?
+    public var container: String?
+    public var resolution: String?
+    public var fps: Double?
+    public var dynamicRange: String?
+    public var colorSpace: String?
+    public var bitDepth: Int?
+    public var httpRetries: Int = 0
+    public var peakSpeed: String?
+    public var duration: String?
+    public var postProcessingSteps: [String] = []
+    public var exitStatus: String?
+    public var commandLine: String?
+    public var timestamp: Date = Date()
+    
+    public var hdrSummary: String? {
+        var tags: [String] = []
+        if let dr = dynamicRange, !dr.isEmpty && dr.lowercased() != "sdr" {
+            tags.append(dr.uppercased())
+        }
+        if let depth = bitDepth, depth >= 10 {
+            tags.append("\(depth)-bit")
+        }
+        if let cs = colorSpace, !cs.isEmpty {
+            tags.append(cs.uppercased())
+        }
+        return tags.isEmpty ? nil : tags.joined(separator: " • ")
+    }
+}
+
 struct DownloadOptions: Codable {
     var saveFolder: URL
     var fileType: MediaFileType
@@ -248,6 +311,7 @@ struct DownloadOptions: Codable {
     var forceOverwrite: Bool?
     var rawCookies: String?
     var selectedFormatId: String?
+    var hdrAction: HDRAction?
 
     enum CodingKeys: String, CodingKey {
         case saveFolder
@@ -273,6 +337,7 @@ struct DownloadOptions: Codable {
         case conversionCodec
         case forceOverwrite
         case selectedFormatId
+        case hdrAction
     }
 
     init(
@@ -299,7 +364,8 @@ struct DownloadOptions: Codable {
         conversionCodec: ConversionCodec? = nil,
         forceOverwrite: Bool? = false,
         rawCookies: String? = nil,
-        selectedFormatId: String? = nil
+        selectedFormatId: String? = nil,
+        hdrAction: HDRAction? = .preserveHDR
     ) {
         self.saveFolder = saveFolder
         self.fileType = fileType
@@ -325,6 +391,7 @@ struct DownloadOptions: Codable {
         self.forceOverwrite = forceOverwrite
         self.rawCookies = rawCookies
         self.selectedFormatId = selectedFormatId
+        self.hdrAction = hdrAction
     }
 
     init(from decoder: Decoder) throws {
@@ -353,6 +420,7 @@ struct DownloadOptions: Codable {
         self.forceOverwrite = try container.decodeIfPresent(Bool.self, forKey: .forceOverwrite)
         self.rawCookies = nil // Ephemeral only, never loaded from persistent history/json
         self.selectedFormatId = try container.decodeIfPresent(String.self, forKey: .selectedFormatId)
+        self.hdrAction = try container.decodeIfPresent(HDRAction.self, forKey: .hdrAction) ?? .preserveHDR
     }
     
     static var `default`: DownloadOptions {
@@ -1158,6 +1226,9 @@ struct MediaFormat: Codable, Identifiable, Hashable {
     let preference: Int?
     let sourcePreference: Int?
     let audioChannels: Int?
+    let dynamicRange: String?
+    let colorSpace: String?
+    let bitDepth: Int?
 
     enum CodingKeys: String, CodingKey {
         case formatId = "format_id"
@@ -1172,6 +1243,9 @@ struct MediaFormat: Codable, Identifiable, Hashable {
         case preference
         case sourcePreference = "source_preference"
         case audioChannels = "audio_channels"
+        case dynamicRange = "dynamic_range"
+        case colorSpace = "color_space"
+        case bitDepth = "bit_depth"
     }
 
     init(
@@ -1194,7 +1268,10 @@ struct MediaFormat: Codable, Identifiable, Hashable {
         languagePreference: Int? = nil,
         preference: Int? = nil,
         sourcePreference: Int? = nil,
-        audioChannels: Int? = nil
+        audioChannels: Int? = nil,
+        dynamicRange: String? = nil,
+        colorSpace: String? = nil,
+        bitDepth: Int? = nil
     ) {
         self.formatId = formatId
         self.ext = ext
@@ -1216,6 +1293,48 @@ struct MediaFormat: Codable, Identifiable, Hashable {
         self.preference = preference
         self.sourcePreference = sourcePreference
         self.audioChannels = audioChannels
+        self.dynamicRange = dynamicRange
+        self.colorSpace = colorSpace
+        self.bitDepth = bitDepth
+    }
+
+    var isHDR: Bool {
+        if let dr = dynamicRange?.lowercased(), !dr.isEmpty && dr != "sdr" {
+            return true
+        }
+        if let bitDepth = bitDepth, bitDepth > 8 {
+            return true
+        }
+        if let cs = colorSpace?.lowercased(), cs.contains("2020") || cs.contains("hdr") {
+            return true
+        }
+        let note = (formatNote ?? "").lowercased()
+        return note.contains("hdr") || note.contains("hlg") || note.contains("dv") || note.contains("10bit") || note.contains("10-bit")
+    }
+
+    var hdrSummary: String? {
+        var tags: [String] = []
+        if let dr = dynamicRange, !dr.isEmpty && dr.lowercased() != "sdr" {
+            tags.append(dr.uppercased())
+        } else if (formatNote ?? "").localizedCaseInsensitiveContains("hdr") {
+            tags.append("HDR")
+        } else if (formatNote ?? "").localizedCaseInsensitiveContains("hlg") {
+            tags.append("HLG")
+        } else if (formatNote ?? "").localizedCaseInsensitiveContains("dolby") || (formatNote ?? "").localizedCaseInsensitiveContains("dv") {
+            tags.append("Dolby Vision")
+        }
+        
+        if let depth = bitDepth, depth >= 10 {
+            tags.append("\(depth)-bit")
+        } else if (formatNote ?? "").localizedCaseInsensitiveContains("10bit") || (formatNote ?? "").localizedCaseInsensitiveContains("10-bit") {
+            tags.append("10-bit")
+        }
+        
+        if let cs = colorSpace, cs.lowercased().contains("2020") {
+            tags.append("BT.2020")
+        }
+        
+        return tags.isEmpty ? nil : tags.joined(separator: " • ")
     }
 
     var isFragmented: Bool {
@@ -1514,6 +1633,7 @@ struct MediaFormat: Codable, Identifiable, Hashable {
             let mb = Double(size) / (1024.0 * 1024.0)
             parts.append(String(format: "%.1f MB", mb))
         }
+        if let hdr = hdrSummary { parts.append(hdr) }
         if let note = formatNote, !note.isEmpty { parts.append(note) }
         return parts.joined(separator: " • ")
     }

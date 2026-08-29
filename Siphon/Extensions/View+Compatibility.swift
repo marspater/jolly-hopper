@@ -37,27 +37,29 @@ extension View {
 
 // MARK: - Standardized Siphon Design System & Theme
 public enum SiphonTheme {
-    // Primary Accent & Gradients
-    public static let accent = Color(red: 0.10, green: 0.48, blue: 1.0)
+    // Primary Accent & Gradients with Display P3 wide color gamut support
+    public static let accent = Color(.displayP3, red: 0.10, green: 0.48, blue: 1.0, opacity: 1.0)
     public static let primaryGradient = LinearGradient(
         colors: [
-            Color(red: 0.18, green: 0.52, blue: 1.0),
-            Color(red: 0.06, green: 0.40, blue: 0.94)
+            Color(.displayP3, red: 0.18, green: 0.52, blue: 1.0, opacity: 1.0),
+            Color(.displayP3, red: 0.06, green: 0.40, blue: 0.94, opacity: 1.0)
         ],
         startPoint: .topLeading,
         endPoint: .bottomTrailing
     )
     
-    // Semantic Status Colors (Consistent contrast across Light & Dark modes)
-    public static let statusDownloading = Color(red: 0.08, green: 0.48, blue: 0.98)
-    public static let statusQueued = Color(red: 0.96, green: 0.55, blue: 0.10)
-    public static let statusCompleted = Color(red: 0.18, green: 0.72, blue: 0.38)
-    public static let statusFailed = Color(red: 0.94, green: 0.26, blue: 0.30)
+    // Semantic Status Colors (Display P3 with graceful sRGB fallback)
+    public static let statusDownloading = Color(.displayP3, red: 0.08, green: 0.48, blue: 0.98, opacity: 1.0)
+    public static let statusQueued = Color(.displayP3, red: 0.96, green: 0.55, blue: 0.10, opacity: 1.0)
+    public static let statusCompleted = Color(.displayP3, red: 0.18, green: 0.72, blue: 0.38, opacity: 1.0)
+    public static let statusFailed = Color(.displayP3, red: 0.94, green: 0.26, blue: 0.30, opacity: 1.0)
+    public static let statusHdr = Color(.displayP3, red: 0.98, green: 0.65, blue: 0.15, opacity: 1.0)
     
     public static let downloading = statusDownloading
     public static let queued = statusQueued
     public static let completed = statusCompleted
     public static let failed = statusFailed
+    public static let hdr = statusHdr
     
     // Radii Tokens
     public static let radiusControl: CGFloat = 8
