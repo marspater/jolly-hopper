@@ -578,6 +578,9 @@ final class YtdlpServiceTests: XCTestCase {
             "yt-dlp",
             "--username", "secret_user@example.com",
             "--password", "MyP@ssw0rd!123",
+            "--video-password", "secret_vid_pass",
+            "--token", "secret_token_abc",
+            "--api-key", "secret_key_xyz",
             "--proxy", "http://user:pass@127.0.0.1:8080",
             "https://site.example/video?auth=SECRET"
         ]
@@ -585,10 +588,16 @@ final class YtdlpServiceTests: XCTestCase {
         let sanitized = LoggerService.sanitizeCommandForLog(args)
         XCTAssertTrue(sanitized.contains("--username \"<USERNAME>\""))
         XCTAssertTrue(sanitized.contains("--password \"<PASSWORD>\""))
+        XCTAssertTrue(sanitized.contains("--video-password \"<PASSWORD>\""))
+        XCTAssertTrue(sanitized.contains("--token \"<TOKEN>\""))
+        XCTAssertTrue(sanitized.contains("--api-key \"<API_KEY>\""))
         XCTAssertTrue(sanitized.contains("--proxy \"<PROXY_REDACTED>\""))
         XCTAssertTrue(sanitized.contains("https://site.example/video"))
         XCTAssertFalse(sanitized.contains("secret_user@example.com"))
         XCTAssertFalse(sanitized.contains("MyP@ssw0rd!123"))
+        XCTAssertFalse(sanitized.contains("secret_vid_pass"))
+        XCTAssertFalse(sanitized.contains("secret_token_abc"))
+        XCTAssertFalse(sanitized.contains("secret_key_xyz"))
         XCTAssertFalse(sanitized.contains("auth=SECRET"))
     }
 
