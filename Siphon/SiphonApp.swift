@@ -583,11 +583,11 @@ enum NavigationItem: String, CaseIterable, Identifiable {
     
     var icon: String {
         switch self {
-        case .home: return "house"
-        case .downloading: return "arrow.down.circle"
-        case .queued: return "clock"
-        case .completed: return "checkmark.circle"
-        case .failed: return "exclamationmark.circle"
+        case .home: return "house.fill"
+        case .downloading: return "arrow.down.circle.fill"
+        case .queued: return "clock.fill"
+        case .completed: return "checkmark.circle.fill"
+        case .failed: return "exclamationmark.circle.fill"
         }
     }
 }

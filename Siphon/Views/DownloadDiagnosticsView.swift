@@ -92,6 +92,7 @@ struct DownloadDiagnosticsView: View {
                                     startPoint: .topLeading,
                                     endPoint: .bottomTrailing
                                 )
+                                .allowedDynamicRange(AdaptiveRenderingEnvironment.shared.capabilities.supportsEDR ? .high : .standard)
                             )
                             .clipShape(Capsule())
                     }
@@ -360,7 +361,7 @@ struct DownloadDiagnosticsView: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
         .overlay(
-            Divider().opacity(0.4),
+            Divider().opacity(0.18),
             alignment: .bottom
         )
     }
