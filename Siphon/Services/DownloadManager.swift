@@ -13,27 +13,29 @@ final class DownloadEventCoalescer: @unchecked Sendable {
     
     private var lastProgressFlush = Date()
     private var lastLogFlush = Date()
-    private var timer: DispatchSourceTimer?
+    private var scheduledFlushWorkItem: DispatchWorkItem?
     private let onFlush: @Sendable (Double?, String?, String?, [String]) -> Void
     
     init(onFlush: @escaping @Sendable (Double?, String?, String?, [String]) -> Void) {
         self.onFlush = onFlush
-        
-        let t = DispatchSource.makeTimerSource(queue: DispatchQueue.global(qos: .utility))
-        t.schedule(deadline: .now() + 0.1, repeating: 0.1)
-        t.setEventHandler { [weak self] in
-            self?.checkPeriodicFlush()
-        }
-        t.resume()
-        self.timer = t
     }
 
     deinit {
-        timer?.cancel()
+        scheduledFlushWorkItem?.cancel()
     }
 
-    private func checkPeriodicFlush() {
+    private func scheduleFlushIfNeeded() {
+        if scheduledFlushWorkItem != nil { return }
+        let workItem = DispatchWorkItem { [weak self] in
+            self?.performTimerFlush()
+        }
+        scheduledFlushWorkItem = workItem
+        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 0.150, execute: workItem)
+    }
+
+    private func performTimerFlush() {
         lock.lock()
+        scheduledFlushWorkItem = nil
         let now = Date()
         var progressToFlush: (progress: Double, speed: String?, eta: String?)? = nil
         if pendingProgress != nil && now.timeIntervalSince(lastProgressFlush) >= 0.100 {
@@ -48,6 +50,10 @@ final class DownloadEventCoalescer: @unchecked Sendable {
             linesToFlush = pendingLogLines
             pendingLogLines.removeAll(keepingCapacity: true)
             pendingLogBytes = 0
+        }
+        
+        if pendingProgress != nil || !pendingLogLines.isEmpty {
+            scheduleFlushIfNeeded()
         }
         lock.unlock()
 
@@ -66,6 +72,8 @@ final class DownloadEventCoalescer: @unchecked Sendable {
             lastProgressFlush = now
             toFlush = pendingProgress
             pendingProgress = nil
+        } else {
+            scheduleFlushIfNeeded()
         }
         lock.unlock()
 
@@ -97,6 +105,8 @@ final class DownloadEventCoalescer: @unchecked Sendable {
             linesToFlush = pendingLogLines
             pendingLogLines.removeAll(keepingCapacity: true)
             pendingLogBytes = 0
+        } else {
+            scheduleFlushIfNeeded()
         }
         lock.unlock()
 
@@ -107,8 +117,8 @@ final class DownloadEventCoalescer: @unchecked Sendable {
 
     func flushRemaining() {
         lock.lock()
-        timer?.cancel()
-        timer = nil
+        scheduledFlushWorkItem?.cancel()
+        scheduledFlushWorkItem = nil
         let p = pendingProgress
         let lines = pendingLogLines
         pendingProgress = nil
@@ -353,7 +363,15 @@ class DownloadManager: ObservableObject {
         if !downloads.contains(where: { $0.id == download.id }) {
             downloads.append(download)
         }
-        await executeDownload(download)
+        guard activeTasks[download.id] == nil else { return }
+
+        let downloadId = download.id
+        let task = Task { [weak self, weak download] in
+            guard let self, let download else { return }
+            await self.executeDownload(download)
+        }
+        activeTasks[downloadId] = task
+        await task.value
     }
 
     private func executeDownload(_ download: Download) async {
@@ -586,8 +604,8 @@ class DownloadManager: ObservableObject {
             return
         }
         updateStatus(for: download, to: .stopped)
-        activeTasks.removeValue(forKey: download.id)?.cancel()
-        activeControllers.removeValue(forKey: download.id)?.cancel()
+        activeTasks[download.id]?.cancel()
+        activeControllers[download.id]?.cancel()
         if !skipSaveAndBroadcast {
             objectWillChange.send()
         }
@@ -603,7 +621,6 @@ class DownloadManager: ObservableObject {
             let lang = languageService ?? LanguageService()
             NotificationService.shared.sendDownloadStopped(filename: download.title.isEmpty ? LoggerService.sanitizeURLForLog(download.url) : download.title, languageService: lang)
         }
-        processQueue()
     }
 
 
@@ -623,10 +640,9 @@ class DownloadManager: ObservableObject {
             return
         }
         updateStatus(for: download, to: .paused)
-        activeTasks.removeValue(forKey: download.id)?.cancel()
-        activeControllers.removeValue(forKey: download.id)?.cancel()
+        activeTasks[download.id]?.cancel()
+        activeControllers[download.id]?.cancel()
         objectWillChange.send()
-        processQueue()
     }
 
     func resumeDownload(_ download: Download) {
@@ -920,6 +936,15 @@ class DownloadManager: ObservableObject {
 
     private func updateStatus(for download: Download, to status: DownloadStatus) {
         download.status = status
+        switch status {
+        case .completed, .failed, .stopped, .fileExists:
+            download.mediaInfo = download.mediaInfo?.prunedForCompletion()
+            if download.log.count > 2000 {
+                download.log = String(download.log.suffix(2000))
+            }
+        default:
+            break
+        }
     }
 }
 
