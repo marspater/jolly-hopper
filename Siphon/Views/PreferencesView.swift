@@ -146,6 +146,7 @@ struct PreferencesView: View {
         .accentColor(SiphonTheme.accent)
         .background(PreferencesWindowConfigurator())
         .background(.ultraThinMaterial)
+        .siphonEnvironmentalBackdrop()
         .onChange(of: languageService.selectedLanguage) { _, newValue in
             if previousLanguage != nil && previousLanguage != newValue {
                 showLanguageChangeAlert = true
@@ -395,11 +396,18 @@ struct PreferencesView: View {
                         .font(.geist(11, weight: .medium))
                         .foregroundColor(.green)
                 } else {
-                    Button(languageService.s("check_updates")) {
+                    Button {
                         Task {
                             await updateChecker.checkForUpdates(manual: true)
                         }
+                    } label: {
+                        Text(languageService.s("check_updates"))
+                            .font(.geist(12, weight: .medium))
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 4)
+                            .siphonInteractiveGlass(cornerRadius: 6)
                     }
+                    .buttonStyle(.plain)
                 }
             }
         }

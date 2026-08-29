@@ -93,6 +93,7 @@ struct ContentView: View {
         }
         .navigationSplitViewStyle(.balanced)
         .background(.ultraThinMaterial)
+        .siphonEnvironmentalBackdrop()
     }
 }
 
@@ -144,18 +145,12 @@ struct SidebarView: View {
                             .font(.geist(13, weight: .medium))
                         Spacer()
                         Text("⌘,")
-                            .font(.geist(10, weight: .medium))
+                            .font(.geistMono(10, weight: .medium))
                             .foregroundColor(.secondary)
                     }
                     .padding(.horizontal, 12)
                     .padding(.vertical, 8)
-                    .background(
-                        SiphonTheme.controlBackground(cornerRadius: SiphonTheme.radiusControl)
-                    )
-                    .cornerRadius(SiphonTheme.radiusControl)
-                    .overlay(
-                        SiphonTheme.controlBorder(cornerRadius: SiphonTheme.radiusControl)
-                    )
+                    .siphonInteractiveGlass(cornerRadius: SiphonTheme.radiusControl)
                 }
                 .buttonStyle(.plain)
                 .padding(.horizontal, 8)
@@ -398,18 +393,17 @@ struct StatCard: View {
     let count: Int
     let color: Color
     let action: () -> Void
-    @State private var isHovered = false
     
     var body: some View {
         Button(action: action) {
             VStack(spacing: 6) {
                 Text("\(count)")
-                    .font(.geist(30, weight: .bold))
+                    .font(.geist(28, weight: .bold))
                     .monospacedDigit()
                     .foregroundColor(color)
                 Text(title)
-                    .font(.geist(12, weight: .semibold))
-                    .foregroundColor(.primary.opacity(0.75))
+                    .font(.geist(13, weight: .semibold))
+                    .foregroundColor(.primary.opacity(0.80))
                     .multilineTextAlignment(.center)
                     .lineLimit(2)
             }
@@ -417,21 +411,9 @@ struct StatCard: View {
             .frame(height: 96)
             .padding(.vertical, 8)
             .padding(.horizontal, 6)
-            .background(
-                SiphonTheme.cardBackground(cornerRadius: SiphonTheme.radiusCard, isHovered: isHovered)
-            )
-            .cornerRadius(SiphonTheme.radiusCard)
-            .overlay(
-                SiphonTheme.cardBorder(cornerRadius: SiphonTheme.radiusCard, isHovered: isHovered)
-            )
-            .shadow(color: Color.black.opacity(isHovered ? 0.08 : 0.03), radius: isHovered ? 8 : 3, x: 0, y: 2)
-            .scaleEffect(isHovered ? 1.02 : 1.0)
-            .animation(.spring(response: 0.25, dampingFraction: 0.8), value: isHovered)
+            .siphonInteractiveGlass(cornerRadius: SiphonTheme.radiusCard, tintColor: color)
         }
         .buttonStyle(.plain)
-        .onHover { hovering in
-            isHovered = hovering
-        }
     }
 }
 

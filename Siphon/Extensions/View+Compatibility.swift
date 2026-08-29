@@ -297,3 +297,130 @@ public struct SiphonSpinner: View {
             }
     }
 }
+
+// MARK: - Interactive Liquid Glass Control Modifier & Environmental Field
+public struct SiphonInteractiveGlassModifier: ViewModifier {
+    public var cornerRadius: CGFloat
+    public var isDestructive: Bool
+    public var isSelected: Bool
+    public var tintColor: Color?
+    
+    @State private var isHovered = false
+    
+    public init(
+        cornerRadius: CGFloat = SiphonTheme.radiusControl,
+        isDestructive: Bool = false,
+        isSelected: Bool = false,
+        tintColor: Color? = nil
+    ) {
+        self.cornerRadius = cornerRadius
+        self.isDestructive = isDestructive
+        self.isSelected = isSelected
+        self.tintColor = tintColor
+    }
+    
+    public func body(content: Content) -> some View {
+        let isOpaque = NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency
+        let effectiveTint = isDestructive ? SiphonTheme.statusFailed : (tintColor ?? SiphonTheme.accent)
+        
+        content
+            .background {
+                if isOpaque {
+                    RoundedRectangle(cornerRadius: cornerRadius)
+                        .fill(Color(nsColor: isHovered ? .selectedControlColor : .controlBackgroundColor))
+                } else {
+                    ZStack {
+                        if isHovered && !isSelected {
+                            RoundedRectangle(cornerRadius: cornerRadius)
+                                .fill(effectiveTint.opacity(0.18))
+                                .blur(radius: 6)
+                                .padding(-1)
+                                .allowedDynamicRange(AdaptiveRenderingEnvironment.shared.capabilities.supportsEDR ? .high : .standard)
+                        }
+                        
+                        RoundedRectangle(cornerRadius: cornerRadius)
+                            .fill(
+                                isSelected
+                                    ? effectiveTint.opacity(0.85)
+                                    : (isHovered ? Color.primary.opacity(0.08) : Color.primary.opacity(0.04))
+                            )
+                            .background(
+                                RoundedRectangle(cornerRadius: cornerRadius)
+                                    .fill(.ultraThinMaterial)
+                            )
+                    }
+                }
+            }
+            .clipShape(RoundedRectangle(cornerRadius: cornerRadius))
+            .overlay(
+                RoundedRectangle(cornerRadius: cornerRadius)
+                    .strokeBorder(
+                        LinearGradient(
+                            colors: isSelected
+                                ? [Color.white.opacity(0.35), Color.white.opacity(0.10), Color.clear]
+                                : (isHovered
+                                    ? [effectiveTint.opacity(0.50), effectiveTint.opacity(0.20), Color.clear]
+                                    : [Color.white.opacity(0.18), Color.white.opacity(0.04), Color.clear]),
+                            startPoint: .top,
+                            endPoint: .bottom
+                        ),
+                        lineWidth: 1
+                    )
+            )
+            .scaleEffect(isHovered ? 1.015 : 1.0)
+            .animation(.spring(response: 0.25, dampingFraction: 0.75), value: isHovered)
+            .animation(.spring(response: 0.25, dampingFraction: 0.75), value: isSelected)
+            .onHover { hovering in
+                isHovered = hovering
+            }
+    }
+}
+
+extension View {
+    @ViewBuilder
+    public func siphonInteractiveGlass(
+        cornerRadius: CGFloat = SiphonTheme.radiusControl,
+        isDestructive: Bool = false,
+        isSelected: Bool = false,
+        tintColor: Color? = nil
+    ) -> some View {
+        self.modifier(
+            SiphonInteractiveGlassModifier(
+                cornerRadius: cornerRadius,
+                isDestructive: isDestructive,
+                isSelected: isSelected,
+                tintColor: tintColor
+            )
+        )
+    }
+    
+    @ViewBuilder
+    public func siphonEnvironmentalBackdrop() -> some View {
+        self.background(
+            ZStack {
+                RadialGradient(
+                    gradient: Gradient(colors: [
+                        Color(.displayP3, red: 0.10, green: 0.38, blue: 0.90, opacity: 0.06),
+                        Color(.displayP3, red: 0.32, green: 0.16, blue: 0.70, opacity: 0.025),
+                        Color.clear
+                    ]),
+                    center: .topLeading,
+                    startRadius: 40,
+                    endRadius: 650
+                )
+                
+                RadialGradient(
+                    gradient: Gradient(colors: [
+                        Color(.displayP3, red: 0.06, green: 0.55, blue: 0.85, opacity: 0.035),
+                        Color.clear
+                    ]),
+                    center: .bottomTrailing,
+                    startRadius: 60,
+                    endRadius: 550
+                )
+            }
+            .ignoresSafeArea()
+            .allowsHitTesting(false)
+        )
+    }
+}

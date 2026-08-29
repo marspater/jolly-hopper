@@ -533,21 +533,31 @@ struct FileThumbnailView: View {
             Text(download.status.title(lang: languageService))
                 .font(.geist(11, weight: .semibold))
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 3)
-        .background(badgeBackgroundColor)
+        .padding(.horizontal, 9)
+        .padding(.vertical, 3.5)
+        .background(
+            Capsule()
+                .fill(badgeForegroundColor.opacity(0.12))
+                .background(Capsule().fill(.ultraThinMaterial))
+        )
         .foregroundColor(badgeForegroundColor)
         .clipShape(Capsule())
-    }
-
-    private var badgeBackgroundColor: Color {
-        switch download.status {
-        case .downloading, .fetching, .processing: return SiphonTheme.statusDownloading.opacity(0.15)
-        case .completed: return SiphonTheme.statusCompleted.opacity(0.15)
-        case .failed: return SiphonTheme.statusFailed.opacity(0.15)
-        case .queued, .paused, .fileExists: return SiphonTheme.statusQueued.opacity(0.15)
-        default: return Color.primary.opacity(0.06)
-        }
+        .overlay(
+            Capsule()
+                .strokeBorder(
+                    LinearGradient(
+                        colors: [
+                            badgeForegroundColor.opacity(0.40),
+                            badgeForegroundColor.opacity(0.12),
+                            Color.clear
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    ),
+                    lineWidth: 1
+                )
+        )
+        .animation(.spring(response: 0.35, dampingFraction: 0.78), value: download.status)
     }
 
     private var badgeForegroundColor: Color {
