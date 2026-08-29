@@ -3,7 +3,7 @@
 A high-performance, native macOS media extractor & downloader powered by `yt-dlp` and `FFmpeg`. Engineered with advanced anti-bot bypass mechanisms for Cloudflare, YouTube, and 1,000+ protected video streaming sites.
 
 <div align="center">
-  <img src="assets/app_screenshot.png?v=2" alt="Siphon Interface" width="880" style="border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.3);" />
+  <img src="assets/app_screenshot.png?v=3" alt="Siphon Interface" width="880" style="border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.3);" />
   <p>
     <a href="https://github.com/marspater/jolly-hopper/releases/latest"><img src="https://img.shields.io/badge/Version-v5.0.0-indigo?style=for-the-badge&logo=swift&logoColor=white" alt="Version 5.0.0" /></a>
     <a href="https://github.com/marspater/jolly-hopper/releases/latest"><img src="https://img.shields.io/badge/Download-macOS-blue?style=for-the-badge&logo=apple&logoColor=white" alt="Download Siphon for macOS" /></a>
