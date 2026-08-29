@@ -39,6 +39,11 @@ class LoggerService: ObservableObject {
             "-u": "\"<USERNAME>\"",
             "--password": "\"<PASSWORD>\"",
             "-p": "\"<PASSWORD>\"",
+            "--video-password": "\"<PASSWORD>\"",
+            "--ap-username": "\"<USERNAME>\"",
+            "--ap-password": "\"<PASSWORD>\"",
+            "--token": "\"<TOKEN>\"",
+            "--api-key": "\"<API_KEY>\"",
             "--proxy": "\"<PROXY_REDACTED>\""
         ]
 
