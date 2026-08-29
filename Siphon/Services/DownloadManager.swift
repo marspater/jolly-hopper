@@ -363,15 +363,10 @@ class DownloadManager: ObservableObject {
         if !downloads.contains(where: { $0.id == download.id }) {
             downloads.append(download)
         }
-        guard activeTasks[download.id] == nil else { return }
-
-        let downloadId = download.id
-        let task = Task { [weak self, weak download] in
-            guard let self, let download else { return }
-            await self.executeDownload(download)
+        processQueue()
+        if let task = activeTasks[download.id] {
+            await task.value
         }
-        activeTasks[downloadId] = task
-        await task.value
     }
 
     private func executeDownload(_ download: Download) async {
