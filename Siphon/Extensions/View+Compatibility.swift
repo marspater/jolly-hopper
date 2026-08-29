@@ -162,9 +162,23 @@ public enum SiphonTheme {
     }
     
     @ViewBuilder
-    public static func cardBorder(cornerRadius: CGFloat = radiusCard, isHovered: Bool = false) -> some View {
+    public static func cardBorder(cornerRadius: CGFloat = radiusCard, isHovered: Bool = false, accentColor: Color? = nil) -> some View {
         let isOpaque = NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency
-        if isOpaque {
+        if let accent = accentColor {
+            RoundedRectangle(cornerRadius: cornerRadius)
+                .strokeBorder(
+                    LinearGradient(
+                        colors: [
+                            accent.opacity(isHovered ? 0.55 : 0.40),
+                            accent.opacity(isHovered ? 0.20 : 0.12),
+                            Color.clear
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    ),
+                    lineWidth: 1
+                )
+        } else if isOpaque {
             RoundedRectangle(cornerRadius: cornerRadius)
                 .stroke(Color.primary.opacity(isHovered ? 0.24 : 0.14), lineWidth: 1)
         } else {

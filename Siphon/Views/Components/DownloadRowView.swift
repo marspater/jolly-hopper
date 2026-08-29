@@ -1138,8 +1138,23 @@ struct LinearProgressBar: View {
     var body: some View {
         GeometryReader { geometry in
             ZStack(alignment: .leading) {
+                // Liquid glass track
                 Capsule()
                     .fill(Color.primary.opacity(0.08))
+                    .background(Capsule().fill(.ultraThinMaterial))
+                    .overlay(
+                        Capsule()
+                            .strokeBorder(
+                                LinearGradient(
+                                    colors: [Color.white.opacity(0.14), Color.clear],
+                                    startPoint: .top,
+                                    endPoint: .bottom
+                                ),
+                                lineWidth: 0.5
+                            )
+                    )
+                
+                // Glowing progress fill
                 Capsule()
                     .fill(SiphonTheme.primaryGradient)
                     .frame(width: max(0, geometry.size.width * CGFloat(safeValue)))
