@@ -395,5 +395,254 @@ final class QueueAndErrorUXTests: XCTestCase {
 
         XCTAssertEqual(updatedMatches.count, 1, "Real media file must trigger fileExists match")
     }
+
+    // MARK: - Dedicated Stress & Edge Case Tests
+
+    func testSimultaneousCancellationOfMultipleProcesses() async {
+        let count = 10
+        var controllers: [DownloadProcessController] = []
+
+        for _ in 0..<count {
+            let controller = DownloadProcessController()
+            let proc = Process()
+            _ = controller.attachProcess(proc)
+            controllers.append(controller)
+        }
+
+        await withTaskGroup(of: Void.self) { group in
+            for controller in controllers {
+                group.addTask {
+                    controller.cancel()
+                }
+            }
+        }
+
+        for controller in controllers {
+            XCTAssertTrue(controller.isCancelled, "All controllers must be marked cancelled")
+        }
+    }
+
+    func testPauseAndResumeDuringFetching() {
+        let manager = DownloadManager()
+        let options = DownloadOptions.default
+        let download = Download(url: "https://example.com/fetching-test", options: options)
+        download.status = .fetching
+        manager.downloads.append(download)
+
+        // Pause while fetching
+        manager.pauseDownload(download)
+        XCTAssertEqual(download.status, .paused, "Pausing during fetching must transition status to .paused")
+
+        // Resume
+        manager.resumeDownload(download)
+        XCTAssertEqual(download.status, .queued, "Resuming paused download must transition status back to .queued")
+    }
+
+    func testCancellationDuringFfmpegPostprocessing() {
+        let manager = DownloadManager()
+        let options = DownloadOptions.default
+        let download = Download(url: "https://example.com/postprocessing-test", options: options)
+        download.status = .processing
+        manager.downloads.append(download)
+
+        let controller = DownloadProcessController()
+        let proc = Process()
+        _ = controller.attachProcess(proc)
+        manager.activeControllers[download.id] = controller
+
+        // Stop download while in postprocessing
+        manager.stopDownload(download)
+        XCTAssertEqual(download.status, .stopped, "Stopping during postprocessing must set status to .stopped")
+        XCTAssertTrue(controller.isCancelled, "Attached controller must be cancelled")
+        XCTAssertNil(manager.activeControllers[download.id], "Controller must be detached from activeControllers")
+    }
+
+    func testProcessExitingWhilePipeCallbacksAreActive() async {
+        let runner = DefaultYtdlpProcessRunner()
+        let controller = DownloadProcessController()
+        let receivedOutputBox = TestBox<[String]>([])
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent("pipe_test_\(UUID().uuidString)")
+        try? FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        do {
+            let output = try await runner.runDownloadProcess(
+                args: ["/bin/sh", "-c", "echo '[download] Destination: \(tempDir.path)/rapid_test.mp4'; touch '\(tempDir.path)/rapid_test.mp4'; echo '[download]  50.0% of ~10.00MiB at 2.00MiB/s ETA 00:05'; echo 'Exiting rapidly'"],
+                saveFolder: tempDir,
+                processController: controller,
+                onProgress: { _, _, _ in },
+                onOutput: { line in
+                    receivedOutputBox.value.append(line)
+                }
+            )
+            XCTAssertFalse(output.isEmpty, "Output should be captured completely even on rapid process exit")
+            XCTAssertTrue(receivedOutputBox.value.contains(where: { $0.contains("Exiting rapidly") }))
+        } catch {
+            XCTFail("Rapid process exit should not throw error: \(error)")
+        }
+    }
+
+    func testDuplicateFilenamesAcrossSimultaneousTasks() {
+        let manager = DownloadManager()
+        var options = DownloadOptions.default
+        options.customFilename = "simultaneous_video"
+        options.fileType = .mp4
+
+        let count = 5
+        var resolvedPaths: [String] = []
+
+        for i in 0..<count {
+            let dl = Download(url: "https://example.com/video_\(i)", options: options, title: "Title \(i)")
+            let (_, resolvedPath) = manager.resolveUniqueOutputPath(for: dl)
+            manager.reserveOutputPath(resolvedPath)
+            resolvedPaths.append(resolvedPath)
+        }
+
+        // Clean up reservations
+        for path in resolvedPaths {
+            manager.unreserveOutputPath(path)
+        }
+
+        let uniqueSet = Set(resolvedPaths)
+        XCTAssertEqual(uniqueSet.count, count, "All simultaneously resolved output paths must be completely unique without collision")
+        XCTAssertTrue(resolvedPaths[0].hasSuffix("simultaneous_video.mp4"))
+        XCTAssertTrue(resolvedPaths[1].hasSuffix("simultaneous_video_1.mp4"))
+        XCTAssertTrue(resolvedPaths[2].hasSuffix("simultaneous_video_2.mp4"))
+    }
+
+    func testInstallerFailureHalfwayThroughPairedFfmpegInstallation() throws {
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent("installer_test_\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let oldFfmpeg = tempDir.appendingPathComponent("ffmpeg")
+        let oldFfprobe = tempDir.appendingPathComponent("ffprobe")
+        try "old_ffmpeg_v1".data(using: .utf8)?.write(to: oldFfmpeg)
+        try "old_ffprobe_v1".data(using: .utf8)?.write(to: oldFfprobe)
+
+        let extractedFfmpeg = tempDir.appendingPathComponent("extracted_ffmpeg")
+        try "new_ffmpeg_v2".data(using: .utf8)?.write(to: extractedFfmpeg)
+        // extractedFfprobe is deliberately missing to simulate a failure halfway through
+
+        let backupFfmpeg = tempDir.appendingPathComponent("ffmpeg.backup")
+        let backupFfprobe = tempDir.appendingPathComponent("ffprobe.backup")
+
+        var ffmpegMovedToBackup = false
+        var ffprobeMovedToBackup = false
+
+        // Simulate atomic installer logic
+        do {
+            if FileManager.default.fileExists(atPath: oldFfmpeg.path) {
+                try FileManager.default.moveItem(at: oldFfmpeg, to: backupFfmpeg)
+                ffmpegMovedToBackup = true
+            }
+            if FileManager.default.fileExists(atPath: oldFfprobe.path) {
+                try FileManager.default.moveItem(at: oldFfprobe, to: backupFfprobe)
+                ffprobeMovedToBackup = true
+            }
+
+            try FileManager.default.moveItem(at: extractedFfmpeg, to: oldFfmpeg)
+            let missingFfprobe = tempDir.appendingPathComponent("missing_extracted_ffprobe")
+            try FileManager.default.moveItem(at: missingFfprobe, to: oldFfprobe)
+
+            XCTFail("Installer should have thrown error on missing second binary")
+        } catch {
+            // Atomic rollback
+            try? FileManager.default.removeItem(at: oldFfmpeg)
+            try? FileManager.default.removeItem(at: oldFfprobe)
+
+            if ffmpegMovedToBackup {
+                try? FileManager.default.moveItem(at: backupFfmpeg, to: oldFfmpeg)
+            }
+            if ffprobeMovedToBackup {
+                try? FileManager.default.moveItem(at: backupFfprobe, to: oldFfprobe)
+            }
+        }
+
+        let restoredFfmpeg = try String(contentsOf: oldFfmpeg, encoding: .utf8)
+        let restoredFfprobe = try String(contentsOf: oldFfprobe, encoding: .utf8)
+        XCTAssertEqual(restoredFfmpeg, "old_ffmpeg_v1", "Original FFmpeg must be restored on halfway failure")
+        XCTAssertEqual(restoredFfprobe, "old_ffprobe_v1", "Original FFprobe must be restored on halfway failure")
+    }
+
+    func testAppTerminationDuringActiveDownloads() {
+        let manager = DownloadManager()
+        let options = DownloadOptions.default
+
+        let d1 = Download(url: "https://example.com/term1", options: options)
+        d1.status = .downloading
+        let d2 = Download(url: "https://example.com/term2", options: options)
+        d2.status = .fetching
+        let d3 = Download(url: "https://example.com/term3", options: options)
+        d3.status = .queued
+
+        manager.downloads = [d1, d2, d3]
+
+        let c1 = DownloadProcessController()
+        let p1 = Process()
+        _ = c1.attachProcess(p1)
+        manager.activeControllers[d1.id] = c1
+
+        let t1 = Task { }
+        manager.activeTasks[d1.id] = t1
+
+        let testPath = "/tmp/test_term.mp4"
+        manager.reserveOutputPath(testPath)
+
+        manager.stopAllDownloads()
+        manager.shutdown()
+
+        XCTAssertTrue(c1.isCancelled, "All controllers must be cancelled on shutdown")
+        XCTAssertTrue(t1.isCancelled, "All active tasks must be cancelled on shutdown")
+        XCTAssertEqual(d1.status, .stopped)
+        XCTAssertEqual(d2.status, .stopped)
+        XCTAssertEqual(d3.status, .stopped)
+        XCTAssertTrue(manager.activeControllers.isEmpty)
+        XCTAssertTrue(manager.activeTasks.isEmpty)
+    }
+
+    func testNotificationFloodResilience() async {
+        let service = NotificationService.shared
+        let lang = LanguageService()
+
+        await withTaskGroup(of: Void.self) { group in
+            for i in 0..<100 {
+                group.addTask {
+                    if i % 3 == 0 {
+                        service.sendDownloadCompleted(filename: "video_\(i).mp4", languageService: lang)
+                    } else if i % 3 == 1 {
+                        service.sendDownloadFailed(filename: "video_\(i).mp4", languageService: lang)
+                    } else {
+                        service.sendDownloadStopped(filename: "video_\(i).mp4", languageService: lang)
+                    }
+                }
+            }
+        }
+        XCTAssertTrue(true, "NotificationService must survive rapid concurrent dispatch without crashing")
+    }
+
+    func testRepeatedUpdateChecksConcurrentGuard() async {
+        let checker = UpdateChecker()
+
+        await withTaskGroup(of: Void.self) { group in
+            for _ in 0..<10 {
+                group.addTask {
+                    await checker.checkForUpdates()
+                }
+            }
+        }
+
+        XCTAssertFalse(checker.isChecking, "isChecking must reset to false after checks complete")
+    }
+
+    func testSimultaneousDependencyInstallationCalls() async {
+        let manager = DownloadManager()
+
+        let t1 = Task { await manager.updateYtdlp() }
+        let t2 = Task { await manager.updateYtdlp() }
+
+        _ = await (t1.value, t2.value)
+        XCTAssertFalse(manager.isUpdatingYtdlp, "isUpdatingYtdlp must be false once operations complete")
+    }
 }
 

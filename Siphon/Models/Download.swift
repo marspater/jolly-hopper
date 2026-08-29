@@ -924,6 +924,31 @@ struct MediaInfo: Codable {
         try container.encodeIfPresent(formatProtocol, forKey: .formatProtocol)
         try container.encodeIfPresent(manifestUrl, forKey: .manifestUrl)
     }
+
+    func prunedForCompletion() -> MediaInfo {
+        return MediaInfo(
+            id: self.id,
+            title: self.title,
+            description: nil,
+            thumbnail: self.thumbnail,
+            duration: self.duration,
+            uploader: self.uploader,
+            uploadDate: self.uploadDate,
+            viewCount: self.viewCount,
+            likeCount: self.likeCount,
+            formats: nil,
+            subtitles: nil,
+            automaticCaptions: nil,
+            chapters: nil,
+            playlist: self.playlist,
+            playlistIndex: self.playlistIndex,
+            playlistCount: self.playlistCount,
+            webpageUrl: self.webpageUrl,
+            originalUrl: self.originalUrl,
+            formatProtocol: nil,
+            manifestUrl: nil
+        )
+    }
     
     var durationString: String? {
         guard let duration = duration else { return nil }

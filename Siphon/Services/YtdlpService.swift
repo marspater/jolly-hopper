@@ -212,23 +212,52 @@ actor DependencyInstaller {
         let hadOldFfmpeg = FileManager.default.fileExists(atPath: ffmpegFinal.path)
         let hadOldFfprobe = FileManager.default.fileExists(atPath: ffprobeFinal.path)
 
-        if hadOldFfmpeg { try FileManager.default.moveItem(at: ffmpegFinal, to: ffmpegBackup) }
-        if hadOldFfprobe { try FileManager.default.moveItem(at: ffprobeFinal, to: ffprobeBackup) }
+        var ffmpegMovedToBackup = false
+        var ffprobeMovedToBackup = false
 
         do {
+            if hadOldFfmpeg {
+                try FileManager.default.moveItem(at: ffmpegFinal, to: ffmpegBackup)
+                ffmpegMovedToBackup = true
+            }
+            if hadOldFfprobe {
+                try FileManager.default.moveItem(at: ffprobeFinal, to: ffprobeBackup)
+                ffprobeMovedToBackup = true
+            }
+
             try FileManager.default.moveItem(at: extractedFfmpeg, to: ffmpegFinal)
             try FileManager.default.moveItem(at: extractedFfprobe, to: ffprobeFinal)
 
-            if hadOldFfmpeg { try? FileManager.default.removeItem(at: ffmpegBackup) }
-            if hadOldFfprobe { try? FileManager.default.removeItem(at: ffprobeBackup) }
+            if ffmpegMovedToBackup { try? FileManager.default.removeItem(at: ffmpegBackup) }
+            if ffprobeMovedToBackup { try? FileManager.default.removeItem(at: ffprobeBackup) }
 
             return (ffmpeg: ffmpegFinal, ffprobe: ffprobeFinal)
         } catch {
-            // Roll back both
+            // Atomic rollback of both binaries
             try? FileManager.default.removeItem(at: ffmpegFinal)
             try? FileManager.default.removeItem(at: ffprobeFinal)
-            if hadOldFfmpeg { try? FileManager.default.moveItem(at: ffmpegBackup, to: ffmpegFinal) }
-            if hadOldFfprobe { try? FileManager.default.moveItem(at: ffprobeBackup, to: ffprobeFinal) }
+
+            var rollbackErrors: [Error] = []
+            if ffmpegMovedToBackup {
+                do {
+                    try FileManager.default.moveItem(at: ffmpegBackup, to: ffmpegFinal)
+                } catch {
+                    rollbackErrors.append(error)
+                }
+            }
+            if ffprobeMovedToBackup {
+                do {
+                    try FileManager.default.moveItem(at: ffprobeBackup, to: ffprobeFinal)
+                } catch {
+                    rollbackErrors.append(error)
+                }
+            }
+
+            if !rollbackErrors.isEmpty {
+                await MainActor.run {
+                    LoggerService.shared.log("Critical: Rollback error during FFmpeg installation: \(rollbackErrors)", level: .error)
+                }
+            }
             throw InstallError.installationFailed(destination: "\(ffmpegFinal.path) + \(ffprobeFinal.path)", underlyingError: error)
         }
     }
@@ -642,6 +671,22 @@ class YtdlpService: ObservableObject {
 
 
 
+    private func isPlaylistURL(_ urlString: String) -> Bool {
+        guard let components = URLComponents(string: urlString) else {
+            return (urlString.contains("list=") || urlString.contains("/playlist/")) && !urlString.contains("/videos/")
+        }
+        let path = components.path.lowercased()
+        if path.contains("/playlist") || path.contains("/sets/") || path.contains("/album/") {
+            return !path.contains("/videos/")
+        }
+        if let queryItems = components.queryItems {
+            let hasListQuery = queryItems.contains(where: { $0.name.lowercased() == "list" || $0.name.lowercased() == "p" })
+            let isSingleVideoPath = path.contains("/watch") || path.contains("/videos/") || path.contains("/video/")
+            return hasListQuery && !isSingleVideoPath
+        }
+        return false
+    }
+
     func fetchInfo(url: String, rawCookies: String? = nil) async throws -> MediaInfo {
         guard let path = ytdlpPath else {
             throw YtdlpError.notFound
@@ -651,7 +696,7 @@ class YtdlpService: ObservableObject {
         do {
              return try await fetchSingleVideoInfo(path: path.path, url: normalizedURL, rawCookies: rawCookies)
         } catch {
-            if (normalizedURL.contains("list=") || normalizedURL.contains("/playlist/")) && !normalizedURL.contains("/videos/") {
+            if isPlaylistURL(normalizedURL) {
                 do {
                     return try await fetchPlaylistSummaryInfo(path: path.path, url: normalizedURL, rawCookies: rawCookies)
                 } catch {
@@ -1664,19 +1709,20 @@ class YtdlpService: ObservableObject {
             } catch {}
             
             if let output = dumpOutput, !output.isEmpty {
-                var rawHtml = ""
+                var rawChunks: [String] = []
                 for line in output.split(whereSeparator: \.isNewline) {
                     let trimmed = String(line).trimmingCharacters(in: .whitespaces)
                     if !trimmed.starts(with: "#") && !trimmed.starts(with: "[") && !trimmed.starts(with: "WARNING") && !trimmed.starts(with: "ERROR") {
                         if let decodedData = Data(base64Encoded: trimmed, options: .ignoreUnknownCharacters) {
                             let decodedString = String(decoding: decodedData, as: UTF8.self)
                             if !decodedString.isEmpty {
-                                rawHtml += decodedString
+                                rawChunks.append(decodedString)
                             }
                         }
                     }
                 }
-                if !rawHtml.isEmpty {
+                if !rawChunks.isEmpty {
+                    let rawHtml = rawChunks.joined()
                     let hasMediaData = rawHtml.contains("hlsAuto") ||
                                        rawHtml.contains("videoPlayerData") ||
                                        rawHtml.contains("sources") ||
@@ -1732,20 +1778,20 @@ class YtdlpService: ObservableObject {
                 }
                 
                 if let output = dumpOutput, !output.isEmpty {
-                    var browserHtml = ""
-                    // Bolt Performance Optimization: Use Substring iteration instead of allocating a large intermediate string array
+                    var browserChunks: [String] = []
                     for line in output.split(whereSeparator: \.isNewline) {
                         let trimmed = String(line).trimmingCharacters(in: .whitespaces)
                         if !trimmed.starts(with: "#") && !trimmed.starts(with: "[") && !trimmed.starts(with: "WARNING") && !trimmed.starts(with: "ERROR") {
                             if let decodedData = Data(base64Encoded: trimmed, options: .ignoreUnknownCharacters) {
                                 let decodedString = String(decoding: decodedData, as: UTF8.self)
                                 if !decodedString.isEmpty {
-                                    browserHtml += decodedString
+                                    browserChunks.append(decodedString)
                                 }
                             }
                         }
                     }
-                    if !browserHtml.isEmpty {
+                    if !browserChunks.isEmpty {
+                        let browserHtml = browserChunks.joined()
                         let hasMediaData = browserHtml.contains("hlsAuto") ||
                                            browserHtml.contains("videoPlayerData") ||
                                            browserHtml.contains("sources") ||
@@ -1888,20 +1934,20 @@ class YtdlpService: ObservableObject {
                         } catch {}
                         
                         if let output = embedDump, !output.isEmpty {
-                            var embedHtml = ""
-                            // Bolt Performance Optimization: Use Substring iteration instead of allocating a large intermediate string array
+                            var embedChunks: [String] = []
                             for line in output.split(whereSeparator: \.isNewline) {
                                 let trimmed = String(line).trimmingCharacters(in: .whitespaces)
                                 if !trimmed.starts(with: "#") && !trimmed.starts(with: "[") && !trimmed.starts(with: "WARNING") && !trimmed.starts(with: "ERROR") {
                                     if let decodedData = Data(base64Encoded: trimmed, options: .ignoreUnknownCharacters) {
                                         let decodedString = String(decoding: decodedData, as: UTF8.self)
                                         if !decodedString.isEmpty {
-                                            embedHtml += decodedString
+                                            embedChunks.append(decodedString)
                                         }
                                     }
                                 }
                             }
-                            if !embedHtml.isEmpty {
+                            if !embedChunks.isEmpty {
+                                let embedHtml = embedChunks.joined()
                                 if let extracted = extractStreamURLFromHTML(embedHtml) {
                                     streamUrl = extracted
                                     embedUrl = embed
