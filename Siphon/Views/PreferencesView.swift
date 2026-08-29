@@ -135,7 +135,7 @@ struct PreferencesView: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .transition(.opacity)
+            .clipped()
         }
         .padding(.horizontal, 16)
         .padding(.bottom, 16)
@@ -1048,7 +1048,18 @@ struct PreferencesView: View {
                 .cornerRadius(SiphonTheme.radiusCard)
                 .overlay(
                     RoundedRectangle(cornerRadius: SiphonTheme.radiusCard)
-                        .stroke(SiphonTheme.statusQueued.opacity(0.3), lineWidth: 1)
+                        .strokeBorder(
+                            LinearGradient(
+                                colors: [
+                                    SiphonTheme.statusQueued.opacity(0.45),
+                                    SiphonTheme.statusQueued.opacity(0.12),
+                                    Color.clear
+                                ],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            ),
+                            lineWidth: 1
+                        )
                 )
 
                 // Credits & Details Card
@@ -1196,6 +1207,7 @@ struct PreferencesView: View {
             }
             .padding(.horizontal, 16)
         }
+        .clipped()
     }
     
 

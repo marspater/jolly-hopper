@@ -162,17 +162,6 @@ struct SidebarView: View {
             }
             .padding(.bottom, 8)
         }
-        .toolbar {
-            ToolbarItem {
-                Button {
-                    appState.showAddDownloadSheet = true
-                } label: {
-                    Label(languageService.s("new_download"), systemImage: "plus")
-                        .help(languageService.s("new_download"))
-                        .accessibilityLabel(languageService.s("new_download"))
-                }
-            }
-        }
     }
     
     @ViewBuilder
@@ -245,6 +234,17 @@ struct DetailView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    appState.showAddDownloadSheet = true
+                } label: {
+                    Label(languageService.s("new_download"), systemImage: "plus")
+                        .help(languageService.s("new_download"))
+                        .accessibilityLabel(languageService.s("new_download"))
+                }
+            }
+        }
     }
 }
 
