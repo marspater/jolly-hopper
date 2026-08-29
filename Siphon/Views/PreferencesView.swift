@@ -115,6 +115,7 @@ struct PreferencesView: View {
                         lineWidth: 1
                     )
             )
+            .animation(.spring(response: 0.28, dampingFraction: 0.8), value: selectedTab)
             .padding(.top, 10)
             .padding(.bottom, 10)
 
@@ -122,7 +123,7 @@ struct PreferencesView: View {
                 .opacity(0.20)
 
             // Active Tab Content View
-            Group {
+            ZStack {
                 switch selectedTab {
                 case .general:
                     generalTab
@@ -136,6 +137,7 @@ struct PreferencesView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .clipped()
+            .id(selectedTab)
         }
         .padding(.horizontal, 16)
         .padding(.bottom, 16)
@@ -176,9 +178,7 @@ struct PreferencesView: View {
     @ViewBuilder
     private func tabSegment(_ tab: PreferenceTab, title: String, icon: String) -> some View {
         Button {
-            withAnimation(.easeInOut(duration: 0.18)) {
-                selectedTab = tab
-            }
+            selectedTab = tab
         } label: {
             HStack(spacing: 5) {
                 Image(systemName: icon)
@@ -189,8 +189,8 @@ struct PreferencesView: View {
                     .fixedSize(horizontal: true, vertical: false)
             }
             .foregroundColor(selectedTab == tab ? .white : .secondary)
-            .padding(.horizontal, 12)
-            .frame(maxHeight: .infinity)
+            .padding(.horizontal, 8)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background {
                 if selectedTab == tab {
                     ZStack {

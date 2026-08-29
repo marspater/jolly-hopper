@@ -235,7 +235,34 @@ struct DetailView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .toolbar {
-            ToolbarItem(placement: .primaryAction) {
+            ToolbarItemGroup(placement: .primaryAction) {
+                if (appState.selectedNavItem == .downloading || appState.selectedNavItem == .queued) &&
+                    (downloadManager.downloadingCount > 0 || downloadManager.queuedCount > 0) {
+                    Button {
+                        downloadManager.stopAllDownloads()
+                    } label: {
+                        Label(languageService.s("stop_all"), systemImage: "stop.circle")
+                    }
+                    .help(languageService.s("stop_all"))
+                    .accessibilityLabel(languageService.s("stop_all"))
+                } else if appState.selectedNavItem == .completed && !downloadManager.completedDownloads.isEmpty {
+                    Button {
+                        downloadManager.clearDownloads(downloadManager.completedDownloads)
+                    } label: {
+                        Label(languageService.s("clear_history"), systemImage: "trash")
+                    }
+                    .help(languageService.s("clear_history_help"))
+                    .accessibilityLabel(languageService.s("clear_history"))
+                } else if appState.selectedNavItem == .failed && !downloadManager.failedDownloads.isEmpty {
+                    Button {
+                        downloadManager.clearDownloads(downloadManager.failedDownloads)
+                    } label: {
+                        Label(languageService.s("clear_history"), systemImage: "trash")
+                    }
+                    .help(languageService.s("clear_history_help"))
+                    .accessibilityLabel(languageService.s("clear_history"))
+                }
+                
                 Button {
                     appState.showAddDownloadSheet = true
                 } label: {
