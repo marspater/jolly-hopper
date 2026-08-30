@@ -91,3 +91,12 @@ local_case_studies/
 
 # Swift Package Manager & Xcode Builds
 .build/
+
+# Temporary & Ad-Hoc Investigation Scripts
+check_*
+find_*
+fix_*
+print_code.py
+test_a11y*
+scratch_*
+
