@@ -118,6 +118,45 @@ final class MediaInfoTests: XCTestCase {
         XCTAssertEqual(input3.decodingHTMLEntities(), "No entities here")
     }
 
+    func testDecodingHTMLEntities_EmptyAndNoAmpersandString() {
+        XCTAssertEqual("".decodingHTMLEntities(), "")
+        XCTAssertEqual("Hello World 123!".decodingHTMLEntities(), "Hello World 123!")
+    }
+
+    func testDecodingHTMLEntities_AllNamedEntities() {
+        let input = "&quot; &apos; &amp; &lt; &gt; &nbsp; &copy; &reg; &trade; &mdash; &ndash; &hellip; &lsquo; &rsquo; &ldquo; &rdquo; &bull;"
+        let expected = "\" ' & < >   © ® ™ — – … ‘ ’ “ ” •"
+        XCTAssertEqual(input.decodingHTMLEntities(), expected)
+    }
+
+    func testDecodingHTMLEntities_DecimalEntitiesWithLeadingZeros() {
+        XCTAssertEqual("&#039;".decodingHTMLEntities(), "'")
+        XCTAssertEqual("&#0039;".decodingHTMLEntities(), "'")
+        XCTAssertEqual("&#32;".decodingHTMLEntities(), " ")
+        XCTAssertEqual("&#160;".decodingHTMLEntities(), "\u{00A0}")
+    }
+
+    func testDecodingHTMLEntities_HexadecimalEntitiesUpperAndLowerCase() {
+        XCTAssertEqual("&#x27;".decodingHTMLEntities(), "'")
+        XCTAssertEqual("&#X27;".decodingHTMLEntities(), "'")
+        XCTAssertEqual("&#x1F600;".decodingHTMLEntities(), "😀")
+        XCTAssertEqual("&#X1f600;".decodingHTMLEntities(), "😀")
+    }
+
+    func testDecodingHTMLEntities_AdjacentAndMixedEntities() {
+        XCTAssertEqual("&lt;&gt;&amp;&quot;&#39;&#x27;".decodingHTMLEntities(), "<>&\"''")
+        XCTAssertEqual("&amp;amp;".decodingHTMLEntities(), "&amp;")
+    }
+
+    func testDecodingHTMLEntities_MalformedAndUnmatchedEntities() {
+        XCTAssertEqual("&".decodingHTMLEntities(), "&")
+        XCTAssertEqual("&amp".decodingHTMLEntities(), "&amp")
+        XCTAssertEqual("&#;".decodingHTMLEntities(), "&#;")
+        XCTAssertEqual("&#xyz;".decodingHTMLEntities(), "&#xyz;")
+        XCTAssertEqual("&unknown;".decodingHTMLEntities(), "&unknown;")
+        XCTAssertEqual("&#999999999;".decodingHTMLEntities(), "&#999999999;")
+    }
+
     func testMediaInfoTitleDecodingHTMLEntities() throws {
         let json = """
         {
