@@ -1172,7 +1172,7 @@ public extension String {
         ]
         
         // Replace numeric decimal entities (e.g., &#039; or &#39; or &#160;)
-        if let regex = decimalRegex {
+        if let regex = String.decimalRegex {
             let nsString = result as NSString
             let matches = regex.matches(in: result, options: [], range: NSRange(location: 0, length: nsString.length))
             for match in matches.reversed() {
@@ -1185,7 +1185,7 @@ public extension String {
         }
         
         // Replace numeric hexadecimal entities (e.g., &#x27; or &#X27;)
-        if let regex = hexRegex {
+        if let regex = String.hexRegex {
             let nsString = result as NSString
             let matches = regex.matches(in: result, options: [], range: NSRange(location: 0, length: nsString.length))
             for match in matches.reversed() {
