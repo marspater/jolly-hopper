@@ -237,6 +237,133 @@ final class MediaInfoTests: XCTestCase {
         XCTAssertEqual(formatNeedsTesting.videoQualityScore(options: options), 9800000.0, accuracy: 0.001)
     }
 
+    // MARK: - MediaFormat audioQualityScore Tests
+
+    func testAudioQualityScore_WithFullProperties_CalculatesCorrectScore() {
+        var options = DownloadOptions.default
+        options.audioCodec = .aac
+
+        let format = MediaFormat(
+            formatId: "m4a_audio",
+            ext: "m4a",
+            acodec: "mp4a.40.2 (aac)",
+            abr: 192.0,
+            tbr: 256.0,
+            needsTesting: false,
+            languagePreference: 1,
+            preference: 2,
+            sourcePreference: 3,
+            audioChannels: 6
+        )
+
+        // Calculation breakdown:
+        // isOriginalOrPrimaryAudio (lp >= 0): +10_000_000
+        // languagePreference (1 * 100_000): +100_000
+        // preference (2 * 10_000): +20_000
+        // sourcePreference (3 * 1_000): +3_000
+        // codec match ("aac" in "mp4a.40.2 (aac)"): +500_000
+        // bitrate (abr 192.0 * 10): +1_920
+        // audioChannels (6 * 5): +30
+        // Total = 10,624,950.0
+        let score = format.audioQualityScore(options: options)
+        XCTAssertEqual(score, 10624950.0, accuracy: 0.001)
+    }
+
+    func testAudioQualityScore_IsOriginalOrPrimaryAudio() {
+        let options = DownloadOptions.default
+
+        // Original language preference >= 0 boost
+        let originalFormat = MediaFormat(
+            formatId: "orig_audio",
+            ext: "m4a",
+            languagePreference: 0
+        )
+        XCTAssertEqual(originalFormat.audioQualityScore(options: options), 10000000.0, accuracy: 0.001)
+
+        // Dubbed audio penalty (languagePreference < 0)
+        let dubbedFormat = MediaFormat(
+            formatId: "dub_audio",
+            ext: "m4a",
+            formatNote: "Spanish dubbed",
+            languagePreference: -1
+        )
+        // Base penalty -5_000_000 + lp (-1 * 100_000) = -5_100_000
+        XCTAssertEqual(dubbedFormat.audioQualityScore(options: options), -5100000.0, accuracy: 0.001)
+
+        // Dubbed formatNote without languagePreference
+        let dubbedNoteFormat = MediaFormat(
+            formatId: "dub_note",
+            ext: "m4a",
+            formatNote: "dubbed"
+        )
+        XCTAssertEqual(dubbedNoteFormat.audioQualityScore(options: options), -5000000.0, accuracy: 0.001)
+    }
+
+    func testAudioQualityScore_AudioCodecMatching() {
+        var options = DownloadOptions.default
+        options.audioCodec = .opus
+
+        // Matching codec
+        let matchFormat = MediaFormat(
+            formatId: "opus_audio",
+            ext: "opus",
+            acodec: "opus"
+        )
+        XCTAssertEqual(matchFormat.audioQualityScore(options: options), 10500000.0, accuracy: 0.001)
+
+        // Non-matching codec
+        let mismatchFormat = MediaFormat(
+            formatId: "aac_audio",
+            ext: "m4a",
+            acodec: "mp4a.40.2"
+        )
+        XCTAssertEqual(mismatchFormat.audioQualityScore(options: options), 10000000.0, accuracy: 0.001)
+
+        // Auto codec requested (no bonus)
+        options.audioCodec = .auto
+        XCTAssertEqual(matchFormat.audioQualityScore(options: options), 10000000.0, accuracy: 0.001)
+    }
+
+    func testAudioQualityScore_BitrateFallbackHierarchy() {
+        let options = DownloadOptions.default
+
+        // Preferred abr
+        let abrFormat = MediaFormat(
+            formatId: "abr_fmt",
+            ext: "m4a",
+            abr: 128.0,
+            tbr: 256.0
+        )
+        XCTAssertEqual(abrFormat.audioQualityScore(options: options), 10001280.0, accuracy: 0.001)
+
+        // Fallback tbr
+        let tbrFormat = MediaFormat(
+            formatId: "tbr_fmt",
+            ext: "m4a",
+            tbr: 256.0
+        )
+        XCTAssertEqual(tbrFormat.audioQualityScore(options: options), 10002560.0, accuracy: 0.001)
+
+        // No bitrate
+        let noBitrateFormat = MediaFormat(
+            formatId: "nobitrate_fmt",
+            ext: "m4a"
+        )
+        XCTAssertEqual(noBitrateFormat.audioQualityScore(options: options), 10000000.0, accuracy: 0.001)
+    }
+
+    func testAudioQualityScore_NeedsTestingPenalty() {
+        let options = DownloadOptions.default
+
+        let formatNeedsTesting = MediaFormat(
+            formatId: "test_fmt",
+            ext: "m4a",
+            needsTesting: true
+        )
+
+        XCTAssertEqual(formatNeedsTesting.audioQualityScore(options: options), 9000000.0, accuracy: 0.001)
+    }
+
     // MARK: - MediaFormat.displaySummary Tests
 
     func testMediaFormatDisplaySummary_MinimalFormat_ReturnsEmptyString() {
