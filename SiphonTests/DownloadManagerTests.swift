@@ -532,4 +532,47 @@ final class DownloadManagerTests: XCTestCase {
             )
         )
     }
+
+    func testMenuDownloadVideo() {
+        let manager = DownloadManager()
+        let testUrl = "https://example.com/video_menu"
+        let initialCount = manager.downloads.count
+
+        manager.menuDownload(url: testUrl, type: "video", quality: "1080")
+
+        XCTAssertEqual(manager.downloads.count, initialCount + 1)
+        guard let download = manager.downloads.last else {
+            XCTFail("Failed to find added download")
+            return
+        }
+
+        XCTAssertEqual(download.url, testUrl)
+        XCTAssertEqual(download.options.fileType, .mp4)
+        XCTAssertEqual(download.options.videoResolution, .r1080p)
+        XCTAssertEqual(download.options.videoCodec, .auto)
+        XCTAssertEqual(download.options.audioCodec, .auto)
+        XCTAssertTrue(download.options.sponsorBlock)
+        XCTAssertTrue(download.options.embedThumbnail)
+        XCTAssertTrue(download.options.embedMetadata)
+    }
+
+    func testMenuDownloadAudio() {
+        let manager = DownloadManager()
+        let testUrl = "https://example.com/audio_menu"
+        let initialCount = manager.downloads.count
+
+        manager.menuDownload(url: testUrl, type: "audio", quality: "best")
+
+        XCTAssertEqual(manager.downloads.count, initialCount + 1)
+        guard let download = manager.downloads.last else {
+            XCTFail("Failed to find added download")
+            return
+        }
+
+        XCTAssertEqual(download.url, testUrl)
+        XCTAssertEqual(download.options.fileType, .m4a)
+        XCTAssertEqual(download.options.videoCodec, .none)
+        XCTAssertEqual(download.options.audioCodec, .auto)
+        XCTAssertEqual(download.options.audioQuality, .best)
+    }
 }
