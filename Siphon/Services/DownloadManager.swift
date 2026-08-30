@@ -371,9 +371,13 @@ class DownloadManager: ObservableObject {
 
     private func executeDownload(_ download: Download) async {
         let downloadId = download.id
+        let downloadCopy = download
         defer {
             activeTasks.removeValue(forKey: downloadId)
             activeControllers.removeValue(forKey: downloadId)
+            if download.status == .stopped || download.status == .failed {
+                cleanupTemporaryFiles(for: downloadCopy)
+            }
             processQueue()
         }
 
@@ -410,12 +414,8 @@ class DownloadManager: ObservableObject {
             download.diagnostics.duration = info.durationString
 
             let (resolvedBaseName, candidateKey) = resolveUniqueOutputPath(for: download)
-            let sanitize: (String) -> String = { input in
-                let invalidChars = CharacterSet(charactersIn: "\\/:*?\"<>|")
-                return input.components(separatedBy: invalidChars).joined(separator: "_")
-            }
             let rawBaseName = download.options.customFilename ?? download.title
-            let sanitizedBaseName = sanitize(rawBaseName)
+            let sanitizedBaseName = YtdlpService.sanitizeFilename(rawBaseName)
             if resolvedBaseName != sanitizedBaseName {
                 download.options.customFilename = resolvedBaseName
             }
@@ -628,10 +628,8 @@ class DownloadManager: ObservableObject {
         }
         addToHistory(download, skipSave: skipSaveAndBroadcast)
 
-        let downloadCopy = download
-        Task {
-            try? await Task.sleep(nanoseconds: 300_000_000)
-            cleanupTemporaryFiles(for: downloadCopy)
+        if previousStatus == .queued {
+            cleanupTemporaryFiles(for: download)
         }
 
         if !suppressNotification {
@@ -643,6 +641,7 @@ class DownloadManager: ObservableObject {
 
     func retryDownload(_ download: Download) {
         guard download.status == .failed || download.status == .stopped || download.status == .fileExists else { return }
+        download.options.forceOverwrite = false
         updateStatus(for: download, to: .queued)
         download.progress = 0
         objectWillChange.send()
@@ -709,9 +708,23 @@ class DownloadManager: ObservableObject {
     }
     
     func resumeWithNewName(_ download: Download) {
-        let uniqueSuffix = " (\(Int(Date().timeIntervalSince1970) % 10000))"
-        let base = download.options.customFilename ?? download.title
-        download.options.customFilename = "\(base)\(uniqueSuffix)"
+        let rawBase = download.options.customFilename ?? download.title
+        let sanitizedBase = YtdlpService.sanitizeFilename(rawBase)
+        let folder = download.options.saveFolder
+        let ext = download.options.fileType.fileExtension
+
+        var counter = 1
+        var candidateName = "\(sanitizedBase) (\(counter))"
+        var candidatePath = folder.appendingPathComponent("\(candidateName).\(ext)").path
+
+        while FileManager.default.fileExists(atPath: candidatePath) || reservedOutputPaths.contains(candidatePath) {
+            counter += 1
+            candidateName = "\(sanitizedBase) (\(counter))"
+            candidatePath = folder.appendingPathComponent("\(candidateName).\(ext)").path
+        }
+
+        download.options.customFilename = candidateName
+        download.options.forceOverwrite = false
         updateStatus(for: download, to: .queued)
         objectWillChange.send()
         processQueue()
@@ -729,12 +742,8 @@ class DownloadManager: ObservableObject {
     }
 
     func resolveUniqueOutputPath(for download: Download) -> (resolvedBaseName: String, candidatePath: String) {
-        let sanitize: (String) -> String = { input in
-            let invalidChars = CharacterSet(charactersIn: "\\/:*?\"<>|")
-            return input.components(separatedBy: invalidChars).joined(separator: "_")
-        }
         let rawBaseName = download.options.customFilename ?? download.title
-        let sanitizedBaseName = sanitize(rawBaseName)
+        let sanitizedBaseName = YtdlpService.sanitizeFilename(rawBaseName)
 
         let folderPath = download.options.saveFolder
         var resolvedBaseName = sanitizedBaseName
@@ -933,6 +942,15 @@ class DownloadManager: ObservableObject {
 
     func clearHistory() {
         history.removeAll()
+        downloads.removeAll {
+            switch $0.status {
+            case .completed, .failed, .stopped, .fileExists:
+                return true
+            default:
+                return false
+            }
+        }
+        objectWillChange.send()
         saveHistory()
     }
 

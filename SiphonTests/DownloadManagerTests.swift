@@ -354,4 +354,85 @@ final class DownloadManagerTests: XCTestCase {
 
         UserDefaults.standard.removeObject(forKey: userDefaultsKey)
     }
+
+    func testRetryDownloadResetsForceOverwriteFlag() {
+        let manager = DownloadManager()
+        var options = DownloadOptions.default
+        options.forceOverwrite = true
+
+        let dlFailed = Download(url: "https://example.com/fail", options: options)
+        dlFailed.status = .failed
+        manager.downloads.append(dlFailed)
+
+        manager.retryDownload(dlFailed)
+        XCTAssertFalse(dlFailed.options.forceOverwrite == true)
+        XCTAssertEqual(dlFailed.status, .queued)
+
+        let dlStopped = Download(url: "https://example.com/stop", options: options)
+        dlStopped.status = .stopped
+        manager.downloads.append(dlStopped)
+
+        manager.retryDownload(dlStopped)
+        XCTAssertFalse(dlStopped.options.forceOverwrite == true)
+        XCTAssertEqual(dlStopped.status, .queued)
+
+        let dlExists = Download(url: "https://example.com/exists", options: options)
+        dlExists.status = .fileExists
+        manager.downloads.append(dlExists)
+
+        manager.retryDownload(dlExists)
+        XCTAssertFalse(dlExists.options.forceOverwrite == true)
+        XCTAssertEqual(dlExists.status, .queued)
+    }
+
+    func testClearHistoryPrunesVisibleFinishedDownloads() {
+        let manager = DownloadManager()
+
+        let dlCompleted = Download(url: "https://example.com/1", options: .default)
+        dlCompleted.status = .completed
+
+        let dlFailed = Download(url: "https://example.com/2", options: .default)
+        dlFailed.status = .failed
+
+        let dlStopped = Download(url: "https://example.com/3", options: .default)
+        dlStopped.status = .stopped
+
+        let dlQueued = Download(url: "https://example.com/4", options: .default)
+        dlQueued.status = .queued
+
+        manager.downloads = [dlCompleted, dlFailed, dlStopped, dlQueued]
+        manager.clearHistory()
+
+        XCTAssertEqual(manager.downloads.count, 1)
+        XCTAssertEqual(manager.downloads.first?.id, dlQueued.id)
+        XCTAssertEqual(manager.completedDownloads.count, 0)
+        XCTAssertEqual(manager.failedDownloads.count, 0)
+    }
+
+    func testResumeWithNewNameUsesCleanSequentialSuffix() {
+        let manager = DownloadManager()
+        let dl = Download(url: "https://example.com/vid", options: .default, title: "My Video")
+        dl.status = .fileExists
+
+        manager.resumeWithNewName(dl)
+
+        XCTAssertEqual(dl.options.customFilename, "My Video (1)")
+        XCTAssertFalse(dl.options.forceOverwrite == true)
+        XCTAssertEqual(dl.status, .queued)
+    }
+
+    func testDownloadProcessControllerAtomicStartupAndCancellation() {
+        let controller = DownloadProcessController()
+        XCTAssertFalse(controller.isCancelled)
+
+        controller.cancel()
+        XCTAssertTrue(controller.isCancelled)
+
+        let proc = Process()
+        proc.executableURL = URL(fileURLWithPath: "/bin/echo")
+        proc.arguments = ["hello"]
+
+        XCTAssertThrowsError(try controller.start(proc))
+        XCTAssertFalse(proc.isRunning)
+    }
 }
