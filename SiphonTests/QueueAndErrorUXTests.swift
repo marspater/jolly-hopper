@@ -643,5 +643,15 @@ final class QueueAndErrorUXTests: XCTestCase {
         _ = await (t1.value, t2.value)
         XCTAssertFalse(manager.isUpdatingYtdlp, "isUpdatingYtdlp must be false once operations complete")
     }
+
+    func testUpdateInstallerScriptContainsRequiredSteps() {
+        let script = UpdateChecker.updateInstallerScript()
+        XCTAssertTrue(script.contains("unzip"), "Script should handle zip archives")
+        XCTAssertTrue(script.contains("hdiutil mount"), "Script should handle dmg mounting")
+        XCTAssertTrue(script.contains("codesign --verify"), "Script should verify code signature")
+        XCTAssertTrue(script.contains("PlistBuddy"), "Script should verify bundle ID")
+        XCTAssertTrue(script.contains("ditto"), "Script should use ditto for app replacement")
+        XCTAssertTrue(script.contains("disown"), "Script should disown background process")
+    }
 }
 

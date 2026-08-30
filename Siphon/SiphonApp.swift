@@ -452,19 +452,8 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
         return Self.computeSHA256(for: fileURL)
     }
     
-    private func installUpdate(packagePath: String) {
-        let appPath = Bundle.main.bundlePath
-        let bundleId = Bundle.main.bundleIdentifier ?? "com.siphon.Siphon"
-        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent("Siphon_Staging_\(UUID().uuidString)")
-        do {
-            try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
-        } catch {
-            LoggerService.shared.log("Failed to create temporary directory for update installation: \(error.localizedDescription)", level: .error)
-            isInstalling = false
-            return
-        }
-        
-        let script = """
+    static func updateInstallerScript() -> String {
+        return """
         (
             set -e
             sleep 2
@@ -540,6 +529,21 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
             fi
         ) & disown
         """
+    }
+
+    private func installUpdate(packagePath: String) {
+        let appPath = Bundle.main.bundlePath
+        let bundleId = Bundle.main.bundleIdentifier ?? "com.siphon.Siphon"
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent("Siphon_Staging_\(UUID().uuidString)")
+        do {
+            try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        } catch {
+            LoggerService.shared.log("Failed to create temporary directory for update installation: \(error.localizedDescription)", level: .error)
+            isInstalling = false
+            return
+        }
+
+        let script = Self.updateInstallerScript()
         
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/bash")
