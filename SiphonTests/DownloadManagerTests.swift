@@ -532,4 +532,104 @@ final class DownloadManagerTests: XCTestCase {
             )
         )
     }
+
+    // MARK: - Initialize Tests
+
+    func testInitializeVersionFetchingAndAssignment() async {
+        let manager = DownloadManager()
+        let languageService = LanguageService()
+
+        manager.ytdlpService.ytdlpPath = URL(fileURLWithPath: "/usr/local/bin/yt-dlp")
+        let expectedVersion = "2025.02.20"
+        manager.ytdlpService.processRunner = MockYtdlpProcessRunner(mockCommand: { _ in
+            return expectedVersion
+        })
+
+        await manager.initialize(languageService: languageService)
+
+        XCTAssertEqual(manager.ytdlpVersion, expectedVersion)
+    }
+
+    func testInitializeLoadsHistoryAndResetsActiveStatuses() async {
+        let manager = DownloadManager()
+        let languageService = LanguageService()
+
+        let historyKey = UserDefaultsKeys.downloadHistory
+        defer { UserDefaults.standard.removeObject(forKey: historyKey) }
+
+        let download = Download(url: "https://example.com/init_history", options: .default)
+        download.status = .downloading
+        let historic = HistoricDownload(download: download)
+
+        if let data = try? JSONEncoder().encode([historic]) {
+            UserDefaults.standard.set(data, forKey: historyKey)
+        }
+
+        await manager.initialize(languageService: languageService)
+
+        XCTAssertEqual(manager.history.count, 1)
+        XCTAssertEqual(manager.downloads.count, 1)
+        XCTAssertEqual(manager.downloads.first?.status, .stopped, "Active download from history should be converted to .stopped during initialize")
+    }
+
+    func testInitializeDisclaimerDisplayWhenNotAcknowledgedAndNotFirstLaunch() async {
+        let manager = DownloadManager()
+        let languageService = LanguageService()
+
+        let disclaimerKey = UserDefaultsKeys.disclaimerAcknowledged
+        let firstLaunchKey = "isFirstLaunch_v3"
+
+        defer {
+            UserDefaults.standard.removeObject(forKey: disclaimerKey)
+            UserDefaults.standard.removeObject(forKey: firstLaunchKey)
+        }
+
+        // Case 1: Disclaimer NOT acknowledged, NOT first launch -> show disclaimer
+        UserDefaults.standard.set(false, forKey: disclaimerKey)
+        UserDefaults.standard.set(false, forKey: firstLaunchKey)
+        languageService.isFirstLaunch = false
+
+        await manager.initialize(languageService: languageService)
+        XCTAssertTrue(manager.showDisclaimer)
+
+        // Case 2: Disclaimer IS acknowledged -> do not show disclaimer
+        let manager2 = DownloadManager()
+        UserDefaults.standard.set(true, forKey: disclaimerKey)
+        UserDefaults.standard.set(false, forKey: firstLaunchKey)
+        languageService.isFirstLaunch = false
+
+        await manager2.initialize(languageService: languageService)
+        XCTAssertFalse(manager2.showDisclaimer)
+
+        // Case 3: Is first launch -> do not show disclaimer
+        let manager3 = DownloadManager()
+        UserDefaults.standard.set(false, forKey: disclaimerKey)
+        UserDefaults.standard.set(true, forKey: firstLaunchKey)
+        languageService.isFirstLaunch = true
+
+        await manager3.initialize(languageService: languageService)
+        XCTAssertFalse(manager3.showDisclaimer)
+    }
+
+    func testInitializeWhatsNewDisplayWhenVersionChanges() async {
+        let manager = DownloadManager()
+        let languageService = LanguageService()
+
+        let lastSeenKey = UserDefaultsKeys.lastSeenVersion
+        defer { UserDefaults.standard.removeObject(forKey: lastSeenKey) }
+
+        // Set last seen version to older version
+        UserDefaults.standard.set("0.0.1", forKey: lastSeenKey)
+
+        await manager.initialize(languageService: languageService)
+
+        let currentVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "4.2.0"
+        XCTAssertTrue(manager.showWhatsNew)
+        XCTAssertEqual(UserDefaults.standard.string(forKey: lastSeenKey), currentVersion)
+
+        // Run initialize again with current version already stored -> showWhatsNew should remain false on fresh instance
+        let manager2 = DownloadManager()
+        await manager2.initialize(languageService: languageService)
+        XCTAssertFalse(manager2.showWhatsNew)
+    }
 }
