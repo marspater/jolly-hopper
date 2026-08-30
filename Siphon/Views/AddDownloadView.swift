@@ -157,12 +157,7 @@ struct AddDownloadView: View {
                 presetSubtitleLanguage = ""
             }
 
-            // Handle Clipboard and External URLs
-            if let clipboardString = NSPasteboard.general.string(forType: .string),
-               clipboardString.hasPrefix("http") {
-                urlInput = clipboardString
-            }
-
+            // Handle External URLs passed via AppState
             if !appState.urlToDownload.isEmpty {
                 urlInput = appState.urlToDownload
                 appState.urlToDownload = ""
