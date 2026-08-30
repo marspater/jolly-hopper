@@ -532,4 +532,20 @@ final class DownloadManagerTests: XCTestCase {
             )
         )
     }
+
+    func testAcknowledgeDisclaimer() {
+        let userDefaultsKey = UserDefaultsKeys.disclaimerAcknowledged
+        UserDefaults.standard.removeObject(forKey: userDefaultsKey)
+        defer {
+            UserDefaults.standard.removeObject(forKey: userDefaultsKey)
+        }
+
+        let manager = DownloadManager()
+        manager.showDisclaimer = true
+
+        manager.acknowledgeDisclaimer()
+
+        XCTAssertFalse(manager.showDisclaimer, "acknowledgeDisclaimer should set showDisclaimer to false")
+        XCTAssertTrue(UserDefaults.standard.bool(forKey: userDefaultsKey), "acknowledgeDisclaimer should set disclaimerAcknowledged in UserDefaults to true")
+    }
 }
