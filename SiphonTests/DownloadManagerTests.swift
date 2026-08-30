@@ -17,14 +17,58 @@ final class DownloadManagerTests: XCTestCase {
 
         // Assert
         XCTAssertEqual(manager.downloads.count, initialCount + 1, "Downloads array count should increase by 1")
+    }
+
+    func testQuickDownloadWithDefaultSettings() {
+        let manager = DownloadManager()
+        let testUrl = "https://example.com/quick-video"
+        let initialCount = manager.downloads.count
+
+        // Act
+        manager.quickDownload(url: testUrl)
+
+        // Assert
+        XCTAssertEqual(manager.downloads.count, initialCount + 1, "Downloads array count should increase by 1")
 
         guard let addedDownload = manager.downloads.last else {
-            XCTFail("Failed to get the added download")
+            XCTFail("Failed to retrieve added quick download")
             return
         }
 
-        XCTAssertEqual(addedDownload.url, testUrl, "The added download URL should match the provided URL")
-        XCTAssertEqual(addedDownload.status, .queued, "The added download should have .queued status initially")
+        let preset = DownloadPreset.maxCompatibility
+        XCTAssertEqual(addedDownload.url, testUrl)
+        XCTAssertEqual(addedDownload.status, .queued)
+        XCTAssertEqual(addedDownload.options.fileType, preset.fileType)
+        XCTAssertNil(addedDownload.options.rawCookies)
+
+        let expectedDefaultFolder = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Downloads")
+        XCTAssertEqual(addedDownload.options.saveFolder.path, expectedDefaultFolder.path)
+    }
+
+    func testQuickDownloadWithCustomSaveFolderAndCookies() {
+        let manager = DownloadManager()
+        let testUrl = "https://example.com/quick-video-cookies"
+        let customFolderPath = "/tmp/custom_siphon_downloads"
+        let testCookies = "sessionid=abc123xyz; domain=example.com"
+
+        UserDefaults.standard.set(customFolderPath, forKey: UserDefaultsKeys.defaultSaveFolder)
+        defer {
+            UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.defaultSaveFolder)
+        }
+
+        // Act
+        manager.quickDownload(url: testUrl, rawCookies: testCookies)
+
+        // Assert
+        guard let addedDownload = manager.downloads.last else {
+            XCTFail("Failed to retrieve added quick download with cookies")
+            return
+        }
+
+        XCTAssertEqual(addedDownload.url, testUrl)
+        XCTAssertEqual(addedDownload.status, .queued)
+        XCTAssertEqual(addedDownload.options.rawCookies, testCookies)
+        XCTAssertEqual(addedDownload.options.saveFolder.path, URL(fileURLWithPath: customFolderPath).path)
     }
 
     func testAddDownloadsBatch() {
