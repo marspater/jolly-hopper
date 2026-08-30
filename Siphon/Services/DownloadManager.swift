@@ -468,7 +468,7 @@ class DownloadManager: ObservableObject {
         }.value
     }
 
-    private func performDownload(for download: Download) async throws -> String {
+    private func performDownload(for download: Download) async throws -> URL {
         updateStatus(for: download, to: .downloading)
         objectWillChange.send()
 
@@ -523,7 +523,7 @@ class DownloadManager: ObservableObject {
         return outputPath
     }
 
-    private func finalizeCompletedDownload(_ download: Download, outputPath: String) {
+    private func finalizeCompletedDownload(_ download: Download, outputPath: URL) {
         download.filePath = outputPath
         download.diagnostics.exitStatus = "Completed (0)"
         updateStatus(for: download, to: .completed)
