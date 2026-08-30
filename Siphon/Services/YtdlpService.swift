@@ -1281,7 +1281,11 @@ class YtdlpService: ObservableObject {
         if options.embedThumbnail && FileManager.default.fileExists(atPath: scratchThumbnailURL.path) {
             let hasThumb = await hasAttachedThumbnail(mediaFile: finalFileURL, ffmpegDir: ffmpegDir)
             if !hasThumb {
-                _ = await embedThumbnailWithFfmpeg(imageFile: scratchThumbnailURL, mediaFile: finalFileURL, ffmpegDir: ffmpegDir)
+                let embedded = await embedThumbnailWithFfmpeg(imageFile: scratchThumbnailURL, mediaFile: finalFileURL, ffmpegDir: ffmpegDir)
+                if !embedded {
+                    onOutput("[WARNING] Thumbnail embedding was requested, but FFmpeg could not embed the cover art into \(finalFileURL.lastPathComponent).\n")
+                    LoggerService.shared.log("Thumbnail embedding failed for \(finalFileURL.lastPathComponent)", level: .warning)
+                }
             }
         }
 
