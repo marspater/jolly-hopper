@@ -26,3 +26,7 @@
 ## 2026-08-15 - Thread-Safe In-Memory Caching for System Workspace Queries
 **Learning:** Querying `NSWorkspace.shared.urlForApplication(withBundleIdentifier:)` performs workspace and bundle resolution that can be redundant and slow when called repeatedly. Caching the result thread-safely with `NSLock` avoids unnecessary workspace lookups.
 **Action:** Cache static or slowly-changing system workspace lookup results in memory with thread safety (`NSLock`) when invoked from UI views or utility classes.
+
+## 2026-08-15 - Synchronized Set Property Observer for O(1) Array Existence Checks
+**Learning:** In Swift, checking element existence in an array using `contains(where:)` is O(N). When checking existence frequently during processing (such as in `processDownload`), maintaining a synchronized `Set<UUID>` updated via a property observer (`didSet`) turns linear lookups into O(1) operations while keeping code clean.
+**Action:** When performing repeated existence checks against an `@Published` array of identifiable objects, synchronize a helper `Set` via `didSet` to achieve O(1) set lookup speed.

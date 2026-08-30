@@ -135,7 +135,12 @@ final class DownloadEventCoalescer: @unchecked Sendable {
 @MainActor
 class DownloadManager: ObservableObject {
 
-    @Published var downloads: [Download] = []
+    @Published var downloads: [Download] = [] {
+        didSet {
+            downloadIds = Set(downloads.map { $0.id })
+        }
+    }
+    private var downloadIds: Set<UUID> = []
     @Published var history: [HistoricDownload] = []
     @Published var showDisclaimer: Bool = false
     @Published var ytdlpVersion: String?
@@ -360,7 +365,8 @@ class DownloadManager: ObservableObject {
 
     func processDownload(_ download: Download) async {
         guard download.status == .queued else { return }
-        if !downloads.contains(where: { $0.id == download.id }) {
+        // Bolt Performance Optimization: O(1) Set lookup replacing O(N) array scan
+        if !downloadIds.contains(download.id) {
             downloads.append(download)
         }
         processQueue()
