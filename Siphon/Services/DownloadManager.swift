@@ -473,10 +473,11 @@ class DownloadManager: ObservableObject {
                             download.log = String(download.log.suffix(25_000))
                         }
                         download.log += combined
-                        for line in lines {
-                            if line.contains("[EmbedThumbnail]") || line.contains("[Metadata]") || line.contains("[Merger]") || line.contains("[VideoConvertor]") || line.contains("[ThumbnailsConvertor]") || line.contains("[EmbedSubtitle]") {
-                                if download.status == .downloading {
+                        if download.status == .downloading {
+                            for line in lines {
+                                if line.contains("[EmbedThumbnail]") || line.contains("[Metadata]") || line.contains("[Merger]") || line.contains("[VideoConvertor]") || line.contains("[ThumbnailsConvertor]") || line.contains("[EmbedSubtitle]") {
                                     download.status = .processing
+                                    break
                                 }
                             }
                         }

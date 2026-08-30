@@ -26,3 +26,7 @@
 ## 2026-08-15 - Thread-Safe In-Memory Caching for System Workspace Queries
 **Learning:** Querying `NSWorkspace.shared.urlForApplication(withBundleIdentifier:)` performs workspace and bundle resolution that can be redundant and slow when called repeatedly. Caching the result thread-safely with `NSLock` avoids unnecessary workspace lookups.
 **Action:** Cache static or slowly-changing system workspace lookup results in memory with thread safety (`NSLock`) when invoked from UI views or utility classes.
+
+## 2026-08-15 - Early break and status gating in log processing loops
+**Learning:** Checking for post-processing keywords across log output lines inside high-frequency progress coalescing updates causes redundant string searching once the download status has already transitioned to `.processing`. Gating the log line scan with `download.status == .downloading` and executing an early `break` as soon as `.processing` is set eliminates millions of useless string checks.
+**Action:** When scanning log streams for state-transition keywords, gate the scan by checking if the target state transition is needed, and break out of line-by-line loops immediately upon state change.
