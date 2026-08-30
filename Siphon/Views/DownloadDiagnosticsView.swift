@@ -132,6 +132,8 @@ struct DownloadDiagnosticsView: View {
                     .foregroundColor(.secondary)
             }
             .buttonStyle(.plain)
+            .help(languageService.s("close"))
+            .accessibilityLabel(languageService.s("close"))
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 14)

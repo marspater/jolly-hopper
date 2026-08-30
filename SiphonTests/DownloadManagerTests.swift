@@ -435,4 +435,101 @@ final class DownloadManagerTests: XCTestCase {
         XCTAssertThrowsError(try controller.start(proc))
         XCTAssertFalse(proc.isRunning)
     }
+
+    func testShouldCleanupTemporaryFiles() {
+        XCTAssertTrue(DownloadManager.shouldCleanupTemporaryFiles(for: .stopped))
+        XCTAssertTrue(DownloadManager.shouldCleanupTemporaryFiles(for: .failed))
+
+        XCTAssertFalse(DownloadManager.shouldCleanupTemporaryFiles(for: .queued))
+        XCTAssertFalse(DownloadManager.shouldCleanupTemporaryFiles(for: .downloading))
+        XCTAssertFalse(DownloadManager.shouldCleanupTemporaryFiles(for: .completed))
+        XCTAssertFalse(DownloadManager.shouldCleanupTemporaryFiles(for: .fetching))
+        XCTAssertFalse(DownloadManager.shouldCleanupTemporaryFiles(for: .processing))
+        XCTAssertFalse(DownloadManager.shouldCleanupTemporaryFiles(for: .paused))
+        XCTAssertFalse(DownloadManager.shouldCleanupTemporaryFiles(for: .fileExists))
+    }
+
+    func testExtractVideoId() {
+        XCTAssertEqual(
+            DownloadManager.extractVideoId(from: "https://www.youtube.com/watch?v=dQw4w9WgXcQ"),
+            "dQw4w9WgXcQ"
+        )
+        XCTAssertEqual(
+            DownloadManager.extractVideoId(from: "https://youtu.be/dQw4w9WgXcQ"),
+            "dQw4w9WgXcQ"
+        )
+        XCTAssertEqual(
+            DownloadManager.extractVideoId(from: "invalid_url"),
+            "invalid_url"
+        )
+    }
+
+    func testIsTemporaryFileName() {
+        XCTAssertTrue(DownloadManager.isTemporaryFileName("video.mp4.part"))
+        XCTAssertTrue(DownloadManager.isTemporaryFileName("video.mp4.ytdl"))
+        XCTAssertTrue(DownloadManager.isTemporaryFileName("video.mp4.temp"))
+        XCTAssertTrue(DownloadManager.isTemporaryFileName("video.mp4.tmp"))
+        XCTAssertTrue(DownloadManager.isTemporaryFileName("video.f137.part"))
+        XCTAssertTrue(DownloadManager.isTemporaryFileName("video.f140.ytdl"))
+
+        XCTAssertFalse(DownloadManager.isTemporaryFileName("video.mp4"))
+        XCTAssertFalse(DownloadManager.isTemporaryFileName("video.m4a"))
+        XCTAssertFalse(DownloadManager.isTemporaryFileName("video.part.mp4"))
+    }
+
+    func testIsMatchingTemporaryFile() {
+        let rawBaseName = "My Great Video"
+        let sanitizedBaseName = "My_Great_Video"
+        let videoId = "dQw4w9WgXcQ"
+
+        // Matches prefix (raw base name) and temp extension
+        XCTAssertTrue(
+            DownloadManager.isMatchingTemporaryFile(
+                fileName: "My Great Video.f137.part",
+                rawBaseName: rawBaseName,
+                sanitizedBaseName: sanitizedBaseName,
+                videoId: videoId
+            )
+        )
+
+        // Matches prefix (sanitized base name) and temp extension
+        XCTAssertTrue(
+            DownloadManager.isMatchingTemporaryFile(
+                fileName: "My_Great_Video.f140.ytdl",
+                rawBaseName: rawBaseName,
+                sanitizedBaseName: sanitizedBaseName,
+                videoId: videoId
+            )
+        )
+
+        // Matches video ID and temp extension
+        XCTAssertTrue(
+            DownloadManager.isMatchingTemporaryFile(
+                fileName: "some_other_title_dQw4w9WgXcQ.temp",
+                rawBaseName: rawBaseName,
+                sanitizedBaseName: sanitizedBaseName,
+                videoId: videoId
+            )
+        )
+
+        // Does not match prefix or video ID
+        XCTAssertFalse(
+            DownloadManager.isMatchingTemporaryFile(
+                fileName: "Unrelated_Video.part",
+                rawBaseName: rawBaseName,
+                sanitizedBaseName: sanitizedBaseName,
+                videoId: videoId
+            )
+        )
+
+        // Matches prefix but is NOT a temporary file
+        XCTAssertFalse(
+            DownloadManager.isMatchingTemporaryFile(
+                fileName: "My_Great_Video.mp4",
+                rawBaseName: rawBaseName,
+                sanitizedBaseName: sanitizedBaseName,
+                videoId: videoId
+            )
+        )
+    }
 }
