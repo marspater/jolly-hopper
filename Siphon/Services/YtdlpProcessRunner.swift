@@ -4,11 +4,12 @@
 //
 
 import Foundation
+import Darwin
 
 public final class DownloadProcessController: @unchecked Sendable {
     private enum State {
         case idle
-        case attached(Process)
+        case running(Process, pid_t)
         case cancelled
     }
 
@@ -17,16 +18,91 @@ public final class DownloadProcessController: @unchecked Sendable {
 
     public init() {}
 
-    private static func terminateProcessTree(_ proc: Process) {
-        guard proc.isRunning else { return }
-        let pid = proc.processIdentifier
-        proc.terminate()
-        if pid > 0 && proc.isRunning {
-            kill(-pid, SIGTERM)
+    private static func getDescendantPIDs(for parentPID: pid_t) -> [pid_t] {
+        guard parentPID > 0 else { return [] }
+        var descendants: [pid_t] = []
+        var queue: [pid_t] = [parentPID]
+
+        while !queue.isEmpty {
+            let currentParent = queue.removeFirst()
+            let byteCount = proc_listpids(UInt32(PROC_PPID_ONLY), UInt32(currentParent), nil, 0)
+            guard byteCount > 0 else { continue }
+            let pidCount = Int(byteCount) / MemoryLayout<pid_t>.size
+            var pids = [pid_t](repeating: 0, count: pidCount)
+            let actualBytes = proc_listpids(UInt32(PROC_PPID_ONLY), UInt32(currentParent), &pids, byteCount)
+            guard actualBytes > 0 else { continue }
+            let actualCount = Int(actualBytes) / MemoryLayout<pid_t>.size
+            for i in 0..<actualCount {
+                let child = pids[i]
+                if child > 0 && !descendants.contains(child) {
+                    descendants.append(child)
+                    queue.append(child)
+                }
+            }
+        }
+        return descendants
+    }
+
+    public static func terminateProcessTree(_ proc: Process?, pid: pid_t? = nil) {
+        let resolvedPID = (pid != nil && pid! > 0) ? pid! : (proc?.processIdentifier ?? 0)
+
+        // 1. Gather all descendant child processes (ffmpeg, aria2c, etc.) before terminating parent
+        let descendants = resolvedPID > 0 ? getDescendantPIDs(for: resolvedPID) : []
+
+        // 2. Terminate the main process
+        if let proc, proc.isRunning {
+            proc.terminate()
+        }
+        if resolvedPID > 0 {
+            kill(resolvedPID, SIGTERM)
+            kill(-resolvedPID, SIGTERM)
+        }
+
+        // 3. Terminate all descendant processes
+        for child in descendants {
+            kill(child, SIGTERM)
+        }
+
+        // 4. Fallback cleanup: if descendants still exist, send SIGKILL
+        if !descendants.isEmpty {
+            DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + 0.15) {
+                for child in descendants {
+                    if kill(child, 0) == 0 {
+                        kill(child, SIGKILL)
+                    }
+                }
+            }
         }
     }
 
-    /// Registers the process with the controller.
+    /// Starts the process atomically under the controller's lock.
+    /// If the controller has already been cancelled, throws without starting the process.
+    public func start(_ proc: Process) throws {
+        lock.lock()
+        switch state {
+        case .cancelled:
+            lock.unlock()
+            throw YtdlpError.downloadFailed("Download was stopped.")
+        case .running:
+            lock.unlock()
+            throw YtdlpError.downloadFailed("Process already running.")
+        case .idle:
+            break
+        }
+
+        do {
+            try proc.run()
+            let pid = proc.processIdentifier
+            state = .running(proc, pid)
+            lock.unlock()
+        } catch {
+            state = .idle
+            lock.unlock()
+            throw error
+        }
+    }
+
+    /// Registers the process with the controller (backwards-compatible).
     /// Returns `true` if successfully attached and uncancelled, or `false` if already cancelled.
     @discardableResult
     public func attachProcess(_ proc: Process) -> Bool {
@@ -38,17 +114,17 @@ public final class DownloadProcessController: @unchecked Sendable {
             shouldTerminate = proc.isRunning
             success = false
         case .idle:
-            state = .attached(proc)
+            state = .running(proc, proc.processIdentifier)
             shouldTerminate = false
             success = true
-        case .attached:
+        case .running:
             shouldTerminate = false
             success = false
         }
         lock.unlock()
 
         if shouldTerminate {
-            Self.terminateProcessTree(proc)
+            Self.terminateProcessTree(proc, pid: proc.processIdentifier)
         }
         return success
     }
@@ -60,7 +136,7 @@ public final class DownloadProcessController: @unchecked Sendable {
         switch state {
         case .idle, .cancelled:
             break
-        case .attached:
+        case .running:
             state = .idle
         }
     }
@@ -72,8 +148,8 @@ public final class DownloadProcessController: @unchecked Sendable {
         state = .cancelled
         lock.unlock()
 
-        if case .attached(let proc) = previousState {
-            Self.terminateProcessTree(proc)
+        if case .running(let proc, let pid) = previousState {
+            Self.terminateProcessTree(proc, pid: pid)
         }
     }
 
@@ -100,52 +176,61 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
     public init() {}
 
     public func runCommand(_ args: [String]) async throws -> String {
-        try await withCheckedThrowingContinuation { continuation in
-            let safeContinuation = SafeContinuation(continuation)
-            let process = Process()
-            let pipe = Pipe()
+        let process = Process()
+        let pipe = Pipe()
 
-            process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-            process.arguments = args
-            process.standardOutput = pipe
-            process.standardError = pipe
-            process.environment = YtdlpService.createSanitizedEnvironment()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+        process.arguments = args
+        process.standardOutput = pipe
+        process.standardError = pipe
+        process.environment = YtdlpService.createSanitizedEnvironment()
 
-            let outputBuffer = ThreadSafeDataBuffer()
-            pipe.fileHandleForReading.readabilityHandler = { handle in
-                let data = handle.availableData
-                if !data.isEmpty {
-                    outputBuffer.append(data)
+        return try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                let safeContinuation = SafeContinuation(continuation)
+
+                let outputBuffer = ThreadSafeDataBuffer()
+                pipe.fileHandleForReading.readabilityHandler = { handle in
+                    let data = handle.availableData
+                    if !data.isEmpty {
+                        outputBuffer.append(data)
+                    }
+                }
+
+                process.terminationHandler = { proc in
+                    pipe.fileHandleForReading.readabilityHandler = nil
+
+                    let remainingData = pipe.fileHandleForReading.readDataToEndOfFile()
+                    try? pipe.fileHandleForReading.close()
+                    proc.terminationHandler = nil
+
+                    if !remainingData.isEmpty {
+                        outputBuffer.append(remainingData)
+                    }
+
+                    let output = outputBuffer.getString()
+
+                    if Task.isCancelled || proc.terminationReason == .uncaughtSignal {
+                        safeContinuation.resume(throwing: YtdlpError.downloadFailed("Command was cancelled."))
+                    } else if proc.terminationStatus == 0 {
+                        safeContinuation.resume(returning: output)
+                    } else {
+                        safeContinuation.resume(throwing: YtdlpError.commandFailed(output))
+                    }
+                }
+
+                do {
+                    try process.run()
+                } catch {
+                    pipe.fileHandleForReading.readabilityHandler = nil
+                    try? pipe.fileHandleForReading.close()
+                    process.terminationHandler = nil
+                    safeContinuation.resume(throwing: error)
                 }
             }
-
-            process.terminationHandler = { proc in
-                pipe.fileHandleForReading.readabilityHandler = nil
-
-                let remainingData = pipe.fileHandleForReading.readDataToEndOfFile()
-                try? pipe.fileHandleForReading.close()
-                proc.terminationHandler = nil
-
-                if !remainingData.isEmpty {
-                    outputBuffer.append(remainingData)
-                }
-
-                let output = outputBuffer.getString()
-
-                if proc.terminationStatus == 0 {
-                    safeContinuation.resume(returning: output)
-                } else {
-                    safeContinuation.resume(throwing: YtdlpError.commandFailed(output))
-                }
-            }
-
-            do {
-                try process.run()
-            } catch {
-                pipe.fileHandleForReading.readabilityHandler = nil
-                try? pipe.fileHandleForReading.close()
-                process.terminationHandler = nil
-                safeContinuation.resume(throwing: error)
+        } onCancel: {
+            if process.isRunning {
+                DownloadProcessController.terminateProcessTree(process, pid: process.processIdentifier)
             }
         }
     }
@@ -391,6 +476,7 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
                     if fm.fileExists(atPath: resolved.path),
                        let values = try? resolved.resourceValues(forKeys: [.isRegularFileKey]),
                        values.isRegularFile == true,
+                       YtdlpService.isMediaFilePath(resolved.path),
                        YtdlpService.isPathContained(targetURL: resolved, inside: saveFolder) {
                         finalURL = resolved
                     }
@@ -441,19 +527,12 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
                 }
             }
 
-            let attached = processController?.attachProcess(process) ?? true
-            guard attached else {
-                outputPipe.fileHandleForReading.readabilityHandler = nil
-                errorPipe.fileHandleForReading.readabilityHandler = nil
-                try? outputPipe.fileHandleForReading.close()
-                try? errorPipe.fileHandleForReading.close()
-                process.terminationHandler = nil
-                safeContinuation.resume(throwing: YtdlpError.downloadFailed("Download was stopped."))
-                return
-            }
-
             do {
-                try process.run()
+                if let controller = processController {
+                    try controller.start(process)
+                } else {
+                    try process.run()
+                }
             } catch {
                 processController?.detach()
                 outputPipe.fileHandleForReading.readabilityHandler = nil

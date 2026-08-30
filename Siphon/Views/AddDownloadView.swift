@@ -1671,7 +1671,8 @@ struct AddDownloadView: View {
         if downloadMode == .single {
             let filename = customFilename.isEmpty ? (mediaInfo?.title ?? "") : customFilename
             if !filename.isEmpty {
-                let potentialPath = saveFolder.appendingPathComponent("\(filename).\(fileType.fileExtension)")
+                let safeName = YtdlpService.sanitizeFilename(filename)
+                let potentialPath = saveFolder.appendingPathComponent("\(safeName).\(fileType.fileExtension)")
                 let pathString = potentialPath.path
 
                 Task {
