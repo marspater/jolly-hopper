@@ -26,3 +26,7 @@
 ## 2026-08-15 - Thread-Safe In-Memory Caching for System Workspace Queries
 **Learning:** Querying `NSWorkspace.shared.urlForApplication(withBundleIdentifier:)` performs workspace and bundle resolution that can be redundant and slow when called repeatedly. Caching the result thread-safely with `NSLock` avoids unnecessary workspace lookups.
 **Action:** Cache static or slowly-changing system workspace lookup results in memory with thread safety (`NSLock`) when invoked from UI views or utility classes.
+
+## 2026-08-15 - Set Membership for Process Graph Traversals
+**Learning:** Performing `!array.contains(element)` inside process graph traversals causes quadratic O(N^2) complexity as descendant counts grow. Maintaining a parallel `Set` allows O(1) deduplication and linear O(N) traversal.
+**Action:** When traversing tree/graph structures in Swift (such as PID hierarchies), use a `Set` for membership checks alongside an `Array` if element ordering must be preserved.
