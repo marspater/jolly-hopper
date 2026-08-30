@@ -469,6 +469,11 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
             set -e
             sleep 2
             
+            PKG_PATH="$1"
+            APP_PATH="$2"
+            WORK_DIR="$3"
+            EXPECTED_BUNDLE_ID="$4"
+
             # Step 1: Unpack into staging directory
             if file "$PKG_PATH" | grep -q "Zip archive"; then
                 /usr/bin/unzip -q "$PKG_PATH" -d "$WORK_DIR"
@@ -543,7 +548,7 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
         
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/bash")
-        process.arguments = ["-c", script]
+        process.arguments = ["-c", script, "bash", packagePath, appPath, tempDir.path, bundleId]
         var env = ProcessInfo.processInfo.environment
         env["PKG_PATH"] = packagePath
         env["APP_PATH"] = appPath
