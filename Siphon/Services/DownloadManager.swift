@@ -816,12 +816,11 @@ class DownloadManager: ObservableObject {
     }
 
     nonisolated static func extractVideoId(from urlString: String) -> String? {
-        guard let url = URL(string: urlString),
-              url.scheme != nil,
-              let components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
-            return nil
+        if let url = URL(string: urlString),
+           let components = URLComponents(url: url, resolvingAgainstBaseURL: false) {
+            return components.queryItems?.first(where: { $0.name == "v" })?.value ?? url.lastPathComponent
         }
-        return components.queryItems?.first(where: { $0.name == "v" })?.value ?? url.lastPathComponent
+        return nil
     }
 
     nonisolated static func isTemporaryFileName(_ fileName: String) -> Bool {

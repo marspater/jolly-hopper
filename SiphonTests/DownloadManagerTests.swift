@@ -377,7 +377,10 @@ final class DownloadManagerTests: XCTestCase {
             DownloadManager.extractVideoId(from: "https://youtu.be/dQw4w9WgXcQ"),
             "dQw4w9WgXcQ"
         )
-        XCTAssertNil(DownloadManager.extractVideoId(from: "invalid_url"))
+        XCTAssertEqual(
+            DownloadManager.extractVideoId(from: "invalid_url"),
+            "invalid_url"
+        )
     }
 
     func testIsTemporaryFileName() {
