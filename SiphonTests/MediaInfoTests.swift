@@ -442,8 +442,8 @@ final class MediaInfoTests: XCTestCase {
             resolution: "1920x1080",
             fps: 60.0
         )
-        let subtitle = SubtitleInfo(url: "https://example.com/sub.vtt", ext: "vtt", name: "English")
-        let chapter = ChapterInfo(title: "Intro", startTime: 0.0, endTime: 10.0)
+        let subtitle = SubtitleInfo(ext: "vtt", url: "https://example.com/sub.vtt", name: "English")
+        let chapter = ChapterInfo(startTime: 0.0, endTime: 10.0, title: "Intro")
 
         let mediaInfo = MediaInfo(
             id: "vid_12345",
