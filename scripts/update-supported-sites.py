@@ -34,4 +34,3 @@ The script downloads `{UPSTREAM}`, preserves this repository's attribution and r
 """
 
 TARGET.write_text(head + upstream_markdown, encoding="utf-8")
-print(f"Updated {TARGET.relative_to(TARGET.parent)} from {UPSTREAM}")
