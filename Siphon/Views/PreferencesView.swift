@@ -115,7 +115,6 @@ struct PreferencesView: View {
                         lineWidth: 1
                     )
             )
-            .animation(.spring(response: 0.28, dampingFraction: 0.8), value: selectedTab)
             .padding(.top, 10)
             .padding(.bottom, 10)
 
@@ -179,7 +178,9 @@ struct PreferencesView: View {
     @ViewBuilder
     private func tabSegment(_ tab: PreferenceTab, title: String, icon: String) -> some View {
         Button {
-            selectedTab = tab
+            withAnimation(.spring(response: 0.32, dampingFraction: 0.74)) {
+                selectedTab = tab
+            }
         } label: {
             HStack(spacing: 5) {
                 Image(systemName: icon)
@@ -1004,216 +1005,175 @@ struct PreferencesView: View {
     
     private var aboutTab: some View {
         ScrollView {
-            VStack(spacing: 20) {
-                // Header section with glowing icon
-                VStack(spacing: 12) {
+            VStack(spacing: 16) {
+                // Header section: Clean app branding & version
+                VStack(spacing: 8) {
                     Image(nsImage: NSApp.applicationIconImage)
                         .resizable()
-                        .frame(width: 72, height: 72)
-                        .shadow(color: .purple.opacity(0.4), radius: 20, x: 0, y: 6)
-                        .shadow(color: .blue.opacity(0.2), radius: 30, x: 0, y: 8)
-                    
+                        .frame(width: 56, height: 56)
+                        .shadow(color: SiphonTheme.accent.opacity(0.35), radius: 16, x: 0, y: 4)
+
                     VStack(spacing: 4) {
                         Text("Siphon")
-                            .font(.geist(24, weight: .bold))
-                        
-                        Text(languageService.s("version") + " \(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "4.2.0")")
+                            .font(.geist(20, weight: .bold))
+
+                        Text(languageService.s("version") + " \(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "5.0.0")")
                             .font(.geistMono(11, weight: .semibold))
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 3)
-                            .background(SiphonTheme.accent.opacity(0.15))
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 2.5)
+                            .background(SiphonTheme.accent.opacity(0.12))
                             .foregroundColor(SiphonTheme.accent)
                             .clipShape(Capsule())
                     }
-                    
+
                     Text(languageService.s("app_desc"))
-                        .font(.geist(13))
+                        .font(.geist(12))
                         .foregroundColor(.secondary)
                         .multilineTextAlignment(.center)
-                        .padding(.horizontal, 24)
+                        .padding(.horizontal, 20)
                 }
-                .padding(.top, 8)
+                .padding(.top, 6)
+                .padding(.bottom, 2)
 
-                // Legal Disclaimer Card
+                // Section 1: Credits & Engine (Grouped Settings Style Card)
                 VStack(alignment: .leading, spacing: 8) {
-                    HStack(spacing: 6) {
-                        Image(systemName: "exclamationmark.shield.fill")
-                            .foregroundColor(SiphonTheme.statusQueued)
-                        Text(languageService.s("legal_disclaimer_title"))
-                            .font(.geist(13, weight: .bold))
-                    }
-                    
-                    Text(languageService.s("legal_disclaimer_message"))
-                        .font(.geist(11))
-                        .foregroundColor(.secondary)
-                        .lineSpacing(3)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                .padding(14)
-                .background(
-                    SiphonTheme.cardBackground(cornerRadius: SiphonTheme.radiusCard)
-                )
-                .cornerRadius(SiphonTheme.radiusCard)
-                .overlay(
-                    RoundedRectangle(cornerRadius: SiphonTheme.radiusCard)
-                        .strokeBorder(
-                            LinearGradient(
-                                colors: [
-                                    SiphonTheme.statusQueued.opacity(0.45),
-                                    SiphonTheme.statusQueued.opacity(0.12),
-                                    Color.clear
-                                ],
-                                startPoint: .top,
-                                endPoint: .bottom
-                            ),
-                            lineWidth: 1
-                        )
-                )
-
-                // Credits & Details Card
-                VStack(alignment: .leading, spacing: 10) {
                     Text(languageService.s("credits"))
-                        .font(.geist(13, weight: .bold))
-                    
-                    HStack {
-                        Text("Maintainer")
-                            .foregroundColor(.secondary)
-                        Spacer()
-                        Text("marspater")
-                            .font(.geist(13, weight: .medium))
-                    }
-                    .font(.geist(11))
-                    
-                    SiphonTheme.subtleDivider
-                    
-                    HStack {
-                        Text(languageService.s("video_downloading"))
-                            .foregroundColor(.secondary)
-                        Spacer()
-                        Link("yt-dlp", destination: URL(string: "https://github.com/yt-dlp/yt-dlp") ?? URL(fileURLWithPath: "/"))
-                            .font(.geist(13, weight: .medium))
-                    }
-                    .font(.geist(11))
-                }
-                .padding(14)
-                .background(
-                    SiphonTheme.cardBackground(cornerRadius: SiphonTheme.radiusCard)
-                )
-                .cornerRadius(SiphonTheme.radiusCard)
-                .overlay(
-                    SiphonTheme.cardBorder(cornerRadius: SiphonTheme.radiusCard)
-                )
+                        .font(.geist(13, weight: .semibold))
+                        .foregroundColor(.primary)
 
-                // License Card
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(languageService.s("license"))
-                        .font(.geist(13, weight: .bold))
-                    Text("GNU General Public License v3.0")
-                        .font(.geist(11, weight: .semibold))
-                    Text(languageService.s("license_desc"))
+                    VStack(spacing: 0) {
+                        HStack {
+                            Text("Maintainer")
+                                .font(.geist(13, weight: .medium))
+                                .foregroundColor(.primary)
+                            Spacer()
+                            Text("marspater")
+                                .font(.geist(12, weight: .medium))
+                                .foregroundColor(.secondary)
+                        }
+                        .padding(.vertical, 8)
+
+                        SiphonTheme.subtleDivider
+
+                        HStack {
+                            Text(languageService.s("video_downloading"))
+                                .font(.geist(13, weight: .medium))
+                                .foregroundColor(.primary)
+                            Spacer()
+                            Link("yt-dlp", destination: URL(string: "https://github.com/yt-dlp/yt-dlp") ?? URL(fileURLWithPath: "/"))
+                                .font(.geist(12, weight: .semibold))
+                                .foregroundColor(SiphonTheme.accent)
+                        }
+                        .padding(.vertical, 8)
+                    }
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 4)
+                    .background(
+                        SiphonTheme.cardBackground(cornerRadius: SiphonTheme.radiusCard)
+                    )
+                    .cornerRadius(SiphonTheme.radiusCard)
+                    .overlay(
+                        SiphonTheme.cardBorder(cornerRadius: SiphonTheme.radiusCard)
+                    )
+                }
+
+                // Section 2: Legal & License (Grouped Settings Style Card)
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(languageService.s("legal_disclaimer_title"))
+                        .font(.geist(13, weight: .semibold))
+                        .foregroundColor(.primary)
+
+                    VStack(alignment: .leading, spacing: 10) {
+                        HStack(alignment: .top, spacing: 8) {
+                            Image(systemName: "exclamationmark.shield.fill")
+                                .foregroundColor(SiphonTheme.statusQueued)
+                                .font(.geist(13))
+                                .padding(.top, 1)
+
+                            Text(languageService.s("legal_disclaimer_message"))
+                                .font(.geist(11))
+                                .foregroundColor(.secondary)
+                                .lineSpacing(2)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+
+                        SiphonTheme.subtleDivider
+
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack {
+                                Text(languageService.s("license"))
+                                    .font(.geist(13, weight: .medium))
+                                    .foregroundColor(.primary)
+                                Spacer()
+                                Text("GNU GPL v3.0")
+                                    .font(.geist(12, weight: .medium))
+                                    .foregroundColor(.secondary)
+                            }
+
+                            HStack {
+                                Text(languageService.s("license_desc"))
+                                    .font(.geist(10))
+                                    .foregroundColor(.secondary)
+                                Spacer()
+                                Link(languageService.s("view_license"), destination: URL(string: "https://www.gnu.org/licenses/gpl-3.0.html") ?? URL(fileURLWithPath: "/"))
+                                    .font(.geist(11, weight: .medium))
+                                    .foregroundColor(SiphonTheme.accent)
+                            }
+                        }
+                    }
+                    .padding(14)
+                    .background(
+                        SiphonTheme.cardBackground(cornerRadius: SiphonTheme.radiusCard)
+                    )
+                    .cornerRadius(SiphonTheme.radiusCard)
+                    .overlay(
+                        SiphonTheme.cardBorder(cornerRadius: SiphonTheme.radiusCard)
+                    )
+                }
+
+                // Quick links & Footer
+                VStack(spacing: 8) {
+                    HStack(spacing: 10) {
+                        Link(destination: URL(string: "https://github.com/marspater/jolly-hopper") ?? URL(fileURLWithPath: "/")) {
+                            Label("GitHub", systemImage: "link")
+                                .font(.geist(11, weight: .semibold))
+                                .foregroundColor(SiphonTheme.accent)
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 6)
+                                .siphonInteractiveGlass(cornerRadius: 14)
+                        }
+                        .buttonStyle(.plain)
+
+                        Link(destination: URL(string: "https://github.com/marspater/jolly-hopper/blob/main/README.md") ?? URL(fileURLWithPath: "/")) {
+                            Label("README", systemImage: "doc.text")
+                                .font(.geist(11, weight: .semibold))
+                                .foregroundColor(SiphonTheme.accent)
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 6)
+                                .siphonInteractiveGlass(cornerRadius: 14)
+                        }
+                        .buttonStyle(.plain)
+
+                        Link(destination: URL(string: "https://github.com/marspater/jolly-hopper/blob/main/SUPPORTED_SITES.md") ?? URL(fileURLWithPath: "/")) {
+                            Label(languageService.s("supported_sites"), systemImage: "globe")
+                                .font(.geist(11, weight: .semibold))
+                                .foregroundColor(SiphonTheme.accent)
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 6)
+                                .siphonInteractiveGlass(cornerRadius: 14)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    .padding(.top, 4)
+
+                    Text("© 2026 marspater • All rights reserved")
                         .font(.geist(10))
-                        .foregroundColor(.secondary)
-                    Link(languageService.s("view_license"), destination: URL(string: "https://www.gnu.org/licenses/gpl-3.0.html") ?? URL(fileURLWithPath: "/"))
-                        .font(.geist(11))
+                        .foregroundColor(.secondary.opacity(0.7))
+                        .padding(.bottom, 6)
                 }
-                .padding(14)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(
-                    SiphonTheme.cardBackground(cornerRadius: SiphonTheme.radiusCard)
-                )
-                .cornerRadius(SiphonTheme.radiusCard)
-                .overlay(
-                    SiphonTheme.cardBorder(cornerRadius: SiphonTheme.radiusCard)
-                )
-
-                // Quick links
-                HStack(spacing: 10) {
-                    Link(destination: URL(string: "https://github.com/marspater/jolly-hopper") ?? URL(fileURLWithPath: "/")) {
-                        Label("GitHub", systemImage: "link")
-                            .font(.geist(11, weight: .semibold))
-                            .foregroundColor(SiphonTheme.accent)
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 6)
-                            .background(
-                                Capsule()
-                                    .fill(SiphonTheme.accent.opacity(0.12))
-                                    .background(Capsule().fill(.ultraThinMaterial))
-                            )
-                            .clipShape(Capsule())
-                            .overlay(
-                                Capsule()
-                                    .strokeBorder(
-                                        LinearGradient(
-                                            colors: [SiphonTheme.accent.opacity(0.45), SiphonTheme.accent.opacity(0.18)],
-                                            startPoint: .topLeading,
-                                            endPoint: .bottomTrailing
-                                        ),
-                                        lineWidth: 1
-                                    )
-                            )
-                    }
-                    .buttonStyle(.plain)
-                    
-                    Link(destination: URL(string: "https://github.com/marspater/jolly-hopper/blob/main/README.md") ?? URL(fileURLWithPath: "/")) {
-                        Label("README", systemImage: "doc.text")
-                            .font(.geist(11, weight: .semibold))
-                            .foregroundColor(SiphonTheme.accent)
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 6)
-                            .background(
-                                Capsule()
-                                    .fill(SiphonTheme.accent.opacity(0.12))
-                                    .background(Capsule().fill(.ultraThinMaterial))
-                            )
-                            .clipShape(Capsule())
-                            .overlay(
-                                Capsule()
-                                    .strokeBorder(
-                                        LinearGradient(
-                                            colors: [SiphonTheme.accent.opacity(0.45), SiphonTheme.accent.opacity(0.18)],
-                                            startPoint: .topLeading,
-                                            endPoint: .bottomTrailing
-                                        ),
-                                        lineWidth: 1
-                                    )
-                            )
-                    }
-                    .buttonStyle(.plain)
-                    
-                    Link(destination: URL(string: "https://github.com/marspater/jolly-hopper/blob/main/SUPPORTED_SITES.md") ?? URL(fileURLWithPath: "/")) {
-                        Label(languageService.s("supported_sites"), systemImage: "globe")
-                            .font(.geist(11, weight: .semibold))
-                            .foregroundColor(SiphonTheme.accent)
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 6)
-                            .background(
-                                Capsule()
-                                    .fill(SiphonTheme.accent.opacity(0.12))
-                                    .background(Capsule().fill(.ultraThinMaterial))
-                            )
-                            .clipShape(Capsule())
-                            .overlay(
-                                Capsule()
-                                    .strokeBorder(
-                                        LinearGradient(
-                                            colors: [SiphonTheme.accent.opacity(0.45), SiphonTheme.accent.opacity(0.18)],
-                                            startPoint: .topLeading,
-                                            endPoint: .bottomTrailing
-                                        ),
-                                        lineWidth: 1
-                                    )
-                            )
-                    }
-                    .buttonStyle(.plain)
-                }
-                .padding(.top, 4)
-
-                Text("© 2026 marspater • All rights reserved")
-                    .font(.geist(10))
-                    .foregroundColor(.secondary)
-                    .padding(.bottom, 12)
             }
             .padding(.horizontal, 16)
+            .padding(.top, 6)
         }
         .clipped()
     }

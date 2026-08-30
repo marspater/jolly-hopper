@@ -29,7 +29,7 @@ struct ContentView: View {
     @EnvironmentObject var languageService: LanguageService
     @EnvironmentObject var updateChecker: UpdateChecker
     @State private var showUpdateAlert = false
-    @State private var columnVisibility: NavigationSplitViewVisibility = .automatic
+    @State private var columnVisibility: NavigationSplitViewVisibility = .detailOnly
     @AppStorage("showMenuBarIcon") private var showMenuBarIcon: Bool = true
     @AppStorage(UserDefaultsKeys.theme) private var theme: String = "system"
     
@@ -94,6 +94,44 @@ struct ContentView: View {
         .navigationSplitViewStyle(.balanced)
         .background(.ultraThinMaterial)
         .siphonEnvironmentalBackdrop()
+        .toolbar {
+            ToolbarItemGroup(placement: .primaryAction) {
+                if (appState.selectedNavItem == .downloading || appState.selectedNavItem == .queued) &&
+                    (downloadManager.downloadingCount > 0 || downloadManager.queuedCount > 0) {
+                    Button {
+                        downloadManager.stopAllDownloads()
+                    } label: {
+                        Label(languageService.s("stop_all"), systemImage: "stop.circle")
+                    }
+                    .help(languageService.s("stop_all"))
+                    .accessibilityLabel(languageService.s("stop_all"))
+                } else if appState.selectedNavItem == .completed && !downloadManager.completedDownloads.isEmpty {
+                    Button {
+                        downloadManager.clearDownloads(downloadManager.completedDownloads)
+                    } label: {
+                        Label(languageService.s("clear_history"), systemImage: "trash")
+                    }
+                    .help(languageService.s("clear_history_help"))
+                    .accessibilityLabel(languageService.s("clear_history"))
+                } else if appState.selectedNavItem == .failed && !downloadManager.failedDownloads.isEmpty {
+                    Button {
+                        downloadManager.clearDownloads(downloadManager.failedDownloads)
+                    } label: {
+                        Label(languageService.s("clear_history"), systemImage: "trash")
+                    }
+                    .help(languageService.s("clear_history_help"))
+                    .accessibilityLabel(languageService.s("clear_history"))
+                }
+                
+                Button {
+                    appState.showAddDownloadSheet = true
+                } label: {
+                    Label(languageService.s("new_download"), systemImage: "plus")
+                        .help(languageService.s("new_download"))
+                        .accessibilityLabel(languageService.s("new_download"))
+                }
+            }
+        }
     }
 }
 
@@ -229,44 +267,6 @@ struct DetailView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .toolbar {
-            ToolbarItemGroup(placement: .primaryAction) {
-                if (appState.selectedNavItem == .downloading || appState.selectedNavItem == .queued) &&
-                    (downloadManager.downloadingCount > 0 || downloadManager.queuedCount > 0) {
-                    Button {
-                        downloadManager.stopAllDownloads()
-                    } label: {
-                        Label(languageService.s("stop_all"), systemImage: "stop.circle")
-                    }
-                    .help(languageService.s("stop_all"))
-                    .accessibilityLabel(languageService.s("stop_all"))
-                } else if appState.selectedNavItem == .completed && !downloadManager.completedDownloads.isEmpty {
-                    Button {
-                        downloadManager.clearDownloads(downloadManager.completedDownloads)
-                    } label: {
-                        Label(languageService.s("clear_history"), systemImage: "trash")
-                    }
-                    .help(languageService.s("clear_history_help"))
-                    .accessibilityLabel(languageService.s("clear_history"))
-                } else if appState.selectedNavItem == .failed && !downloadManager.failedDownloads.isEmpty {
-                    Button {
-                        downloadManager.clearDownloads(downloadManager.failedDownloads)
-                    } label: {
-                        Label(languageService.s("clear_history"), systemImage: "trash")
-                    }
-                    .help(languageService.s("clear_history_help"))
-                    .accessibilityLabel(languageService.s("clear_history"))
-                }
-                
-                Button {
-                    appState.showAddDownloadSheet = true
-                } label: {
-                    Label(languageService.s("new_download"), systemImage: "plus")
-                        .help(languageService.s("new_download"))
-                        .accessibilityLabel(languageService.s("new_download"))
-                }
-            }
-        }
     }
 }
 
