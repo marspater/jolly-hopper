@@ -811,11 +811,11 @@ class DownloadManager: ObservableObject {
         clearDownloads([download])
     }
 
-    static func shouldCleanupTemporaryFiles(for status: DownloadStatus) -> Bool {
+    nonisolated static func shouldCleanupTemporaryFiles(for status: DownloadStatus) -> Bool {
         return status == .stopped || status == .failed
     }
 
-    static func extractVideoId(from urlString: String) -> String? {
+    nonisolated static func extractVideoId(from urlString: String) -> String? {
         guard let url = URL(string: urlString),
               let components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
             return nil
@@ -823,7 +823,7 @@ class DownloadManager: ObservableObject {
         return components.queryItems?.first(where: { $0.name == "v" })?.value ?? url.lastPathComponent
     }
 
-    static func isTemporaryFileName(_ fileName: String) -> Bool {
+    nonisolated static func isTemporaryFileName(_ fileName: String) -> Bool {
         let lower = fileName.lowercased()
         return lower.hasSuffix(".part") ||
                lower.hasSuffix(".ytdl") ||
@@ -835,7 +835,7 @@ class DownloadManager: ObservableObject {
                (lower.range(of: #"\.f\d+\.tmp$"#, options: .regularExpression) != nil)
     }
 
-    static func isMatchingTemporaryFile(
+    nonisolated static func isMatchingTemporaryFile(
         fileName: String,
         rawBaseName: String,
         sanitizedBaseName: String,
