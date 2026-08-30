@@ -817,6 +817,7 @@ class DownloadManager: ObservableObject {
 
     nonisolated static func extractVideoId(from urlString: String) -> String? {
         guard let url = URL(string: urlString),
+              url.scheme != nil,
               let components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
             return nil
         }
