@@ -1735,6 +1735,7 @@ class YtdlpService: ObservableObject {
         guard FileManager.default.fileExists(atPath: cookiePath) else { return nil }
         try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: cookiePath)
         
+        // Security: Using -- to prevent argument injection
         let curlArgs = [
             "/usr/bin/curl",
             "-sL",
