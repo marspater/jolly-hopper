@@ -1141,6 +1141,9 @@ struct MediaInfo: Codable {
 
 // MARK: - HTML Entity Decoding Extension
 public extension String {
+    private static let decimalRegex = try? NSRegularExpression(pattern: "&#([0-9]{1,7});", options: [])
+    private static let hexRegex = try? NSRegularExpression(pattern: "&#[xX]([0-9a-fA-F]{1,6});", options: [])
+
     /// Decodes named, decimal (e.g. &#039; or &#39;), and hexadecimal (e.g. &#x27;) HTML entities into plain text.
     func decodingHTMLEntities() -> String {
         guard self.contains("&") else { return self }
@@ -1168,9 +1171,14 @@ public extension String {
             ("&bull;", "•")
         ]
         
+        for (entity, char) in namedEntities {
+            if result.contains(entity) {
+                result = result.replacingOccurrences(of: entity, with: char)
+            }
+        }
+        
         // Replace numeric decimal entities (e.g., &#039; or &#39; or &#160;)
-        let decimalPattern = "&#([0-9]{1,7});"
-        if let regex = try? NSRegularExpression(pattern: decimalPattern, options: []) {
+        if let regex = String.decimalRegex {
             let nsString = result as NSString
             let matches = regex.matches(in: result, options: [], range: NSRange(location: 0, length: nsString.length))
             for match in matches.reversed() {
@@ -1183,8 +1191,7 @@ public extension String {
         }
         
         // Replace numeric hexadecimal entities (e.g., &#x27; or &#X27;)
-        let hexPattern = "&#[xX]([0-9a-fA-F]{1,6});"
-        if let regex = try? NSRegularExpression(pattern: hexPattern, options: []) {
+        if let regex = String.hexRegex {
             let nsString = result as NSString
             let matches = regex.matches(in: result, options: [], range: NSRange(location: 0, length: nsString.length))
             for match in matches.reversed() {
@@ -1194,10 +1201,6 @@ public extension String {
                     result = (result as NSString).replacingCharacters(in: match.range, with: charStr)
                 }
             }
-        }
-        
-        for (entity, replacement) in namedEntities {
-            result = result.replacingOccurrences(of: entity, with: replacement)
         }
         
         return result
