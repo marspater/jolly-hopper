@@ -432,5 +432,67 @@ final class MediaInfoTests: XCTestCase {
         XCTAssertEqual(resolved.count, 1)
         XCTAssertEqual(resolved[0].formatId, "140-23", "Audio-only download should pick original track over dubbed track")
     }
+
+    // MARK: - MediaInfo.prunedForCompletion Tests
+
+    func testPrunedForCompletion_PopulatedMediaInfo_ClearsHeavyMetadataAndRetainsEssentialInfo() {
+        let fullFormat = MediaFormat(
+            formatId: "1080p",
+            ext: "mp4",
+            resolution: "1920x1080",
+            fps: 60.0
+        )
+        let subtitle = SubtitleInfo(url: "https://example.com/sub.vtt", ext: "vtt", name: "English")
+        let chapter = ChapterInfo(title: "Intro", startTime: 0.0, endTime: 10.0)
+
+        let mediaInfo = MediaInfo(
+            id: "vid_12345",
+            title: "Full Metadata Test Video",
+            description: "Heavy description text that should be pruned",
+            thumbnail: "https://example.com/thumb.jpg",
+            duration: 300.0,
+            uploader: "Test Creator",
+            uploadDate: "20231025",
+            viewCount: 15000,
+            likeCount: 1200,
+            formats: [fullFormat],
+            subtitles: ["en": [subtitle]],
+            automaticCaptions: ["en": [subtitle]],
+            chapters: [chapter],
+            playlist: "Test Playlist",
+            playlistIndex: 1,
+            playlistCount: 5,
+            webpageUrl: "https://example.com/watch?v=vid_12345",
+            originalUrl: "https://example.com/watch?v=vid_12345",
+            formatProtocol: "https",
+            manifestUrl: "https://example.com/manifest.m3u8"
+        )
+
+        let pruned = mediaInfo.prunedForCompletion()
+
+        // Verify retained UI metadata
+        XCTAssertEqual(pruned.id, "vid_12345")
+        XCTAssertEqual(pruned.title, "Full Metadata Test Video")
+        XCTAssertEqual(pruned.thumbnail, "https://example.com/thumb.jpg")
+        XCTAssertEqual(pruned.duration, 300.0)
+        XCTAssertEqual(pruned.uploader, "Test Creator")
+        XCTAssertEqual(pruned.uploadDate, "20231025")
+        XCTAssertEqual(pruned.viewCount, 15000)
+        XCTAssertEqual(pruned.likeCount, 1200)
+        XCTAssertEqual(pruned.playlist, "Test Playlist")
+        XCTAssertEqual(pruned.playlistIndex, 1)
+        XCTAssertEqual(pruned.playlistCount, 5)
+        XCTAssertEqual(pruned.webpageUrl, "https://example.com/watch?v=vid_12345")
+        XCTAssertEqual(pruned.originalUrl, "https://example.com/watch?v=vid_12345")
+
+        // Verify cleared heavy fields
+        XCTAssertNil(pruned.description, "Description should be pruned")
+        XCTAssertNil(pruned.formats, "Formats array should be pruned")
+        XCTAssertNil(pruned.subtitles, "Subtitles dictionary should be pruned")
+        XCTAssertNil(pruned.automaticCaptions, "Automatic captions dictionary should be pruned")
+        XCTAssertNil(pruned.chapters, "Chapters array should be pruned")
+        XCTAssertNil(pruned.formatProtocol, "Format protocol should be pruned")
+        XCTAssertNil(pruned.manifestUrl, "Manifest URL should be pruned")
+    }
 }
 
