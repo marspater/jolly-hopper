@@ -201,110 +201,140 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
         updateProgress = 0
     }
     
-    func checkForUpdates(manual: Bool = false) async {
-        guard !isChecking else { return }
-        isChecking = true
+    private struct ReleaseInfo {
+        let cleanTag: String
+        let releasePageURL: URL?
+        let downloadURL: URL?
+        let downloadAssetName: String?
+        let checksumURL: URL?
+    }
+
+    private func fetchLatestReleaseInfo() async throws -> ReleaseInfo? {
         guard let url = URL(string: "https://api.github.com/repos/\(repoOwner)/\(repoName)/releases/latest") else {
-            isChecking = false
-            return
+            return nil
         }
-        
+
         var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 15)
         request.setValue("Siphon-App/\(currentVersion)", forHTTPHeaderField: "User-Agent")
         request.setValue("application/vnd.github.v3+json", forHTTPHeaderField: "Accept")
-        
-        do {
-            let (data, response) = try await URLSession.shared.data(for: request)
-            if let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode != 200 {
-                throw NSError(domain: "UpdateChecker", code: httpResponse.statusCode, userInfo: [NSLocalizedDescriptionKey: "GitHub returned HTTP \(httpResponse.statusCode)"])
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        if let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode != 200 {
+            throw NSError(domain: "UpdateChecker", code: httpResponse.statusCode, userInfo: [NSLocalizedDescriptionKey: "GitHub returned HTTP \(httpResponse.statusCode)"])
+        }
+
+        guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let tagName = json["tag_name"] as? String else {
+            return nil
+        }
+
+        let cleanTag = tagName.replacingOccurrences(of: "v", with: "")
+        let releasePageURL = (json["html_url"] as? String).flatMap { URL(string: $0) }
+
+        var downloadURL: URL?
+        var downloadAssetName: String?
+        var checksumURL: URL?
+
+        if let assets = json["assets"] as? [[String: Any]] {
+            #if arch(arm64)
+            let targetArch = "arm64"
+            let altArch = "aarch64"
+            let nonTargetArch = "x86_64"
+            #else
+            let targetArch = "x86_64"
+            let altArch = "intel"
+            let nonTargetArch = "arm64"
+            #endif
+
+            // Prefer packages matching current architecture, then universal, and prefer .dmg over .zip
+            let sortedAssets = assets.sorted { a, b in
+                let nameA = (a["name"] as? String)?.lowercased() ?? ""
+                let nameB = (b["name"] as? String)?.lowercased() ?? ""
+
+                let aMatchesTarget = nameA.contains(targetArch) || nameA.contains(altArch) || nameA.contains("universal")
+                let bMatchesTarget = nameB.contains(targetArch) || nameB.contains(altArch) || nameB.contains("universal")
+                let aMatchesNonTarget = nameA.contains(nonTargetArch)
+                let bMatchesNonTarget = nameB.contains(nonTargetArch)
+
+                if aMatchesTarget && !bMatchesTarget { return true }
+                if !aMatchesTarget && bMatchesTarget { return false }
+                if !aMatchesNonTarget && bMatchesNonTarget { return true }
+                if aMatchesNonTarget && !bMatchesNonTarget { return false }
+
+                if nameA.hasSuffix(".dmg") && !nameB.hasSuffix(".dmg") { return true }
+                return false
             }
-            if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-               let tagName = json["tag_name"] as? String {
-                
-                let cleanTag = tagName.replacingOccurrences(of: "v", with: "")
-                latestVersion = cleanTag
-                hasUpdate = cleanTag.compare(currentVersion, options: .numeric) == .orderedDescending
-                
-                if let htmlUrlStr = json["html_url"] as? String, let htmlUrl = URL(string: htmlUrlStr) {
-                    releasePageURL = htmlUrl
+
+            if let dlpAsset = sortedAssets.first(where: {
+                let name = ($0["name"] as? String)?.lowercased() ?? ""
+                return name.hasSuffix(".dmg") || name.hasSuffix(".zip") || name.hasSuffix(".app.zip")
+            }), let downloadUrlStr = dlpAsset["browser_download_url"] as? String {
+                downloadURL = URL(string: downloadUrlStr)
+                let assetName = (dlpAsset["name"] as? String) ?? ""
+                downloadAssetName = assetName
+
+                let lowerAssetName = assetName.lowercased()
+                if let sumAsset = assets.first(where: {
+                    let name = ($0["name"] as? String)?.lowercased() ?? ""
+                    return name == "\(lowerAssetName).sha256" ||
+                           name == "\(lowerAssetName).sha256.txt" ||
+                           name == "\(lowerAssetName).sha256sum" ||
+                           name == "sha256sums.txt" ||
+                           name == "checksums.txt" ||
+                           name == "sha256sum.txt" ||
+                           name == "checksums.sha256"
+                }), let sumUrlStr = sumAsset["browser_download_url"] as? String {
+                    checksumURL = URL(string: sumUrlStr)
                 }
-                
-                downloadURL = nil
-                downloadAssetName = nil
-                expectedChecksum = nil
-                checksumURL = nil
-                
-                if let assets = json["assets"] as? [[String: Any]] {
-                    #if arch(arm64)
-                    let targetArch = "arm64"
-                    let altArch = "aarch64"
-                    let nonTargetArch = "x86_64"
-                    #else
-                    let targetArch = "x86_64"
-                    let altArch = "intel"
-                    let nonTargetArch = "arm64"
-                    #endif
+            }
+        }
 
-                    // Prefer packages matching current architecture, then universal, and prefer .dmg over .zip
-                    let sortedAssets = assets.sorted { a, b in
-                        let nameA = (a["name"] as? String)?.lowercased() ?? ""
-                        let nameB = (b["name"] as? String)?.lowercased() ?? ""
+        return ReleaseInfo(
+            cleanTag: cleanTag,
+            releasePageURL: releasePageURL,
+            downloadURL: downloadURL,
+            downloadAssetName: downloadAssetName,
+            checksumURL: checksumURL
+        )
+    }
 
-                        let aMatchesTarget = nameA.contains(targetArch) || nameA.contains(altArch) || nameA.contains("universal")
-                        let bMatchesTarget = nameB.contains(targetArch) || nameB.contains(altArch) || nameB.contains("universal")
-                        let aMatchesNonTarget = nameA.contains(nonTargetArch)
-                        let bMatchesNonTarget = nameB.contains(nonTargetArch)
+    func checkForUpdates(manual: Bool = false) async {
+        guard !isChecking else { return }
+        isChecking = true
+        defer { isChecking = false }
 
-                        if aMatchesTarget && !bMatchesTarget { return true }
-                        if !aMatchesTarget && bMatchesTarget { return false }
-                        if !aMatchesNonTarget && bMatchesNonTarget { return true }
-                        if aMatchesNonTarget && !bMatchesNonTarget { return false }
+        do {
+            guard let releaseInfo = try await fetchLatestReleaseInfo() else {
+                return
+            }
 
-                        if nameA.hasSuffix(".dmg") && !nameB.hasSuffix(".dmg") { return true }
-                        return false
-                    }
+            latestVersion = releaseInfo.cleanTag
+            hasUpdate = releaseInfo.cleanTag.compare(currentVersion, options: .numeric) == .orderedDescending
 
-                    if let dlpAsset = sortedAssets.first(where: {
-                        let name = ($0["name"] as? String)?.lowercased() ?? ""
-                        return name.hasSuffix(".dmg") || name.hasSuffix(".zip") || name.hasSuffix(".app.zip")
-                    }), let downloadUrlStr = dlpAsset["browser_download_url"] as? String {
-                        downloadURL = URL(string: downloadUrlStr)
-                        let assetName = (dlpAsset["name"] as? String) ?? ""
-                        downloadAssetName = assetName
-                        
-                        // Check if an exact corresponding sha256 checksum asset or central manifest exists
-                        let lowerAssetName = assetName.lowercased()
-                        if let sumAsset = assets.first(where: {
-                            let name = ($0["name"] as? String)?.lowercased() ?? ""
-                            return name == "\(lowerAssetName).sha256" ||
-                                   name == "\(lowerAssetName).sha256.txt" ||
-                                   name == "\(lowerAssetName).sha256sum" ||
-                                   name == "sha256sums.txt" ||
-                                   name == "checksums.txt" ||
-                                   name == "sha256sum.txt" ||
-                                   name == "checksums.sha256"
-                        }), let sumUrlStr = sumAsset["browser_download_url"] as? String {
-                            checksumURL = URL(string: sumUrlStr)
-                        }
-                    }
-                }
-                
-                if !hasUpdate {
-                    showUpToDateMessage = true
-                    if manual {
-                        NotificationService.shared.sendAppUpdateNotification(
-                            title: "Siphon is Up to Date",
-                            body: "Version \(currentVersion) is the latest version available."
-                        )
-                    }
-                    try? await Task.sleep(nanoseconds: 3 * 1_000_000_000)
-                    showUpToDateMessage = false
-                } else if manual {
+            if let htmlUrl = releaseInfo.releasePageURL {
+                releasePageURL = htmlUrl
+            }
+
+            downloadURL = releaseInfo.downloadURL
+            downloadAssetName = releaseInfo.downloadAssetName
+            expectedChecksum = nil
+            checksumURL = releaseInfo.checksumURL
+
+            if !hasUpdate {
+                showUpToDateMessage = true
+                if manual {
                     NotificationService.shared.sendAppUpdateNotification(
-                        title: "Update Available",
-                        body: "Siphon v\(cleanTag) is now available."
+                        title: "Siphon is Up to Date",
+                        body: "Version \(currentVersion) is the latest version available."
                     )
                 }
+                try? await Task.sleep(nanoseconds: 3 * 1_000_000_000)
+                showUpToDateMessage = false
+            } else if manual {
+                NotificationService.shared.sendAppUpdateNotification(
+                    title: "Update Available",
+                    body: "Siphon v\(releaseInfo.cleanTag) is now available."
+                )
             }
         } catch {
             LoggerService.shared.log("Failed to check for app updates: \(error.localizedDescription)", level: .warning)
@@ -319,7 +349,6 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
                 )
             }
         }
-        isChecking = false
     }
     
     func downloadAndInstallUpdate() async {
