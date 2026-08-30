@@ -73,7 +73,10 @@ struct MenuBarView: View {
             }
             
             Button {
-                if let clipboard = NSPasteboard.general.string(forType: .string) {
+                if let clipboard = NSPasteboard.general.string(forType: .string)?.trimmingCharacters(in: .whitespacesAndNewlines),
+                   let parsedURL = URL(string: clipboard),
+                   let scheme = parsedURL.scheme?.lowercased(),
+                   (scheme == "http" || scheme == "https") {
                     url = clipboard
                     isPasted = true
                     Task {

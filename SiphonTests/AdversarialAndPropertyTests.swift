@@ -231,4 +231,41 @@ final class AdversarialAndPropertyTests: XCTestCase {
         XCTAssertEqual(resolved[0].formatId, "137", "Should fall back gracefully to valid 1080p stream")
         XCTAssertEqual(resolved[1].formatId, "140")
     }
+
+    // MARK: - 5. Clipboard URL Validation Tests
+
+    func testClipboardURLValidationRejectsNonHTTPAndSensitiveData() {
+        let invalidInputs = [
+            "Password123!",
+            "file:///etc/passwd",
+            "javascript:alert(1)",
+            "ftp://example.com/file",
+            "  not a url  ",
+            ""
+        ]
+
+        let validate: (String) -> String? = { input in
+            let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard let parsed = URL(string: trimmed),
+                  let scheme = parsed.scheme?.lowercased(),
+                  (scheme == "http" || scheme == "https") else {
+                return nil
+            }
+            return trimmed
+        }
+
+        for input in invalidInputs {
+            XCTAssertNil(validate(input), "Clipboard validation should reject invalid input: '\(input)'")
+        }
+
+        let validInputs = [
+            "https://youtube.com/watch?v=123",
+            "http://example.com/video.mp4",
+            "  https://vimeo.com/123456  "
+        ]
+
+        for input in validInputs {
+            XCTAssertNotNil(validate(input), "Clipboard validation should accept valid HTTP/HTTPS URL: '\(input)'")
+        }
+    }
 }

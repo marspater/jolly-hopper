@@ -158,8 +158,10 @@ struct AddDownloadView: View {
             }
 
             // Handle Clipboard and External URLs
-            if let clipboardString = NSPasteboard.general.string(forType: .string),
-               clipboardString.hasPrefix("http") {
+            if let clipboardString = NSPasteboard.general.string(forType: .string)?.trimmingCharacters(in: .whitespacesAndNewlines),
+               let parsedURL = URL(string: clipboardString),
+               let scheme = parsedURL.scheme?.lowercased(),
+               (scheme == "http" || scheme == "https") {
                 urlInput = clipboardString
             }
 
@@ -536,7 +538,10 @@ struct AddDownloadView: View {
                 )
 
                 Button {
-                    if let clipboardString = NSPasteboard.general.string(forType: .string) {
+                    if let clipboardString = NSPasteboard.general.string(forType: .string)?.trimmingCharacters(in: .whitespacesAndNewlines),
+                       let parsedURL = URL(string: clipboardString),
+                       let scheme = parsedURL.scheme?.lowercased(),
+                       (scheme == "http" || scheme == "https") {
                         urlInput = clipboardString
                         isPasted = true
                         Task {
