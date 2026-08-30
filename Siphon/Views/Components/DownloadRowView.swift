@@ -363,7 +363,7 @@ struct DownloadRowView: View {
                                 .resizable()
                                 .aspectRatio(contentMode: .fill)
                         case .failure, .empty:
-                            if let filePath = download.filePath, FileManager.default.fileExists(atPath: filePath.path) {
+                            if let filePath = download.filePath {
                                 FileThumbnailView(fileURL: filePath)
                             } else {
                                 thumbnailPlaceholder
@@ -372,7 +372,7 @@ struct DownloadRowView: View {
                             thumbnailPlaceholder
                         }
                     }
-                } else if let filePath = download.filePath, FileManager.default.fileExists(atPath: filePath.path) {
+                } else if let filePath = download.filePath {
                     FileThumbnailView(fileURL: filePath)
                 } else {
                     thumbnailPlaceholder

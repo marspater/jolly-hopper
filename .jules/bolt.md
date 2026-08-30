@@ -26,3 +26,7 @@
 ## 2026-08-15 - Thread-Safe In-Memory Caching for System Workspace Queries
 **Learning:** Querying `NSWorkspace.shared.urlForApplication(withBundleIdentifier:)` performs workspace and bundle resolution that can be redundant and slow when called repeatedly. Caching the result thread-safely with `NSLock` avoids unnecessary workspace lookups.
 **Action:** Cache static or slowly-changing system workspace lookup results in memory with thread safety (`NSLock`) when invoked from UI views or utility classes.
+
+## 2026-08-30 - Eliminating Sync Disk I/O from SwiftUI View Body
+**Learning:** Performing `FileManager.default.fileExists(atPath:)` inside `@MainActor` SwiftUI `body` computations blocks the main render loop and causes frame drops. Moving file existence checks into `Task` or asynchronous child view initializers ensures zero main-thread blocking during view evaluation.
+**Action:** Always avoid calling synchronous file system APIs (`FileManager.default.fileExists`) directly inside SwiftUI view bodies; pass properties down to subviews or evaluate inside asynchronous tasks (`.task`).
