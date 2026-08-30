@@ -44,6 +44,7 @@ struct DownloadListView: View {
                                 Label(languageService.s("clear_history"), systemImage: "trash")
                             }
                             .help(languageService.s("clear_history_help"))
+                            .accessibilityLabel(languageService.s("clear_history_help"))
                         }
                     }
                 }
