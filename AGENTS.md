@@ -26,6 +26,7 @@ Before analyzing, planning, or editing any files:
 
 ### 3. Execution & Code Standards
 - **Minimal & Targeted Diffs**: Limit edits strictly to what is necessary for the objective. Do not reformat or refactor unrelated files.
+- **No Ad-Hoc Scripts**: Never commit or include temporary root-level audit, search, rewrite, or scratch scripts (`check_*`, `find_*`, `fix_*`, `print_code.py`, `test_a11y*`) in commits or pull requests. All tests must be integrated as supported test cases within the Xcode test suite (`SiphonTests`).
 - **Respect Repo Conventions**: Follow the architectural patterns, typing practices, and formatting established in recent commits.
 - **Validation**:
   - Run project linting, type checks, and formatting commands before finalizing.
@@ -35,4 +36,4 @@ Before analyzing, planning, or editing any files:
 
 ### 4. Git Hygiene
 - Write concise Conventional Commit messages (`feat: ...`, `fix: ...`, `refactor: ...`, `test: ...`).
-- Never leave behind merge conflict markers, temporary debug logs, or unstaged scratch files.
+- Never leave behind merge conflict markers, temporary debug logs, unstaged scratch files, or unmaintained executable surface.
