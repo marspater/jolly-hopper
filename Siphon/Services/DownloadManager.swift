@@ -811,8 +811,50 @@ class DownloadManager: ObservableObject {
         clearDownloads([download])
     }
 
+    static func shouldCleanupTemporaryFiles(for status: DownloadStatus) -> Bool {
+        return status == .stopped || status == .failed
+    }
+
+    static func extractVideoId(from urlString: String) -> String? {
+        guard let url = URL(string: urlString),
+              let components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
+            return nil
+        }
+        return components.queryItems?.first(where: { $0.name == "v" })?.value ?? url.lastPathComponent
+    }
+
+    static func isTemporaryFileName(_ fileName: String) -> Bool {
+        let lower = fileName.lowercased()
+        return lower.hasSuffix(".part") ||
+               lower.hasSuffix(".ytdl") ||
+               lower.hasSuffix(".temp") ||
+               lower.hasSuffix(".tmp") ||
+               (lower.range(of: #"\.f\d+\.part$"#, options: .regularExpression) != nil) ||
+               (lower.range(of: #"\.f\d+\.ytdl$"#, options: .regularExpression) != nil) ||
+               (lower.range(of: #"\.f\d+\.temp$"#, options: .regularExpression) != nil) ||
+               (lower.range(of: #"\.f\d+\.tmp$"#, options: .regularExpression) != nil)
+    }
+
+    static func isMatchingTemporaryFile(
+        fileName: String,
+        rawBaseName: String,
+        sanitizedBaseName: String,
+        videoId: String?
+    ) -> Bool {
+        let matchesPrefix = (!rawBaseName.isEmpty && fileName.hasPrefix(rawBaseName)) ||
+                            (!sanitizedBaseName.isEmpty && fileName.hasPrefix(sanitizedBaseName))
+        let matchesId: Bool
+        if let vid = videoId, !vid.isEmpty {
+            matchesId = fileName.contains(vid)
+        } else {
+            matchesId = false
+        }
+
+        return (matchesPrefix || matchesId) && isTemporaryFileName(fileName)
+    }
+
     private func cleanupTemporaryFiles(for download: Download) {
-        guard download.status == .stopped || download.status == .failed else { return }
+        guard Self.shouldCleanupTemporaryFiles(for: download.status) else { return }
 
         let folder = download.options.saveFolder
         let title = download.title
@@ -821,50 +863,27 @@ class DownloadManager: ObservableObject {
 
         Task.detached {
             let fileManager = FileManager.default
-            
+
             let sanitize: (String) -> String = { input in
                 let invalidChars = CharacterSet(charactersIn: "\\/:*?\"<>|")
                 return input.components(separatedBy: invalidChars).joined(separator: "_")
             }
 
-            let videoId: String? = {
-                if let url = URL(string: urlString),
-                   let components = URLComponents(url: url, resolvingAgainstBaseURL: false) {
-                    return components.queryItems?.first(where: { $0.name == "v" })?.value ?? url.lastPathComponent
-                }
-                return nil
-            }()
-
+            let videoId = Self.extractVideoId(from: urlString)
             let sanitizedBaseName = sanitize(rawBaseName)
 
             do {
                 let contents = try fileManager.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)
-                
+
                 for file in contents {
                     let fileName = file.lastPathComponent
-
-                    let matchesPrefix = (!rawBaseName.isEmpty && fileName.hasPrefix(rawBaseName)) || (!sanitizedBaseName.isEmpty && fileName.hasPrefix(sanitizedBaseName))
-                    let matchesId: Bool
-                    if let vid = videoId, !vid.isEmpty {
-                        matchesId = fileName.contains(vid)
-                    } else {
-                        matchesId = false
-                    }
-
-                    if matchesPrefix || matchesId {
-                        let lower = fileName.lowercased()
-                        let isTemp = lower.hasSuffix(".part") ||
-                                     lower.hasSuffix(".ytdl") ||
-                                     lower.hasSuffix(".temp") ||
-                                     lower.hasSuffix(".tmp") ||
-                                     (lower.range(of: #"\.f\d+\.part$"#, options: .regularExpression) != nil) ||
-                                     (lower.range(of: #"\.f\d+\.ytdl$"#, options: .regularExpression) != nil) ||
-                                     (lower.range(of: #"\.f\d+\.temp$"#, options: .regularExpression) != nil) ||
-                                     (lower.range(of: #"\.f\d+\.tmp$"#, options: .regularExpression) != nil)
-
-                        if isTemp {
-                            try? fileManager.removeItem(at: file)
-                        }
+                    if Self.isMatchingTemporaryFile(
+                        fileName: fileName,
+                        rawBaseName: rawBaseName,
+                        sanitizedBaseName: sanitizedBaseName,
+                        videoId: videoId
+                    ) {
+                        try? fileManager.removeItem(at: file)
                     }
                 }
             } catch {
