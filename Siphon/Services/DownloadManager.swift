@@ -377,7 +377,7 @@ class DownloadManager: ObservableObject {
         objectWillChange.send()
 
         do {
-            let (resolvedBaseName, candidateKey) = try await prepareDownloadMetadata(for: download)
+            let (resolvedBaseName, candidateKey) = try await prepareDownloadMetadata(download)
 
             reserveOutputPath(candidateKey)
             defer {
@@ -456,7 +456,7 @@ class DownloadManager: ObservableObject {
         }.value
     }
 
-    private func performDownloadProcess(_ download: Download) async throws -> String {
+    private func performDownloadProcess(_ download: Download) async throws -> URL {
         updateStatus(for: download, to: .downloading)
         objectWillChange.send()
 
@@ -511,7 +511,7 @@ class DownloadManager: ObservableObject {
         return outputPath
     }
 
-    private func handleDownloadCompletion(_ download: Download, outputPath: String) {
+    private func handleDownloadCompletion(_ download: Download, outputPath: URL) {
         download.filePath = outputPath
         download.diagnostics.exitStatus = "Completed (0)"
         updateStatus(for: download, to: .completed)
