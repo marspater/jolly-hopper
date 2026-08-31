@@ -1806,10 +1806,16 @@ struct AddDownloadView: View {
         }
     }
 
-    private func formatNumber(_ number: Int) -> String {
+    // Bolt Performance Optimization: Cache static NumberFormatter instance to avoid expensive repeated allocations during view rendering
+    private static let viewCountFormatter: NumberFormatter = {
         let formatter = NumberFormatter()
         formatter.numberStyle = .decimal
         formatter.maximumFractionDigits = 1
+        return formatter
+    }()
+
+    private func formatNumber(_ number: Int) -> String {
+        let formatter = Self.viewCountFormatter
         if number >= 1_000_000_000 { return "\(formatter.string(from: NSNumber(value: Double(number) / 1_000_000_000)) ?? "")B" }
         else if number >= 1_000_000 { return "\(formatter.string(from: NSNumber(value: Double(number) / 1_000_000)) ?? "")M" }
         else if number >= 1_000 { return "\(formatter.string(from: NSNumber(value: Double(number) / 1_000)) ?? "")K" }
