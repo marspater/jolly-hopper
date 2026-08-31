@@ -92,7 +92,14 @@ Record the starting commit mentally as the baseline for the task.
 
 If `HEAD` is behind `origin/main`, do not begin analysis until the repository has been synchronized.
 
-If the repository contains local modifications that cannot safely be discarded, stop and report that condition rather than silently building on top of stale state.
+### Disposable Jules Environment
+
+The Jules task environment is considered disposable.
+
+The bootstrap process is authorized to reset the working tree to the latest
+`origin/main` and remove untracked/ignored files before a task begins.
+
+Do not preserve stale local changes from previous Jules sessions.
 
 ---
 
