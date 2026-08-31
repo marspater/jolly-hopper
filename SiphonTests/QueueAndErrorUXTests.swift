@@ -756,5 +756,23 @@ final class QueueAndErrorUXTests: XCTestCase {
         XCTAssertEqual(manager.failedDownloads.count, 2)
         XCTAssertEqual(manager.failedCount, 2)
     }
+
+    func testErrorUXInfoSanitizesSensitiveTokensInRawError() {
+        let lang = LanguageService()
+        let download = Download(url: "https://example.com/watch", options: .default)
+        download.errorMessage = "403 Forbidden: https://video.example.com/stream.m3u8?token=secret999&auth=123"
+        download.log = "Error line 1: Cookie: session=abcde12345\nError line 2: token=secret999\nError line 3: https://video.example.com/file.mp4?auth=secret123"
+
+        let uxInfo = download.errorUXInfo(lang: lang)
+        XCTAssertNotNil(uxInfo)
+        guard let info = uxInfo else { return }
+
+        XCTAssertFalse(info.rawError.contains("token=secret999"))
+        XCTAssertFalse(info.rawError.contains("session=abcde12345"))
+        XCTAssertFalse(info.rawError.contains("auth=secret123"))
+        XCTAssertTrue(info.rawError.contains("Cookie: <REDACTED>"))
+        XCTAssertTrue(info.rawError.contains("token=<REDACTED>"))
+        XCTAssertTrue(info.rawError.contains("https://video.example.com/file.mp4"))
+    }
 }
 

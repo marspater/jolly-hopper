@@ -242,6 +242,7 @@ class LoggerService: ObservableObject {
     }
     
     enum LogLevel: String {
+        case debug = "DEBUG"
         case info = "INFO"
         case warning = "WARN"
         case error = "ERROR"

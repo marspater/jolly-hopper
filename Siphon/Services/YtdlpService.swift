@@ -1740,7 +1740,9 @@ class YtdlpService: ObservableObject {
                 if case .commandFailed(let output) = error {
                     dumpOutput = output
                 }
-            } catch {}
+            } catch {
+                LoggerService.shared.log("Non-YtdlpError during raw cookie dump-pages: \(error.localizedDescription)", level: .debug)
+            }
             
             if let output = dumpOutput, !output.isEmpty {
                 var rawChunks: [String] = []
@@ -1965,7 +1967,9 @@ class YtdlpService: ObservableObject {
                             if case .commandFailed(let output) = error {
                                 embedDump = output
                             }
-                        } catch {}
+                        } catch {
+                            LoggerService.shared.log("Non-YtdlpError during embed dump-pages: \(error.localizedDescription)", level: .debug)
+                        }
                         
                         if let output = embedDump, !output.isEmpty {
                             var embedChunks: [String] = []

@@ -122,7 +122,7 @@ class Download: ObservableObject, Identifiable {
         }
         
         let lower = error.lowercased()
-        let rawError = log.isEmpty ? error : log
+        let rawError = LoggerService.sanitizeDiagnosticText(log.isEmpty ? error : log)
         
         if lower.contains("sign in to confirm") || lower.contains("bot") || lower.contains("cloudflare") || lower.contains("login") || lower.contains("cookies") {
             let isYouTube = url.lowercased().contains("youtube.com") || url.lowercased().contains("youtu.be")
