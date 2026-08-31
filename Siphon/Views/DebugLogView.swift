@@ -42,7 +42,7 @@ struct DebugLogView: View {
                         .background(Color.primary.opacity(0.06))
                         .clipShape(Circle())
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.bouncy(scale: 0.90, hover: 1.10))
                 .help("Close")
                 .accessibilityLabel("Close")
                 .keyboardShortcut(.cancelAction)
@@ -97,7 +97,7 @@ struct DebugLogView: View {
                     .background(Color.primary.opacity(0.06))
                     .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusControl))
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.bouncy(scale: 0.95, hover: 1.025))
 
                 Button {
                     logger.clearLogs()
@@ -114,7 +114,7 @@ struct DebugLogView: View {
                     .background(Color.primary.opacity(0.06))
                     .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusControl))
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.bouncy(scale: 0.95, hover: 1.025))
 
                 Spacer()
 
@@ -133,7 +133,7 @@ struct DebugLogView: View {
                     .background(Color.primary.opacity(0.06))
                     .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusControl))
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.bouncy(scale: 0.95, hover: 1.025))
             }
             .padding(.horizontal, 18)
             .padding(.bottom, 16)

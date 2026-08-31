@@ -450,7 +450,7 @@ struct SponsorView: View {
                     )
             )
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.bouncy(scale: 0.96, hover: 1.02))
         .padding(.horizontal, 8)
         .onHover { hovering in
             withAnimation(.spring(response: 0.25, dampingFraction: 0.8)) {

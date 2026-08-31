@@ -366,7 +366,7 @@ struct PreferencesView: View {
                             .stroke(Color.white.opacity(0.25), lineWidth: 1)
                     )
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.bouncy(scale: 0.95, hover: 1.025))
                 .shadow(color: SiphonTheme.accent.opacity(0.25), radius: 6, y: 2)
             }
             .padding(.vertical, 2)
@@ -408,7 +408,7 @@ struct PreferencesView: View {
                             .padding(.vertical, 4)
                             .siphonInteractiveGlass(cornerRadius: 6)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.bouncy(scale: 0.95, hover: 1.025))
                 }
             }
         }

@@ -703,7 +703,8 @@ struct AddDownloadView: View {
 
                             AsyncImage(url: item.thumbnailURL) { image in image.resizable().aspectRatio(contentMode: .fill) }
                             placeholder: { Rectangle().fill(Color.gray.opacity(0.2)) }
-                            .frame(width: 50, height: 30).cornerRadius(4)
+                            .frame(width: 50, height: 30)
+                            .clipShape(RoundedRectangle(cornerRadius: 4))
 
                             VStack(alignment: .leading) {
                                 Text(item.title).font(.geist(13, weight: .medium)).lineLimit(1)
