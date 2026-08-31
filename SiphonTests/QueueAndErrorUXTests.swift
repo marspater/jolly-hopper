@@ -42,6 +42,15 @@ final class QueueAndErrorUXTests: XCTestCase {
         XCTAssertEqual(customDownload.sourceDomain, "Media.mysite.org")
     }
     
+    func testGenerateUpdateScriptContainsRequiredSteps() {
+        let script = UpdateChecker.generateUpdateScript()
+        XCTAssertTrue(script.contains("set -e"))
+        XCTAssertTrue(script.contains("/usr/bin/codesign --verify"))
+        XCTAssertTrue(script.contains("EXPECTED_BUNDLE_ID"))
+        XCTAssertTrue(script.contains("BACKUP_PATH"))
+        XCTAssertTrue(script.contains("ditto \"$NEW_APP\" \"$APP_PATH\""))
+    }
+    
     func testFormatSubtitleGeneration() {
         let lang = LanguageService()
         var options = DownloadOptions.default

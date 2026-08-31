@@ -366,6 +366,47 @@ final class YtdlpServiceTests: XCTestCase {
         ])
     }
 
+    func testThreadSafeOutputStateFinalPathHandling() {
+        let state = ThreadSafeOutputState()
+
+        // 1. Initially getFinalPath() must return nil
+        XCTAssertNil(state.getFinalPath(), "Initial finalPath should be nil")
+
+        // 2. Setting an empty or whitespace-only/quote-only string should be ignored
+        state.setFinalPath("")
+        XCTAssertNil(state.getFinalPath(), "Empty string should not update finalPath")
+
+        state.setFinalPath("   \"\"   ")
+        XCTAssertNil(state.getFinalPath(), "Whitespace/quotes-only string should not update finalPath")
+
+        // 3. Setting a valid path with surrounding quotes and whitespace should clean and store the path
+        state.setFinalPath("   \"/tmp/final_output_file.mp4\"   ")
+        XCTAssertEqual(state.getFinalPath(), "/tmp/final_output_file.mp4")
+
+        // 4. Updating finalPath with another valid path overwrites the existing value
+        state.setFinalPath("'/tmp/overwritten_output.mp4'")
+        XCTAssertEqual(state.getFinalPath(), "/tmp/overwritten_output.mp4")
+    }
+
+    func testThreadSafeOutputStateFinalPathConcurrency() {
+        let state = ThreadSafeOutputState()
+        let group = DispatchGroup()
+        let iterations = 100
+
+        for i in 0..<iterations {
+            group.enter()
+            DispatchQueue.global().async {
+                state.setFinalPath("/tmp/path_\(i).mp4")
+                _ = state.getFinalPath()
+                group.leave()
+            }
+        }
+
+        let result = group.wait(timeout: .now() + 5.0)
+        XCTAssertEqual(result, .success, "Concurrent access to ThreadSafeOutputState timed out")
+        XCTAssertNotNil(state.getFinalPath(), "Final path should be populated after concurrent operations")
+    }
+
     func testConcurrentDownloadsWithIdenticalTitlesResolveCorrectly() async throws {
         let tempDir = FileManager.default.temporaryDirectory
         let sessionFolder = tempDir.appendingPathComponent("siphon_concurrent_test_\(UUID().uuidString)")

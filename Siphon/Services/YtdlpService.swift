@@ -159,6 +159,7 @@ actor DependencyInstaller {
             let proc = Process()
             proc.executableURL = URL(fileURLWithPath: "/usr/bin/gzip")
             proc.arguments = ["-d", "-f", path]
+            proc.environment = YtdlpService.createSanitizedEnvironment()
             try proc.run()
             proc.waitUntilExit()
             guard proc.terminationStatus == 0 else {

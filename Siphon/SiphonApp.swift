@@ -412,7 +412,7 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
                 
                 // Cryptographic checksum verification if expected checksum was retrieved
                 if let expected = expectedChecksum {
-                    let computed = computeSHA256(for: tempUpdate)
+                    let computed = Self.computeSHA256(for: tempUpdate)
                     if computed == nil || computed?.lowercased() != expected.lowercased() {
                         LoggerService.shared.log("Update checksum verification failed: expected \(expected), got \(computed ?? "nil")", level: .error)
                         try? FileManager.default.removeItem(at: tempUpdate)
@@ -448,26 +448,16 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
         return digest.map { String(format: "%02hhx", $0) }.joined()
     }
     
-    private func computeSHA256(for fileURL: URL) -> String? {
-        return Self.computeSHA256(for: fileURL)
-    }
-    
-    private func installUpdate(packagePath: String) {
-        let appPath = Bundle.main.bundlePath
-        let bundleId = Bundle.main.bundleIdentifier ?? "com.siphon.Siphon"
-        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent("Siphon_Staging_\(UUID().uuidString)")
-        do {
-            try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
-        } catch {
-            LoggerService.shared.log("Failed to create temporary directory for update installation: \(error.localizedDescription)", level: .error)
-            isInstalling = false
-            return
-        }
-        
-        let script = """
+    static func generateUpdateScript() -> String {
+        return """
         (
             set -e
             sleep 2
+            
+            PKG_PATH="$1"
+            APP_PATH="$2"
+            WORK_DIR="$3"
+            EXPECTED_BUNDLE_ID="$4"
             
             # Step 1: Unpack into staging directory
             if file "$PKG_PATH" | grep -q "Zip archive"; then
@@ -540,10 +530,25 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
             fi
         ) & disown
         """
+    }
+
+    private func installUpdate(packagePath: String) {
+        let appPath = Bundle.main.bundlePath
+        let bundleId = Bundle.main.bundleIdentifier ?? "com.siphon.Siphon"
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent("Siphon_Staging_\(UUID().uuidString)")
+        do {
+            try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        } catch {
+            LoggerService.shared.log("Failed to create temporary directory for update installation: \(error.localizedDescription)", level: .error)
+            isInstalling = false
+            return
+        }
+        
+        let script = Self.generateUpdateScript()
         
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/bash")
-        process.arguments = ["-c", script]
+        process.arguments = ["-c", script, "bash", packagePath, appPath, tempDir.path, bundleId]
         var env = ProcessInfo.processInfo.environment
         env["PKG_PATH"] = packagePath
         env["APP_PATH"] = appPath

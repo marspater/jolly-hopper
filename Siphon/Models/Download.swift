@@ -1555,6 +1555,7 @@ struct MediaFormat: Codable, Identifiable, Hashable {
     }
 
     func audioQualityScore(options: DownloadOptions) -> Double {
+        guard acodec != "none" else { return 0.0 }
         var score: Double = 0.0
         
         // Huge preference for original track over dubbed foreign language tracks

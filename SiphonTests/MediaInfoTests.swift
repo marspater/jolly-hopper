@@ -118,6 +118,45 @@ final class MediaInfoTests: XCTestCase {
         XCTAssertEqual(input3.decodingHTMLEntities(), "No entities here")
     }
 
+    func testDecodingHTMLEntities_EmptyAndNoAmpersandString() {
+        XCTAssertEqual("".decodingHTMLEntities(), "")
+        XCTAssertEqual("Hello World 123!".decodingHTMLEntities(), "Hello World 123!")
+    }
+
+    func testDecodingHTMLEntities_AllNamedEntities() {
+        let input = "&quot; &apos; &amp; &lt; &gt; &nbsp; &copy; &reg; &trade; &mdash; &ndash; &hellip; &lsquo; &rsquo; &ldquo; &rdquo; &bull;"
+        let expected = "\" ' & < >   © ® ™ — – … ‘ ’ “ ” •"
+        XCTAssertEqual(input.decodingHTMLEntities(), expected)
+    }
+
+    func testDecodingHTMLEntities_DecimalEntitiesWithLeadingZeros() {
+        XCTAssertEqual("&#039;".decodingHTMLEntities(), "'")
+        XCTAssertEqual("&#0039;".decodingHTMLEntities(), "'")
+        XCTAssertEqual("&#32;".decodingHTMLEntities(), " ")
+        XCTAssertEqual("&#160;".decodingHTMLEntities(), "\u{00A0}")
+    }
+
+    func testDecodingHTMLEntities_HexadecimalEntitiesUpperAndLowerCase() {
+        XCTAssertEqual("&#x27;".decodingHTMLEntities(), "'")
+        XCTAssertEqual("&#X27;".decodingHTMLEntities(), "'")
+        XCTAssertEqual("&#x1F600;".decodingHTMLEntities(), "😀")
+        XCTAssertEqual("&#X1f600;".decodingHTMLEntities(), "😀")
+    }
+
+    func testDecodingHTMLEntities_AdjacentAndMixedEntities() {
+        XCTAssertEqual("&lt;&gt;&amp;&quot;&#39;&#x27;".decodingHTMLEntities(), "<>&\"''")
+        XCTAssertEqual("&amp;amp;".decodingHTMLEntities(), "&amp;")
+    }
+
+    func testDecodingHTMLEntities_MalformedAndUnmatchedEntities() {
+        XCTAssertEqual("&".decodingHTMLEntities(), "&")
+        XCTAssertEqual("&amp".decodingHTMLEntities(), "&amp")
+        XCTAssertEqual("&#;".decodingHTMLEntities(), "&#;")
+        XCTAssertEqual("&#xyz;".decodingHTMLEntities(), "&#xyz;")
+        XCTAssertEqual("&unknown;".decodingHTMLEntities(), "&unknown;")
+        XCTAssertEqual("&#999999999;".decodingHTMLEntities(), "&#999999999;")
+    }
+
     func testMediaInfoTitleDecodingHTMLEntities() throws {
         let json = """
         {
@@ -431,6 +470,196 @@ final class MediaInfoTests: XCTestCase {
 
         XCTAssertEqual(resolved.count, 1)
         XCTAssertEqual(resolved[0].formatId, "140-23", "Audio-only download should pick original track over dubbed track")
+    }
+
+    // MARK: - MediaFormat.audioQualityScore Tests
+
+    func testAudioQualityScore_VideoFormat_ReturnsZero() {
+        let options = DownloadOptions.default
+        let videoFormat = MediaFormat(
+            formatId: "137",
+            ext: "mp4",
+            vcodec: "avc1.640028",
+            acodec: "none"
+        )
+        XCTAssertEqual(videoFormat.audioQualityScore(options: options), 0.0)
+    }
+
+    func testAudioQualityScore_LanguagePreferenceBonus() {
+        let options = DownloadOptions.default
+
+        // Explicit positive languagePreference (>= 0 is original + bonus)
+        let formatWithPref = MediaFormat(
+            formatId: "audio_pref",
+            ext: "m4a",
+            languagePreference: 5
+        )
+        XCTAssertEqual(formatWithPref.audioQualityScore(options: options), 10500000.0, accuracy: 0.001)
+
+        // Matching formatNote containing original
+        let formatWithNote = MediaFormat(
+            formatId: "audio_note",
+            ext: "m4a",
+            formatNote: "English track (original)"
+        )
+        XCTAssertEqual(formatWithNote.audioQualityScore(options: options), 10000000.0, accuracy: 0.001)
+    }
+
+    func testAudioQualityScore_OriginalTrackBonusAndDubbedPenalty() {
+        let options = DownloadOptions.default
+
+        // Original track
+        let originalFormat = MediaFormat(
+            formatId: "orig_audio",
+            ext: "m4a",
+            formatNote: "original"
+        )
+        XCTAssertEqual(originalFormat.audioQualityScore(options: options), 10000000.0, accuracy: 0.001)
+
+        // Dubbed penalty with negative languagePreference
+        let dubbedFormat = MediaFormat(
+            formatId: "dub_audio",
+            ext: "m4a",
+            formatNote: "dubbed",
+            language: "en",
+            languagePreference: -1
+        )
+        XCTAssertEqual(dubbedFormat.audioQualityScore(options: options), -5100000.0, accuracy: 0.001)
+
+        // Dubbed formatNote without languagePreference
+        let dubbedNoteFormat = MediaFormat(
+            formatId: "dub_note",
+            ext: "m4a",
+            formatNote: "dubbed"
+        )
+        XCTAssertEqual(dubbedNoteFormat.audioQualityScore(options: options), -5000000.0, accuracy: 0.001)
+    }
+
+    func testAudioQualityScore_AudioCodecMatching() {
+        var options = DownloadOptions.default
+        options.audioCodec = .opus
+
+        // Matching codec
+        let matchFormat = MediaFormat(
+            formatId: "opus_audio",
+            ext: "opus",
+            acodec: "opus"
+        )
+        XCTAssertEqual(matchFormat.audioQualityScore(options: options), 10500000.0, accuracy: 0.001)
+
+        // Non-matching codec
+        let mismatchFormat = MediaFormat(
+            formatId: "aac_audio",
+            ext: "m4a",
+            acodec: "mp4a.40.2"
+        )
+        XCTAssertEqual(mismatchFormat.audioQualityScore(options: options), 10000000.0, accuracy: 0.001)
+
+        // Auto codec requested (no bonus)
+        options.audioCodec = .auto
+        XCTAssertEqual(matchFormat.audioQualityScore(options: options), 10000000.0, accuracy: 0.001)
+    }
+
+    func testAudioQualityScore_BitrateFallbackHierarchy() {
+        let options = DownloadOptions.default
+
+        // Preferred abr
+        let abrFormat = MediaFormat(
+            formatId: "abr_fmt",
+            ext: "m4a",
+            abr: 128.0,
+            tbr: 256.0
+        )
+        XCTAssertEqual(abrFormat.audioQualityScore(options: options), 10001280.0, accuracy: 0.001)
+
+        // Fallback tbr
+        let tbrFormat = MediaFormat(
+            formatId: "tbr_fmt",
+            ext: "m4a",
+            tbr: 256.0
+        )
+        XCTAssertEqual(tbrFormat.audioQualityScore(options: options), 10002560.0, accuracy: 0.001)
+
+        // No bitrate
+        let noBitrateFormat = MediaFormat(
+            formatId: "nobitrate_fmt",
+            ext: "m4a"
+        )
+        XCTAssertEqual(noBitrateFormat.audioQualityScore(options: options), 10000000.0, accuracy: 0.001)
+    }
+
+    func testAudioQualityScore_NeedsTestingPenalty() {
+        let options = DownloadOptions.default
+
+        let formatNeedsTesting = MediaFormat(
+            formatId: "test_fmt",
+            ext: "m4a",
+            needsTesting: true
+        )
+
+        XCTAssertEqual(formatNeedsTesting.audioQualityScore(options: options), 9000000.0, accuracy: 0.001)
+    }
+
+    // MARK: - MediaInfo.prunedForCompletion Tests
+
+    func testPrunedForCompletion_PopulatedMediaInfo_ClearsHeavyMetadataAndRetainsEssentialInfo() {
+        let fullFormat = MediaFormat(
+            formatId: "1080p",
+            ext: "mp4",
+            resolution: "1920x1080",
+            fps: 60.0
+        )
+        let subtitle = SubtitleInfo(ext: "vtt", url: "https://example.com/sub.vtt", name: "English")
+        let chapter = ChapterInfo(startTime: 0.0, endTime: 10.0, title: "Intro")
+
+        let mediaInfo = MediaInfo(
+            id: "vid_12345",
+            title: "Full Metadata Test Video",
+            description: "Heavy description text that should be pruned",
+            thumbnail: "https://example.com/thumb.jpg",
+            duration: 300.0,
+            uploader: "Test Creator",
+            uploadDate: "20231025",
+            viewCount: 15000,
+            likeCount: 1200,
+            formats: [fullFormat],
+            subtitles: ["en": [subtitle]],
+            automaticCaptions: ["en": [subtitle]],
+            chapters: [chapter],
+            playlist: "Test Playlist",
+            playlistIndex: 1,
+            playlistCount: 5,
+            webpageUrl: "https://example.com/watch?v=vid_12345",
+            originalUrl: "https://example.com/watch?v=vid_12345",
+            formatProtocol: "https",
+            manifestUrl: "https://example.com/manifest.m3u8"
+        )
+
+        let pruned = mediaInfo.prunedForCompletion()
+
+        // Verify retained UI metadata
+        XCTAssertEqual(pruned.id, "vid_12345")
+        XCTAssertEqual(pruned.title, "Full Metadata Test Video")
+        XCTAssertEqual(pruned.thumbnail, "https://example.com/thumb.jpg")
+        XCTAssertEqual(pruned.duration, 300.0)
+        XCTAssertEqual(pruned.uploader, "Test Creator")
+        XCTAssertEqual(pruned.uploadDate, "20231025")
+        XCTAssertEqual(pruned.viewCount, 15000)
+        XCTAssertEqual(pruned.likeCount, 1200)
+        XCTAssertEqual(pruned.playlist, "Test Playlist")
+        XCTAssertEqual(pruned.playlistIndex, 1)
+        XCTAssertEqual(pruned.playlistCount, 5)
+        XCTAssertEqual(pruned.webpageUrl, "https://example.com/watch?v=vid_12345")
+        XCTAssertEqual(pruned.originalUrl, "https://example.com/watch?v=vid_12345")
+
+        // Verify cleared heavy fields
+        XCTAssertNil(pruned.description, "Description should be pruned")
+        XCTAssertNil(pruned.formats, "Formats array should be pruned")
+        XCTAssertNil(pruned.subtitles, "Subtitles dictionary should be pruned")
+        XCTAssertNil(pruned.automaticCaptions, "Automatic captions dictionary should be pruned")
+        XCTAssertNil(pruned.chapters, "Chapters array should be pruned")
+        XCTAssertNil(pruned.formatProtocol, "Format protocol should be pruned")
+        XCTAssertNil(pruned.manifestUrl, "Manifest URL should be pruned")
     }
 }
 
