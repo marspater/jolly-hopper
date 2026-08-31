@@ -60,6 +60,8 @@ struct AddDownloadView: View {
     @State private var showStreamInspector: Bool = false
     @State private var fetchTask: Task<Void, Never>? = nil
     @State private var playlistTask: Task<Void, Never>? = nil
+    @Namespace private var modeNamespace
+    @Namespace private var formatNamespace
 
     enum InputMode: String, CaseIterable, Identifiable {
         case single = "single"
@@ -221,7 +223,7 @@ struct AddDownloadView: View {
 
             HStack(spacing: 2) {
                 Button {
-                    withAnimation(.spring(response: 0.25, dampingFraction: 0.8)) {
+                    withAnimation(.spring(response: 0.30, dampingFraction: 0.68, blendDuration: 0)) {
                         inputMode = .single
                     }
                 } label: {
@@ -235,13 +237,14 @@ struct AddDownloadView: View {
                                 Capsule()
                                     .fill(SiphonTheme.primaryGradient)
                                     .shadow(color: SiphonTheme.accent.opacity(0.35), radius: 4, y: 1)
+                                    .matchedGeometryEffect(id: "activeModeBubble", in: modeNamespace)
                             }
                         }
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.bouncy(scale: 0.95, hover: 1.02))
 
                 Button {
-                    withAnimation(.spring(response: 0.25, dampingFraction: 0.8)) {
+                    withAnimation(.spring(response: 0.30, dampingFraction: 0.68, blendDuration: 0)) {
                         inputMode = .batch
                     }
                 } label: {
@@ -255,10 +258,11 @@ struct AddDownloadView: View {
                                 Capsule()
                                     .fill(SiphonTheme.primaryGradient)
                                     .shadow(color: SiphonTheme.accent.opacity(0.35), radius: 4, y: 1)
+                                    .matchedGeometryEffect(id: "activeModeBubble", in: modeNamespace)
                             }
                         }
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.bouncy(scale: 0.95, hover: 1.02))
             }
             .padding(2)
             .background(
@@ -819,7 +823,7 @@ struct AddDownloadView: View {
                 // Video / Audio Capsule Switcher
                 HStack(spacing: 2) {
                     Button {
-                        withAnimation(.spring(response: 0.25, dampingFraction: 0.8)) {
+                        withAnimation(.spring(response: 0.30, dampingFraction: 0.68, blendDuration: 0)) {
                             isVideoTab = true
                             fileType = .mp4
                         }
@@ -834,13 +838,14 @@ struct AddDownloadView: View {
                                     Capsule()
                                         .fill(SiphonTheme.primaryGradient)
                                         .shadow(color: SiphonTheme.accent.opacity(0.35), radius: 4, y: 1)
+                                        .matchedGeometryEffect(id: "activeFormatBubble", in: formatNamespace)
                                 }
                             }
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.bouncy(scale: 0.95, hover: 1.02))
 
                     Button {
-                        withAnimation(.spring(response: 0.25, dampingFraction: 0.8)) {
+                        withAnimation(.spring(response: 0.30, dampingFraction: 0.68, blendDuration: 0)) {
                             isVideoTab = false
                             fileType = .mp3
                         }
@@ -855,10 +860,11 @@ struct AddDownloadView: View {
                                     Capsule()
                                         .fill(SiphonTheme.primaryGradient)
                                         .shadow(color: SiphonTheme.accent.opacity(0.35), radius: 4, y: 1)
+                                        .matchedGeometryEffect(id: "activeFormatBubble", in: formatNamespace)
                                 }
                             }
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.bouncy(scale: 0.95, hover: 1.02))
                 }
                 .padding(2)
                 .background(
@@ -1414,7 +1420,7 @@ struct AddDownloadView: View {
                                 .stroke(Color.white.opacity(isDisabled ? 0.05 : 0.25), lineWidth: 1)
                         )
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.bouncy(scale: 0.95, hover: 1.025))
                 .disabled(isDisabled)
                 .shadow(color: isDisabled ? .clear : SiphonTheme.accent.opacity(0.35), radius: 6, y: 2)
                 .keyboardShortcut(.return)
@@ -1447,7 +1453,7 @@ struct AddDownloadView: View {
                             .stroke(Color.white.opacity(isDisabled ? 0.05 : 0.25), lineWidth: 1)
                     )
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.bouncy(scale: 0.95, hover: 1.025))
                 .disabled(isDisabled)
                 .shadow(color: isDisabled ? .clear : SiphonTheme.accent.opacity(0.35), radius: 6, y: 2)
                 .keyboardShortcut(.return)

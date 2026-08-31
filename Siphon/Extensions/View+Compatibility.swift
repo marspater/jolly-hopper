@@ -367,12 +367,40 @@ public struct SiphonInteractiveGlassModifier: ViewModifier {
                         lineWidth: 1
                     )
             )
-            .scaleEffect(isHovered ? 1.015 : 1.0)
-            .animation(.spring(response: 0.25, dampingFraction: 0.75), value: isHovered)
-            .animation(.spring(response: 0.25, dampingFraction: 0.75), value: isSelected)
+            .scaleEffect(isHovered ? 1.02 : 1.0)
+            .animation(.spring(response: 0.30, dampingFraction: 0.68, blendDuration: 0), value: isHovered)
+            .animation(.spring(response: 0.32, dampingFraction: 0.70, blendDuration: 0), value: isSelected)
             .onHover { hovering in
                 isHovered = hovering
             }
+    }
+}
+
+// MARK: - Fluid Bouncy Button Style
+public struct BouncyButtonStyle: ButtonStyle {
+    public var scaleAmount: CGFloat = 0.95
+    public var hoverScale: CGFloat = 1.025
+    
+    @State private var isHovered = false
+    
+    public init(scaleAmount: CGFloat = 0.95, hoverScale: CGFloat = 1.025) {
+        self.scaleAmount = scaleAmount
+        self.hoverScale = hoverScale
+    }
+    
+    public func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? scaleAmount : (isHovered ? hoverScale : 1.0))
+            .animation(.spring(response: 0.28, dampingFraction: 0.65, blendDuration: 0), value: configuration.isPressed)
+            .animation(.spring(response: 0.32, dampingFraction: 0.70, blendDuration: 0), value: isHovered)
+            .onHover { isHovered = $0 }
+    }
+}
+
+extension ButtonStyle where Self == BouncyButtonStyle {
+    public static var bouncy: BouncyButtonStyle { BouncyButtonStyle() }
+    public static func bouncy(scale: CGFloat = 0.95, hover: CGFloat = 1.025) -> BouncyButtonStyle {
+        BouncyButtonStyle(scaleAmount: scale, hoverScale: hover)
     }
 }
 

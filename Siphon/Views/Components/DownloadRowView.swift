@@ -585,7 +585,7 @@ struct FileThumbnailView: View {
                         Image(systemName: "eye.circle.fill")
                             .font(.geist(20))
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.bouncy(scale: 0.90, hover: 1.08))
                     .foregroundColor(SiphonTheme.accent)
                     .help("Quick Look")
                     .accessibilityLabel("Quick Look")
@@ -599,7 +599,7 @@ struct FileThumbnailView: View {
                     Image(systemName: "play.circle.fill")
                         .font(.geist(20))
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.bouncy(scale: 0.90, hover: 1.08))
                 .foregroundColor(SiphonTheme.accent)
                 .help(languageService.s("play"))
                 .accessibilityLabel(languageService.s("play"))
@@ -687,7 +687,7 @@ struct FileThumbnailView: View {
                     Image(systemName: "pause.circle.fill")
                         .font(.geist(18))
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.bouncy(scale: 0.90, hover: 1.08))
                 .foregroundColor(SiphonTheme.statusQueued)
                 .help(languageService.s("pause"))
                 .accessibilityLabel(languageService.s("pause"))
@@ -699,7 +699,7 @@ struct FileThumbnailView: View {
                         Image(systemName: "stop.circle.fill")
                             .font(.geist(18))
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.bouncy(scale: 0.90, hover: 1.08))
                     .foregroundColor(SiphonTheme.statusFailed)
                     .help(languageService.s("stop"))
                     .accessibilityLabel(languageService.s("stop"))
@@ -749,7 +749,7 @@ struct FileThumbnailView: View {
                     Image(systemName: "pause.circle")
                         .font(.geist(18))
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.bouncy(scale: 0.90, hover: 1.08))
                 .foregroundColor(SiphonTheme.statusQueued)
                 .help(languageService.s("pause"))
                 .accessibilityLabel(languageService.s("pause"))
@@ -804,7 +804,7 @@ struct FileThumbnailView: View {
                     Image(systemName: "play.circle.fill")
                         .font(.geist(18))
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.bouncy(scale: 0.90, hover: 1.08))
                 .foregroundColor(SiphonTheme.accent)
                 .help(languageService.s("resume"))
                 .accessibilityLabel(languageService.s("resume"))
@@ -847,7 +847,7 @@ struct FileThumbnailView: View {
                     Image(systemName: "arrow.clockwise.circle.fill")
                         .font(.geist(18))
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.bouncy(scale: 0.90, hover: 1.08))
                 .foregroundColor(SiphonTheme.statusQueued)
                 .help(languageService.s("retry"))
                 .accessibilityLabel(languageService.s("retry"))
