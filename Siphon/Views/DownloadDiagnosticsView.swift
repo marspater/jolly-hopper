@@ -131,7 +131,7 @@ struct DownloadDiagnosticsView: View {
                     .font(.system(size: 16))
                     .foregroundColor(.secondary)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.bouncy(scale: 0.90, hover: 1.10))
             .help(languageService.s("close"))
             .accessibilityLabel(languageService.s("close"))
         }
