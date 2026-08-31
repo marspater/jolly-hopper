@@ -1447,6 +1447,7 @@ struct MediaFormat: Codable, Identifiable, Hashable {
         let matchesCodec: Bool
         let meetsResolution: Bool
         let height: Int
+        let isAppleNativeCodec: Bool
         let tested: Bool
         let bitrate: Double
         let fps: Double
@@ -1470,6 +1471,10 @@ struct MediaFormat: Codable, Identifiable, Hashable {
             guard let maxH = options.videoResolution?.maxHeight else { return true }
             return h <= maxH
         }()
+        let isAppleNative: Bool = {
+            guard let vc = vcodec?.lowercased() else { return false }
+            return vc.hasPrefix("avc1") || vc.contains("h264") || vc.hasPrefix("hev1") || vc.hasPrefix("hvc1") || vc.contains("h265") || vc.contains("hevc")
+        }()
         let br = tbr ?? (vbr ?? (abr ?? 0.0))
         let f = fps ?? 0.0
         let isTested = (needsTesting != true)
@@ -1478,6 +1483,7 @@ struct MediaFormat: Codable, Identifiable, Hashable {
             matchesCodec: matchesCodec,
             meetsResolution: meetsRes,
             height: h,
+            isAppleNativeCodec: isAppleNative,
             tested: isTested,
             bitrate: br,
             fps: f,
@@ -1501,19 +1507,25 @@ struct MediaFormat: Codable, Identifiable, Hashable {
         if ra.height != rb.height {
             return ra.height > rb.height
         }
-        // 4. Tested status as a tie-breaker factor
+        // 4. For MP4 containers under auto codec, prefer Apple-native codecs (H.264/HEVC) for QuickTime & Finder QuickLook compatibility
+        if options.fileType == .mp4 && (options.videoCodec == nil || options.videoCodec == .auto) {
+            if ra.isAppleNativeCodec != rb.isAppleNativeCodec {
+                return ra.isAppleNativeCodec
+            }
+        }
+        // 5. Tested status as a tie-breaker factor
         if ra.tested != rb.tested {
             return ra.tested
         }
-        // 5. Bitrate
+        // 6. Bitrate
         if abs(ra.bitrate - rb.bitrate) > 5.0 {
             return ra.bitrate > rb.bitrate
         }
-        // 6. FPS
+        // 7. FPS
         if ra.fps != rb.fps {
             return ra.fps > rb.fps
         }
-        // 7. File size
+        // 8. File size
         return ra.size > rb.size
     }
 

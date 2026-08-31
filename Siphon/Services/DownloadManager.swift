@@ -494,6 +494,19 @@ class DownloadManager: ObservableObject {
             updateStatus(for: download, to: .completed)
             download.progress = 1.0
 
+            // Attach Finder file icon if embed thumbnail is requested and thumbnail is available
+            if download.options.embedThumbnail, let finalURL = download.filePath {
+                if let thumbURL = download.thumbnailURL {
+                    Task.detached(priority: .utility) {
+                        if let data = try? Data(contentsOf: thumbURL), let img = NSImage(data: data) {
+                            await MainActor.run {
+                                _ = NSWorkspace.shared.setIcon(img, forFile: finalURL.path, options: [])
+                            }
+                        }
+                    }
+                }
+            }
+
             // Memory optimization: Prune large formats/subtitles and bound log for completed download
             download.mediaInfo = download.mediaInfo?.prunedForCompletion()
             if download.log.count > 2000 {
