@@ -1,5 +1,6 @@
 import Foundation
 import CryptoKit
+import AppKit
 
 struct DependencyChecksums {
     static let ytdlpVersion = "2026.08.19"
@@ -1286,6 +1287,30 @@ class YtdlpService: ObservableObject {
                 if !embedded {
                     onOutput("[WARNING] Thumbnail embedding was requested, but FFmpeg could not embed the cover art into \(finalFileURL.lastPathComponent).\n")
                     LoggerService.shared.log("Thumbnail embedding failed for \(finalFileURL.lastPathComponent)", level: .warning)
+                }
+            }
+        }
+
+        // Attach Finder custom file icon for native macOS Finder / Downloads thumbnail display
+        if options.embedThumbnail {
+            var possibleThumbnailURLs: [URL] = []
+            if FileManager.default.fileExists(atPath: scratchThumbnailURL.path) {
+                possibleThumbnailURLs.append(scratchThumbnailURL)
+            }
+            let scratchFiles = (try? FileManager.default.contentsOfDirectory(at: scratchDirectory, includingPropertiesForKeys: nil)) ?? []
+            for file in scratchFiles {
+                let ext = file.pathExtension.lowercased()
+                if ["jpg", "jpeg", "png", "webp"].contains(ext) {
+                    possibleThumbnailURLs.append(file)
+                }
+            }
+            for thumbURL in possibleThumbnailURLs {
+                if let img = NSImage(contentsOf: thumbURL) {
+                    let setSuccess = NSWorkspace.shared.setIcon(img, forFile: finalFileURL.path, options: [])
+                    if setSuccess {
+                        LoggerService.shared.log("Attached custom Finder thumbnail icon to \(finalFileURL.lastPathComponent)", level: .info)
+                        break
+                    }
                 }
             }
         }

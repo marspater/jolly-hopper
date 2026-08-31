@@ -63,6 +63,51 @@ final class QueueAndErrorUXTests: XCTestCase {
         let subtitle = download.formatSubtitle(lang: lang)
         XCTAssertEqual(subtitle, "YouTube • 1080p • MP4 • 03:45")
     }
+
+    func testFormatSubtitleEdgeCases() {
+        let lang = LanguageService()
+
+        // Edge Case 1: Video download with explicit resolution, video codec, HDR diagnostics, and duration
+        var videoOptions = DownloadOptions.default
+        videoOptions.fileType = .mp4
+        videoOptions.videoResolution = .r2160p
+        videoOptions.videoCodec = .h265
+        let videoDownload = Download(url: "https://www.youtube.com/watch?v=hdrVideo", options: videoOptions)
+        videoDownload.diagnostics.dynamicRange = "HDR10"
+        videoDownload.diagnostics.bitDepth = 10
+        videoDownload.duration = "12:34"
+        XCTAssertEqual(videoDownload.formatSubtitle(lang: lang), "YouTube • 2160p • H265 • HDR10 • 10-bit • MP4 • 12:34")
+
+        // Edge Case 2: Video download with .best resolution deriving max height from mediaInfo formats
+        var bestVideoOptions = DownloadOptions.default
+        bestVideoOptions.fileType = .mkv
+        bestVideoOptions.videoResolution = .best
+        bestVideoOptions.videoCodec = .auto
+        let bestVideoDownload = Download(url: "https://vimeo.com/98765432", options: bestVideoOptions)
+        let f1 = MediaFormat(formatId: "1", ext: "mp4", resolution: "1280x720")
+        let f2 = MediaFormat(formatId: "2", ext: "mp4", resolution: "1920x1080")
+        bestVideoDownload.mediaInfo = MediaInfo(id: "98765432", title: "Test", formats: [f1, f2])
+        bestVideoDownload.duration = "05:00"
+        XCTAssertEqual(bestVideoDownload.formatSubtitle(lang: lang), "Vimeo • 1080p • MKV • 05:00")
+
+        // Edge Case 3: Audio download with explicit quality, codec, and duration
+        var audioOptions = DownloadOptions.default
+        audioOptions.fileType = .mp3
+        audioOptions.audioQuality = .q320
+        audioOptions.audioCodec = .mp3
+        let audioDownload = Download(url: "https://soundcloud.com/artist/track", options: audioOptions)
+        audioDownload.duration = "04:15"
+        XCTAssertEqual(audioDownload.formatSubtitle(lang: lang), "SoundCloud • 320kbps • MP3 • MP3 • 04:15")
+
+        // Edge Case 4: Audio download with default quality (.best) and auto codec, without duration
+        var defaultAudioOptions = DownloadOptions.default
+        defaultAudioOptions.fileType = .m4a
+        defaultAudioOptions.audioQuality = .best
+        defaultAudioOptions.audioCodec = .auto
+        let defaultAudioDownload = Download(url: "https://example.com/audio", options: defaultAudioOptions)
+        defaultAudioDownload.duration = ""
+        XCTAssertEqual(defaultAudioDownload.formatSubtitle(lang: lang), "Example.com • M4A")
+    }
     
     func testErrorUXCategorization() {
         let lang = LanguageService()
