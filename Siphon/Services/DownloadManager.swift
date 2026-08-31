@@ -154,6 +154,7 @@ class DownloadManager: ObservableObject {
     private let userDefaults = UserDefaults.standard
     var activeControllers: [UUID: DownloadProcessController] = [:]
     var activeTasks: [UUID: Task<Void, Never>] = [:]
+    private var reservedDownloadSlots: Set<UUID> = []
     private var isProcessingQueue = false
     var languageService: LanguageService?
     private var reservedOutputPaths: Set<String> = []
@@ -178,7 +179,11 @@ class DownloadManager: ObservableObject {
     }
 
     var failedDownloads: [Download] {
-        downloads.filter { $0.status == .failed || $0.status == .stopped || $0.status == .fileExists }
+        downloads.filter { $0.status == .failed || $0.status == .stopped }
+    }
+
+    var actionRequiredDownloads: [Download] {
+        downloads.filter { $0.status == .fileExists }
     }
 
     var downloadingCount: Int {
@@ -191,7 +196,7 @@ class DownloadManager: ObservableObject {
         downloads.reduce(0) { $0 + ($1.status == .completed ? 1 : 0) }
     }
     var failedCount: Int {
-        downloads.reduce(0) { $0 + (($1.status == .failed || $1.status == .stopped || $1.status == .fileExists) ? 1 : 0) }
+        downloads.reduce(0) { $0 + (($1.status == .failed || $1.status == .stopped) ? 1 : 0) }
     }
 
 
@@ -323,13 +328,14 @@ class DownloadManager: ObservableObject {
         defer { isProcessingQueue = false }
 
         let limit = maxConcurrentDownloads
-        let currentActive = downloadingCount
+        let currentActive = reservedDownloadSlots.count
         let availableSlots = max(0, limit - currentActive)
         guard availableSlots > 0 else { return }
 
         var started = 0
-        for download in downloads where download.status == .queued {
+        for download in downloads where download.status == .queued && !reservedDownloadSlots.contains(download.id) {
             if started >= availableSlots { break }
+            reservedDownloadSlots.insert(download.id)
             startDownloadTask(download)
             started += 1
         }
@@ -348,13 +354,17 @@ class DownloadManager: ObservableObject {
     }
 
     func processDownload(_ download: Download) async {
-        guard download.status == .queued else { return }
         if !downloads.contains(where: { $0.id == download.id }) {
             downloads.append(download)
         }
         processQueue()
-        if let task = activeTasks[download.id] {
-            await task.value
+
+        while download.status == .queued || download.status == .fetching || download.status == .downloading || download.status == .processing {
+            if let task = activeTasks[download.id] {
+                await task.value
+                break
+            }
+            try? await Task.sleep(nanoseconds: 50_000_000)
         }
     }
 
@@ -362,6 +372,7 @@ class DownloadManager: ObservableObject {
         let downloadId = download.id
         let downloadCopy = download
         defer {
+            reservedDownloadSlots.remove(downloadId)
             activeTasks.removeValue(forKey: downloadId)
             activeControllers.removeValue(forKey: downloadId)
             if download.status == .stopped || download.status == .failed {
@@ -507,6 +518,11 @@ class DownloadManager: ObservableObject {
                 }
             }
 
+            // Retain key metadata in diagnostics before pruning mediaInfo
+            if download.diagnostics.resolution == nil, let maxH = download.mediaInfo?.formats?.compactMap({ $0.parsedHeight }).max() {
+                download.diagnostics.resolution = "\(maxH)p"
+            }
+
             // Memory optimization: Prune large formats/subtitles and bound log for completed download
             download.mediaInfo = download.mediaInfo?.prunedForCompletion()
             if download.log.count > 2000 {
@@ -623,6 +639,10 @@ class DownloadManager: ObservableObject {
             return
         }
         updateStatus(for: download, to: .stopped)
+        if activeTasks[download.id] == nil {
+            reservedDownloadSlots.remove(download.id)
+            processQueue()
+        }
         activeTasks[download.id]?.cancel()
         activeControllers[download.id]?.cancel()
         if !skipSaveAndBroadcast {
@@ -658,6 +678,10 @@ class DownloadManager: ObservableObject {
             return
         }
         updateStatus(for: download, to: .paused)
+        if activeTasks[download.id] == nil {
+            reservedDownloadSlots.remove(download.id)
+            processQueue()
+        }
         activeTasks[download.id]?.cancel()
         activeControllers[download.id]?.cancel()
         objectWillChange.send()

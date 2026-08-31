@@ -70,6 +70,8 @@ class Download: ObservableObject, Identifiable {
         if options.fileType.isVideo {
             if let res = options.videoResolution, res != .best, res != .worst {
                 parts.append(res.rawValue.replacingOccurrences(of: "r", with: ""))
+            } else if let diagRes = diagnostics.resolution, !diagRes.isEmpty {
+                parts.append(diagRes)
             } else if let h = mediaInfo?.formats?.compactMap({ $0.parsedHeight }).max() {
                 parts.append("\(h)p")
             }
@@ -84,7 +86,10 @@ class Download: ObservableObject, Identifiable {
                 parts.append(quality.rawValue)
             }
             if let codec = options.audioCodec, codec != .auto {
-                parts.append(codec.rawValue.uppercased())
+                let codecName = codec.rawValue.uppercased()
+                if codecName != options.fileType.rawValue.uppercased() {
+                    parts.append(codecName)
+                }
             }
         }
         

@@ -636,4 +636,29 @@ final class DownloadManagerTests: XCTestCase {
         await manager2.initialize(languageService: languageService)
         XCTAssertFalse(manager2.showWhatsNew)
     }
+
+    func testQueueSlotAccountingDoesNotExceedMaxConcurrentDownloads() async {
+        let manager = DownloadManager()
+        let maxSlots = UserDefaults.standard.integer(forKey: UserDefaultsKeys.maxConcurrentDownloads)
+        let limit = maxSlots > 0 ? maxSlots : 3
+
+        let d1 = Download(url: "https://example.com/1", options: .default)
+        let d2 = Download(url: "https://example.com/2", options: .default)
+        let d3 = Download(url: "https://example.com/3", options: .default)
+        let d4 = Download(url: "https://example.com/4", options: .default)
+        let d5 = Download(url: "https://example.com/5", options: .default)
+
+        manager.downloads = [d1, d2, d3, d4, d5]
+
+        // Trigger queue processing multiple times synchronously
+        manager.processQueue()
+        manager.processQueue()
+        manager.processQueue()
+
+        // Count active tasks and reserved slots
+        let activeCount = manager.activeTasks.count
+        XCTAssertLessThanOrEqual(activeCount, limit, "Active tasks must never exceed the concurrency limit")
+
+        manager.shutdown()
+    }
 }

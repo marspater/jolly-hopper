@@ -97,7 +97,7 @@ final class QueueAndErrorUXTests: XCTestCase {
         audioOptions.audioCodec = .mp3
         let audioDownload = Download(url: "https://soundcloud.com/artist/track", options: audioOptions)
         audioDownload.duration = "04:15"
-        XCTAssertEqual(audioDownload.formatSubtitle(lang: lang), "SoundCloud • 320kbps • MP3 • MP3 • 04:15")
+        XCTAssertEqual(audioDownload.formatSubtitle(lang: lang), "SoundCloud • 320kbps • MP3 • 04:15")
 
         // Edge Case 4: Audio download with default quality (.best) and auto codec, without duration
         var defaultAudioOptions = DownloadOptions.default
@@ -696,6 +696,65 @@ final class QueueAndErrorUXTests: XCTestCase {
 
         _ = await (t1.value, t2.value)
         XCTAssertFalse(manager.isUpdatingYtdlp, "isUpdatingYtdlp must be false once operations complete")
+    }
+
+    func testFormatSubtitleRetainsResolutionFromDiagnosticsAfterPruning() {
+        let lang = LanguageService()
+        var options = DownloadOptions.default
+        options.fileType = .mp4
+        options.videoResolution = .best
+        options.videoCodec = .auto
+
+        let download = Download(url: "https://youtube.com/watch?v=pruned", options: options)
+        let f1 = MediaFormat(formatId: "1", ext: "mp4", resolution: "1920x1080")
+        download.mediaInfo = MediaInfo(id: "pruned", title: "Test Pruned", formats: [f1])
+
+        // Before pruning, formatSubtitle infers 1080p
+        XCTAssertTrue(download.formatSubtitle(lang: lang).contains("1080p"))
+
+        // Simulate completion: copy resolution to diagnostics, then prune mediaInfo
+        download.diagnostics.resolution = "1080p"
+        download.mediaInfo = download.mediaInfo?.prunedForCompletion()
+        XCTAssertNil(download.mediaInfo?.formats)
+
+        // After pruning, formatSubtitle must still retain the 1080p badge from diagnostics
+        XCTAssertTrue(download.formatSubtitle(lang: lang).contains("1080p"))
+    }
+
+    func testLoggerServiceSanitizeDiagnosticText() {
+        let rawError = "Download failed: https://video.example.com/stream.mp4?token=secret123&auth=abc with Bearer eyJhbGciOiJIUzI1Ni. Cookie: session=12345"
+        let sanitized = LoggerService.sanitizeDiagnosticText(rawError)
+
+        XCTAssertFalse(sanitized.contains("token=secret123"))
+        XCTAssertFalse(sanitized.contains("auth=abc"))
+        XCTAssertFalse(sanitized.contains("session=12345"))
+        XCTAssertTrue(sanitized.contains("Bearer <REDACTED>"))
+        XCTAssertTrue(sanitized.contains("Cookie: <REDACTED>"))
+    }
+
+    func testAppUpdateScriptIncludesTeamIDVerification() {
+        let script = UpdateChecker.generateUpdateScript()
+
+        XCTAssertTrue(script.contains("EXPECTED_TEAM_ID"))
+        XCTAssertTrue(script.contains("TeamIdentifier="))
+        XCTAssertTrue(script.contains("Team identifier mismatch"))
+    }
+
+    func testFileExistsSeparationFromFailedDownloads() {
+        let manager = DownloadManager()
+        let d1 = Download(url: "https://example.com/1", options: .default)
+        d1.status = .fileExists
+        let d2 = Download(url: "https://example.com/2", options: .default)
+        d2.status = .failed
+        let d3 = Download(url: "https://example.com/3", options: .default)
+        d3.status = .stopped
+
+        manager.downloads = [d1, d2, d3]
+
+        XCTAssertEqual(manager.actionRequiredDownloads.count, 1)
+        XCTAssertEqual(manager.actionRequiredDownloads.first?.id, d1.id)
+        XCTAssertEqual(manager.failedDownloads.count, 2)
+        XCTAssertEqual(manager.failedCount, 2)
     }
 }
 
