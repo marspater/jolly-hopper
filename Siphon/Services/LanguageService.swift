@@ -13,7 +13,6 @@ enum Language: String, CaseIterable, Identifiable {
 @MainActor
 class LanguageService: ObservableObject {
     @AppStorage("selectedLanguage") var selectedLanguage: Language = .english
-    @AppStorage("isFirstLaunch_v3") var isFirstLaunch: Bool = true
     
     nonisolated func s(_ key: String) -> String {
         if let translated = translations[key] {
@@ -23,8 +22,6 @@ class LanguageService: ObservableObject {
     }
     
     private let translations: [String: String] = [
-        "welcome_to_siphon": "Welcome to Siphon",
-        "start_using": "Start Using",
         "legal_disclaimer": "Legal Disclaimer",
         "about_app": "About Siphon",
         "couldnt_download": "Couldn't download",

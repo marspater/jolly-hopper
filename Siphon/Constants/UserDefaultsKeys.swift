@@ -3,7 +3,6 @@ import Foundation
 enum UserDefaultsKeys {
     static let showMenuBarIcon = "showMenuBarIcon"
     static let showNotifications = "showNotifications"
-    static let disclaimerAcknowledged = "disclaimerAcknowledged"
     static let customPresets = "customPresets"
     static let defaultSaveFolder = "defaultSaveFolder"
     static let lastSeenVersion = "lastSeenVersion_v3"

@@ -137,7 +137,6 @@ class DownloadManager: ObservableObject {
 
     @Published var downloads: [Download] = []
     @Published var history: [HistoricDownload] = []
-    @Published var showDisclaimer: Bool = false
     @Published var ytdlpVersion: String?
     @Published var showWhatsNew: Bool = false
     @Published var ytdlpUpdateMessage: YtdlpUpdateMessage?
@@ -208,11 +207,6 @@ class DownloadManager: ObservableObject {
 
         loadHistory()
 
-
-        if !userDefaults.bool(forKey: UserDefaultsKeys.disclaimerAcknowledged) && !languageService.isFirstLaunch {
-            showDisclaimer = true
-        }
-
         let currentVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "4.2.0"
         let lastSeenVersion = userDefaults.string(forKey: UserDefaultsKeys.lastSeenVersion) ?? "0.0.0"
 
@@ -220,11 +214,6 @@ class DownloadManager: ObservableObject {
             showWhatsNew = true
             userDefaults.set(currentVersion, forKey: UserDefaultsKeys.lastSeenVersion)
         }
-    }
-
-    func acknowledgeDisclaimer() {
-        userDefaults.set(true, forKey: UserDefaultsKeys.disclaimerAcknowledged)
-        showDisclaimer = false
     }
 
     func updateYtdlp() async {

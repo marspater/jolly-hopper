@@ -533,22 +533,6 @@ final class DownloadManagerTests: XCTestCase {
         )
     }
 
-    func testAcknowledgeDisclaimer() {
-        let userDefaultsKey = UserDefaultsKeys.disclaimerAcknowledged
-        UserDefaults.standard.removeObject(forKey: userDefaultsKey)
-        defer {
-            UserDefaults.standard.removeObject(forKey: userDefaultsKey)
-        }
-
-        let manager = DownloadManager()
-        manager.showDisclaimer = true
-
-        manager.acknowledgeDisclaimer()
-
-        XCTAssertFalse(manager.showDisclaimer, "acknowledgeDisclaimer should set showDisclaimer to false")
-        XCTAssertTrue(UserDefaults.standard.bool(forKey: userDefaultsKey), "acknowledgeDisclaimer should set disclaimerAcknowledged in UserDefaults to true")
-    }
-
     func testMenuDownloadVideo() {
         let manager = DownloadManager()
         let testUrl = "https://example.com/video_menu"
@@ -629,45 +613,6 @@ final class DownloadManagerTests: XCTestCase {
         XCTAssertEqual(manager.history.count, 1)
         XCTAssertEqual(manager.downloads.count, 1)
         XCTAssertEqual(manager.downloads.first?.status, .stopped, "Active download from history should be converted to .stopped during initialize")
-    }
-
-    func testInitializeDisclaimerDisplayWhenNotAcknowledgedAndNotFirstLaunch() async {
-        let manager = DownloadManager()
-        let languageService = LanguageService()
-
-        let disclaimerKey = UserDefaultsKeys.disclaimerAcknowledged
-        let firstLaunchKey = "isFirstLaunch_v3"
-
-        defer {
-            UserDefaults.standard.removeObject(forKey: disclaimerKey)
-            UserDefaults.standard.removeObject(forKey: firstLaunchKey)
-        }
-
-        // Case 1: Disclaimer NOT acknowledged, NOT first launch -> show disclaimer
-        UserDefaults.standard.set(false, forKey: disclaimerKey)
-        UserDefaults.standard.set(false, forKey: firstLaunchKey)
-        languageService.isFirstLaunch = false
-
-        await manager.initialize(languageService: languageService)
-        XCTAssertTrue(manager.showDisclaimer)
-
-        // Case 2: Disclaimer IS acknowledged -> do not show disclaimer
-        let manager2 = DownloadManager()
-        UserDefaults.standard.set(true, forKey: disclaimerKey)
-        UserDefaults.standard.set(false, forKey: firstLaunchKey)
-        languageService.isFirstLaunch = false
-
-        await manager2.initialize(languageService: languageService)
-        XCTAssertFalse(manager2.showDisclaimer)
-
-        // Case 3: Is first launch -> do not show disclaimer
-        let manager3 = DownloadManager()
-        UserDefaults.standard.set(false, forKey: disclaimerKey)
-        UserDefaults.standard.set(true, forKey: firstLaunchKey)
-        languageService.isFirstLaunch = true
-
-        await manager3.initialize(languageService: languageService)
-        XCTAssertFalse(manager3.showDisclaimer)
     }
 
     func testInitializeWhatsNewDisplayWhenVersionChanges() async {
