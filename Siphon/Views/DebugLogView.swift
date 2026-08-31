@@ -44,6 +44,8 @@ struct DebugLogView: View {
                 }
                 .buttonStyle(.plain)
                 .keyboardShortcut(.cancelAction)
+                .help("Close")
+                .accessibilityLabel("Close")
             }
             .padding(.horizontal, 18)
             .padding(.top, 16)
