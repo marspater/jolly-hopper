@@ -46,31 +46,33 @@ public final class DownloadProcessController: @unchecked Sendable {
 
     public static func terminateProcessTree(_ proc: Process?, pid: pid_t? = nil) {
         let resolvedPID = (pid != nil && pid! > 0) ? pid! : (proc?.processIdentifier ?? 0)
+        guard resolvedPID > 0 || proc?.isRunning == true else { return }
 
-        // 1. Gather all descendant child processes (ffmpeg, aria2c, etc.) before terminating parent
-        let descendants = resolvedPID > 0 ? getDescendantPIDs(for: resolvedPID) : []
-
-        // 2. Terminate the main process
+        // 1. Terminate main parent process immediately
         if let proc, proc.isRunning {
             proc.terminate()
         }
         if resolvedPID > 0 {
             kill(resolvedPID, SIGTERM)
-            kill(-resolvedPID, SIGTERM)
         }
 
-        // 3. Terminate all descendant processes
-        for child in descendants {
-            kill(child, SIGTERM)
-        }
-
-        // 4. Fallback cleanup: if descendants still exist, send SIGKILL
-        if !descendants.isEmpty {
-            DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + 0.15) {
-                for child in descendants {
-                    if kill(child, 0) == 0 {
-                        kill(child, SIGKILL)
+        // 2. Multi-pass descendant reaping: catch initial descendants and late spawns during shutdown
+        var allSignaledPIDs: Set<pid_t> = []
+        if resolvedPID > 0 {
+            for pass in 0..<3 {
+                let currentDescendants = getDescendantPIDs(for: resolvedPID)
+                for child in currentDescendants {
+                    if !allSignaledPIDs.contains(child) {
+                        allSignaledPIDs.insert(child)
+                        kill(child, SIGTERM)
                     }
+                }
+                if currentDescendants.isEmpty && pass > 0 {
+                    break
+                }
+                // Short yield before next sweep to allow processes to terminate
+                if pass < 2 {
+                    usleep(25_000) // 25ms
                 }
             }
         }
@@ -179,6 +181,7 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
     public func runCommand(_ args: [String]) async throws -> String {
         let process = Process()
         let pipe = Pipe()
+        let controller = DownloadProcessController()
 
         process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
         process.arguments = args
@@ -189,6 +192,11 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
         return try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { continuation in
                 let safeContinuation = SafeContinuation(continuation)
+
+                if Task.isCancelled || controller.isCancelled {
+                    safeContinuation.resume(throwing: YtdlpError.downloadFailed("Command was cancelled."))
+                    return
+                }
 
                 let outputBuffer = ThreadSafeDataBuffer()
                 pipe.fileHandleForReading.readabilityHandler = { handle in
@@ -211,7 +219,7 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
 
                     let output = outputBuffer.getString()
 
-                    if Task.isCancelled || proc.terminationReason == .uncaughtSignal {
+                    if Task.isCancelled || controller.isCancelled || proc.terminationReason == .uncaughtSignal {
                         safeContinuation.resume(throwing: YtdlpError.downloadFailed("Command was cancelled."))
                     } else if proc.terminationStatus == 0 {
                         safeContinuation.resume(returning: output)
@@ -221,7 +229,14 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
                 }
 
                 do {
-                    try process.run()
+                    if Task.isCancelled {
+                        pipe.fileHandleForReading.readabilityHandler = nil
+                        try? pipe.fileHandleForReading.close()
+                        process.terminationHandler = nil
+                        safeContinuation.resume(throwing: YtdlpError.downloadFailed("Command was cancelled."))
+                        return
+                    }
+                    try controller.start(process)
                 } catch {
                     pipe.fileHandleForReading.readabilityHandler = nil
                     try? pipe.fileHandleForReading.close()
@@ -230,9 +245,7 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
                 }
             }
         } onCancel: {
-            if process.isRunning {
-                DownloadProcessController.terminateProcessTree(process, pid: process.processIdentifier)
-            }
+            controller.cancel()
         }
     }
 
@@ -289,9 +302,7 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
                         if normalized != "NA" && !normalized.isEmpty, let percent = Double(normalized), !percent.isNaN && !percent.isInfinite {
                             let safeSpeed = (speed == "NA" || speed?.isEmpty == true) ? nil : speed
                             let safeEta = (eta == "NA" || eta?.isEmpty == true) ? nil : eta
-                            DispatchQueue.main.async {
-                                onProgress(max(0.0, min(1.0, percent / 100.0)), safeSpeed, safeEta)
-                            }
+                            onProgress(max(0.0, min(1.0, percent / 100.0)), safeSpeed, safeEta)
                         }
                     }
                     return
@@ -321,10 +332,8 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
                                 }
                             }
 
-                            DispatchQueue.main.async {
-                                onOutput(line)
-                                onProgress(safePercent, speedStr, etaStr)
-                            }
+                            onOutput(line)
+                            onProgress(safePercent, speedStr, etaStr)
                             return
                         }
                     }
@@ -336,7 +345,7 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
                    line.contains("[ThumbnailsConvertor]") ||
                    line.contains("[EmbedThumbnail]") ||
                    line.contains("[EmbedSubtitle]") {
-                    DispatchQueue.main.async { onOutput(line) }
+                    onOutput(line)
                     return
                 }
 

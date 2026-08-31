@@ -138,10 +138,44 @@ class LoggerService: ObservableObject {
         }
         return Array(result.suffix(maxEntries))
     }
-    
+
+    nonisolated static func sanitizeDiagnosticText(_ text: String) -> String {
+        guard !text.isEmpty else { return text }
+        var result = text
+
+        // 1. Sanitize URLs (strip query strings, fragments, credentials)
+        if let urlRegex = try? NSRegularExpression(pattern: #"https?://[^\s"'<>]+"#, options: []) {
+            let nsString = result as NSString
+            let matches = urlRegex.matches(in: result, options: [], range: NSRange(location: 0, length: nsString.length))
+            for match in matches.reversed() {
+                let urlStr = nsString.substring(with: match.range)
+                let sanitizedURL = sanitizeURLForLog(urlStr)
+                if let swiftRange = Range(match.range, in: result) {
+                    result.replaceSubrange(swiftRange, with: sanitizedURL)
+                }
+            }
+        }
+
+        // 2. Redact Bearer / API tokens and credentials
+        let redactionPatterns: [(String, String)] = [
+            (#"(?i)bearer\s+[A-Za-z0-9\-_\.]+"#, "Bearer <REDACTED>"),
+            (#"(?i)cookie:\s*[^\r\n]+"#, "Cookie: <REDACTED>"),
+            (#"(?i)(token|api_key|password|pass|secret)=([A-Za-z0-9\-_%]+)"#, "$1=<REDACTED>")
+        ]
+
+        for (pattern, replacement) in redactionPatterns {
+            if let regex = try? NSRegularExpression(pattern: pattern, options: []) {
+                result = regex.stringByReplacingMatches(in: result, options: [], range: NSRange(location: 0, length: (result as NSString).length), withTemplate: replacement)
+            }
+        }
+
+        return result
+    }
+
     func log(_ message: String, level: LogLevel = .info) {
         let timestamp = Self.dateFormatter.string(from: Date())
-        let entry = "[\(timestamp)] [\(level.rawValue)] \(message)"
+        let sanitizedMessage = Self.sanitizeDiagnosticText(message)
+        let entry = "[\(timestamp)] [\(level.rawValue)] \(sanitizedMessage)"
         
         logs.append(entry)
         if logs.count > maxLogEntries {

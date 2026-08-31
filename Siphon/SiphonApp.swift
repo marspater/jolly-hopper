@@ -196,6 +196,10 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
         currentDownloadTask = nil
         activeSession?.invalidateAndCancel()
         activeSession = nil
+        expectedChecksum = nil
+        downloadURL = nil
+        downloadAssetName = nil
+        checksumURL = nil
         isDownloading = false
         isInstalling = false
         updateProgress = 0
@@ -448,6 +452,30 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
         return digest.map { String(format: "%02hhx", $0) }.joined()
     }
     
+    static func currentTeamIdentifier() -> String? {
+        let appPath = Bundle.main.bundlePath
+        let proc = Process()
+        proc.executableURL = URL(fileURLWithPath: "/usr/bin/codesign")
+        proc.arguments = ["-d", "--verbose=2", appPath]
+        let pipe = Pipe()
+        proc.standardError = pipe
+        do {
+            try proc.run()
+            proc.waitUntilExit()
+            let data = pipe.fileHandleForReading.readDataToEndOfFile()
+            guard let output = String(data: data, encoding: .utf8) else { return nil }
+            for line in output.components(separatedBy: .newlines) {
+                if line.hasPrefix("TeamIdentifier=") {
+                    let id = line.replacingOccurrences(of: "TeamIdentifier=", with: "").trimmingCharacters(in: .whitespacesAndNewlines)
+                    return (id == "not set" || id.isEmpty) ? nil : id
+                }
+            }
+        } catch {
+            return nil
+        }
+        return nil
+    }
+
     static func generateUpdateScript() -> String {
         return """
         (
@@ -458,6 +486,7 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
             APP_PATH="$2"
             WORK_DIR="$3"
             EXPECTED_BUNDLE_ID="$4"
+            EXPECTED_TEAM_ID="$5"
             
             # Step 1: Unpack into staging directory
             if file "$PKG_PATH" | grep -q "Zip archive"; then
@@ -475,12 +504,22 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
                 exit 1
             fi
             
-            # Step 2: Verify Code Signature Integrity
+            # Step 2: Verify Code Signature Integrity & Team Identifier
             if ! /usr/bin/codesign --verify --deep --strict --verbose=2 "$NEW_APP" 2>/dev/null; then
                 echo "Code signature verification failed on new app payload"
                 hdiutil unmount "$WORK_DIR" -quiet 2>/dev/null || true
                 rm -rf "$WORK_DIR" "$PKG_PATH"
                 exit 1
+            fi
+
+            if [ -n "$EXPECTED_TEAM_ID" ]; then
+                NEW_TEAM_ID="$(/usr/bin/codesign -d --verbose=2 "$NEW_APP" 2>&1 | awk -F= '/^TeamIdentifier=/ {print $2}' || true)"
+                if [ -n "$NEW_TEAM_ID" ] && [ "$NEW_TEAM_ID" != "not set" ] && [ "$NEW_TEAM_ID" != "$EXPECTED_TEAM_ID" ]; then
+                    echo "Team identifier mismatch: expected $EXPECTED_TEAM_ID, got $NEW_TEAM_ID"
+                    hdiutil unmount "$WORK_DIR" -quiet 2>/dev/null || true
+                    rm -rf "$WORK_DIR" "$PKG_PATH"
+                    exit 1
+                fi
             fi
             
             # Step 3: Verify Bundle Identifier matches
@@ -535,6 +574,7 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
     private func installUpdate(packagePath: String) {
         let appPath = Bundle.main.bundlePath
         let bundleId = Bundle.main.bundleIdentifier ?? "com.siphon.Siphon"
+        let teamId = Self.currentTeamIdentifier() ?? ""
         let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent("Siphon_Staging_\(UUID().uuidString)")
         do {
             try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
@@ -548,12 +588,13 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
         
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/bash")
-        process.arguments = ["-c", script, "bash", packagePath, appPath, tempDir.path, bundleId]
+        process.arguments = ["-c", script, "bash", packagePath, appPath, tempDir.path, bundleId, teamId]
         var env = ProcessInfo.processInfo.environment
         env["PKG_PATH"] = packagePath
         env["APP_PATH"] = appPath
         env["WORK_DIR"] = tempDir.path
         env["EXPECTED_BUNDLE_ID"] = bundleId
+        env["EXPECTED_TEAM_ID"] = teamId
         process.environment = env
         
         do {
