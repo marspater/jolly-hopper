@@ -363,7 +363,7 @@ struct DownloadRowView: View {
                                 .resizable()
                                 .aspectRatio(contentMode: .fill)
                         case .failure, .empty:
-                            if let filePath = download.filePath, FileManager.default.fileExists(atPath: filePath.path) {
+                            if let filePath = download.filePath {
                                 FileThumbnailView(fileURL: filePath)
                             } else {
                                 thumbnailPlaceholder
@@ -372,7 +372,7 @@ struct DownloadRowView: View {
                             thumbnailPlaceholder
                         }
                     }
-                } else if let filePath = download.filePath, FileManager.default.fileExists(atPath: filePath.path) {
+                } else if let filePath = download.filePath {
                     FileThumbnailView(fileURL: filePath)
                 } else {
                     thumbnailPlaceholder
@@ -423,6 +423,10 @@ struct DownloadRowView: View {
                 }
             }
         }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(download.title.isEmpty ? "Media preview" : "\(download.title) thumbnail")
+        .accessibilityHint(download.status == .completed && download.filePath != nil ? "Double click or press space to preview media" : "")
+        .accessibilityAddTraits(download.status == .completed && download.filePath != nil ? .isButton : [])
         .frame(width: 120, height: 68)
         .overlay(
             RoundedRectangle(cornerRadius: SiphonTheme.radiusControl)

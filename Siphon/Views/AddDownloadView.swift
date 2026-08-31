@@ -157,12 +157,7 @@ struct AddDownloadView: View {
                 presetSubtitleLanguage = ""
             }
 
-            // Handle Clipboard and External URLs
-            if let clipboardString = NSPasteboard.general.string(forType: .string),
-               clipboardString.hasPrefix("http") {
-                urlInput = clipboardString
-            }
-
+            // Handle External URLs passed via AppState
             if !appState.urlToDownload.isEmpty {
                 urlInput = appState.urlToDownload
                 appState.urlToDownload = ""
@@ -1806,10 +1801,15 @@ struct AddDownloadView: View {
         }
     }
 
-    private func formatNumber(_ number: Int) -> String {
+    private static let countFormatter: NumberFormatter = {
         let formatter = NumberFormatter()
         formatter.numberStyle = .decimal
         formatter.maximumFractionDigits = 1
+        return formatter
+    }()
+
+    private func formatNumber(_ number: Int) -> String {
+        let formatter = Self.countFormatter
         if number >= 1_000_000_000 { return "\(formatter.string(from: NSNumber(value: Double(number) / 1_000_000_000)) ?? "")B" }
         else if number >= 1_000_000 { return "\(formatter.string(from: NSNumber(value: Double(number) / 1_000_000)) ?? "")M" }
         else if number >= 1_000 { return "\(formatter.string(from: NSNumber(value: Double(number) / 1_000)) ?? "")K" }

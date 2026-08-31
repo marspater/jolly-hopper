@@ -21,6 +21,7 @@ public final class DownloadProcessController: @unchecked Sendable {
     private static func getDescendantPIDs(for parentPID: pid_t) -> [pid_t] {
         guard parentPID > 0 else { return [] }
         var descendants: [pid_t] = []
+        var seenPIDs: Set<pid_t> = []
         var queue: [pid_t] = [parentPID]
 
         while !queue.isEmpty {
@@ -34,7 +35,7 @@ public final class DownloadProcessController: @unchecked Sendable {
             let actualCount = Int(actualBytes) / MemoryLayout<pid_t>.size
             for i in 0..<actualCount {
                 let child = pids[i]
-                if child > 0 && !descendants.contains(child) {
+                if child > 0 && seenPIDs.insert(child).inserted {
                     descendants.append(child)
                     queue.append(child)
                 }
