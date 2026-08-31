@@ -136,7 +136,7 @@ struct PreferencesView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .clipped()
-            .id(selectedTab)
+            .animation(.spring(response: 0.30, dampingFraction: 0.72), value: selectedTab)
         }
         .padding(.horizontal, 16)
         .padding(.bottom, 16)
@@ -178,7 +178,7 @@ struct PreferencesView: View {
     @ViewBuilder
     private func tabSegment(_ tab: PreferenceTab, title: String, icon: String) -> some View {
         Button {
-            withAnimation(.spring(response: 0.32, dampingFraction: 0.74)) {
+            withAnimation(.spring(response: 0.30, dampingFraction: 0.68, blendDuration: 0)) {
                 selectedTab = tab
             }
         } label: {
@@ -197,7 +197,7 @@ struct PreferencesView: View {
                 if selectedTab == tab {
                     ZStack {
                         Capsule()
-                            .fill(SiphonTheme.accent.opacity(0.30))
+                            .fill(SiphonTheme.accent.opacity(0.35))
                             .blur(radius: 6)
                             .padding(-1)
                             .allowedDynamicRange(AdaptiveRenderingEnvironment.shared.capabilities.supportsEDR ? .high : .standard)
@@ -214,7 +214,7 @@ struct PreferencesView: View {
             }
             .contentShape(Capsule())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.bouncy(scale: 0.95, hover: 1.02))
     }
 
     private var generalTab: some View {

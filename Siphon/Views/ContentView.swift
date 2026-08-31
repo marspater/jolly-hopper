@@ -224,7 +224,7 @@ struct SidebarView: View {
             .padding(.vertical, 6)
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.bouncy(scale: 0.97, hover: 1.01))
         .listRowInsets(EdgeInsets(top: 2, leading: 6, bottom: 2, trailing: 6))
         .listRowBackground(
             RoundedRectangle(cornerRadius: SiphonTheme.radiusControl)
@@ -262,6 +262,7 @@ struct DetailView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .animation(.spring(response: 0.30, dampingFraction: 0.72), value: appState.selectedNavItem)
     }
 }
 
@@ -270,7 +271,6 @@ struct HomeView: View {
     @EnvironmentObject var downloadManager: DownloadManager
     @EnvironmentObject var languageService: LanguageService
     @State private var isLogoHovered = false
-    @State private var isButtonHovered = false
     
     var body: some View {
         ScrollView {
@@ -284,8 +284,8 @@ struct HomeView: View {
                         .frame(width: 96, height: 96)
                         .shadow(color: .purple.opacity(isLogoHovered ? 0.6 : 0.4), radius: isLogoHovered ? 32 : 24, x: 0, y: isLogoHovered ? 12 : 8)
                         .shadow(color: .blue.opacity(isLogoHovered ? 0.35 : 0.2), radius: isLogoHovered ? 48 : 40, x: 0, y: 12)
-                        .scaleEffect(isLogoHovered ? 1.05 : 1.0)
-                        .animation(.spring(response: 0.35, dampingFraction: 0.7), value: isLogoHovered)
+                        .scaleEffect(isLogoHovered ? 1.06 : 1.0)
+                        .animation(.spring(response: 0.32, dampingFraction: 0.65), value: isLogoHovered)
                         .onHover { hovering in
                             isLogoHovered = hovering
                         }
@@ -323,15 +323,10 @@ struct HomeView: View {
                         Capsule()
                             .stroke(Color.white.opacity(0.25), lineWidth: 1)
                     )
+                    .shadow(color: SiphonTheme.accent.opacity(0.35), radius: 12, y: 4)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.bouncy(scale: 0.94, hover: 1.03))
                 .keyboardShortcut("n", modifiers: .command)
-                .scaleEffect(isButtonHovered ? 1.03 : 1.0)
-                .shadow(color: SiphonTheme.accent.opacity(isButtonHovered ? 0.45 : 0.25), radius: isButtonHovered ? 14 : 10, y: isButtonHovered ? 6 : 4)
-                .animation(.spring(response: 0.3, dampingFraction: 0.75), value: isButtonHovered)
-                .onHover { hovering in
-                    isButtonHovered = hovering
-                }
                 
                 // Stats Grid
                 LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 16), count: 4), spacing: 16) {
@@ -408,7 +403,7 @@ struct StatCard: View {
             .padding(.horizontal, 6)
             .siphonInteractiveGlass(cornerRadius: SiphonTheme.radiusCard, tintColor: color)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.bouncy(scale: 0.95, hover: 1.025))
     }
 }
 

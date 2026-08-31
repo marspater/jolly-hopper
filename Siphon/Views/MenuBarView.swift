@@ -12,6 +12,7 @@ struct MenuBarView: View {
     // Bug #11 fix: Use State to prevent heavy computation in View body
     @State private var customPresets: [CustomPreset] = []
     @State private var isPasted: Bool = false
+    @Namespace private var menuBarFormatNamespace
     
     var body: some View {
         VStack(spacing: 12) {
@@ -112,7 +113,7 @@ struct MenuBarView: View {
                 
                 HStack(spacing: 2) {
                     Button {
-                        withAnimation(.spring(response: 0.25, dampingFraction: 0.8)) {
+                        withAnimation(.spring(response: 0.30, dampingFraction: 0.68, blendDuration: 0)) {
                             selectedType = "video"
                         }
                     } label: {
@@ -126,13 +127,14 @@ struct MenuBarView: View {
                                     Capsule()
                                         .fill(SiphonTheme.primaryGradient)
                                         .shadow(color: SiphonTheme.accent.opacity(0.35), radius: 4, y: 1)
+                                        .matchedGeometryEffect(id: "activeMenuBarFormatBubble", in: menuBarFormatNamespace)
                                 }
                             }
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.bouncy(scale: 0.95, hover: 1.02))
                     
                     Button {
-                        withAnimation(.spring(response: 0.25, dampingFraction: 0.8)) {
+                        withAnimation(.spring(response: 0.30, dampingFraction: 0.68, blendDuration: 0)) {
                             selectedType = "audio"
                         }
                     } label: {
@@ -146,10 +148,11 @@ struct MenuBarView: View {
                                     Capsule()
                                         .fill(SiphonTheme.primaryGradient)
                                         .shadow(color: SiphonTheme.accent.opacity(0.35), radius: 4, y: 1)
+                                        .matchedGeometryEffect(id: "activeMenuBarFormatBubble", in: menuBarFormatNamespace)
                                 }
                             }
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.bouncy(scale: 0.95, hover: 1.02))
                 }
                 .padding(2)
                 .background(
@@ -231,7 +234,7 @@ struct MenuBarView: View {
                     .stroke(Color.white.opacity(url.isEmpty ? 0.05 : 0.25), lineWidth: 1)
             )
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.bouncy(scale: 0.95, hover: 1.025))
         .disabled(url.isEmpty)
         .shadow(color: url.isEmpty ? .clear : SiphonTheme.accent.opacity(0.35), radius: 6, y: 2)
     }
