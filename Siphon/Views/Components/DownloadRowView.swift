@@ -434,6 +434,10 @@ struct DownloadRowView: View {
             }
         }
         .help(download.status == .completed ? "Click to Quick Look" : "")
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(download.status == .completed ? "Quick Look preview" : download.title)
+        .accessibilityAddTraits(download.status == .completed ? [.isButton] : [])
+        .accessibilityHint(download.status == .completed ? "Click to preview with Quick Look" : "")
     }
     
     private var thumbnailPlaceholder: some View {
