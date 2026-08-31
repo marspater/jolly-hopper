@@ -44,11 +44,6 @@ struct ContentView: View {
                         appState.showAddDownloadSheet = false
                     }
                 }
-                .sheet(isPresented: $languageService.isFirstLaunch) {
-                    WelcomeView()
-                        .environmentObject(languageService)
-                        .interactiveDismissDisabled()
-                }
                 .task {
                     await downloadManager.initialize(languageService: languageService)
                     await updateChecker.checkForUpdates()
