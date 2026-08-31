@@ -597,6 +597,9 @@ final class DownloadManagerTests: XCTestCase {
         let manager = DownloadManager()
         let languageService = LanguageService()
 
+        manager.ytdlpService.ytdlpPath = URL(fileURLWithPath: "/usr/local/bin/yt-dlp")
+        manager.ytdlpService.processRunner = MockYtdlpProcessRunner(mockCommand: { _ in "2025.02.20" })
+
         let historyKey = UserDefaultsKeys.downloadHistory
         defer { UserDefaults.standard.removeObject(forKey: historyKey) }
 
@@ -619,6 +622,9 @@ final class DownloadManagerTests: XCTestCase {
         let manager = DownloadManager()
         let languageService = LanguageService()
 
+        manager.ytdlpService.ytdlpPath = URL(fileURLWithPath: "/usr/local/bin/yt-dlp")
+        manager.ytdlpService.processRunner = MockYtdlpProcessRunner(mockCommand: { _ in "2025.02.20" })
+
         let lastSeenKey = UserDefaultsKeys.lastSeenVersion
         defer { UserDefaults.standard.removeObject(forKey: lastSeenKey) }
 
@@ -633,6 +639,8 @@ final class DownloadManagerTests: XCTestCase {
 
         // Run initialize again with current version already stored -> showWhatsNew should remain false on fresh instance
         let manager2 = DownloadManager()
+        manager2.ytdlpService.ytdlpPath = URL(fileURLWithPath: "/usr/local/bin/yt-dlp")
+        manager2.ytdlpService.processRunner = MockYtdlpProcessRunner(mockCommand: { _ in "2025.02.20" })
         await manager2.initialize(languageService: languageService)
         XCTAssertFalse(manager2.showWhatsNew)
     }
