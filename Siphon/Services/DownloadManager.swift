@@ -377,56 +377,14 @@ class DownloadManager: ObservableObject {
         objectWillChange.send()
 
         do {
-            let info = try await ytdlpService.fetchInfo(url: download.url, rawCookies: download.options.rawCookies)
+            let (resolvedBaseName, candidateKey) = try await prepareDownloadMetadata(for: download)
 
-            guard !Task.isCancelled else { return }
-            guard download.status == .fetching else { return }
-
-            download.title = info.title
-            download.duration = info.durationString
-            download.thumbnailURL = info.thumbnailURL
-            download.mediaInfo = info
-            
-            let selectedFormats = info.resolveSelectedFormats(options: download.options)
-            let primaryFormat = selectedFormats.first(where: { !$0.isAudioOnly }) ?? selectedFormats.first
-            download.diagnostics.ytdlpVersion = self.ytdlpVersion
-            download.diagnostics.extractor = info.uploader ?? download.sourceDomain
-            download.diagnostics.formatId = download.options.selectedFormatId ?? primaryFormat?.formatId
-            download.diagnostics.videoCodec = primaryFormat?.vcodec ?? download.options.videoCodec?.rawValue
-            download.diagnostics.audioCodec = selectedFormats.first(where: { $0.isAudioOnly || $0.acodec != "none" })?.acodec ?? download.options.audioCodec?.rawValue
-            download.diagnostics.container = download.options.fileType.rawValue
-            download.diagnostics.resolution = primaryFormat?.resolution
-            download.diagnostics.fps = primaryFormat?.fps
-            download.diagnostics.dynamicRange = primaryFormat?.dynamicRange
-            download.diagnostics.colorSpace = primaryFormat?.colorSpace
-            download.diagnostics.bitDepth = primaryFormat?.bitDepth
-            download.diagnostics.duration = info.durationString
-
-            let (resolvedBaseName, candidateKey) = resolveUniqueOutputPath(for: download)
-            let rawBaseName = download.options.customFilename ?? download.title
-            let sanitizedBaseName = YtdlpService.sanitizeFilename(rawBaseName)
-            if resolvedBaseName != sanitizedBaseName {
-                download.options.customFilename = resolvedBaseName
-            }
             reserveOutputPath(candidateKey)
             defer {
                 unreserveOutputPath(candidateKey)
             }
 
-            let folderPath = download.options.saveFolder
-            let fileExists = await Task.detached {
-                if let contents = try? FileManager.default.contentsOfDirectory(at: folderPath, includingPropertiesForKeys: nil) {
-                    let matches = contents.filter { file in
-                        let nameWithoutExt = file.deletingPathExtension().lastPathComponent
-                        let isExactMatch = nameWithoutExt == resolvedBaseName
-                        let isPart = file.lastPathComponent.hasSuffix(".part") || file.lastPathComponent.hasSuffix(".ytdl")
-                        let isMedia = YtdlpService.isMediaFilePath(file.path)
-                        return isExactMatch && !isPart && isMedia
-                    }
-                    return !matches.isEmpty
-                }
-                return false
-            }.value
+            let fileExists = await checkFileExists(for: download, resolvedBaseName: resolvedBaseName)
 
             guard !Task.isCancelled else { return }
             guard download.status == .fetching else { return }
@@ -437,168 +395,235 @@ class DownloadManager: ObservableObject {
                 return // Paused: UI will show button to resume with overwrite or add a number
             }
 
-            updateStatus(for: download, to: .downloading)
-            objectWillChange.send()
+            let outputPath = try await performDownloadProcess(download)
+            handleDownloadCompletion(download, outputPath: outputPath)
+        } catch let error as YtdlpError {
+            handleYtdlpError(error, for: download)
+        } catch {
+            handleGenericError(error, for: download)
+        }
+    }
 
-            let controller = DownloadProcessController()
-            activeControllers[download.id] = controller
+    private func prepareDownloadMetadata(_ download: Download) async throws -> (resolvedBaseName: String, candidateKey: String) {
+        let info = try await ytdlpService.fetchInfo(url: download.url, rawCookies: download.options.rawCookies)
 
-            LoggerService.shared.log("Starting download for URL: \(LoggerService.sanitizeURLForLog(download.url))", level: .info)
+        guard !Task.isCancelled else { throw YtdlpError.downloadFailed("Task cancelled during info fetch") }
+        guard download.status == .fetching else { throw YtdlpError.downloadFailed("Download status changed during info fetch") }
 
-            let coalescer = DownloadEventCoalescer { [weak download] progress, speed, eta, lines in
-                DispatchQueue.main.async { [weak download] in
-                    guard let download else { return }
-                    if let progress {
-                        download.progress = progress
-                        download.speed = speed
-                        download.eta = eta
-                        if let speed, !speed.isEmpty {
-                            download.diagnostics.peakSpeed = speed
-                        }
+        download.title = info.title
+        download.duration = info.durationString
+        download.thumbnailURL = info.thumbnailURL
+        download.mediaInfo = info
+
+        let selectedFormats = info.resolveSelectedFormats(options: download.options)
+        let primaryFormat = selectedFormats.first(where: { !$0.isAudioOnly }) ?? selectedFormats.first
+        download.diagnostics.ytdlpVersion = self.ytdlpVersion
+        download.diagnostics.extractor = info.uploader ?? download.sourceDomain
+        download.diagnostics.formatId = download.options.selectedFormatId ?? primaryFormat?.formatId
+        download.diagnostics.videoCodec = primaryFormat?.vcodec ?? download.options.videoCodec?.rawValue
+        download.diagnostics.audioCodec = selectedFormats.first(where: { $0.isAudioOnly || $0.acodec != "none" })?.acodec ?? download.options.audioCodec?.rawValue
+        download.diagnostics.container = download.options.fileType.rawValue
+        download.diagnostics.resolution = primaryFormat?.resolution
+        download.diagnostics.fps = primaryFormat?.fps
+        download.diagnostics.dynamicRange = primaryFormat?.dynamicRange
+        download.diagnostics.colorSpace = primaryFormat?.colorSpace
+        download.diagnostics.bitDepth = primaryFormat?.bitDepth
+        download.diagnostics.duration = info.durationString
+
+        let (resolvedBaseName, candidateKey) = resolveUniqueOutputPath(for: download)
+        let rawBaseName = download.options.customFilename ?? download.title
+        let sanitizedBaseName = YtdlpService.sanitizeFilename(rawBaseName)
+        if resolvedBaseName != sanitizedBaseName {
+            download.options.customFilename = resolvedBaseName
+        }
+        return (resolvedBaseName, candidateKey)
+    }
+
+    private func checkFileExists(for download: Download, resolvedBaseName: String) async -> Bool {
+        let folderPath = download.options.saveFolder
+        return await Task.detached {
+            if let contents = try? FileManager.default.contentsOfDirectory(at: folderPath, includingPropertiesForKeys: nil) {
+                let matches = contents.filter { file in
+                    let nameWithoutExt = file.deletingPathExtension().lastPathComponent
+                    let isExactMatch = nameWithoutExt == resolvedBaseName
+                    let isPart = file.lastPathComponent.hasSuffix(".part") || file.lastPathComponent.hasSuffix(".ytdl")
+                    let isMedia = YtdlpService.isMediaFilePath(file.path)
+                    return isExactMatch && !isPart && isMedia
+                }
+                return !matches.isEmpty
+            }
+            return false
+        }.value
+    }
+
+    private func performDownloadProcess(_ download: Download) async throws -> String {
+        updateStatus(for: download, to: .downloading)
+        objectWillChange.send()
+
+        let controller = DownloadProcessController()
+        activeControllers[download.id] = controller
+
+        LoggerService.shared.log("Starting download for URL: \(LoggerService.sanitizeURLForLog(download.url))", level: .info)
+
+        let coalescer = DownloadEventCoalescer { [weak download] progress, speed, eta, lines in
+            DispatchQueue.main.async { [weak download] in
+                guard let download else { return }
+                if let progress {
+                    download.progress = progress
+                    download.speed = speed
+                    download.eta = eta
+                    if let speed, !speed.isEmpty {
+                        download.diagnostics.peakSpeed = speed
                     }
-                    if !lines.isEmpty {
-                        let combined = lines.joined(separator: "\n") + "\n"
-                        if download.log.count + combined.count > 50_000 {
-                            download.log = String(download.log.suffix(25_000))
-                        }
-                        if download.status == .downloading {
-                            for line in lines {
-                                if line.contains("[EmbedThumbnail]") || line.contains("[Metadata]") || line.contains("[Merger]") || line.contains("[VideoConvertor]") || line.contains("[ThumbnailsConvertor]") || line.contains("[EmbedSubtitle]") {
-                                    download.status = .processing
-                                    break
-                                }
+                }
+                if !lines.isEmpty {
+                    let combined = lines.joined(separator: "\n") + "\n"
+                    if download.log.count + combined.count > 50_000 {
+                        download.log = String(download.log.suffix(25_000))
+                    }
+                    if download.status == .downloading {
+                        for line in lines {
+                            if line.contains("[EmbedThumbnail]") || line.contains("[Metadata]") || line.contains("[Merger]") || line.contains("[VideoConvertor]") || line.contains("[ThumbnailsConvertor]") || line.contains("[EmbedSubtitle]") {
+                                download.status = .processing
+                                break
                             }
                         }
                     }
                 }
             }
+        }
 
-            let outputPath = try await ytdlpService.download(
-                url: download.url,
-                options: download.options,
-                mediaInfo: download.mediaInfo,
-                processController: controller,
-                onProgress: { progress, speed, eta in
-                    let safeProgress = progress.isNaN ? 0 : max(0, min(1, progress))
-                    coalescer.recordProgress(progress: safeProgress, speed: speed, eta: eta)
-                },
-                onOutput: { line in
-                    coalescer.recordLogLine(line)
-                }
-            )
-
-            coalescer.flushRemaining()
-
-            download.filePath = outputPath
-            download.diagnostics.exitStatus = "Completed (0)"
-            updateStatus(for: download, to: .completed)
-            download.progress = 1.0
-
-            // Memory optimization: Prune large formats/subtitles and bound log for completed download
-            download.mediaInfo = download.mediaInfo?.prunedForCompletion()
-            if download.log.count > 2000 {
-                download.log = String(download.log.suffix(2000))
+        let outputPath = try await ytdlpService.download(
+            url: download.url,
+            options: download.options,
+            mediaInfo: download.mediaInfo,
+            processController: controller,
+            onProgress: { progress, speed, eta in
+                let safeProgress = progress.isNaN ? 0 : max(0, min(1, progress))
+                coalescer.recordProgress(progress: safeProgress, speed: speed, eta: eta)
+            },
+            onOutput: { line in
+                coalescer.recordLogLine(line)
             }
-            objectWillChange.send()
+        )
 
-            LoggerService.shared.log("Download completed successfully: \(download.title.isEmpty ? LoggerService.sanitizeURLForLog(download.url) : download.title)", level: .info)
+        coalescer.flushRemaining()
+        return outputPath
+    }
 
-            addToHistory(download)
+    private func handleDownloadCompletion(_ download: Download, outputPath: String) {
+        download.filePath = outputPath
+        download.diagnostics.exitStatus = "Completed (0)"
+        updateStatus(for: download, to: .completed)
+        download.progress = 1.0
 
-            // Send notification
-            let lang = languageService ?? LanguageService()
-            NotificationService.shared.sendDownloadCompleted(filename: download.title.isEmpty ? LoggerService.sanitizeURLForLog(download.url) : download.title, languageService: lang)
+        // Memory optimization: Prune large formats/subtitles and bound log for completed download
+        download.mediaInfo = download.mediaInfo?.prunedForCompletion()
+        if download.log.count > 2000 {
+            download.log = String(download.log.suffix(2000))
+        }
+        objectWillChange.send()
 
-        } catch let error as YtdlpError {
-            if download.status == .stopped || download.status == .paused || Task.isCancelled {
-                LoggerService.shared.log("Download stopped or paused by user (\(LoggerService.sanitizeURLForLog(download.url)))", level: .info)
-                download.diagnostics.exitStatus = "Stopped by user"
-                if download.status == .stopped {
-                    addToHistory(download)
-                }
-                return
+        LoggerService.shared.log("Download completed successfully: \(download.title.isEmpty ? LoggerService.sanitizeURLForLog(download.url) : download.title)", level: .info)
+
+        addToHistory(download)
+
+        // Send notification
+        let lang = languageService ?? LanguageService()
+        NotificationService.shared.sendDownloadCompleted(filename: download.title.isEmpty ? LoggerService.sanitizeURLForLog(download.url) : download.title, languageService: lang)
+    }
+
+    private func handleYtdlpError(_ error: YtdlpError, for download: Download) {
+        if download.status == .stopped || download.status == .paused || Task.isCancelled {
+            LoggerService.shared.log("Download stopped or paused by user (\(LoggerService.sanitizeURLForLog(download.url)))", level: .info)
+            download.diagnostics.exitStatus = "Stopped by user"
+            if download.status == .stopped {
+                addToHistory(download)
             }
-            download.diagnostics.exitStatus = "Failed: \(error.localizedDescription)"
-            updateStatus(for: download, to: .failed)
-            objectWillChange.send()
+            return
+        }
+        download.diagnostics.exitStatus = "Failed: \(error.localizedDescription)"
+        updateStatus(for: download, to: .failed)
+        objectWillChange.send()
 
-            let lang = languageService ?? LanguageService()
-            switch error {
-            case .safariCookiesFullDiskAccessRequired:
-                download.errorMessage = lang.s("safari_fda_required")
-            case .tooManyRequests:
-                download.errorMessage = lang.s("too_many_requests")
-            case .cloudflareBlocked:
+        let lang = languageService ?? LanguageService()
+        switch error {
+        case .safariCookiesFullDiskAccessRequired:
+            download.errorMessage = lang.s("safari_fda_required")
+        case .tooManyRequests:
+            download.errorMessage = lang.s("too_many_requests")
+        case .cloudflareBlocked:
+            download.errorMessage = lang.s("cloudflare_blocked")
+        case .boyfriendTVNeedsBrowserCookies:
+            download.errorMessage = "This site requires signed-in browser cookies. Open Settings > Advanced > Browser Cookies, choose your browser, then try again."
+        case .boyfriendTVLoginRequired:
+            download.errorMessage = lang.s("login_required")
+        case .notFound:
+            download.errorMessage = lang.s("ytdlp_not_found")
+        case .parseError:
+            download.errorMessage = lang.s("parse_error")
+        case .ffmpegInstallationFailed:
+            download.errorMessage = lang.s("ffmpeg_error")
+        case .securityViolation(let message):
+            download.errorMessage = "Security violation: \(message)"
+        case .subtitleError(let details):
+            download.errorMessage = String(format: lang.s("subtitle_download_failed"), details)
+        case .downloadFailed(let reason), .commandFailed(let reason):
+            let lower = reason.lowercased()
+            if lower.contains("cloudflare") || lower.contains("403") || lower.contains("anti-bot") || lower.contains("captcha") {
                 download.errorMessage = lang.s("cloudflare_blocked")
-            case .boyfriendTVNeedsBrowserCookies:
-                download.errorMessage = "This site requires signed-in browser cookies. Open Settings > Advanced > Browser Cookies, choose your browser, then try again."
-            case .boyfriendTVLoginRequired:
+            } else if lower.contains("sign in") || lower.contains("private video") || lower.contains("login") || lower.contains("members-only") {
                 download.errorMessage = lang.s("login_required")
-            case .notFound:
-                download.errorMessage = lang.s("ytdlp_not_found")
-            case .parseError:
-                download.errorMessage = lang.s("parse_error")
-            case .ffmpegInstallationFailed:
-                download.errorMessage = lang.s("ffmpeg_error")
-            case .securityViolation(let message):
-                download.errorMessage = "Security violation: \(message)"
-            case .subtitleError(let details):
-                download.errorMessage = String(format: lang.s("subtitle_download_failed"), details)
-            case .downloadFailed(let reason), .commandFailed(let reason):
-                let lower = reason.lowercased()
-                if lower.contains("cloudflare") || lower.contains("403") || lower.contains("anti-bot") || lower.contains("captcha") {
-                    download.errorMessage = lang.s("cloudflare_blocked")
-                } else if lower.contains("sign in") || lower.contains("private video") || lower.contains("login") || lower.contains("members-only") {
-                    download.errorMessage = lang.s("login_required")
-                } else if lower.contains("drm") || lower.contains("encrypted") || lower.contains("protected") {
-                    download.errorMessage = lang.s("drm_protected")
-                } else if lower.contains("unavailable") || lower.contains("removed") || lower.contains("404") {
-                    download.errorMessage = lang.s("video_unavailable")
-                } else if lower.contains("no space left") || lower.contains("disk full") {
-                    download.errorMessage = lang.s("disk_full")
-                } else if lower.contains("permission denied") {
-                    download.errorMessage = lang.s("permission_denied")
-                } else if lower.contains("unsupported url") {
-                    download.errorMessage = lang.s("unsupported_url")
-                } else if lower.contains("timed out") || lower.contains("timeout") {
-                    download.errorMessage = lang.s("network_timeout")
-                } else {
-                    download.errorMessage = String(format: lang.s("download_failed_error"), reason)
-                }
-            }
-
-            LoggerService.shared.log("Download failed (\(LoggerService.sanitizeURLForLog(download.url))): \(download.errorMessage ?? error.localizedDescription)", level: .error)
-            NotificationService.shared.sendDownloadFailed(filename: download.title.isEmpty ? LoggerService.sanitizeURLForLog(download.url) : download.title, languageService: lang)
-            addToHistory(download)
-        } catch {
-            if download.status == .stopped || download.status == .paused || Task.isCancelled {
-                LoggerService.shared.log("Download stopped or paused by user (\(LoggerService.sanitizeURLForLog(download.url)))", level: .info)
-                if download.status == .stopped {
-                    addToHistory(download)
-                }
-                return
-            }
-            updateStatus(for: download, to: .failed)
-            objectWillChange.send()
-
-            let lang = languageService ?? LanguageService()
-            let errorText = error.localizedDescription
-            let lower = errorText.lowercased()
-            if lower.contains("no space left") || lower.contains("disk full") {
+            } else if lower.contains("drm") || lower.contains("encrypted") || lower.contains("protected") {
+                download.errorMessage = lang.s("drm_protected")
+            } else if lower.contains("unavailable") || lower.contains("removed") || lower.contains("404") {
+                download.errorMessage = lang.s("video_unavailable")
+            } else if lower.contains("no space left") || lower.contains("disk full") {
                 download.errorMessage = lang.s("disk_full")
             } else if lower.contains("permission denied") {
                 download.errorMessage = lang.s("permission_denied")
+            } else if lower.contains("unsupported url") {
+                download.errorMessage = lang.s("unsupported_url")
             } else if lower.contains("timed out") || lower.contains("timeout") {
                 download.errorMessage = lang.s("network_timeout")
             } else {
-                download.errorMessage = String(format: lang.s("download_failed_error"), errorText)
+                download.errorMessage = String(format: lang.s("download_failed_error"), reason)
             }
-            LoggerService.shared.log("Download failed with error (\(LoggerService.sanitizeURLForLog(download.url))): \(error.localizedDescription)", level: .error)
-
-            NotificationService.shared.sendDownloadFailed(filename: download.title.isEmpty ? LoggerService.sanitizeURLForLog(download.url) : download.title, languageService: lang)
-
-            addToHistory(download)
         }
+
+        LoggerService.shared.log("Download failed (\(LoggerService.sanitizeURLForLog(download.url))): \(download.errorMessage ?? error.localizedDescription)", level: .error)
+        NotificationService.shared.sendDownloadFailed(filename: download.title.isEmpty ? LoggerService.sanitizeURLForLog(download.url) : download.title, languageService: lang)
+        addToHistory(download)
+    }
+
+    private func handleGenericError(_ error: Error, for download: Download) {
+        if download.status == .stopped || download.status == .paused || Task.isCancelled {
+            LoggerService.shared.log("Download stopped or paused by user (\(LoggerService.sanitizeURLForLog(download.url)))", level: .info)
+            if download.status == .stopped {
+                addToHistory(download)
+            }
+            return
+        }
+        updateStatus(for: download, to: .failed)
+        objectWillChange.send()
+
+        let lang = languageService ?? LanguageService()
+        let errorText = error.localizedDescription
+        let lower = errorText.lowercased()
+        if lower.contains("no space left") || lower.contains("disk full") {
+            download.errorMessage = lang.s("disk_full")
+        } else if lower.contains("permission denied") {
+            download.errorMessage = lang.s("permission_denied")
+        } else if lower.contains("timed out") || lower.contains("timeout") {
+            download.errorMessage = lang.s("network_timeout")
+        } else {
+            download.errorMessage = String(format: lang.s("download_failed_error"), errorText)
+        }
+        LoggerService.shared.log("Download failed with error (\(LoggerService.sanitizeURLForLog(download.url))): \(error.localizedDescription)", level: .error)
+
+        NotificationService.shared.sendDownloadFailed(filename: download.title.isEmpty ? LoggerService.sanitizeURLForLog(download.url) : download.title, languageService: lang)
+
+        addToHistory(download)
     }
 
 
