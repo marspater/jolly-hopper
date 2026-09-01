@@ -412,8 +412,35 @@ final class YtdlpServiceTests: XCTestCase {
             onOutput: { _ in }
         )
 
-        // Verify localized subdomain pl.eporner.com was normalized to www.eporner.com
+        // Verify localized subdomain pl.eporner.com was normalized to www.eporner.com and http-chunk-size excluded
         XCTAssertTrue(capturedArgsBox.value.contains("https://www.eporner.com/video-rS36Amplbu9/jonas-smith-18-02-2025/"))
+        XCTAssertFalse(capturedArgsBox.value.contains("--http-chunk-size"))
+    }
+
+    func testHttp500ServerRangeErrorRetryFallback() async throws {
+        let callCountBox = TestBox<Int>(0)
+        let capturedArgs = TestBox<[[String]]>([])
+
+        service.processRunner = MockYtdlpProcessRunner(mockDownload: { args in
+            callCountBox.value += 1
+            capturedArgs.value.append(args)
+            if callCountBox.value == 1 {
+                throw YtdlpError.commandFailed("[download] Got error: HTTP Error 500: Internal Server Error. Giving up after 10 retries")
+            }
+            return "/tmp/recovered_unchunked.mp4"
+        })
+
+        let result = try await service.download(
+            url: "https://example.com/stream-server-error.mp4",
+            options: DownloadOptions.default,
+            onProgress: { _, _, _ in },
+            onOutput: { _ in }
+        )
+
+        XCTAssertEqual(callCountBox.value, 2, "Should retry once upon encountering HTTP Error 500 Range/Chunking error")
+        XCTAssertTrue(capturedArgs.value[0].contains("--http-chunk-size"), "Initial attempt should include chunk size")
+        XCTAssertFalse(capturedArgs.value[1].contains("--http-chunk-size"), "Retry attempt must strip --http-chunk-size")
+        XCTAssertEqual(result.lastPathComponent, "recovered_unchunked.mp4")
     }
 
     func testMetadataFlagGatingWhenDisabled() async throws {

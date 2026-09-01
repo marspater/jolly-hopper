@@ -2589,6 +2589,9 @@ class YtdlpService: ObservableObject {
         if lower.contains("range header not supported") || lower.contains("range request not supported") || lower.contains("does not support range") || lower.contains("server does not support ranges") {
             return true
         }
+        if lower.contains("http error 500") || lower.contains("http error 502") || lower.contains("http error 503") || lower.contains("http error 504") || lower.contains("internal server error") || lower.contains("bad gateway") || lower.contains("service unavailable") {
+            return true
+        }
         return false
     }
 
@@ -2601,6 +2604,7 @@ class YtdlpService: ObservableObject {
         let isBoyfriendTV = isBoyfriendTVURL(parsedHost) ||
                             parsedHost == "cdn.boyfriend.tv" || parsedHost.hasSuffix(".boyfriend.tv") ||
                             parsedHost == "cdn.boyfriendtv.com" || parsedHost.hasSuffix(".boyfriendtv.com")
+        let isEporner = isEpornerURL(parsedHost) || lowerUrl.contains("eporner.com")
 
         // Retries, socket timeouts & performance optimization flags
         args.append(contentsOf: ["--retries", "10"])
@@ -2637,8 +2641,11 @@ class YtdlpService: ObservableObject {
         // Universal baseline transport optimization:
         // 1. 10M HTTP chunking: enables multi-megabyte Range chunks across CDNs/hosts to bypass single-stream connection throttling.
         //    Safe because runDownloadProcess automatically catches Range-incompatible servers and retries as continuous stream.
+        //    Excluded for Eporner CDNs which return HTTP 500 on chunk slicing.
         // 2. 16K buffer size: reduces read/write syscall overhead compared to default small buffers.
-        args.append(contentsOf: ["--http-chunk-size", "10M"])
+        if !isEporner {
+            args.append(contentsOf: ["--http-chunk-size", "10M"])
+        }
         args.append(contentsOf: ["--buffer-size", "16K"])
 
         // Adaptive rate-throttling recovery:
