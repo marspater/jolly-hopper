@@ -2626,12 +2626,13 @@ class YtdlpService: ObservableObject {
         let tempCookiesURL = FileManager.default.temporaryDirectory.appendingPathComponent("siphon_cookies_\(UUID().uuidString).txt")
         let host = URL(string: url)?.host ?? ""
         let cookieContent = "# Netscape HTTP Cookie File\n\(host)\tFALSE\t/\tFALSE\t2783382923\t\(cookieName)\t\(cookieValue)\n"
-        do {
-            try cookieContent.write(to: tempCookiesURL, atomically: true, encoding: .utf8)
-            try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: tempCookiesURL.path)
+        guard let data = cookieContent.data(using: .utf8) else { return nil }
+
+        // Create file with 0o600 permissions upfront to prevent TOCTOU permission window
+        if FileManager.default.createFile(atPath: tempCookiesURL.path, contents: data, attributes: [.posixPermissions: 0o600]) {
             return tempCookiesURL
-        } catch {
-            LoggerService.shared.log("Error writing cookies file: \(error)", level: .error)
+        } else {
+            LoggerService.shared.log("Error creating temporary cookies file with restricted permissions", level: .error)
             return nil
         }
     }
@@ -2657,11 +2658,12 @@ class YtdlpService: ObservableObject {
         }
         
         let content = lines.joined(separator: "\n") + "\n"
-        do {
-            try content.write(to: tempCookiesURL, atomically: true, encoding: .utf8)
-            try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: tempCookiesURL.path)
+        guard let data = content.data(using: .utf8) else { return nil }
+
+        // Create file with 0o600 permissions upfront to prevent TOCTOU permission window
+        if FileManager.default.createFile(atPath: tempCookiesURL.path, contents: data, attributes: [.posixPermissions: 0o600]) {
             return tempCookiesURL
-        } catch {
+        } else {
             return nil
         }
     }
