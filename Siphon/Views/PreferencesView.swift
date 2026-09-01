@@ -63,6 +63,7 @@ struct PreferencesView: View {
     @State private var presetSponsorBlock: Bool = false
     @State private var presetSplitChapters: Bool = false
     @State private var editingPreset: CustomPreset? = nil
+    @State private var hasFullDiskAccess: Bool = YtdlpService.hasFullDiskAccess
     
     private var presetFilteredResolutions: [VideoResolution] {
         if presetVideoCodec == .h264 {
@@ -156,6 +157,13 @@ struct PreferencesView: View {
             previousLanguage = languageService.selectedLanguage
             installedBrowsers = BrowserUtils.shared.getInstalledBrowsers()
             customPresets = CustomPreset.loadAll()
+            hasFullDiskAccess = YtdlpService.hasFullDiskAccess
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            hasFullDiskAccess = YtdlpService.hasFullDiskAccess
+        }
+        .onChange(of: browserForCookies) { _, _ in
+            hasFullDiskAccess = YtdlpService.hasFullDiskAccess
         }
         .sheet(isPresented: $showCreatePresetSheet) {
             createPresetSheet
@@ -958,10 +966,6 @@ struct PreferencesView: View {
         }
     }
 
-    private var hasFullDiskAccess: Bool {
-        YtdlpService.hasFullDiskAccess
-    }
-
     private var safariWarningView: some View {
         VStack(alignment: .leading, spacing: 8) {
             if hasFullDiskAccess {
@@ -988,14 +992,27 @@ struct PreferencesView: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 
-                Button(languageService.s("open_system_settings")) {
-                    if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles") {
-                        NSWorkspace.shared.open(url)
+                HStack(spacing: 8) {
+                    Button(languageService.s("open_system_settings")) {
+                        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles") {
+                            NSWorkspace.shared.open(url)
+                        }
                     }
+                    .buttonStyle(.borderedProminent)
+                    .tint(SiphonTheme.accent)
+                    .controlSize(.small)
+
+                    Button("Check Permission") {
+                        hasFullDiskAccess = YtdlpService.hasFullDiskAccess
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(SiphonTheme.accent)
-                .controlSize(.small)
+
+                Text("Note: After toggling Full Disk Access in System Settings, restart Siphon for macOS permissions to take effect.")
+                    .font(.geist(10))
+                    .foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
         .padding(.top, 4)

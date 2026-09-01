@@ -2690,6 +2690,15 @@ class YtdlpService: ObservableObject {
                     "--downloader-args", "aria2c:-s 16 -x 16 -k 1M -j 16 --min-split-size=1M --summary-interval=1"
                 ])
             }
+        } else if isEporner {
+            args.append(contentsOf: ["--add-header", "Referer:https://www.eporner.com/"])
+            args.append(contentsOf: ["--add-header", "Origin:https://www.eporner.com"])
+            if Self.findAria2cPath() != nil {
+                args.append(contentsOf: [
+                    "--downloader", "aria2c",
+                    "--downloader-args", "aria2c:-s 16 -x 16 -k 1M -j 16 --min-split-size=1M --summary-interval=1"
+                ])
+            }
         } else if isGuywhURL(parsedHost) || isGuywhURL(url) || parsedHost.contains("guywh") {
             if let uaIdx = args.firstIndex(of: "--user-agent") {
                 args[uaIdx + 1] = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
@@ -2718,20 +2727,39 @@ class YtdlpService: ObservableObject {
     }
 
     static var hasFullDiskAccess: Bool {
+        let homeDir = FileManager.default.homeDirectoryForCurrentUser.path
         let candidatePaths = [
-            NSHomeDirectory() + "/Library/Containers/com.apple.Safari/Data/Library/Cookies/Cookies.binarycookies",
-            NSHomeDirectory() + "/Library/Cookies/Cookies.binarycookies",
-            NSHomeDirectory() + "/Library/Safari/Bookmarks.plist",
-            NSHomeDirectory() + "/Library/Safari/History.db"
+            "\(homeDir)/Library/Containers/com.apple.Safari/Data/Library/Cookies/Cookies.binarycookies",
+            "\(homeDir)/Library/Safari/Bookmarks.plist",
+            "\(homeDir)/Library/Safari/History.db",
+            "\(homeDir)/Library/Safari/CloudTabs.db",
+            "\(homeDir)/Library/Cookies/Cookies.binarycookies",
+            "\(NSHomeDirectory())/Library/Containers/com.apple.Safari/Data/Library/Cookies/Cookies.binarycookies",
+            "\(NSHomeDirectory())/Library/Safari/Bookmarks.plist"
         ]
         for path in candidatePaths {
-            if FileManager.default.fileExists(atPath: path) {
-                if let fileHandle = FileHandle(forReadingAtPath: path) {
-                    try? fileHandle.close()
-                    return true
-                }
+            if let fileHandle = FileHandle(forReadingAtPath: path) {
+                try? fileHandle.close()
+                return true
+            }
+            let fd = Darwin.open(path, O_RDONLY)
+            if fd >= 0 {
+                Darwin.close(fd)
+                return true
             }
         }
+
+        let candidateDirs = [
+            "\(homeDir)/Library/Safari",
+            "\(homeDir)/Library/Containers/com.apple.Safari/Data/Library/Cookies",
+            "\(homeDir)/Library/Cookies"
+        ]
+        for dir in candidateDirs {
+            if let contents = try? FileManager.default.contentsOfDirectory(atPath: dir), !contents.isEmpty {
+                return true
+            }
+        }
+
         return false
     }
 

@@ -415,6 +415,14 @@ final class YtdlpServiceTests: XCTestCase {
         // Verify localized subdomain pl.eporner.com was normalized to www.eporner.com and http-chunk-size excluded
         XCTAssertTrue(capturedArgsBox.value.contains("https://www.eporner.com/video-rS36Amplbu9/jonas-smith-18-02-2025/"))
         XCTAssertFalse(capturedArgsBox.value.contains("--http-chunk-size"))
+        if YtdlpService.findAria2cPath() != nil {
+            XCTAssertTrue(capturedArgsBox.value.contains("aria2c"), "Eporner should use aria2c multi-connection downloader when available")
+        }
+    }
+
+    func testHasFullDiskAccessCheckDoesNotCrash() {
+        let hasAccess = YtdlpService.hasFullDiskAccess
+        XCTAssertTrue(hasAccess == true || hasAccess == false)
     }
 
     func testHttp500ServerRangeErrorRetryFallback() async throws {
