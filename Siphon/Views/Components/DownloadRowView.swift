@@ -1077,6 +1077,7 @@ struct FileThumbnailView: View {
                     showLog = false
                 }
                 .buttonStyle(.borderedProminent)
+                .keyboardShortcut(.cancelAction)
             }
             .padding(14)
             .background(.ultraThinMaterial)
