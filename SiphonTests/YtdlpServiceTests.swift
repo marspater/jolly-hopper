@@ -397,6 +397,25 @@ final class YtdlpServiceTests: XCTestCase {
         }
     }
 
+    func testEpornerSubdomainNormalization() async throws {
+        let capturedArgsBox = TestBox<[String]>([])
+        service.processRunner = MockYtdlpProcessRunner(mockDownload: { args in
+            capturedArgsBox.value = args
+            return "[download] Destination: /tmp/test.mp4\n"
+        })
+
+        let options = DownloadOptions.default
+        _ = try await service.download(
+            url: "https://pl.eporner.com/video-rS36Amplbu9/jonas-smith-18-02-2025/",
+            options: options,
+            onProgress: { _, _, _ in },
+            onOutput: { _ in }
+        )
+
+        // Verify localized subdomain pl.eporner.com was normalized to www.eporner.com
+        XCTAssertTrue(capturedArgsBox.value.contains("https://www.eporner.com/video-rS36Amplbu9/jonas-smith-18-02-2025/"))
+    }
+
     func testMetadataFlagGatingWhenDisabled() async throws {
         let capturedArgsBox = TestBox<[String]>([])
         service.processRunner = MockYtdlpProcessRunner(mockDownload: { args in

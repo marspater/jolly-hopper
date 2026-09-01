@@ -2503,7 +2503,19 @@ class YtdlpService: ObservableObject {
             return components.url?.absoluteString ?? components.string ?? urlString
         }
 
+        // 5. Eporner normalization (map localized subdomains like pl.eporner.com, de.eporner.com to www.eporner.com so yt-dlp triggers its native Eporner extractor)
+        if isEpornerURL(host) {
+            components.scheme = "https"
+            components.host = "www.eporner.com"
+            return components.url?.absoluteString ?? components.string ?? urlString
+        }
+
         return components.string ?? urlString
+    }
+
+    private func isEpornerURL(_ urlOrHost: String) -> Bool {
+        let host = (URL(string: urlOrHost)?.host ?? urlOrHost).lowercased()
+        return host == "eporner.com" || host.hasSuffix(".eporner.com")
     }
 
     private func isXHamsterURL(_ urlOrHost: String) -> Bool {
