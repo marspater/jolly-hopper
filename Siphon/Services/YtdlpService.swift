@@ -2622,7 +2622,7 @@ class YtdlpService: ObservableObject {
         return trimmed.isEmpty ? "download" : trimmed
     }
 
-    private func createTempCookiesFile(url: String, cookieName: String, cookieValue: String) -> URL? {
+    func createTempCookiesFile(url: String, cookieName: String, cookieValue: String) -> URL? {
         let tempCookiesURL = FileManager.default.temporaryDirectory.appendingPathComponent("siphon_cookies_\(UUID().uuidString).txt")
         let host = URL(string: url)?.host ?? ""
         let cookieContent = "# Netscape HTTP Cookie File\n\(host)\tFALSE\t/\tFALSE\t2783382923\t\(cookieName)\t\(cookieValue)\n"
@@ -2637,7 +2637,7 @@ class YtdlpService: ObservableObject {
         }
     }
 
-    private func createTempCookiesFileFromHeader(url: String, cookieHeader: String) -> URL? {
+    func createTempCookiesFileFromHeader(url: String, cookieHeader: String) -> URL? {
         guard let urlObj = URL(string: url), let host = urlObj.host, !host.isEmpty else { return nil }
         let domain = host.hasPrefix(".") ? host : ".\(host)"
         let tempCookiesURL = FileManager.default.temporaryDirectory.appendingPathComponent("siphon_header_cookies_\(UUID().uuidString).txt")
