@@ -1405,6 +1405,7 @@ class YtdlpService: ObservableObject {
 
         do {
             try proc.run()
+            _ = pipe.fileHandleForReading.readDataToEndOfFile()
             proc.waitUntilExit()
             if proc.terminationStatus == 0 && fm.fileExists(atPath: tempOutput.path), ((try? tempOutput.resourceValues(forKeys: [.fileSizeKey]))?.fileSize ?? 0) > 0 {
                 let backupURL = mediaFile.deletingLastPathComponent().appendingPathComponent("thumb_orig_\(UUID().uuidString).\(ext)")
@@ -1473,8 +1474,8 @@ class YtdlpService: ObservableObject {
 
         do {
             try proc.run()
-            proc.waitUntilExit()
             let data = pipe.fileHandleForReading.readDataToEndOfFile()
+            proc.waitUntilExit()
             let output = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             return output.components(separatedBy: .newlines).contains { line in
                 let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)

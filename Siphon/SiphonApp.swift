@@ -461,8 +461,8 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
         proc.standardError = pipe
         do {
             try proc.run()
-            proc.waitUntilExit()
             let data = pipe.fileHandleForReading.readDataToEndOfFile()
+            proc.waitUntilExit()
             guard let output = String(data: data, encoding: .utf8) else { return nil }
             for line in output.components(separatedBy: .newlines) {
                 if line.hasPrefix("TeamIdentifier=") {
