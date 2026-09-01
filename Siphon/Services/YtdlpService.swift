@@ -2827,6 +2827,9 @@ final class StreamBuffer: @unchecked Sendable {
 }
 
 final class ThreadSafeOutputState: @unchecked Sendable {
+    // Bolt Performance Optimization: Reuse static CharacterSet to avoid repeated allocations in high-frequency progress loops
+    private static let quoteCharacterSet = CharacterSet(charactersIn: "\"\'")
+
     private var finalPath: String?
     private var candidatePaths: [String] = []
     private var errorText: String = ""
@@ -2834,7 +2837,7 @@ final class ThreadSafeOutputState: @unchecked Sendable {
 
     func setFinalPath(_ path: String) {
         let cleaned = path.trimmingCharacters(in: .whitespacesAndNewlines)
-            .trimmingCharacters(in: CharacterSet(charactersIn: "\"\'"))
+            .trimmingCharacters(in: Self.quoteCharacterSet)
         guard !cleaned.isEmpty else { return }
         lock.lock()
         finalPath = cleaned
@@ -2849,7 +2852,7 @@ final class ThreadSafeOutputState: @unchecked Sendable {
 
     func addCandidatePath(_ newPath: String) {
         let cleaned = newPath.trimmingCharacters(in: .whitespacesAndNewlines)
-            .trimmingCharacters(in: CharacterSet(charactersIn: "\"\'"))
+            .trimmingCharacters(in: Self.quoteCharacterSet)
         guard !cleaned.isEmpty else { return }
         lock.lock()
         candidatePaths.append(cleaned)
