@@ -1306,7 +1306,8 @@ class YtdlpService: ObservableObject {
             }
             for thumbURL in possibleThumbnailURLs {
                 if let img = NSImage(contentsOf: thumbURL) {
-                    let setSuccess = NSWorkspace.shared.setIcon(img, forFile: finalFileURL.path, options: [])
+                    let squareIcon = Self.createAspectFitIcon(from: img)
+                    let setSuccess = NSWorkspace.shared.setIcon(squareIcon, forFile: finalFileURL.path, options: [])
                     if setSuccess {
                         LoggerService.shared.log("Attached custom Finder thumbnail icon to \(finalFileURL.lastPathComponent)", level: .info)
                         break
@@ -1427,6 +1428,32 @@ class YtdlpService: ObservableObject {
         }
     }
 
+    nonisolated public static func createAspectFitIcon(from image: NSImage, targetSize: CGFloat = 512) -> NSImage {
+        let sourceSize = image.size
+        guard sourceSize.width > 0 && sourceSize.height > 0 else { return image }
+        
+        let canvas = NSImage(size: NSSize(width: targetSize, height: targetSize))
+        canvas.lockFocus()
+        
+        // Calculate aspect fit rect inside square canvas to prevent stretching
+        let widthRatio = targetSize / sourceSize.width
+        let heightRatio = targetSize / sourceSize.height
+        let scale = min(widthRatio, heightRatio)
+        
+        let scaledWidth = sourceSize.width * scale
+        let scaledHeight = sourceSize.height * scale
+        let x = (targetSize - scaledWidth) / 2.0
+        let y = (targetSize - scaledHeight) / 2.0
+        
+        let destRect = NSRect(x: x, y: y, width: scaledWidth, height: scaledHeight)
+        let srcRect = NSRect(origin: .zero, size: sourceSize)
+        
+        image.draw(in: destRect, from: srcRect, operation: .copy, fraction: 1.0)
+        canvas.unlockFocus()
+        
+        return canvas
+    }
+
     private func hasAttachedThumbnail(mediaFile: URL, ffmpegDir: String) async -> Bool {
         let ffprobeBin = URL(fileURLWithPath: ffmpegDir).appendingPathComponent("ffprobe")
         guard FileManager.default.isExecutableFile(atPath: ffprobeBin.path) else { return false }
@@ -1435,8 +1462,7 @@ class YtdlpService: ObservableObject {
         proc.executableURL = ffprobeBin
         proc.arguments = [
             "-v", "error",
-            "-select_streams", "v",
-            "-show_entries", "stream_disposition=attached_pic",
+            "-show_entries", "stream_disposition=attached_pic:format_tags=cover:format_tags=covr:stream_tags=cover:stream_tags=covr",
             "-of", "csv=p=0",
             mediaFile.path
         ]
@@ -1450,7 +1476,10 @@ class YtdlpService: ObservableObject {
             proc.waitUntilExit()
             let data = pipe.fileHandleForReading.readDataToEndOfFile()
             let output = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            return output.components(separatedBy: .newlines).contains("1")
+            return output.components(separatedBy: .newlines).contains { line in
+                let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+                return trimmed == "1" || !trimmed.isEmpty
+            }
         } catch {
             return false
         }
@@ -2827,6 +2856,9 @@ final class StreamBuffer: @unchecked Sendable {
 }
 
 final class ThreadSafeOutputState: @unchecked Sendable {
+    // Bolt Performance Optimization: Reuse static CharacterSet to avoid repeated allocations in high-frequency progress loops
+    private static let quoteCharacterSet = CharacterSet(charactersIn: "\"\'")
+
     private var finalPath: String?
     private var candidatePaths: [String] = []
     private var errorText: String = ""
@@ -2834,7 +2866,7 @@ final class ThreadSafeOutputState: @unchecked Sendable {
 
     func setFinalPath(_ path: String) {
         let cleaned = path.trimmingCharacters(in: .whitespacesAndNewlines)
-            .trimmingCharacters(in: CharacterSet(charactersIn: "\"\'"))
+            .trimmingCharacters(in: Self.quoteCharacterSet)
         guard !cleaned.isEmpty else { return }
         lock.lock()
         finalPath = cleaned
@@ -2849,7 +2881,7 @@ final class ThreadSafeOutputState: @unchecked Sendable {
 
     func addCandidatePath(_ newPath: String) {
         let cleaned = newPath.trimmingCharacters(in: .whitespacesAndNewlines)
-            .trimmingCharacters(in: CharacterSet(charactersIn: "\"\'"))
+            .trimmingCharacters(in: Self.quoteCharacterSet)
         guard !cleaned.isEmpty else { return }
         lock.lock()
         candidatePaths.append(cleaned)

@@ -510,8 +510,9 @@ class DownloadManager: ObservableObject {
                 if let thumbURL = download.thumbnailURL {
                     Task.detached(priority: .utility) {
                         if let data = try? Data(contentsOf: thumbURL), let img = NSImage(data: data) {
+                            let squareIcon = YtdlpService.createAspectFitIcon(from: img)
                             await MainActor.run {
-                                _ = NSWorkspace.shared.setIcon(img, forFile: finalURL.path, options: [])
+                                _ = NSWorkspace.shared.setIcon(squareIcon, forFile: finalURL.path, options: [])
                             }
                         }
                     }

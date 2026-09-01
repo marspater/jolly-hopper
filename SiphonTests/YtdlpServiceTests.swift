@@ -246,6 +246,35 @@ final class YtdlpServiceTests: XCTestCase {
         }
     }
 
+    func testCreateAspectFitIconPreservesAspectRatioOnSquareCanvas() {
+        // Test rectangular 16:9 image
+        let wideImage = NSImage(size: NSSize(width: 1920, height: 1080))
+        let wideIcon = YtdlpService.createAspectFitIcon(from: wideImage, targetSize: 512)
+        XCTAssertEqual(wideIcon.size.width, 512)
+        XCTAssertEqual(wideIcon.size.height, 512)
+
+        // Test portrait 9:16 image
+        let tallImage = NSImage(size: NSSize(width: 720, height: 1280))
+        let tallIcon = YtdlpService.createAspectFitIcon(from: tallImage, targetSize: 512)
+        XCTAssertEqual(tallIcon.size.width, 512)
+        XCTAssertEqual(tallIcon.size.height, 512)
+
+        // Test square image
+        let squareImage = NSImage(size: NSSize(width: 600, height: 600))
+        let squareIcon = YtdlpService.createAspectFitIcon(from: squareImage, targetSize: 512)
+        XCTAssertEqual(squareIcon.size.width, 512)
+        XCTAssertEqual(squareIcon.size.height, 512)
+    }
+
+    func testThreadSafeOutputStateQuoteStripping() {
+        let state = ThreadSafeOutputState()
+        state.setFinalPath("\"/path/to/downloaded video.mp4\"")
+        XCTAssertEqual(state.getFinalPath(), "/path/to/downloaded video.mp4")
+
+        state.addCandidatePath("'/another/path/video.mp4'")
+        XCTAssertEqual(state.getCandidatePaths(), ["/another/path/video.mp4"])
+    }
+
     func testSpeedLimiterFlagAppendedWhenConfigured() async throws {
         UserDefaults.standard.set(5120, forKey: UserDefaultsKeys.downloadSpeedLimit)
         defer { UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.downloadSpeedLimit) }
