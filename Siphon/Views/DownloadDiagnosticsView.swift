@@ -320,6 +320,7 @@ struct DownloadDiagnosticsView: View {
             }
             .buttonStyle(.borderedProminent)
             .tint(SiphonTheme.accent)
+            .keyboardShortcut(.cancelAction)
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 12)
