@@ -388,10 +388,13 @@ final class YtdlpServiceTests: XCTestCase {
             onOutput: { _ in }
         )
 
-        // Verify Guywh headers are appended
+        // Verify Guywh headers and direct stream format fallback are appended
         XCTAssertTrue(capturedArgsBox.value.contains("Referer: https://guywh.com/"))
         XCTAssertTrue(capturedArgsBox.value.contains("Origin: https://guywh.com"))
         XCTAssertTrue(capturedArgsBox.value.contains(where: { $0.contains("Chrome/126") }))
+        if let fIdx = capturedArgsBox.value.firstIndex(of: "-f") {
+            XCTAssertEqual(capturedArgsBox.value[fIdx + 1], "b/best")
+        }
     }
 
     func testMetadataFlagGatingWhenDisabled() async throws {

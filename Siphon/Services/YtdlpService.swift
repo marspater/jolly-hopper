@@ -1073,7 +1073,7 @@ class YtdlpService: ObservableObject {
             args.append(contentsOf: ["--downloader", "ffmpeg", "--hls-use-mpegts"])
         }
 
-        args.append(contentsOf: buildFormatArgs(options: options, mediaInfo: mediaInfo))
+        args.append(contentsOf: buildFormatArgs(url: url, options: options, mediaInfo: mediaInfo))
         let codecFallbackWarnings = codecFallbackOutputWarnings(options: options)
         if options.downloadSubtitles && !options.subtitleLanguages.isEmpty {
             let subFormat = options.subtitleFormat?.ytdlpValue ?? "srt"
@@ -1530,12 +1530,18 @@ class YtdlpService: ObservableObject {
 
 
 
-    private func buildFormatArgs(options: DownloadOptions, mediaInfo: MediaInfo? = nil) -> [String] {
+    private func buildFormatArgs(url: String? = nil, options: DownloadOptions, mediaInfo: MediaInfo? = nil) -> [String] {
         var args: [String] = []
+
+        let isSynthesizedDirectStream = (mediaInfo?.uploader == "Guywh" || isGuywhURL(mediaInfo?.id ?? "")) ||
+                                        (mediaInfo?.uploader == "BoyfriendTV" || isBoyfriendTVURL(mediaInfo?.id ?? "")) ||
+                                        (url.map(isGuywhURL) ?? false) ||
+                                        (url.map(isBoyfriendTVURL) ?? false)
 
         // 1. Explicit user-specified format ID
         if let customFormatId = options.selectedFormatId, !customFormatId.isEmpty {
-            args.append(contentsOf: ["-f", customFormatId])
+            let formatId = isSynthesizedDirectStream ? "b/best" : customFormatId
+            args.append(contentsOf: ["-f", formatId])
             if options.fileType.isVideo {
                 if let mergeFormat = compatibleMergeOutputFormat(for: options) {
                     args.append(contentsOf: ["--merge-output-format", mergeFormat])
@@ -1553,10 +1559,9 @@ class YtdlpService: ObservableObject {
         if let info = mediaInfo {
             let resolved = info.resolveSelectedFormats(options: options)
             if !resolved.isEmpty {
-                let isSynthesizedBtv = (info.uploader == "BoyfriendTV" || isBoyfriendTVURL(info.id)) && resolved.allSatisfy { $0.formatId == "1080" || $0.formatId == "720" || $0.formatId == "480" || $0.formatId == "240" || $0.formatId == "best" }
                 let formatId: String
-                if isSynthesizedBtv {
-                    formatId = "best"
+                if isSynthesizedDirectStream {
+                    formatId = "b/best"
                 } else if resolved.count == 2 {
                     formatId = "\(resolved[0].formatId)+\(resolved[1].formatId)"
                 } else {
@@ -1588,7 +1593,9 @@ class YtdlpService: ObservableObject {
 
         let maxH = options.videoResolution?.maxHeight
         let selector: String
-        if let h = maxH {
+        if isSynthesizedDirectStream {
+            selector = "b/best"
+        } else if let h = maxH {
             selector = "bestvideo[height<=\(h)]+bestaudio/best[height<=\(h)]/bestvideo+bestaudio/best"
         } else {
             selector = "bestvideo+bestaudio/best"
