@@ -371,6 +371,29 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertTrue(capturedArgsBox.value.contains("Origin:https://thisvid.com"))
     }
 
+    func testGuywhURLNormalizationAndHeaders() async throws {
+        let capturedArgsBox = TestBox<[String]>([])
+        service.processRunner = MockYtdlpProcessRunner(mockDownload: { args in
+            capturedArgsBox.value = args
+            return "[download] Destination: /tmp/test.mp4\n"
+        })
+
+        var options = DownloadOptions.default
+        options.videoResolution = .r1080p
+
+        _ = try await service.download(
+            url: "https://guywh.com/videos/7279/sample-title/",
+            options: options,
+            onProgress: { _, _, _ in },
+            onOutput: { _ in }
+        )
+
+        // Verify Guywh headers are appended
+        XCTAssertTrue(capturedArgsBox.value.contains("Referer: https://guywh.com/"))
+        XCTAssertTrue(capturedArgsBox.value.contains("Origin: https://guywh.com"))
+        XCTAssertTrue(capturedArgsBox.value.contains(where: { $0.contains("Chrome/126") }))
+    }
+
     func testMetadataFlagGatingWhenDisabled() async throws {
         let capturedArgsBox = TestBox<[String]>([])
         service.processRunner = MockYtdlpProcessRunner(mockDownload: { args in

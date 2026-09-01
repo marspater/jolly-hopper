@@ -757,6 +757,30 @@ class YtdlpService: ObservableObject {
             }
         }
 
+        if isGuywhURL(url) {
+            if let guywhMedia = await resolveGuywhMediaInfo(url: url, rawCookies: rawCookies) {
+                let quality = guywhMedia.quality ?? "720p"
+                let height = Int(quality.replacingOccurrences(of: "p", with: "")) ?? 720
+                let format = MediaFormat(
+                    formatId: quality,
+                    ext: "mp4",
+                    resolution: "\(Int(Double(height) * 16.0 / 9.0))x\(height)",
+                    fps: 30.0,
+                    vcodec: "h264",
+                    acodec: "aac",
+                    tbr: 2500
+                )
+                return MediaInfo(
+                    id: url,
+                    title: guywhMedia.title,
+                    thumbnail: guywhMedia.thumbnailURL,
+                    duration: guywhMedia.duration,
+                    uploader: "Guywh",
+                    formats: [format]
+                )
+            }
+        }
+
         var args = [
             path,
             "--ignore-config",
@@ -992,6 +1016,13 @@ class YtdlpService: ObservableObject {
                 customResolvedTitle = btvMedia.title
                 customEmbedURL = btvMedia.embedURL
                 customThumbnailURL = btvMedia.thumbnailURL
+            }
+        } else if isGuywhURL(url) {
+            if let guywhMedia = await resolveGuywhMediaInfo(url: url, rawCookies: options.rawCookies) {
+                targetURL = guywhMedia.streamURL
+                customResolvedTitle = guywhMedia.title
+                customEmbedURL = guywhMedia.embedURL
+                customThumbnailURL = guywhMedia.thumbnailURL
             }
         }
 
@@ -2176,6 +2207,208 @@ class YtdlpService: ObservableObject {
         return resolved
     }
 
+    // MARK: - Guywh / KVS Extractor
+
+    private func isGuywhURL(_ urlOrHost: String) -> Bool {
+        let host = (URL(string: urlOrHost)?.host ?? urlOrHost).lowercased()
+        return host == "guywh.com" || host.hasSuffix(".guywh.com")
+    }
+
+    struct GuywhExtractedMedia {
+        let streamURL: String
+        let embedURL: String
+        let title: String
+        let thumbnailURL: String?
+        let duration: Double?
+        let quality: String?
+    }
+
+    private func resolveGuywhMediaInfo(url: String, rawCookies: String? = nil) async -> GuywhExtractedMedia? {
+        let targetUrl = normalizeURLForYtdlp(url)
+        guard let pageURL = URL(string: targetUrl) else { return nil }
+        
+        var html = ""
+        
+        // 1. Try URLSession direct fetch with standard browser headers
+        if processRunner is DefaultYtdlpProcessRunner {
+            var request = URLRequest(url: pageURL)
+            request.timeoutInterval = 5.0
+            request.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36", forHTTPHeaderField: "User-Agent")
+            request.setValue("https://guywh.com/", forHTTPHeaderField: "Referer")
+            request.setValue("https://guywh.com", forHTTPHeaderField: "Origin")
+            if let raw = rawCookies, !raw.isEmpty {
+                request.setValue(raw, forHTTPHeaderField: "Cookie")
+            }
+            
+            if let (data, response) = try? await URLSession.shared.data(for: request),
+               let httpResponse = response as? HTTPURLResponse,
+               (200...299).contains(httpResponse.statusCode),
+               let fetched = String(data: data, encoding: .utf8) {
+                html = fetched
+            }
+        }
+        
+        // 2. Fallback to yt-dlp dump-pages if direct fetch failed
+        if html.isEmpty {
+            let appSupportYtdlp = Self.getAppSupportDirectory().appendingPathComponent("yt-dlp")
+            let ytdlpBinary = ytdlpPath ?? Bundle.main.url(forResource: "yt-dlp", withExtension: nil) ?? (FileManager.default.fileExists(atPath: appSupportYtdlp.path) ? appSupportYtdlp : nil)
+            if let ytdlp = ytdlpBinary {
+                var dumpArgs = [ytdlp.path, "--ignore-config", "--dump-pages"]
+                appendSiteSpecificArgs(for: targetUrl, to: &dumpArgs)
+                dumpArgs.append("--")
+                dumpArgs.append(targetUrl)
+                if let output = try? await processRunner.runCommand(dumpArgs) {
+                    var chunks: [String] = []
+                    for line in output.split(whereSeparator: \.isNewline) {
+                        let trimmed = String(line).trimmingCharacters(in: .whitespaces)
+                        if !trimmed.starts(with: "#") && !trimmed.starts(with: "[") && !trimmed.starts(with: "WARNING") && !trimmed.starts(with: "ERROR") {
+                            if let decodedData = Data(base64Encoded: trimmed, options: .ignoreUnknownCharacters),
+                               let decodedString = String(decoding: decodedData, as: UTF8.self) as String?,
+                               !decodedString.isEmpty {
+                                chunks.append(decodedString)
+                            }
+                        }
+                    }
+                    if !chunks.isEmpty {
+                        html = chunks.joined()
+                    }
+                }
+            }
+        }
+        
+        guard !html.isEmpty else { return nil }
+        
+        // Extract Title
+        var title = "Guywh Video"
+        let titlePatterns = [
+            "video_title\\s*:\\s*['\"]([^'\"]+)['\"]",
+            "property=[\"']og:title[\"']\\s+content=[\"']([^\"']+)[\"']",
+            "<h1[^>]*>([^<]+)</h1>",
+            "<title>(.*?)</title>"
+        ]
+        for pattern in titlePatterns {
+            if let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]),
+               let match = regex.firstMatch(in: html, options: [], range: NSRange(location: 0, length: (html as NSString).length)),
+               match.numberOfRanges > 1 {
+                let rawTitle = (html as NSString).substring(with: match.range(at: 1))
+                    .replacingOccurrences(of: "(?i) - guywh\\.com", with: "", options: .regularExpression)
+                    .replacingOccurrences(of: "(?i)guywh\\.com - ", with: "", options: .regularExpression)
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                    .decodingHTMLEntities()
+                if !rawTitle.isEmpty {
+                    title = rawTitle
+                    break
+                }
+            }
+        }
+        
+        // Extract Thumbnail
+        var thumbnailURL: String? = nil
+        let thumbPatterns = [
+            "preview_url\\s*:\\s*['\"](https?://[^'\"]+)['\"]",
+            "preview_url1\\s*:\\s*['\"](https?://[^'\"]+)['\"]",
+            "property=[\"']og:image[\"']\\s+content=[\"'](https?://[^\"']+)[\"']",
+            "poster=[\"'](https?://[^\"']+)[\"']"
+        ]
+        for pattern in thumbPatterns {
+            if let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]),
+               let match = regex.firstMatch(in: html, options: [], range: NSRange(location: 0, length: (html as NSString).length)),
+               match.numberOfRanges > 1 {
+                let candidate = (html as NSString).substring(with: match.range(at: 1))
+                    .replacingOccurrences(of: "\\/", with: "/")
+                if candidate.hasPrefix("http") {
+                    thumbnailURL = candidate
+                    break
+                }
+            }
+        }
+        
+        // Extract Stream URL & Quality
+        var streamURL: String? = nil
+        var quality: String? = nil
+        
+        let streamPatterns = [
+            "video_url\\s*:\\s*['\"](https?://[^'\"]+)['\"]",
+            "\"contentUrl\"\\s*:\\s*\"(https?://[^\"]+)\"",
+            "video_alt_url\\s*:\\s*['\"](https?://[^'\"]+)['\"]",
+            "<source[^>]+src=[\"'](https?://[^\"']+)[\"']"
+        ]
+        for pattern in streamPatterns {
+            if let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]),
+               let match = regex.firstMatch(in: html, options: [], range: NSRange(location: 0, length: (html as NSString).length)),
+               match.numberOfRanges > 1 {
+                let candidate = (html as NSString).substring(with: match.range(at: 1))
+                    .replacingOccurrences(of: "\\/", with: "/")
+                if candidate.hasPrefix("http") {
+                    streamURL = candidate
+                    break
+                }
+            }
+        }
+        
+        // Extract Quality Text if present
+        if html.contains("video_url_fhd: '1'") || html.contains("video_url_fhd: 1") {
+            quality = "1080p"
+        } else if html.contains("video_url_hd: '1'") || html.contains("video_url_hd: 1") {
+            quality = "720p"
+        } else if let qMatch = html.range(of: "video_url_text\\s*:\\s*['\"]([^'\"]+)['\"]", options: .regularExpression) {
+            let qStr = String(html[qMatch])
+            if qStr.contains("1080") { quality = "1080p" }
+            else if qStr.contains("720") { quality = "720p" }
+            else if qStr.contains("480") { quality = "480p" }
+            else if qStr.contains("360") { quality = "360p" }
+        }
+        
+        // Extract Embed URL or generate standard embed URL
+        var embedURL = targetUrl
+        let videoIdPatterns = ["/videos/(\\d+)", "video_id\\s*:\\s*['\"](\\d+)['\"]", "/embed/(\\d+)"]
+        for pattern in videoIdPatterns {
+            if let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]),
+               let match = regex.firstMatch(in: targetUrl + "\n" + html, options: [], range: NSRange(location: 0, length: ((targetUrl + "\n" + html) as NSString).length)),
+               match.numberOfRanges > 1 {
+                let vidId = ((targetUrl + "\n" + html) as NSString).substring(with: match.range(at: 1))
+                embedURL = "https://guywh.com/embed/\(vidId)"
+                break
+            }
+        }
+        
+        // If stream URL was not in main page, attempt embed page fetch
+        if streamURL == nil, let embedPageURL = URL(string: embedURL), (processRunner is DefaultYtdlpProcessRunner) {
+            var embedReq = URLRequest(url: embedPageURL)
+            embedReq.timeoutInterval = 5.0
+            embedReq.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36", forHTTPHeaderField: "User-Agent")
+            embedReq.setValue("https://guywh.com/", forHTTPHeaderField: "Referer")
+            if let (data, response) = try? await URLSession.shared.data(for: embedReq),
+               let httpResponse = response as? HTTPURLResponse,
+               (200...299).contains(httpResponse.statusCode),
+               let embedHtml = String(data: data, encoding: .utf8) {
+                for pattern in streamPatterns {
+                    if let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]),
+                       let match = regex.firstMatch(in: embedHtml, options: [], range: NSRange(location: 0, length: (embedHtml as NSString).length)),
+                       match.numberOfRanges > 1 {
+                        let candidate = (embedHtml as NSString).substring(with: match.range(at: 1))
+                            .replacingOccurrences(of: "\\/", with: "/")
+                        if candidate.hasPrefix("http") {
+                            streamURL = candidate
+                            break
+                        }
+                    }
+                }
+            }
+        }
+        
+        guard let validStreamURL = streamURL else { return nil }
+        
+        return GuywhExtractedMedia(
+            streamURL: validStreamURL,
+            embedURL: embedURL,
+            title: title,
+            thumbnailURL: thumbnailURL,
+            duration: nil,
+            quality: quality
+        )
+    }
+
     private func normalizeURLForYtdlp(_ urlString: String) -> String {
         guard var components = URLComponents(string: urlString) else { return urlString }
         if let nested = components.queryItems?.first(where: { ["url", "u", "redirect", "target"].contains($0.name.lowercased()) })?.value,
@@ -2254,6 +2487,12 @@ class YtdlpService: ObservableObject {
             if host.hasSuffix("xhamster.com") {
                 components.host = "xhamster.com"
             }
+            return components.url?.absoluteString ?? components.string ?? urlString
+        }
+
+        // 4. Guywh normalization
+        if isGuywhURL(host) {
+            components.scheme = "https"
             return components.url?.absoluteString ?? components.string ?? urlString
         }
 
@@ -2425,6 +2664,15 @@ class YtdlpService: ObservableObject {
                     "--downloader-args", "aria2c:-s 16 -x 16 -k 1M -j 16 --min-split-size=1M --summary-interval=1"
                 ])
             }
+        } else if isGuywhURL(parsedHost) || isGuywhURL(url) || parsedHost.contains("guywh") {
+            if let uaIdx = args.firstIndex(of: "--user-agent") {
+                args[uaIdx + 1] = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+            } else {
+                args.append(contentsOf: ["--user-agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"])
+            }
+            args.append(contentsOf: ["--add-header", "Referer: https://guywh.com/"])
+            args.append(contentsOf: ["--add-header", "Origin: https://guywh.com"])
+            args.append(contentsOf: ["--add-header", "Accept: */*"])
         } else if parsedHost == "single-stream video site.com" || parsedHost.hasSuffix(".single-stream video site.com") {
             args.append(contentsOf: ["--add-header", "Referer:https://single-stream video site.com/"])
         } else if lowerUrl.contains(".m3u8") || lowerUrl.contains(".mpd") {
