@@ -224,6 +224,28 @@ final class YtdlpServiceTests: XCTestCase {
         try? FileManager.default.removeItem(at: regularFile)
     }
 
+    func testTempCookiesFileCreationPermissions() throws {
+        let tempCookieURL = service.createTempCookiesFile(url: "https://example.com/video", cookieName: "test_token", cookieValue: "12345")
+        XCTAssertNotNil(tempCookieURL)
+        if let url = tempCookieURL {
+            defer { try? FileManager.default.removeItem(at: url) }
+            XCTAssertTrue(FileManager.default.fileExists(atPath: url.path))
+            let attrs = try FileManager.default.attributesOfItem(atPath: url.path)
+            let posix = attrs[.posixPermissions] as? NSNumber
+            XCTAssertEqual(posix?.intValue, 0o600, "Cookie file must be created with 0o600 POSIX permissions")
+        }
+
+        let tempHeaderCookieURL = service.createTempCookiesFileFromHeader(url: "https://example.com/video", cookieHeader: "session=abcde; token=secret123")
+        XCTAssertNotNil(tempHeaderCookieURL)
+        if let url = tempHeaderCookieURL {
+            defer { try? FileManager.default.removeItem(at: url) }
+            XCTAssertTrue(FileManager.default.fileExists(atPath: url.path))
+            let attrs = try FileManager.default.attributesOfItem(atPath: url.path)
+            let posix = attrs[.posixPermissions] as? NSNumber
+            XCTAssertEqual(posix?.intValue, 0o600, "Header cookie file must be created with 0o600 POSIX permissions")
+        }
+    }
+
     func testSpeedLimiterFlagAppendedWhenConfigured() async throws {
         UserDefaults.standard.set(5120, forKey: UserDefaultsKeys.downloadSpeedLimit)
         defer { UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.downloadSpeedLimit) }
