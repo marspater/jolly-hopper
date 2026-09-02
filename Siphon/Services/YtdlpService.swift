@@ -2855,7 +2855,7 @@ class YtdlpService: ObservableObject {
 
     private func fetchHTMLWithBrowserCookies(url: String, browser: String) async -> String? {
         guard let path = ytdlpPath?.path else { return nil }
-        let cookieURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + "_cookies.txt")
+        let cookieURL = FileManager.default.temporaryDirectory.appendingPathComponent("siphon_cookies_\(UUID().uuidString).txt")
         let cookiePath = cookieURL.path
         FileManager.default.createFile(atPath: cookiePath, contents: nil, attributes: [.posixPermissions: 0o600])
         defer {
