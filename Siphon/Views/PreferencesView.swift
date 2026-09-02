@@ -223,6 +223,8 @@ struct PreferencesView: View {
             .contentShape(Capsule())
         }
         .buttonStyle(.bouncy(scale: 0.95, hover: 1.02))
+        .help(title)
+        .accessibilityLabel(title)
     }
 
     private var generalTab: some View {
