@@ -166,6 +166,7 @@ class DownloadManager: ObservableObject {
 
 
     let ytdlpService = YtdlpService()
+    var urlSession: URLSession = .shared
 
 
     private var maxConcurrentDownloads: Int {
@@ -215,17 +216,40 @@ class DownloadManager: ObservableObject {
         downloads.filter { $0.status == .fileExists }
     }
 
+    // Bolt Performance Optimization: Single-pass status counting to avoid 4 separate array reductions over downloads
+    private var statusCounts: (downloading: Int, queued: Int, completed: Int, failed: Int) {
+        var downloading = 0
+        var queued = 0
+        var completed = 0
+        var failed = 0
+        for download in downloads {
+            switch download.status {
+            case .downloading, .fetching, .processing:
+                downloading += 1
+            case .queued:
+                queued += 1
+            case .completed:
+                completed += 1
+            case .failed, .stopped:
+                failed += 1
+            default:
+                break
+            }
+        }
+        return (downloading, queued, completed, failed)
+    }
+
     var downloadingCount: Int {
-        downloads.reduce(0) { $0 + (($1.status == .downloading || $1.status == .fetching || $1.status == .processing) ? 1 : 0) }
+        statusCounts.downloading
     }
     var queuedCount: Int {
-        downloads.reduce(0) { $0 + ($1.status == .queued ? 1 : 0) }
+        statusCounts.queued
     }
     var completedCount: Int {
-        downloads.reduce(0) { $0 + ($1.status == .completed ? 1 : 0) }
+        statusCounts.completed
     }
     var failedCount: Int {
-        downloads.reduce(0) { $0 + (($1.status == .failed || $1.status == .stopped) ? 1 : 0) }
+        statusCounts.failed
     }
 
 
@@ -366,7 +390,7 @@ class DownloadManager: ObservableObject {
 
         // Proactively fetch NEW info from GitHub releases for current version only
         isFetchingWhatsNew = true
-        if let releaseInfo = await fetchReleaseNotesFromGitHub(version: currentVersion) {
+        if let releaseInfo = await fetchReleaseNotesFromGitHub(version: currentVersion, session: urlSession) {
             let parsed = parseReleaseFeatures(from: releaseInfo.body)
             if !parsed.isEmpty {
                 whatsNewFeatures = parsed
@@ -378,7 +402,7 @@ class DownloadManager: ObservableObject {
         userDefaults.set(currentVersion, forKey: UserDefaultsKeys.lastSeenVersion)
     }
 
-    private func fetchReleaseNotesFromGitHub(version: String) async -> (title: String, body: String)? {
+    func fetchReleaseNotesFromGitHub(version: String, session: URLSession = .shared) async -> (title: String, body: String)? {
         guard let url = URL(string: "https://api.github.com/repos/marspater/jolly-hopper/releases/tags/v\(version)") else {
             return nil
         }
@@ -388,7 +412,7 @@ class DownloadManager: ObservableObject {
         request.setValue("application/vnd.github.v3+json", forHTTPHeaderField: "Accept")
 
         do {
-            let (data, response) = try await URLSession.shared.data(for: request)
+            let (data, response) = try await session.data(for: request)
             guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
                 return nil
             }
@@ -722,7 +746,8 @@ class DownloadManager: ObservableObject {
             if download.options.embedThumbnail, let finalURL = download.filePath {
                 if let thumbURL = download.thumbnailURL {
                     Task.detached(priority: .utility) {
-                        if let data = try? Data(contentsOf: thumbURL), let img = NSImage(data: data) {
+                        // Bolt Performance Optimization: Replace blocking Data(contentsOf:) with non-blocking async URLSession read
+                        if let (data, _) = try? await URLSession.shared.data(from: thumbURL), let img = NSImage(data: data) {
                             let squareIcon = YtdlpService.createAspectFitIcon(from: img)
                             await MainActor.run {
                                 _ = NSWorkspace.shared.setIcon(squareIcon, forFile: finalURL.path, options: [])
@@ -1154,7 +1179,8 @@ class DownloadManager: ObservableObject {
                 // Restore as Download objects for UI, reversing so newest is at the top
                 let restored = decoded.reversed().map { $0.toDownload() }
                 
-                var existingIds = Set(downloads.map { $0.id })
+                // Bolt Performance Optimization: Use downloads.lazy.map to prevent intermediate array allocation before Set creation
+                var existingIds = Set(downloads.lazy.map { $0.id })
                 for download in restored {
                     download.options.rawCookies = nil // Purge any legacy session cookies from restored history
                     if !existingIds.contains(download.id) {
