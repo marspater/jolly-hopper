@@ -661,4 +661,166 @@ final class DownloadManagerTests: XCTestCase {
 
         manager.shutdown()
     }
+
+    private func makeMockURLSession() -> URLSession {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [MockURLProtocol.self]
+        return URLSession(configuration: configuration)
+    }
+
+    func testFetchReleaseNotesFromGitHubNetworkErrorReturnsNil() async {
+        let manager = DownloadManager()
+        MockURLProtocol.requestHandler = { _ in
+            throw URLError(.notConnectedToInternet)
+        }
+        let mockSession = makeMockURLSession()
+
+        let result = await manager.fetchReleaseNotesFromGitHub(version: "1.0.0", session: mockSession)
+
+        XCTAssertNil(result, "Network error during fetchReleaseNotesFromGitHub must return nil")
+    }
+
+    func testFetchReleaseNotesFromGitHubHTTPStatusCodeFailureReturnsNil() async {
+        let manager = DownloadManager()
+        MockURLProtocol.requestHandler = { request in
+            let response = HTTPURLResponse(
+                url: request.url!,
+                statusCode: 404,
+                httpVersion: nil,
+                headerFields: nil
+            )!
+            return (response, Data())
+        }
+        let mockSession = makeMockURLSession()
+
+        let result = await manager.fetchReleaseNotesFromGitHub(version: "1.0.0", session: mockSession)
+
+        XCTAssertNil(result, "Non-200 HTTP response must return nil")
+    }
+
+    func testFetchReleaseNotesFromGitHubInvalidJSONReturnsNil() async {
+        let manager = DownloadManager()
+        MockURLProtocol.requestHandler = { request in
+            let response = HTTPURLResponse(
+                url: request.url!,
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: nil
+            )!
+            let invalidData = "Not JSON".data(using: .utf8)!
+            return (response, invalidData)
+        }
+        let mockSession = makeMockURLSession()
+
+        let result = await manager.fetchReleaseNotesFromGitHub(version: "1.0.0", session: mockSession)
+
+        XCTAssertNil(result, "Invalid JSON data must return nil")
+    }
+
+    func testFetchReleaseNotesFromGitHubOlderTagVersionReturnsNil() async {
+        let manager = DownloadManager()
+        MockURLProtocol.requestHandler = { request in
+            let response = HTTPURLResponse(
+                url: request.url!,
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: nil
+            )!
+            let jsonString = """
+            {
+                "tag_name": "v0.9.0",
+                "name": "Old Release",
+                "body": "Some notes"
+            }
+            """
+            return (response, jsonString.data(using: .utf8)!)
+        }
+        let mockSession = makeMockURLSession()
+
+        let result = await manager.fetchReleaseNotesFromGitHub(version: "1.0.0", session: mockSession)
+
+        XCTAssertNil(result, "Release notes for older tag version must return nil")
+    }
+
+    func testFetchReleaseNotesFromGitHubEmptyBodyReturnsNil() async {
+        let manager = DownloadManager()
+        MockURLProtocol.requestHandler = { request in
+            let response = HTTPURLResponse(
+                url: request.url!,
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: nil
+            )!
+            let jsonString = """
+            {
+                "tag_name": "v1.0.0",
+                "name": "Release 1.0.0",
+                "body": "   \\r\\n  "
+            }
+            """
+            return (response, jsonString.data(using: .utf8)!)
+        }
+        let mockSession = makeMockURLSession()
+
+        let result = await manager.fetchReleaseNotesFromGitHub(version: "1.0.0", session: mockSession)
+
+        XCTAssertNil(result, "Release notes with empty body after sanitization must return nil")
+    }
+
+    func testFetchReleaseNotesFromGitHubSuccessReturnsNotes() async {
+        let manager = DownloadManager()
+        MockURLProtocol.requestHandler = { request in
+            let response = HTTPURLResponse(
+                url: request.url!,
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: nil
+            )!
+            let jsonString = """
+            {
+                "tag_name": "v1.0.0",
+                "name": "Siphon v1.0.0",
+                "body": "✨ Added feature A\\n🚀 Performance fix B"
+            }
+            """
+            return (response, jsonString.data(using: .utf8)!)
+        }
+        let mockSession = makeMockURLSession()
+
+        let result = await manager.fetchReleaseNotesFromGitHub(version: "1.0.0", session: mockSession)
+
+        XCTAssertNotNil(result, "Valid release notes response must return non-nil tuple")
+        XCTAssertEqual(result?.title, "Siphon v1.0.0")
+        XCTAssertEqual(result?.body, "✨ Added feature A\n🚀 Performance fix B")
+    }
+}
+
+final class MockURLProtocol: URLProtocol, @unchecked Sendable {
+    static var requestHandler: ((URLRequest) throws -> (HTTPURLResponse, Data))?
+
+    override class func canInit(with request: URLRequest) -> Bool {
+        return true
+    }
+
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest {
+        return request
+    }
+
+    override func startLoading() {
+        guard let handler = MockURLProtocol.requestHandler else {
+            client?.urlProtocol(self, didFailWithError: URLError(.unknown))
+            return
+        }
+
+        do {
+            let (response, data) = try handler(request)
+            client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+            client?.urlProtocol(self, didLoad: data)
+            client?.urlProtocolDidFinishLoading(self)
+        } catch {
+            client?.urlProtocol(self, didFailWithError: error)
+        }
+    }
+
+    override func stopLoading() {}
 }

@@ -166,6 +166,7 @@ class DownloadManager: ObservableObject {
 
 
     let ytdlpService = YtdlpService()
+    var urlSession: URLSession = .shared
 
 
     private var maxConcurrentDownloads: Int {
@@ -366,7 +367,7 @@ class DownloadManager: ObservableObject {
 
         // Proactively fetch NEW info from GitHub releases for current version only
         isFetchingWhatsNew = true
-        if let releaseInfo = await fetchReleaseNotesFromGitHub(version: currentVersion) {
+        if let releaseInfo = await fetchReleaseNotesFromGitHub(version: currentVersion, session: urlSession) {
             let parsed = parseReleaseFeatures(from: releaseInfo.body)
             if !parsed.isEmpty {
                 whatsNewFeatures = parsed
@@ -378,7 +379,7 @@ class DownloadManager: ObservableObject {
         userDefaults.set(currentVersion, forKey: UserDefaultsKeys.lastSeenVersion)
     }
 
-    private func fetchReleaseNotesFromGitHub(version: String) async -> (title: String, body: String)? {
+    func fetchReleaseNotesFromGitHub(version: String, session: URLSession = .shared) async -> (title: String, body: String)? {
         guard let url = URL(string: "https://api.github.com/repos/marspater/jolly-hopper/releases/tags/v\(version)") else {
             return nil
         }
@@ -388,7 +389,7 @@ class DownloadManager: ObservableObject {
         request.setValue("application/vnd.github.v3+json", forHTTPHeaderField: "Accept")
 
         do {
-            let (data, response) = try await URLSession.shared.data(for: request)
+            let (data, response) = try await session.data(for: request)
             guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
                 return nil
             }
