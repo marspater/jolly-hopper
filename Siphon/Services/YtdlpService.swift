@@ -1266,7 +1266,7 @@ class YtdlpService: ObservableObject {
 
                 // Strategy 1: Cookie failure -> handle FDA or try alternate browser before stripping browser cookies
                 if !errText.isEmpty, isCookieFailureError(errText), currentArgs.contains("--cookies-from-browser"), !triedStrategies.contains(.stripCookies) {
-                    if isSafariPermissionError(errText) && !Self.hasFullDiskAccess {
+                    if isSafariPermissionError(errText) {
                         throw YtdlpError.safariCookiesFullDiskAccessRequired
                     }
                     if let idx = currentArgs.firstIndex(of: "--cookies-from-browser"), idx + 1 < currentArgs.count {
@@ -3106,7 +3106,7 @@ class YtdlpService: ObservableObject {
         let lowerErr = errString.lowercased()
         let configuredBrowser = configuredBrowserCookieSource()
 
-        if configuredBrowser == "safari" && isSafariPermissionError(errString) && !Self.hasFullDiskAccess {
+        if isSafariPermissionError(errString) || (configuredBrowser == "safari" && !Self.hasFullDiskAccess) {
             return YtdlpError.safariCookiesFullDiskAccessRequired
         }
 
@@ -3117,7 +3117,7 @@ class YtdlpService: ObservableObject {
             if (lowerErr.contains("video is unavailable") || lowerErr.contains("video unavailable") || lowerErr.contains("video has been removed") || lowerErr.contains("video removed") || lowerErr.contains("404 not found") || lowerErr.contains("page not found") || lowerErr.contains("http error 404")) && !lowerErr.contains("cookie") {
                 return YtdlpError.downloadFailed("This video is unavailable, private, or has been removed.")
             }
-            if lowerErr.contains("sign in") || lowerErr.contains("private video") || lowerErr.contains("login") || lowerErr.contains("members-only") || lowerErr.contains("unsupported url") {
+            if lowerErr.contains("sign in") || lowerErr.contains("private video") || lowerErr.contains("login") || lowerErr.contains("members-only") {
                 if configuredBrowser == "safari" && !Self.hasFullDiskAccess {
                     return YtdlpError.safariCookiesFullDiskAccessRequired
                 }
@@ -3389,7 +3389,7 @@ class YtdlpService: ObservableObject {
         } catch let error as YtdlpError {
             if case .commandFailed(let output) = error, isCookieFailureError(output), let idx = args.firstIndex(of: "--cookies-from-browser"), idx + 1 < args.count {
                 let browser = args[idx + 1]
-                if browser == "safari" && isSafariPermissionError(output) && !Self.hasFullDiskAccess {
+                if browser == "safari" && isSafariPermissionError(output) {
                     throw YtdlpError.safariCookiesFullDiskAccessRequired
                 }
                 LoggerService.shared.log("Browser cookie access failed for '\(browser)' or database missing. Checking alternative browsers...", level: .info)
