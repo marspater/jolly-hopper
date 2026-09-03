@@ -562,27 +562,6 @@ class YtdlpService: ObservableObject {
         LoggerService.shared.log("Selected \(source) FFprobe path: \(ffprobe.path)", level: .info)
     }
 
-    private func validatedFfmpegLocationForYtdlp() async throws -> URL {
-        if let ffmpeg = ffmpegPath,
-           let ffprobe = ffprobePath,
-           await validateFfmpegPair(ffmpeg: ffmpeg, ffprobe: ffprobe, context: "yt-dlp") {
-            setFfmpegPaths(ffmpeg: ffmpeg, ffprobe: ffprobe, source: "yt-dlp")
-            return ffmpeg
-        }
-
-        await findFfmpeg()
-
-        guard let ffmpeg = ffmpegPath,
-              let ffprobe = ffprobePath,
-              await validateFfmpegPair(ffmpeg: ffmpeg, ffprobe: ffprobe, context: "yt-dlp") else {
-            let attemptedPath = Self.getAppSupportDirectory().path
-            throw YtdlpError.ffmpegInstallationFailed(attemptedPath)
-        }
-
-        setFfmpegPaths(ffmpeg: ffmpeg, ffprobe: ffprobe, source: "yt-dlp")
-        return ffmpeg
-    }
-
     func downloadFfmpegAndFfprobeBundle() async {
         let appSupport = Self.getAppSupportDirectory()
         LoggerService.shared.log("Safely downloading atomic FFmpeg + FFprobe bundle from \(DependencyChecksums.ffmpegURL) and \(DependencyChecksums.ffprobeURL)", level: .info)
