@@ -3457,7 +3457,8 @@ class YtdlpService: ObservableObject {
 
     private func fetchHTMLWithBrowserCookies(url: String, browser: String) async -> String? {
         guard let path = ytdlpPath?.path else { return nil }
-        let cookieURL = FileManager.default.temporaryDirectory.appendingPathComponent("siphon_cookies_\(UUID().uuidString).txt")
+        guard let cookiesDir = YtdlpService.getSecureTempCookiesDirectory() else { return nil }
+        let cookieURL = cookiesDir.appendingPathComponent("siphon_cookies_\(UUID().uuidString).txt")
         let cookiePath = cookieURL.path
         FileManager.default.createFile(atPath: cookiePath, contents: nil, attributes: [.posixPermissions: 0o600])
         defer {
@@ -3587,8 +3588,26 @@ class YtdlpService: ObservableObject {
         return trimmed.isEmpty ? "download" : trimmed
     }
 
+    static func getSecureTempCookiesDirectory() -> URL? {
+        let cookiesDir = FileManager.default.temporaryDirectory.appendingPathComponent("siphon_cookies", isDirectory: true)
+        let path = cookiesDir.path
+        let fileManager = FileManager.default
+        if !fileManager.fileExists(atPath: path) {
+            do {
+                try fileManager.createDirectory(at: cookiesDir, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+            } catch {
+                LoggerService.shared.log("Error creating secure cookies directory: \(error.localizedDescription)", level: .error)
+                return nil
+            }
+        } else {
+            try? fileManager.setAttributes([.posixPermissions: 0o700], ofItemAtPath: path)
+        }
+        return cookiesDir
+    }
+
     func createTempCookiesFile(url: String, cookieName: String, cookieValue: String) -> URL? {
-        let tempCookiesURL = FileManager.default.temporaryDirectory.appendingPathComponent("siphon_cookies_\(UUID().uuidString).txt")
+        guard let cookiesDir = YtdlpService.getSecureTempCookiesDirectory() else { return nil }
+        let tempCookiesURL = cookiesDir.appendingPathComponent("siphon_cookies_\(UUID().uuidString).txt")
         let host = URL(string: url)?.host ?? ""
         let cleanName = sanitizeCookieToken(cookieName)
         let cleanValue = sanitizeCookieToken(cookieValue)
@@ -3607,8 +3626,9 @@ class YtdlpService: ObservableObject {
 
     func createTempCookiesFileFromHeader(url: String, cookieHeader: String) -> URL? {
         guard let urlObj = URL(string: url), let host = urlObj.host, !host.isEmpty else { return nil }
+        guard let cookiesDir = YtdlpService.getSecureTempCookiesDirectory() else { return nil }
         let domain = host.hasPrefix(".") ? host : ".\(host)"
-        let tempCookiesURL = FileManager.default.temporaryDirectory.appendingPathComponent("siphon_header_cookies_\(UUID().uuidString).txt")
+        let tempCookiesURL = cookiesDir.appendingPathComponent("siphon_header_cookies_\(UUID().uuidString).txt")
         
         var lines = ["# Netscape HTTP Cookie File"]
         let pairs = cookieHeader.components(separatedBy: ";")
@@ -3643,15 +3663,21 @@ class YtdlpService: ObservableObject {
     }
 
     static func purgeOrphanedTempCookieFiles() {
-        let tempDir = FileManager.default.temporaryDirectory
         let fileManager = FileManager.default
-        guard let files = try? fileManager.contentsOfDirectory(at: tempDir, includingPropertiesForKeys: nil) else { return }
-        for file in files {
-            let name = file.lastPathComponent
-            if (name.hasPrefix("siphon_cookies_") || name.hasPrefix("siphon_header_cookies_")) && name.hasSuffix(".txt") {
-                try? fileManager.removeItem(at: file)
-            } else if name.hasPrefix("siphon_scratch_") || name.hasPrefix("Siphon_Staging_") || name.hasPrefix("Siphon_Update_Package_") {
-                try? fileManager.removeItem(at: file)
+        let tempDirsToClean: [URL] = [
+            FileManager.default.temporaryDirectory,
+            getSecureTempCookiesDirectory()
+        ].compactMap { $0 }
+
+        for dir in tempDirsToClean {
+            guard let files = try? fileManager.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil) else { continue }
+            for file in files {
+                let name = file.lastPathComponent
+                if (name.hasPrefix("siphon_cookies_") || name.hasPrefix("siphon_header_cookies_")) && name.hasSuffix(".txt") {
+                    try? fileManager.removeItem(at: file)
+                } else if name.hasPrefix("siphon_scratch_") || name.hasPrefix("Siphon_Staging_") || name.hasPrefix("Siphon_Update_Package_") {
+                    try? fileManager.removeItem(at: file)
+                }
             }
         }
     }

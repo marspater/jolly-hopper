@@ -207,24 +207,51 @@ final class YtdlpServiceTests: XCTestCase {
 
     func testPurgeOrphanedTempCookieFiles() throws {
         let tempDir = FileManager.default.temporaryDirectory
+        let secureCookiesDir = YtdlpService.getSecureTempCookiesDirectory()
+        XCTAssertNotNil(secureCookiesDir)
+
         let staleCookieFile = tempDir.appendingPathComponent("siphon_cookies_test_purge.txt")
         let staleHeaderCookieFile = tempDir.appendingPathComponent("siphon_header_cookies_test_purge.txt")
         let regularFile = tempDir.appendingPathComponent("siphon_regular_file.txt")
 
+        let subDirCookieFile = secureCookiesDir?.appendingPathComponent("siphon_cookies_subdir_test.txt")
+        let subDirHeaderCookieFile = secureCookiesDir?.appendingPathComponent("siphon_header_cookies_subdir_test.txt")
+
         try "test".write(to: staleCookieFile, atomically: true, encoding: .utf8)
         try "test".write(to: staleHeaderCookieFile, atomically: true, encoding: .utf8)
         try "test".write(to: regularFile, atomically: true, encoding: .utf8)
+        if let subDirCookieFile = subDirCookieFile {
+            try "test".write(to: subDirCookieFile, atomically: true, encoding: .utf8)
+        }
+        if let subDirHeaderCookieFile = subDirHeaderCookieFile {
+            try "test".write(to: subDirHeaderCookieFile, atomically: true, encoding: .utf8)
+        }
 
         YtdlpService.purgeOrphanedTempCookieFiles()
 
         XCTAssertFalse(FileManager.default.fileExists(atPath: staleCookieFile.path))
         XCTAssertFalse(FileManager.default.fileExists(atPath: staleHeaderCookieFile.path))
         XCTAssertTrue(FileManager.default.fileExists(atPath: regularFile.path))
+        if let subDirCookieFile = subDirCookieFile {
+            XCTAssertFalse(FileManager.default.fileExists(atPath: subDirCookieFile.path))
+        }
+        if let subDirHeaderCookieFile = subDirHeaderCookieFile {
+            XCTAssertFalse(FileManager.default.fileExists(atPath: subDirHeaderCookieFile.path))
+        }
 
         try? FileManager.default.removeItem(at: regularFile)
     }
 
-    func testTempCookiesFileCreationPermissions() throws {
+    func testTempCookiesDirectoryAndFilePermissions() throws {
+        let secureCookiesDir = YtdlpService.getSecureTempCookiesDirectory()
+        XCTAssertNotNil(secureCookiesDir)
+        if let dirURL = secureCookiesDir {
+            XCTAssertTrue(FileManager.default.fileExists(atPath: dirURL.path))
+            let dirAttrs = try FileManager.default.attributesOfItem(atPath: dirURL.path)
+            let dirPosix = dirAttrs[.posixPermissions] as? NSNumber
+            XCTAssertEqual(dirPosix?.intValue, 0o700, "Secure cookies directory must be created with 0o700 POSIX permissions")
+        }
+
         let tempCookieURL = service.createTempCookiesFile(url: "https://example.com/video", cookieName: "test_token", cookieValue: "12345")
         XCTAssertNotNil(tempCookieURL)
         if let url = tempCookieURL {
@@ -233,6 +260,7 @@ final class YtdlpServiceTests: XCTestCase {
             let attrs = try FileManager.default.attributesOfItem(atPath: url.path)
             let posix = attrs[.posixPermissions] as? NSNumber
             XCTAssertEqual(posix?.intValue, 0o600, "Cookie file must be created with 0o600 POSIX permissions")
+            XCTAssertEqual(url.deletingLastPathComponent().lastPathComponent, "siphon_cookies", "Cookie file must be stored in siphon_cookies subdirectory")
         }
 
         let tempHeaderCookieURL = service.createTempCookiesFileFromHeader(url: "https://example.com/video", cookieHeader: "session=abcde; token=secret123")
@@ -243,6 +271,7 @@ final class YtdlpServiceTests: XCTestCase {
             let attrs = try FileManager.default.attributesOfItem(atPath: url.path)
             let posix = attrs[.posixPermissions] as? NSNumber
             XCTAssertEqual(posix?.intValue, 0o600, "Header cookie file must be created with 0o600 POSIX permissions")
+            XCTAssertEqual(url.deletingLastPathComponent().lastPathComponent, "siphon_cookies", "Header cookie file must be stored in siphon_cookies subdirectory")
         }
     }
 
