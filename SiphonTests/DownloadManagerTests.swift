@@ -51,18 +51,55 @@ final class DownloadManagerTests: XCTestCase {
 
         let downloadStopped = Download(url: "https://example.com/stopped", options: options)
         downloadStopped.status = .stopped
+        downloadStopped.progress = 0.4
+        downloadStopped.errorMessage = "Cancelled by user"
+        downloadStopped.log = "Download stopped prematurely"
         manager.downloads.append(downloadStopped)
 
         let downloadFailed = Download(url: "https://example.com/failed", options: options)
         downloadFailed.status = .failed
+        downloadFailed.progress = 0.2
+        downloadFailed.errorMessage = "Network timeout"
+        downloadFailed.log = "Error downloading segment"
         manager.downloads.append(downloadFailed)
+
+        let downloadCompleted = Download(url: "https://example.com/completed", options: options)
+        downloadCompleted.status = .completed
+        downloadCompleted.progress = 1.0
+        manager.downloads.append(downloadCompleted)
+
+        let downloadDownloading = Download(url: "https://example.com/downloading", options: options)
+        downloadDownloading.status = .downloading
+        downloadDownloading.progress = 0.5
+        manager.downloads.append(downloadDownloading)
+
+        let downloadFileExists = Download(url: "https://example.com/fileexists", options: options)
+        downloadFileExists.status = .fileExists
+        manager.downloads.append(downloadFileExists)
 
         XCTAssertEqual(manager.failedDownloads.count, 2)
 
         manager.retryFailedDownloads()
 
+        // Failed / stopped downloads should transition to .queued and reset progress/error details
         XCTAssertEqual(downloadStopped.status, .queued)
+        XCTAssertEqual(downloadStopped.progress, 0)
+        XCTAssertNil(downloadStopped.errorMessage)
+        XCTAssertEqual(downloadStopped.log, "")
+
         XCTAssertEqual(downloadFailed.status, .queued)
+        XCTAssertEqual(downloadFailed.progress, 0)
+        XCTAssertNil(downloadFailed.errorMessage)
+        XCTAssertEqual(downloadFailed.log, "")
+
+        // Non-failed/stopped downloads should remain untouched
+        XCTAssertEqual(downloadCompleted.status, .completed)
+        XCTAssertEqual(downloadCompleted.progress, 1.0)
+
+        XCTAssertEqual(downloadDownloading.status, .downloading)
+        XCTAssertEqual(downloadDownloading.progress, 0.5)
+
+        XCTAssertEqual(downloadFileExists.status, .fileExists)
     }
 
     func testLanguageServiceTranslationsForMissingKeys() {
