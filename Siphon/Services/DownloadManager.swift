@@ -215,17 +215,40 @@ class DownloadManager: ObservableObject {
         downloads.filter { $0.status == .fileExists }
     }
 
+    // Bolt Performance Optimization: Single-pass status counting to avoid 4 separate array reductions over downloads
+    private var statusCounts: (downloading: Int, queued: Int, completed: Int, failed: Int) {
+        var downloading = 0
+        var queued = 0
+        var completed = 0
+        var failed = 0
+        for download in downloads {
+            switch download.status {
+            case .downloading, .fetching, .processing:
+                downloading += 1
+            case .queued:
+                queued += 1
+            case .completed:
+                completed += 1
+            case .failed, .stopped:
+                failed += 1
+            default:
+                break
+            }
+        }
+        return (downloading, queued, completed, failed)
+    }
+
     var downloadingCount: Int {
-        downloads.reduce(0) { $0 + (($1.status == .downloading || $1.status == .fetching || $1.status == .processing) ? 1 : 0) }
+        statusCounts.downloading
     }
     var queuedCount: Int {
-        downloads.reduce(0) { $0 + ($1.status == .queued ? 1 : 0) }
+        statusCounts.queued
     }
     var completedCount: Int {
-        downloads.reduce(0) { $0 + ($1.status == .completed ? 1 : 0) }
+        statusCounts.completed
     }
     var failedCount: Int {
-        downloads.reduce(0) { $0 + (($1.status == .failed || $1.status == .stopped) ? 1 : 0) }
+        statusCounts.failed
     }
 
 

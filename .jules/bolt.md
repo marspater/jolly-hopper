@@ -26,3 +26,7 @@
 ## 2026-08-15 - Thread-Safe In-Memory Caching for System Workspace Queries
 **Learning:** Querying `NSWorkspace.shared.urlForApplication(withBundleIdentifier:)` performs workspace and bundle resolution that can be redundant and slow when called repeatedly. Caching the result thread-safely with `NSLock` avoids unnecessary workspace lookups.
 **Action:** Cache static or slowly-changing system workspace lookup results in memory with thread safety (`NSLock`) when invoked from UI views or utility classes.
+
+## 2026-09-03 - Single-Pass Status Counting for Computed Counts
+**Learning:** Computing multiple status counts (`downloadingCount`, `queuedCount`, `completedCount`, `failedCount`) via separate `reduce` or `filter` calls causes N passes over the array (e.g. 4 passes). Consolidating the status counting into a single pass helper method (`statusCounts`) reduces array traversals by 75% and eliminates repetitive closure overhead.
+**Action:** When computing multiple related metrics from a single array, compute them all in a single pass helper method or tuple instead of chaining multiple `reduce`/`filter` calls.

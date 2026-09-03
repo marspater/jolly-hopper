@@ -661,4 +661,40 @@ final class DownloadManagerTests: XCTestCase {
 
         manager.shutdown()
     }
+
+    func testStatusCountsAccurateCalculation() {
+        let manager = DownloadManager()
+        let options = DownloadOptions.default
+
+        let d1 = Download(url: "https://example.com/1", options: options)
+        d1.status = .downloading
+
+        let d2 = Download(url: "https://example.com/2", options: options)
+        d2.status = .fetching
+
+        let d3 = Download(url: "https://example.com/3", options: options)
+        d3.status = .processing
+
+        let d4 = Download(url: "https://example.com/4", options: options)
+        d4.status = .queued
+
+        let d5 = Download(url: "https://example.com/5", options: options)
+        d5.status = .completed
+
+        let d6 = Download(url: "https://example.com/6", options: options)
+        d6.status = .failed
+
+        let d7 = Download(url: "https://example.com/7", options: options)
+        d7.status = .stopped
+
+        let d8 = Download(url: "https://example.com/8", options: options)
+        d8.status = .paused
+
+        manager.downloads = [d1, d2, d3, d4, d5, d6, d7, d8]
+
+        XCTAssertEqual(manager.downloadingCount, 3, "downloadingCount should include downloading, fetching, and processing")
+        XCTAssertEqual(manager.queuedCount, 1, "queuedCount should include queued downloads")
+        XCTAssertEqual(manager.completedCount, 1, "completedCount should include completed downloads")
+        XCTAssertEqual(manager.failedCount, 2, "failedCount should include failed and stopped downloads")
+    }
 }
