@@ -2277,7 +2277,6 @@ class YtdlpService: ObservableObject {
                         return rawVal
                     }
                 }
-            }
         }
         return nil
     }
