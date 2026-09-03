@@ -661,4 +661,43 @@ final class DownloadManagerTests: XCTestCase {
 
         manager.shutdown()
     }
+
+    // MARK: - Resume Download Tests
+
+    func testResumeDownloadFromPausedState() {
+        let manager = DownloadManager()
+        let download = Download(url: "https://example.com/resume-test", options: .default)
+        download.status = .paused
+        manager.downloads.append(download)
+
+        let expectation = expectation(description: "objectWillChange emitted")
+        let cancellable = manager.objectWillChange.sink {
+            expectation.fulfill()
+        }
+
+        manager.resumeDownload(download)
+
+        XCTAssertEqual(download.status, .queued, "Resuming a paused download must transition status to .queued")
+        wait(for: [expectation], timeout: 1.0)
+        cancellable.cancel()
+    }
+
+    func testResumeDownloadNonPausedStatusesIgnored() {
+        let manager = DownloadManager()
+        let nonPausedStatuses: [DownloadStatus] = [
+            .downloading, .fetching, .processing,
+            .completed, .failed, .stopped,
+            .queued, .fileExists
+        ]
+
+        for status in nonPausedStatuses {
+            let download = Download(url: "https://example.com/status-\(status)", options: .default)
+            download.status = status
+            manager.downloads.append(download)
+
+            manager.resumeDownload(download)
+
+            XCTAssertEqual(download.status, status, "resumeDownload must ignore downloads in \(status) status")
+        }
+    }
 }
