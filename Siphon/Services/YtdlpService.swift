@@ -2294,6 +2294,21 @@ class YtdlpService: ObservableObject {
         return host == "guywh.com" || host.hasSuffix(".guywh.com")
     }
 
+    private func extractHttpUrlMatch(regexes: [NSRegularExpression], in text: String) -> String? {
+        let nsText = text as NSString
+        for regex in regexes {
+            if let match = regex.firstMatch(in: text, options: [], range: NSRange(location: 0, length: nsText.length)),
+               match.numberOfRanges > 1 {
+                let candidate = nsText.substring(with: match.range(at: 1))
+                    .replacingOccurrences(of: "\\/", with: "/")
+                if candidate.hasPrefix("http") {
+                    return candidate
+                }
+            }
+        }
+        return nil
+    }
+
     struct GuywhExtractedMedia {
         let streamURL: String
         let embedURL: String
@@ -2383,7 +2398,6 @@ class YtdlpService: ObservableObject {
         }
         
         // Extract Thumbnail
-        var thumbnailURL: String? = nil
         let thumbPatterns = [
             "preview_url\\s*:\\s*['\"](https?://[^'\"]+)['\"]",
             "preview_url1\\s*:\\s*['\"](https?://[^'\"]+)['\"]",
@@ -2391,20 +2405,9 @@ class YtdlpService: ObservableObject {
             "poster=[\"'](https?://[^\"']+)[\"']"
         ]
         let thumbRegexes = thumbPatterns.compactMap { try? NSRegularExpression(pattern: $0, options: [.caseInsensitive]) }
-        for regex in thumbRegexes {
-            if let match = regex.firstMatch(in: html, options: [], range: NSRange(location: 0, length: (html as NSString).length)),
-               match.numberOfRanges > 1 {
-                let candidate = (html as NSString).substring(with: match.range(at: 1))
-                    .replacingOccurrences(of: "\\/", with: "/")
-                if candidate.hasPrefix("http") {
-                    thumbnailURL = candidate
-                    break
-                }
-            }
-        }
+        var thumbnailURL: String? = extractHttpUrlMatch(regexes: thumbRegexes, in: html)
         
         // Extract Stream URL & Quality
-        var streamURL: String? = nil
         var quality: String? = nil
         
         let streamPatterns = [
@@ -2414,17 +2417,7 @@ class YtdlpService: ObservableObject {
             "<source[^>]+src=[\"'](https?://[^\"']+)[\"']"
         ]
         let streamRegexes = streamPatterns.compactMap { try? NSRegularExpression(pattern: $0, options: [.caseInsensitive]) }
-        for regex in streamRegexes {
-            if let match = regex.firstMatch(in: html, options: [], range: NSRange(location: 0, length: (html as NSString).length)),
-               match.numberOfRanges > 1 {
-                let candidate = (html as NSString).substring(with: match.range(at: 1))
-                    .replacingOccurrences(of: "\\/", with: "/")
-                if candidate.hasPrefix("http") {
-                    streamURL = candidate
-                    break
-                }
-            }
-        }
+        var streamURL: String? = extractHttpUrlMatch(regexes: streamRegexes, in: html)
         
         // Extract Quality Text if present
         if html.contains("video_url_fhd: '1'") || html.contains("video_url_fhd: 1") {
@@ -2462,17 +2455,7 @@ class YtdlpService: ObservableObject {
                let httpResponse = response as? HTTPURLResponse,
                (200...299).contains(httpResponse.statusCode),
                let embedHtml = String(data: data, encoding: .utf8) {
-                for regex in streamRegexes {
-                    if let match = regex.firstMatch(in: embedHtml, options: [], range: NSRange(location: 0, length: (embedHtml as NSString).length)),
-                       match.numberOfRanges > 1 {
-                        let candidate = (embedHtml as NSString).substring(with: match.range(at: 1))
-                            .replacingOccurrences(of: "\\/", with: "/")
-                        if candidate.hasPrefix("http") {
-                            streamURL = candidate
-                            break
-                        }
-                    }
-                }
+                streamURL = extractHttpUrlMatch(regexes: streamRegexes, in: embedHtml)
             }
         }
         
@@ -2727,7 +2710,6 @@ class YtdlpService: ObservableObject {
         }
         
         // Extract Thumbnail
-        var thumbnailURL: String? = nil
         let thumbPatterns = [
             "preview_url\\s*:\\s*['\"](https?://[^'\"]+)['\"]",
             "preview_url1\\s*:\\s*['\"](https?://[^'\"]+)['\"]",
@@ -2736,17 +2718,7 @@ class YtdlpService: ObservableObject {
             "\"thumbnailUrl\"\\s*:\\s*\"(https?://[^\"]+)\""
         ]
         let thumbRegexes = thumbPatterns.compactMap { try? NSRegularExpression(pattern: $0, options: [.caseInsensitive]) }
-        for regex in thumbRegexes {
-            if let match = regex.firstMatch(in: html, options: [], range: NSRange(location: 0, length: (html as NSString).length)),
-               match.numberOfRanges > 1 {
-                let candidate = (html as NSString).substring(with: match.range(at: 1))
-                    .replacingOccurrences(of: "\\/", with: "/")
-                if candidate.hasPrefix("http") {
-                    thumbnailURL = candidate
-                    break
-                }
-            }
-        }
+        var thumbnailURL: String? = extractHttpUrlMatch(regexes: thumbRegexes, in: html)
         
         // Extract Stream URL & Quality
         var streamURL: String? = nil
@@ -2885,17 +2857,7 @@ class YtdlpService: ObservableObject {
                                     }
                                 }
                                 if thumbnailURL == nil {
-                                    for regex in thumbRegexes {
-                                        if let match = regex.firstMatch(in: embedHtml, options: [], range: NSRange(location: 0, length: (embedHtml as NSString).length)),
-                                           match.numberOfRanges > 1 {
-                                            let candidate = (embedHtml as NSString).substring(with: match.range(at: 1))
-                                                .replacingOccurrences(of: "\\/", with: "/")
-                                            if candidate.hasPrefix("http") {
-                                                thumbnailURL = candidate
-                                                break
-                                            }
-                                        }
-                                    }
+                                    thumbnailURL = extractHttpUrlMatch(regexes: thumbRegexes, in: embedHtml)
                                 }
                             }
                         }
@@ -2924,17 +2886,7 @@ class YtdlpService: ObservableObject {
                             }
                         }
                         if thumbnailURL == nil {
-                            for regex in thumbRegexes {
-                                if let match = regex.firstMatch(in: text, options: [], range: NSRange(location: 0, length: (text as NSString).length)),
-                                   match.numberOfRanges > 1 {
-                                    let candidate = (text as NSString).substring(with: match.range(at: 1))
-                                        .replacingOccurrences(of: "\\/", with: "/")
-                                    if candidate.hasPrefix("http") {
-                                        thumbnailURL = candidate
-                                        break
-                                    }
-                                }
-                            }
+                            thumbnailURL = extractHttpUrlMatch(regexes: thumbRegexes, in: text)
                         }
                     }
                 }
