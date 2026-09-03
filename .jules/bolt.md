@@ -26,3 +26,7 @@
 ## 2026-08-15 - Thread-Safe In-Memory Caching for System Workspace Queries
 **Learning:** Querying `NSWorkspace.shared.urlForApplication(withBundleIdentifier:)` performs workspace and bundle resolution that can be redundant and slow when called repeatedly. Caching the result thread-safely with `NSLock` avoids unnecessary workspace lookups.
 **Action:** Cache static or slowly-changing system workspace lookup results in memory with thread safety (`NSLock`) when invoked from UI views or utility classes.
+
+## 2026-08-16 - Caching Computed Domain Properties on Immutable Observable Models
+**Learning:** Computed properties on model classes that parse URL strings and run regular expression replacements during SwiftUI view body updates cause repeated, redundant CPU allocations on every render tick. Computing domain strings once during `init` on immutable models eliminates render pass overhead completely.
+**Action:** On observable models with immutable inputs (like URLs), compute derived domain or host properties once during `init` as stored `let` properties, replacing regex replacements with string prefixes/suffixes where possible.
