@@ -2289,6 +2289,33 @@ class YtdlpService: ObservableObject {
 
     // MARK: - Guywh / KVS Extractor
 
+    private static let guywhTitleRegexes: [NSRegularExpression] = [
+        "video_title\\s*:\\s*['\"]([^'\"]+)['\"]",
+        "property=[\"']og:title[\"']\\s+content=[\"']([^\"']+)[\"']",
+        "<h1[^>]*>([^<]+)</h1>",
+        "<title>(.*?)</title>"
+    ].compactMap { try? NSRegularExpression(pattern: $0, options: [.caseInsensitive]) }
+
+    private static let guywhThumbRegexes: [NSRegularExpression] = [
+        "preview_url\\s*:\\s*['\"](https?://[^'\"]+)['\"]",
+        "preview_url1\\s*:\\s*['\"](https?://[^'\"]+)['\"]",
+        "property=[\"']og:image[\"']\\s+content=[\"'](https?://[^\"']+)[\"']",
+        "poster=[\"'](https?://[^\"']+)[\"']"
+    ].compactMap { try? NSRegularExpression(pattern: $0, options: [.caseInsensitive]) }
+
+    private static let guywhStreamRegexes: [NSRegularExpression] = [
+        "video_url\\s*:\\s*['\"](https?://[^'\"]+)['\"]",
+        "\"contentUrl\"\\s*:\\s*\"(https?://[^\"]+)\"",
+        "video_alt_url\\s*:\\s*['\"](https?://[^'\"]+)['\"]",
+        "<source[^>]+src=[\"'](https?://[^\"']+)[\"']"
+    ].compactMap { try? NSRegularExpression(pattern: $0, options: [.caseInsensitive]) }
+
+    private static let guywhVideoIdRegexes: [NSRegularExpression] = [
+        "/videos/(\\d+)",
+        "video_id\\s*:\\s*['\"](\\d+)['\"]",
+        "/embed/(\\d+)"
+    ].compactMap { try? NSRegularExpression(pattern: $0, options: [.caseInsensitive]) }
+
     private func isGuywhURL(_ urlOrHost: String) -> Bool {
         let host = (URL(string: urlOrHost)?.host ?? urlOrHost).lowercased()
         return host == "guywh.com" || host.hasSuffix(".guywh.com")
@@ -2360,15 +2387,8 @@ class YtdlpService: ObservableObject {
         
         // Extract Title
         var title = "Guywh Video"
-        let titlePatterns = [
-            "video_title\\s*:\\s*['\"]([^'\"]+)['\"]",
-            "property=[\"']og:title[\"']\\s+content=[\"']([^\"']+)[\"']",
-            "<h1[^>]*>([^<]+)</h1>",
-            "<title>(.*?)</title>"
-        ]
-        for pattern in titlePatterns {
-            if let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]),
-               let match = regex.firstMatch(in: html, options: [], range: NSRange(location: 0, length: (html as NSString).length)),
+        for regex in Self.guywhTitleRegexes {
+            if let match = regex.firstMatch(in: html, options: [], range: NSRange(location: 0, length: (html as NSString).length)),
                match.numberOfRanges > 1 {
                 let rawTitle = (html as NSString).substring(with: match.range(at: 1))
                     .replacingOccurrences(of: "(?i) - guywh\\.com", with: "", options: .regularExpression)
@@ -2384,15 +2404,8 @@ class YtdlpService: ObservableObject {
         
         // Extract Thumbnail
         var thumbnailURL: String? = nil
-        let thumbPatterns = [
-            "preview_url\\s*:\\s*['\"](https?://[^'\"]+)['\"]",
-            "preview_url1\\s*:\\s*['\"](https?://[^'\"]+)['\"]",
-            "property=[\"']og:image[\"']\\s+content=[\"'](https?://[^\"']+)[\"']",
-            "poster=[\"'](https?://[^\"']+)[\"']"
-        ]
-        for pattern in thumbPatterns {
-            if let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]),
-               let match = regex.firstMatch(in: html, options: [], range: NSRange(location: 0, length: (html as NSString).length)),
+        for regex in Self.guywhThumbRegexes {
+            if let match = regex.firstMatch(in: html, options: [], range: NSRange(location: 0, length: (html as NSString).length)),
                match.numberOfRanges > 1 {
                 let candidate = (html as NSString).substring(with: match.range(at: 1))
                     .replacingOccurrences(of: "\\/", with: "/")
@@ -2407,15 +2420,8 @@ class YtdlpService: ObservableObject {
         var streamURL: String? = nil
         var quality: String? = nil
         
-        let streamPatterns = [
-            "video_url\\s*:\\s*['\"](https?://[^'\"]+)['\"]",
-            "\"contentUrl\"\\s*:\\s*\"(https?://[^\"]+)\"",
-            "video_alt_url\\s*:\\s*['\"](https?://[^'\"]+)['\"]",
-            "<source[^>]+src=[\"'](https?://[^\"']+)[\"']"
-        ]
-        for pattern in streamPatterns {
-            if let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]),
-               let match = regex.firstMatch(in: html, options: [], range: NSRange(location: 0, length: (html as NSString).length)),
+        for regex in Self.guywhStreamRegexes {
+            if let match = regex.firstMatch(in: html, options: [], range: NSRange(location: 0, length: (html as NSString).length)),
                match.numberOfRanges > 1 {
                 let candidate = (html as NSString).substring(with: match.range(at: 1))
                     .replacingOccurrences(of: "\\/", with: "/")
@@ -2441,10 +2447,8 @@ class YtdlpService: ObservableObject {
         
         // Extract Embed URL or generate standard embed URL
         var embedURL = targetUrl
-        let videoIdPatterns = ["/videos/(\\d+)", "video_id\\s*:\\s*['\"](\\d+)['\"]", "/embed/(\\d+)"]
-        for pattern in videoIdPatterns {
-            if let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]),
-               let match = regex.firstMatch(in: targetUrl + "\n" + html, options: [], range: NSRange(location: 0, length: ((targetUrl + "\n" + html) as NSString).length)),
+        for regex in Self.guywhVideoIdRegexes {
+            if let match = regex.firstMatch(in: targetUrl + "\n" + html, options: [], range: NSRange(location: 0, length: ((targetUrl + "\n" + html) as NSString).length)),
                match.numberOfRanges > 1 {
                 let vidId = ((targetUrl + "\n" + html) as NSString).substring(with: match.range(at: 1))
                 embedURL = "https://guywh.com/embed/\(vidId)"
@@ -2462,9 +2466,8 @@ class YtdlpService: ObservableObject {
                let httpResponse = response as? HTTPURLResponse,
                (200...299).contains(httpResponse.statusCode),
                let embedHtml = String(data: data, encoding: .utf8) {
-                for pattern in streamPatterns {
-                    if let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]),
-                       let match = regex.firstMatch(in: embedHtml, options: [], range: NSRange(location: 0, length: (embedHtml as NSString).length)),
+                for regex in Self.guywhStreamRegexes {
+                    if let match = regex.firstMatch(in: embedHtml, options: [], range: NSRange(location: 0, length: (embedHtml as NSString).length)),
                        match.numberOfRanges > 1 {
                         let candidate = (embedHtml as NSString).substring(with: match.range(at: 1))
                             .replacingOccurrences(of: "\\/", with: "/")
