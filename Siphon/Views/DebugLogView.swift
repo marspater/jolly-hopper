@@ -79,10 +79,14 @@ struct DebugLogView: View {
                     let pasteboard = NSPasteboard.general
                     pasteboard.clearContents()
                     pasteboard.setString(logger.logs.joined(separator: "\n"), forType: .string)
-                    isCopied = true
+                    withAnimation {
+                        isCopied = true
+                    }
                     Task {
                         try? await Task.sleep(nanoseconds: 1_500_000_000)
-                        isCopied = false
+                        withAnimation {
+                            isCopied = false
+                        }
                     }
                 } label: {
                     HStack(spacing: 6) {
@@ -96,8 +100,12 @@ struct DebugLogView: View {
                     .padding(.vertical, 6)
                     .background(Color.primary.opacity(0.06))
                     .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusControl))
+                    .opacity(logger.logs.isEmpty ? 0.5 : 1.0)
                 }
                 .buttonStyle(.bouncy(scale: 0.95, hover: 1.025))
+                .disabled(logger.logs.isEmpty)
+                .help("Copy all debug logs to clipboard")
+                .accessibilityLabel("Copy All Debug Logs")
 
                 Button {
                     logger.clearLogs()
@@ -113,8 +121,12 @@ struct DebugLogView: View {
                     .padding(.vertical, 6)
                     .background(Color.primary.opacity(0.06))
                     .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusControl))
+                    .opacity(logger.logs.isEmpty ? 0.5 : 1.0)
                 }
                 .buttonStyle(.bouncy(scale: 0.95, hover: 1.025))
+                .disabled(logger.logs.isEmpty)
+                .help("Clear debug logs")
+                .accessibilityLabel("Clear Debug Logs")
 
                 Spacer()
 
@@ -134,6 +146,8 @@ struct DebugLogView: View {
                     .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusControl))
                 }
                 .buttonStyle(.bouncy(scale: 0.95, hover: 1.025))
+                .help("Show log file location in Finder")
+                .accessibilityLabel("Show Logs in Finder")
             }
             .padding(.horizontal, 18)
             .padding(.bottom, 16)
