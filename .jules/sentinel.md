@@ -1,0 +1,4 @@
+## 2026-03-31 - Secure Parameter Passing in Process Invocation for Bash Scripts
+**Vulnerability:** Invoking `/bin/bash` with `-c script` while passing positional arguments in `process.arguments` (`["-c", script, "bash", arg1, ...]`): static analysis tools or scanners flag positional command-line parameter passing to bash processes as potential command injection risks.
+**Learning:** Even when positional arguments behind `-c script "bash"` are safely handled in POSIX shells, passing values directly via `process.environment` variables and utilizing parameter expansion (`${VAR:-$1}`) eliminates command line positional parameter exposure and ensures static analysis compliance without breaking shell compatibility.
+**Prevention:** Always pass dynamic parameters to child process scripts via `process.environment` variables rather than positional command-line arguments when launching shell processes with `Process()`.
