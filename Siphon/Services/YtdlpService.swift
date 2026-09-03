@@ -2390,9 +2390,9 @@ class YtdlpService: ObservableObject {
             "property=[\"']og:image[\"']\\s+content=[\"'](https?://[^\"']+)[\"']",
             "poster=[\"'](https?://[^\"']+)[\"']"
         ]
-        for pattern in thumbPatterns {
-            if let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]),
-               let match = regex.firstMatch(in: html, options: [], range: NSRange(location: 0, length: (html as NSString).length)),
+        let thumbRegexes = thumbPatterns.compactMap { try? NSRegularExpression(pattern: $0, options: [.caseInsensitive]) }
+        for regex in thumbRegexes {
+            if let match = regex.firstMatch(in: html, options: [], range: NSRange(location: 0, length: (html as NSString).length)),
                match.numberOfRanges > 1 {
                 let candidate = (html as NSString).substring(with: match.range(at: 1))
                     .replacingOccurrences(of: "\\/", with: "/")
@@ -2413,9 +2413,9 @@ class YtdlpService: ObservableObject {
             "video_alt_url\\s*:\\s*['\"](https?://[^'\"]+)['\"]",
             "<source[^>]+src=[\"'](https?://[^\"']+)[\"']"
         ]
-        for pattern in streamPatterns {
-            if let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]),
-               let match = regex.firstMatch(in: html, options: [], range: NSRange(location: 0, length: (html as NSString).length)),
+        let streamRegexes = streamPatterns.compactMap { try? NSRegularExpression(pattern: $0, options: [.caseInsensitive]) }
+        for regex in streamRegexes {
+            if let match = regex.firstMatch(in: html, options: [], range: NSRange(location: 0, length: (html as NSString).length)),
                match.numberOfRanges > 1 {
                 let candidate = (html as NSString).substring(with: match.range(at: 1))
                     .replacingOccurrences(of: "\\/", with: "/")
@@ -2462,9 +2462,8 @@ class YtdlpService: ObservableObject {
                let httpResponse = response as? HTTPURLResponse,
                (200...299).contains(httpResponse.statusCode),
                let embedHtml = String(data: data, encoding: .utf8) {
-                for pattern in streamPatterns {
-                    if let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]),
-                       let match = regex.firstMatch(in: embedHtml, options: [], range: NSRange(location: 0, length: (embedHtml as NSString).length)),
+                for regex in streamRegexes {
+                    if let match = regex.firstMatch(in: embedHtml, options: [], range: NSRange(location: 0, length: (embedHtml as NSString).length)),
                        match.numberOfRanges > 1 {
                         let candidate = (embedHtml as NSString).substring(with: match.range(at: 1))
                             .replacingOccurrences(of: "\\/", with: "/")
@@ -2736,9 +2735,9 @@ class YtdlpService: ObservableObject {
             "poster=[\"'](https?://[^\"']+)[\"']",
             "\"thumbnailUrl\"\\s*:\\s*\"(https?://[^\"]+)\""
         ]
-        for pattern in thumbPatterns {
-            if let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]),
-               let match = regex.firstMatch(in: html, options: [], range: NSRange(location: 0, length: (html as NSString).length)),
+        let thumbRegexes = thumbPatterns.compactMap { try? NSRegularExpression(pattern: $0, options: [.caseInsensitive]) }
+        for regex in thumbRegexes {
+            if let match = regex.firstMatch(in: html, options: [], range: NSRange(location: 0, length: (html as NSString).length)),
                match.numberOfRanges > 1 {
                 let candidate = (html as NSString).substring(with: match.range(at: 1))
                     .replacingOccurrences(of: "\\/", with: "/")
@@ -2771,9 +2770,9 @@ class YtdlpService: ObservableObject {
             "['\"](/get_file/[^'\"]+)['\"]",
             "['\"](https?://[^'\"]+/get_file/[^'\"]+)['\"]"
         ]
-        for pattern in streamPatterns {
-            if let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]),
-               let match = regex.firstMatch(in: html, options: [], range: NSRange(location: 0, length: (html as NSString).length)),
+        let streamRegexes = streamPatterns.compactMap { try? NSRegularExpression(pattern: $0, options: [.caseInsensitive]) }
+        for regex in streamRegexes {
+            if let match = regex.firstMatch(in: html, options: [], range: NSRange(location: 0, length: (html as NSString).length)),
                match.numberOfRanges > 1 {
                 let rawCandidate = (html as NSString).substring(with: match.range(at: 1))
                 if let candidate = sanitizeGFFStreamURL(rawCandidate) {
@@ -2874,9 +2873,8 @@ class YtdlpService: ObservableObject {
                             }
                             if !embedChunks.isEmpty {
                                 let embedHtml = embedChunks.joined()
-                                for pattern in streamPatterns {
-                                    if let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]),
-                                       let match = regex.firstMatch(in: embedHtml, options: [], range: NSRange(location: 0, length: (embedHtml as NSString).length)),
+                                for regex in streamRegexes {
+                                    if let match = regex.firstMatch(in: embedHtml, options: [], range: NSRange(location: 0, length: (embedHtml as NSString).length)),
                                        match.numberOfRanges > 1 {
                                         let rawCandidate = (embedHtml as NSString).substring(with: match.range(at: 1))
                                         if let candidate = sanitizeGFFStreamURL(rawCandidate) {
@@ -2887,9 +2885,8 @@ class YtdlpService: ObservableObject {
                                     }
                                 }
                                 if thumbnailURL == nil {
-                                    for pattern in thumbPatterns {
-                                        if let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]),
-                                           let match = regex.firstMatch(in: embedHtml, options: [], range: NSRange(location: 0, length: (embedHtml as NSString).length)),
+                                    for regex in thumbRegexes {
+                                        if let match = regex.firstMatch(in: embedHtml, options: [], range: NSRange(location: 0, length: (embedHtml as NSString).length)),
                                            match.numberOfRanges > 1 {
                                             let candidate = (embedHtml as NSString).substring(with: match.range(at: 1))
                                                 .replacingOccurrences(of: "\\/", with: "/")
@@ -2915,9 +2912,8 @@ class YtdlpService: ObservableObject {
                        let httpResponse = response as? HTTPURLResponse,
                        (200...299).contains(httpResponse.statusCode),
                        let text = String(data: data, encoding: .utf8) {
-                        for pattern in streamPatterns {
-                            if let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]),
-                               let match = regex.firstMatch(in: text, options: [], range: NSRange(location: 0, length: (text as NSString).length)),
+                        for regex in streamRegexes {
+                            if let match = regex.firstMatch(in: text, options: [], range: NSRange(location: 0, length: (text as NSString).length)),
                                match.numberOfRanges > 1 {
                                 let rawCandidate = (text as NSString).substring(with: match.range(at: 1))
                                 if let candidate = sanitizeGFFStreamURL(rawCandidate) {
@@ -2928,9 +2924,8 @@ class YtdlpService: ObservableObject {
                             }
                         }
                         if thumbnailURL == nil {
-                            for pattern in thumbPatterns {
-                                if let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]),
-                                   let match = regex.firstMatch(in: text, options: [], range: NSRange(location: 0, length: (text as NSString).length)),
+                            for regex in thumbRegexes {
+                                if let match = regex.firstMatch(in: text, options: [], range: NSRange(location: 0, length: (text as NSString).length)),
                                    match.numberOfRanges > 1 {
                                     let candidate = (text as NSString).substring(with: match.range(at: 1))
                                         .replacingOccurrences(of: "\\/", with: "/")
