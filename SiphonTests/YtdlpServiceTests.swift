@@ -397,6 +397,126 @@ final class YtdlpServiceTests: XCTestCase {
         }
     }
 
+    func testGFFURLNormalizationAndHeaders() async throws {
+        let capturedArgsBox = TestBox<[String]>([])
+        service.processRunner = MockYtdlpProcessRunner(mockDownload: { args in
+            capturedArgsBox.value = args
+            return "[download] Destination: /tmp/test.mp4\n"
+        })
+
+        var options = DownloadOptions.default
+        options.videoResolution = .r1080p
+
+        _ = try await service.download(
+            url: "https://gayforfans.com/video/8831/sample-title/?utm_source=feed&ref=banner",
+            options: options,
+            onProgress: { _, _, _ in },
+            onOutput: { _ in }
+        )
+
+        // Verify GFF headers and direct stream format selector are appended
+        XCTAssertTrue(capturedArgsBox.value.contains("Referer: https://gayforfans.com/"))
+        XCTAssertTrue(capturedArgsBox.value.contains("Origin: https://gayforfans.com"))
+        XCTAssertTrue(capturedArgsBox.value.contains(where: { $0.contains("Chrome/126") }))
+        XCTAssertFalse(capturedArgsBox.value.contains(where: { $0.contains("utm_source") }))
+        if let fIdx = capturedArgsBox.value.firstIndex(of: "-f") {
+            XCTAssertEqual(capturedArgsBox.value[fIdx + 1], "b/best")
+        }
+    }
+
+    func testGFFDirectManifestAndMetadataExtraction() async throws {
+        service.ytdlpPath = URL(fileURLWithPath: "/usr/local/bin/yt-dlp")
+        
+        let mainPageHTML = """
+        <!DOCTYPE html><html><head>
+        <title>Sexy Muscle Workout - GayForFans.com</title>
+        <meta property="og:image" content="https://gayforfans.com/contents/videos_screenshots/8000/8831/preview.jpg">
+        <script>
+        var flashvars = {
+            video_url: 'https://cdn.gayforfans.com/videos/8831/8831.mp4',
+            video_url_text: '1080p',
+            video_url_fhd: '1',
+            preview_url: 'https://gayforfans.com/contents/videos_screenshots/8000/8831/preview.jpg'
+        };
+        </script>
+        </head><body></body></html>
+        """
+        let mainB64 = mainPageHTML.data(using: .utf8)!.base64EncodedString()
+        
+        service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
+            if args.contains("--dump-pages") {
+                return mainB64
+            }
+            return "{}"
+        })
+
+        let info = try await service.fetchInfo(url: "https://gayforfans.com/videos/8831/sexy-muscle-workout/")
+        XCTAssertEqual(info.title, "Sexy Muscle Workout")
+        XCTAssertEqual(info.uploader, "GayForFans")
+        XCTAssertEqual(info.thumbnail, "https://gayforfans.com/contents/videos_screenshots/8000/8831/preview.jpg")
+        XCTAssertEqual(info.formats?.first?.formatId, "1080p")
+    }
+
+    func testGFFEmbedPageExtractionFallback() async throws {
+        service.ytdlpPath = URL(fileURLWithPath: "/usr/local/bin/yt-dlp")
+        
+        let mainPageHTML = """
+        <!DOCTYPE html><html><head><title>GayForFans - Beach Twink Action</title></head>
+        <body>
+        <iframe src="https://gayforfans.com/embed/9921" width="100%" height="100%"></iframe>
+        </body></html>
+        """
+        let mainB64 = mainPageHTML.data(using: .utf8)!.base64EncodedString()
+
+        let embedPageHTML = """
+        <!DOCTYPE html><html><head><title>Embed</title></head><body>
+        <script>
+        var playerConfig = {
+            video_url: "https://cdn.gayforfans.com/videos/9921/master.m3u8",
+            preview_url: "https://cdn.gayforfans.com/thumbs/9921.jpg"
+        };
+        </script></body></html>
+        """
+        let embedB64 = embedPageHTML.data(using: .utf8)!.base64EncodedString()
+
+        service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
+            if args.contains("--dump-pages") {
+                if args.contains(where: { $0.contains("/videos/9921/") }) {
+                    return mainB64
+                } else if args.contains(where: { $0.contains("/embed/9921") }) {
+                    return embedB64
+                }
+            }
+            return "{}"
+        })
+
+        let info = try await service.fetchInfo(url: "https://gayforfans.com/videos/9921/beach-twink-action/")
+        XCTAssertEqual(info.title, "Beach Twink Action")
+        XCTAssertEqual(info.uploader, "GayForFans")
+        XCTAssertEqual(info.thumbnail, "https://cdn.gayforfans.com/thumbs/9921.jpg")
+    }
+
+    func testGFFErrorMappingAndCloudflare() async throws {
+        service.ytdlpPath = URL(fileURLWithPath: "/usr/local/bin/yt-dlp")
+        UserDefaults.standard.set("none", forKey: UserDefaultsKeys.browserForCookies)
+        defer { UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.browserForCookies) }
+
+        // Cloudflare error
+        service.processRunner = MockYtdlpProcessRunner(mockCommand: { _ in
+            throw YtdlpError.commandFailed("ERROR: Cloudflare turnstile challenge required 403 Forbidden")
+        })
+        do {
+            _ = try await service.fetchInfo(url: "https://gayforfans.com/videos/8831/test/")
+            XCTFail("Expected cloudflare error to be thrown")
+        } catch let err as YtdlpError {
+            if case .cloudflareBlocked = err {
+                // Expected
+            } else {
+                XCTFail("Expected .cloudflareBlocked but got \(err)")
+            }
+        }
+    }
+
     func testEpornerSubdomainNormalization() async throws {
         let capturedArgsBox = TestBox<[String]>([])
         service.processRunner = MockYtdlpProcessRunner(mockDownload: { args in

@@ -35,6 +35,8 @@ class LoggerService: ObservableObject {
             "--cookies-from-browser": "\"<BROWSER>\"",
             "--add-header": "\"<REDACTED_HEADER>\"",
             "--header": "\"<REDACTED_HEADER>\"",
+            "--http-header": "\"<REDACTED_HEADER>\"",
+            "-H": "\"<REDACTED_HEADER>\"",
             "--username": "\"<USERNAME>\"",
             "-u": "\"<USERNAME>\"",
             "--password": "\"<PASSWORD>\"",
@@ -60,6 +62,17 @@ class LoggerService: ObservableObject {
                 continue
             }
 
+            // Check --flag=value syntax
+            var handledInline = false
+            for (flag, placeholder) in sensitiveValueFlags {
+                if arg.hasPrefix(flag + "=") {
+                    sanitizedArgs.append("\(flag)=\(placeholder)")
+                    handledInline = true
+                    break
+                }
+            }
+            if handledInline { continue }
+
             if arg.hasPrefix("http://") || arg.hasPrefix("https://") {
                 let sanitized = sanitizeURLForLog(arg)
                 sanitizedArgs.append(sanitized.contains(" ") ? "\"\(sanitized)\"" : sanitized)
@@ -84,8 +97,11 @@ class LoggerService: ObservableObject {
         let appSupport = (FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first ?? URL(fileURLWithPath: NSHomeDirectory() + "/Library/Application Support"))
             .appendingPathComponent("Siphon")
         
-        try? FileManager.default.createDirectory(at: appSupport, withIntermediateDirectories: true)
+        try? FileManager.default.createDirectory(at: appSupport, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
         self.logFileURL = appSupport.appendingPathComponent("siphon_debug.log")
+        if FileManager.default.fileExists(atPath: logFileURL.path) {
+            try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: logFileURL.path)
+        }
         
         loadInitialLogs()
     }
@@ -159,8 +175,9 @@ class LoggerService: ObservableObject {
         // 2. Redact Bearer / API tokens and credentials
         let redactionPatterns: [(String, String)] = [
             (#"(?i)bearer\s+[A-Za-z0-9\-_\.]+"#, "Bearer <REDACTED>"),
+            (#"(?i)authorization:\s*[^\r\n]+"#, "Authorization: <REDACTED>"),
             (#"(?i)cookie:\s*[^\r\n]+"#, "Cookie: <REDACTED>"),
-            (#"(?i)(token|api_key|password|pass|secret)=([A-Za-z0-9\-_%]+)"#, "$1=<REDACTED>")
+            (#"(?i)(token|api_key|password|pass|secret|auth|signature|sig|access_token)=([A-Za-z0-9\-_%]+)"#, "$1=<REDACTED>")
         ]
 
         for (pattern, replacement) in redactionPatterns {
@@ -204,6 +221,7 @@ class LoggerService: ObservableObject {
             }
         } else {
             try? data.write(to: logFileURL, options: .atomic)
+            try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: logFileURL.path)
         }
     }
     

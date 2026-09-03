@@ -48,9 +48,9 @@ struct MenuBarView: View {
     }
     
     private var urlInput: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: SiphonTheme.spacing8) {
             Image(systemName: "link")
-                .font(.geist(12))
+                .font(.system(size: 12))
                 .foregroundColor(.secondary)
             
             TextField(languageService.s("url_hint"), text: $url)
@@ -65,7 +65,7 @@ struct MenuBarView: View {
                     url = ""
                 } label: {
                     Image(systemName: "xmark.circle.fill")
-                        .font(.geist(12))
+                        .font(.system(size: 12))
                         .foregroundColor(.secondary)
                 }
                 .buttonStyle(.plain)
@@ -84,14 +84,14 @@ struct MenuBarView: View {
                 }
             } label: {
                 Image(systemName: isPasted ? "checkmark" : "doc.on.clipboard")
-                    .font(.geist(12))
+                    .font(.system(size: 12))
                     .foregroundColor(isPasted ? SiphonTheme.statusCompleted : .secondary)
             }
             .buttonStyle(.plain)
             .help(languageService.s("paste_from_clipboard"))
             .accessibilityLabel(languageService.s("paste_from_clipboard"))
         }
-        .padding(.horizontal, 10)
+        .padding(.horizontal, SiphonTheme.spacing10)
         .padding(.vertical, 8)
         .background(
             SiphonTheme.cardBackground(cornerRadius: SiphonTheme.radiusControl)
@@ -103,7 +103,7 @@ struct MenuBarView: View {
     }
     
     private var optionsCard: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: SiphonTheme.spacing8) {
             HStack {
                 Text(languageService.s("format"))
                     .font(.geist(12, weight: .medium))
@@ -111,7 +111,7 @@ struct MenuBarView: View {
                 
                 Spacer()
                 
-                HStack(spacing: 2) {
+                HStack(spacing: SiphonTheme.spacing2) {
                     Button {
                         withAnimation(.spring(response: 0.30, dampingFraction: 0.68, blendDuration: 0)) {
                             selectedType = "video"
@@ -120,7 +120,7 @@ struct MenuBarView: View {
                         Text(languageService.s("video"))
                             .font(.geist(11, weight: .semibold))
                             .foregroundColor(selectedType == "video" ? .white : .secondary)
-                            .padding(.horizontal, 12)
+                            .padding(.horizontal, SiphonTheme.spacing12)
                             .padding(.vertical, 4)
                             .background {
                                 if selectedType == "video" {
@@ -131,7 +131,7 @@ struct MenuBarView: View {
                                 }
                             }
                     }
-                    .buttonStyle(.bouncy(scale: 0.95, hover: 1.02))
+                    .buttonStyle(.bouncy(scale: 0.97, hover: 1.015))
                     
                     Button {
                         withAnimation(.spring(response: 0.30, dampingFraction: 0.68, blendDuration: 0)) {
@@ -141,7 +141,7 @@ struct MenuBarView: View {
                         Text(languageService.s("audio"))
                             .font(.geist(11, weight: .semibold))
                             .foregroundColor(selectedType == "audio" ? .white : .secondary)
-                            .padding(.horizontal, 12)
+                            .padding(.horizontal, SiphonTheme.spacing12)
                             .padding(.vertical, 4)
                             .background {
                                 if selectedType == "audio" {
@@ -152,9 +152,9 @@ struct MenuBarView: View {
                                 }
                             }
                     }
-                    .buttonStyle(.bouncy(scale: 0.95, hover: 1.02))
+                    .buttonStyle(.bouncy(scale: 0.97, hover: 1.015))
                 }
-                .padding(2)
+                .padding(SiphonTheme.spacing2)
                 .background(
                     Capsule()
                         .fill(Color.primary.opacity(0.04))
@@ -214,9 +214,9 @@ struct MenuBarView: View {
         Button {
             initiateDownload()
         } label: {
-            HStack(spacing: 6) {
+            HStack(spacing: SiphonTheme.spacing6) {
                 Image(systemName: "arrow.down.circle.fill")
-                    .font(.geist(14, weight: .semibold))
+                    .font(.system(size: 14, weight: .semibold))
                 Text(languageService.s("download_btn"))
                     .font(.geist(13, weight: .bold))
             }
@@ -234,18 +234,19 @@ struct MenuBarView: View {
                     .stroke(Color.white.opacity(url.isEmpty ? 0.05 : 0.25), lineWidth: 1)
             )
         }
-        .buttonStyle(.bouncy(scale: 0.95, hover: 1.025))
+        .buttonStyle(.bouncy(scale: 0.97, hover: 1.015))
         .disabled(url.isEmpty)
         .shadow(color: url.isEmpty ? .clear : SiphonTheme.accent.opacity(0.35), radius: 6, y: 2)
     }
 
     private func initiateDownload() {
-        guard !url.isEmpty else { return }
+        let cleanURL = url.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanURL.isEmpty else { return }
         
         if selectedPreset.hasPrefix("custom_") {
             let idString = String(selectedPreset.dropFirst(7))
             if let preset = customPresets.first(where: { $0.id.uuidString == idString }) {
-                downloadManager.addDownload(url: url, options: DownloadOptions(
+                downloadManager.addDownload(url: cleanURL, options: DownloadOptions(
                     saveFolder: getSaveFolder(),
                     fileType: preset.fileType,
                     videoFormat: nil,
@@ -270,7 +271,7 @@ struct MenuBarView: View {
                 ))
             }
         } else if let preset = DownloadPreset(rawValue: selectedPreset) {
-            downloadManager.addDownload(url: url, options: DownloadOptions(
+            downloadManager.addDownload(url: cleanURL, options: DownloadOptions(
                 saveFolder: getSaveFolder(),
                 fileType: preset.fileType,
                 videoFormat: nil,
@@ -307,7 +308,7 @@ struct MenuBarView: View {
     }
     
     private var footer: some View {
-        HStack(alignment: .center, spacing: 8) {
+        HStack(alignment: .center, spacing: SiphonTheme.spacing8) {
             Button {
                 MenuBarManager.shared.closePopover()
                 NSApp.setActivationPolicy(.regular)
@@ -322,7 +323,7 @@ struct MenuBarView: View {
             } label: {
                 HStack(spacing: 5) {
                     Image(systemName: "macwindow")
-                        .font(.geist(11, weight: .semibold))
+                        .font(.system(size: 11, weight: .semibold))
                     Text(languageService.s("show_main_window"))
                         .font(.geist(11, weight: .medium))
                         .lineLimit(1)
@@ -340,15 +341,13 @@ struct MenuBarView: View {
                     SiphonTheme.pillBorder(isSelected: false)
                 )
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.bouncy(scale: 0.97, hover: 1.015))
             .help(languageService.s("show_main_window"))
             .accessibilityLabel(languageService.s("show_main_window"))
             
             if downloadManager.downloadingDownloads.count > 0 {
                 HStack(spacing: 5) {
-                    ProgressView()
-                        .controlSize(.small)
-                        .scaleEffect(0.75)
+                    SiphonSpinner(size: 10, color: SiphonTheme.downloading, lineWidth: 1.8)
                     Text("\(downloadManager.downloadingDownloads.count)")
                         .font(.geist(11, weight: .bold))
                         .monospacedDigit()
@@ -376,7 +375,7 @@ struct MenuBarView: View {
             } label: {
                 HStack(spacing: 4) {
                     Image(systemName: "power")
-                        .font(.geist(11, weight: .bold))
+                        .font(.system(size: 11, weight: .bold))
                     Text(languageService.s("quit"))
                         .font(.geist(11, weight: .semibold))
                         .lineLimit(1)
@@ -393,7 +392,7 @@ struct MenuBarView: View {
                         .stroke(SiphonTheme.failed.opacity(0.25), lineWidth: 1)
                 )
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.bouncy(scale: 0.97, hover: 1.015))
             .help(languageService.s("quit"))
             .accessibilityLabel(languageService.s("quit"))
         }

@@ -40,6 +40,19 @@ public struct RenderingCapabilities: Sendable, Equatable {
     public let supportsEDR: Bool
     public let supportsP3: Bool
     public let reduceTransparency: Bool
+    public let reduceMotion: Bool
+    
+    public init(
+        supportsEDR: Bool,
+        supportsP3: Bool,
+        reduceTransparency: Bool,
+        reduceMotion: Bool = false
+    ) {
+        self.supportsEDR = supportsEDR
+        self.supportsP3 = supportsP3
+        self.reduceTransparency = reduceTransparency
+        self.reduceMotion = reduceMotion
+    }
 }
 
 public enum MaterialMode: Sendable, Equatable {
@@ -64,6 +77,10 @@ public final class AdaptiveRenderingEnvironment: ObservableObject {
     
     public var colorGamut: ColorGamut {
         capabilities.supportsP3 ? .p3 : .sRGB
+    }
+
+    public var reduceMotion: Bool {
+        capabilities.reduceMotion
     }
     
     private init() {
@@ -94,6 +111,7 @@ public final class AdaptiveRenderingEnvironment: ObservableObject {
     
     public static func detectCapabilities() -> RenderingCapabilities {
         let reduceTransparency = NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency
+        let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
         var supportsEDR = false
         var supportsP3 = false
         
@@ -113,7 +131,8 @@ public final class AdaptiveRenderingEnvironment: ObservableObject {
         return RenderingCapabilities(
             supportsEDR: supportsEDR,
             supportsP3: supportsP3,
-            reduceTransparency: reduceTransparency
+            reduceTransparency: reduceTransparency,
+            reduceMotion: reduceMotion
         )
     }
 }
@@ -144,10 +163,24 @@ public enum SiphonTheme {
     public static let failed = statusFailed
     public static let hdr = statusHdr
     
-    // Radii Tokens
+    // Standard Spacing Scale (4pt/8pt rhythm)
+    public static let spacing2: CGFloat = 2
+    public static let spacing4: CGFloat = 4
+    public static let spacing6: CGFloat = 6
+    public static let spacing8: CGFloat = 8
+    public static let spacing10: CGFloat = 10
+    public static let spacing12: CGFloat = 12
+    public static let spacing14: CGFloat = 14
+    public static let spacing16: CGFloat = 16
+    public static let spacing20: CGFloat = 20
+    public static let spacing24: CGFloat = 24
+    public static let spacing32: CGFloat = 32
+    
+    // Semantic Radii Tokens
+    public static let radiusSmall: CGFloat = 6
     public static let radiusControl: CGFloat = 8
     public static let radiusCard: CGFloat = 12
-    public static let radiusSheet: CGFloat = 14
+    public static let radiusSheet: CGFloat = 16
     
     // Elevated Card & Tile Backgrounds (Less transparency on cards, solid separation from window)
     @ViewBuilder
@@ -382,29 +415,368 @@ public struct SiphonInteractiveGlassModifier: ViewModifier {
 
 // MARK: - Fluid Bouncy Button Style
 public struct BouncyButtonStyle: ButtonStyle {
-    public var scaleAmount: CGFloat = 0.95
-    public var hoverScale: CGFloat = 1.025
+    public var scaleAmount: CGFloat = 0.97
+    public var hoverScale: CGFloat = 1.015
     
     @State private var isHovered = false
     
-    public init(scaleAmount: CGFloat = 0.95, hoverScale: CGFloat = 1.025) {
+    public init(scaleAmount: CGFloat = 0.97, hoverScale: CGFloat = 1.015) {
         self.scaleAmount = scaleAmount
         self.hoverScale = hoverScale
     }
     
     public func makeBody(configuration: Configuration) -> some View {
+        let reduceMotion = AdaptiveRenderingEnvironment.shared.capabilities.reduceMotion
+        let effectivePressScale = reduceMotion ? 1.0 : scaleAmount
+        let effectiveHoverScale = reduceMotion ? 1.0 : hoverScale
+        
         configuration.label
-            .scaleEffect(configuration.isPressed ? scaleAmount : (isHovered ? hoverScale : 1.0))
-            .animation(.spring(response: 0.28, dampingFraction: 0.65, blendDuration: 0), value: configuration.isPressed)
-            .animation(.spring(response: 0.32, dampingFraction: 0.70, blendDuration: 0), value: isHovered)
+            .scaleEffect(configuration.isPressed ? effectivePressScale : (isHovered ? effectiveHoverScale : 1.0))
+            .animation(reduceMotion ? nil : .spring(response: 0.28, dampingFraction: 0.65, blendDuration: 0), value: configuration.isPressed)
+            .animation(reduceMotion ? nil : .spring(response: 0.32, dampingFraction: 0.70, blendDuration: 0), value: isHovered)
             .onHover { isHovered = $0 }
     }
 }
 
 extension ButtonStyle where Self == BouncyButtonStyle {
     public static var bouncy: BouncyButtonStyle { BouncyButtonStyle() }
-    public static func bouncy(scale: CGFloat = 0.95, hover: CGFloat = 1.025) -> BouncyButtonStyle {
+    public static func bouncy(scale: CGFloat = 0.97, hover: CGFloat = 1.015) -> BouncyButtonStyle {
         BouncyButtonStyle(scaleAmount: scale, hoverScale: hover)
+    }
+}
+
+// MARK: - Standardized Siphon Button Styles
+public struct SiphonPrimaryButtonStyle: ButtonStyle {
+    public var cornerRadius: CGFloat = SiphonTheme.radiusControl
+    @State private var isHovered = false
+    
+    public init(cornerRadius: CGFloat = SiphonTheme.radiusControl) {
+        self.cornerRadius = cornerRadius
+    }
+    
+    public func makeBody(configuration: Configuration) -> some View {
+        let reduceMotion = AdaptiveRenderingEnvironment.shared.capabilities.reduceMotion
+        configuration.label
+            .font(.geist(13, weight: .semibold))
+            .foregroundColor(.white)
+            .padding(.horizontal, SiphonTheme.spacing16)
+            .padding(.vertical, 6)
+            .background(SiphonTheme.primaryGradient)
+            .clipShape(RoundedRectangle(cornerRadius: cornerRadius))
+            .overlay(
+                RoundedRectangle(cornerRadius: cornerRadius)
+                    .stroke(Color.white.opacity(0.25), lineWidth: 1)
+            )
+            .shadow(color: SiphonTheme.accent.opacity(isHovered ? 0.35 : 0.20), radius: isHovered ? 8 : 4, y: 2)
+            .scaleEffect(reduceMotion ? 1.0 : (configuration.isPressed ? 0.97 : (isHovered ? 1.015 : 1.0)))
+            .animation(reduceMotion ? nil : .spring(response: 0.28, dampingFraction: 0.65), value: configuration.isPressed)
+            .animation(reduceMotion ? nil : .spring(response: 0.30, dampingFraction: 0.70), value: isHovered)
+            .onHover { isHovered = $0 }
+    }
+}
+
+public struct SiphonSecondaryButtonStyle: ButtonStyle {
+    public var cornerRadius: CGFloat = SiphonTheme.radiusControl
+    @State private var isHovered = false
+    
+    public init(cornerRadius: CGFloat = SiphonTheme.radiusControl) {
+        self.cornerRadius = cornerRadius
+    }
+    
+    public func makeBody(configuration: Configuration) -> some View {
+        let reduceMotion = AdaptiveRenderingEnvironment.shared.capabilities.reduceMotion
+        configuration.label
+            .font(.geist(13, weight: .medium))
+            .foregroundColor(.primary)
+            .padding(.horizontal, SiphonTheme.spacing14)
+            .padding(.vertical, 6)
+            .background(SiphonTheme.controlBackground(cornerRadius: cornerRadius, isHovered: isHovered))
+            .clipShape(RoundedRectangle(cornerRadius: cornerRadius))
+            .overlay(
+                SiphonTheme.controlBorder(cornerRadius: cornerRadius, isHovered: isHovered)
+            )
+            .scaleEffect(reduceMotion ? 1.0 : (configuration.isPressed ? 0.97 : (isHovered ? 1.015 : 1.0)))
+            .animation(reduceMotion ? nil : .spring(response: 0.28, dampingFraction: 0.65), value: configuration.isPressed)
+            .animation(reduceMotion ? nil : .spring(response: 0.30, dampingFraction: 0.70), value: isHovered)
+            .onHover { isHovered = $0 }
+    }
+}
+
+public struct SiphonGhostButtonStyle: ButtonStyle {
+    public var cornerRadius: CGFloat = SiphonTheme.radiusControl
+    @State private var isHovered = false
+    
+    public init(cornerRadius: CGFloat = SiphonTheme.radiusControl) {
+        self.cornerRadius = cornerRadius
+    }
+    
+    public func makeBody(configuration: Configuration) -> some View {
+        let reduceMotion = AdaptiveRenderingEnvironment.shared.capabilities.reduceMotion
+        configuration.label
+            .font(.geist(12, weight: .medium))
+            .foregroundColor(isHovered ? .primary : .secondary)
+            .padding(.horizontal, SiphonTheme.spacing10)
+            .padding(.vertical, 5)
+            .background(
+                RoundedRectangle(cornerRadius: cornerRadius)
+                    .fill(Color.primary.opacity(isHovered ? 0.08 : 0.0))
+            )
+            .scaleEffect(reduceMotion ? 1.0 : (configuration.isPressed ? 0.97 : 1.0))
+            .animation(reduceMotion ? nil : .spring(response: 0.28, dampingFraction: 0.65), value: configuration.isPressed)
+            .animation(reduceMotion ? nil : .spring(response: 0.30, dampingFraction: 0.70), value: isHovered)
+            .onHover { isHovered = $0 }
+    }
+}
+
+public struct SiphonIconButtonStyle: ButtonStyle {
+    public var size: CGFloat = 26
+    @State private var isHovered = false
+    
+    public init(size: CGFloat = 26) {
+        self.size = size
+    }
+    
+    public func makeBody(configuration: Configuration) -> some View {
+        let reduceMotion = AdaptiveRenderingEnvironment.shared.capabilities.reduceMotion
+        configuration.label
+            .frame(width: size, height: size)
+            .background(
+                Circle()
+                    .fill(Color.primary.opacity(isHovered ? 0.08 : 0.0))
+            )
+            .scaleEffect(reduceMotion ? 1.0 : (configuration.isPressed ? 0.92 : (isHovered ? 1.05 : 1.0)))
+            .animation(reduceMotion ? nil : .spring(response: 0.25, dampingFraction: 0.65), value: configuration.isPressed)
+            .animation(reduceMotion ? nil : .spring(response: 0.28, dampingFraction: 0.70), value: isHovered)
+            .onHover { isHovered = $0 }
+    }
+}
+
+extension ButtonStyle where Self == SiphonPrimaryButtonStyle {
+    public static var siphonPrimary: SiphonPrimaryButtonStyle { SiphonPrimaryButtonStyle() }
+    public static func siphonPrimary(cornerRadius: CGFloat = SiphonTheme.radiusControl) -> SiphonPrimaryButtonStyle {
+        SiphonPrimaryButtonStyle(cornerRadius: cornerRadius)
+    }
+}
+
+extension ButtonStyle where Self == SiphonSecondaryButtonStyle {
+    public static var siphonSecondary: SiphonSecondaryButtonStyle { SiphonSecondaryButtonStyle() }
+    public static func siphonSecondary(cornerRadius: CGFloat = SiphonTheme.radiusControl) -> SiphonSecondaryButtonStyle {
+        SiphonSecondaryButtonStyle(cornerRadius: cornerRadius)
+    }
+}
+
+extension ButtonStyle where Self == SiphonGhostButtonStyle {
+    public static var siphonGhost: SiphonGhostButtonStyle { SiphonGhostButtonStyle() }
+    public static func siphonGhost(cornerRadius: CGFloat = SiphonTheme.radiusControl) -> SiphonGhostButtonStyle {
+        SiphonGhostButtonStyle(cornerRadius: cornerRadius)
+    }
+}
+
+extension ButtonStyle where Self == SiphonIconButtonStyle {
+    public static var siphonIcon: SiphonIconButtonStyle { SiphonIconButtonStyle() }
+    public static func siphonIcon(size: CGFloat = 26) -> SiphonIconButtonStyle {
+        SiphonIconButtonStyle(size: size)
+    }
+}
+
+// MARK: - Standardized Badges & Indicators
+struct SiphonStatusBadge: View {
+    let status: DownloadStatus
+    let title: String
+    let foregroundColor: Color
+    
+    init(status: DownloadStatus, title: String, foregroundColor: Color) {
+        self.status = status
+        self.title = title
+        self.foregroundColor = foregroundColor
+    }
+    
+    public var body: some View {
+        HStack(spacing: 5) {
+            switch status {
+            case .downloading, .fetching, .processing:
+                SiphonSpinner(size: 10, color: foregroundColor, lineWidth: 1.8)
+            case .completed:
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.system(size: 11, weight: .semibold))
+            case .failed:
+                Image(systemName: "xmark.circle.fill")
+                    .font(.system(size: 11, weight: .semibold))
+            case .stopped:
+                Image(systemName: "stop.circle.fill")
+                    .font(.system(size: 11, weight: .semibold))
+            case .queued:
+                Image(systemName: "clock.fill")
+                    .font(.system(size: 11, weight: .semibold))
+            case .paused:
+                Image(systemName: "pause.circle.fill")
+                    .font(.system(size: 11, weight: .semibold))
+            case .fileExists:
+                Image(systemName: "exclamationmark.circle.fill")
+                    .font(.system(size: 11, weight: .semibold))
+            }
+            
+            Text(title)
+                .font(.geist(11, weight: .semibold))
+        }
+        .padding(.horizontal, 9)
+        .padding(.vertical, 3.5)
+        .foregroundColor(foregroundColor)
+        .background(
+            Capsule()
+                .fill(foregroundColor.opacity(0.12))
+                .background(Capsule().fill(.ultraThinMaterial))
+        )
+        .clipShape(Capsule())
+        .overlay(
+            Capsule()
+                .strokeBorder(
+                    LinearGradient(
+                        colors: [
+                            foregroundColor.opacity(0.40),
+                            foregroundColor.opacity(0.12),
+                            Color.clear
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    ),
+                    lineWidth: 1
+                )
+        )
+    }
+}
+
+public struct SiphonTagBadge: View {
+    public let text: String
+    public var systemImage: String? = nil
+    public var tintColor: Color = .secondary
+    public var isHdr: Bool = false
+    public var isMonospaced: Bool = false
+    
+    public init(
+        text: String,
+        systemImage: String? = nil,
+        tintColor: Color = .secondary,
+        isHdr: Bool = false,
+        isMonospaced: Bool = false
+    ) {
+        self.text = text
+        self.systemImage = systemImage
+        self.tintColor = tintColor
+        self.isHdr = isHdr
+        self.isMonospaced = isMonospaced
+    }
+    
+    public var body: some View {
+        HStack(spacing: 4) {
+            if let icon = systemImage {
+                Image(systemName: icon)
+                    .font(.system(size: 9, weight: .semibold))
+            }
+            
+            Text(text)
+                .font(isMonospaced ? .geistMono(10, weight: .semibold) : .geist(10, weight: .semibold))
+        }
+        .padding(.horizontal, 6)
+        .padding(.vertical, 2.5)
+        .foregroundColor(isHdr ? .white : tintColor)
+        .background {
+            if isHdr {
+                LinearGradient(
+                    colors: [SiphonTheme.statusHdr, Color.orange],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+                .allowedDynamicRange(AdaptiveRenderingEnvironment.shared.capabilities.supportsEDR ? .high : .standard)
+            } else {
+                tintColor.opacity(0.12)
+            }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusSmall))
+        .overlay(
+            RoundedRectangle(cornerRadius: SiphonTheme.radiusSmall)
+                .strokeBorder(
+                    isHdr ? Color.white.opacity(0.3) : tintColor.opacity(0.22),
+                    lineWidth: 0.5
+                )
+        )
+    }
+}
+
+// MARK: - Standardized Empty State View
+public struct SiphonEmptyStateView: View {
+    public let icon: String
+    public let title: String
+    public let message: String
+    public var actionTitle: String? = nil
+    public var action: (() -> Void)? = nil
+    
+    public init(
+        icon: String,
+        title: String,
+        message: String,
+        actionTitle: String? = nil,
+        action: (() -> Void)? = nil
+    ) {
+        self.icon = icon
+        self.title = title
+        self.message = message
+        self.actionTitle = actionTitle
+        self.action = action
+    }
+    
+    public var body: some View {
+        VStack(spacing: SiphonTheme.spacing16) {
+            ZStack {
+                Circle()
+                    .fill(Color.primary.opacity(0.04))
+                    .frame(width: 72, height: 72)
+                Image(systemName: icon)
+                    .font(.system(size: 32, weight: .regular))
+                    .foregroundColor(.secondary.opacity(0.7))
+            }
+            
+            VStack(spacing: SiphonTheme.spacing6) {
+                Text(title)
+                    .font(.geist(16, weight: .semibold))
+                    .foregroundColor(.primary)
+                Text(message)
+                    .font(.geist(13))
+                    .foregroundColor(.secondary)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: 320)
+            }
+            
+            if let actionTitle = actionTitle, let action = action {
+                Button(action: action) {
+                    HStack(spacing: SiphonTheme.spacing6) {
+                        Image(systemName: "plus.circle.fill")
+                            .font(.system(size: 13, weight: .semibold))
+                        Text(actionTitle)
+                            .font(.geist(13, weight: .semibold))
+                    }
+                }
+                .buttonStyle(.siphonPrimary(cornerRadius: 16))
+                .padding(.top, SiphonTheme.spacing4)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(SiphonTheme.spacing32)
+    }
+}
+
+// MARK: - Standardized Input View Modifier
+extension View {
+    @ViewBuilder
+    public func siphonInputStyle(cornerRadius: CGFloat = SiphonTheme.radiusControl) -> some View {
+        self.padding(.horizontal, SiphonTheme.spacing10)
+            .padding(.vertical, 7)
+            .background(Color.primary.opacity(0.04))
+            .clipShape(RoundedRectangle(cornerRadius: cornerRadius))
+            .overlay(
+                RoundedRectangle(cornerRadius: cornerRadius)
+                    .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+            )
     }
 }
 

@@ -1,6 +1,23 @@
 import Foundation
 import AppKit
 import Combine
+import SwiftUI
+
+struct ReleaseFeature: Identifiable, Sendable {
+    let id: UUID
+    let icon: String
+    let iconColor: Color
+    let title: String
+    let description: String
+
+    init(id: UUID = UUID(), icon: String, iconColor: Color, title: String, description: String) {
+        self.id = id
+        self.icon = icon
+        self.iconColor = iconColor
+        self.title = title
+        self.description = description
+    }
+}
 
 
 final class DownloadEventCoalescer: @unchecked Sendable {
@@ -139,6 +156,10 @@ class DownloadManager: ObservableObject {
     @Published var history: [HistoricDownload] = []
     @Published var ytdlpVersion: String?
     @Published var showWhatsNew: Bool = false
+    @Published var whatsNewTitle: String = ""
+    @Published var whatsNewMessage: String = ""
+    @Published var whatsNewFeatures: [ReleaseFeature] = []
+    @Published var isFetchingWhatsNew: Bool = false
     @Published var ytdlpUpdateMessage: YtdlpUpdateMessage?
     @Published var isUpdatingYtdlp: Bool = false
     @Published var ytdlpUpdateProgress: Double = 0
@@ -164,6 +185,14 @@ class DownloadManager: ObservableObject {
             .assign(to: &$isUpdatingYtdlp)
         ytdlpService.$updateProgress
             .assign(to: &$ytdlpUpdateProgress)
+
+        NotificationCenter.default.addObserver(
+            forName: UserDefaults.didChangeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.processQueue()
+        }
     }
 
     var downloadingDownloads: [Download] {
@@ -212,13 +241,185 @@ class DownloadManager: ObservableObject {
 
         loadHistory()
 
-        let currentVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "4.2.0"
-        let lastSeenVersion = userDefaults.string(forKey: UserDefaultsKeys.lastSeenVersion) ?? "0.0.0"
+        await checkAndFetchWhatsNew()
+    }
 
-        if currentVersion != lastSeenVersion {
-            showWhatsNew = true
-            userDefaults.set(currentVersion, forKey: UserDefaultsKeys.lastSeenVersion)
+    var appVersion: String {
+        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "5.1.0"
+    }
+
+    static let defaultFeatures: [ReleaseFeature] = [
+        ReleaseFeature(
+            icon: "textformat",
+            iconColor: .purple,
+            title: "Native Geist Typography",
+            description: "Integrated Vercel Geist and Geist Mono font families natively across all views, controls, and badges."
+        ),
+        ReleaseFeature(
+            icon: "macwindow",
+            iconColor: .cyan,
+            title: "Translucent Liquid Glass",
+            description: "Deep desktop translucency, smooth materials, and refined responsive split-view layouts."
+        ),
+        ReleaseFeature(
+            icon: "bolt.fill",
+            iconColor: .blue,
+            title: "Multi-Stream & Anti-Bot Engine",
+            description: "Chrome Client Hints emulation, multi-connection pooling, and automatic video-only audio multiplexing."
+        ),
+        ReleaseFeature(
+            icon: "menubar.rectangle",
+            iconColor: .indigo,
+            title: "Control Center Menu Bar",
+            description: "Instant download initiation directly from the macOS status bar with quality presets and quick controls."
+        ),
+        ReleaseFeature(
+            icon: "shield.checkerboard",
+            iconColor: .green,
+            title: "Hardened Security & Cookie Isolation",
+            description: "Automated session cookie cleanup, sensitive header redaction in logs, and cryptographic validation."
+        ),
+        ReleaseFeature(
+            icon: "accessibility",
+            iconColor: .orange,
+            title: "Speed & Accessibility",
+            description: "Optimized HTML entity decoding, full VoiceOver screen reader support, and fluid animation feedback."
+        )
+    ]
+
+    func parseReleaseFeatures(from text: String) -> [ReleaseFeature] {
+        var features: [ReleaseFeature] = []
+        let lines = text.components(separatedBy: .newlines)
+
+        for line in lines {
+            let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmed.isEmpty || trimmed.hasPrefix("#") || trimmed.hasPrefix("---") || trimmed.hasPrefix("===") {
+                continue
+            }
+
+            var cleanLine = trimmed
+            if cleanLine.hasPrefix("- ") || cleanLine.hasPrefix("* ") || cleanLine.hasPrefix("• ") {
+                cleanLine = String(cleanLine.dropFirst(2)).trimmingCharacters(in: .whitespaces)
+            }
+
+            if let colonIndex = cleanLine.firstIndex(of: ":") {
+                let rawTitle = String(cleanLine[..<colonIndex])
+                let rawDesc = String(cleanLine[cleanLine.index(after: colonIndex)...])
+
+                let cleanTitle = rawTitle.replacingOccurrences(of: "*", with: "")
+                    .replacingOccurrences(of: "`", with: "")
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+
+                let cleanDesc = rawDesc.replacingOccurrences(of: "*", with: "")
+                    .replacingOccurrences(of: "`", with: "")
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+
+                guard !cleanTitle.isEmpty && !cleanDesc.isEmpty else { continue }
+
+                let lower = cleanTitle.lowercased() + " " + cleanDesc.lowercased()
+                let icon: String
+                let color: Color
+                if lower.contains("font") || lower.contains("typography") || lower.contains("rebrand") || lower.contains("geist") {
+                    icon = "textformat"
+                    color = .purple
+                } else if lower.contains("glass") || lower.contains("translucen") || lower.contains("material") || lower.contains("ui") || lower.contains("layout") {
+                    icon = "macwindow"
+                    color = .cyan
+                } else if lower.contains("anti-bot") || lower.contains("stream") || lower.contains("engine") || lower.contains("download") || lower.contains("speed") {
+                    icon = "bolt.fill"
+                    color = .blue
+                } else if lower.contains("menu bar") || lower.contains("status bar") || lower.contains("menubar") {
+                    icon = "menubar.rectangle"
+                    color = .indigo
+                } else if lower.contains("security") || lower.contains("cookie") || lower.contains("privacy") || lower.contains("sandbox") {
+                    icon = "shield.checkerboard"
+                    color = .green
+                } else if lower.contains("accessib") || lower.contains("voiceover") || lower.contains("tooltip") || lower.contains("optim") {
+                    icon = "accessibility"
+                    color = .orange
+                } else {
+                    icon = "sparkles"
+                    color = .blue
+                }
+
+                features.append(ReleaseFeature(icon: icon, iconColor: color, title: cleanTitle, description: cleanDesc))
+            }
         }
+
+        return features.isEmpty ? DownloadManager.defaultFeatures : features
+    }
+
+    func checkAndFetchWhatsNew() async {
+        let currentVersion = appVersion
+        let lastSeenVersion = userDefaults.string(forKey: UserDefaultsKeys.lastSeenVersion)
+
+        let isFirstEverRun = (lastSeenVersion == nil || lastSeenVersion?.isEmpty == true || lastSeenVersion == "0.0.0")
+        let isAppUpdated = (lastSeenVersion != nil && lastSeenVersion != currentVersion && !isFirstEverRun)
+
+        // Only show if app was updated or during the first ever app run after installation
+        guard isFirstEverRun || isAppUpdated else {
+            return
+        }
+
+        whatsNewTitle = languageService?.s("whats_new_title") ?? "What's New in Siphon"
+        whatsNewFeatures = DownloadManager.defaultFeatures
+
+        // Proactively fetch NEW info from GitHub releases for current version only
+        isFetchingWhatsNew = true
+        if let releaseInfo = await fetchReleaseNotesFromGitHub(version: currentVersion) {
+            let parsed = parseReleaseFeatures(from: releaseInfo.body)
+            if !parsed.isEmpty {
+                whatsNewFeatures = parsed
+            }
+        }
+        isFetchingWhatsNew = false
+
+        showWhatsNew = true
+        userDefaults.set(currentVersion, forKey: UserDefaultsKeys.lastSeenVersion)
+    }
+
+    private func fetchReleaseNotesFromGitHub(version: String) async -> (title: String, body: String)? {
+        guard let url = URL(string: "https://api.github.com/repos/marspater/jolly-hopper/releases/tags/v\(version)") else {
+            return nil
+        }
+
+        var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 8)
+        request.setValue("Siphon-App/\(version)", forHTTPHeaderField: "User-Agent")
+        request.setValue("application/vnd.github.v3+json", forHTTPHeaderField: "Accept")
+
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+                return nil
+            }
+            guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                return nil
+            }
+
+            guard let tagName = json["tag_name"] as? String else { return nil }
+            let cleanTag = tagName.replacingOccurrences(of: "v", with: "")
+            // Strictly guard against displaying older release notes for newer app version
+            if cleanTag.compare(version, options: .numeric) == .orderedAscending {
+                return nil
+            }
+
+            let title = (json["name"] as? String) ?? "What's New in Siphon"
+            var rawBody = (json["body"] as? String) ?? ""
+            rawBody = sanitizeReleaseNotes(rawBody)
+
+            if !rawBody.isEmpty {
+                return (title: title, body: rawBody)
+            }
+        } catch {
+            return nil
+        }
+        return nil
+    }
+
+    private func sanitizeReleaseNotes(_ text: String) -> String {
+        var sanitized = text.replacingOccurrences(of: "\r\n", with: "\n")
+        sanitized = sanitized.trimmingCharacters(in: .whitespacesAndNewlines)
+        return sanitized
     }
 
     func updateYtdlp() async {
@@ -342,12 +543,23 @@ class DownloadManager: ObservableObject {
     }
 
     private func startDownloadTask(_ download: Download) {
-        guard download.status == .queued else { return }
-        guard activeTasks[download.id] == nil else { return }
-
         let downloadId = download.id
+        guard download.status == .queued else {
+            reservedDownloadSlots.remove(downloadId)
+            return
+        }
+        guard activeTasks[downloadId] == nil else { return }
+
         let task = Task { [weak self, weak download] in
-            guard let self, let download else { return }
+            guard let self else { return }
+            guard let download else {
+                await MainActor.run {
+                    self.reservedDownloadSlots.remove(downloadId)
+                    self.activeTasks.removeValue(forKey: downloadId)
+                    self.processQueue()
+                }
+                return
+            }
             await self.executeDownload(download)
         }
         activeTasks[downloadId] = task
@@ -472,6 +684,7 @@ class DownloadManager: ObservableObject {
                         if download.log.count + combined.count > 50_000 {
                             download.log = String(download.log.suffix(25_000))
                         }
+                        download.log.append(combined)
                         if download.status == .downloading {
                             for line in lines {
                                 if line.contains("[EmbedThumbnail]") || line.contains("[Metadata]") || line.contains("[Merger]") || line.contains("[VideoConvertor]") || line.contains("[ThumbnailsConvertor]") || line.contains("[EmbedSubtitle]") {
@@ -699,12 +912,14 @@ class DownloadManager: ObservableObject {
         guard let index = downloads.firstIndex(where: { $0.id == download.id }), index > 0 else { return }
         downloads.swapAt(index, index - 1)
         objectWillChange.send()
+        processQueue()
     }
 
     func moveDownloadDown(_ download: Download) {
         guard let index = downloads.firstIndex(where: { $0.id == download.id }), index < downloads.count - 1 else { return }
         downloads.swapAt(index, index + 1)
         objectWillChange.send()
+        processQueue()
     }
 
     func moveDownloadToTop(_ download: Download) {
@@ -712,6 +927,7 @@ class DownloadManager: ObservableObject {
         let item = downloads.remove(at: index)
         downloads.insert(item, at: 0)
         objectWillChange.send()
+        processQueue()
     }
 
     func moveDownloadToBottom(_ download: Download) {
@@ -719,11 +935,13 @@ class DownloadManager: ObservableObject {
         let item = downloads.remove(at: index)
         downloads.append(item)
         objectWillChange.send()
+        processQueue()
     }
 
     func moveDownload(from source: IndexSet, to destination: Int) {
         downloads.move(fromOffsets: source, toOffset: destination)
         objectWillChange.send()
+        processQueue()
     }
 
 
@@ -744,7 +962,13 @@ class DownloadManager: ObservableObject {
         var candidateName = "\(sanitizedBase) (\(counter))"
         var candidatePath = folder.appendingPathComponent("\(candidateName).\(ext)").path
 
-        while FileManager.default.fileExists(atPath: candidatePath) || reservedOutputPaths.contains(candidatePath) {
+        let existingFiles = (try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)) ?? []
+        let existingBaseNames = Set(existingFiles.compactMap { file -> String? in
+            guard YtdlpService.isMediaFilePath(file.path) else { return nil }
+            return file.deletingPathExtension().lastPathComponent
+        })
+
+        while existingBaseNames.contains(candidateName) || FileManager.default.fileExists(atPath: candidatePath) || reservedOutputPaths.contains(candidatePath) {
             counter += 1
             candidateName = "\(sanitizedBase) (\(counter))"
             candidatePath = folder.appendingPathComponent("\(candidateName).\(ext)").path
@@ -793,12 +1017,8 @@ class DownloadManager: ObservableObject {
     }
     
     func stopAllDownloads() {
-        // Bolt Performance Optimization: Avoid synchronous disk I/O and redundant UI broadcasts inside loops by batching operations
-        for download in downloadingDownloads {
+        for download in downloadingDownloads + queuedDownloads {
             stopDownload(download, suppressNotification: false, skipSaveAndBroadcast: true)
-        }
-        for download in queuedDownloads {
-            updateStatus(for: download, to: .stopped)
         }
         objectWillChange.send()
         saveHistory()
@@ -813,10 +1033,9 @@ class DownloadManager: ObservableObject {
 
 
     func clearQueuedDownloads() {
-        for download in queuedDownloads {
-            updateStatus(for: download, to: .stopped)
-        }
-        downloads.removeAll { $0.status == .stopped }
+        let queued = queuedDownloads
+        guard !queued.isEmpty else { return }
+        clearDownloads(queued)
     }
 
 
@@ -937,6 +1156,7 @@ class DownloadManager: ObservableObject {
                 
                 var existingIds = Set(downloads.map { $0.id })
                 for download in restored {
+                    download.options.rawCookies = nil // Purge any legacy session cookies from restored history
                     if !existingIds.contains(download.id) {
                         switch download.status {
                         case .downloading, .fetching, .processing, .queued:
@@ -997,12 +1217,18 @@ class DownloadManager: ObservableObject {
 
     func removeFromHistory(_ download: HistoricDownload) {
         history.removeAll { $0.id == download.id }
+        downloads.removeAll { $0.id == download.id }
+        objectWillChange.send()
         saveHistory()
     }
 
 
 
     func openFile(_ path: URL) {
+        guard YtdlpService.isMediaFilePath(path.path) else {
+            LoggerService.shared.log("Refusing to open non-media file via NSWorkspace: \(path.path)", level: .warning)
+            return
+        }
         NSWorkspace.shared.open(path)
     }
 

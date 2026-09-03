@@ -392,13 +392,12 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
 
                     if line.contains("%") {
                         let components = line.split(whereSeparator: \.isWhitespace).map(String.init)
-
-                        if let percentStr = components.first {
-                            let cleanPercent = percentStr.hasSuffix("%") ? String(percentStr.dropLast()) : percentStr
-                            if let percent = Double(cleanPercent) {
-                                let speed = components.count > 1 ? components[1] : nil
-                                let eta = components.count > 2 ? components[2] : nil
-                                onProgress(percent / 100.0, speed, eta)
+                        if let percentIndex = components.firstIndex(where: { $0.hasSuffix("%") }) {
+                            let percentStr = components[percentIndex].dropLast()
+                            if let percent = Double(percentStr), !percent.isNaN && !percent.isInfinite {
+                                let speed = components.indices.contains(percentIndex + 3) ? components[percentIndex + 3] : nil
+                                let eta = components.indices.contains(percentIndex + 5) ? components[percentIndex + 5] : nil
+                                onProgress(max(0.0, min(1.0, percent / 100.0)), speed, eta)
                             }
                         }
                     } else if line.contains("[EmbedThumbnail]") {
@@ -470,9 +469,13 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
                     DispatchQueue.main.async { onOutput("[ERROR] \(line)") }
                 }
 
-                // If user requested cancellation or process was terminated via signal, resume with cancelled error
-                if processController?.isCancelled == true || proc.terminationReason == .uncaughtSignal {
+                // If user requested cancellation or process was terminated via signal, resume with appropriate error
+                if processController?.isCancelled == true {
                     safeContinuation.resume(throwing: YtdlpError.downloadFailed("Download was stopped."))
+                    return
+                }
+                if proc.terminationReason == .uncaughtSignal {
+                    safeContinuation.resume(throwing: YtdlpError.downloadFailed("Process terminated unexpectedly with signal (exit code \(proc.terminationStatus))."))
                     return
                 }
 
