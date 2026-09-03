@@ -1715,24 +1715,6 @@ class YtdlpService: ObservableObject {
         return args
     }
 
-    private func buildVideoSelector(for resolution: VideoResolution?, ignoreWorst: Bool = false) -> String {
-        guard let resolution else { return "bestvideo" }
-
-        switch resolution {
-        case .best:
-            return "bestvideo"
-        case .r2160p, .r1440p, .r1080p, .r720p, .r480p, .r360p, .r240p:
-            return resolution.ytdlpValue
-        case .worst:
-            return ignoreWorst ? "bestvideo" : "worstvideo"
-        }
-    }
-
-    private func buildCombinedSelector(for resolution: VideoResolution?) -> String {
-        guard let resolution else { return "best*" }
-        return resolution.ytdlpCombinedValue
-    }
-
     private func compatibleMergeOutputFormat(for options: DownloadOptions) -> String? {
         guard options.fileType.isVideo else { return nil }
 
