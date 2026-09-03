@@ -661,4 +661,52 @@ final class DownloadManagerTests: XCTestCase {
 
         manager.shutdown()
     }
+
+    func testPauseDownloadEligibleAndIneligibleStatuses() {
+        let manager = DownloadManager()
+
+        let eligibleStatuses: [DownloadStatus] = [.downloading, .fetching, .processing, .queued]
+        for status in eligibleStatuses {
+            let download = Download(url: "https://example.com/test_pause_eligible_\(status)", options: .default)
+            download.status = status
+            manager.downloads = [download]
+
+            manager.pauseDownload(download)
+
+            XCTAssertEqual(download.status, .paused, "pauseDownload should change status from \(status) to .paused")
+        }
+
+        let ineligibleStatuses: [DownloadStatus] = [.completed, .failed, .cancelled, .stopped, .paused]
+        for status in ineligibleStatuses {
+            let download = Download(url: "https://example.com/test_pause_ineligible_\(status)", options: .default)
+            download.status = status
+            manager.downloads = [download]
+
+            manager.pauseDownload(download)
+
+            XCTAssertEqual(download.status, status, "pauseDownload should NOT change status when download is in \(status) state")
+        }
+
+        manager.shutdown()
+    }
+
+    func testPauseDownloadQueueAndTaskCancellation() {
+        let manager = DownloadManager()
+
+        let download = Download(url: "https://example.com/test_pause_task", options: .default)
+        download.status = .downloading
+        manager.downloads = [download]
+
+        let task = Task {
+            try? await Task.sleep(nanoseconds: 1_000_000_000)
+        }
+        manager.activeTasks[download.id] = task
+
+        manager.pauseDownload(download)
+
+        XCTAssertEqual(download.status, .paused)
+        XCTAssertTrue(task.isCancelled, "activeTask should be cancelled when pauseDownload is invoked")
+
+        manager.shutdown()
+    }
 }
