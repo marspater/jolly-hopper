@@ -3459,7 +3459,14 @@ class YtdlpService: ObservableObject {
         guard let path = ytdlpPath?.path else { return nil }
         let cookieURL = FileManager.default.temporaryDirectory.appendingPathComponent("siphon_cookies_\(UUID().uuidString).txt")
         let cookiePath = cookieURL.path
-        FileManager.default.createFile(atPath: cookiePath, contents: nil, attributes: [.posixPermissions: 0o600])
+
+        let fd = Darwin.open(cookiePath, O_CREAT | O_EXCL | O_WRONLY, 0o600)
+        guard fd >= 0 else {
+            LoggerService.shared.log("Failed to create secure temporary cookies file at \(cookiePath)", level: .error)
+            return nil
+        }
+        Darwin.close(fd)
+
         defer {
             try? FileManager.default.removeItem(atPath: cookiePath)
         }

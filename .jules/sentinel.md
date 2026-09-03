@@ -1,0 +1,4 @@
+## 2026-08-20 - Atomic File Creation for Temporary Cookies
+**Vulnerability:** Temporary cookie files created via standard file manager APIs with post-creation or standard attribute setter calls can expose permission race conditions (TOCTOU) before file permissions take effect.
+**Learning:** `FileManager.default.createFile` creates the file and sets permissions via attributes, but using low-level POSIX `Darwin.open(path, O_CREAT | O_EXCL | O_WRONLY, 0o600)` guarantees strict atomic file creation with restricted owner-only (`0o600`) POSIX permissions immediately upon creation and fails if the target file already exists (`O_EXCL`).
+**Prevention:** Always use `Darwin.open(path, O_CREAT | O_EXCL | O_WRONLY, 0o600)` when initializing temporary files containing sensitive authentication tokens or cookies on macOS.
