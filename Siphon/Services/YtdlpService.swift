@@ -3117,13 +3117,13 @@ class YtdlpService: ObservableObject {
             if (lowerErr.contains("video is unavailable") || lowerErr.contains("video unavailable") || lowerErr.contains("video has been removed") || lowerErr.contains("video removed") || lowerErr.contains("404 not found") || lowerErr.contains("page not found") || lowerErr.contains("http error 404")) && !lowerErr.contains("cookie") {
                 return YtdlpError.downloadFailed("This video is unavailable, private, or has been removed.")
             }
-            if lowerErr.contains("sign in") || lowerErr.contains("private video") || lowerErr.contains("login") || lowerErr.contains("members-only") {
-                if configuredBrowser == "safari" && !Self.hasFullDiskAccess {
+            if lowerErr.contains("sign in") || lowerErr.contains("private video") || lowerErr.contains("login") || lowerErr.contains("members-only") || lowerErr.contains("unsupported url") {
+                if configuredBrowser == "safari" || isSafariPermissionError(errString) {
                     return YtdlpError.safariCookiesFullDiskAccessRequired
                 }
                 if configuredBrowser == nil {
                     return YtdlpError.boyfriendTVNeedsBrowserCookies
-                } else {
+                } else if !lowerErr.contains("unsupported url") {
                     return YtdlpError.boyfriendTVLoginRequired
                 }
             }
