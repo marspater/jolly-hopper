@@ -35,6 +35,8 @@ class LoggerService: ObservableObject {
             "--cookies-from-browser": "\"<BROWSER>\"",
             "--add-header": "\"<REDACTED_HEADER>\"",
             "--header": "\"<REDACTED_HEADER>\"",
+            "--http-header": "\"<REDACTED_HEADER>\"",
+            "-H": "\"<REDACTED_HEADER>\"",
             "--username": "\"<USERNAME>\"",
             "-u": "\"<USERNAME>\"",
             "--password": "\"<PASSWORD>\"",
@@ -158,6 +160,7 @@ class LoggerService: ObservableObject {
 
         // 2. Redact Bearer / API tokens and credentials
         let redactionPatterns: [(String, String)] = [
+            (#"(?i)authorization:\s*(basic|bearer)\s+[^\r\n]+"#, "Authorization: <REDACTED>"),
             (#"(?i)bearer\s+[A-Za-z0-9\-_\.]+"#, "Bearer <REDACTED>"),
             (#"(?i)cookie:\s*[^\r\n]+"#, "Cookie: <REDACTED>"),
             (#"(?i)(token|api_key|password|pass|secret)=([A-Za-z0-9\-_%]+)"#, "$1=<REDACTED>")
