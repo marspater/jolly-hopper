@@ -276,7 +276,6 @@ class YtdlpService: ObservableObject {
     var ffmpegPath: URL?
     var ffprobePath: URL?
     private var deniedCookieSources: Set<String> = []
-    private let localVersion = DependencyChecksums.ytdlpVersion
     private let bundledYtdlpName = "yt-dlp_macos"
     private var activeSetupTask: Task<Void, Never>?
 
