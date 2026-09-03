@@ -221,7 +221,7 @@ struct AddDownloadView: View {
 
             Spacer()
 
-            HStack(spacing: 2) {
+            HStack(spacing: SiphonTheme.spacing2) {
                 Button {
                     withAnimation(.spring(response: 0.30, dampingFraction: 0.68, blendDuration: 0)) {
                         inputMode = .single
@@ -230,7 +230,7 @@ struct AddDownloadView: View {
                     Text(languageService.s("single_mode"))
                         .font(.geist(11, weight: .semibold))
                         .foregroundColor(inputMode == .single ? .white : .secondary)
-                        .padding(.horizontal, 12)
+                        .padding(.horizontal, SiphonTheme.spacing12)
                         .padding(.vertical, 4)
                         .background {
                             if inputMode == .single {
@@ -241,7 +241,7 @@ struct AddDownloadView: View {
                             }
                         }
                 }
-                .buttonStyle(.bouncy(scale: 0.95, hover: 1.02))
+                .buttonStyle(.bouncy(scale: 0.97, hover: 1.015))
 
                 Button {
                     withAnimation(.spring(response: 0.30, dampingFraction: 0.68, blendDuration: 0)) {
@@ -251,7 +251,7 @@ struct AddDownloadView: View {
                     Text(languageService.s("batch_import"))
                         .font(.geist(11, weight: .semibold))
                         .foregroundColor(inputMode == .batch ? .white : .secondary)
-                        .padding(.horizontal, 12)
+                        .padding(.horizontal, SiphonTheme.spacing12)
                         .padding(.vertical, 4)
                         .background {
                             if inputMode == .batch {
@@ -262,9 +262,9 @@ struct AddDownloadView: View {
                             }
                         }
                 }
-                .buttonStyle(.bouncy(scale: 0.95, hover: 1.02))
+                .buttonStyle(.bouncy(scale: 0.97, hover: 1.015))
             }
-            .padding(2)
+            .padding(SiphonTheme.spacing2)
             .background(
                 Capsule()
                     .fill(Color.primary.opacity(0.04))
@@ -517,7 +517,7 @@ struct AddDownloadView: View {
                             urlInput = ""
                         } label: {
                             Image(systemName: "xmark.circle.fill")
-                                .font(.geist(12))
+                                .font(.system(size: 12))
                                 .foregroundColor(.secondary)
                         }
                         .buttonStyle(.plain)
@@ -525,7 +525,7 @@ struct AddDownloadView: View {
                         .accessibilityLabel(languageService.s("clear"))
                     }
                 }
-                .padding(.horizontal, 10)
+                .padding(.horizontal, SiphonTheme.spacing10)
                 .padding(.vertical, 7)
                 .background(Color.primary.opacity(0.04))
                 .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusControl))
@@ -544,14 +544,14 @@ struct AddDownloadView: View {
                         }
                     }
                 } label: {
-                    HStack(spacing: 4) {
+                    HStack(spacing: SiphonTheme.spacing4) {
                         Image(systemName: isPasted ? "checkmark" : "doc.on.clipboard")
-                            .font(.geist(12, weight: .medium))
+                            .font(.system(size: 12, weight: .medium))
                         Text(languageService.s("paste"))
                             .font(.geist(12, weight: .medium))
                     }
                     .foregroundColor(isPasted ? SiphonTheme.statusCompleted : .primary)
-                    .padding(.horizontal, 10)
+                    .padding(.horizontal, SiphonTheme.spacing10)
                     .padding(.vertical, 7)
                     .background(SiphonTheme.controlBackground(cornerRadius: SiphonTheme.radiusControl))
                     .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusControl))
@@ -559,14 +559,14 @@ struct AddDownloadView: View {
                         SiphonTheme.controlBorder(cornerRadius: SiphonTheme.radiusControl)
                     )
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.bouncy(scale: 0.97, hover: 1.015))
                 .help(languageService.s("paste_from_clipboard"))
                 .accessibilityLabel(languageService.s("paste_from_clipboard"))
 
                 Button {
                     fetchInfo()
                 } label: {
-                    HStack(spacing: 6) {
+                    HStack(spacing: SiphonTheme.spacing6) {
                         if isLoading {
                             SiphonSpinner(size: 12, color: .white, lineWidth: 2)
                             Text(languageService.s("fetching"))
@@ -575,11 +575,11 @@ struct AddDownloadView: View {
                             Text(languageService.s("fetch"))
                                 .font(.geist(12, weight: .semibold))
                             Image(systemName: "arrow.right")
-                                .font(.geist(11, weight: .bold))
+                                .font(.system(size: 11, weight: .bold))
                         }
                     }
                     .foregroundColor(urlInput.isEmpty ? .secondary.opacity(0.5) : .white)
-                    .padding(.horizontal, 12)
+                    .padding(.horizontal, SiphonTheme.spacing12)
                     .padding(.vertical, 7)
                     .background(
                         urlInput.isEmpty ?
@@ -592,7 +592,7 @@ struct AddDownloadView: View {
                             .stroke(Color.white.opacity(urlInput.isEmpty ? 0.05 : 0.25), lineWidth: 1)
                     )
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.bouncy(scale: 0.97, hover: 1.015))
                 .disabled(urlInput.isEmpty || isLoading)
                 .shadow(color: urlInput.isEmpty ? .clear : SiphonTheme.accent.opacity(0.35), radius: 4, y: 1)
                 .help(languageService.s("fetch_info"))
@@ -1379,7 +1379,7 @@ struct AddDownloadView: View {
     }
 
     private var footer: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: SiphonTheme.spacing12) {
             Spacer()
             Button {
                 AddDownloadWindowManager.shared.closeWindow()
@@ -1388,7 +1388,7 @@ struct AddDownloadView: View {
                 Text(languageService.s("cancel"))
                     .font(.geist(13, weight: .medium))
                     .foregroundColor(.primary)
-                    .padding(.horizontal, 14)
+                    .padding(.horizontal, SiphonTheme.spacing14)
                     .padding(.vertical, 5)
                     .background(SiphonTheme.controlBackground(cornerRadius: SiphonTheme.radiusControl))
                     .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusControl))
@@ -1396,7 +1396,7 @@ struct AddDownloadView: View {
                         SiphonTheme.controlBorder(cornerRadius: SiphonTheme.radiusControl)
                     )
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.bouncy(scale: 0.97, hover: 1.015))
             .keyboardShortcut(.escape)
 
             if inputMode == .batch {
@@ -1408,7 +1408,7 @@ struct AddDownloadView: View {
                     Text(String(format: languageService.s("queue_batch"), count))
                         .font(.geist(13, weight: .bold))
                         .foregroundColor(isDisabled ? .secondary.opacity(0.6) : .white)
-                        .padding(.horizontal, 16)
+                        .padding(.horizontal, SiphonTheme.spacing16)
                         .padding(.vertical, 5)
                         .background(
                             isDisabled ?
@@ -1421,7 +1421,7 @@ struct AddDownloadView: View {
                                 .stroke(Color.white.opacity(isDisabled ? 0.05 : 0.25), lineWidth: 1)
                         )
                 }
-                .buttonStyle(.bouncy(scale: 0.95, hover: 1.025))
+                .buttonStyle(.bouncy(scale: 0.97, hover: 1.015))
                 .disabled(isDisabled)
                 .shadow(color: isDisabled ? .clear : SiphonTheme.accent.opacity(0.35), radius: 6, y: 2)
                 .keyboardShortcut(.return)
@@ -1434,14 +1434,14 @@ struct AddDownloadView: View {
                 Button {
                     startDownload()
                 } label: {
-                    HStack(spacing: 6) {
+                    HStack(spacing: SiphonTheme.spacing6) {
                         Image(systemName: "arrow.down.circle.fill")
-                            .font(.geist(13, weight: .semibold))
+                            .font(.system(size: 13, weight: .semibold))
                         Text(downloadTitle)
                             .font(.geist(13, weight: .bold))
                     }
                     .foregroundColor(isDisabled ? .secondary.opacity(0.6) : .white)
-                    .padding(.horizontal, 16)
+                    .padding(.horizontal, SiphonTheme.spacing16)
                     .padding(.vertical, 5)
                     .background(
                         isDisabled ?
@@ -1454,7 +1454,7 @@ struct AddDownloadView: View {
                             .stroke(Color.white.opacity(isDisabled ? 0.05 : 0.25), lineWidth: 1)
                     )
                 }
-                .buttonStyle(.bouncy(scale: 0.95, hover: 1.025))
+                .buttonStyle(.bouncy(scale: 0.97, hover: 1.015))
                 .disabled(isDisabled)
                 .shadow(color: isDisabled ? .clear : SiphonTheme.accent.opacity(0.35), radius: 6, y: 2)
                 .keyboardShortcut(.return)
@@ -1464,7 +1464,8 @@ struct AddDownloadView: View {
     }
 
     private func fetchInfo() {
-        guard !urlInput.isEmpty else { return }
+        let cleanURL = urlInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanURL.isEmpty else { return }
         fetchTask?.cancel()
         isLoading = true
         errorMessage = nil
@@ -1472,7 +1473,7 @@ struct AddDownloadView: View {
         selectedFormatId = nil
         fetchTask = Task {
             do {
-                let info = try await downloadManager.ytdlpService.fetchInfo(url: urlInput, rawCookies: appState.rawCookiesToDownload)
+                let info = try await downloadManager.ytdlpService.fetchInfo(url: cleanURL, rawCookies: appState.rawCookiesToDownload)
                 guard !Task.isCancelled else { return }
                 mediaInfo = info
                 customFilename = info.title
@@ -1677,9 +1678,17 @@ struct AddDownloadView: View {
                 let potentialPath = saveFolder.appendingPathComponent("\(safeName).\(fileType.fileExtension)")
                 let pathString = potentialPath.path
 
+                let folder = saveFolder
                 Task {
-                    let fileExists = await Task.detached {
-                        FileManager.default.fileExists(atPath: pathString)
+                    let fileExists = await Task.detached { [folder] in
+                        if let contents = try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil) {
+                            return contents.contains { file in
+                                let nameWithoutExt = file.deletingPathExtension().lastPathComponent
+                                let isPart = file.lastPathComponent.hasSuffix(".part") || file.lastPathComponent.hasSuffix(".ytdl")
+                                return nameWithoutExt == safeName && !isPart && YtdlpService.isMediaFilePath(file.path)
+                            }
+                        }
+                        return false
                     }.value
 
                     if fileExists {
@@ -1701,8 +1710,9 @@ struct AddDownloadView: View {
         let lines = text.components(separatedBy: CharacterSet.newlines.union(CharacterSet.whitespaces))
         var valid: [String] = []
         var seen = Set<String>()
+        let stripSet = CharacterSet(charactersIn: "\"',;:()[]{}<>").union(.whitespacesAndNewlines)
         for line in lines {
-            let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+            let trimmed = line.trimmingCharacters(in: stripSet)
             if (trimmed.hasPrefix("http://") || trimmed.hasPrefix("https://")) && !seen.contains(trimmed) {
                 seen.insert(trimmed)
                 valid.append(trimmed)
@@ -1748,8 +1758,9 @@ struct AddDownloadView: View {
             appState.rawCookiesToDownload = nil
         }
 
+        let cleanURL = urlInput.trimmingCharacters(in: .whitespacesAndNewlines)
         if downloadMode == .single {
-            downloadManager.addDownload(url: urlInput, options: finalOptions)
+            downloadManager.addDownload(url: cleanURL, options: finalOptions)
         } else {
             let selectedItems = playlistItems.filter { selectedPlaylistIds.contains($0.id) }
             let urls = selectedItems.map { $0.resolvedURL }

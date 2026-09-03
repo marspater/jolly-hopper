@@ -774,5 +774,320 @@ final class QueueAndErrorUXTests: XCTestCase {
         XCTAssertTrue(info.rawError.contains("token=<REDACTED>"))
         XCTAssertTrue(info.rawError.contains("https://video.example.com/file.mp4"))
     }
+
+    // MARK: - Design System & UI Architecture Tests
+
+    func testDesignTokensSpacingScale() {
+        XCTAssertEqual(SiphonTheme.spacing2, 2)
+        XCTAssertEqual(SiphonTheme.spacing4, 4)
+        XCTAssertEqual(SiphonTheme.spacing6, 6)
+        XCTAssertEqual(SiphonTheme.spacing8, 8)
+        XCTAssertEqual(SiphonTheme.spacing10, 10)
+        XCTAssertEqual(SiphonTheme.spacing12, 12)
+        XCTAssertEqual(SiphonTheme.spacing14, 14)
+        XCTAssertEqual(SiphonTheme.spacing16, 16)
+        XCTAssertEqual(SiphonTheme.spacing20, 20)
+        XCTAssertEqual(SiphonTheme.spacing24, 24)
+        XCTAssertEqual(SiphonTheme.spacing32, 32)
+    }
+
+    func testDesignTokensRadiiScale() {
+        XCTAssertEqual(SiphonTheme.radiusSmall, 6)
+        XCTAssertEqual(SiphonTheme.radiusControl, 8)
+        XCTAssertEqual(SiphonTheme.radiusCard, 12)
+        XCTAssertEqual(SiphonTheme.radiusSheet, 16)
+    }
+
+    func testAdaptiveRenderingEnvironmentReduceMotion() {
+        let env = AdaptiveRenderingEnvironment.shared
+        let systemReduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        XCTAssertEqual(env.capabilities.reduceMotion, systemReduceMotion)
+        XCTAssertEqual(env.reduceMotion, systemReduceMotion)
+    }
+
+    func testBouncyButtonStyleDefaults() {
+        let style = BouncyButtonStyle()
+        XCTAssertEqual(style.scaleAmount, 0.97)
+        XCTAssertEqual(style.hoverScale, 1.015)
+    }
+
+    func testStatusAndTagBadgesInstantiation() {
+        let allStatuses: [DownloadStatus] = [
+            .downloading, .fetching, .processing,
+            .completed, .failed, .stopped,
+            .queued, .paused, .fileExists
+        ]
+
+        for status in allStatuses {
+            let badge = SiphonStatusBadge(status: status, title: status.rawValue, foregroundColor: .blue)
+            XCTAssertNotNil(badge)
+        }
+
+        let tag1 = SiphonTagBadge(text: "HDR10", isHdr: true)
+        XCTAssertNotNil(tag1)
+
+        let tag2 = SiphonTagBadge(text: "PID: 1234", tintColor: .secondary, isMonospaced: true)
+        XCTAssertNotNil(tag2)
+    }
+
+    func testEmptyStateInstantiation() {
+        var didTriggerAction = false
+        let emptyView = SiphonEmptyStateView(
+            icon: "tray.fill",
+            title: "No Downloads",
+            message: "Paste a link to begin",
+            actionTitle: "New Download"
+        ) {
+            didTriggerAction = true
+        }
+        XCTAssertNotNil(emptyView)
+        emptyView.action?()
+        XCTAssertTrue(didTriggerAction)
+    }
+
+    // MARK: - Security Hardening & Trust Boundary Tests
+
+    func testUpdateScriptSignatureIntegrityAndSymlinkRejection() {
+        let script = UpdateChecker.generateUpdateScript()
+        XCTAssertTrue(script.contains("[ -L \"$NEW_APP\" ]"), "Update script must explicitly reject symlinks for the app bundle")
+        XCTAssertTrue(script.contains("[ \"$NEW_TEAM_ID\" != \"$EXPECTED_TEAM_ID\" ]"), "Update script must strictly reject team identifier mismatches without bypass")
+    }
+
+    func testTrustedGitHubURLValidation() {
+        let valid1 = URL(string: "https://github.com/marspater/jolly-hopper/releases/download/v5.0.0/Siphon.dmg")!
+        let valid2 = URL(string: "https://objects.githubusercontent.com/github-production-release-asset/12345/abcde")!
+        let httpUrl = URL(string: "http://github.com/marspater/jolly-hopper/releases/download/v5.0.0/Siphon.dmg")!
+        let attackerUrl = URL(string: "https://evil-attacker.com/malware.dmg")!
+        let subAttackerUrl = URL(string: "https://github.com.attacker.com/malware.dmg")!
+
+        XCTAssertTrue(UpdateChecker.isTrustedGitHubURL(valid1))
+        XCTAssertTrue(UpdateChecker.isTrustedGitHubURL(valid2))
+        XCTAssertFalse(UpdateChecker.isTrustedGitHubURL(httpUrl), "Insecure HTTP scheme must be rejected")
+        XCTAssertFalse(UpdateChecker.isTrustedGitHubURL(attackerUrl), "Untrusted domain must be rejected")
+        XCTAssertFalse(UpdateChecker.isTrustedGitHubURL(subAttackerUrl), "Attacker subdomain must be rejected")
+    }
+
+    func testHistoricDownloadStripsRawCookies() {
+        var options = DownloadOptions.default
+        options.rawCookies = "session=super_secret_cookie_token; auth=admin"
+        let download = Download(url: "https://example.com/video", options: options)
+
+        let historic = HistoricDownload(download: download)
+        XCTAssertNil(historic.options.rawCookies, "Persistent HistoricDownload must strip ephemeral rawCookies")
+    }
+
+    func testLoggerServiceInlineFlagAndTokenRedaction() {
+        let cmd = LoggerService.sanitizeCommandForLog([
+            "yt-dlp",
+            "--cookies=my_cookies.txt",
+            "--password=secret_password",
+            "--token=sensitive_token",
+            "--header=Authorization: Bearer mySecretToken"
+        ])
+        XCTAssertFalse(cmd.contains("my_cookies.txt"), "Inline --cookies= must be redacted")
+        XCTAssertFalse(cmd.contains("secret_password"), "Inline --password= must be redacted")
+        XCTAssertFalse(cmd.contains("sensitive_token"), "Inline --token= must be redacted")
+        XCTAssertFalse(cmd.contains("mySecretToken"), "Inline --header= must be redacted")
+        XCTAssertTrue(cmd.contains("--cookies=\"<COOKIE_FILE>\""))
+        XCTAssertTrue(cmd.contains("--password=\"<PASSWORD>\""))
+        XCTAssertTrue(cmd.contains("--token=\"<TOKEN>\""))
+
+        let diag = LoggerService.sanitizeDiagnosticText("Failed request: Authorization: Bearer superSecretKey123\nCookie: session=xyz987\nauth=adminSecret")
+        XCTAssertFalse(diag.contains("superSecretKey123"))
+        XCTAssertFalse(diag.contains("session=xyz987"))
+        XCTAssertFalse(diag.contains("adminSecret"))
+        XCTAssertTrue(diag.contains("Authorization: <REDACTED>"))
+        XCTAssertTrue(diag.contains("Cookie: <REDACTED>"))
+        XCTAssertTrue(diag.contains("auth=<REDACTED>"))
+    }
+
+    func testSanitizeFilenameHardening() {
+        // Control character stripping
+        let withNull = "video\0title\r\nname"
+        let cleaned1 = YtdlpService.sanitizeFilename(withNull)
+        XCTAssertFalse(cleaned1.contains("\0"))
+        XCTAssertFalse(cleaned1.contains("\r"))
+        XCTAssertFalse(cleaned1.contains("\n"))
+
+        // Leading dots and hyphens stripping
+        let leading = "...---my_movie"
+        let cleaned2 = YtdlpService.sanitizeFilename(leading)
+        XCTAssertFalse(cleaned2.hasPrefix("."))
+        XCTAssertFalse(cleaned2.hasPrefix("-"))
+        XCTAssertEqual(cleaned2, "my_movie")
+
+        // Reserved Windows/DOS/macOS device names
+        let reserved = YtdlpService.sanitizeFilename("NUL")
+        XCTAssertEqual(reserved, "download_NUL")
+        let con = YtdlpService.sanitizeFilename("con")
+        XCTAssertEqual(con, "download_con")
+
+        // Max length clamping
+        let longName = String(repeating: "a", count: 300)
+        let clamped = YtdlpService.sanitizeFilename(longName)
+        XCTAssertLessThanOrEqual(clamped.count, 200)
+    }
+
+    func testCLIArgumentValidators() {
+        // Timeframe
+        XCTAssertTrue(YtdlpService.isValidTimeFrame("00:01:30"))
+        XCTAssertTrue(YtdlpService.isValidTimeFrame("01:30"))
+        XCTAssertTrue(YtdlpService.isValidTimeFrame("90"))
+        XCTAssertTrue(YtdlpService.isValidTimeFrame("90.5"))
+        XCTAssertFalse(YtdlpService.isValidTimeFrame("01:30; rm -rf /"))
+        XCTAssertFalse(YtdlpService.isValidTimeFrame("--exec touch /tmp/pwned"))
+
+        // Format ID
+        XCTAssertTrue(YtdlpService.isSafeFormatId("bestvideo+bestaudio/best"))
+        XCTAssertTrue(YtdlpService.isSafeFormatId("1080p"))
+        XCTAssertTrue(YtdlpService.isSafeFormatId("b/best"))
+        XCTAssertFalse(YtdlpService.isSafeFormatId("-F"))
+        XCTAssertFalse(YtdlpService.isSafeFormatId("--exec rm"))
+        XCTAssertFalse(YtdlpService.isSafeFormatId("format id with spaces"))
+
+        // Subtitle Language
+        XCTAssertTrue(YtdlpService.isSafeSubtitleLanguage("en"))
+        XCTAssertTrue(YtdlpService.isSafeSubtitleLanguage("zh-Hans"))
+        XCTAssertTrue(YtdlpService.isSafeSubtitleLanguage("es_419"))
+        XCTAssertFalse(YtdlpService.isSafeSubtitleLanguage("-f"))
+        XCTAssertFalse(YtdlpService.isSafeSubtitleLanguage("--write-subs"))
+    }
+
+    // MARK: - Bug Audit Regression Tests
+
+    func testDisplayProgressGuardsAgainstNaNAndInfinity() {
+        let download = Download(url: "https://example.com/video", options: .default)
+        download.progress = Double.nan
+        XCTAssertEqual(download.displayProgress, "0%", "NaN progress must safely evaluate to 0% without crashing")
+
+        download.progress = Double.infinity
+        XCTAssertEqual(download.displayProgress, "100%", "Infinite progress must clamp safely without crashing")
+    }
+
+    func testVideoOnlyFormatResolutionPairsWithAudio() {
+        let videoFmt = MediaFormat(
+            formatId: "137",
+            ext: "mp4",
+            resolution: "1920x1080",
+            fps: 30,
+            vcodec: "avc1.640028",
+            acodec: "none",
+            tbr: 3000
+        )
+        let audioFmt = MediaFormat(
+            formatId: "140",
+            ext: "m4a",
+            resolution: nil,
+            fps: nil,
+            vcodec: "none",
+            acodec: "mp4a.40.2",
+            tbr: 128
+        )
+        let info = MediaInfo(
+            id: "vid123",
+            title: "Test Video",
+            thumbnail: nil,
+            duration: 120,
+            uploader: "YouTube",
+            formats: [videoFmt, audioFmt]
+        )
+
+        var options = DownloadOptions.default
+        options.fileType = .mp4
+        options.selectedFormatId = "137"
+
+        let resolved = info.resolveSelectedFormats(options: options)
+        XCTAssertEqual(resolved.count, 2, "Single video-only format selection must automatically pair with best audio")
+        XCTAssertEqual(resolved.first?.formatId, "137")
+        XCTAssertEqual(resolved.last?.formatId, "140")
+    }
+
+    func testClearQueuedDownloadsPreservesExistingStoppedDownloads() {
+        let manager = DownloadManager()
+        let stoppedDownload = Download(url: "https://example.com/stopped", options: .default)
+        stoppedDownload.status = .stopped
+
+        let queuedDownload1 = Download(url: "https://example.com/queued1", options: .default)
+        queuedDownload1.status = .queued
+
+        let queuedDownload2 = Download(url: "https://example.com/queued2", options: .default)
+        queuedDownload2.status = .queued
+
+        manager.downloads = [stoppedDownload, queuedDownload1, queuedDownload2]
+
+        manager.clearQueuedDownloads()
+
+        XCTAssertEqual(manager.downloads.count, 1, "Only queued downloads should be removed")
+        XCTAssertEqual(manager.downloads.first?.id, stoppedDownload.id, "Existing stopped download must be preserved")
+    }
+
+    func testResumeWithNewNameAvoidsAnyMediaExtensionCollision() {
+        let manager = DownloadManager()
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent("RenameTest_\(UUID().uuidString)")
+        try? FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        // Create an existing conflicting media file with .mkv extension
+        let existingPath = tempDir.appendingPathComponent("MyMovie (1).mkv")
+        FileManager.default.createFile(atPath: existingPath.path, contents: Data("test".utf8))
+
+        var options = DownloadOptions.default
+        options.saveFolder = tempDir
+        options.fileType = .mp4
+
+        let download = Download(url: "https://example.com/video", options: options, title: "MyMovie")
+        manager.resumeWithNewName(download)
+
+        XCTAssertEqual(download.options.customFilename, "MyMovie (2)", "Must skip conflicting basename even if existing file has a different media extension")
+    }
+
+    func testWhatsNewOnlyShowsOnFirstRunOrUpdate() async {
+        let manager = DownloadManager()
+        let testVersion = manager.appVersion
+        let userDefaults = UserDefaults.standard
+
+        // 1. Simulate already up to date (normal launch)
+        userDefaults.set(testVersion, forKey: UserDefaultsKeys.lastSeenVersion)
+        manager.showWhatsNew = false
+        await manager.checkAndFetchWhatsNew()
+        XCTAssertFalse(manager.showWhatsNew, "What's New must not show if app is already on current seen version")
+
+        // 2. Simulate app update (older seen version)
+        userDefaults.set("4.2.0", forKey: UserDefaultsKeys.lastSeenVersion)
+        manager.showWhatsNew = false
+        await manager.checkAndFetchWhatsNew()
+        XCTAssertTrue(manager.showWhatsNew, "What's New must show when app was updated from an older version")
+        XCTAssertEqual(userDefaults.string(forKey: UserDefaultsKeys.lastSeenVersion), testVersion, "Seen version must be updated to current")
+
+        // 3. Reset to up-to-date
+        userDefaults.set(testVersion, forKey: UserDefaultsKeys.lastSeenVersion)
+    }
+
+    func testHTMLEntityDecodingOptimization() {
+        let plain = "Hello World!"
+        XCTAssertEqual(plain.decodingHTMLEntities(), "Hello World!")
+
+        let named = "Tom &amp; Jerry &bull; &copy; 2026"
+        XCTAssertEqual(named.decodingHTMLEntities(), "Tom & Jerry • © 2026")
+
+        let decimal = "It&#39;s a test &#160;!"
+        XCTAssertEqual(decimal.decodingHTMLEntities(), "It's a test  !")
+
+        let hex = "&#x27;Quotes&#x22;"
+        XCTAssertEqual(hex.decodingHTMLEntities(), "'Quotes\"")
+    }
+
+    func testHeaderRedactionIncludesShortAndHttpHeaderFlags() {
+        let args = [
+            "yt-dlp",
+            "-H", "Authorization: Bearer secret-token-12345",
+            "--http-header", "X-Custom-Auth: supersecret",
+            "https://example.com/video"
+        ]
+        let joined = LoggerService.sanitizeCommandForLog(args)
+        XCTAssertFalse(joined.contains("secret-token-12345"), "Must redact argument following -H")
+        XCTAssertFalse(joined.contains("supersecret"), "Must redact argument following --http-header")
+        XCTAssertTrue(joined.contains("<REDACTED_HEADER>"), "Must replace sensitive header with placeholder")
+    }
 }
 

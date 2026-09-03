@@ -222,7 +222,9 @@ struct PreferencesView: View {
             }
             .contentShape(Capsule())
         }
-        .buttonStyle(.bouncy(scale: 0.95, hover: 1.02))
+        .buttonStyle(.bouncy(scale: 0.97, hover: 1.015))
+        .help(title)
+        .accessibilityLabel(title)
     }
 
     private var generalTab: some View {
@@ -1022,32 +1024,30 @@ struct PreferencesView: View {
     
     private var aboutTab: some View {
         ScrollView {
-            VStack(spacing: 16) {
+            VStack(spacing: SiphonTheme.spacing16) {
                 // Header section: Clean app branding & version
-                VStack(spacing: 8) {
+                VStack(spacing: SiphonTheme.spacing8) {
                     Image(nsImage: NSApp.applicationIconImage)
                         .resizable()
                         .frame(width: 56, height: 56)
-                        .shadow(color: SiphonTheme.accent.opacity(0.35), radius: 16, x: 0, y: 4)
+                        .shadow(color: SiphonTheme.accent.opacity(0.25), radius: 12, x: 0, y: 4)
 
-                    VStack(spacing: 4) {
+                    VStack(spacing: SiphonTheme.spacing4) {
                         Text("Siphon")
                             .font(.geist(20, weight: .bold))
 
-                        Text(languageService.s("version") + " \(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "5.0.0")")
-                            .font(.geistMono(11, weight: .semibold))
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 2.5)
-                            .background(SiphonTheme.accent.opacity(0.12))
-                            .foregroundColor(SiphonTheme.accent)
-                            .clipShape(Capsule())
+                        SiphonTagBadge(
+                            text: "v\(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "5.0.0")",
+                            tintColor: SiphonTheme.accent,
+                            isMonospaced: true
+                        )
                     }
 
                     Text(languageService.s("app_desc"))
                         .font(.geist(12))
                         .foregroundColor(.secondary)
                         .multilineTextAlignment(.center)
-                        .padding(.horizontal, 20)
+                        .padding(.horizontal, SiphonTheme.spacing20)
                 }
                 .padding(.top, 6)
                 .padding(.bottom, 2)
@@ -1149,15 +1149,15 @@ struct PreferencesView: View {
                 }
 
                 // Quick links & Footer
-                VStack(spacing: 8) {
-                    HStack(spacing: 10) {
+                VStack(spacing: SiphonTheme.spacing8) {
+                    HStack(spacing: SiphonTheme.spacing10) {
                         Link(destination: URL(string: "https://github.com/marspater/jolly-hopper") ?? URL(fileURLWithPath: "/")) {
                             Label("GitHub", systemImage: "link")
                                 .font(.geist(11, weight: .semibold))
                                 .foregroundColor(SiphonTheme.accent)
-                                .padding(.horizontal, 14)
+                                .padding(.horizontal, SiphonTheme.spacing12)
                                 .padding(.vertical, 6)
-                                .siphonInteractiveGlass(cornerRadius: 14)
+                                .siphonInteractiveGlass(cornerRadius: SiphonTheme.radiusControl)
                         }
                         .buttonStyle(.plain)
 
@@ -1165,9 +1165,9 @@ struct PreferencesView: View {
                             Label("README", systemImage: "doc.text")
                                 .font(.geist(11, weight: .semibold))
                                 .foregroundColor(SiphonTheme.accent)
-                                .padding(.horizontal, 14)
+                                .padding(.horizontal, SiphonTheme.spacing12)
                                 .padding(.vertical, 6)
-                                .siphonInteractiveGlass(cornerRadius: 14)
+                                .siphonInteractiveGlass(cornerRadius: SiphonTheme.radiusControl)
                         }
                         .buttonStyle(.plain)
 
@@ -1175,13 +1175,13 @@ struct PreferencesView: View {
                             Label(languageService.s("supported_sites"), systemImage: "globe")
                                 .font(.geist(11, weight: .semibold))
                                 .foregroundColor(SiphonTheme.accent)
-                                .padding(.horizontal, 14)
+                                .padding(.horizontal, SiphonTheme.spacing12)
                                 .padding(.vertical, 6)
-                                .siphonInteractiveGlass(cornerRadius: 14)
+                                .siphonInteractiveGlass(cornerRadius: SiphonTheme.radiusControl)
                         }
                         .buttonStyle(.plain)
                     }
-                    .padding(.top, 4)
+                    .padding(.top, SiphonTheme.spacing4)
 
                     Text("© 2026 marspater • All rights reserved")
                         .font(.geist(10))

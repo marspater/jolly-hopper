@@ -781,6 +781,34 @@ class YtdlpService: ObservableObject {
             }
         }
 
+        if isGFFURL(url) {
+            LoggerService.shared.log("Initiating GayForFans media info resolution for: \(LoggerService.sanitizeURLForLog(url))", level: .info)
+            if let gffMedia = await resolveGFFMediaInfo(url: url, rawCookies: rawCookies) {
+                LoggerService.shared.log("GayForFans media successfully extracted: '\(gffMedia.title)' with stream: \(LoggerService.sanitizeURLForLog(gffMedia.streamURL))", level: .info)
+                let quality = gffMedia.quality ?? "720p"
+                let height = Int(quality.replacingOccurrences(of: "p", with: "")) ?? 720
+                let format = MediaFormat(
+                    formatId: quality,
+                    ext: "mp4",
+                    resolution: "\(Int(Double(height) * 16.0 / 9.0))x\(height)",
+                    fps: 30.0,
+                    vcodec: "h264",
+                    acodec: "aac",
+                    tbr: 2500
+                )
+                return MediaInfo(
+                    id: url,
+                    title: gffMedia.title,
+                    thumbnail: gffMedia.thumbnailURL,
+                    duration: gffMedia.duration,
+                    uploader: "GayForFans",
+                    formats: [format]
+                )
+            } else {
+                LoggerService.shared.log("GayForFans custom extractor could not resolve media directly. Falling back to yt-dlp native extraction...", level: .warning)
+            }
+        }
+
         var args = [
             path,
             "--ignore-config",
@@ -1024,6 +1052,13 @@ class YtdlpService: ObservableObject {
                 customEmbedURL = guywhMedia.embedURL
                 customThumbnailURL = guywhMedia.thumbnailURL
             }
+        } else if isGFFURL(url) {
+            if let gffMedia = await resolveGFFMediaInfo(url: url, rawCookies: options.rawCookies) {
+                targetURL = gffMedia.streamURL
+                customResolvedTitle = gffMedia.title
+                customEmbedURL = gffMedia.embedURL
+                customThumbnailURL = gffMedia.thumbnailURL
+            }
         }
 
         var args = [path.path, "--ignore-config"]
@@ -1078,8 +1113,11 @@ class YtdlpService: ObservableObject {
         if options.downloadSubtitles && !options.subtitleLanguages.isEmpty {
             let subFormat = options.subtitleFormat?.ytdlpValue ?? "srt"
             args.append(contentsOf: ["--sub-format", "\(subFormat)/best"])
-            let langList = options.subtitleLanguages.joined(separator: ",")
-            args.append(contentsOf: ["--sub-langs", langList])
+            let safeLangs = options.subtitleLanguages.filter { Self.isSafeSubtitleLanguage($0) }
+            if !safeLangs.isEmpty {
+                let langList = safeLangs.joined(separator: ",")
+                args.append(contentsOf: ["--sub-langs", langList])
+            }
 
             args.append("--write-subs")
             args.append("--write-auto-subs")
@@ -1111,7 +1149,8 @@ class YtdlpService: ObservableObject {
             args.append(contentsOf: ["--sponsorblock-remove", "all"])
         }
 
-        if let start = options.timeFrameStart, let end = options.timeFrameEnd {
+        if let start = options.timeFrameStart, let end = options.timeFrameEnd,
+           Self.isValidTimeFrame(start), Self.isValidTimeFrame(end) {
             args.append(contentsOf: ["--download-sections", "*\(start)-\(end)"])
         }
 
@@ -1190,6 +1229,7 @@ class YtdlpService: ObservableObject {
         }
 
         var triedStrategies = Set<DownloadRecoveryStrategy>()
+        var triedAltBrowsers = Set<String>()
         var currentArgs = args
         var outputPath: String? = nil
 
@@ -1211,10 +1251,20 @@ class YtdlpService: ObservableObject {
                     errText = ""
                 }
 
-                // Strategy 1: Cookie failure -> handle FDA or strip browser cookies
+                // Strategy 1: Cookie failure -> handle FDA or try alternate browser before stripping browser cookies
                 if !errText.isEmpty, isCookieFailureError(errText), currentArgs.contains("--cookies-from-browser"), !triedStrategies.contains(.stripCookies) {
                     if isSafariPermissionError(errText) && !Self.hasFullDiskAccess {
                         throw YtdlpError.safariCookiesFullDiskAccessRequired
+                    }
+                    if let idx = currentArgs.firstIndex(of: "--cookies-from-browser"), idx + 1 < currentArgs.count {
+                        let failedBrowser = currentArgs[idx + 1]
+                        if let altBrowser = ["chrome", "brave", "firefox", "edge", "safari"].first(where: { $0 != failedBrowser && ($0 != "safari" || Self.hasFullDiskAccess) && !triedAltBrowsers.contains($0) }) {
+                            triedAltBrowsers.insert(altBrowser)
+                            LoggerService.shared.log("Browser cookie access failed for '\(failedBrowser)'. Retrying download with alternative browser cookies from '\(altBrowser)'...", level: .info)
+                            onOutput("[Siphon Info] Retrying with cookies from \(altBrowser.capitalized)...\n")
+                            currentArgs[idx + 1] = altBrowser
+                            continue
+                        }
                     }
                     triedStrategies.insert(.stripCookies)
                     LoggerService.shared.log("Browser cookie access failed or database missing (\(errText.trimmingCharacters(in: .whitespacesAndNewlines))). Retrying download without browser cookies...", level: .warning)
@@ -1534,13 +1584,29 @@ class YtdlpService: ObservableObject {
         var args: [String] = []
 
         let isSynthesizedDirectStream = (mediaInfo?.uploader == "Guywh" || isGuywhURL(mediaInfo?.id ?? "")) ||
+                                        (mediaInfo?.uploader == "GayForFans" || isGFFURL(mediaInfo?.id ?? "")) ||
                                         (mediaInfo?.uploader == "BoyfriendTV" || isBoyfriendTVURL(mediaInfo?.id ?? "")) ||
                                         (url.map(isGuywhURL) ?? false) ||
+                                        (url.map(isGFFURL) ?? false) ||
                                         (url.map(isBoyfriendTVURL) ?? false)
 
         // 1. Explicit user-specified format ID
-        if let customFormatId = options.selectedFormatId, !customFormatId.isEmpty {
-            let formatId = isSynthesizedDirectStream ? "b/best" : customFormatId
+        if let customFormatId = options.selectedFormatId, !customFormatId.isEmpty, Self.isSafeFormatId(customFormatId) {
+            let formatId: String
+            if isSynthesizedDirectStream {
+                formatId = "b/best"
+            } else if options.fileType.isVideo && !customFormatId.contains("+") {
+                // If the selected format is video-only, automatically append best audio (+ba/b)
+                if let info = mediaInfo,
+                   let matchedFmt = info.formats?.first(where: { $0.formatId == customFormatId }),
+                   matchedFmt.isVideoOnly {
+                    formatId = "\(customFormatId)+ba/b"
+                } else {
+                    formatId = customFormatId
+                }
+            } else {
+                formatId = customFormatId
+            }
             args.append(contentsOf: ["-f", formatId])
             if options.fileType.isVideo {
                 if let mergeFormat = compatibleMergeOutputFormat(for: options) {
@@ -1730,8 +1796,15 @@ class YtdlpService: ObservableObject {
     }
 
     private func configuredBrowserCookieSource() -> String? {
-        let browser = UserDefaults.standard.string(forKey: UserDefaultsKeys.browserForCookies) ?? "safari"
-        return browser == "none" ? nil : browser
+        let raw = UserDefaults.standard.string(forKey: UserDefaultsKeys.browserForCookies) ?? "safari"
+        let browser = raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if browser == "none" { return nil }
+        let allowed = Set(SupportedBrowser.allCases.map(\.rawValue))
+        if allowed.contains(browser) {
+            return browser
+        }
+        LoggerService.shared.log("Invalid or unrecognized browserForCookies setting '\(raw)', falling back to none", level: .warning)
+        return nil
     }
 
     private func logCookieUsage(for url: String, usingBrowserCookies: Bool) {
@@ -2416,11 +2489,485 @@ class YtdlpService: ObservableObject {
         )
     }
 
-    private func normalizeURLForYtdlp(_ urlString: String) -> String {
+    // MARK: - GFF Extractor
+
+    private func isGFFURL(_ urlOrHost: String) -> Bool {
+        let host = (URL(string: urlOrHost)?.host ?? urlOrHost).lowercased()
+        return host == "gayforfans.com" || host.hasSuffix(".gayforfans.com")
+    }
+
+    struct GFFExtractedMedia {
+        let streamURL: String
+        let embedURL: String
+        let title: String
+        let thumbnailURL: String?
+        let duration: Double?
+        let quality: String?
+    }
+
+    private func sanitizeGFFStreamURL(_ raw: String) -> String? {
+        var candidate = raw.replacingOccurrences(of: "\\/", with: "/").trimmingCharacters(in: .whitespacesAndNewlines)
+        if candidate.isEmpty { return nil }
+        
+        // Base64 decoded check (e.g. kt_player base64 encoded strings)
+        if !candidate.contains("://") && !candidate.hasPrefix("//") && !candidate.hasPrefix("/") {
+            if let decodedData = Data(base64Encoded: candidate, options: .ignoreUnknownCharacters),
+               let decodedStr = String(data: decodedData, encoding: .utf8),
+               decodedStr.hasPrefix("http") || decodedStr.hasPrefix("//") || decodedStr.hasPrefix("/") {
+                candidate = decodedStr
+            }
+        }
+        
+        if candidate.hasPrefix("//") {
+            candidate = "https:" + candidate
+        } else if candidate.hasPrefix("/") {
+            candidate = "https://gayforfans.com" + candidate
+        }
+        
+        guard candidate.hasPrefix("http://") || candidate.hasPrefix("https://") else {
+            return nil
+        }
+        
+        // Exclude image / preview thumbnails / short trailers if full stream exists
+        let lower = candidate.lowercased()
+        if lower.contains(".jpg") || lower.contains(".png") || lower.contains(".webp") || lower.contains(".gif") {
+            return nil
+        }
+        return candidate
+    }
+
+    private func resolveGFFMediaInfo(url: String, rawCookies: String? = nil) async -> GFFExtractedMedia? {
+        let targetUrl = normalizeURLForYtdlp(url)
+        guard let pageURL = URL(string: targetUrl) else { return nil }
+        
+        LoggerService.shared.log("[GFF] Extracting media for: \(LoggerService.sanitizeURLForLog(targetUrl))", level: .info)
+        var html = ""
+        
+        let appSupportYtdlp = Self.getAppSupportDirectory().appendingPathComponent("yt-dlp")
+        let ytdlpBinary = ytdlpPath ?? Bundle.main.url(forResource: "yt-dlp", withExtension: nil) ?? (FileManager.default.fileExists(atPath: appSupportYtdlp.path) ? appSupportYtdlp : nil)
+
+        // 1. Try raw session cookies if provided (e.g. from browser extension)
+        if let raw = rawCookies, !raw.isEmpty, let ytdlp = ytdlpBinary,
+           let tempFile = createTempCookiesFileFromHeader(url: targetUrl, cookieHeader: raw) {
+            defer { try? FileManager.default.removeItem(at: tempFile) }
+            var rawArgs = [ytdlp.path, "--ignore-config", "--dump-pages", "--cookies", tempFile.path]
+            appendSiteSpecificArgs(for: targetUrl, to: &rawArgs)
+            rawArgs.append("--")
+            rawArgs.append(targetUrl)
+            
+            var dumpOutput: String? = nil
+            do {
+                dumpOutput = try await processRunner.runCommand(rawArgs)
+            } catch let error as YtdlpError {
+                if case .commandFailed(let output) = error {
+                    dumpOutput = output
+                }
+            } catch {
+                LoggerService.shared.log("[GFF] Non-YtdlpError during raw cookie dump-pages: \(error.localizedDescription)", level: .debug)
+            }
+            
+            if let output = dumpOutput, !output.isEmpty {
+                var rawChunks: [String] = []
+                for line in output.split(whereSeparator: \.isNewline) {
+                    let trimmed = String(line).trimmingCharacters(in: .whitespaces)
+                    if !trimmed.starts(with: "#") && !trimmed.starts(with: "[") && !trimmed.starts(with: "WARNING") && !trimmed.starts(with: "ERROR") {
+                        if let decodedData = Data(base64Encoded: trimmed, options: .ignoreUnknownCharacters) {
+                            let decodedString = String(decoding: decodedData, as: UTF8.self)
+                            if !decodedString.isEmpty {
+                                rawChunks.append(decodedString)
+                            }
+                        }
+                    }
+                }
+                if !rawChunks.isEmpty {
+                    let rawHtml = rawChunks.joined()
+                    let hasMediaData = rawHtml.contains("video_url") ||
+                                       rawHtml.contains("videoPlayerData") ||
+                                       rawHtml.contains("sources") ||
+                                       rawHtml.contains("gayforfans") ||
+                                       rawHtml.contains("contentUrl") ||
+                                       rawHtml.contains("embedUrl") ||
+                                       rawHtml.contains("/embed/") ||
+                                       rawHtml.contains("<title>") ||
+                                       rawHtml.contains("flashvars") ||
+                                       rawHtml.contains("playerConfig")
+                    if hasMediaData {
+                        html = rawHtml
+                        LoggerService.shared.log("[GFF] Successfully extracted GayForFans page dump using session cookies (length: \(rawHtml.count) bytes)", level: .info)
+                    }
+                }
+            }
+        }
+
+        var browsersToTry: [String?] = []
+        if let configured = configuredBrowserCookieSource() {
+            if configured != "safari" || Self.hasFullDiskAccess {
+                browsersToTry.append(configured)
+            }
+        }
+        for candidate in ["safari", "chrome", "brave", "firefox", "edge"] {
+            if candidate == "safari" && !Self.hasFullDiskAccess {
+                continue
+            }
+            if !browsersToTry.contains(where: { $0 == candidate }) {
+                browsersToTry.append(candidate)
+            }
+        }
+        browsersToTry.append(nil)
+
+        // 2. Try browser cookies and impersonated HTTP page dump
+        if html.isEmpty, let ytdlp = ytdlpBinary {
+            for browser in browsersToTry {
+                var args = [ytdlp.path, "--ignore-config", "--dump-pages"]
+                if let browserName = browser {
+                    args.append(contentsOf: ["--cookies-from-browser", browserName])
+                }
+                appendSiteSpecificArgs(for: targetUrl, to: &args)
+                args.append("--")
+                args.append(targetUrl)
+                
+                var dumpOutput: String? = nil
+                do {
+                    dumpOutput = try await processRunner.runCommand(args)
+                } catch let error as YtdlpError {
+                    if case .commandFailed(let output) = error {
+                        dumpOutput = output
+                    }
+                } catch {
+                    // Ignore general process errors
+                }
+                
+                if let output = dumpOutput, !output.isEmpty {
+                    var browserChunks: [String] = []
+                    for line in output.split(whereSeparator: \.isNewline) {
+                        let trimmed = String(line).trimmingCharacters(in: .whitespaces)
+                        if !trimmed.starts(with: "#") && !trimmed.starts(with: "[") && !trimmed.starts(with: "WARNING") && !trimmed.starts(with: "ERROR") {
+                            if let decodedData = Data(base64Encoded: trimmed, options: .ignoreUnknownCharacters) {
+                                let decodedString = String(decoding: decodedData, as: UTF8.self)
+                                if !decodedString.isEmpty {
+                                    browserChunks.append(decodedString)
+                                }
+                            }
+                        }
+                    }
+                    if !browserChunks.isEmpty {
+                        let browserHtml = browserChunks.joined()
+                        let hasMediaData = browserHtml.contains("video_url") ||
+                                           browserHtml.contains("videoPlayerData") ||
+                                           browserHtml.contains("sources") ||
+                                           browserHtml.contains("gayforfans") ||
+                                           browserHtml.contains("contentUrl") ||
+                                           browserHtml.contains("embedUrl") ||
+                                           browserHtml.contains("/embed/") ||
+                                           browserHtml.contains("<title>") ||
+                                           browserHtml.contains("flashvars") ||
+                                           browserHtml.contains("playerConfig")
+                        if hasMediaData {
+                            html = browserHtml
+                            let sourceLog = browser == nil ? "impersonated HTTP request" : "browser cookies from '\(browser!)'"
+                            LoggerService.shared.log("[GFF] Successfully extracted GayForFans page dump using \(sourceLog) (length: \(browserHtml.count) bytes)", level: .info)
+                            break
+                        }
+                    }
+                }
+            }
+        }
+
+        // 3. Fallback to URLSession if browser dump output was empty or didn't contain stream
+        if html.isEmpty && (processRunner is DefaultYtdlpProcessRunner) {
+            var request = URLRequest(url: pageURL)
+            request.timeoutInterval = 5.0
+            request.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36", forHTTPHeaderField: "User-Agent")
+            request.setValue("https://gayforfans.com/", forHTTPHeaderField: "Referer")
+            request.setValue("https://gayforfans.com", forHTTPHeaderField: "Origin")
+            if let raw = rawCookies, !raw.isEmpty {
+                request.setValue(raw, forHTTPHeaderField: "Cookie")
+            }
+            
+            if let (data, response) = try? await URLSession.shared.data(for: request),
+               let httpResponse = response as? HTTPURLResponse,
+               (200...299).contains(httpResponse.statusCode),
+               let fetched = String(data: data, encoding: .utf8) {
+                html = fetched
+                LoggerService.shared.log("[GFF] Fetched page HTML via URLSession direct request (length: \(fetched.count) bytes)", level: .info)
+            }
+        }
+        
+        guard !html.isEmpty else {
+            LoggerService.shared.log("[GFF] Unable to retrieve HTML page dump for: \(LoggerService.sanitizeURLForLog(targetUrl))", level: .warning)
+            return nil
+        }
+        
+        // Extract Title
+        var title = "GayForFans Video"
+        let titlePatterns = [
+            "video_title\\s*:\\s*['\"]([^'\"]+)['\"]",
+            "property=[\"']og:title[\"']\\s+content=[\"']([^\"']+)[\"']",
+            "<title>(.*?)</title>",
+            "<h1[^>]*>([^<]+)</h1>"
+        ]
+        for pattern in titlePatterns {
+            if let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]),
+               let match = regex.firstMatch(in: html, options: [], range: NSRange(location: 0, length: (html as NSString).length)),
+               match.numberOfRanges > 1 {
+                let rawTitle = (html as NSString).substring(with: match.range(at: 1))
+                    .replacingOccurrences(of: "(?i)<title>", with: "", options: .regularExpression)
+                    .replacingOccurrences(of: "(?i)</title>", with: "", options: .regularExpression)
+                    .replacingOccurrences(of: "(?i) - gayforfans\\.com", with: "", options: .regularExpression)
+                    .replacingOccurrences(of: "(?i)gayforfans\\.com - ", with: "", options: .regularExpression)
+                    .replacingOccurrences(of: "(?i)gayforfans - ", with: "", options: .regularExpression)
+                    .replacingOccurrences(of: "(?i) - gayforfans", with: "", options: .regularExpression)
+                    .replacingOccurrences(of: "(?i) \\| GayForFans", with: "", options: .regularExpression)
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                    .decodingHTMLEntities()
+                if !rawTitle.isEmpty {
+                    title = rawTitle
+                    break
+                }
+            }
+        }
+        
+        // Extract Thumbnail
+        var thumbnailURL: String? = nil
+        let thumbPatterns = [
+            "preview_url\\s*:\\s*['\"](https?://[^'\"]+)['\"]",
+            "preview_url1\\s*:\\s*['\"](https?://[^'\"]+)['\"]",
+            "property=[\"']og:image[\"']\\s+content=[\"'](https?://[^\"']+)[\"']",
+            "poster=[\"'](https?://[^\"']+)[\"']",
+            "\"thumbnailUrl\"\\s*:\\s*\"(https?://[^\"]+)\""
+        ]
+        for pattern in thumbPatterns {
+            if let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]),
+               let match = regex.firstMatch(in: html, options: [], range: NSRange(location: 0, length: (html as NSString).length)),
+               match.numberOfRanges > 1 {
+                let candidate = (html as NSString).substring(with: match.range(at: 1))
+                    .replacingOccurrences(of: "\\/", with: "/")
+                if candidate.hasPrefix("http") {
+                    thumbnailURL = candidate
+                    break
+                }
+            }
+        }
+        
+        // Extract Stream URL & Quality
+        var streamURL: String? = nil
+        var quality: String? = nil
+        
+        let streamPatterns = [
+            "video_url\\s*:\\s*['\"]([^'\"]+)['\"]",
+            "video_alt_url\\s*:\\s*['\"]([^'\"]+)['\"]",
+            "video_alt_url[1-4]?\\s*:\\s*['\"]([^'\"]+)['\"]",
+            "\"file\"\\s*:\\s*\"([^\"]+)\"",
+            "\"src\"\\s*:\\s*\"([^\"]+)\"",
+            "\"videoUrl\"\\s*:\\s*\"([^\"]+)\"",
+            "\"mediaUrl\"\\s*:\\s*\"([^\"]+)\"",
+            "\"contentUrl\"\\s*:\\s*\"([^\"]+)\"",
+            "\"(?:hlsAuto|hls|videoUrl|media|src|file|video_url)\"\\s*:\\s*\"([^\"]+)\"",
+            "<source[^>]+src=[\"']([^\"']+)[\"']",
+            "data-video-url=[\"']([^\"']+)[\"']",
+            "data-src=[\"']([^\"']+\\.(?:mp4|m3u8)[^\"']*)[\"']",
+            "['\"](https?://[^'\"]+\\.gayforfans\\.com[^'\"]+\\.(?:mp4|m3u8)(?:\\?[^'\"]*)?)['\"]",
+            "['\"](//[^'\"]+\\.gayforfans\\.com[^'\"]+\\.(?:mp4|m3u8)(?:\\?[^'\"]*)?)['\"]",
+            "['\"](/get_file/[^'\"]+)['\"]",
+            "['\"](https?://[^'\"]+/get_file/[^'\"]+)['\"]"
+        ]
+        for pattern in streamPatterns {
+            if let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]),
+               let match = regex.firstMatch(in: html, options: [], range: NSRange(location: 0, length: (html as NSString).length)),
+               match.numberOfRanges > 1 {
+                let rawCandidate = (html as NSString).substring(with: match.range(at: 1))
+                if let candidate = sanitizeGFFStreamURL(rawCandidate) {
+                    streamURL = candidate
+                    break
+                }
+            }
+        }
+        
+        // Extract Quality Text if present
+        if html.contains("video_url_fhd: '1'") || html.contains("video_url_fhd: 1") || html.contains("video_url_fhd:\"1\"") {
+            quality = "1080p"
+        } else if html.contains("video_url_hd: '1'") || html.contains("video_url_hd: 1") || html.contains("video_url_hd:\"1\"") {
+            quality = "720p"
+        } else if let qMatch = html.range(of: "video_url_text\\s*:\\s*['\"]([^'\"]+)['\"]", options: .regularExpression) {
+            let qStr = String(html[qMatch])
+            if qStr.contains("1080") { quality = "1080p" }
+            else if qStr.contains("720") { quality = "720p" }
+            else if qStr.contains("480") { quality = "480p" }
+            else if qStr.contains("360") { quality = "360p" }
+        }
+        
+        // Extract Candidate Embed URLs
+        var candidateEmbeds: [String] = []
+        let embedPatterns = [
+            "\"embedUrl\"\\s*:\\s*\"([^\"]+)\"",
+            "<iframe[^>]+src=[\"'](https?://(?:www\\.)?gayforfans\\.com/embed/[^\"']+)[\"']",
+            "<iframe[^>]+src=[\"'](/embed/[^\"']+)[\"']"
+        ]
+        for pattern in embedPatterns {
+            if let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]),
+               let match = regex.firstMatch(in: html, options: [], range: NSRange(location: 0, length: (html as NSString).length)),
+               match.numberOfRanges > 1 {
+                let val = (html as NSString).substring(with: match.range(at: 1))
+                    .replacingOccurrences(of: "\\/", with: "/")
+                if val.hasPrefix("http") {
+                    if !candidateEmbeds.contains(val) { candidateEmbeds.append(val) }
+                } else if val.hasPrefix("/embed/") {
+                    let full = "https://gayforfans.com" + val
+                    if !candidateEmbeds.contains(full) { candidateEmbeds.append(full) }
+                }
+            }
+        }
+
+        let videoIdPatterns = ["/videos?/(\\d+)", "video_id\\s*:\\s*['\"](\\d+)['\"]", "/embed/(\\d+)"]
+        for pattern in videoIdPatterns {
+            if let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]),
+               let match = regex.firstMatch(in: targetUrl + "\n" + html, options: [], range: NSRange(location: 0, length: ((targetUrl + "\n" + html) as NSString).length)),
+               match.numberOfRanges > 1 {
+                let vidId = ((targetUrl + "\n" + html) as NSString).substring(with: match.range(at: 1))
+                let defaultEmbed = "https://gayforfans.com/embed/\(vidId)/"
+                if !candidateEmbeds.contains(defaultEmbed) && !candidateEmbeds.contains("https://gayforfans.com/embed/\(vidId)") {
+                    candidateEmbeds.append(defaultEmbed)
+                }
+            }
+        }
+        
+        var embedURL = candidateEmbeds.first ?? targetUrl
+
+        // If stream URL was not in main page, attempt embed page fetch across candidate embeds
+        if streamURL == nil && !candidateEmbeds.isEmpty {
+            LoggerService.shared.log("[GFF] Stream URL not in main page; testing \(candidateEmbeds.count) candidate embed targets", level: .info)
+            for embed in candidateEmbeds {
+                if streamURL != nil { break }
+                if let ytdlp = ytdlpBinary {
+                    for browser in browsersToTry {
+                        var embedArgs = [ytdlp.path, "--ignore-config", "--dump-pages"]
+                        if let browserName = browser {
+                            embedArgs.append(contentsOf: ["--cookies-from-browser", browserName])
+                        }
+                        appendSiteSpecificArgs(for: embed, to: &embedArgs)
+                        embedArgs.append("--")
+                        embedArgs.append(embed)
+                        
+                        var embedDump: String? = nil
+                        do {
+                            embedDump = try await processRunner.runCommand(embedArgs)
+                        } catch let error as YtdlpError {
+                            if case .commandFailed(let output) = error {
+                                embedDump = output
+                            }
+                        } catch {
+                            LoggerService.shared.log("[GFF] Non-YtdlpError during embed dump-pages: \(error.localizedDescription)", level: .debug)
+                        }
+                        
+                        if let output = embedDump, !output.isEmpty {
+                            var embedChunks: [String] = []
+                            for line in output.split(whereSeparator: \.isNewline) {
+                                let trimmed = String(line).trimmingCharacters(in: .whitespaces)
+                                if !trimmed.starts(with: "#") && !trimmed.starts(with: "[") && !trimmed.starts(with: "WARNING") && !trimmed.starts(with: "ERROR") {
+                                    if let decodedData = Data(base64Encoded: trimmed, options: .ignoreUnknownCharacters) {
+                                        let decodedString = String(decoding: decodedData, as: UTF8.self)
+                                        if !decodedString.isEmpty {
+                                            embedChunks.append(decodedString)
+                                        }
+                                    }
+                                }
+                            }
+                            if !embedChunks.isEmpty {
+                                let embedHtml = embedChunks.joined()
+                                for pattern in streamPatterns {
+                                    if let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]),
+                                       let match = regex.firstMatch(in: embedHtml, options: [], range: NSRange(location: 0, length: (embedHtml as NSString).length)),
+                                       match.numberOfRanges > 1 {
+                                        let rawCandidate = (embedHtml as NSString).substring(with: match.range(at: 1))
+                                        if let candidate = sanitizeGFFStreamURL(rawCandidate) {
+                                            streamURL = candidate
+                                            embedURL = embed
+                                            break
+                                        }
+                                    }
+                                }
+                                if thumbnailURL == nil {
+                                    for pattern in thumbPatterns {
+                                        if let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]),
+                                           let match = regex.firstMatch(in: embedHtml, options: [], range: NSRange(location: 0, length: (embedHtml as NSString).length)),
+                                           match.numberOfRanges > 1 {
+                                            let candidate = (embedHtml as NSString).substring(with: match.range(at: 1))
+                                                .replacingOccurrences(of: "\\/", with: "/")
+                                            if candidate.hasPrefix("http") {
+                                                thumbnailURL = candidate
+                                                break
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // HTTP direct fallback for embed URL if yt-dlp did not extract stream
+                if streamURL == nil, let embedPageURL = URL(string: embed), (processRunner is DefaultYtdlpProcessRunner) {
+                    var embedReq = URLRequest(url: embedPageURL)
+                    embedReq.timeoutInterval = 5.0
+                    embedReq.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36", forHTTPHeaderField: "User-Agent")
+                    embedReq.setValue("https://gayforfans.com/", forHTTPHeaderField: "Referer")
+                    if let (data, response) = try? await URLSession.shared.data(for: embedReq),
+                       let httpResponse = response as? HTTPURLResponse,
+                       (200...299).contains(httpResponse.statusCode),
+                       let text = String(data: data, encoding: .utf8) {
+                        for pattern in streamPatterns {
+                            if let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]),
+                               let match = regex.firstMatch(in: text, options: [], range: NSRange(location: 0, length: (text as NSString).length)),
+                               match.numberOfRanges > 1 {
+                                let rawCandidate = (text as NSString).substring(with: match.range(at: 1))
+                                if let candidate = sanitizeGFFStreamURL(rawCandidate) {
+                                    streamURL = candidate
+                                    embedURL = embed
+                                    break
+                                }
+                            }
+                        }
+                        if thumbnailURL == nil {
+                            for pattern in thumbPatterns {
+                                if let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]),
+                                   let match = regex.firstMatch(in: text, options: [], range: NSRange(location: 0, length: (text as NSString).length)),
+                                   match.numberOfRanges > 1 {
+                                    let candidate = (text as NSString).substring(with: match.range(at: 1))
+                                        .replacingOccurrences(of: "\\/", with: "/")
+                                    if candidate.hasPrefix("http") {
+                                        thumbnailURL = candidate
+                                        break
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        guard let validStreamURL = streamURL else {
+            LoggerService.shared.log("[GFF] Failed to extract valid stream URL from page or embed targets (HTML length: \(html.count))", level: .warning)
+            return nil
+        }
+        
+        LoggerService.shared.log("[GFF] Successfully extracted stream: \(LoggerService.sanitizeURLForLog(validStreamURL)) (Quality: \(quality ?? "auto"))", level: .info)
+        return GFFExtractedMedia(
+            streamURL: validStreamURL,
+            embedURL: embedURL,
+            title: title,
+            thumbnailURL: thumbnailURL,
+            duration: nil,
+            quality: quality
+        )
+    }
+
+    private func normalizeURLForYtdlp(_ urlString: String, depth: Int = 0) -> String {
+        guard depth < 3 else { return urlString }
         guard var components = URLComponents(string: urlString) else { return urlString }
         if let nested = components.queryItems?.first(where: { ["url", "u", "redirect", "target"].contains($0.name.lowercased()) })?.value,
            isBoyfriendTVURL(nested) {
-            return normalizeURLForYtdlp(nested)
+            return normalizeURLForYtdlp(nested, depth: depth + 1)
         }
 
         guard let host = components.host?.lowercased() else { return urlString }
@@ -2510,6 +3057,22 @@ class YtdlpService: ObservableObject {
             return components.url?.absoluteString ?? components.string ?? urlString
         }
 
+        // 6. GayForFans normalization
+        if isGFFURL(host) {
+            components.scheme = "https"
+            let trackingPrefixes = ["utm_"]
+            let trackingNames = Set(["fbclid", "gclid", "dclid", "msclkid", "igshid", "mc_cid", "mc_eid", "ref", "source"])
+            components.queryItems = components.queryItems?.filter { item in
+                let name = item.name.lowercased()
+                return !trackingNames.contains(name) && !trackingPrefixes.contains { name.hasPrefix($0) }
+            }
+            if components.queryItems?.isEmpty == true { components.queryItems = nil }
+            if components.path.hasPrefix("/video/") {
+                components.path = components.path.replacingOccurrences(of: "^/video/", with: "/videos/", options: .regularExpression)
+            }
+            return components.url?.absoluteString ?? components.string ?? urlString
+        }
+
         return components.string ?? urlString
     }
 
@@ -2530,7 +3093,7 @@ class YtdlpService: ObservableObject {
     }
 
     private func shouldRetryWithBrowserCookies(error _: Error, url: String, usingBrowserCookies: Bool, forceBrowserCookies: Bool) -> Bool {
-        isBoyfriendTVURL(url) && !usingBrowserCookies && !forceBrowserCookies && configuredBrowserCookieSource() != nil
+        (isBoyfriendTVURL(url) || isGFFURL(url)) && !usingBrowserCookies && !forceBrowserCookies && configuredBrowserCookieSource() != nil
     }
 
     private func mapSiteSpecificError(_ error: Error, url: String) -> Error {
@@ -2558,6 +3121,16 @@ class YtdlpService: ObservableObject {
                 } else {
                     return YtdlpError.boyfriendTVLoginRequired
                 }
+            }
+            return error
+        }
+
+        if isGFFURL(url) {
+            if lowerErr.contains("cloudflare") || lowerErr.contains("403") || lowerErr.contains("anti-bot") || lowerErr.contains("captcha") || lowerErr.contains("challenge") || lowerErr.contains("turnstile") {
+                return YtdlpError.cloudflareBlocked
+            }
+            if (lowerErr.contains("video is unavailable") || lowerErr.contains("video unavailable") || lowerErr.contains("video has been removed") || lowerErr.contains("video removed") || lowerErr.contains("404 not found") || lowerErr.contains("page not found") || lowerErr.contains("http error 404")) && !lowerErr.contains("cookie") {
+                return YtdlpError.downloadFailed("This video is unavailable, private, or has been removed.")
             }
             return error
         }
@@ -2708,6 +3281,16 @@ class YtdlpService: ObservableObject {
             args.append(contentsOf: ["--add-header", "Referer: https://guywh.com/"])
             args.append(contentsOf: ["--add-header", "Origin: https://guywh.com"])
             args.append(contentsOf: ["--add-header", "Accept: */*"])
+        } else if isGFFURL(parsedHost) || isGFFURL(url) || parsedHost.contains("gayforfans") {
+            if let uaIdx = args.firstIndex(of: "--user-agent") {
+                args[uaIdx + 1] = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+            } else {
+                args.append(contentsOf: ["--user-agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"])
+            }
+            args.append(contentsOf: ["--add-header", "Referer: https://gayforfans.com/"])
+            args.append(contentsOf: ["--add-header", "Origin: https://gayforfans.com"])
+            args.append(contentsOf: ["--add-header", "Accept: */*"])
+            args.append(contentsOf: ["--hls-use-mpegts"])
         } else if parsedHost == "single-stream video site.com" || parsedHost.hasSuffix(".single-stream video site.com") {
             args.append(contentsOf: ["--add-header", "Referer:https://single-stream video site.com/"])
         } else if lowerUrl.contains(".m3u8") || lowerUrl.contains(".mpd") {
@@ -2804,10 +3387,29 @@ class YtdlpService: ObservableObject {
                 if browser == "safari" && isSafariPermissionError(output) && !Self.hasFullDiskAccess {
                     throw YtdlpError.safariCookiesFullDiskAccessRequired
                 }
-                LoggerService.shared.log("Browser cookie access failed for '\(browser)' or database missing. Automatically retrying command without browser cookies...", level: .info)
+                LoggerService.shared.log("Browser cookie access failed for '\(browser)' or database missing. Checking alternative browsers...", level: .info)
                 if let urlArg = args.last {
                     recordCookieDenial(browser: browser, url: urlArg)
                 }
+                
+                let altBrowsers = ["chrome", "brave", "firefox", "edge", "safari"].filter { $0 != browser && ($0 != "safari" || Self.hasFullDiskAccess) }
+                for alt in altBrowsers {
+                    var altArgs = args
+                    altArgs[idx + 1] = alt
+                    LoggerService.shared.log("Retrying command with alternative browser cookies from '\(alt)'...", level: .info)
+                    do {
+                        return try await processRunner.runCommand(altArgs)
+                    } catch let altErr as YtdlpError {
+                        if case .commandFailed(let altOut) = altErr, isCookieFailureError(altOut) {
+                            continue
+                        }
+                        throw altErr
+                    } catch {
+                        continue
+                    }
+                }
+                
+                LoggerService.shared.log("All browser cookie attempts failed. Retrying command without browser cookies...", level: .info)
                 let cleanArgs = stripCookieArgs(from: args)
                 return try await processRunner.runCommand(cleanArgs)
             }
@@ -2855,7 +3457,7 @@ class YtdlpService: ObservableObject {
 
     private func fetchHTMLWithBrowserCookies(url: String, browser: String) async -> String? {
         guard let path = ytdlpPath?.path else { return nil }
-        let cookieURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + "_cookies.txt")
+        let cookieURL = FileManager.default.temporaryDirectory.appendingPathComponent("siphon_cookies_\(UUID().uuidString).txt")
         let cookiePath = cookieURL.path
         FileManager.default.createFile(atPath: cookiePath, contents: nil, attributes: [.posixPermissions: 0o600])
         defer {
@@ -2946,18 +3548,52 @@ class YtdlpService: ObservableObject {
         return nil
     }
 
+    nonisolated static func isValidTimeFrame(_ time: String) -> Bool {
+        let pattern = #"^\d{1,2}(?::\d{2}){0,2}(?:\.\d+)?$|^\d+(?:\.\d+)?$"#
+        return time.range(of: pattern, options: .regularExpression) != nil
+    }
+
+    nonisolated static func isSafeFormatId(_ formatId: String) -> Bool {
+        guard !formatId.isEmpty, !formatId.hasPrefix("-"), formatId.count <= 128 else { return false }
+        let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "+/[]<>=,:_-."))
+        return formatId.unicodeScalars.allSatisfy { allowed.contains($0) }
+    }
+
+    nonisolated static func isSafeSubtitleLanguage(_ lang: String) -> Bool {
+        guard !lang.isEmpty, !lang.hasPrefix("-"), lang.count <= 32 else { return false }
+        let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-_"))
+        return lang.unicodeScalars.allSatisfy { allowed.contains($0) }
+    }
+
     nonisolated static func sanitizeFilename(_ filename: String) -> String {
-        let invalidCharacters = CharacterSet(charactersIn: "/\\?%*|\"<>:")
+        let invalidCharacters = CharacterSet(charactersIn: "/\\?%*|\"<>:").union(.controlCharacters)
         let components = filename.components(separatedBy: invalidCharacters)
         let cleaned = components.joined(separator: "_")
-        let trimmed = cleaned.replacingOccurrences(of: "..", with: "").trimmingCharacters(in: .whitespacesAndNewlines)
+        var trimmed = cleaned.replacingOccurrences(of: "..", with: "").trimmingCharacters(in: .whitespacesAndNewlines)
+        
+        while trimmed.hasPrefix(".") || trimmed.hasPrefix("-") {
+            trimmed = String(trimmed.dropFirst()).trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        
+        let reservedNames = Set(["CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9", "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9", ".DS_STORE"])
+        if reservedNames.contains(trimmed.uppercased()) {
+            trimmed = "download_\(trimmed)"
+        }
+        
+        if trimmed.count > 200 {
+            trimmed = String(trimmed.prefix(200))
+        }
+        
         return trimmed.isEmpty ? "download" : trimmed
     }
 
     func createTempCookiesFile(url: String, cookieName: String, cookieValue: String) -> URL? {
         let tempCookiesURL = FileManager.default.temporaryDirectory.appendingPathComponent("siphon_cookies_\(UUID().uuidString).txt")
         let host = URL(string: url)?.host ?? ""
-        let cookieContent = "# Netscape HTTP Cookie File\n\(host)\tFALSE\t/\tFALSE\t2783382923\t\(cookieName)\t\(cookieValue)\n"
+        let cleanName = sanitizeCookieToken(cookieName)
+        let cleanValue = sanitizeCookieToken(cookieValue)
+        guard !cleanName.isEmpty, !cleanValue.isEmpty else { return nil }
+        let cookieContent = "# Netscape HTTP Cookie File\n\(host)\tFALSE\t/\tFALSE\t2783382923\t\(cleanName)\t\(cleanValue)\n"
         guard let data = cookieContent.data(using: .utf8) else { return nil }
 
         // Create file with 0o600 permissions upfront to prevent TOCTOU permission window
@@ -3013,6 +3649,8 @@ class YtdlpService: ObservableObject {
         for file in files {
             let name = file.lastPathComponent
             if (name.hasPrefix("siphon_cookies_") || name.hasPrefix("siphon_header_cookies_")) && name.hasSuffix(".txt") {
+                try? fileManager.removeItem(at: file)
+            } else if name.hasPrefix("siphon_scratch_") || name.hasPrefix("Siphon_Staging_") || name.hasPrefix("Siphon_Update_Package_") {
                 try? fileManager.removeItem(at: file)
             }
         }

@@ -62,53 +62,14 @@ struct DownloadListView: View {
     }
     
     private var emptyState: some View {
-        VStack(spacing: 18) {
-            ZStack {
-                Circle()
-                    .fill(Color.primary.opacity(0.04))
-                    .frame(width: 80, height: 80)
-                Image(systemName: "tray.fill")
-                    .font(.geist(36))
-                    .foregroundColor(.secondary.opacity(0.7))
-            }
-            
-            VStack(spacing: 6) {
-                Text(emptyMessage)
-                    .font(.geist(16, weight: .semibold))
-                    .foregroundColor(.primary)
-                Text(languageService.s("url_placeholder"))
-                    .font(.geist(13))
-                    .foregroundColor(.secondary)
-                    .multilineTextAlignment(.center)
-                    .frame(maxWidth: 340)
-            }
-            
-            Button {
-                appState.showAddDownloadSheet = true
-            } label: {
-                HStack(spacing: 6) {
-                    Image(systemName: "plus.circle.fill")
-                        .font(.geist(13, weight: .semibold))
-                    Text(languageService.s("new_download"))
-                        .font(.geist(13, weight: .semibold))
-                }
-                .foregroundColor(.white)
-                .padding(.horizontal, 18)
-                .padding(.vertical, 8)
-                .background(
-                    SiphonTheme.primaryGradient
-                )
-                .clipShape(Capsule())
-                .overlay(
-                    Capsule()
-                        .stroke(Color.white.opacity(0.25), lineWidth: 1)
-                )
-            }
-            .buttonStyle(.plain)
-            .shadow(color: SiphonTheme.accent.opacity(0.35), radius: 8, y: 3)
+        SiphonEmptyStateView(
+            icon: "tray.fill",
+            title: emptyMessage,
+            message: languageService.s("url_placeholder"),
+            actionTitle: languageService.s("new_download")
+        ) {
+            appState.showAddDownloadSheet = true
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding(32)
     }
 }
 
@@ -133,7 +94,8 @@ struct DownloadRowView: View {
                 
                 VStack(alignment: .leading, spacing: 4) {
                     // Line 1: Title
-                    Text(download.status == .fetching ? languageService.s("fetching") : download.title)
+                    let effectiveTitle = download.title.isEmpty ? (download.sourceDomain.isEmpty ? download.url : "\(download.sourceDomain) Video") : download.title
+                    Text(download.status == .fetching ? languageService.s("fetching") : effectiveTitle)
                         .font(.geist(14, weight: .semibold))
                         .lineLimit(2)
                         .fixedSize(horizontal: false, vertical: true)
@@ -151,7 +113,12 @@ struct DownloadRowView: View {
                             
                             if download.status == .downloading {
                                 HStack(spacing: 8) {
-                                    Text("\(Int(download.progress * 100))%")
+                                    let safePercent: Int = {
+                                        if download.progress.isNaN { return 0 }
+                                        if download.progress.isInfinite { return download.progress > 0 ? 100 : 0 }
+                                        return Int(max(0.0, min(1.0, download.progress)) * 100)
+                                    }()
+                                    Text("\(safePercent)%")
                                         .font(.geistMono(12, weight: .bold))
                                         .foregroundColor(SiphonTheme.accent)
                                     
@@ -401,22 +368,8 @@ struct DownloadRowView: View {
             if let hdr = download.diagnostics.hdrSummary ?? download.mediaInfo?.formats?.first(where: { $0.isHDR })?.hdrSummary {
                 VStack {
                     HStack {
-                        Text(hdr.components(separatedBy: " • ").first ?? "HDR")
-                            .font(.geist(8, weight: .bold))
-                            .foregroundColor(.white)
-                            .padding(.horizontal, 4)
-                            .padding(.vertical, 1.5)
-                            .background(
-                                LinearGradient(
-                                    colors: [SiphonTheme.statusHdr, Color.orange],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                )
-                                .allowedDynamicRange(AdaptiveRenderingEnvironment.shared.capabilities.supportsEDR ? .high : .standard)
-                            )
-                            .clipShape(RoundedRectangle(cornerRadius: 3))
-                            .padding(4)
-                        
+                        SiphonTagBadge(text: hdr.components(separatedBy: " • ").first ?? "HDR", isHdr: true)
+                            .padding(SiphonTheme.spacing4)
                         Spacer()
                     }
                     Spacer()
@@ -445,7 +398,7 @@ struct DownloadRowView: View {
             .fill(Color.primary.opacity(0.06))
             .overlay {
                 Image(systemName: "play.rectangle.fill")
-                    .font(.geist(24))
+                    .font(.system(size: 24))
                     .foregroundColor(.secondary.opacity(0.6))
             }
     }
@@ -500,68 +453,11 @@ struct FileThumbnailView: View {
 }
     
     private var statusBadge: some View {
-        HStack(spacing: 5) {
-            switch download.status {
-            case .downloading:
-                StatusSpinnerView()
-            case .fetching:
-                StatusSpinnerView()
-            case .processing:
-                StatusSpinnerView()
-            case .completed:
-                Image(systemName: "checkmark.circle.fill")
-                    .foregroundColor(SiphonTheme.statusCompleted)
-                    .font(.caption2)
-            case .failed:
-                Image(systemName: "xmark.circle.fill")
-                    .foregroundColor(SiphonTheme.statusFailed)
-                    .font(.caption2)
-            case .stopped:
-                Image(systemName: "stop.circle.fill")
-                    .foregroundColor(.secondary)
-                    .font(.caption2)
-            case .queued:
-                Image(systemName: "clock.fill")
-                    .foregroundColor(SiphonTheme.statusQueued)
-                    .font(.caption2)
-            case .paused:
-                Image(systemName: "pause.circle.fill")
-                    .foregroundColor(SiphonTheme.statusQueued)
-                    .font(.caption2)
-            case .fileExists:
-                Image(systemName: "exclamationmark.circle.fill")
-                    .foregroundColor(SiphonTheme.statusQueued)
-                    .font(.caption2)
-            }
-            
-            Text(download.status.title(lang: languageService))
-                .font(.geist(11, weight: .semibold))
-        }
-        .padding(.horizontal, 9)
-        .padding(.vertical, 3.5)
-        .background(
-            Capsule()
-                .fill(badgeForegroundColor.opacity(0.12))
-                .background(Capsule().fill(.ultraThinMaterial))
+        SiphonStatusBadge(
+            status: download.status,
+            title: download.status.title(lang: languageService),
+            foregroundColor: badgeForegroundColor
         )
-        .foregroundColor(badgeForegroundColor)
-        .clipShape(Capsule())
-        .overlay(
-            Capsule()
-                .strokeBorder(
-                    LinearGradient(
-                        colors: [
-                            badgeForegroundColor.opacity(0.40),
-                            badgeForegroundColor.opacity(0.12),
-                            Color.clear
-                        ],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    ),
-                    lineWidth: 1
-                )
-        )
-        .animation(.spring(response: 0.35, dampingFraction: 0.78), value: download.status)
     }
 
     private var badgeForegroundColor: Color {
@@ -575,7 +471,7 @@ struct FileThumbnailView: View {
     }
     
     private var actionButtons: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: SiphonTheme.spacing6) {
             // Completed state: Primary Play button + Single More Menu
             if download.status == .completed {
                 if let path = download.filePath, FileManager.default.fileExists(atPath: path.path) {
@@ -583,9 +479,9 @@ struct FileThumbnailView: View {
                         QuickLookPreviewHelper.shared.preview(url: path)
                     } label: {
                         Image(systemName: "eye.circle.fill")
-                            .font(.geist(20))
+                            .font(.system(size: 18, weight: .semibold))
                     }
-                    .buttonStyle(.bouncy(scale: 0.90, hover: 1.08))
+                    .buttonStyle(.siphonIcon(size: 28))
                     .foregroundColor(SiphonTheme.accent)
                     .help("Quick Look")
                     .accessibilityLabel("Quick Look")
@@ -597,9 +493,9 @@ struct FileThumbnailView: View {
                     }
                 } label: {
                     Image(systemName: "play.circle.fill")
-                        .font(.geist(20))
+                        .font(.system(size: 18, weight: .semibold))
                 }
-                .buttonStyle(.bouncy(scale: 0.90, hover: 1.08))
+                .buttonStyle(.siphonIcon(size: 28))
                 .foregroundColor(SiphonTheme.accent)
                 .help(languageService.s("play"))
                 .accessibilityLabel(languageService.s("play"))
@@ -671,7 +567,7 @@ struct FileThumbnailView: View {
                     }
                 } label: {
                     Image(systemName: "ellipsis.circle")
-                        .font(.geist(18))
+                        .font(.system(size: 17, weight: .regular))
                         .foregroundColor(.secondary)
                 }
                 .menuStyle(.borderlessButton)
@@ -685,9 +581,9 @@ struct FileThumbnailView: View {
                     downloadManager.pauseDownload(download)
                 } label: {
                     Image(systemName: "pause.circle.fill")
-                        .font(.geist(18))
+                        .font(.system(size: 18, weight: .semibold))
                 }
-                .buttonStyle(.bouncy(scale: 0.90, hover: 1.08))
+                .buttonStyle(.siphonIcon(size: 28))
                 .foregroundColor(SiphonTheme.statusQueued)
                 .help(languageService.s("pause"))
                 .accessibilityLabel(languageService.s("pause"))
@@ -697,9 +593,9 @@ struct FileThumbnailView: View {
                         downloadManager.stopDownload(download)
                     } label: {
                         Image(systemName: "stop.circle.fill")
-                            .font(.geist(18))
+                            .font(.system(size: 18, weight: .semibold))
                     }
-                    .buttonStyle(.bouncy(scale: 0.90, hover: 1.08))
+                    .buttonStyle(.siphonIcon(size: 28))
                     .foregroundColor(SiphonTheme.statusFailed)
                     .help(languageService.s("stop"))
                     .accessibilityLabel(languageService.s("stop"))
@@ -733,7 +629,7 @@ struct FileThumbnailView: View {
                     }
                 } label: {
                     Image(systemName: "ellipsis.circle")
-                        .font(.geist(18))
+                        .font(.system(size: 17, weight: .regular))
                         .foregroundColor(.secondary)
                 }
                 .menuStyle(.borderlessButton)
@@ -747,9 +643,9 @@ struct FileThumbnailView: View {
                     downloadManager.pauseDownload(download)
                 } label: {
                     Image(systemName: "pause.circle")
-                        .font(.geist(18))
+                        .font(.system(size: 18, weight: .semibold))
                 }
-                .buttonStyle(.bouncy(scale: 0.90, hover: 1.08))
+                .buttonStyle(.siphonIcon(size: 28))
                 .foregroundColor(SiphonTheme.statusQueued)
                 .help(languageService.s("pause"))
                 .accessibilityLabel(languageService.s("pause"))
@@ -788,7 +684,7 @@ struct FileThumbnailView: View {
                     }
                 } label: {
                     Image(systemName: "ellipsis.circle")
-                        .font(.geist(18))
+                        .font(.system(size: 17, weight: .regular))
                         .foregroundColor(.secondary)
                 }
                 .menuStyle(.borderlessButton)
@@ -802,9 +698,9 @@ struct FileThumbnailView: View {
                     downloadManager.resumeDownload(download)
                 } label: {
                     Image(systemName: "play.circle.fill")
-                        .font(.geist(18))
+                        .font(.system(size: 18, weight: .semibold))
                 }
-                .buttonStyle(.bouncy(scale: 0.90, hover: 1.08))
+                .buttonStyle(.siphonIcon(size: 28))
                 .foregroundColor(SiphonTheme.accent)
                 .help(languageService.s("resume"))
                 .accessibilityLabel(languageService.s("resume"))
@@ -831,7 +727,7 @@ struct FileThumbnailView: View {
                     }
                 } label: {
                     Image(systemName: "ellipsis.circle")
-                        .font(.geist(18))
+                        .font(.system(size: 17, weight: .regular))
                         .foregroundColor(.secondary)
                 }
                 .menuStyle(.borderlessButton)
@@ -845,9 +741,9 @@ struct FileThumbnailView: View {
                     downloadManager.retryDownload(download)
                 } label: {
                     Image(systemName: "arrow.clockwise.circle.fill")
-                        .font(.geist(18))
+                        .font(.system(size: 18, weight: .semibold))
                 }
-                .buttonStyle(.bouncy(scale: 0.90, hover: 1.08))
+                .buttonStyle(.siphonIcon(size: 28))
                 .foregroundColor(SiphonTheme.statusQueued)
                 .help(languageService.s("retry"))
                 .accessibilityLabel(languageService.s("retry"))
@@ -888,7 +784,7 @@ struct FileThumbnailView: View {
                     }
                 } label: {
                     Image(systemName: "ellipsis.circle")
-                        .font(.geist(18))
+                        .font(.system(size: 17, weight: .regular))
                         .foregroundColor(.secondary)
                 }
                 .menuStyle(.borderlessButton)
@@ -901,22 +797,30 @@ struct FileThumbnailView: View {
                 Button {
                     downloadManager.resumeWithOverwrite(download)
                 } label: {
-                    Image(systemName: "square.and.arrow.down.on.square.fill")
-                        .font(.geist(16))
+                    HStack(spacing: 4) {
+                        Image(systemName: "square.and.arrow.down.on.square.fill")
+                            .font(.system(size: 13))
+                        Text(languageService.s("overwrite"))
+                            .font(.geist(11, weight: .medium))
+                    }
+                    .foregroundColor(SiphonTheme.statusQueued)
                 }
-                .buttonStyle(.plain)
-                .foregroundColor(SiphonTheme.statusQueued)
+                .buttonStyle(.siphonGhost)
                 .help(languageService.s("overwrite"))
                 .accessibilityLabel(languageService.s("overwrite"))
                 
                 Button {
                     downloadManager.resumeWithNewName(download)
                 } label: {
-                    Image(systemName: "plus.square.on.square.fill")
-                        .font(.geist(16))
+                    HStack(spacing: 4) {
+                        Image(systemName: "plus.square.on.square.fill")
+                            .font(.system(size: 13))
+                        Text(languageService.s("download_new_name"))
+                            .font(.geist(11, weight: .medium))
+                    }
+                    .foregroundColor(SiphonTheme.accent)
                 }
-                .buttonStyle(.plain)
-                .foregroundColor(SiphonTheme.accent)
+                .buttonStyle(.siphonGhost)
                 .help(languageService.s("download_new_name"))
                 .accessibilityLabel(languageService.s("download_new_name"))
             }
@@ -1020,6 +924,26 @@ struct FileThumbnailView: View {
             }
             
             Divider()
+        } else if download.status == .fileExists {
+            Button {
+                downloadManager.resumeWithOverwrite(download)
+            } label: {
+                Label(languageService.s("overwrite"), systemImage: "square.and.arrow.down.on.square.fill")
+            }
+            
+            Button {
+                downloadManager.resumeWithNewName(download)
+            } label: {
+                Label(languageService.s("download_new_name"), systemImage: "plus.square.on.square.fill")
+            }
+            
+            Button {
+                downloadManager.stopDownload(download)
+            } label: {
+                Label(languageService.s("stop"), systemImage: "stop.fill")
+            }
+            
+            Divider()
         } else if download.status == .failed || download.status == .stopped {
             Button {
                 downloadManager.retryDownload(download)
@@ -1089,31 +1013,6 @@ struct FileThumbnailView: View {
                 .background(Color.black.opacity(0.2))
         }
         .frame(width: 620, height: 420)
-    }
-}
-
-struct StatusSpinnerView: View {
-    @State private var isRotating = 0.0
-
-    var body: some View {
-        Circle()
-            .trim(from: 0, to: 0.72)
-            .stroke(
-                LinearGradient(
-                    colors: [Color.accentColor, Color.accentColor.opacity(0.3)],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                ),
-                style: StrokeStyle(lineWidth: 1.9, lineCap: .round)
-            )
-            .frame(width: 11, height: 11)
-            .rotationEffect(.degrees(isRotating))
-            .onAppear {
-                isRotating = 0
-                withAnimation(.linear(duration: 0.85).repeatForever(autoreverses: false)) {
-                    isRotating = 360
-                }
-            }
     }
 }
 

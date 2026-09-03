@@ -81,24 +81,11 @@ struct DownloadDiagnosticsView: View {
                         .lineLimit(1)
                     
                     if let hdr = download.diagnostics.hdrSummary ?? download.mediaInfo?.formats?.first(where: { $0.isHDR })?.hdrSummary {
-                        Text(hdr)
-                            .font(.geist(10, weight: .bold))
-                            .foregroundColor(.white)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(
-                                LinearGradient(
-                                    colors: [SiphonTheme.statusHdr, Color.orange],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                )
-                                .allowedDynamicRange(AdaptiveRenderingEnvironment.shared.capabilities.supportsEDR ? .high : .standard)
-                            )
-                            .clipShape(Capsule())
+                        SiphonTagBadge(text: hdr, isHdr: true)
                     }
                 }
                 
-                HStack(spacing: 6) {
+                HStack(spacing: SiphonTheme.spacing6) {
                     Text(download.status.title(lang: languageService))
                         .font(.geist(11, weight: .medium))
                         .foregroundColor(statusColor(for: download.status))
@@ -115,9 +102,7 @@ struct DownloadDiagnosticsView: View {
                         Text("•")
                             .foregroundColor(.secondary)
                             .font(.geist(11))
-                        Text("PID: \(pid)")
-                            .font(.geist(11, weight: .semibold))
-                            .foregroundColor(.secondary)
+                        SiphonTagBadge(text: "PID: \(pid)", tintColor: .secondary, isMonospaced: true)
                     }
                 }
             }
@@ -131,7 +116,7 @@ struct DownloadDiagnosticsView: View {
                     .font(.system(size: 16))
                     .foregroundColor(.secondary)
             }
-            .buttonStyle(.bouncy(scale: 0.90, hover: 1.10))
+            .buttonStyle(.siphonIcon(size: 24))
             .help(languageService.s("close"))
             .accessibilityLabel(languageService.s("close"))
         }
@@ -293,11 +278,12 @@ struct DownloadDiagnosticsView: View {
             } label: {
                 HStack(spacing: 4) {
                     Image(systemName: "doc.on.clipboard")
+                        .font(.system(size: 12))
                     Text("Copy Markdown Report")
+                        .font(.geist(12, weight: .medium))
                 }
-                .font(.geist(12, weight: .medium))
             }
-            .buttonStyle(.bordered)
+            .buttonStyle(.siphonSecondary)
             
             if let file = download.filePath, FileManager.default.fileExists(atPath: file.path) {
                 Button {
@@ -305,11 +291,12 @@ struct DownloadDiagnosticsView: View {
                 } label: {
                     HStack(spacing: 4) {
                         Image(systemName: "folder")
+                            .font(.system(size: 12))
                         Text("Show in Finder")
+                            .font(.geist(12, weight: .medium))
                     }
-                    .font(.geist(12, weight: .medium))
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(.siphonSecondary)
             }
             
             Button {
@@ -318,8 +305,7 @@ struct DownloadDiagnosticsView: View {
                 Text("Done")
                     .font(.geist(12, weight: .semibold))
             }
-            .buttonStyle(.borderedProminent)
-            .tint(SiphonTheme.accent)
+            .buttonStyle(.siphonPrimary)
             .keyboardShortcut(.cancelAction)
         }
         .padding(.horizontal, 20)
@@ -330,7 +316,7 @@ struct DownloadDiagnosticsView: View {
     
     @ViewBuilder
     private func diagnosticSection<Content: View>(title: String, @ViewBuilder content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: SiphonTheme.spacing8) {
             Text(title)
                 .font(.geist(12, weight: .bold))
                 .foregroundColor(.secondary)
@@ -339,9 +325,9 @@ struct DownloadDiagnosticsView: View {
             VStack(spacing: 0) {
                 content()
             }
-            .background(SiphonTheme.cardBackground(cornerRadius: 8))
-            .clipShape(RoundedRectangle(cornerRadius: 8))
-            .overlay(SiphonTheme.cardBorder(cornerRadius: 8))
+            .background(SiphonTheme.cardBackground(cornerRadius: SiphonTheme.radiusCard))
+            .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusCard))
+            .overlay(SiphonTheme.cardBorder(cornerRadius: SiphonTheme.radiusCard))
         }
     }
     

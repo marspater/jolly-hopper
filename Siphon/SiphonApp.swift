@@ -178,7 +178,7 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
     @Published var needsRestart = false
     
     private var currentVersion: String {
-        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "5.0.0"
+        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "5.1.0"
     }
     private let repoOwner = "marspater"
     private let repoName = "jolly-hopper"
@@ -326,8 +326,14 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
         isChecking = false
     }
     
+    static func isTrustedGitHubURL(_ url: URL) -> Bool {
+        guard url.scheme == "https", let host = url.host?.lowercased() else { return false }
+        return host == "github.com" || host.hasSuffix(".github.com") ||
+               host == "githubusercontent.com" || host.hasSuffix(".githubusercontent.com")
+    }
+
     func downloadAndInstallUpdate() async {
-        guard let url = downloadURL else {
+        guard let url = downloadURL, Self.isTrustedGitHubURL(url) else {
             if let pageURL = releasePageURL {
                 NSWorkspace.shared.open(pageURL)
             }
@@ -335,7 +341,7 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
         }
         
         // Fetch checksum in background if available
-        if let cURL = checksumURL {
+        if let cURL = checksumURL, Self.isTrustedGitHubURL(cURL) {
             if let (cData, _) = try? await URLSession.shared.data(from: cURL),
                let text = String(data: cData, encoding: .utf8) {
                 // Parse sha256 hex string (64 hex characters) specifically matching downloaded asset
@@ -497,7 +503,7 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
             
             NEW_APP="$(find "$WORK_DIR" -maxdepth 2 -name "*.app" | head -n 1)"
             
-            if [ -z "$NEW_APP" ] || [ ! -d "$NEW_APP" ]; then
+            if [ -z "$NEW_APP" ] || [ ! -d "$NEW_APP" ] || [ -L "$NEW_APP" ]; then
                 echo "No application bundle found in update payload"
                 hdiutil unmount "$WORK_DIR" -quiet 2>/dev/null || true
                 rm -rf "$WORK_DIR" "$PKG_PATH"
@@ -514,7 +520,7 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
 
             if [ -n "$EXPECTED_TEAM_ID" ]; then
                 NEW_TEAM_ID="$(/usr/bin/codesign -d --verbose=2 "$NEW_APP" 2>&1 | awk -F= '/^TeamIdentifier=/ {print $2}' || true)"
-                if [ -n "$NEW_TEAM_ID" ] && [ "$NEW_TEAM_ID" != "not set" ] && [ "$NEW_TEAM_ID" != "$EXPECTED_TEAM_ID" ]; then
+                if [ "$NEW_TEAM_ID" != "$EXPECTED_TEAM_ID" ]; then
                     echo "Team identifier mismatch: expected $EXPECTED_TEAM_ID, got $NEW_TEAM_ID"
                     hdiutil unmount "$WORK_DIR" -quiet 2>/dev/null || true
                     rm -rf "$WORK_DIR" "$PKG_PATH"
@@ -577,7 +583,7 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
         let teamId = Self.currentTeamIdentifier() ?? ""
         let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent("Siphon_Staging_\(UUID().uuidString)")
         do {
-            try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+            try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
         } catch {
             LoggerService.shared.log("Failed to create temporary directory for update installation: \(error.localizedDescription)", level: .error)
             isInstalling = false

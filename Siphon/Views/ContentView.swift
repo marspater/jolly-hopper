@@ -60,6 +60,9 @@ struct ContentView: View {
                 .onChange(of: showMenuBarIcon) { _, newValue in
                     MenuBarManager.shared.setVisible(newValue)
                 }
+                .sheet(isPresented: $downloadManager.showWhatsNew) {
+                    WhatsNewSheetView()
+                }
                 .alert(item: $downloadManager.ytdlpUpdateMessage) { status in
                     Alert(
                         title: Text(status.title),
@@ -91,7 +94,7 @@ struct ContentView: View {
         .siphonEnvironmentalBackdrop()
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
-                if (appState.selectedNavItem == .downloading || appState.selectedNavItem == .queued) &&
+                if (appState.selectedNavItem == .downloading || appState.selectedNavItem == .queued || appState.selectedNavItem == .home) &&
                     (downloadManager.downloadingCount > 0 || downloadManager.queuedCount > 0) {
                     Button {
                         downloadManager.stopAllDownloads()
@@ -162,7 +165,7 @@ struct SidebarView: View {
         .listStyle(.sidebar)
         .siphonSidebarWidth()
         .safeAreaInset(edge: .bottom) {
-            VStack(spacing: 8) {
+            VStack(spacing: SiphonTheme.spacing8) {
                 SponsorView()
                 
                 Button {
@@ -172,23 +175,26 @@ struct SidebarView: View {
                         downloadManager: downloadManager
                     )
                 } label: {
-                    HStack {
+                    HStack(spacing: SiphonTheme.spacing8) {
                         Image(systemName: "gear")
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundColor(.secondary)
                         Text(languageService.s("settings"))
                             .font(.geist(13, weight: .medium))
+                            .foregroundColor(.primary)
                         Spacer()
                         Text("⌘,")
                             .font(.geistMono(10, weight: .medium))
                             .foregroundColor(.secondary)
                     }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
+                    .padding(.horizontal, SiphonTheme.spacing12)
+                    .padding(.vertical, SiphonTheme.spacing8)
                     .siphonInteractiveGlass(cornerRadius: SiphonTheme.radiusControl)
                 }
                 .buttonStyle(.plain)
-                .padding(.horizontal, 8)
+                .padding(.horizontal, SiphonTheme.spacing8)
             }
-            .padding(.bottom, 8)
+            .padding(.bottom, SiphonTheme.spacing8)
         }
     }
     
@@ -200,7 +206,7 @@ struct SidebarView: View {
                 appState.selectedNavItem = item
             }
         } label: {
-            HStack(spacing: 8) {
+            HStack(spacing: SiphonTheme.spacing8) {
                 Image(systemName: item.icon)
                     .font(.system(size: 13, weight: .medium))
                     .frame(width: 18, alignment: .center)
@@ -210,21 +216,14 @@ struct SidebarView: View {
                     .foregroundColor(isSelected ? .primary : .secondary)
                 Spacer()
                 if badgeCount > 0 {
-                    Text("\(badgeCount)")
-                        .font(.geist(10, weight: .bold))
-                        .monospacedDigit()
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(badgeColor.opacity(0.18))
-                        .foregroundColor(badgeColor)
-                        .clipShape(Capsule())
+                    SiphonTagBadge(text: "\(badgeCount)", tintColor: badgeColor, isMonospaced: true)
                 }
             }
-            .padding(.horizontal, 8)
+            .padding(.horizontal, SiphonTheme.spacing8)
             .padding(.vertical, 6)
             .contentShape(Rectangle())
         }
-        .buttonStyle(.bouncy(scale: 0.97, hover: 1.01))
+        .buttonStyle(.bouncy(scale: 0.98, hover: 1.01))
         .listRowInsets(EdgeInsets(top: 2, leading: 6, bottom: 2, trailing: 6))
         .listRowBackground(
             RoundedRectangle(cornerRadius: SiphonTheme.radiusControl)
@@ -274,31 +273,36 @@ struct HomeView: View {
     
     var body: some View {
         ScrollView {
-            VStack(spacing: 36) {
-                Spacer(minLength: 20)
+            VStack(spacing: SiphonTheme.spacing32) {
+                Spacer(minLength: SiphonTheme.spacing20)
                 
                 // Logo & Title Section
-                VStack(spacing: 20) {
+                VStack(spacing: SiphonTheme.spacing16) {
+                    let reduceMotion = AdaptiveRenderingEnvironment.shared.capabilities.reduceMotion
                     Image(nsImage: NSApp.applicationIconImage)
                         .resizable()
-                        .frame(width: 96, height: 96)
-                        .shadow(color: .purple.opacity(isLogoHovered ? 0.6 : 0.4), radius: isLogoHovered ? 32 : 24, x: 0, y: isLogoHovered ? 12 : 8)
-                        .shadow(color: .blue.opacity(isLogoHovered ? 0.35 : 0.2), radius: isLogoHovered ? 48 : 40, x: 0, y: 12)
-                        .scaleEffect(isLogoHovered ? 1.06 : 1.0)
-                        .animation(.spring(response: 0.32, dampingFraction: 0.65), value: isLogoHovered)
+                        .frame(width: 92, height: 92)
+                        .shadow(
+                            color: SiphonTheme.accent.opacity(isLogoHovered ? 0.35 : 0.20),
+                            radius: isLogoHovered ? 18 : 12,
+                            x: 0,
+                            y: isLogoHovered ? 8 : 4
+                        )
+                        .scaleEffect(reduceMotion ? 1.0 : (isLogoHovered ? 1.025 : 1.0))
+                        .animation(reduceMotion ? nil : .spring(response: 0.32, dampingFraction: 0.65), value: isLogoHovered)
                         .onHover { hovering in
                             isLogoHovered = hovering
                         }
                     
-                    VStack(spacing: 8) {
+                    VStack(spacing: SiphonTheme.spacing6) {
                         Text("Siphon")
-                            .font(.geist(42, weight: .black))
+                            .font(.geist(36, weight: .bold))
                         
                         Text(languageService.s("url_placeholder"))
-                            .font(.geist(17))
+                            .font(.geist(15))
                             .foregroundColor(.secondary)
                             .multilineTextAlignment(.center)
-                            .padding(.horizontal, 24)
+                            .padding(.horizontal, SiphonTheme.spacing24)
                     }
                 }
                 
@@ -306,15 +310,15 @@ struct HomeView: View {
                 Button {
                     appState.showAddDownloadSheet = true
                 } label: {
-                    HStack(spacing: 10) {
+                    HStack(spacing: SiphonTheme.spacing8) {
                         Image(systemName: "plus.circle.fill")
-                            .font(.geist(16, weight: .semibold))
+                            .font(.system(size: 15, weight: .semibold))
                         Text(languageService.s("new_download"))
-                            .font(.geist(15, weight: .semibold))
+                            .font(.geist(14, weight: .semibold))
                     }
                     .foregroundColor(.white)
-                    .padding(.horizontal, 28)
-                    .padding(.vertical, 12)
+                    .padding(.horizontal, SiphonTheme.spacing24)
+                    .padding(.vertical, SiphonTheme.spacing10)
                     .background(
                         SiphonTheme.primaryGradient
                     )
@@ -323,13 +327,13 @@ struct HomeView: View {
                         Capsule()
                             .stroke(Color.white.opacity(0.25), lineWidth: 1)
                     )
-                    .shadow(color: SiphonTheme.accent.opacity(0.35), radius: 12, y: 4)
+                    .shadow(color: SiphonTheme.accent.opacity(0.35), radius: 8, y: 3)
                 }
-                .buttonStyle(.bouncy(scale: 0.94, hover: 1.03))
+                .buttonStyle(.bouncy(scale: 0.96, hover: 1.015))
                 .keyboardShortcut("n", modifiers: .command)
                 
                 // Stats Grid
-                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 16), count: 4), spacing: 16) {
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: SiphonTheme.spacing14), count: 4), spacing: SiphonTheme.spacing14) {
                     StatCard(title: languageService.s("stat_downloading"), count: downloadManager.downloadingCount, color: SiphonTheme.downloading) {
                         appState.selectedNavItem = .downloading
                     }
@@ -343,37 +347,27 @@ struct HomeView: View {
                         appState.selectedNavItem = .failed
                     }
                 }
-                .padding(.horizontal, 32)
-                .frame(maxWidth: 850)
+                .padding(.horizontal, SiphonTheme.spacing32)
+                .frame(maxWidth: 820)
                 
-                Spacer(minLength: 20)
+                Spacer(minLength: SiphonTheme.spacing20)
                 
                 // Version info footer
                 if let version = downloadManager.ytdlpVersion {
-                    HStack(spacing: 6) {
+                    HStack(spacing: SiphonTheme.spacing6) {
                         Image(systemName: "terminal.fill")
-                            .font(.geist(10))
+                            .font(.system(size: 10, weight: .medium))
                         Text("yt-dlp \(version)")
                             .font(.geistMono(11, weight: .medium))
                     }
                     .foregroundColor(.secondary.opacity(0.8))
-                    .padding(.bottom, 16)
+                    .padding(.bottom, SiphonTheme.spacing16)
                 }
             }
-            .frame(maxWidth: .infinity, minHeight: 520)
-            .padding(.vertical, 20)
+            .frame(maxWidth: .infinity, minHeight: 500)
+            .padding(.vertical, SiphonTheme.spacing20)
         }
         .background(.ultraThinMaterial)
-        .alert(languageService.s("whats_new_title"), isPresented: $downloadManager.showWhatsNew) {
-            Button(languageService.s("star_github")) {
-                if let url = URL(string: "https://github.com/marspater/jolly-hopper") {
-                    NSWorkspace.shared.open(url)
-                }
-            }
-            Button(languageService.s("ok")) { }
-        } message: {
-            Text(languageService.s("whats_new_message"))
-        }
     }
 }
 
@@ -386,24 +380,24 @@ struct StatCard: View {
     
     var body: some View {
         Button(action: action) {
-            VStack(spacing: 6) {
+            VStack(spacing: SiphonTheme.spacing4) {
                 Text("\(count)")
-                    .font(.geist(28, weight: .bold))
+                    .font(.geist(26, weight: .bold))
                     .monospacedDigit()
                     .foregroundColor(color)
                 Text(title)
-                    .font(.geist(13, weight: .semibold))
-                    .foregroundColor(.primary.opacity(0.80))
+                    .font(.geist(12, weight: .semibold))
+                    .foregroundColor(.primary.opacity(0.85))
                     .multilineTextAlignment(.center)
                     .lineLimit(2)
             }
             .frame(maxWidth: .infinity)
-            .frame(height: 96)
-            .padding(.vertical, 8)
-            .padding(.horizontal, 6)
+            .frame(height: 90)
+            .padding(.vertical, SiphonTheme.spacing8)
+            .padding(.horizontal, SiphonTheme.spacing6)
             .siphonInteractiveGlass(cornerRadius: SiphonTheme.radiusCard, tintColor: color)
         }
-        .buttonStyle(.bouncy(scale: 0.95, hover: 1.025))
+        .buttonStyle(.bouncy(scale: 0.97, hover: 1.015))
     }
 }
 
@@ -418,20 +412,20 @@ struct SponsorView: View {
                 NSWorkspace.shared.open(url)
             }
         } label: {
-            HStack(spacing: 8) {
+            HStack(spacing: SiphonTheme.spacing8) {
                 Image(systemName: "star.fill")
                     .foregroundColor(SiphonTheme.statusQueued)
-                    .font(.geist(12, weight: .semibold))
+                    .font(.system(size: 11, weight: .semibold))
                 Text(languageService.s("star_github"))
                     .font(.geist(12, weight: .medium))
                     .foregroundColor(.primary)
                 Spacer()
                 Image(systemName: "arrow.up.right")
-                    .font(.geist(10))
+                    .font(.system(size: 10, weight: .medium))
                     .foregroundColor(.secondary)
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
+            .padding(.horizontal, SiphonTheme.spacing12)
+            .padding(.vertical, SiphonTheme.spacing8)
             .background(
                 RoundedRectangle(cornerRadius: SiphonTheme.radiusControl)
                     .fill(
@@ -450,8 +444,165 @@ struct SponsorView: View {
                     )
             )
         }
-        .buttonStyle(.bouncy(scale: 0.96, hover: 1.02))
-        .padding(.horizontal, 8)
+        .buttonStyle(.bouncy(scale: 0.97, hover: 1.015))
+        .padding(.horizontal, SiphonTheme.spacing8)
+        .onHover { hovering in
+            withAnimation(.spring(response: 0.25, dampingFraction: 0.8)) {
+                isHovered = hovering
+            }
+        }
+    }
+}
+
+struct WhatsNewSheetView: View {
+    @EnvironmentObject var downloadManager: DownloadManager
+    @EnvironmentObject var languageService: LanguageService
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        VStack(spacing: 0) {
+            // Header - Clean, non-redundant title and version pill
+            VStack(spacing: 8) {
+                HStack(spacing: 8) {
+                    Text("WHAT'S NEW")
+                        .font(.geist(10, weight: .bold))
+                        .tracking(1.2)
+                        .foregroundColor(SiphonTheme.accent)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(SiphonTheme.accent.opacity(0.12))
+                        .clipShape(Capsule())
+
+                    SiphonTagBadge(
+                        text: "v\(downloadManager.appVersion)",
+                        tintColor: SiphonTheme.accent,
+                        isMonospaced: true
+                    )
+                }
+
+                Text("What's New in Siphon")
+                    .font(.geist(22, weight: .bold))
+                    .foregroundColor(.primary)
+
+                Text(languageService.s("whats_new_subtitle"))
+                    .font(.geist(13))
+                    .foregroundColor(.secondary)
+                    .multilineTextAlignment(.center)
+            }
+            .padding(.top, SiphonTheme.spacing24)
+            .padding(.horizontal, SiphonTheme.spacing24)
+            .padding(.bottom, SiphonTheme.spacing16)
+
+            Divider()
+                .padding(.horizontal, SiphonTheme.spacing20)
+
+            // Feature Showcase - Beautiful structured cards instead of raw unstyled markdown
+            ScrollView(showsIndicators: true) {
+                VStack(spacing: 10) {
+                    ForEach(downloadManager.whatsNewFeatures) { feature in
+                        FeatureCardRow(feature: feature)
+                    }
+                }
+                .padding(.horizontal, SiphonTheme.spacing24)
+                .padding(.vertical, 10)
+            }
+            .frame(maxHeight: 330)
+
+            Divider()
+                .padding(.horizontal, SiphonTheme.spacing20)
+
+            // Footer Actions
+            HStack(spacing: SiphonTheme.spacing12) {
+                Button {
+                    if let url = URL(string: "https://github.com/marspater/jolly-hopper/releases") {
+                        NSWorkspace.shared.open(url)
+                    }
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "arrow.up.right.square")
+                            .font(.system(size: 12))
+                        Text(languageService.s("view_on_github"))
+                            .font(.geist(12, weight: .medium))
+                    }
+                }
+                .buttonStyle(.siphonSecondary)
+                .help("View release notes on GitHub")
+
+                Spacer()
+
+                Button {
+                    downloadManager.showWhatsNew = false
+                    dismiss()
+                } label: {
+                    Text(languageService.s("continue"))
+                        .font(.geist(13, weight: .semibold))
+                        .frame(minWidth: 100)
+                }
+                .buttonStyle(.siphonPrimary)
+                .keyboardShortcut(.defaultAction)
+            }
+            .padding(.horizontal, SiphonTheme.spacing24)
+            .padding(.vertical, SiphonTheme.spacing16)
+        }
+        .frame(width: 540, height: 520)
+        .background(
+            RoundedRectangle(cornerRadius: SiphonTheme.radiusCard)
+                .fill(.ultraThinMaterial)
+                .ignoresSafeArea()
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: SiphonTheme.radiusCard)
+                .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+                .ignoresSafeArea()
+        )
+    }
+}
+
+private struct FeatureCardRow: View {
+    let feature: ReleaseFeature
+    @State private var isHovered = false
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 14) {
+            // Category Icon Squircle
+            ZStack {
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(feature.iconColor.opacity(isHovered ? 0.18 : 0.12))
+                    .frame(width: 36, height: 36)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 10)
+                            .stroke(feature.iconColor.opacity(isHovered ? 0.35 : 0.20), lineWidth: 1)
+                    )
+
+                Image(systemName: feature.icon)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundColor(feature.iconColor)
+            }
+
+            // Title & Description
+            VStack(alignment: .leading, spacing: 3) {
+                Text(feature.title)
+                    .font(.geist(13, weight: .semibold))
+                    .foregroundColor(.primary)
+
+                Text(feature.description)
+                    .font(.geist(12))
+                    .foregroundColor(.secondary)
+                    .lineSpacing(2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(12)
+        .background(
+            RoundedRectangle(cornerRadius: SiphonTheme.radiusControl)
+                .fill(Color.primary.opacity(isHovered ? 0.055 : 0.035))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: SiphonTheme.radiusControl)
+                .stroke(Color.primary.opacity(isHovered ? 0.10 : 0.06), lineWidth: 1)
+        )
         .onHover { hovering in
             withAnimation(.spring(response: 0.25, dampingFraction: 0.8)) {
                 isHovered = hovering

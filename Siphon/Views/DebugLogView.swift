@@ -9,26 +9,19 @@ struct DebugLogView: View {
     var body: some View {
         VStack(spacing: 0) {
             // Header
-            HStack(spacing: 12) {
+            HStack(spacing: SiphonTheme.spacing12) {
                 Image(systemName: "terminal.fill")
-                    .font(.geist(15, weight: .semibold))
+                    .font(.system(size: 15, weight: .semibold))
                     .foregroundColor(SiphonTheme.accent)
 
                 Text("Debug Logs")
                     .font(.geist(15, weight: .bold))
 
-                HStack(spacing: 4) {
-                    Circle()
-                        .fill(SiphonTheme.statusCompleted)
-                        .frame(width: 6, height: 6)
-                    Text("\(logger.logs.count) entries")
-                        .font(.geistMono(11, weight: .medium))
-                        .foregroundColor(.secondary)
-                }
-                .padding(.horizontal, 8)
-                .padding(.vertical, 3)
-                .background(Color.primary.opacity(0.04))
-                .clipShape(Capsule())
+                SiphonTagBadge(
+                    text: "\(logger.logs.count) entries",
+                    tintColor: .secondary,
+                    isMonospaced: true
+                )
 
                 Spacer()
 
@@ -38,11 +31,8 @@ struct DebugLogView: View {
                     Image(systemName: "xmark")
                         .font(.system(size: 11, weight: .bold))
                         .foregroundColor(.secondary)
-                        .frame(width: 22, height: 22)
-                        .background(Color.primary.opacity(0.06))
-                        .clipShape(Circle())
                 }
-                .buttonStyle(.bouncy(scale: 0.90, hover: 1.10))
+                .buttonStyle(.siphonIcon(size: 24))
                 .help("Close")
                 .accessibilityLabel("Close")
                 .keyboardShortcut(.cancelAction)
@@ -74,15 +64,19 @@ struct DebugLogView: View {
             .padding(.bottom, 14)
 
             // Bottom Action Bar
-            HStack(spacing: 10) {
+            HStack(spacing: SiphonTheme.spacing10) {
                 Button {
                     let pasteboard = NSPasteboard.general
                     pasteboard.clearContents()
                     pasteboard.setString(logger.logs.joined(separator: "\n"), forType: .string)
-                    isCopied = true
+                    withAnimation {
+                        isCopied = true
+                    }
                     Task {
                         try? await Task.sleep(nanoseconds: 1_500_000_000)
-                        isCopied = false
+                        withAnimation {
+                            isCopied = false
+                        }
                     }
                 } label: {
                     HStack(spacing: 6) {
@@ -92,12 +86,12 @@ struct DebugLogView: View {
                             .font(.geist(12, weight: .medium))
                     }
                     .foregroundColor(isCopied ? SiphonTheme.statusCompleted : .primary)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .background(Color.primary.opacity(0.06))
-                    .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusControl))
+                    .opacity(logger.logs.isEmpty ? 0.5 : 1.0)
                 }
-                .buttonStyle(.bouncy(scale: 0.95, hover: 1.025))
+                .buttonStyle(.siphonSecondary)
+                .disabled(logger.logs.isEmpty)
+                .help("Copy all debug logs to clipboard")
+                .accessibilityLabel("Copy All Debug Logs")
 
                 Button {
                     logger.clearLogs()
@@ -109,12 +103,12 @@ struct DebugLogView: View {
                             .font(.geist(12, weight: .medium))
                     }
                     .foregroundColor(.secondary)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .background(Color.primary.opacity(0.06))
-                    .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusControl))
+                    .opacity(logger.logs.isEmpty ? 0.5 : 1.0)
                 }
-                .buttonStyle(.bouncy(scale: 0.95, hover: 1.025))
+                .buttonStyle(.siphonSecondary)
+                .disabled(logger.logs.isEmpty)
+                .help("Clear debug logs")
+                .accessibilityLabel("Clear Debug Logs")
 
                 Spacer()
 
@@ -128,12 +122,10 @@ struct DebugLogView: View {
                             .font(.geist(12, weight: .medium))
                     }
                     .foregroundColor(.secondary)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .background(Color.primary.opacity(0.06))
-                    .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusControl))
                 }
-                .buttonStyle(.bouncy(scale: 0.95, hover: 1.025))
+                .buttonStyle(.siphonSecondary)
+                .help("Show log file location in Finder")
+                .accessibilityLabel("Show Logs in Finder")
             }
             .padding(.horizontal, 18)
             .padding(.bottom, 16)
