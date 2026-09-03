@@ -1728,11 +1728,6 @@ class YtdlpService: ObservableObject {
         }
     }
 
-    private func buildCombinedSelector(for resolution: VideoResolution?) -> String {
-        guard let resolution else { return "best*" }
-        return resolution.ytdlpCombinedValue
-    }
-
     private func compatibleMergeOutputFormat(for options: DownloadOptions) -> String? {
         guard options.fileType.isVideo else { return nil }
 
