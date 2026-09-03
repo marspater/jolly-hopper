@@ -722,7 +722,8 @@ class DownloadManager: ObservableObject {
             if download.options.embedThumbnail, let finalURL = download.filePath {
                 if let thumbURL = download.thumbnailURL {
                     Task.detached(priority: .utility) {
-                        if let data = try? Data(contentsOf: thumbURL), let img = NSImage(data: data) {
+                        // Bolt Performance Optimization: Replace blocking Data(contentsOf:) with non-blocking async URLSession read
+                        if let (data, _) = try? await URLSession.shared.data(from: thumbURL), let img = NSImage(data: data) {
                             let squareIcon = YtdlpService.createAspectFitIcon(from: img)
                             await MainActor.run {
                                 _ = NSWorkspace.shared.setIcon(squareIcon, forFile: finalURL.path, options: [])
