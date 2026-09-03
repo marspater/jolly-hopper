@@ -1154,7 +1154,8 @@ class DownloadManager: ObservableObject {
                 // Restore as Download objects for UI, reversing so newest is at the top
                 let restored = decoded.reversed().map { $0.toDownload() }
                 
-                var existingIds = Set(downloads.map { $0.id })
+                // Bolt Performance Optimization: Use downloads.lazy.map to prevent intermediate array allocation before Set creation
+                var existingIds = Set(downloads.lazy.map { $0.id })
                 for download in restored {
                     download.options.rawCookies = nil // Purge any legacy session cookies from restored history
                     if !existingIds.contains(download.id) {
