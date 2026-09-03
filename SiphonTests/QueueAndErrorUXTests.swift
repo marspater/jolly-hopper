@@ -1089,5 +1089,209 @@ final class QueueAndErrorUXTests: XCTestCase {
         XCTAssertFalse(joined.contains("supersecret"), "Must redact argument following --http-header")
         XCTAssertTrue(joined.contains("<REDACTED_HEADER>"), "Must replace sensitive header with placeholder")
     }
+
+    // MARK: - Download Model & Type Tests
+
+    func testDownloadDisplayProgress() {
+        let options = DownloadOptions.default
+        let download = Download(url: "https://example.com/test", options: options)
+
+        download.progress = 0.45
+        download.speed = "2.5 MB/s"
+        download.eta = "00:15"
+        XCTAssertEqual(download.displayProgress, "45% • 2.5 MB/s • 00:15")
+
+        // Progress clamp boundary tests
+        download.progress = -0.5
+        XCTAssertEqual(download.displayProgress, "0% • 2.5 MB/s • 00:15")
+
+        download.progress = 1.5
+        XCTAssertEqual(download.displayProgress, "100% • 2.5 MB/s • 00:15")
+    }
+
+    func testDownloadSourceDomainAllPlatforms() {
+        let options = DownloadOptions.default
+
+        let domains: [(String, String)] = [
+            ("https://www.youtube.com/watch?v=123", "YouTube"),
+            ("https://youtu.be/123", "YouTube"),
+            ("https://twitter.com/user/123", "X (Twitter)"),
+            ("https://x.com/user/123", "X (Twitter)"),
+            ("https://www.instagram.com/p/123", "Instagram"),
+            ("https://www.tiktok.com/@user/123", "TikTok"),
+            ("https://vimeo.com/123", "Vimeo"),
+            ("https://www.reddit.com/r/videos/123", "Reddit"),
+            ("https://www.facebook.com/watch/123", "Facebook"),
+            ("https://fb.watch/123", "Facebook"),
+            ("https://www.twitch.tv/streamer", "Twitch"),
+            ("https://soundcloud.com/artist/track", "SoundCloud"),
+            ("https://www.dailymotion.com/video/123", "Dailymotion"),
+            ("https://www.bilibili.com/video/123", "Bilibili.com"),
+            ("invalid_url", "Web")
+        ]
+
+        for (url, expectedDomain) in domains {
+            let dl = Download(url: url, options: options)
+            XCTAssertEqual(dl.sourceDomain, expectedDomain, "URL \(url) should map to \(expectedDomain)")
+        }
+    }
+
+    func testDownloadStatusTitlesAndColors() {
+        let lang = LanguageService()
+        let cases: [(DownloadStatus, String)] = [
+            (.fetching, "blue"),
+            (.queued, "orange"),
+            (.downloading, "blue"),
+            (.processing, "purple"),
+            (.completed, "green"),
+            (.failed, "red"),
+            (.stopped, "gray"),
+            (.paused, "yellow"),
+            (.fileExists, "orange")
+        ]
+
+        for (status, expectedColor) in cases {
+            XCTAssertEqual(status.color, expectedColor)
+            XCTAssertFalse(status.title(lang: lang).isEmpty)
+        }
+    }
+
+    func testHDROptionTitlesAndIdentifiers() {
+        let lang = LanguageService()
+        XCTAssertEqual(HDRAction.preserveHDR.id, "preserve_hdr")
+        XCTAssertEqual(HDRAction.convertToSDR.id, "convert_to_sdr")
+        XCTAssertEqual(HDRAction.preserveHDR.title(lang: lang), "Preserve HDR (Original)")
+        XCTAssertEqual(HDRAction.convertToSDR.title(lang: lang), "Convert HDR to SDR (Tone-mapped)")
+    }
+
+    func testDownloadDiagnosticsHDRSummary() {
+        var diag = DownloadDiagnostics()
+        XCTAssertNil(diag.hdrSummary, "Empty diagnostics should yield nil hdrSummary")
+
+        diag.dynamicRange = "HDR10"
+        diag.bitDepth = 10
+        diag.colorSpace = "BT.2020"
+        XCTAssertEqual(diag.hdrSummary, "HDR10 • 10-bit • BT.2020")
+
+        diag.dynamicRange = "sdr"
+        diag.bitDepth = 8
+        diag.colorSpace = ""
+        XCTAssertNil(diag.hdrSummary, "SDR 8-bit without color space should yield nil hdrSummary")
+    }
+
+    func testMediaFileTypeProperties() {
+        XCTAssertTrue(MediaFileType.mp4.isVideo)
+        XCTAssertFalse(MediaFileType.mp4.isAudio)
+        XCTAssertEqual(MediaFileType.mp4.fileExtension, "mp4")
+        XCTAssertEqual(MediaFileType.videoTypes, [.mp4, .webm, .mkv])
+
+        XCTAssertTrue(MediaFileType.mp3.isAudio)
+        XCTAssertFalse(MediaFileType.mp3.isVideo)
+        XCTAssertEqual(MediaFileType.mp3.fileExtension, "mp3")
+        XCTAssertEqual(MediaFileType.audioTypes, [.mp3, .opus, .flac, .wav, .m4a])
+    }
+
+    func testAudioQualityYtdlpValuesAndTitles() {
+        let lang = LanguageService()
+        XCTAssertEqual(AudioQuality.best.ytdlpValue, "0")
+        XCTAssertEqual(AudioQuality.q320.ytdlpValue, "320K")
+        XCTAssertEqual(AudioQuality.q256.ytdlpValue, "256K")
+        XCTAssertEqual(AudioQuality.q192.ytdlpValue, "192K")
+        XCTAssertEqual(AudioQuality.q128.ytdlpValue, "128K")
+
+        XCTAssertEqual(AudioQuality.best.title(lang: lang), lang.s("res_best"))
+        XCTAssertEqual(AudioQuality.q320.title(lang: lang), "320kbps")
+    }
+
+    func testVideoResolutionYtdlpValuesAndMaxHeight() {
+        let lang = LanguageService()
+        XCTAssertEqual(VideoResolution.r2160p.maxHeight, 2160)
+        XCTAssertEqual(VideoResolution.r1080p.maxHeight, 1080)
+        XCTAssertNil(VideoResolution.best.maxHeight)
+
+        XCTAssertTrue(VideoResolution.r1080p.ytdlpValue.contains("height<=1080"))
+        XCTAssertTrue(VideoResolution.r1080p.ytdlpCombinedValue.contains("bestaudio"))
+        XCTAssertFalse(VideoResolution.r1080p.title(lang: lang).isEmpty)
+    }
+
+    func testVideoAndAudioCodecYtdlpFilters() {
+        let lang = LanguageService()
+        XCTAssertEqual(VideoCodec.h264.ytdlpFilter, "[vcodec^=avc1]")
+        XCTAssertEqual(VideoCodec.h265.ytdlpFilter, "[vcodec~='^(hev1|hvc1)']")
+        XCTAssertNil(VideoCodec.auto.ytdlpFilter)
+        XCTAssertFalse(VideoCodec.h264.title(lang: lang).isEmpty)
+        XCTAssertNotNil(VideoCodec.h264.compatibilityNote)
+
+        XCTAssertEqual(AudioCodec.aac.ytdlpFilter, "[acodec^=mp4a]")
+        XCTAssertNil(AudioCodec.auto.ytdlpFilter)
+        XCTAssertFalse(AudioCodec.aac.title(lang: lang).isEmpty)
+    }
+
+    func testSubtitleFormatAndConversionCodec() {
+        let lang = LanguageService()
+        XCTAssertEqual(SubtitleFormat.srt.displayName, "SRT")
+        XCTAssertEqual(SubtitleFormat.srt.ytdlpValue, "srt")
+
+        XCTAssertFalse(ConversionCodec.none.title(lang: lang).isEmpty)
+        XCTAssertFalse(ConversionCodec.h264.title(lang: lang).isEmpty)
+    }
+
+    func testDownloadPresets() {
+        let lang = LanguageService()
+        for preset in DownloadPreset.allCases {
+            XCTAssertFalse(preset.title(lang: lang).isEmpty)
+            XCTAssertFalse(preset.description(lang: lang).isEmpty)
+            XCTAssertNotNil(preset.videoCodec)
+            XCTAssertNotNil(preset.audioCodec)
+            XCTAssertNotNil(preset.videoResolution)
+            XCTAssertNotNil(preset.fileType)
+        }
+    }
+
+    func testCustomPresetPersistence() {
+        let key = UserDefaultsKeys.customPresets
+        UserDefaults.standard.removeObject(forKey: key)
+
+        let preset1 = CustomPreset(
+            name: "My 4K Preset",
+            videoCodec: .h265,
+            audioCodec: .aac,
+            videoResolution: .r2160p,
+            fileType: .mp4
+        )
+
+        CustomPreset.saveAll([preset1])
+
+        let loaded = CustomPreset.loadAll()
+        XCTAssertEqual(loaded.count, 1)
+        XCTAssertEqual(loaded.first?.name, "My 4K Preset")
+        XCTAssertEqual(loaded.first?.videoResolution, .r2160p)
+
+        UserDefaults.standard.removeObject(forKey: key)
+    }
+
+    func testHistoricDownloadToDownloadRoundtrip() {
+        var options = DownloadOptions.default
+        options.rawCookies = "secret_cookies"
+
+        let download = Download(url: "https://example.com/roundtrip", options: options, title: "Roundtrip Video")
+        download.status = .completed
+        download.progress = 1.0
+        download.filePath = URL(fileURLWithPath: "/tmp/roundtrip.mp4")
+        download.errorMessage = "None"
+        download.log = "Log data"
+
+        let historic = HistoricDownload(download: download)
+        XCTAssertNil(historic.options.rawCookies, "HistoricDownload must strip rawCookies")
+
+        let reconstructed = historic.toDownload()
+        XCTAssertEqual(reconstructed.id, download.id)
+        XCTAssertEqual(reconstructed.url, download.url)
+        XCTAssertEqual(reconstructed.title, download.title)
+        XCTAssertEqual(reconstructed.status, .completed)
+        XCTAssertEqual(reconstructed.progress, 1.0)
+        XCTAssertEqual(reconstructed.filePath?.path, "/tmp/roundtrip.mp4")
+        XCTAssertEqual(reconstructed.log, "Log data")
+    }
 }
 

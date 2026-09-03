@@ -51,18 +51,55 @@ final class DownloadManagerTests: XCTestCase {
 
         let downloadStopped = Download(url: "https://example.com/stopped", options: options)
         downloadStopped.status = .stopped
+        downloadStopped.progress = 0.4
+        downloadStopped.errorMessage = "Cancelled by user"
+        downloadStopped.log = "Download stopped prematurely"
         manager.downloads.append(downloadStopped)
 
         let downloadFailed = Download(url: "https://example.com/failed", options: options)
         downloadFailed.status = .failed
+        downloadFailed.progress = 0.2
+        downloadFailed.errorMessage = "Network timeout"
+        downloadFailed.log = "Error downloading segment"
         manager.downloads.append(downloadFailed)
+
+        let downloadCompleted = Download(url: "https://example.com/completed", options: options)
+        downloadCompleted.status = .completed
+        downloadCompleted.progress = 1.0
+        manager.downloads.append(downloadCompleted)
+
+        let downloadDownloading = Download(url: "https://example.com/downloading", options: options)
+        downloadDownloading.status = .downloading
+        downloadDownloading.progress = 0.5
+        manager.downloads.append(downloadDownloading)
+
+        let downloadFileExists = Download(url: "https://example.com/fileexists", options: options)
+        downloadFileExists.status = .fileExists
+        manager.downloads.append(downloadFileExists)
 
         XCTAssertEqual(manager.failedDownloads.count, 2)
 
         manager.retryFailedDownloads()
 
+        // Failed / stopped downloads should transition to .queued and reset progress/error details
         XCTAssertEqual(downloadStopped.status, .queued)
+        XCTAssertEqual(downloadStopped.progress, 0)
+        XCTAssertNil(downloadStopped.errorMessage)
+        XCTAssertEqual(downloadStopped.log, "")
+
         XCTAssertEqual(downloadFailed.status, .queued)
+        XCTAssertEqual(downloadFailed.progress, 0)
+        XCTAssertNil(downloadFailed.errorMessage)
+        XCTAssertEqual(downloadFailed.log, "")
+
+        // Non-failed/stopped downloads should remain untouched
+        XCTAssertEqual(downloadCompleted.status, .completed)
+        XCTAssertEqual(downloadCompleted.progress, 1.0)
+
+        XCTAssertEqual(downloadDownloading.status, .downloading)
+        XCTAssertEqual(downloadDownloading.progress, 0.5)
+
+        XCTAssertEqual(downloadFileExists.status, .fileExists)
     }
 
     func testLanguageServiceTranslationsForMissingKeys() {
@@ -661,4 +698,305 @@ final class DownloadManagerTests: XCTestCase {
 
         manager.shutdown()
     }
+
+    // MARK: - Single-Pass Status Counts Tests
+
+    func testStatusCountsAccurateCalculation() {
+        let manager = DownloadManager()
+        let options = DownloadOptions.default
+
+        let d1 = Download(url: "https://example.com/1", options: options)
+        d1.status = .downloading
+
+        let d2 = Download(url: "https://example.com/2", options: options)
+        d2.status = .fetching
+
+        let d3 = Download(url: "https://example.com/3", options: options)
+        d3.status = .processing
+
+        let d4 = Download(url: "https://example.com/4", options: options)
+        d4.status = .queued
+
+        let d5 = Download(url: "https://example.com/5", options: options)
+        d5.status = .completed
+
+        let d6 = Download(url: "https://example.com/6", options: options)
+        d6.status = .failed
+
+        let d7 = Download(url: "https://example.com/7", options: options)
+        d7.status = .stopped
+
+        let d8 = Download(url: "https://example.com/8", options: options)
+        d8.status = .paused
+
+        manager.downloads = [d1, d2, d3, d4, d5, d6, d7, d8]
+
+        XCTAssertEqual(manager.downloadingCount, 3, "downloadingCount should include downloading, fetching, and processing")
+        XCTAssertEqual(manager.queuedCount, 1, "queuedCount should include queued downloads")
+        XCTAssertEqual(manager.completedCount, 1, "completedCount should include completed downloads")
+        XCTAssertEqual(manager.failedCount, 2, "failedCount should include failed and stopped downloads")
+
+        manager.shutdown()
+    }
+
+    // MARK: - Pause Download Tests
+
+    func testPauseDownloadEligibleAndIneligibleStatuses() {
+        let manager = DownloadManager()
+
+        let eligibleStatuses: [DownloadStatus] = [.downloading, .fetching, .processing, .queued]
+        for status in eligibleStatuses {
+            let download = Download(url: "https://example.com/test_pause_eligible_\(status)", options: .default)
+            download.status = status
+            manager.downloads = [download]
+
+            manager.pauseDownload(download)
+
+            XCTAssertEqual(download.status, .paused, "pauseDownload should change status from \(status) to .paused")
+        }
+
+        let ineligibleStatuses: [DownloadStatus] = [.completed, .failed, .stopped, .paused, .fileExists]
+        for status in ineligibleStatuses {
+            let download = Download(url: "https://example.com/test_pause_ineligible_\(status)", options: .default)
+            download.status = status
+            manager.downloads = [download]
+
+            manager.pauseDownload(download)
+
+            XCTAssertEqual(download.status, status, "pauseDownload should NOT change status when download is in \(status) state")
+        }
+
+        manager.shutdown()
+    }
+
+    func testPauseDownloadQueueAndTaskCancellation() {
+        let manager = DownloadManager()
+
+        let download = Download(url: "https://example.com/test_pause_task", options: .default)
+        download.status = .downloading
+        manager.downloads = [download]
+
+        let task = Task {
+            _ = try? await Task.sleep(nanoseconds: 1_000_000_000)
+        }
+        manager.activeTasks[download.id] = task
+
+        manager.pauseDownload(download)
+
+        XCTAssertEqual(download.status, .paused)
+        XCTAssertTrue(task.isCancelled, "activeTask should be cancelled when pauseDownload is invoked")
+
+        manager.shutdown()
+    }
+
+    // MARK: - Resume Download Tests
+
+    func testResumeDownloadFromPausedState() {
+        let manager = DownloadManager()
+        let download = Download(url: "https://example.com/resume-test", options: .default)
+        download.status = .paused
+        manager.downloads.append(download)
+
+        let expectation = expectation(description: "objectWillChange emitted")
+        let cancellable = manager.objectWillChange.sink {
+            expectation.fulfill()
+        }
+
+        manager.resumeDownload(download)
+
+        XCTAssertEqual(download.status, .queued, "Resuming a paused download must transition status to .queued")
+        wait(for: [expectation], timeout: 1.0)
+        cancellable.cancel()
+        manager.shutdown()
+    }
+
+    func testResumeDownloadNonPausedStatusesIgnored() {
+        let manager = DownloadManager()
+        let nonPausedStatuses: [DownloadStatus] = [
+            .downloading, .fetching, .processing,
+            .completed, .failed, .stopped,
+            .queued, .fileExists
+        ]
+
+        for status in nonPausedStatuses {
+            let download = Download(url: "https://example.com/status-\(status)", options: .default)
+            download.status = status
+            manager.downloads.append(download)
+
+            manager.resumeDownload(download)
+
+            XCTAssertEqual(download.status, status, "resumeDownload must ignore downloads in \(status) status")
+        }
+        manager.shutdown()
+    }
+
+    // MARK: - Fetch Release Notes Tests
+
+    private func makeMockURLSession() -> URLSession {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [MockURLProtocol.self]
+        return URLSession(configuration: configuration)
+    }
+
+    func testFetchReleaseNotesFromGitHubNetworkErrorReturnsNil() async {
+        let manager = DownloadManager()
+        MockURLProtocol.requestHandler = { _ in
+            throw URLError(.notConnectedToInternet)
+        }
+        let mockSession = makeMockURLSession()
+
+        let result = await manager.fetchReleaseNotesFromGitHub(version: "1.0.0", session: mockSession)
+
+        XCTAssertNil(result, "Network error during fetchReleaseNotesFromGitHub must return nil")
+        manager.shutdown()
+    }
+
+    func testFetchReleaseNotesFromGitHubHTTPStatusCodeFailureReturnsNil() async {
+        let manager = DownloadManager()
+        MockURLProtocol.requestHandler = { request in
+            let response = HTTPURLResponse(
+                url: request.url!,
+                statusCode: 404,
+                httpVersion: nil,
+                headerFields: nil
+            )!
+            return (response, Data())
+        }
+        let mockSession = makeMockURLSession()
+
+        let result = await manager.fetchReleaseNotesFromGitHub(version: "1.0.0", session: mockSession)
+
+        XCTAssertNil(result, "Non-200 HTTP response must return nil")
+        manager.shutdown()
+    }
+
+    func testFetchReleaseNotesFromGitHubInvalidJSONReturnsNil() async {
+        let manager = DownloadManager()
+        MockURLProtocol.requestHandler = { request in
+            let response = HTTPURLResponse(
+                url: request.url!,
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: nil
+            )!
+            let invalidData = "Not JSON".data(using: .utf8)!
+            return (response, invalidData)
+        }
+        let mockSession = makeMockURLSession()
+
+        let result = await manager.fetchReleaseNotesFromGitHub(version: "1.0.0", session: mockSession)
+
+        XCTAssertNil(result, "Invalid JSON data must return nil")
+        manager.shutdown()
+    }
+
+    func testFetchReleaseNotesFromGitHubOlderTagVersionReturnsNil() async {
+        let manager = DownloadManager()
+        MockURLProtocol.requestHandler = { request in
+            let response = HTTPURLResponse(
+                url: request.url!,
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: nil
+            )!
+            let jsonString = """
+            {
+                "tag_name": "v0.9.0",
+                "name": "Old Release",
+                "body": "Some notes"
+            }
+            """
+            return (response, jsonString.data(using: .utf8)!)
+        }
+        let mockSession = makeMockURLSession()
+
+        let result = await manager.fetchReleaseNotesFromGitHub(version: "1.0.0", session: mockSession)
+
+        XCTAssertNil(result, "Release notes for older tag version must return nil")
+        manager.shutdown()
+    }
+
+    func testFetchReleaseNotesFromGitHubEmptyBodyReturnsNil() async {
+        let manager = DownloadManager()
+        MockURLProtocol.requestHandler = { request in
+            let response = HTTPURLResponse(
+                url: request.url!,
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: nil
+            )!
+            let jsonString = """
+            {
+                "tag_name": "v1.0.0",
+                "name": "Release 1.0.0",
+                "body": "   \\r\\n  "
+            }
+            """
+            return (response, jsonString.data(using: .utf8)!)
+        }
+        let mockSession = makeMockURLSession()
+
+        let result = await manager.fetchReleaseNotesFromGitHub(version: "1.0.0", session: mockSession)
+
+        XCTAssertNil(result, "Release notes with empty body after sanitization must return nil")
+        manager.shutdown()
+    }
+
+    func testFetchReleaseNotesFromGitHubSuccessReturnsNotes() async {
+        let manager = DownloadManager()
+        MockURLProtocol.requestHandler = { request in
+            let response = HTTPURLResponse(
+                url: request.url!,
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: nil
+            )!
+            let jsonString = """
+            {
+                "tag_name": "v1.0.0",
+                "name": "Siphon v1.0.0",
+                "body": "✨ Added feature A\\n🚀 Performance fix B"
+            }
+            """
+            return (response, jsonString.data(using: .utf8)!)
+        }
+        let mockSession = makeMockURLSession()
+
+        let result = await manager.fetchReleaseNotesFromGitHub(version: "1.0.0", session: mockSession)
+
+        XCTAssertNotNil(result, "Valid release notes response must return non-nil tuple")
+        XCTAssertEqual(result?.title, "Siphon v1.0.0")
+        XCTAssertEqual(result?.body, "✨ Added feature A\n🚀 Performance fix B")
+        manager.shutdown()
+    }
+}
+
+final class MockURLProtocol: URLProtocol, @unchecked Sendable {
+    nonisolated(unsafe) static var requestHandler: ((URLRequest) throws -> (HTTPURLResponse, Data))?
+
+    override class func canInit(with request: URLRequest) -> Bool {
+        return true
+    }
+
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest {
+        return request
+    }
+
+    override func startLoading() {
+        guard let handler = MockURLProtocol.requestHandler else {
+            client?.urlProtocol(self, didFailWithError: URLError(.unknown))
+            return
+        }
+
+        do {
+            let (response, data) = try handler(request)
+            client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+            client?.urlProtocol(self, didLoad: data)
+            client?.urlProtocolDidFinishLoading(self)
+        } catch {
+            client?.urlProtocol(self, didFailWithError: error)
+        }
+    }
+
+    override func stopLoading() {}
 }

@@ -276,8 +276,6 @@ class YtdlpService: ObservableObject {
     var ffmpegPath: URL?
     var ffprobePath: URL?
     private var deniedCookieSources: Set<String> = []
-    private let localVersion = DependencyChecksums.ytdlpVersion
-    private let bundledYtdlpName = "yt-dlp_macos"
     private var activeSetupTask: Task<Void, Never>?
 
     var processRunner: YtdlpProcessRunning
@@ -560,27 +558,6 @@ class YtdlpService: ObservableObject {
         ffprobePath = ffprobe
         LoggerService.shared.log("Selected \(source) FFmpeg path: \(ffmpeg.path)", level: .info)
         LoggerService.shared.log("Selected \(source) FFprobe path: \(ffprobe.path)", level: .info)
-    }
-
-    private func validatedFfmpegLocationForYtdlp() async throws -> URL {
-        if let ffmpeg = ffmpegPath,
-           let ffprobe = ffprobePath,
-           await validateFfmpegPair(ffmpeg: ffmpeg, ffprobe: ffprobe, context: "yt-dlp") {
-            setFfmpegPaths(ffmpeg: ffmpeg, ffprobe: ffprobe, source: "yt-dlp")
-            return ffmpeg
-        }
-
-        await findFfmpeg()
-
-        guard let ffmpeg = ffmpegPath,
-              let ffprobe = ffprobePath,
-              await validateFfmpegPair(ffmpeg: ffmpeg, ffprobe: ffprobe, context: "yt-dlp") else {
-            let attemptedPath = Self.getAppSupportDirectory().path
-            throw YtdlpError.ffmpegInstallationFailed(attemptedPath)
-        }
-
-        setFfmpegPaths(ffmpeg: ffmpeg, ffprobe: ffprobe, source: "yt-dlp")
-        return ffmpeg
     }
 
     func downloadFfmpegAndFfprobeBundle() async {
@@ -1713,24 +1690,6 @@ class YtdlpService: ObservableObject {
         }
 
         return args
-    }
-
-    private func buildVideoSelector(for resolution: VideoResolution?, ignoreWorst: Bool = false) -> String {
-        guard let resolution else { return "bestvideo" }
-
-        switch resolution {
-        case .best:
-            return "bestvideo"
-        case .r2160p, .r1440p, .r1080p, .r720p, .r480p, .r360p, .r240p:
-            return resolution.ytdlpValue
-        case .worst:
-            return ignoreWorst ? "bestvideo" : "worstvideo"
-        }
-    }
-
-    private func buildCombinedSelector(for resolution: VideoResolution?) -> String {
-        guard let resolution else { return "best*" }
-        return resolution.ytdlpCombinedValue
     }
 
     private func compatibleMergeOutputFormat(for options: DownloadOptions) -> String? {
@@ -3587,8 +3546,26 @@ class YtdlpService: ObservableObject {
         return trimmed.isEmpty ? "download" : trimmed
     }
 
+    static func getSecureTempCookiesDirectory() -> URL? {
+        let cookiesDir = FileManager.default.temporaryDirectory.appendingPathComponent("siphon_cookies")
+        let path = cookiesDir.path
+        let fileManager = FileManager.default
+        if !fileManager.fileExists(atPath: path) {
+            do {
+                try fileManager.createDirectory(at: cookiesDir, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+            } catch {
+                LoggerService.shared.log("Error creating secure cookies directory: \(error.localizedDescription)", level: .error)
+                return nil
+            }
+        } else {
+            try? fileManager.setAttributes([.posixPermissions: 0o700], ofItemAtPath: path)
+        }
+        return cookiesDir
+    }
+
     func createTempCookiesFile(url: String, cookieName: String, cookieValue: String) -> URL? {
-        let tempCookiesURL = FileManager.default.temporaryDirectory.appendingPathComponent("siphon_cookies_\(UUID().uuidString).txt")
+        guard let cookiesDir = YtdlpService.getSecureTempCookiesDirectory() else { return nil }
+        let tempCookiesURL = cookiesDir.appendingPathComponent("siphon_cookies_\(UUID().uuidString).txt")
         let host = URL(string: url)?.host ?? ""
         let cleanName = sanitizeCookieToken(cookieName)
         let cleanValue = sanitizeCookieToken(cookieValue)
@@ -3607,8 +3584,9 @@ class YtdlpService: ObservableObject {
 
     func createTempCookiesFileFromHeader(url: String, cookieHeader: String) -> URL? {
         guard let urlObj = URL(string: url), let host = urlObj.host, !host.isEmpty else { return nil }
+        guard let cookiesDir = YtdlpService.getSecureTempCookiesDirectory() else { return nil }
         let domain = host.hasPrefix(".") ? host : ".\(host)"
-        let tempCookiesURL = FileManager.default.temporaryDirectory.appendingPathComponent("siphon_header_cookies_\(UUID().uuidString).txt")
+        let tempCookiesURL = cookiesDir.appendingPathComponent("siphon_header_cookies_\(UUID().uuidString).txt")
         
         var lines = ["# Netscape HTTP Cookie File"]
         let pairs = cookieHeader.components(separatedBy: ";")
@@ -3643,15 +3621,21 @@ class YtdlpService: ObservableObject {
     }
 
     static func purgeOrphanedTempCookieFiles() {
-        let tempDir = FileManager.default.temporaryDirectory
         let fileManager = FileManager.default
-        guard let files = try? fileManager.contentsOfDirectory(at: tempDir, includingPropertiesForKeys: nil) else { return }
-        for file in files {
-            let name = file.lastPathComponent
-            if (name.hasPrefix("siphon_cookies_") || name.hasPrefix("siphon_header_cookies_")) && name.hasSuffix(".txt") {
-                try? fileManager.removeItem(at: file)
-            } else if name.hasPrefix("siphon_scratch_") || name.hasPrefix("Siphon_Staging_") || name.hasPrefix("Siphon_Update_Package_") {
-                try? fileManager.removeItem(at: file)
+        let tempDirsToClean: [URL] = [
+            FileManager.default.temporaryDirectory,
+            getSecureTempCookiesDirectory()
+        ].compactMap { $0 }
+
+        for dir in tempDirsToClean {
+            guard let files = try? fileManager.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil) else { continue }
+            for file in files {
+                let name = file.lastPathComponent
+                if (name.hasPrefix("siphon_cookies_") || name.hasPrefix("siphon_header_cookies_")) && name.hasSuffix(".txt") {
+                    try? fileManager.removeItem(at: file)
+                } else if name.hasPrefix("siphon_scratch_") || name.hasPrefix("Siphon_Staging_") || name.hasPrefix("Siphon_Update_Package_") {
+                    try? fileManager.removeItem(at: file)
+                }
             }
         }
     }

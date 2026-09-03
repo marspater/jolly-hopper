@@ -21,6 +21,8 @@ class Download: ObservableObject, Identifiable {
     @Published var mediaInfo: MediaInfo? = nil
     @Published var diagnostics: DownloadDiagnostics = DownloadDiagnostics()
     
+    let sourceDomain: String
+
     var displayProgress: String {
         let safeProgress: Double = {
             if progress.isNaN { return 0.0 }
@@ -34,7 +36,8 @@ class Download: ObservableObject, Identifiable {
         return "\(percentage)%"
     }
     
-    var sourceDomain: String {
+    // Bolt Performance Optimization: Extract source domain once during initialization to avoid repeated URL parsing and regex evaluations during SwiftUI render passes
+    static func extractSourceDomain(from url: String) -> String {
         guard let urlObj = URL(string: url), let host = urlObj.host?.lowercased() else {
             return "Web"
         }
@@ -64,7 +67,7 @@ class Download: ObservableObject, Identifiable {
             return "Dailymotion"
         }
         
-        let cleaned = host.replacingOccurrences(of: "^www\\.", with: "", options: .regularExpression)
+        let cleaned = host.hasPrefix("www.") ? String(host.dropFirst(4)) : host
         guard let first = cleaned.first else { return cleaned }
         return String(first).uppercased() + cleaned.dropFirst()
     }
@@ -193,6 +196,7 @@ class Download: ObservableObject, Identifiable {
     init(url: String, options: DownloadOptions, title: String = "___FETCHING___", id: UUID = UUID(), createdAt: Date = Date()) {
         self.id = id
         self.url = url
+        self.sourceDomain = Download.extractSourceDomain(from: url)
         self.createdAt = createdAt
         self.options = options
         self.title = title.decodingHTMLEntities()
