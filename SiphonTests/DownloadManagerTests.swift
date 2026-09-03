@@ -796,7 +796,7 @@ final class DownloadManagerTests: XCTestCase {
 }
 
 final class MockURLProtocol: URLProtocol, @unchecked Sendable {
-    static var requestHandler: ((URLRequest) throws -> (HTTPURLResponse, Data))?
+    nonisolated(unsafe) static var requestHandler: ((URLRequest) throws -> (HTTPURLResponse, Data))?
 
     override class func canInit(with request: URLRequest) -> Bool {
         return true
