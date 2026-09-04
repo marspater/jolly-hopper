@@ -1380,22 +1380,47 @@ struct MediaFormat: Codable, Identifiable, Hashable {
         return false
     }
     
+    // Bolt Performance Optimization: Zero-allocation backward string scan for height resolution digits and case-insensitive pattern matching to eliminate CharacterSet, Array, and String allocations during high-frequency format sorting passes
     var parsedHeight: Int? {
         if let res = resolution {
-            let digits = res.components(separatedBy: CharacterSet.decimalDigits.inverted).filter { !$0.isEmpty }
-            if let lastNum = digits.last, let h = Int(lastNum) {
+            var endIdx: String.Index? = nil
+            var startIdx: String.Index? = nil
+            var curr = res.endIndex
+
+            while curr > res.startIndex {
+                curr = res.index(before: curr)
+                let char = res[curr]
+                if char.isNumber {
+                    if endIdx == nil {
+                        endIdx = res.index(after: curr)
+                    }
+                    startIdx = curr
+                } else if endIdx != nil {
+                    break
+                }
+            }
+            if let start = startIdx, let end = endIdx, let h = Int(res[start..<end]) {
                 return h
             }
         }
-        let lowerNote = (formatNote ?? "").lowercased()
-        let lowerId = formatId.lowercased()
-        if lowerNote.contains("2160p") || lowerId.contains("2160p") { return 2160 }
-        if lowerNote.contains("1440p") || lowerId.contains("1440p") { return 1440 }
-        if lowerNote.contains("1080p") || lowerId.contains("1080p") { return 1080 }
-        if lowerNote.contains("720p") || lowerId.contains("720p") { return 720 }
-        if lowerNote.contains("480p") || lowerId.contains("480p") { return 480 }
-        if lowerNote.contains("360p") || lowerId.contains("360p") { return 360 }
-        if lowerNote.contains("240p") || lowerId.contains("240p") { return 240 }
+
+        let note = formatNote ?? ""
+        let fid = formatId
+
+        func check(_ pattern: String) -> Bool {
+            note.range(of: pattern, options: .caseInsensitive) != nil ||
+            fid.range(of: pattern, options: .caseInsensitive) != nil
+        }
+
+        if check("2160p") { return 2160 }
+        if check("1440p") { return 1440 }
+        if check("1080p") { return 1080 }
+        if check("720p") { return 720 }
+        if check("480p") { return 480 }
+        if check("360p") { return 360 }
+        if check("240p") { return 240 }
+
+        let lowerId = fid.lowercased()
         if lowerId == "hq" || lowerId == "hd" || lowerId == "source" || lowerId == "original" || lowerId == "best-mp4" || lowerId == "source-mp4" {
             return 1080
         }
