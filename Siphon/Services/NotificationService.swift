@@ -11,9 +11,28 @@ final class NotificationService: NSObject, @unchecked Sendable, UNUserNotificati
         }
     }
 
+    static var isRunningTests: Bool {
+        if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil {
+            return true
+        }
+        if NSClassFromString("XCTest") != nil {
+            return true
+        }
+        if let bundleId = Bundle.main.bundleIdentifier, bundleId.contains("xctest") {
+            return true
+        }
+        return false
+    }
+
+    var isNotificationCenterAvailable: Bool {
+        return notificationCenter != nil
+    }
+
     private var notificationCenter: UNUserNotificationCenter? {
-        guard Bundle.main.bundleIdentifier != nil else {
-            logMessage("Notifications unavailable: no bundle identifier", level: .warning)
+        if Self.isRunningTests {
+            return nil
+        }
+        guard let bundleId = Bundle.main.bundleIdentifier, !bundleId.isEmpty, !bundleId.contains("xctest") else {
             return nil
         }
         return UNUserNotificationCenter.current()
@@ -71,13 +90,22 @@ final class NotificationService: NSObject, @unchecked Sendable, UNUserNotificati
         logMessage("NotificationService initialized, delegate registered.", level: .info)
     }
 
+    private func logPermissionError(_ error: Error) {
+        let nsError = error as NSError
+        if nsError.domain == UNErrorDomain && nsError.code == 1 {
+            logMessage("Notification permission not available in current environment.", level: .debug)
+        } else {
+            logMessage("Notification permission error: \(error.localizedDescription)", level: .error)
+        }
+    }
+
     func requestPermission() {
         guard let center = notificationCenter else { return }
         center.requestAuthorization(options: [.alert, .sound, .badge]) { [weak self] granted, error in
             if granted {
                 self?.logMessage("Notification permission granted.", level: .info)
             } else if let error = error {
-                self?.logMessage("Notification permission error: \(error.localizedDescription)", level: .error)
+                self?.logPermissionError(error)
             } else {
                 self?.logMessage("Notification permission denied by user.", level: .warning)
             }
@@ -102,7 +130,7 @@ final class NotificationService: NSObject, @unchecked Sendable, UNUserNotificati
                         self.logMessage("Notification permission granted upon request. Posting notification...", level: .info)
                         self.postNotificationRequest(center: center, content: content, identifier: identifier, logName: logName)
                     } else if let error = error {
-                        self.logMessage("Notification permission error: \(error.localizedDescription)", level: .error)
+                        self.logPermissionError(error)
                     } else {
                         self.logMessage("Notification permission denied by user upon request.", level: .warning)
                     }

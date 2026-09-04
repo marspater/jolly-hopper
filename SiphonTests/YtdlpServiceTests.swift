@@ -453,6 +453,43 @@ final class YtdlpServiceTests: XCTestCase {
         }
     }
 
+    func testBestCamURLDetectionAndHeaders() async throws {
+        let capturedArgsBox = TestBox<[String]>([])
+        service.processRunner = MockYtdlpProcessRunner(mockDownload: { args in
+            capturedArgsBox.value = args
+            return "[download] Destination: /tmp/test_bestcam.mp4\n"
+        })
+
+        var options = DownloadOptions.default
+        options.videoResolution = .r1080p
+
+        _ = try await service.download(
+            url: "https://bestcam.tv/21323036",
+            options: options,
+            onProgress: { _, _, _ in },
+            onOutput: { _ in }
+        )
+
+        XCTAssertTrue(capturedArgsBox.value.contains("Referer: https://abyssplayer.com/"))
+        XCTAssertTrue(capturedArgsBox.value.contains("Origin: https://abyssplayer.com"))
+        if let fIdx = capturedArgsBox.value.firstIndex(of: "-f") {
+            XCTAssertEqual(capturedArgsBox.value[fIdx + 1], "b/best")
+        }
+    }
+
+    func testBestCamAES256CTRDecryptionFixture() throws {
+        let filename = "7c9a1f00ba871cce7861afcf0dfe6.255724278.4"
+        let ciphertext = Data([0xe6, 0x4a, 0xbd, 0xed, 0xbe, 0xe1, 0x91, 0x3c, 0x6f, 0xaf, 0x93, 0x9a, 0xd6, 0x93, 0x83, 0x66])
+        let tempFileURL = FileManager.default.temporaryDirectory.appendingPathComponent("bestcam_test_\(UUID().uuidString).bin")
+        try ciphertext.write(to: tempFileURL)
+        defer { try? FileManager.default.removeItem(at: tempFileURL) }
+
+        try service.decryptBestCamFile(at: tempFileURL, filename: filename)
+        let plaintext = try Data(contentsOf: tempFileURL)
+        let headerHex = plaintext.prefix(16).map { String(format: "%02x", $0) }.joined()
+        XCTAssertEqual(headerHex, "000000206674797069736f6d00000200", "Decrypted stream must match MP4 container header")
+    }
+
     func testGFFDirectManifestAndMetadataExtraction() async throws {
         service.ytdlpPath = URL(fileURLWithPath: "/usr/local/bin/yt-dlp")
         
@@ -1700,6 +1737,9 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertTrue(path.contains("/opt/homebrew/bin"), "PATH must include Homebrew Apple Silicon bin")
         XCTAssertTrue(path.contains("/usr/local/bin"), "PATH must include Homebrew Intel bin")
         XCTAssertTrue(path.contains("/usr/bin"), "PATH must include standard system binaries")
+        XCTAssertEqual(env["HOME"], NSHomeDirectory(), "HOME must point to user home directory so browser cookie databases can be found")
+        XCTAssertTrue(env["XDG_CONFIG_HOME"]?.contains("SandboxHome") == true, "XDG_CONFIG_HOME must be isolated to SandboxHome")
+        XCTAssertTrue(env["XDG_CACHE_HOME"]?.contains("SandboxHome") == true, "XDG_CACHE_HOME must be isolated to SandboxHome")
     }
 
     func testJsRuntimeArgsAppendedInDownload() async throws {

@@ -1000,3 +1000,24 @@ final class MockURLProtocol: URLProtocol, @unchecked Sendable {
 
     override func stopLoading() {}
 }
+
+// MARK: - NotificationService Tests
+
+final class NotificationServiceTests: XCTestCase {
+    func testNotificationServiceDetectsTestEnvironment() {
+        XCTAssertTrue(NotificationService.isRunningTests, "NotificationService must detect that it is executing inside the test runner")
+    }
+
+    func testNotificationServiceSuppressesCenterDuringTests() {
+        XCTAssertFalse(NotificationService.shared.isNotificationCenterAvailable, "Notification center must be unavailable during test runs to prevent UNErrorDomain error 1")
+    }
+
+    func testNotificationServiceSafeNotificationsDuringTests() {
+        NotificationService.shared.setup()
+        NotificationService.shared.requestPermission()
+        NotificationService.shared.sendDownloadCompleted(filename: "sample_video.mp4")
+        NotificationService.shared.sendDownloadFailed(filename: "sample_video.mp4")
+        NotificationService.shared.sendDownloadStopped(filename: "sample_video.mp4")
+        NotificationService.shared.sendEncodingCompleted(filename: "sample_video.mp4", codec: "h264")
+    }
+}
