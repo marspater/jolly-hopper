@@ -85,6 +85,7 @@ struct DownloadRowView: View {
     @State private var showLog = false
     @State private var showDiagnostics = false
     @State private var isCopiedLog = false
+    @State private var isCopiedError = false
     @State private var showRawError = false
     
     var body: some View {
@@ -291,23 +292,40 @@ struct DownloadRowView: View {
                                 Button {
                                     NSPasteboard.general.clearContents()
                                     NSPasteboard.general.setString(info.rawError, forType: .string)
+                                    isCopiedError = true
+                                    Task {
+                                        try? await Task.sleep(nanoseconds: 1_500_000_000)
+                                        isCopiedError = false
+                                    }
                                 } label: {
-                                    Text(languageService.s("copy_error"))
-                                        .font(.geist(10, weight: .medium))
+                                    HStack(spacing: 3) {
+                                        Image(systemName: isCopiedError ? "checkmark" : "doc.on.doc")
+                                            .font(.geist(9))
+                                        Text(isCopiedError ? "Copied!" : languageService.s("copy_error"))
+                                            .font(.geist(10, weight: .medium))
+                                    }
                                 }
                                 .buttonStyle(.plain)
-                                .foregroundColor(SiphonTheme.accent)
+                                .foregroundColor(isCopiedError ? SiphonTheme.statusCompleted : SiphonTheme.accent)
+                                .help(languageService.s("copy_error"))
+                                .accessibilityLabel(isCopiedError ? "Copied!" : languageService.s("copy_error"))
                                 
                                 Spacer()
                                 
                                 Button {
                                     showLog = true
                                 } label: {
-                                    Text(languageService.s("download_log"))
-                                        .font(.geist(10, weight: .medium))
+                                    HStack(spacing: 3) {
+                                        Image(systemName: "doc.text")
+                                            .font(.geist(9))
+                                        Text(languageService.s("download_log"))
+                                            .font(.geist(10, weight: .medium))
+                                    }
                                 }
                                 .buttonStyle(.plain)
                                 .foregroundColor(.secondary)
+                                .help(languageService.s("download_log"))
+                                .accessibilityLabel(languageService.s("download_log"))
                             }
                             .padding(.horizontal, 2)
                         }
