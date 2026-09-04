@@ -462,7 +462,7 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
         let appPath = Bundle.main.bundlePath
         let proc = Process()
         proc.executableURL = URL(fileURLWithPath: "/usr/bin/codesign")
-        proc.arguments = ["-d", "--verbose=2", appPath]
+        proc.arguments = ["-d", "--verbose=2", "--", appPath]
         let pipe = Pipe()
         proc.standardError = pipe
         do {
