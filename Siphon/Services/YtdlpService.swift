@@ -2239,6 +2239,15 @@ class YtdlpService: ObservableObject {
     }
 
     func resolveBoyfriendTVStreamURLForDownload(streamURL: String, options: DownloadOptions) -> String {
+        // Signed HLS streams (e.g. containing /media=hls... or /key=...) use _TPL_.mp4 as the signed master playlist endpoint.
+        // The security key is cryptographically bound to the exact URI path. Modifying any part of the path (such as
+        // replacing _TPL_) breaks the token signature and returns HTTP 403 Forbidden ("x-message: Wrong key").
+        // Passing the master playlist URL directly to yt-dlp allows it to parse the master playlist and download
+        // the selected format using each stream's individually signed valid URL.
+        if streamURL.contains("media=hls") || streamURL.contains("/key=") {
+            return streamURL
+        }
+
         guard streamURL.contains("_TPL_") || streamURL.contains("_TPL") else {
             return streamURL
         }
