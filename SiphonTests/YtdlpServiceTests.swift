@@ -1859,6 +1859,20 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertTrue(res480.contains("1490652_480p.mp4"), "Must resolve _TPL_ to _480p.mp4 for 480p resolution")
     }
 
+    func testResolveBoyfriendTVSignedHLSStreamURLPreservesMasterPlaylist() {
+        let signedHlsStream = "https://cdn.boyfriendtv.com/key=M6TOhrRP25EtFcL8J+HFtg,end=1788548089/media=hls4A/multi=854x480:e54eeab7b34304bf87a5de82fb3acfb4,426x240:m_e54eeab7b34304bf87a5de82fb3acfb4,1280x720:hq_e54eeab7b34304bf87a5de82fb3acfb4,1920x1080:hd_e54eeab7b34304bf87a5de82fb3acfb4/2026-08/_TPL_.mp4"
+        
+        var options1080 = DownloadOptions.default
+        options1080.videoResolution = .r1080p
+        let res1080 = service.resolveBoyfriendTVStreamURLForDownload(streamURL: signedHlsStream, options: options1080)
+        XCTAssertEqual(res1080, signedHlsStream, "Signed HLS streams must preserve _TPL_.mp4 to avoid HMAC token invalidation (403 Forbidden)")
+
+        var options720 = DownloadOptions.default
+        options720.videoResolution = .r720p
+        let res720 = service.resolveBoyfriendTVStreamURLForDownload(streamURL: signedHlsStream, options: options720)
+        XCTAssertEqual(res720, signedHlsStream, "Signed HLS streams must preserve _TPL_.mp4 regardless of requested resolution")
+    }
+
     func testDownloadProcessControllerSingleOwnerAttachment() {
         let controller = DownloadProcessController()
         let proc1 = Process()
