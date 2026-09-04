@@ -3132,6 +3132,145 @@ class YtdlpService: ObservableObject {
         _ = try FileManager.default.replaceItemAt(fileURL, withItemAt: tempOutputURL)
     }
 
+    func parseBestCamSources(from json: [String: Any]) -> [BestCamSource] {
+        let mp4 = (json["mp4"] as? [String: Any]) ?? json
+        let fristDatas = (mp4["fristDatas"] as? [[String: Any]])
+            ?? (mp4["firstDatas"] as? [[String: Any]])
+            ?? (mp4["frist_datas"] as? [[String: Any]])
+            ?? (json["fristDatas"] as? [[String: Any]])
+            ?? []
+
+        func splitURLAndPath(fullUrl: String, fallbackPath: String? = nil) -> (url: String, path: String)? {
+            if let u = URL(string: fullUrl), let host = u.host {
+                let scheme = u.scheme ?? "https"
+                let base = "\(scheme)://\(host)"
+                var p = u.path
+                if p.hasPrefix("/") { p.removeFirst() }
+                if !p.isEmpty {
+                    return (base, p)
+                } else if let fallback = fallbackPath, !fallback.isEmpty {
+                    var fb = fallback
+                    if fb.hasPrefix("/") { fb.removeFirst() }
+                    return (base, fb)
+                }
+            }
+            return nil
+        }
+
+        var parsedSources: [BestCamSource] = []
+        if let rawSources = mp4["sources"] as? [[String: Any]] {
+            for raw in rawSources {
+                let label = (raw["label"] as? String) ?? "720p"
+                let resId = (raw["res_id"] as? Int) ?? 0
+                var size = (raw["size"] as? Int64) ?? Int64((raw["size"] as? Int) ?? 0)
+                var codec = (raw["codec"] as? String) ?? "h264"
+                let sub = (raw["sub"] as? String) ?? ""
+
+                // Check direct path & url in raw source (Schema A)
+                if let rawPath = raw["path"] as? String, !rawPath.isEmpty,
+                   let rawUrl = raw["url"] as? String, !rawUrl.isEmpty {
+                    var path = rawPath
+                    if path.hasPrefix("/") { path.removeFirst() }
+                    let sourceUrl: String
+                    if let parsed = URL(string: rawUrl), let host = parsed.host {
+                        sourceUrl = "\(parsed.scheme ?? "https")://\(host)"
+                        if parsed.path.count > 1 && path.isEmpty {
+                            var pp = parsed.path
+                            if pp.hasPrefix("/") { pp.removeFirst() }
+                            path = pp
+                        }
+                    } else {
+                        sourceUrl = rawUrl
+                    }
+                    parsedSources.append(BestCamSource(
+                        label: label,
+                        resId: resId,
+                        size: size,
+                        codec: codec,
+                        path: path,
+                        url: sourceUrl,
+                        sub: sub
+                    ))
+                    continue
+                }
+
+                // Fall back to matching fristDatas by res_id or size (Schema B)
+                let matchedFrist = fristDatas.first(where: {
+                    if resId > 0, let fResId = $0["res_id"] as? Int, fResId == resId {
+                        return true
+                    }
+                    return false
+                }) ?? fristDatas.first(where: {
+                    if size > 0 {
+                        let fSize = ($0["size"] as? Int64) ?? Int64(($0["size"] as? Int) ?? 0)
+                        return fSize == size
+                    }
+                    return false
+                })
+
+                if let matched = matchedFrist {
+                    let fdUrl = (matched["url"] as? String) ?? (matched["path"] as? String) ?? ""
+                    if let (base, p) = splitURLAndPath(fullUrl: fdUrl, fallbackPath: raw["path"] as? String) {
+                        if size == 0 {
+                            size = (matched["size"] as? Int64) ?? Int64((matched["size"] as? Int) ?? 0)
+                        }
+                        if codec.isEmpty, let c = matched["codec"] as? String {
+                            codec = c
+                        }
+                        parsedSources.append(BestCamSource(
+                            label: label,
+                            resId: resId,
+                            size: size,
+                            codec: codec,
+                            path: p,
+                            url: base,
+                            sub: sub
+                        ))
+                    }
+                }
+            }
+        }
+
+        // If rawSources was empty or failed to parse, attempt direct extraction from fristDatas
+        if parsedSources.isEmpty && !fristDatas.isEmpty {
+            for fd in fristDatas {
+                let resId = (fd["res_id"] as? Int) ?? 0
+                let size = (fd["size"] as? Int64) ?? Int64((fd["size"] as? Int) ?? 0)
+                let codec = (fd["codec"] as? String) ?? "h264"
+                let fdUrl = (fd["url"] as? String) ?? (fd["path"] as? String) ?? ""
+                guard let (base, p) = splitURLAndPath(fullUrl: fdUrl) else { continue }
+                let label: String
+                switch resId {
+                case 1: label = "240p"
+                case 2: label = "360p"
+                case 3: label = "480p"
+                case 4: label = "720p"
+                case 5: label = "1080p"
+                case 6: label = "2160p"
+                default: label = resId > 0 ? "\(resId)p" : "720p"
+                }
+                parsedSources.append(BestCamSource(
+                    label: label,
+                    resId: resId,
+                    size: size,
+                    codec: codec,
+                    path: p,
+                    url: base,
+                    sub: ""
+                ))
+            }
+        }
+
+        parsedSources.sort { s1, s2 in
+            if s1.resId != s2.resId {
+                return s1.resId > s2.resId
+            }
+            return s1.size > s2.size
+        }
+
+        return parsedSources
+    }
+
     func resolveBestCamMediaInfo(url: String, rawCookies: String? = nil, requestedFormat: String? = nil) async -> BestCamExtractedMedia? {
         let targetUrl = normalizeURLForYtdlp(url)
         guard let pageURL = URL(string: targetUrl) else { return nil }
@@ -3285,6 +3424,33 @@ class YtdlpService: ObservableObject {
             }
         }
 
+        if datasB64 == nil && infoJSON == nil {
+            let appSupportYtdlp = Self.getAppSupportDirectory().appendingPathComponent("yt-dlp")
+            let ytdlpBinary = ytdlpPath ?? Bundle.main.url(forResource: "yt-dlp", withExtension: nil) ?? (FileManager.default.fileExists(atPath: appSupportYtdlp.path) ? appSupportYtdlp : nil)
+            if let ytdlp = ytdlpBinary {
+                var dumpArgs = [ytdlp.path, "--ignore-config", "--dump-pages"]
+                appendSiteSpecificArgs(for: embedURL, to: &dumpArgs)
+                dumpArgs.append("--")
+                dumpArgs.append(embedURL)
+                if let output = try? await processRunner.runCommand(dumpArgs) {
+                    for line in output.split(whereSeparator: \.isNewline) {
+                        let trimmed = String(line).trimmingCharacters(in: .whitespaces)
+                        if !trimmed.starts(with: "#") && !trimmed.starts(with: "[") && !trimmed.starts(with: "WARNING") && !trimmed.starts(with: "ERROR") {
+                            if let decodedData = Data(base64Encoded: trimmed, options: .ignoreUnknownCharacters),
+                               let pageHtml = String(decoding: decodedData, as: UTF8.self) as String?,
+                               !pageHtml.isEmpty {
+                                if let m = pageHtml.range(of: "const datas = \"([^\"]+)\"", options: .regularExpression) {
+                                    let matched = String(pageHtml[m])
+                                    datasB64 = matched.replacingOccurrences(of: "const datas = \"", with: "").replacingOccurrences(of: "\"", with: "")
+                                    break
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         var userIdVal: Any? = nil
         var md5IdVal: Any? = nil
         var mediaVal: String? = nil
@@ -3314,39 +3480,8 @@ class YtdlpService: ObservableObject {
             return nil
         }
 
-        var parsedSources: [BestCamSource] = []
-        if let mp4 = decryptedJson["mp4"] as? [String: Any],
-           let rawSources = mp4["sources"] as? [[String: Any]] {
-            for raw in rawSources {
-                guard let path = raw["path"] as? String, !path.isEmpty,
-                      let sourceUrl = raw["url"] as? String, !sourceUrl.isEmpty else {
-                    continue
-                }
-                let label = (raw["label"] as? String) ?? "720p"
-                let resId = (raw["res_id"] as? Int) ?? 0
-                let size = (raw["size"] as? Int64) ?? Int64((raw["size"] as? Int) ?? 0)
-                let codec = (raw["codec"] as? String) ?? "h264"
-                let sub = (raw["sub"] as? String) ?? ""
-                parsedSources.append(BestCamSource(
-                    label: label,
-                    resId: resId,
-                    size: size,
-                    codec: codec,
-                    path: path,
-                    url: sourceUrl,
-                    sub: sub
-                ))
-            }
-        }
-
+        let parsedSources = parseBestCamSources(from: decryptedJson)
         guard !parsedSources.isEmpty else { return nil }
-
-        parsedSources.sort { s1, s2 in
-            if s1.resId != s2.resId {
-                return s1.resId > s2.resId
-            }
-            return s1.size > s2.size
-        }
 
         let chosenSource: BestCamSource
         if let reqFmt = requestedFormat, let matched = parsedSources.first(where: { $0.label.lowercased() == reqFmt.lowercased() }) {
@@ -3357,6 +3492,13 @@ class YtdlpService: ObservableObject {
 
         let streamURL = "\(chosenSource.url)/\(chosenSource.path)"
         let encryptedFilename = chosenSource.path.components(separatedBy: "/").last
+
+        if title == "BestCam Video", let t = (infoJSON?["title"] as? String) ?? (decryptedJson["title"] as? String), !t.isEmpty {
+            title = t
+        }
+        if thumbnailURL == nil, let poster = (infoJSON?["poster"] as? String) ?? (decryptedJson["poster"] as? String), !poster.isEmpty {
+            thumbnailURL = poster
+        }
 
         return BestCamExtractedMedia(
             streamURL: streamURL,

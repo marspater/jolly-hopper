@@ -490,6 +490,73 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertEqual(headerHex, "000000206674797069736f6d00000200", "Decrypted stream must match MP4 container header")
     }
 
+    func testBestCamSourceParsingFromFristDatasSchema() throws {
+        let json: [String: Any] = [
+            "mp4": [
+                "sources": [
+                    ["label": "360p", "res_id": 2, "size": 1014770239, "codec": "h264", "status": true, "sub": "yurawzq6o26"],
+                    ["label": "720p", "res_id": 4, "size": 2002023463, "codec": "h264", "status": true, "sub": "rzc8up3i3"]
+                ],
+                "domains": ["rzc8up3i3.sssrr.org", "yurawzq6o26.sssrr.org"],
+                "fristDatas": [
+                    [
+                        "res_id": 4,
+                        "size": 2002023463,
+                        "codec": "h264",
+                        "url": "https://yrir7uaz632.sssrr.org/0/9/c/a01d8a6a564dfc44904ef5f1cba11.2002023463.4.fd",
+                        "partSize": 16777216
+                    ],
+                    [
+                        "res_id": 2,
+                        "size": 1014770239,
+                        "codec": "h264",
+                        "url": "https://9p7jrkb8.sssrr.org/3/c/9/0e9b8d401dcb3be9277c40cc5a1c5.1014770239.2.fd",
+                        "partSize": 2097152
+                    ]
+                ]
+            ]
+        ]
+
+        let sources = service.parseBestCamSources(from: json)
+        XCTAssertEqual(sources.count, 2)
+        let s720 = sources.first(where: { $0.label == "720p" })
+        XCTAssertNotNil(s720)
+        XCTAssertEqual(s720?.url, "https://yrir7uaz632.sssrr.org")
+        XCTAssertEqual(s720?.path, "0/9/c/a01d8a6a564dfc44904ef5f1cba11.2002023463.4.fd")
+        XCTAssertEqual(s720?.size, 2002023463)
+
+        let s360 = sources.first(where: { $0.label == "360p" })
+        XCTAssertNotNil(s360)
+        XCTAssertEqual(s360?.url, "https://9p7jrkb8.sssrr.org")
+        XCTAssertEqual(s360?.path, "3/c/9/0e9b8d401dcb3be9277c40cc5a1c5.1014770239.2.fd")
+        XCTAssertEqual(s360?.size, 1014770239)
+    }
+
+    func testBestCamSourceParsingFromDirectSourcesSchema() throws {
+        let json: [String: Any] = [
+            "mp4": [
+                "sources": [
+                    [
+                        "label": "720p",
+                        "res_id": 4,
+                        "size": 18237192,
+                        "codec": "h264",
+                        "path": "a/b/c/sample.mp4",
+                        "url": "https://media.sssrr.org",
+                        "sub": "sub1"
+                    ]
+                ]
+            ]
+        ]
+
+        let sources = service.parseBestCamSources(from: json)
+        XCTAssertEqual(sources.count, 1)
+        XCTAssertEqual(sources.first?.label, "720p")
+        XCTAssertEqual(sources.first?.url, "https://media.sssrr.org")
+        XCTAssertEqual(sources.first?.path, "a/b/c/sample.mp4")
+        XCTAssertEqual(sources.first?.size, 18237192)
+    }
+
     func testGFFDirectManifestAndMetadataExtraction() async throws {
         service.ytdlpPath = URL(fileURLWithPath: "/usr/local/bin/yt-dlp")
         
