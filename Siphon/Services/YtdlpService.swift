@@ -159,7 +159,7 @@ actor DependencyInstaller {
         let runGzip: (String) async throws -> Void = { path in
             let proc = Process()
             proc.executableURL = URL(fileURLWithPath: "/usr/bin/gzip")
-            proc.arguments = ["-d", "-f", path]
+            proc.arguments = ["-d", "-f", "--", path]
             proc.environment = YtdlpService.createSanitizedEnvironment()
             try proc.run()
             proc.waitUntilExit()
