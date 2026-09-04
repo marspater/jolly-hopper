@@ -1,5 +1,6 @@
 import Foundation
 import CryptoKit
+import CommonCrypto
 import AppKit
 
 struct DependencyChecksums {
@@ -426,7 +427,7 @@ class YtdlpService: ObservableObject {
 
         var env: [String: String] = [:]
         env["PATH"] = searchPaths.joined(separator: ":")
-        env["HOME"] = isolatedHome.path
+        env["HOME"] = homeDir
         env["TMPDIR"] = FileManager.default.temporaryDirectory.path
         env["XDG_CONFIG_HOME"] = isolatedHome.appendingPathComponent(".config").path
         env["XDG_CACHE_HOME"] = isolatedHome.appendingPathComponent(".cache").path
@@ -786,6 +787,37 @@ class YtdlpService: ObservableObject {
             }
         }
 
+        if isBestCamURL(url) {
+            LoggerService.shared.log("Initiating BestCam media info resolution for: \(LoggerService.sanitizeURLForLog(url))", level: .info)
+            if let bestCamMedia = await resolveBestCamMediaInfo(url: url, rawCookies: rawCookies) {
+                LoggerService.shared.log("BestCam media successfully extracted: '\(bestCamMedia.title)' with \(bestCamMedia.allSources.count) format(s)", level: .info)
+                let formats: [MediaFormat] = bestCamMedia.allSources.map { src in
+                    let quality = src.label
+                    let height = Int(quality.replacingOccurrences(of: "p", with: "")) ?? 720
+                    return MediaFormat(
+                        formatId: quality,
+                        ext: "mp4",
+                        resolution: "\(Int(Double(height) * 16.0 / 9.0))x\(height)",
+                        fps: 30.0,
+                        vcodec: src.codec.isEmpty ? "h264" : src.codec,
+                        acodec: "aac",
+                        tbr: nil,
+                        filesize: src.size > 0 ? src.size : nil
+                    )
+                }
+                return MediaInfo(
+                    id: url,
+                    title: bestCamMedia.title,
+                    thumbnail: bestCamMedia.thumbnailURL,
+                    duration: bestCamMedia.duration,
+                    uploader: "BestCam",
+                    formats: formats.isEmpty ? nil : formats
+                )
+            } else {
+                LoggerService.shared.log("BestCam custom extractor could not resolve media directly. Falling back to yt-dlp native extraction...", level: .warning)
+            }
+        }
+
         var args = [
             path,
             "--ignore-config",
@@ -1015,6 +1047,8 @@ class YtdlpService: ObservableObject {
         var customResolvedTitle: String? = nil
         var customEmbedURL: String? = nil
         var customThumbnailURL: String? = nil
+        var bestCamDecryptionKey: String? = nil
+
         if isBoyfriendTVURL(url) {
             if let btvMedia = await resolveBoyfriendTVMediaInfo(url: url, rawCookies: options.rawCookies) {
                 targetURL = resolveBoyfriendTVStreamURLForDownload(streamURL: btvMedia.streamURL, options: options)
@@ -1035,6 +1069,14 @@ class YtdlpService: ObservableObject {
                 customResolvedTitle = gffMedia.title
                 customEmbedURL = gffMedia.embedURL
                 customThumbnailURL = gffMedia.thumbnailURL
+            }
+        } else if isBestCamURL(url) {
+            if let bestCamMedia = await resolveBestCamMediaInfo(url: url, rawCookies: options.rawCookies, requestedFormat: options.selectedFormatId) {
+                targetURL = bestCamMedia.streamURL
+                customResolvedTitle = bestCamMedia.title
+                customEmbedURL = bestCamMedia.embedURL
+                customThumbnailURL = bestCamMedia.thumbnailURL
+                bestCamDecryptionKey = bestCamMedia.encryptedFilename
             }
         }
 
@@ -1235,7 +1277,9 @@ class YtdlpService: ObservableObject {
                     }
                     if let idx = currentArgs.firstIndex(of: "--cookies-from-browser"), idx + 1 < currentArgs.count {
                         let failedBrowser = currentArgs[idx + 1]
-                        if let altBrowser = ["chrome", "brave", "firefox", "edge", "safari"].first(where: { $0 != failedBrowser && ($0 != "safari" || Self.hasFullDiskAccess) && !triedAltBrowsers.contains($0) }) {
+                        let installed = BrowserUtils.shared.getInstalledBrowsers().map { $0.id.lowercased() }
+                        let pool = installed.isEmpty ? ["chrome", "brave", "firefox", "edge", "safari"] : ["chrome", "brave", "firefox", "edge", "safari"].filter { installed.contains($0) }
+                        if let altBrowser = pool.first(where: { $0 != failedBrowser && ($0 != "safari" || Self.hasFullDiskAccess) && !triedAltBrowsers.contains($0) }) {
                             triedAltBrowsers.insert(altBrowser)
                             LoggerService.shared.log("Browser cookie access failed for '\(failedBrowser)'. Retrying download with alternative browser cookies from '\(altBrowser)'...", level: .info)
                             onOutput("[Siphon Info] Retrying with cookies from \(altBrowser.capitalized)...\n")
@@ -1336,6 +1380,11 @@ class YtdlpService: ObservableObject {
             throw YtdlpError.downloadFailed("Download failed across all recovery strategies.")
         }
         let finalFileURL = URL(fileURLWithPath: finalOutputPath, relativeTo: options.saveFolder).absoluteURL
+
+        if let key = bestCamDecryptionKey {
+            onOutput("[Siphon Info] Decrypting downloaded stream...\n")
+            try decryptBestCamFile(at: finalFileURL, filename: key)
+        }
 
         // Post-download cover art fallback: if the output file lacks an embedded thumbnail and we have a local cover image, embed it via FFmpeg
         if options.embedThumbnail && FileManager.default.fileExists(atPath: scratchThumbnailURL.path) {
@@ -1563,9 +1612,11 @@ class YtdlpService: ObservableObject {
         let isSynthesizedDirectStream = (mediaInfo?.uploader == "Guywh" || isGuywhURL(mediaInfo?.id ?? "")) ||
                                         (mediaInfo?.uploader == "GayForFans" || isGFFURL(mediaInfo?.id ?? "")) ||
                                         (mediaInfo?.uploader == "BoyfriendTV" || isBoyfriendTVURL(mediaInfo?.id ?? "")) ||
+                                        (mediaInfo?.uploader == "BestCam" || isBestCamURL(mediaInfo?.id ?? "")) ||
                                         (url.map(isGuywhURL) ?? false) ||
                                         (url.map(isGFFURL) ?? false) ||
-                                        (url.map(isBoyfriendTVURL) ?? false)
+                                        (url.map(isBoyfriendTVURL) ?? false) ||
+                                        (url.map(isBestCamURL) ?? false)
 
         // 1. Explicit user-specified format ID
         if let customFormatId = options.selectedFormatId, !customFormatId.isEmpty, Self.isSafeFormatId(customFormatId) {
@@ -2921,6 +2972,395 @@ class YtdlpService: ObservableObject {
         )
     }
 
+    // MARK: - BestCam / Abyss Extractor
+
+    func isBestCamURL(_ urlOrHost: String) -> Bool {
+        let host = (URL(string: urlOrHost)?.host ?? urlOrHost).lowercased()
+        return host == "bestcam.tv" || host.hasSuffix(".bestcam.tv") ||
+               host == "abyssplayer.com" || host.hasSuffix(".abyssplayer.com") ||
+               host == "abyss.to" || host.hasSuffix(".abyss.to")
+    }
+
+    struct BestCamSource: Sendable {
+        let label: String
+        let resId: Int
+        let size: Int64
+        let codec: String
+        let path: String
+        let url: String
+        let sub: String
+    }
+
+    struct BestCamExtractedMedia: Sendable {
+        let streamURL: String
+        let embedURL: String
+        let title: String
+        let thumbnailURL: String?
+        let duration: Double?
+        let quality: String?
+        let encryptedFilename: String?
+        let allSources: [BestCamSource]
+    }
+
+    private func decryptAES256CTRData(data: Data, keyStr: String) -> Data? {
+        let digest = Insecure.MD5.hash(data: Data(keyStr.utf8))
+        let keyHex = digest.map { String(format: "%02x", $0) }.joined()
+        guard let keyData = keyHex.data(using: .ascii), keyData.count == 32 else { return nil }
+        let ivData = keyData.prefix(16)
+
+        var cryptor: CCCryptorRef?
+        let createStatus = keyData.withUnsafeBytes { keyBytes in
+            ivData.withUnsafeBytes { ivBytes in
+                CCCryptorCreateWithMode(
+                    CCOperation(kCCDecrypt),
+                    CCMode(kCCModeCTR),
+                    CCAlgorithm(kCCAlgorithmAES),
+                    CCPadding(ccNoPadding),
+                    ivBytes.baseAddress,
+                    keyBytes.baseAddress,
+                    32,
+                    nil, 0, 0, 0,
+                    &cryptor
+                )
+            }
+        }
+        guard createStatus == kCCSuccess, let ref = cryptor else { return nil }
+        defer { CCCryptorRelease(ref) }
+
+        let capacity = data.count
+        var decryptedData = Data(count: capacity)
+        var dataOutMoved = 0
+        let updateStatus = data.withUnsafeBytes { inBytes in
+            decryptedData.withUnsafeMutableBytes { outBytes in
+                CCCryptorUpdate(
+                    ref,
+                    inBytes.baseAddress,
+                    capacity,
+                    outBytes.baseAddress,
+                    capacity,
+                    &dataOutMoved
+                )
+            }
+        }
+        guard updateStatus == kCCSuccess else { return nil }
+        return decryptedData.prefix(dataOutMoved)
+    }
+
+    func decryptBestCamFile(at fileURL: URL, filename: String) throws {
+        let digest = Insecure.MD5.hash(data: Data(filename.utf8))
+        let keyHex = digest.map { String(format: "%02x", $0) }.joined()
+        guard let keyData = keyHex.data(using: .ascii), keyData.count == 32 else {
+            throw YtdlpError.downloadFailed("Invalid stream decryption key")
+        }
+        let ivData = keyData.prefix(16)
+
+        var cryptor: CCCryptorRef?
+        let createStatus = keyData.withUnsafeBytes { keyBytes in
+            ivData.withUnsafeBytes { ivBytes in
+                CCCryptorCreateWithMode(
+                    CCOperation(kCCDecrypt),
+                    CCMode(kCCModeCTR),
+                    CCAlgorithm(kCCAlgorithmAES),
+                    CCPadding(ccNoPadding),
+                    ivBytes.baseAddress,
+                    keyBytes.baseAddress,
+                    32,
+                    nil, 0, 0, 0,
+                    &cryptor
+                )
+            }
+        }
+        guard createStatus == kCCSuccess, let ref = cryptor else {
+            throw YtdlpError.downloadFailed("Failed to initialize stream decryptor")
+        }
+        defer { CCCryptorRelease(ref) }
+
+        let tempOutputURL = fileURL.deletingLastPathComponent().appendingPathComponent("decrypted_\(UUID().uuidString)_\(fileURL.lastPathComponent)")
+        FileManager.default.createFile(atPath: tempOutputURL.path, contents: nil)
+        guard let readHandle = try? FileHandle(forReadingFrom: fileURL),
+              let writeHandle = try? FileHandle(forWritingTo: tempOutputURL) else {
+            try? FileManager.default.removeItem(at: tempOutputURL)
+            throw YtdlpError.downloadFailed("Failed to open file handles for stream decryption")
+        }
+        defer {
+            try? readHandle.close()
+            try? writeHandle.close()
+        }
+
+        let chunkSize = 1024 * 1024
+        var buffer = Data(count: chunkSize)
+
+        while true {
+            let chunk = readHandle.readData(ofLength: chunkSize)
+            if chunk.isEmpty { break }
+
+            let capacity = chunk.count
+            if buffer.count < capacity {
+                buffer = Data(count: capacity)
+            }
+            var dataOutMoved = 0
+            let updateStatus = chunk.withUnsafeBytes { inBytes in
+                buffer.withUnsafeMutableBytes { outBytes in
+                    CCCryptorUpdate(
+                        ref,
+                        inBytes.baseAddress,
+                        capacity,
+                        outBytes.baseAddress,
+                        capacity,
+                        &dataOutMoved
+                    )
+                }
+            }
+            guard updateStatus == kCCSuccess else {
+                try? FileManager.default.removeItem(at: tempOutputURL)
+                throw YtdlpError.downloadFailed("Stream decryption update failed")
+            }
+            writeHandle.write(buffer.prefix(dataOutMoved))
+        }
+
+        try? readHandle.close()
+        try? writeHandle.close()
+        _ = try FileManager.default.replaceItemAt(fileURL, withItemAt: tempOutputURL)
+    }
+
+    func resolveBestCamMediaInfo(url: String, rawCookies: String? = nil, requestedFormat: String? = nil) async -> BestCamExtractedMedia? {
+        let targetUrl = normalizeURLForYtdlp(url)
+        guard let pageURL = URL(string: targetUrl) else { return nil }
+
+        var title = "BestCam Video"
+        var thumbnailURL: String? = nil
+        var abyssSlug: String? = nil
+
+        let host = (pageURL.host ?? "").lowercased()
+        if host.contains("abyssplayer.com") || host.contains("abyss.to") {
+            abyssSlug = pageURL.lastPathComponent
+        } else {
+            var html = ""
+            if processRunner is DefaultYtdlpProcessRunner {
+                var request = URLRequest(url: pageURL)
+                request.timeoutInterval = 8.0
+                request.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36", forHTTPHeaderField: "User-Agent")
+                request.setValue("https://bestcam.tv/", forHTTPHeaderField: "Referer")
+                if let raw = rawCookies, !raw.isEmpty {
+                    request.setValue(raw, forHTTPHeaderField: "Cookie")
+                }
+                if let (data, response) = try? await URLSession.shared.data(for: request),
+                   let httpResponse = response as? HTTPURLResponse,
+                   (200...299).contains(httpResponse.statusCode),
+                   let fetched = String(data: data, encoding: .utf8) {
+                    html = fetched
+                }
+            }
+
+            if html.isEmpty {
+                let appSupportYtdlp = Self.getAppSupportDirectory().appendingPathComponent("yt-dlp")
+                let ytdlpBinary = ytdlpPath ?? Bundle.main.url(forResource: "yt-dlp", withExtension: nil) ?? (FileManager.default.fileExists(atPath: appSupportYtdlp.path) ? appSupportYtdlp : nil)
+                if let ytdlp = ytdlpBinary {
+                    var dumpArgs = [ytdlp.path, "--ignore-config", "--dump-pages"]
+                    appendSiteSpecificArgs(for: targetUrl, to: &dumpArgs)
+                    dumpArgs.append("--")
+                    dumpArgs.append(targetUrl)
+                    if let output = try? await processRunner.runCommand(dumpArgs) {
+                        var chunks: [String] = []
+                        for line in output.split(whereSeparator: \.isNewline) {
+                            let trimmed = String(line).trimmingCharacters(in: .whitespaces)
+                            if !trimmed.starts(with: "#") && !trimmed.starts(with: "[") && !trimmed.starts(with: "WARNING") && !trimmed.starts(with: "ERROR") {
+                                if let decodedData = Data(base64Encoded: trimmed, options: .ignoreUnknownCharacters),
+                                   let decodedString = String(decoding: decodedData, as: UTF8.self) as String?,
+                                   !decodedString.isEmpty {
+                                    chunks.append(decodedString)
+                                }
+                            }
+                        }
+                        if !chunks.isEmpty {
+                            html = chunks.joined()
+                        }
+                    }
+                }
+            }
+
+            guard !html.isEmpty else { return nil }
+
+            // Extract Title
+            let titlePatterns = [
+                "property=[\"']og:title[\"']\\s+content=[\"']([^\"']+)[\"']",
+                "<h1[^>]*>([^<]+)</h1>",
+                "<title>(.*?)</title>"
+            ]
+            for pattern in titlePatterns {
+                if let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]),
+                   let match = regex.firstMatch(in: html, options: [], range: NSRange(location: 0, length: (html as NSString).length)),
+                   match.numberOfRanges > 1 {
+                    let rawTitle = (html as NSString).substring(with: match.range(at: 1))
+                        .replacingOccurrences(of: "(?i) - bestcam\\.tv", with: "", options: .regularExpression)
+                        .replacingOccurrences(of: "(?i)bestcam\\.tv - ", with: "", options: .regularExpression)
+                        .trimmingCharacters(in: .whitespacesAndNewlines)
+                        .decodingHTMLEntities()
+                    if !rawTitle.isEmpty {
+                        title = rawTitle
+                        break
+                    }
+                }
+            }
+
+            // Extract Thumbnail
+            let thumbPatterns = [
+                "property=[\"']og:image[\"']\\s+content=[\"'](https?://[^\"']+)[\"']",
+                "preview_url\\s*:\\s*['\"](https?://[^'\"]+)[\"']",
+                "poster=[\"'](https?://[^\"']+)[\"']"
+            ]
+            for pattern in thumbPatterns {
+                if let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]),
+                   let match = regex.firstMatch(in: html, options: [], range: NSRange(location: 0, length: (html as NSString).length)),
+                   match.numberOfRanges > 1 {
+                    let candidate = (html as NSString).substring(with: match.range(at: 1))
+                        .replacingOccurrences(of: "\\/", with: "/")
+                    if candidate.hasPrefix("http") {
+                        thumbnailURL = candidate
+                        break
+                    }
+                }
+            }
+
+            // Extract Abyss slug from iframe
+            let iframePatterns = [
+                "abyssplayer\\.com/([a-zA-Z0-9_-]+)",
+                "abyss\\.to/([a-zA-Z0-9_-]+)"
+            ]
+            for pattern in iframePatterns {
+                if let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]),
+                   let match = regex.firstMatch(in: html, options: [], range: NSRange(location: 0, length: (html as NSString).length)),
+                   match.numberOfRanges > 1 {
+                    abyssSlug = (html as NSString).substring(with: match.range(at: 1))
+                    break
+                }
+            }
+        }
+
+        guard let slug = abyssSlug, !slug.isEmpty else { return nil }
+        let embedURL = "https://abyssplayer.com/\(slug)"
+
+        var datasB64: String? = nil
+        var infoJSON: [String: Any]? = nil
+
+        let abyssPageURL = URL(string: embedURL)!
+        var abyssReq = URLRequest(url: abyssPageURL)
+        abyssReq.timeoutInterval = 8.0
+        abyssReq.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36", forHTTPHeaderField: "User-Agent")
+        abyssReq.setValue("https://bestcam.tv/", forHTTPHeaderField: "Referer")
+
+        if let (data, response) = try? await URLSession.shared.data(for: abyssReq),
+           let httpResponse = response as? HTTPURLResponse,
+           (200...299).contains(httpResponse.statusCode),
+           let pageHtml = String(data: data, encoding: .utf8) {
+            if let m = pageHtml.range(of: "const datas = \"([^\"]+)\"", options: .regularExpression) {
+                let matched = String(pageHtml[m])
+                datasB64 = matched.replacingOccurrences(of: "const datas = \"", with: "").replacingOccurrences(of: "\"", with: "")
+            }
+        }
+
+        if datasB64 == nil {
+            if let infoURL = URL(string: "https://abyssplayer.com/info/\(slug)") {
+                var infoReq = URLRequest(url: infoURL)
+                infoReq.timeoutInterval = 8.0
+                infoReq.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36", forHTTPHeaderField: "User-Agent")
+                infoReq.setValue("https://bestcam.tv/", forHTTPHeaderField: "Referer")
+                infoReq.setValue("https://bestcam.tv/", forHTTPHeaderField: "x-referer")
+                infoReq.setValue("1920x1080", forHTTPHeaderField: "x-client-screen")
+                if let (data, response) = try? await URLSession.shared.data(for: infoReq),
+                   let httpResponse = response as? HTTPURLResponse,
+                   (200...299).contains(httpResponse.statusCode),
+                   let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                    infoJSON = json
+                }
+            }
+        }
+
+        var userIdVal: Any? = nil
+        var md5IdVal: Any? = nil
+        var mediaVal: String? = nil
+
+        if let b64 = datasB64,
+           let decodedData = Data(base64Encoded: b64),
+           let latinStr = String(data: decodedData, encoding: .isoLatin1),
+           let utf8Data = latinStr.data(using: .utf8),
+           let json = try? JSONSerialization.jsonObject(with: utf8Data) as? [String: Any] {
+            userIdVal = json["user_id"]
+            md5IdVal = json["md5_id"]
+            mediaVal = json["media"] as? String
+        } else if let json = infoJSON {
+            userIdVal = json["user_id"]
+            md5IdVal = json["md5_id"]
+            mediaVal = json["media"] as? String
+        }
+
+        guard let userId = userIdVal, let md5Id = md5IdVal, let mediaStr = mediaVal else {
+            return nil
+        }
+
+        let keyStr = "\(userId):\(slug):\(md5Id)"
+        let mediaBytes = Data(mediaStr.unicodeScalars.map { UInt8($0.value & 0xFF) })
+        guard let decryptedData = decryptAES256CTRData(data: mediaBytes, keyStr: keyStr),
+              let decryptedJson = try? JSONSerialization.jsonObject(with: decryptedData) as? [String: Any] else {
+            return nil
+        }
+
+        var parsedSources: [BestCamSource] = []
+        if let mp4 = decryptedJson["mp4"] as? [String: Any],
+           let rawSources = mp4["sources"] as? [[String: Any]] {
+            for raw in rawSources {
+                guard let path = raw["path"] as? String, !path.isEmpty,
+                      let sourceUrl = raw["url"] as? String, !sourceUrl.isEmpty else {
+                    continue
+                }
+                let label = (raw["label"] as? String) ?? "720p"
+                let resId = (raw["res_id"] as? Int) ?? 0
+                let size = (raw["size"] as? Int64) ?? Int64((raw["size"] as? Int) ?? 0)
+                let codec = (raw["codec"] as? String) ?? "h264"
+                let sub = (raw["sub"] as? String) ?? ""
+                parsedSources.append(BestCamSource(
+                    label: label,
+                    resId: resId,
+                    size: size,
+                    codec: codec,
+                    path: path,
+                    url: sourceUrl,
+                    sub: sub
+                ))
+            }
+        }
+
+        guard !parsedSources.isEmpty else { return nil }
+
+        parsedSources.sort { s1, s2 in
+            if s1.resId != s2.resId {
+                return s1.resId > s2.resId
+            }
+            return s1.size > s2.size
+        }
+
+        let chosenSource: BestCamSource
+        if let reqFmt = requestedFormat, let matched = parsedSources.first(where: { $0.label.lowercased() == reqFmt.lowercased() }) {
+            chosenSource = matched
+        } else {
+            chosenSource = parsedSources.first!
+        }
+
+        let streamURL = "\(chosenSource.url)/\(chosenSource.path)"
+        let encryptedFilename = chosenSource.path.components(separatedBy: "/").last
+
+        return BestCamExtractedMedia(
+            streamURL: streamURL,
+            embedURL: embedURL,
+            title: title,
+            thumbnailURL: thumbnailURL,
+            duration: nil,
+            quality: chosenSource.label,
+            encryptedFilename: encryptedFilename,
+            allSources: parsedSources
+        )
+    }
+
     private func normalizeURLForYtdlp(_ urlString: String, depth: Int = 0) -> String {
         guard depth < 3 else { return urlString }
         guard var components = URLComponents(string: urlString) else { return urlString }
@@ -3029,6 +3469,12 @@ class YtdlpService: ObservableObject {
             if components.path.hasPrefix("/video/") {
                 components.path = components.path.replacingOccurrences(of: "^/video/", with: "/videos/", options: .regularExpression)
             }
+            return components.url?.absoluteString ?? components.string ?? urlString
+        }
+
+        // 7. BestCam normalization
+        if isBestCamURL(host) {
+            components.scheme = "https"
             return components.url?.absoluteString ?? components.string ?? urlString
         }
 
@@ -3249,7 +3695,15 @@ class YtdlpService: ObservableObject {
             args.append(contentsOf: ["--add-header", "Referer: https://gayforfans.com/"])
             args.append(contentsOf: ["--add-header", "Origin: https://gayforfans.com"])
             args.append(contentsOf: ["--add-header", "Accept: */*"])
-            args.append(contentsOf: ["--hls-use-mpegts"])
+        } else if isBestCamURL(parsedHost) || isBestCamURL(url) || parsedHost.contains("sssrr.org") || parsedHost.contains("abyssplayer") || parsedHost.contains("abyss.to") {
+            if let uaIdx = args.firstIndex(of: "--user-agent") {
+                args[uaIdx + 1] = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+            } else {
+                args.append(contentsOf: ["--user-agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"])
+            }
+            args.append(contentsOf: ["--add-header", "Referer: https://abyssplayer.com/"])
+            args.append(contentsOf: ["--add-header", "Origin: https://abyssplayer.com"])
+            args.append(contentsOf: ["--add-header", "Accept: */*"])
         } else if parsedHost == "single-stream video site.com" || parsedHost.hasSuffix(".single-stream video site.com") {
             args.append(contentsOf: ["--add-header", "Referer:https://single-stream video site.com/"])
         } else if lowerUrl.contains(".m3u8") || lowerUrl.contains(".mpd") {
@@ -3351,7 +3805,9 @@ class YtdlpService: ObservableObject {
                     recordCookieDenial(browser: browser, url: urlArg)
                 }
                 
-                let altBrowsers = ["chrome", "brave", "firefox", "edge", "safari"].filter { $0 != browser && ($0 != "safari" || Self.hasFullDiskAccess) }
+                let installed = BrowserUtils.shared.getInstalledBrowsers().map { $0.id.lowercased() }
+                let pool = installed.isEmpty ? ["chrome", "brave", "firefox", "edge", "safari"] : ["chrome", "brave", "firefox", "edge", "safari"].filter { installed.contains($0) }
+                let altBrowsers = pool.filter { $0 != browser && ($0 != "safari" || Self.hasFullDiskAccess) }
                 for alt in altBrowsers {
                     var altArgs = args
                     altArgs[idx + 1] = alt
