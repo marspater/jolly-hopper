@@ -242,6 +242,8 @@ struct AddDownloadView: View {
                         }
                 }
                 .buttonStyle(.bouncy(scale: 0.97, hover: 1.015))
+                .help(languageService.s("single_mode"))
+                .accessibilityLabel(languageService.s("single_mode"))
 
                 Button {
                     withAnimation(.spring(response: 0.30, dampingFraction: 0.68, blendDuration: 0)) {
@@ -263,6 +265,8 @@ struct AddDownloadView: View {
                         }
                 }
                 .buttonStyle(.bouncy(scale: 0.97, hover: 1.015))
+                .help(languageService.s("batch_import"))
+                .accessibilityLabel(languageService.s("batch_import"))
             }
             .padding(SiphonTheme.spacing2)
             .background(
@@ -844,6 +848,8 @@ struct AddDownloadView: View {
                             }
                     }
                     .buttonStyle(.bouncy(scale: 0.95, hover: 1.02))
+                    .help(languageService.s("video"))
+                    .accessibilityLabel(languageService.s("video"))
 
                     Button {
                         withAnimation(.spring(response: 0.30, dampingFraction: 0.68, blendDuration: 0)) {
@@ -866,6 +872,8 @@ struct AddDownloadView: View {
                             }
                     }
                     .buttonStyle(.bouncy(scale: 0.95, hover: 1.02))
+                    .help(languageService.s("audio"))
+                    .accessibilityLabel(languageService.s("audio"))
                 }
                 .padding(2)
                 .background(

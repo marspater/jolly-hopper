@@ -132,6 +132,8 @@ struct MenuBarView: View {
                             }
                     }
                     .buttonStyle(.bouncy(scale: 0.97, hover: 1.015))
+                    .help(languageService.s("video"))
+                    .accessibilityLabel(languageService.s("video"))
                     
                     Button {
                         withAnimation(.spring(response: 0.30, dampingFraction: 0.68, blendDuration: 0)) {
@@ -153,6 +155,8 @@ struct MenuBarView: View {
                             }
                     }
                     .buttonStyle(.bouncy(scale: 0.97, hover: 1.015))
+                    .help(languageService.s("audio"))
+                    .accessibilityLabel(languageService.s("audio"))
                 }
                 .padding(SiphonTheme.spacing2)
                 .background(
