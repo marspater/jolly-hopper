@@ -285,6 +285,52 @@ class YtdlpService: ObservableObject {
         self.processRunner = processRunner
     }
 
+    nonisolated private static let gffTitleRegexes: [NSRegularExpression] = [
+        "video_title\\s*:\\s*['\"]([^'\"]+)['\"]",
+        "property=[\"']og:title[\"']\\s+content=[\"']([^\"']+)[\"']",
+        "<title>(.*?)</title>",
+        "<h1[^>]*>([^<]+)</h1>"
+    ].compactMap { try? NSRegularExpression(pattern: $0, options: [.caseInsensitive]) }
+
+    nonisolated private static let gffThumbRegexes: [NSRegularExpression] = [
+        "preview_url\\s*:\\s*['\"](https?://[^'\"]+)['\"]",
+        "preview_url1\\s*:\\s*['\"](https?://[^'\"]+)['\"]",
+        "property=[\"']og:image[\"']\\s+content=[\"'](https?://[^\"']+)[\"']",
+        "poster=[\"'](https?://[^\"']+)[\"']",
+        "\"thumbnailUrl\"\\s*:\\s*\"(https?://[^\"]+)\""
+    ].compactMap { try? NSRegularExpression(pattern: $0, options: [.caseInsensitive]) }
+
+    nonisolated private static let gffStreamRegexes: [NSRegularExpression] = [
+        "video_url\\s*:\\s*['\"]([^'\"]+)['\"]",
+        "video_alt_url\\s*:\\s*['\"]([^'\"]+)['\"]",
+        "video_alt_url[1-4]?\\s*:\\s*['\"]([^'\"]+)['\"]",
+        "\"file\"\\s*:\\s*\"([^\"]+)\"",
+        "\"src\"\\s*:\\s*\"([^\"]+)\"",
+        "\"videoUrl\"\\s*:\\s*\"([^\"]+)\"",
+        "\"mediaUrl\"\\s*:\\s*\"([^\"]+)\"",
+        "\"contentUrl\"\\s*:\\s*\"([^\"]+)\"",
+        "\"(?:hlsAuto|hls|videoUrl|media|src|file|video_url)\"\\s*:\\s*\"([^\"]+)\"",
+        "<source[^>]+src=[\"']([^\"']+)[\"']",
+        "data-video-url=[\"']([^\"']+)[\"']",
+        "data-src=[\"']([^\"']+\\.(?:mp4|m3u8)[^\"]*)[\"']",
+        "['\"](https?://[^'\"]+\\.gayforfans\\.com[^'\"]+\\.(?:mp4|m3u8)(?:\\?[^'\"]*)?)['\"]",
+        "['\"](//[^'\"]+\\.gayforfans\\.com[^'\"]+\\.(?:mp4|m3u8)(?:\\?[^'\"]*)?)['\"]",
+        "['\"](/get_file/[^'\"]+)['\"]",
+        "['\"](https?://[^'\"]+/get_file/[^'\"]+)[\"']"
+    ].compactMap { try? NSRegularExpression(pattern: $0, options: [.caseInsensitive]) }
+
+    nonisolated private static let gffEmbedRegexes: [NSRegularExpression] = [
+        "\"embedUrl\"\\s*:\\s*\"([^\"]+)\"",
+        "<iframe[^>]+src=[\"'](https?://(?:www\\.)?gayforfans\\.com/embed/[^\"]+)[\"']",
+        "<iframe[^>]+src=[\"'](/embed/[^\"]+)[\"']"
+    ].compactMap { try? NSRegularExpression(pattern: $0, options: [.caseInsensitive]) }
+
+    nonisolated private static let gffVideoIdRegexes: [NSRegularExpression] = [
+        "/videos?/(\\d+)",
+        "video_id\\s*:\\s*['\"](\\d+)['\"]",
+        "/embed/(\\d+)"
+    ].compactMap { try? NSRegularExpression(pattern: $0, options: [.caseInsensitive]) }
+
     nonisolated static func verifySHA256(fileURL: URL, expectedHash: String) -> Bool {
         guard let fileHandle = try? FileHandle(forReadingFrom: fileURL) else { return false }
         defer { try? fileHandle.close() }
@@ -2719,15 +2765,8 @@ class YtdlpService: ObservableObject {
         
         // Extract Title
         var title = "GayForFans Video"
-        let titlePatterns = [
-            "video_title\\s*:\\s*['\"]([^'\"]+)['\"]",
-            "property=[\"']og:title[\"']\\s+content=[\"']([^\"']+)[\"']",
-            "<title>(.*?)</title>",
-            "<h1[^>]*>([^<]+)</h1>"
-        ]
-        for pattern in titlePatterns {
-            if let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]),
-               let match = regex.firstMatch(in: html, options: [], range: NSRange(location: 0, length: (html as NSString).length)),
+        for regex in Self.gffTitleRegexes {
+            if let match = regex.firstMatch(in: html, options: [], range: NSRange(location: 0, length: (html as NSString).length)),
                match.numberOfRanges > 1 {
                 let rawTitle = (html as NSString).substring(with: match.range(at: 1))
                     .replacingOccurrences(of: "(?i)<title>", with: "", options: .regularExpression)
@@ -2748,16 +2787,8 @@ class YtdlpService: ObservableObject {
         
         // Extract Thumbnail
         var thumbnailURL: String? = nil
-        let thumbPatterns = [
-            "preview_url\\s*:\\s*['\"](https?://[^'\"]+)['\"]",
-            "preview_url1\\s*:\\s*['\"](https?://[^'\"]+)['\"]",
-            "property=[\"']og:image[\"']\\s+content=[\"'](https?://[^\"']+)[\"']",
-            "poster=[\"'](https?://[^\"']+)[\"']",
-            "\"thumbnailUrl\"\\s*:\\s*\"(https?://[^\"]+)\""
-        ]
-        for pattern in thumbPatterns {
-            if let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]),
-               let match = regex.firstMatch(in: html, options: [], range: NSRange(location: 0, length: (html as NSString).length)),
+        for regex in Self.gffThumbRegexes {
+            if let match = regex.firstMatch(in: html, options: [], range: NSRange(location: 0, length: (html as NSString).length)),
                match.numberOfRanges > 1 {
                 let candidate = (html as NSString).substring(with: match.range(at: 1))
                     .replacingOccurrences(of: "\\/", with: "/")
@@ -2772,27 +2803,8 @@ class YtdlpService: ObservableObject {
         var streamURL: String? = nil
         var quality: String? = nil
         
-        let streamPatterns = [
-            "video_url\\s*:\\s*['\"]([^'\"]+)['\"]",
-            "video_alt_url\\s*:\\s*['\"]([^'\"]+)['\"]",
-            "video_alt_url[1-4]?\\s*:\\s*['\"]([^'\"]+)['\"]",
-            "\"file\"\\s*:\\s*\"([^\"]+)\"",
-            "\"src\"\\s*:\\s*\"([^\"]+)\"",
-            "\"videoUrl\"\\s*:\\s*\"([^\"]+)\"",
-            "\"mediaUrl\"\\s*:\\s*\"([^\"]+)\"",
-            "\"contentUrl\"\\s*:\\s*\"([^\"]+)\"",
-            "\"(?:hlsAuto|hls|videoUrl|media|src|file|video_url)\"\\s*:\\s*\"([^\"]+)\"",
-            "<source[^>]+src=[\"']([^\"']+)[\"']",
-            "data-video-url=[\"']([^\"']+)[\"']",
-            "data-src=[\"']([^\"']+\\.(?:mp4|m3u8)[^\"']*)[\"']",
-            "['\"](https?://[^'\"]+\\.gayforfans\\.com[^'\"]+\\.(?:mp4|m3u8)(?:\\?[^'\"]*)?)['\"]",
-            "['\"](//[^'\"]+\\.gayforfans\\.com[^'\"]+\\.(?:mp4|m3u8)(?:\\?[^'\"]*)?)['\"]",
-            "['\"](/get_file/[^'\"]+)['\"]",
-            "['\"](https?://[^'\"]+/get_file/[^'\"]+)['\"]"
-        ]
-        for pattern in streamPatterns {
-            if let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]),
-               let match = regex.firstMatch(in: html, options: [], range: NSRange(location: 0, length: (html as NSString).length)),
+        for regex in Self.gffStreamRegexes {
+            if let match = regex.firstMatch(in: html, options: [], range: NSRange(location: 0, length: (html as NSString).length)),
                match.numberOfRanges > 1 {
                 let rawCandidate = (html as NSString).substring(with: match.range(at: 1))
                 if let candidate = sanitizeGFFStreamURL(rawCandidate) {
@@ -2817,14 +2829,8 @@ class YtdlpService: ObservableObject {
         
         // Extract Candidate Embed URLs
         var candidateEmbeds: [String] = []
-        let embedPatterns = [
-            "\"embedUrl\"\\s*:\\s*\"([^\"]+)\"",
-            "<iframe[^>]+src=[\"'](https?://(?:www\\.)?gayforfans\\.com/embed/[^\"']+)[\"']",
-            "<iframe[^>]+src=[\"'](/embed/[^\"']+)[\"']"
-        ]
-        for pattern in embedPatterns {
-            if let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]),
-               let match = regex.firstMatch(in: html, options: [], range: NSRange(location: 0, length: (html as NSString).length)),
+        for regex in Self.gffEmbedRegexes {
+            if let match = regex.firstMatch(in: html, options: [], range: NSRange(location: 0, length: (html as NSString).length)),
                match.numberOfRanges > 1 {
                 let val = (html as NSString).substring(with: match.range(at: 1))
                     .replacingOccurrences(of: "\\/", with: "/")
@@ -2837,12 +2843,12 @@ class YtdlpService: ObservableObject {
             }
         }
 
-        let videoIdPatterns = ["/videos?/(\\d+)", "video_id\\s*:\\s*['\"](\\d+)['\"]", "/embed/(\\d+)"]
-        for pattern in videoIdPatterns {
-            if let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]),
-               let match = regex.firstMatch(in: targetUrl + "\n" + html, options: [], range: NSRange(location: 0, length: ((targetUrl + "\n" + html) as NSString).length)),
+        let targetAndHtml = targetUrl + "\n" + html
+        let targetAndHtmlRange = NSRange(location: 0, length: (targetAndHtml as NSString).length)
+        for regex in Self.gffVideoIdRegexes {
+            if let match = regex.firstMatch(in: targetAndHtml, options: [], range: targetAndHtmlRange),
                match.numberOfRanges > 1 {
-                let vidId = ((targetUrl + "\n" + html) as NSString).substring(with: match.range(at: 1))
+                let vidId = (targetAndHtml as NSString).substring(with: match.range(at: 1))
                 let defaultEmbed = "https://gayforfans.com/embed/\(vidId)/"
                 if !candidateEmbeds.contains(defaultEmbed) && !candidateEmbeds.contains("https://gayforfans.com/embed/\(vidId)") {
                     candidateEmbeds.append(defaultEmbed)
@@ -2893,9 +2899,8 @@ class YtdlpService: ObservableObject {
                             }
                             if !embedChunks.isEmpty {
                                 let embedHtml = embedChunks.joined()
-                                for pattern in streamPatterns {
-                                    if let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]),
-                                       let match = regex.firstMatch(in: embedHtml, options: [], range: NSRange(location: 0, length: (embedHtml as NSString).length)),
+                                for regex in Self.gffStreamRegexes {
+                                    if let match = regex.firstMatch(in: embedHtml, options: [], range: NSRange(location: 0, length: (embedHtml as NSString).length)),
                                        match.numberOfRanges > 1 {
                                         let rawCandidate = (embedHtml as NSString).substring(with: match.range(at: 1))
                                         if let candidate = sanitizeGFFStreamURL(rawCandidate) {
@@ -2906,9 +2911,8 @@ class YtdlpService: ObservableObject {
                                     }
                                 }
                                 if thumbnailURL == nil {
-                                    for pattern in thumbPatterns {
-                                        if let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]),
-                                           let match = regex.firstMatch(in: embedHtml, options: [], range: NSRange(location: 0, length: (embedHtml as NSString).length)),
+                                    for regex in Self.gffThumbRegexes {
+                                        if let match = regex.firstMatch(in: embedHtml, options: [], range: NSRange(location: 0, length: (embedHtml as NSString).length)),
                                            match.numberOfRanges > 1 {
                                             let candidate = (embedHtml as NSString).substring(with: match.range(at: 1))
                                                 .replacingOccurrences(of: "\\/", with: "/")
@@ -2934,9 +2938,8 @@ class YtdlpService: ObservableObject {
                        let httpResponse = response as? HTTPURLResponse,
                        (200...299).contains(httpResponse.statusCode),
                        let text = String(data: data, encoding: .utf8) {
-                        for pattern in streamPatterns {
-                            if let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]),
-                               let match = regex.firstMatch(in: text, options: [], range: NSRange(location: 0, length: (text as NSString).length)),
+                        for regex in Self.gffStreamRegexes {
+                            if let match = regex.firstMatch(in: text, options: [], range: NSRange(location: 0, length: (text as NSString).length)),
                                match.numberOfRanges > 1 {
                                 let rawCandidate = (text as NSString).substring(with: match.range(at: 1))
                                 if let candidate = sanitizeGFFStreamURL(rawCandidate) {
@@ -2947,9 +2950,8 @@ class YtdlpService: ObservableObject {
                             }
                         }
                         if thumbnailURL == nil {
-                            for pattern in thumbPatterns {
-                                if let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]),
-                                   let match = regex.firstMatch(in: text, options: [], range: NSRange(location: 0, length: (text as NSString).length)),
+                            for regex in Self.gffThumbRegexes {
+                                if let match = regex.firstMatch(in: text, options: [], range: NSRange(location: 0, length: (text as NSString).length)),
                                    match.numberOfRanges > 1 {
                                     let candidate = (text as NSString).substring(with: match.range(at: 1))
                                         .replacingOccurrences(of: "\\/", with: "/")
