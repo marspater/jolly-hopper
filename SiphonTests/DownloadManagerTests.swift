@@ -127,17 +127,43 @@ final class DownloadManagerTests: XCTestCase {
         let expectedPath2 = opts2.saveFolder.appendingPathComponent("custom_video (1).mp4").path
 
         // Reserve path for dl1 through DownloadManager
-        let (name1, path1) = manager.resolveUniqueOutputPath(for: dl1)
+        let (name1, path1) = manager.reserveUniqueOutputPath(for: dl1)
         XCTAssertEqual(name1, "custom_video")
         XCTAssertEqual(path1, expectedPath1)
         defer { manager.unreserveOutputPath(path1) }
 
         // Act: Resolve unique output path for dl2 using real production DownloadManager logic
-        let (name2, path2) = manager.resolveUniqueOutputPath(for: dl2)
+        let (name2, path2) = manager.planUniqueOutputPath(for: dl2)
 
         // Assert: Production method resolved the conflict
         XCTAssertEqual(name2, "custom_video (1)", "Second download must have resolved name updated to non-colliding name")
         XCTAssertEqual(path2, expectedPath2)
+    }
+
+    func testPlanUniqueOutputPathDoesNotMutateReservations() {
+        let manager = DownloadManager()
+        var opts = DownloadOptions.default
+        opts.customFilename = "unreserved_test"
+        opts.fileType = .mp4
+        let dl = Download(url: "https://example.com/unreserved", options: opts, title: "Test")
+
+        let (name1, path1) = manager.planUniqueOutputPath(for: dl)
+        XCTAssertEqual(name1, "unreserved_test")
+
+        // Calling plan a second time for the same name should yield the SAME candidate path because plan did not lock/reserve it
+        let (name2, path2) = manager.planUniqueOutputPath(for: dl)
+        XCTAssertEqual(name2, "unreserved_test")
+        XCTAssertEqual(path1, path2)
+
+        // Now actively reserve it
+        let (resName, resPath) = manager.reserveUniqueOutputPath(for: dl)
+        XCTAssertEqual(resName, "unreserved_test")
+        defer { manager.unreserveOutputPath(resPath) }
+
+        // Now plan will see the active reservation and increment
+        let (name3, path3) = manager.planUniqueOutputPath(for: dl)
+        XCTAssertEqual(name3, "unreserved_test (1)")
+        XCTAssertNotEqual(path1, path3)
     }
 
     func testProcessDownloadExitsIfCancelledWhileQueued() async {

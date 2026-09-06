@@ -192,6 +192,24 @@ public final class DownloadProcessController: @unchecked Sendable {
     }
 }
 
+public struct DownloadProcessResult: Sendable {
+    public let primaryPath: String
+    public let allPaths: [String]
+
+    public init(primaryPath: String, allPaths: [String] = []) {
+        self.primaryPath = primaryPath
+        self.allPaths = allPaths.isEmpty ? [primaryPath] : allPaths
+    }
+
+    public var isEmpty: Bool {
+        primaryPath.isEmpty && allPaths.isEmpty
+    }
+
+    public var count: Int {
+        allPaths.count
+    }
+}
+
 public protocol YtdlpProcessRunning: Sendable {
     func runCommand(_ args: [String]) async throws -> String
     func runDownloadProcess(
@@ -200,19 +218,28 @@ public protocol YtdlpProcessRunning: Sendable {
         processController: DownloadProcessController?,
         onProgress: @escaping @Sendable (Double, String?, String?) -> Void,
         onOutput: @escaping @Sendable (String) -> Void
-    ) async throws -> String
+    ) async throws -> DownloadProcessResult
 }
 
 public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
     public init() {}
+
+    public static func configureProcessCommand(_ process: Process, args: [String]) {
+        if FileManager.default.isExecutableFile(atPath: "/usr/bin/perl") {
+            process.executableURL = URL(fileURLWithPath: "/usr/bin/perl")
+            process.arguments = ["-MPOSIX", "-e", "POSIX::setpgid(0,0); exec @ARGV", "--", "/usr/bin/env"] + args
+        } else {
+            process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+            process.arguments = args
+        }
+    }
 
     public func runCommand(_ args: [String]) async throws -> String {
         let process = Process()
         let pipe = Pipe()
         let controller = DownloadProcessController()
 
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        process.arguments = args
+        Self.configureProcessCommand(process, args: args)
         process.standardOutput = pipe
         process.standardError = pipe
         process.environment = YtdlpService.createSanitizedEnvironment()
@@ -283,7 +310,7 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
         processController: DownloadProcessController?,
         onProgress: @escaping @Sendable (Double, String?, String?) -> Void,
         onOutput: @escaping @Sendable (String) -> Void
-    ) async throws -> String {
+    ) async throws -> DownloadProcessResult {
         try await withCheckedThrowingContinuation { continuation in
             let safeContinuation = SafeContinuation(continuation)
 
@@ -296,8 +323,7 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
             let outputPipe = Pipe()
             let errorPipe = Pipe()
 
-            process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-            process.arguments = args
+            Self.configureProcessCommand(process, args: args)
             process.currentDirectoryURL = saveFolder
             process.standardInput = FileHandle.nullDevice
             process.standardOutput = outputPipe
@@ -312,7 +338,7 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
                     if parts.count > 1 {
                         let extracted = parts[1].trimmingCharacters(in: .whitespacesAndNewlines)
                         if !extracted.isEmpty {
-                            outputState.setFinalPath(extracted)
+                            outputState.addFinalPath(extracted)
                         }
                     }
                     onOutput(line)
@@ -509,10 +535,10 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
                 }
 
                 let fm = FileManager.default
-                var finalURL: URL? = nil
+                var verifiedFinalPaths: [String] = []
 
-                // 1. Check deterministic final path emitted by yt-dlp
-                if let directPath = outputState.getFinalPath() {
+                // 1. Check deterministic final path(s) emitted by yt-dlp
+                for directPath in outputState.getFinalPaths() {
                     let rawURL = directPath.hasPrefix("/") ? URL(fileURLWithPath: directPath) : saveFolder.appendingPathComponent(directPath)
                     let resolved = rawURL.standardizedFileURL.resolvingSymlinksInPath()
                     if fm.fileExists(atPath: resolved.path),
@@ -520,12 +546,14 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
                        values.isRegularFile == true,
                        YtdlpService.isMediaFilePath(resolved.path),
                        YtdlpService.isPathContained(targetURL: resolved, inside: saveFolder) {
-                        finalURL = resolved
+                        if !verifiedFinalPaths.contains(resolved.path) {
+                            verifiedFinalPaths.append(resolved.path)
+                        }
                     }
                 }
 
-                // 2. Fallback to candidate paths parsed from output
-                if finalURL == nil {
+                // 2. Fallback to candidate paths parsed from output if no direct final paths verified
+                if verifiedFinalPaths.isEmpty {
                     let candidates = outputState.getCandidatePaths()
                     for candidate in candidates.reversed() {
                         let rawURL = candidate.hasPrefix("/") ? URL(fileURLWithPath: candidate) : saveFolder.appendingPathComponent(candidate)
@@ -536,7 +564,7 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
                            values.isRegularFile == true,
                            YtdlpService.isMediaFilePath(resolved.path),
                            YtdlpService.isPathContained(targetURL: resolved, inside: saveFolder) {
-                            finalURL = resolved
+                            verifiedFinalPaths.append(resolved.path)
                             break
                         }
                     }
@@ -545,8 +573,8 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
                 let errorOutput = outputState.getErrorText()
 
                 if proc.terminationStatus == 0 {
-                    if let resolvedURL = finalURL {
-                        safeContinuation.resume(returning: resolvedURL.path)
+                    if let primary = verifiedFinalPaths.first {
+                        safeContinuation.resume(returning: DownloadProcessResult(primaryPath: primary, allPaths: verifiedFinalPaths))
                     } else {
                         safeContinuation.resume(throwing: YtdlpError.downloadFailed("Download process completed, but no valid media file was verified in the target destination."))
                     }

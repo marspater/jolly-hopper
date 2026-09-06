@@ -646,14 +646,23 @@ class DownloadManager: ObservableObject {
             download.diagnostics.videoCodec = primaryFormat?.vcodec ?? download.options.videoCodec?.rawValue
             download.diagnostics.audioCodec = selectedFormats.first(where: { $0.isAudioOnly || $0.acodec != "none" })?.acodec ?? download.options.audioCodec?.rawValue
             download.diagnostics.container = download.options.fileType.rawValue
-            download.diagnostics.resolution = primaryFormat?.resolution
             download.diagnostics.fps = primaryFormat?.fps
             download.diagnostics.dynamicRange = primaryFormat?.dynamicRange
             download.diagnostics.colorSpace = primaryFormat?.colorSpace
             download.diagnostics.bitDepth = primaryFormat?.bitDepth
             download.diagnostics.duration = info.durationString
 
-            let (resolvedBaseName, candidateKey) = resolveUniqueOutputPath(for: download)
+            let ceilingCheck = info.formatResolutionExceedsCeiling(options: download.options)
+            if ceilingCheck.exceeded, let req = ceilingCheck.requestedHeight, let act = ceilingCheck.actualHeight {
+                let warnMsg = "[Siphon Warning] Requested \(req)p was unavailable. Downloading \(act)p instead.\n"
+                download.log.append(warnMsg)
+                LoggerService.shared.log("Requested \(req)p format unavailable for '\(download.title)'; downloading \(act)p instead.", level: .warning)
+                download.diagnostics.resolution = "\(act)p (requested \(req)p unavailable)"
+            } else {
+                download.diagnostics.resolution = primaryFormat?.resolution
+            }
+
+            let (resolvedBaseName, candidateKey) = planUniqueOutputPath(for: download)
             let rawBaseName = download.options.customFilename ?? download.title
             let sanitizedBaseName = YtdlpService.sanitizeFilename(rawBaseName)
             if resolvedBaseName != sanitizedBaseName {
@@ -725,10 +734,7 @@ class DownloadManager: ObservableObject {
                 }
             }
 
-            let targetSaveFolder = download.options.saveFolder
-            let pathCollector = ThreadSafePathCollector()
-
-            let outputPath = try await ytdlpService.download(
+            let downloadResult = try await ytdlpService.download(
                 url: download.url,
                 options: download.options,
                 mediaInfo: download.mediaInfo,
@@ -738,35 +744,23 @@ class DownloadManager: ObservableObject {
                     coalescer.recordProgress(progress: safeProgress, speed: speed, eta: eta)
                 },
                 onOutput: { line in
-                    if line.contains("SIPHON_FINAL_PATH:") {
-                        let parts = line.components(separatedBy: "SIPHON_FINAL_PATH:")
-                        if parts.count > 1 {
-                            let extracted = parts[1].trimmingCharacters(in: .whitespacesAndNewlines)
-                                .trimmingCharacters(in: CharacterSet(charactersIn: "\"\'"))
-                            if !extracted.isEmpty {
-                                let url = extracted.hasPrefix("/") ? URL(fileURLWithPath: extracted) : targetSaveFolder.appendingPathComponent(extracted)
-                                pathCollector.add(url)
-                            }
-                        }
-                    }
                     coalescer.recordLogLine(line)
                 }
             )
 
             coalescer.flushRemaining()
 
-            let collectedPaths = pathCollector.getPaths()
-            if !collectedPaths.isEmpty {
-                download.filePaths = collectedPaths
-            } else {
-                download.filePath = outputPath
+            if !downloadResult.files.isEmpty {
+                download.filePaths = downloadResult.files
+            } else if let primary = downloadResult.primaryFile {
+                download.filePaths = [primary]
             }
             download.diagnostics.exitStatus = "Completed (0)"
             updateStatus(for: download, to: .completed)
             download.progress = 1.0
 
             // Attach Finder file icon if embed thumbnail is requested and thumbnail is available
-            if download.options.embedThumbnail, let finalURL = download.filePath {
+            if download.options.embedThumbnail, let finalURL = download.primaryFilePath {
                 if let thumbURL = download.thumbnailURL {
                     Task.detached(priority: .utility) {
                         // Bolt Performance Optimization: Replace blocking Data(contentsOf:) with non-blocking async URLSession read
@@ -1001,8 +995,8 @@ class DownloadManager: ObservableObject {
     }
     
     func resumeWithNewName(_ download: Download) {
-        let (_, candidatePath) = reserveUniqueOutputPath(for: download, forceIncrement: true)
-        unreserveOutputPath(candidatePath) // Released so processQueue can reserve it when executing
+        let (candidateName, _) = planUniqueOutputPath(for: download, forceIncrement: true)
+        download.options.customFilename = candidateName
         download.options.forceOverwrite = false
         updateStatus(for: download, to: .queued)
         objectWillChange.send()
@@ -1020,8 +1014,7 @@ class DownloadManager: ObservableObject {
         activeControllers.removeAll()
     }
 
-    @discardableResult
-    func reserveUniqueOutputPath(for download: Download, forceIncrement: Bool = false) -> (resolvedBaseName: String, candidatePath: String) {
+    func planUniqueOutputPath(for download: Download, forceIncrement: Bool = false) -> (resolvedBaseName: String, candidatePath: String) {
         let rawBaseName = download.options.customFilename ?? download.title
         let sanitizedBase = YtdlpService.sanitizeFilename(rawBaseName)
         let folder = download.options.saveFolder
@@ -1049,13 +1042,19 @@ class DownloadManager: ObservableObject {
             counter += 1
         }
 
+        return (candidateName, candidatePath)
+    }
+
+    @discardableResult
+    func reserveUniqueOutputPath(for download: Download, forceIncrement: Bool = false) -> (resolvedBaseName: String, candidatePath: String) {
+        let (candidateName, candidatePath) = planUniqueOutputPath(for: download, forceIncrement: forceIncrement)
         reservedOutputPaths.insert(candidatePath)
         download.options.customFilename = candidateName
         return (candidateName, candidatePath)
     }
 
     func resolveUniqueOutputPath(for download: Download) -> (resolvedBaseName: String, candidatePath: String) {
-        return reserveUniqueOutputPath(for: download)
+        return planUniqueOutputPath(for: download)
     }
 
     func reserveOutputPath(_ path: String) {
@@ -1323,6 +1322,6 @@ final class ThreadSafePathCollector: @unchecked Sendable {
     func getPaths() -> [URL] {
         lock.lock()
         defer { lock.unlock() }
-        return paths
+        return Array(paths)
     }
 }

@@ -1817,8 +1817,7 @@ struct AddDownloadView: View {
             options: tempOptions,
             title: originalFilename
         )
-        let (uniqueFilename, reservedPath) = downloadManager.reserveUniqueOutputPath(for: dummyDl)
-        downloadManager.unreserveOutputPath(reservedPath)
+        let (uniqueFilename, _) = downloadManager.planUniqueOutputPath(for: dummyDl)
 
         var finalOptions = options
         finalOptions.customFilename = uniqueFilename

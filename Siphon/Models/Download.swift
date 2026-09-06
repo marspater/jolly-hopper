@@ -16,6 +16,10 @@ class Download: ObservableObject, Identifiable {
     @Published var speed: String?
     @Published var eta: String?
     @Published var filePaths: [URL] = []
+    var primaryFilePath: URL? {
+        filePaths.first
+    }
+    @available(*, deprecated, message: "Use primaryFilePath or filePaths directly for multi-file output safety")
     var filePath: URL? {
         get { filePaths.first }
         set {
@@ -1149,6 +1153,18 @@ struct MediaInfo: Codable {
         return []
     }
 
+    func formatResolutionExceedsCeiling(options: DownloadOptions) -> (exceeded: Bool, requestedHeight: Int?, actualHeight: Int?) {
+        guard let maxH = options.videoResolution?.maxHeight, options.fileType.isVideo else {
+            return (false, nil, nil)
+        }
+        let selected = resolveSelectedFormats(options: options)
+        let primaryVideo = selected.first(where: { !$0.isAudioOnly })
+        if let actualH = primaryVideo?.parsedHeight, actualH > maxH {
+            return (true, maxH, actualH)
+        }
+        return (false, maxH, primaryVideo?.parsedHeight)
+    }
+
     func isSelectedFormatFragmented(options: DownloadOptions) -> Bool {
         let resolved = resolveSelectedFormats(options: options)
         if !resolved.isEmpty {
@@ -1756,8 +1772,7 @@ struct HistoricDownload: Codable, Identifiable {
     let id: UUID
     let url: String
     let title: String
-    let filePath: String?
-    var filePaths: [String]?
+    var filePaths: [String]
     let downloadDate: Date
     let fileType: MediaFileType
     let status: DownloadStatus
@@ -1767,13 +1782,20 @@ struct HistoricDownload: Codable, Identifiable {
     let log: String
     let progress: Double
     let options: DownloadOptions
-    
+
+    var filePath: String? {
+        filePaths.first
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id, url, title, filePath, filePaths, downloadDate, fileType, status, thumbnailURL, duration, errorMessage, log, progress, options
+    }
+
     @MainActor
     init(download: Download) {
         self.id = download.id
         self.url = download.url
         self.title = download.title
-        self.filePath = download.filePath?.path
         self.filePaths = download.filePaths.map { $0.path }
         self.downloadDate = download.createdAt
         self.fileType = download.options.fileType
@@ -1788,6 +1810,48 @@ struct HistoricDownload: Codable, Identifiable {
         self.options = sanitizedOptions
     }
 
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.id = try container.decode(UUID.self, forKey: .id)
+        self.url = try container.decode(String.self, forKey: .url)
+        self.title = try container.decode(String.self, forKey: .title)
+        self.downloadDate = try container.decode(Date.self, forKey: .downloadDate)
+        self.fileType = try container.decode(MediaFileType.self, forKey: .fileType)
+        self.status = try container.decode(DownloadStatus.self, forKey: .status)
+        self.thumbnailURL = try container.decodeIfPresent(URL.self, forKey: .thumbnailURL)
+        self.duration = try container.decodeIfPresent(String.self, forKey: .duration)
+        self.errorMessage = try container.decodeIfPresent(String.self, forKey: .errorMessage)
+        self.log = try container.decode(String.self, forKey: .log)
+        self.progress = try container.decode(Double.self, forKey: .progress)
+        self.options = try container.decode(DownloadOptions.self, forKey: .options)
+
+        if let paths = try container.decodeIfPresent([String].self, forKey: .filePaths), !paths.isEmpty {
+            self.filePaths = paths
+        } else if let single = try container.decodeIfPresent(String.self, forKey: .filePath) {
+            self.filePaths = [single]
+        } else {
+            self.filePaths = []
+        }
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(url, forKey: .url)
+        try container.encode(title, forKey: .title)
+        try container.encode(filePaths, forKey: .filePaths)
+        try container.encodeIfPresent(filePaths.first, forKey: .filePath)
+        try container.encode(downloadDate, forKey: .downloadDate)
+        try container.encode(fileType, forKey: .fileType)
+        try container.encode(status, forKey: .status)
+        try container.encodeIfPresent(thumbnailURL, forKey: .thumbnailURL)
+        try container.encodeIfPresent(duration, forKey: .duration)
+        try container.encodeIfPresent(errorMessage, forKey: .errorMessage)
+        try container.encode(log, forKey: .log)
+        try container.encode(progress, forKey: .progress)
+        try container.encode(options, forKey: .options)
+    }
+
     // Helper to convert back to Download object for UI
     @MainActor
     func toDownload() -> Download {
@@ -1798,11 +1862,7 @@ struct HistoricDownload: Codable, Identifiable {
         download.duration = self.duration
         download.errorMessage = self.errorMessage
         download.log = self.log
-        if let paths = self.filePaths, !paths.isEmpty {
-            download.filePaths = paths.map { URL(fileURLWithPath: $0) }
-        } else if let path = self.filePath {
-            download.filePath = URL(fileURLWithPath: path)
-        }
+        download.filePaths = self.filePaths.map { URL(fileURLWithPath: $0) }
         return download
     }
 }
