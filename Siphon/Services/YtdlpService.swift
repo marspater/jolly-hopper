@@ -280,6 +280,7 @@ class YtdlpService: ObservableObject {
     private var activeSetupTask: Task<Void, Never>?
 
     var processRunner: YtdlpProcessRunning
+    var updateYtdlpHandler: (() async throws -> String)?
 
     init(processRunner: YtdlpProcessRunning = DefaultYtdlpProcessRunner()) {
         self.processRunner = processRunner
@@ -452,6 +453,9 @@ class YtdlpService: ObservableObject {
     }
 
     func findYtdlp() async {
+        if ytdlpPath != nil && !(processRunner is DefaultYtdlpProcessRunner) {
+            return
+        }
         let appSupport = Self.getAppSupportDirectory()
         let invalidBackup = appSupport.appendingPathComponent("yt-dlp.invalid-backup")
 
@@ -494,6 +498,9 @@ class YtdlpService: ObservableObject {
     }
 
     func findFfmpeg() async {
+        if ffmpegPath != nil || !(processRunner is DefaultYtdlpProcessRunner) {
+            return
+        }
         let appSupport = Self.getAppSupportDirectory()
         let ffmpegInSupport = appSupport.appendingPathComponent("ffmpeg")
         let ffprobeInSupport = appSupport.appendingPathComponent("ffprobe")
@@ -602,6 +609,12 @@ class YtdlpService: ObservableObject {
         defer {
             updateProgress = 1.0
             isUpdating = false
+        }
+
+        if let handler = updateYtdlpHandler {
+            let installedVersion = try await handler()
+            version = installedVersion
+            return installedVersion
         }
 
         let downloadURL = DependencyChecksums.ytdlpURL
@@ -1270,11 +1283,8 @@ class YtdlpService: ObservableObject {
                     errText = ""
                 }
 
-                // Strategy 1: Cookie failure -> handle FDA or try alternate browser before stripping browser cookies
+                // Strategy 1: Cookie failure -> try alternate browser or strip browser cookies
                 if !errText.isEmpty, isCookieFailureError(errText), currentArgs.contains("--cookies-from-browser"), !triedStrategies.contains(.stripCookies) {
-                    if isSafariPermissionError(errText) && !Self.hasFullDiskAccess {
-                        throw YtdlpError.safariCookiesFullDiskAccessRequired
-                    }
                     if let idx = currentArgs.firstIndex(of: "--cookies-from-browser"), idx + 1 < currentArgs.count {
                         let failedBrowser = currentArgs[idx + 1]
                         let installed = BrowserUtils.shared.getInstalledBrowsers().map { $0.id.lowercased() }
@@ -1350,7 +1360,9 @@ class YtdlpService: ObservableObject {
                     triedStrategies.insert(.retryTransientNetworkError)
                     LoggerService.shared.log("Transient CDN connection refusal encountered (\(errText.trimmingCharacters(in: .whitespacesAndNewlines))). Retrying download with fresh connection...", level: .warning)
                     onOutput("[Siphon Info] CDN edge server refused connection. Retrying with fresh stream endpoint...\n")
-                    try? await Task.sleep(nanoseconds: 1_000_000_000)
+                    if processRunner is DefaultYtdlpProcessRunner {
+                        try? await Task.sleep(nanoseconds: 1_000_000_000)
+                    }
                     continue
                 }
 
@@ -1799,6 +1811,9 @@ class YtdlpService: ObservableObject {
     private func appendCookieArgs(for url: String, to args: inout [String], force: Bool = false) -> Bool {
         guard let browser = configuredBrowserCookieSource() else { return false }
         if isCookieDenied(browser: browser, url: url) { return false }
+        if browser == "safari" && !Self.hasFullDiskAccess && !force {
+            return false
+        }
         if force || !args.contains("--cookies-from-browser") {
             args.append(contentsOf: ["--cookies-from-browser", browser])
         }
@@ -3659,7 +3674,7 @@ class YtdlpService: ObservableObject {
         let lowerErr = errString.lowercased()
         let configuredBrowser = configuredBrowserCookieSource()
 
-        if configuredBrowser == "safari" && isSafariPermissionError(errString) && !Self.hasFullDiskAccess {
+        if (configuredBrowser == "safari" || configuredBrowser == nil) && isSafariPermissionError(errString) {
             return YtdlpError.safariCookiesFullDiskAccessRequired
         }
 
@@ -3670,7 +3685,8 @@ class YtdlpService: ObservableObject {
             if (lowerErr.contains("video is unavailable") || lowerErr.contains("video unavailable") || lowerErr.contains("video has been removed") || lowerErr.contains("video removed") || lowerErr.contains("404 not found") || lowerErr.contains("page not found") || lowerErr.contains("http error 404")) && !lowerErr.contains("cookie") {
                 return YtdlpError.downloadFailed("This video is unavailable, private, or has been removed.")
             }
-            if lowerErr.contains("sign in") || lowerErr.contains("private video") || lowerErr.contains("login") || lowerErr.contains("members-only") || lowerErr.contains("unsupported url") {
+            let isVideoPage = url.contains("/videos/") || url.contains("/embed/") || url.contains("/v/")
+            if lowerErr.contains("sign in") || lowerErr.contains("private video") || lowerErr.contains("login") || lowerErr.contains("members-only") || (isVideoPage && lowerErr.contains("unsupported url")) {
                 if configuredBrowser == "safari" && !Self.hasFullDiskAccess {
                     return YtdlpError.safariCookiesFullDiskAccessRequired
                 }
@@ -3679,6 +3695,9 @@ class YtdlpService: ObservableObject {
                 } else {
                     return YtdlpError.boyfriendTVLoginRequired
                 }
+            }
+            if lowerErr.contains("unsupported url") {
+                return YtdlpError.downloadFailed("Could not extract video stream from this BoyfriendTV URL. Please verify the video link and try again.")
             }
             return error
         }
@@ -3875,7 +3894,12 @@ class YtdlpService: ObservableObject {
         }
     }
 
+    static var hasFullDiskAccessOverride: Bool? = nil
+
     static var hasFullDiskAccess: Bool {
+        if let override = hasFullDiskAccessOverride {
+            return override
+        }
         let homeDir = FileManager.default.homeDirectoryForCurrentUser.path
         let candidatePaths = [
             "\(homeDir)/Library/Containers/com.apple.Safari/Data/Library/Cookies/Cookies.binarycookies",
@@ -3950,9 +3974,6 @@ class YtdlpService: ObservableObject {
         } catch let error as YtdlpError {
             if case .commandFailed(let output) = error, isCookieFailureError(output), let idx = args.firstIndex(of: "--cookies-from-browser"), idx + 1 < args.count {
                 let browser = args[idx + 1]
-                if browser == "safari" && isSafariPermissionError(output) && !Self.hasFullDiskAccess {
-                    throw YtdlpError.safariCookiesFullDiskAccessRequired
-                }
                 LoggerService.shared.log("Browser cookie access failed for '\(browser)' or database missing. Checking alternative browsers...", level: .info)
                 if let urlArg = args.last {
                     recordCookieDenial(browser: browser, url: urlArg)

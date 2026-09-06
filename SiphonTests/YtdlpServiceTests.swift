@@ -1595,6 +1595,136 @@ final class YtdlpServiceTests: XCTestCase {
         }
     }
 
+    func testSafariCookieFailureFallsBackToUnauthenticatedFetchForPublicVideos() async throws {
+        service.ytdlpPath = URL(fileURLWithPath: "/usr/local/bin/yt-dlp")
+        UserDefaults.standard.set("safari", forKey: UserDefaultsKeys.browserForCookies)
+        YtdlpService.hasFullDiskAccessOverride = false
+        defer {
+            UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.browserForCookies)
+            YtdlpService.hasFullDiskAccessOverride = nil
+        }
+
+        let jsonManifestOutput = """
+        {
+            "id": "12345",
+            "title": "Eporner Sample Video",
+            "duration": 360,
+            "thumbnail": "https://cdn.eporner.com/thumb.jpg",
+            "formats": [
+                {"format_id": "720p", "width": 1280, "height": 720, "ext": "mp4", "protocol": "https"}
+            ]
+        }
+        """
+
+        service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
+            if args.contains("--cookies-from-browser") {
+                throw YtdlpError.commandFailed("ERROR: [Cookies] Failed to extract cookies from Safari: [Errno 1] Operation not permitted: '/Users/test/Library/Containers/com.apple.Safari/Data/Library/Cookies/Cookies.binarycookies'")
+            }
+            if args.contains("--dump-json") {
+                return jsonManifestOutput
+            }
+            return "{}"
+        })
+
+        let info = try await service.fetchInfo(url: "https://www.eporner.com/video-12345/sample-video/")
+        XCTAssertEqual(info.title, "Eporner Sample Video")
+    }
+
+    func testSafariCookieFailureFallsBackToUnauthenticatedDownloadForPublicVideos() async throws {
+        service.ytdlpPath = URL(fileURLWithPath: "/usr/local/bin/yt-dlp")
+        UserDefaults.standard.set("safari", forKey: UserDefaultsKeys.browserForCookies)
+        YtdlpService.hasFullDiskAccessOverride = false
+        defer {
+            UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.browserForCookies)
+            YtdlpService.hasFullDiskAccessOverride = nil
+        }
+
+        let attemptedCookieRunBox = TestBox<Bool>(false)
+        let succeededWithoutCookiesBox = TestBox<Bool>(false)
+
+        service.processRunner = MockYtdlpProcessRunner(mockDownload: { args in
+            if args.contains("--cookies-from-browser") {
+                attemptedCookieRunBox.value = true
+                throw YtdlpError.downloadFailed("ERROR: [Cookies] Failed to extract cookies from Safari: [Errno 1] Operation not permitted: '/Users/test/Library/Containers/com.apple.Safari/Data/Library/Cookies/Cookies.binarycookies'")
+            }
+            succeededWithoutCookiesBox.value = true
+            return "[download] Destination: /tmp/test.mp4\n"
+        })
+
+        var options = DownloadOptions.default
+        options.videoResolution = .r1080p
+
+        _ = try await service.download(
+            url: "https://www.eporner.com/video-12345/sample-video/",
+            options: options,
+            onProgress: { _, _, _ in },
+            onOutput: { _ in }
+        )
+
+        XCTAssertTrue(attemptedCookieRunBox.value || succeededWithoutCookiesBox.value)
+        XCTAssertTrue(succeededWithoutCookiesBox.value)
+    }
+
+    func testSafariLacksFDAAndVideoRequiresLoginMapsToSafariFDARequired() async throws {
+        service.ytdlpPath = URL(fileURLWithPath: "/usr/local/bin/yt-dlp")
+        UserDefaults.standard.set("safari", forKey: UserDefaultsKeys.browserForCookies)
+        YtdlpService.hasFullDiskAccessOverride = false
+        defer {
+            UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.browserForCookies)
+            YtdlpService.hasFullDiskAccessOverride = nil
+        }
+
+        service.processRunner = MockYtdlpProcessRunner(mockCommand: { _ in
+            throw YtdlpError.commandFailed("ERROR: Private video. Sign in to view this video")
+        })
+
+        do {
+            _ = try await service.fetchInfo(url: "https://www.youtube.com/watch?v=private123")
+            XCTFail("Expected error to be thrown")
+        } catch let err as YtdlpError {
+            if case .safariCookiesFullDiskAccessRequired = err {
+                // Expected
+            } else {
+                XCTFail("Expected .safariCookiesFullDiskAccessRequired but got \(err)")
+            }
+        }
+    }
+
+    func testSafariCookieFailureFallsBackToUnauthenticatedFetchForPornhub() async throws {
+        service.ytdlpPath = URL(fileURLWithPath: "/usr/local/bin/yt-dlp")
+        UserDefaults.standard.set("safari", forKey: UserDefaultsKeys.browserForCookies)
+        YtdlpService.hasFullDiskAccessOverride = false
+        defer {
+            UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.browserForCookies)
+            YtdlpService.hasFullDiskAccessOverride = nil
+        }
+
+        let jsonManifestOutput = """
+        {
+            "id": "ph123456",
+            "title": "Pornhub Sample Video",
+            "duration": 480,
+            "thumbnail": "https://ci.phncdn.com/thumb.jpg",
+            "formats": [
+                {"format_id": "1080p", "width": 1920, "height": 1080, "ext": "mp4", "protocol": "https"}
+            ]
+        }
+        """
+
+        service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
+            if args.contains("--cookies-from-browser") {
+                throw YtdlpError.commandFailed("ERROR: [Cookies] Failed to extract cookies from Safari: [Errno 1] Operation not permitted: '/Users/test/Library/Containers/com.apple.Safari/Data/Library/Cookies/Cookies.binarycookies'")
+            }
+            if args.contains("--dump-json") {
+                return jsonManifestOutput
+            }
+            return "{}"
+        })
+
+        let info = try await service.fetchInfo(url: "https://www.pornhub.com/view_video.php?viewkey=ph123456")
+        XCTAssertEqual(info.title, "Pornhub Sample Video")
+    }
+
     func testBoyfriendTVFiltersPreviewTeaserClips() async throws {
         service.ytdlpPath = URL(fileURLWithPath: "/usr/local/bin/yt-dlp")
         

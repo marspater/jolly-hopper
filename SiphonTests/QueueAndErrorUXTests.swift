@@ -690,6 +690,10 @@ final class QueueAndErrorUXTests: XCTestCase {
 
     func testSimultaneousDependencyInstallationCalls() async {
         let manager = DownloadManager()
+        manager.ytdlpService.updateYtdlpHandler = {
+            try? await Task.sleep(nanoseconds: 10_000_000)
+            return "2025.01.01"
+        }
 
         let t1 = Task { await manager.updateYtdlp() }
         let t2 = Task { await manager.updateYtdlp() }
@@ -1292,6 +1296,15 @@ final class QueueAndErrorUXTests: XCTestCase {
         XCTAssertEqual(reconstructed.progress, 1.0)
         XCTAssertEqual(reconstructed.filePath?.path, "/tmp/roundtrip.mp4")
         XCTAssertEqual(reconstructed.log, "Log data")
+    }
+
+    func testSafariFDALocalizationAndStrings() {
+        let lang = LanguageService()
+        XCTAssertEqual(lang.s("check_permission"), "Check Permission")
+        XCTAssertEqual(lang.s("restart_siphon"), "Restart Siphon")
+        XCTAssertTrue(lang.s("safari_fda_granted_feedback").contains("Full Disk Access detected"))
+        XCTAssertTrue(lang.s("safari_fda_not_detected_hint").contains("Full Disk Access not detected"))
+        XCTAssertTrue(lang.s("safari_fda_restart_hint").contains("restart Siphon"))
     }
 }
 

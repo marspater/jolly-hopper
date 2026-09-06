@@ -64,6 +64,8 @@ struct PreferencesView: View {
     @State private var presetSplitChapters: Bool = false
     @State private var editingPreset: CustomPreset? = nil
     @State private var hasFullDiskAccess: Bool = YtdlpService.hasFullDiskAccess
+    @State private var isCheckingPermission: Bool = false
+    @State private var permissionCheckMessage: String? = nil
     
     private var presetFilteredResolutions: [VideoResolution] {
         if presetVideoCodec == .h264 {
@@ -160,10 +162,18 @@ struct PreferencesView: View {
             hasFullDiskAccess = YtdlpService.hasFullDiskAccess
         }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
-            hasFullDiskAccess = YtdlpService.hasFullDiskAccess
+            let access = YtdlpService.hasFullDiskAccess
+            hasFullDiskAccess = access
+            if access {
+                permissionCheckMessage = nil
+            }
         }
         .onChange(of: browserForCookies) { _, _ in
-            hasFullDiskAccess = YtdlpService.hasFullDiskAccess
+            let access = YtdlpService.hasFullDiskAccess
+            hasFullDiskAccess = access
+            if access {
+                permissionCheckMessage = nil
+            }
         }
         .sheet(isPresented: $showCreatePresetSheet) {
             createPresetSheet
@@ -975,7 +985,7 @@ struct PreferencesView: View {
                     Image(systemName: "checkmark.seal.fill")
                         .foregroundColor(SiphonTheme.statusCompleted)
                         .font(.geist(13))
-                    Text("Full Disk Access: Granted (Safari cookies enabled)")
+                    Text(languageService.s("safari_fda_granted_feedback"))
                         .font(.geist(11, weight: .semibold))
                         .foregroundColor(SiphonTheme.statusCompleted)
                 }
@@ -1004,14 +1014,31 @@ struct PreferencesView: View {
                     .tint(SiphonTheme.accent)
                     .controlSize(.small)
 
-                    Button("Check Permission") {
-                        hasFullDiskAccess = YtdlpService.hasFullDiskAccess
+                    Button {
+                        performPermissionCheck()
+                    } label: {
+                        HStack(spacing: 4) {
+                            if isCheckingPermission {
+                                ProgressView()
+                                    .controlSize(.mini)
+                            }
+                            Text(languageService.s("check_permission"))
+                        }
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .disabled(isCheckingPermission)
+
+                    Button(languageService.s("restart_siphon")) {
+                        updateChecker.restartApp()
                     }
                     .buttonStyle(.bordered)
                     .controlSize(.small)
                 }
 
-                Text("Note: After toggling Full Disk Access in System Settings, restart Siphon for macOS permissions to take effect.")
+                permissionFeedbackView
+
+                Text(languageService.s("safari_fda_restart_hint"))
                     .font(.geist(10))
                     .foregroundColor(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -1019,13 +1046,55 @@ struct PreferencesView: View {
         }
         .padding(.top, 4)
     }
+
+    private func performPermissionCheck() {
+        isCheckingPermission = true
+        let granted = YtdlpService.hasFullDiskAccess
+        hasFullDiskAccess = granted
+        isCheckingPermission = false
+        withAnimation(.easeInOut(duration: 0.2)) {
+            if granted {
+                permissionCheckMessage = languageService.s("safari_fda_granted_feedback")
+            } else {
+                permissionCheckMessage = languageService.s("safari_fda_not_detected_hint")
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var permissionFeedbackView: some View {
+        if let message = permissionCheckMessage {
+            permissionFeedbackContent(message: message)
+        }
+    }
+
+    @ViewBuilder
+    private func permissionFeedbackContent(message: String) -> some View {
+        let statusColor: Color = hasFullDiskAccess ? SiphonTheme.statusCompleted : SiphonTheme.statusQueued
+        HStack(alignment: .top, spacing: 6) {
+            Image(systemName: hasFullDiskAccess ? "checkmark.circle.fill" : "exclamationmark.circle.fill")
+                .foregroundColor(statusColor)
+                .font(.geist(11))
+            Text(message)
+                .font(.geist(10))
+                .foregroundColor(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(statusColor.opacity(0.10))
+        .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusControl))
+        .overlay(
+            RoundedRectangle(cornerRadius: SiphonTheme.radiusControl)
+                .stroke(statusColor.opacity(0.25), lineWidth: 1)
+        )
+    }
     
 
     
     private var aboutTab: some View {
-        ScrollView {
-            VStack(spacing: SiphonTheme.spacing16) {
-                // Header section: Clean app branding & version
+        Form {
+            Section {
                 VStack(spacing: SiphonTheme.spacing8) {
                     Image(nsImage: NSApp.applicationIconImage)
                         .resizable()
@@ -1037,7 +1106,7 @@ struct PreferencesView: View {
                             .font(.geist(20, weight: .bold))
 
                         SiphonTagBadge(
-                            text: "v\(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "5.0.0")",
+                            text: "v\(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "5.1.0")",
                             tintColor: SiphonTheme.accent,
                             isMonospaced: true
                         )
@@ -1049,106 +1118,70 @@ struct PreferencesView: View {
                         .multilineTextAlignment(.center)
                         .padding(.horizontal, SiphonTheme.spacing20)
                 }
-                .padding(.top, 6)
-                .padding(.bottom, 2)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 4)
+            }
+            .listRowBackground(Color.clear)
 
-                // Section 1: Credits & Engine (Grouped Settings Style Card)
-                VStack(alignment: .leading, spacing: 8) {
-                    Text(languageService.s("credits"))
-                        .font(.geist(13, weight: .semibold))
-                        .foregroundColor(.primary)
-
-                    VStack(spacing: 0) {
-                        HStack {
-                            Text("Maintainer")
-                                .font(.geist(13, weight: .medium))
-                                .foregroundColor(.primary)
-                            Spacer()
-                            Text("marspater")
-                                .font(.geist(12, weight: .medium))
-                                .foregroundColor(.secondary)
-                        }
-                        .padding(.vertical, 8)
-
-                        SiphonTheme.subtleDivider
-
-                        HStack {
-                            Text(languageService.s("video_downloading"))
-                                .font(.geist(13, weight: .medium))
-                                .foregroundColor(.primary)
-                            Spacer()
-                            Link("yt-dlp", destination: URL(string: "https://github.com/yt-dlp/yt-dlp") ?? URL(fileURLWithPath: "/"))
-                                .font(.geist(12, weight: .semibold))
-                                .foregroundColor(SiphonTheme.accent)
-                        }
-                        .padding(.vertical, 8)
-                    }
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 4)
-                    .background(
-                        SiphonTheme.cardBackground(cornerRadius: SiphonTheme.radiusCard)
-                    )
-                    .cornerRadius(SiphonTheme.radiusCard)
-                    .overlay(
-                        SiphonTheme.cardBorder(cornerRadius: SiphonTheme.radiusCard)
-                    )
+            Section(languageService.s("credits")) {
+                HStack {
+                    Text(languageService.s("maintainer"))
+                        .font(.geist(13, weight: .medium))
+                    Spacer()
+                    Text("marspater")
+                        .font(.geist(12, weight: .medium))
+                        .foregroundColor(.secondary)
                 }
 
-                // Section 2: Legal & License (Grouped Settings Style Card)
-                VStack(alignment: .leading, spacing: 8) {
-                    Text(languageService.s("legal_disclaimer_title"))
-                        .font(.geist(13, weight: .semibold))
-                        .foregroundColor(.primary)
-
-                    VStack(alignment: .leading, spacing: 10) {
-                        HStack(alignment: .top, spacing: 8) {
-                            Image(systemName: "exclamationmark.shield.fill")
-                                .foregroundColor(SiphonTheme.statusQueued)
-                                .font(.geist(13))
-                                .padding(.top, 1)
-
-                            Text(languageService.s("legal_disclaimer_message"))
-                                .font(.geist(11))
-                                .foregroundColor(.secondary)
-                                .lineSpacing(2)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
-
-                        SiphonTheme.subtleDivider
-
-                        VStack(alignment: .leading, spacing: 4) {
-                            HStack {
-                                Text(languageService.s("license"))
-                                    .font(.geist(13, weight: .medium))
-                                    .foregroundColor(.primary)
-                                Spacer()
-                                Text("GNU GPL v3.0")
-                                    .font(.geist(12, weight: .medium))
-                                    .foregroundColor(.secondary)
-                            }
-
-                            HStack {
-                                Text(languageService.s("license_desc"))
-                                    .font(.geist(10))
-                                    .foregroundColor(.secondary)
-                                Spacer()
-                                Link(languageService.s("view_license"), destination: URL(string: "https://www.gnu.org/licenses/gpl-3.0.html") ?? URL(fileURLWithPath: "/"))
-                                    .font(.geist(11, weight: .medium))
-                                    .foregroundColor(SiphonTheme.accent)
-                            }
-                        }
-                    }
-                    .padding(14)
-                    .background(
-                        SiphonTheme.cardBackground(cornerRadius: SiphonTheme.radiusCard)
-                    )
-                    .cornerRadius(SiphonTheme.radiusCard)
-                    .overlay(
-                        SiphonTheme.cardBorder(cornerRadius: SiphonTheme.radiusCard)
-                    )
+                HStack {
+                    Text(languageService.s("video_downloading"))
+                        .font(.geist(13, weight: .medium))
+                    Spacer()
+                    Link("yt-dlp", destination: URL(string: "https://github.com/yt-dlp/yt-dlp") ?? URL(fileURLWithPath: "/"))
+                        .font(.geist(12, weight: .semibold))
+                        .foregroundColor(SiphonTheme.accent)
                 }
+            }
 
-                // Quick links & Footer
+            Section(languageService.s("legal_disclaimer_title")) {
+                HStack(alignment: .top, spacing: 8) {
+                    Image(systemName: "exclamationmark.shield.fill")
+                        .foregroundColor(SiphonTheme.statusQueued)
+                        .font(.geist(13))
+                        .padding(.top, 1)
+
+                    Text(languageService.s("legal_disclaimer_message"))
+                        .font(.geist(11))
+                        .foregroundColor(.secondary)
+                        .lineSpacing(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(.vertical, 2)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack {
+                        Text(languageService.s("license"))
+                            .font(.geist(13, weight: .medium))
+                        Spacer()
+                        Text("GNU GPL v3.0")
+                            .font(.geist(12, weight: .medium))
+                            .foregroundColor(.secondary)
+                    }
+
+                    HStack {
+                        Text(languageService.s("license_desc"))
+                            .font(.geist(10))
+                            .foregroundColor(.secondary)
+                        Spacer()
+                        Link(languageService.s("view_license"), destination: URL(string: "https://www.gnu.org/licenses/gpl-3.0.html") ?? URL(fileURLWithPath: "/"))
+                            .font(.geist(11, weight: .medium))
+                            .foregroundColor(SiphonTheme.accent)
+                    }
+                }
+                .padding(.vertical, 2)
+            }
+
+            Section {
                 VStack(spacing: SiphonTheme.spacing8) {
                     HStack(spacing: SiphonTheme.spacing10) {
                         Link(destination: URL(string: "https://github.com/marspater/jolly-hopper") ?? URL(fileURLWithPath: "/")) {
@@ -1188,11 +1221,12 @@ struct PreferencesView: View {
                         .foregroundColor(.secondary.opacity(0.7))
                         .padding(.bottom, 6)
                 }
+                .frame(maxWidth: .infinity)
             }
-            .padding(.horizontal, 16)
-            .padding(.top, 6)
+            .listRowBackground(Color.clear)
         }
-        .clipped()
+        .siphonFormStyle()
+        .padding()
     }
     
 

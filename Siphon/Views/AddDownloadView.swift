@@ -1373,6 +1373,13 @@ struct AddDownloadView: View {
                         .controlSize(.small)
                     }
                 }
+
+                if isFDAError {
+                    Text(languageService.s("safari_fda_restart_hint"))
+                        .font(.geist(10))
+                        .foregroundColor(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
         }
         .padding(.horizontal, 16)

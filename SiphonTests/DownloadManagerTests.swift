@@ -632,10 +632,18 @@ final class DownloadManagerTests: XCTestCase {
 
     func testInitializeLoadsHistoryAndResetsActiveStatuses() async {
         let manager = DownloadManager()
+        manager.urlSession = makeMockURLSession()
         let languageService = LanguageService()
 
         let historyKey = UserDefaultsKeys.downloadHistory
-        defer { UserDefaults.standard.removeObject(forKey: historyKey) }
+        defer {
+            UserDefaults.standard.removeObject(forKey: historyKey)
+            MockURLProtocol.requestHandler = nil
+        }
+        MockURLProtocol.requestHandler = { _ in
+            let response = HTTPURLResponse(url: URL(string: "https://api.github.com")!, statusCode: 404, httpVersion: nil, headerFields: nil)!
+            return (response, Data())
+        }
 
         let download = Download(url: "https://example.com/init_history", options: .default)
         download.status = .downloading
@@ -645,7 +653,7 @@ final class DownloadManagerTests: XCTestCase {
             UserDefaults.standard.set(data, forKey: historyKey)
         }
 
-        await manager.initialize(languageService: languageService)
+        await manager.initialize(languageService: languageService, skipBinarySetup: true)
 
         XCTAssertEqual(manager.history.count, 1)
         XCTAssertEqual(manager.downloads.count, 1)
@@ -654,15 +662,24 @@ final class DownloadManagerTests: XCTestCase {
 
     func testInitializeWhatsNewDisplayWhenVersionChanges() async {
         let manager = DownloadManager()
+        manager.urlSession = makeMockURLSession()
         let languageService = LanguageService()
 
         let lastSeenKey = UserDefaultsKeys.lastSeenVersion
-        defer { UserDefaults.standard.removeObject(forKey: lastSeenKey) }
+        defer {
+            UserDefaults.standard.removeObject(forKey: lastSeenKey)
+            MockURLProtocol.requestHandler = nil
+        }
+
+        MockURLProtocol.requestHandler = { _ in
+            let response = HTTPURLResponse(url: URL(string: "https://api.github.com")!, statusCode: 404, httpVersion: nil, headerFields: nil)!
+            return (response, Data())
+        }
 
         // Set last seen version to older version
         UserDefaults.standard.set("0.0.1", forKey: lastSeenKey)
 
-        await manager.initialize(languageService: languageService)
+        await manager.initialize(languageService: languageService, skipBinarySetup: true)
 
         let currentVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "4.2.0"
         XCTAssertTrue(manager.showWhatsNew)
@@ -670,7 +687,8 @@ final class DownloadManagerTests: XCTestCase {
 
         // Run initialize again with current version already stored -> showWhatsNew should remain false on fresh instance
         let manager2 = DownloadManager()
-        await manager2.initialize(languageService: languageService)
+        manager2.urlSession = makeMockURLSession()
+        await manager2.initialize(languageService: languageService, skipBinarySetup: true)
         XCTAssertFalse(manager2.showWhatsNew)
     }
 
