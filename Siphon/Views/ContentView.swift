@@ -251,13 +251,13 @@ struct DetailView: View {
             case .home:
                 HomeView()
             case .downloading:
-                DownloadListView(downloads: downloadManager.downloadingDownloads, emptyMessage: languageService.s("empty_downloading"), showStop: true)
+                DownloadListView(downloads: downloadManager.downloadingDownloads, emptyMessage: languageService.s("empty_downloading"), emptyIcon: "arrow.down.circle", showStop: true)
             case .queued:
-                DownloadListView(downloads: downloadManager.queuedDownloads, emptyMessage: languageService.s("empty_queued"), showStop: true)
+                DownloadListView(downloads: downloadManager.queuedDownloads, emptyMessage: languageService.s("empty_queued"), emptyIcon: "clock", showStop: true)
             case .completed:
-                DownloadListView(downloads: downloadManager.completedDownloads, emptyMessage: languageService.s("empty_completed"), showStop: false)
+                DownloadListView(downloads: downloadManager.completedDownloads, emptyMessage: languageService.s("empty_completed"), emptyIcon: "checkmark.circle", showStop: false)
             case .failed:
-                DownloadListView(downloads: downloadManager.failedDownloads, emptyMessage: languageService.s("empty_failed"), showStop: false)
+                DownloadListView(downloads: downloadManager.failedDownloads, emptyMessage: languageService.s("empty_failed"), emptyIcon: "exclamationmark.triangle", showStop: false)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

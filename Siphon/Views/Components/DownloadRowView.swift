@@ -37,6 +37,7 @@ final class QuickLookPreviewHelper: NSObject, QLPreviewPanelDataSource, QLPrevie
 struct DownloadListView: View {
     let downloads: [Download]
     let emptyMessage: String
+    var emptyIcon: String = "tray.fill"
     let showStop: Bool
     
     @EnvironmentObject var downloadManager: DownloadManager
@@ -63,7 +64,7 @@ struct DownloadListView: View {
     
     private var emptyState: some View {
         SiphonEmptyStateView(
-            icon: "tray.fill",
+            icon: emptyIcon,
             title: emptyMessage,
             message: languageService.s("url_placeholder"),
             actionTitle: languageService.s("new_download")
