@@ -26,3 +26,7 @@
 ## 2026-08-15 - Thread-Safe In-Memory Caching for System Workspace Queries
 **Learning:** Querying `NSWorkspace.shared.urlForApplication(withBundleIdentifier:)` performs workspace and bundle resolution that can be redundant and slow when called repeatedly. Caching the result thread-safely with `NSLock` avoids unnecessary workspace lookups.
 **Action:** Cache static or slowly-changing system workspace lookup results in memory with thread safety (`NSLock`) when invoked from UI views or utility classes.
+
+## 2026-09-06 - Static Pre-Compilation of NSRegularExpression Objects
+**Learning:** Compiling `NSRegularExpression(pattern:options:)` repeatedly inside nested loops causes significant CPU parsing and ARC memory allocation overhead. Pre-compiling static regex arrays using `nonisolated private static let` eliminates compilation overhead and heap allocations across method calls and loop iterations.
+**Action:** Always pre-compile static regular expression patterns into static constants or arrays when used in loops or frequent extraction methods.
