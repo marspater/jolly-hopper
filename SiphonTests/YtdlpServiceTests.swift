@@ -1265,10 +1265,15 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertEqual(resolvedA.first?.formatId, "f720", "When 720p is requested and 720p exists, it must strictly not exceed the 720p ceiling")
 
         // Case B: 720p requested, ONLY 1080p, 1440p, 2160p available (all exceed 720p)
-        // Option 2 fallback: MUST pick the LOWEST resolution exceeding ceiling (1080p), NEVER the highest (2160p)!
+        // Under strict ceiling default, it must reject formats exceeding ceiling
         let mediaInfoB = MediaInfo(id: "testB", title: "Test B", formats: [f2160, f1440, f1080])
-        let resolvedB = mediaInfoB.resolveSelectedFormats(options: options720)
-        XCTAssertEqual(resolvedB.first?.formatId, "f1080", "When all formats exceed the ceiling, fallback must choose the lowest exceeding resolution (1080p), not 4K")
+        let resolvedBStrict = mediaInfoB.resolveSelectedFormats(options: options720)
+        XCTAssertTrue(resolvedBStrict.isEmpty, "Under strict ceiling default, no format exceeding 720p should be selected")
+
+        // When user explicitly opts into .allowHigher policy: MUST pick the LOWEST resolution exceeding ceiling (1080p), NEVER the highest (2160p)!
+        options720.resolutionFallbackPolicy = .allowHigher
+        let resolvedBAllow = mediaInfoB.resolveSelectedFormats(options: options720)
+        XCTAssertEqual(resolvedBAllow.first?.formatId, "f1080", "When all formats exceed the ceiling and allowHigher is active, fallback must choose the lowest exceeding resolution (1080p), not 4K")
     }
 
     func testProcessExitNonZeroThrowsErrorEvenIfFileExists() async {
@@ -2442,8 +2447,10 @@ final class YtdlpServiceTests: XCTestCase {
         ]
         let info = MediaInfo(id: "test", title: "Test Exceeded", formats: formats)
 
+        // With allowHigher policy, format exceeding ceiling is selected with warning
+        options.resolutionFallbackPolicy = .allowHigher
         let check = info.formatResolutionExceedsCeiling(options: options)
-        XCTAssertTrue(check.exceeded, "Must detect that lowest available video format exceeds requested 720p ceiling")
+        XCTAssertTrue(check.exceeded, "Must detect that lowest available video format exceeds requested 720p ceiling when allowHigher is enabled")
         XCTAssertEqual(check.requestedHeight, 720)
         XCTAssertEqual(check.actualHeight, 1080)
 
@@ -2451,6 +2458,47 @@ final class YtdlpServiceTests: XCTestCase {
         options.videoResolution = .r1080p
         let okCheck = info.formatResolutionExceedsCeiling(options: options)
         XCTAssertFalse(okCheck.exceeded)
+    }
+
+    func testStrictResolutionCeilingRejectsFormatsExceedingCeiling() {
+        var options = DownloadOptions.default
+        options.videoResolution = .r720p
+        options.resolutionFallbackPolicy = .strictCeiling
+
+        let formats = [
+            MediaFormat(formatId: "1080p", ext: "mp4", resolution: "1920x1080", vcodec: "avc1", acodec: "none", formatNote: "1080p"),
+            MediaFormat(formatId: "2160p", ext: "mp4", resolution: "3840x2160", vcodec: "avc1", acodec: "none", formatNote: "4K")
+        ]
+        let info = MediaInfo(id: "test", title: "Strict Test", formats: formats)
+
+        let selected = info.resolveSelectedFormats(options: options)
+        XCTAssertTrue(selected.isEmpty, "Strict ceiling must reject formats exceeding ceiling when no format <= requested exists")
+
+        // When a format <= 720p exists, it should be selected
+        let formatsWith720p = [
+            MediaFormat(formatId: "480p", ext: "mp4", resolution: "854x480", vcodec: "avc1", acodec: "none", formatNote: "480p"),
+            MediaFormat(formatId: "1080p", ext: "mp4", resolution: "1920x1080", vcodec: "avc1", acodec: "none", formatNote: "1080p")
+        ]
+        let infoWith720p = MediaInfo(id: "test", title: "Strict Test 2", formats: formatsWith720p)
+        let selectedEligible = infoWith720p.resolveSelectedFormats(options: options)
+        XCTAssertEqual(selectedEligible.first?.formatId, "480p", "Strict ceiling must choose the highest format <= 720p")
+    }
+
+    func testNativeProcessGroupHelperDiscoveryAndExecution() throws {
+        let helper = try XCTUnwrap(DefaultYtdlpProcessRunner.ensureProcessGroupHelper(), "Native process group helper must be available or bootstrappable")
+        XCTAssertTrue(FileManager.default.isExecutableFile(atPath: helper.path))
+
+        let process = Process()
+        DefaultYtdlpProcessRunner.configureProcessCommand(process, args: ["echo", "siphon_pg_ok"])
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        try process.run()
+        process.waitUntilExit()
+
+        XCTAssertEqual(process.terminationStatus, 0)
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        let out = String(data: data, encoding: .utf8) ?? ""
+        XCTAssertTrue(out.contains("siphon_pg_ok"))
     }
 
     func testHistoricDownloadMigrationAndForwardCompatibility() throws {
@@ -2500,11 +2548,11 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertEqual(modernDecoded.filePaths.count, 2)
         XCTAssertEqual(modernDecoded.filePath, "/Users/test/Downloads/ch1.mp4")
 
-        // 3. Re-encode encodes both fields
+        // 3. Modern re-encode encodes ONLY filePaths (conceptual model cleanup)
         let reEncoded = try JSONEncoder().encode(modernDecoded)
         let jsonDict = try JSONSerialization.jsonObject(with: reEncoded) as? [String: Any]
         XCTAssertNotNil(jsonDict?["filePaths"])
-        XCTAssertEqual(jsonDict?["filePath"] as? String, "/Users/test/Downloads/ch1.mp4")
+        XCTAssertNil(jsonDict?["filePath"], "filePath must be omitted from new encodings; it is legacy-only deserialization")
     }
 }
 

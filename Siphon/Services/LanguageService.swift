@@ -300,6 +300,12 @@ class LanguageService: ObservableObject {
         "load_playlist": "Load Playlist Items",
         "quick_look": "Quick Look",
         "copy_file_path": "Copy File Path",
+        "copy_all_paths": "Copy All File Paths",
+        "quick_look_chapters": "Quick Look Chapter",
+        "play_chapters": "Play Chapter",
+        "res_fallback_strict": "Strict Ceiling (≤ requested)",
+        "res_fallback_allow_higher": "Allow Higher (with warning)",
+        "res_fallback_policy": "Resolution Fallback Policy",
         "view_diagnostics": "View Diagnostics",
         "click_to_quick_look": "Click to Quick Look"
     ]

@@ -349,7 +349,7 @@ struct DownloadRowView: View {
                                 .resizable()
                                 .aspectRatio(contentMode: .fill)
                         case .failure, .empty:
-                            if let filePath = download.filePath {
+                            if let filePath = download.primaryFilePath {
                                 FileThumbnailView(fileURL: filePath)
                             } else {
                                 thumbnailPlaceholder
@@ -358,7 +358,7 @@ struct DownloadRowView: View {
                             thumbnailPlaceholder
                         }
                     }
-                } else if let filePath = download.filePath {
+                } else if let filePath = download.primaryFilePath {
                     FileThumbnailView(fileURL: filePath)
                 } else {
                     thumbnailPlaceholder
@@ -370,7 +370,7 @@ struct DownloadRowView: View {
             .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusControl))
             
             // Hover play/quicklook overlay for completed files
-            if download.status == .completed, let path = download.filePath, FileManager.default.fileExists(atPath: path.path) {
+            if download.status == .completed, let path = download.primaryFilePath, FileManager.default.fileExists(atPath: path.path) {
                 if isHovering {
                     ZStack {
                         Color.black.opacity(0.35)
@@ -397,15 +397,15 @@ struct DownloadRowView: View {
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(download.title.isEmpty ? "Media preview" : "\(download.title) thumbnail")
-        .accessibilityHint(download.status == .completed && download.filePath != nil ? "Double click or press space to preview media" : "")
-        .accessibilityAddTraits(download.status == .completed && download.filePath != nil ? .isButton : [])
+        .accessibilityHint(download.status == .completed && download.primaryFilePath != nil ? "Double click or press space to preview media" : "")
+        .accessibilityAddTraits(download.status == .completed && download.primaryFilePath != nil ? .isButton : [])
         .frame(width: 120, height: 68)
         .overlay(
             RoundedRectangle(cornerRadius: SiphonTheme.radiusControl)
                 .stroke(Color.primary.opacity(0.08), lineWidth: 1)
         )
         .onTapGesture {
-            if download.status == .completed, let path = download.filePath, FileManager.default.fileExists(atPath: path.path) {
+            if download.status == .completed, let path = download.primaryFilePath, FileManager.default.fileExists(atPath: path.path) {
                 QuickLookPreviewHelper.shared.preview(url: path)
             }
         }
@@ -493,7 +493,7 @@ struct FileThumbnailView: View {
         HStack(spacing: SiphonTheme.spacing6) {
             // Completed state: Primary Play button + Single More Menu
             if download.status == .completed {
-                if let path = download.filePath, FileManager.default.fileExists(atPath: path.path) {
+                if let path = download.primaryFilePath, FileManager.default.fileExists(atPath: path.path) {
                     Button {
                         QuickLookPreviewHelper.shared.preview(url: path)
                     } label: {
@@ -506,48 +506,67 @@ struct FileThumbnailView: View {
                     .accessibilityLabel(languageService.s("quick_look"))
                 }
                 
-                Button {
-                    if let path = download.filePath {
+                if let path = download.primaryFilePath {
+                    Button {
                         downloadManager.openFile(path)
+                    } label: {
+                        Image(systemName: "play.circle.fill")
+                            .font(.system(size: 18, weight: .semibold))
                     }
-                } label: {
-                    Image(systemName: "play.circle.fill")
-                        .font(.system(size: 18, weight: .semibold))
+                    .buttonStyle(.siphonIcon(size: 28))
+                    .foregroundColor(SiphonTheme.accent)
+                    .help(languageService.s("play"))
+                    .accessibilityLabel(languageService.s("play"))
                 }
-                .buttonStyle(.siphonIcon(size: 28))
-                .foregroundColor(SiphonTheme.accent)
-                .help(languageService.s("play"))
-                .accessibilityLabel(languageService.s("play"))
                 
                 Menu {
-                    if let path = download.filePath, FileManager.default.fileExists(atPath: path.path) {
+                    if download.filePaths.count > 1 {
+                        Menu {
+                            ForEach(download.filePaths, id: \.self) { chapter in
+                                Button(chapter.lastPathComponent) {
+                                    QuickLookPreviewHelper.shared.preview(url: chapter)
+                                }
+                            }
+                        } label: {
+                            Label(languageService.s("quick_look_chapters"), systemImage: "eye")
+                        }
+
+                        Menu {
+                            ForEach(download.filePaths, id: \.self) { chapter in
+                                Button(chapter.lastPathComponent) {
+                                    downloadManager.openFile(chapter)
+                                }
+                            }
+                        } label: {
+                            Label(languageService.s("play_chapters"), systemImage: "play.fill")
+                        }
+                    } else if let path = download.primaryFilePath, FileManager.default.fileExists(atPath: path.path) {
                         Button {
                             QuickLookPreviewHelper.shared.preview(url: path)
                         } label: {
                             Label(languageService.s("quick_look"), systemImage: "eye")
                         }
-                    }
 
-                    Button {
-                        if let path = download.filePath {
+                        Button {
                             downloadManager.openFile(path)
+                        } label: {
+                            Label(languageService.s("play"), systemImage: "play.fill")
                         }
-                    } label: {
-                        Label(languageService.s("play"), systemImage: "play.fill")
                     }
                     
-                    if let path = download.filePath {
+                    if !download.filePaths.isEmpty {
                         Button {
-                            downloadManager.showInFinder(path)
+                            downloadManager.showInFinder(download.filePaths)
                         } label: {
                             Label(languageService.s("show_in_finder"), systemImage: "folder")
                         }
                         
                         Button {
                             NSPasteboard.general.clearContents()
-                            NSPasteboard.general.setString(path.path, forType: .string)
+                            let pathsString = download.filePaths.map { $0.path }.joined(separator: "\n")
+                            NSPasteboard.general.setString(pathsString, forType: .string)
                         } label: {
-                            Label(languageService.s("copy_file_path"), systemImage: "doc.on.doc")
+                            Label(download.filePaths.count > 1 ? languageService.s("copy_all_paths") : languageService.s("copy_file_path"), systemImage: "doc.on.doc")
                         }
                     }
                     
@@ -848,30 +867,55 @@ struct FileThumbnailView: View {
     
     @ViewBuilder
     private var rowContextMenu: some View {
-        if let path = download.filePath, FileManager.default.fileExists(atPath: path.path) {
-            Button {
-                QuickLookPreviewHelper.shared.preview(url: path)
-            } label: {
-                Label(languageService.s("quick_look"), systemImage: "eye")
-            }
-            
-            Button {
-                downloadManager.openFile(path)
-            } label: {
-                Label(languageService.s("play"), systemImage: "play.fill")
+        if download.status == .completed {
+            if download.filePaths.count > 1 {
+                Menu {
+                    ForEach(download.filePaths, id: \.self) { chapter in
+                        Button(chapter.lastPathComponent) {
+                            QuickLookPreviewHelper.shared.preview(url: chapter)
+                        }
+                    }
+                } label: {
+                    Label(languageService.s("quick_look_chapters"), systemImage: "eye")
+                }
+                
+                Menu {
+                    ForEach(download.filePaths, id: \.self) { chapter in
+                        Button(chapter.lastPathComponent) {
+                            downloadManager.openFile(chapter)
+                        }
+                    }
+                } label: {
+                    Label(languageService.s("play_chapters"), systemImage: "play.fill")
+                }
+            } else if let path = download.primaryFilePath, FileManager.default.fileExists(atPath: path.path) {
+                Button {
+                    QuickLookPreviewHelper.shared.preview(url: path)
+                } label: {
+                    Label(languageService.s("quick_look"), systemImage: "eye")
+                }
+                
+                Button {
+                    downloadManager.openFile(path)
+                } label: {
+                    Label(languageService.s("play"), systemImage: "play.fill")
+                }
             }
 
-            Button {
-                downloadManager.showInFinder(path)
-            } label: {
-                Label(languageService.s("show_in_finder"), systemImage: "folder")
-            }
+            if !download.filePaths.isEmpty {
+                Button {
+                    downloadManager.showInFinder(download.filePaths)
+                } label: {
+                    Label(languageService.s("show_in_finder"), systemImage: "folder")
+                }
 
-            Button {
-                NSPasteboard.general.clearContents()
-                NSPasteboard.general.setString(path.path, forType: .string)
-            } label: {
-                Label(languageService.s("copy_file_path"), systemImage: "doc.on.doc")
+                Button {
+                    NSPasteboard.general.clearContents()
+                    let pathsJoined = download.filePaths.map { $0.path }.joined(separator: "\n")
+                    NSPasteboard.general.setString(pathsJoined, forType: .string)
+                } label: {
+                    Label(download.filePaths.count > 1 ? languageService.s("copy_all_paths") : languageService.s("copy_file_path"), systemImage: "doc.on.doc")
+                }
             }
             
             Divider()

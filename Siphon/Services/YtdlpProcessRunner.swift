@@ -224,11 +224,97 @@ public protocol YtdlpProcessRunning: Sendable {
 public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
     public init() {}
 
+    public static func helperExecutableURL() -> URL? {
+        // 1. Auxiliary executable in application bundle
+        if let url = Bundle.main.url(forAuxiliaryExecutable: "siphon-pgrp"),
+           FileManager.default.isExecutableFile(atPath: url.path) {
+            return url
+        }
+        // 2. Contents/Helpers/siphon-pgrp in main bundle
+        let helperInBundle = Bundle.main.bundleURL.appendingPathComponent("Contents/Helpers/siphon-pgrp")
+        if FileManager.default.isExecutableFile(atPath: helperInBundle.path) {
+            return helperInBundle
+        }
+        // 3. Adjacent to main executable
+        if let execDir = Bundle.main.executableURL?.deletingLastPathComponent() {
+            let adjacent = execDir.appendingPathComponent("siphon-pgrp")
+            if FileManager.default.isExecutableFile(atPath: adjacent.path) {
+                return adjacent
+            }
+        }
+        // 4. In built products / test bundle directory
+        let testDir = Bundle(for: DownloadProcessController.self).bundleURL.deletingLastPathComponent()
+        let inBuiltProducts = testDir.appendingPathComponent("siphon-pgrp")
+        if FileManager.default.isExecutableFile(atPath: inBuiltProducts.path) {
+            return inBuiltProducts
+        }
+        // 5. In Application Support/Siphon/bin/siphon-pgrp
+        if let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first {
+            let cachedHelper = appSupport.appendingPathComponent("Siphon/bin/siphon-pgrp")
+            if FileManager.default.isExecutableFile(atPath: cachedHelper.path) {
+                return cachedHelper
+            }
+        }
+        return nil
+    }
+
+    public static func ensureProcessGroupHelper() -> URL? {
+        if let existing = helperExecutableURL() {
+            return existing
+        }
+
+        // Self-bootstrap: compile embedded C helper into Application Support/Siphon/bin
+        guard let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else {
+            return nil
+        }
+        let binDir = appSupport.appendingPathComponent("Siphon/bin")
+        let targetHelper = binDir.appendingPathComponent("siphon-pgrp")
+        let sourceFile = binDir.appendingPathComponent("siphon-pgrp.c")
+
+        do {
+            try FileManager.default.createDirectory(at: binDir, withIntermediateDirectories: true)
+            let cCode = """
+            #include <unistd.h>
+            #include <stdio.h>
+            #include <stdlib.h>
+            int main(int argc, char *argv[]) {
+                if (argc < 2) return 1;
+                setpgid(0, 0);
+                execvp(argv[1], &argv[1]);
+                perror("execvp");
+                return 127;
+            }
+            """
+            try cCode.write(to: sourceFile, atomically: true, encoding: .utf8)
+
+            let clang = Process()
+            clang.executableURL = URL(fileURLWithPath: "/usr/bin/clang")
+            clang.arguments = ["-O2", "-arch", "arm64", "-arch", "x86_64", sourceFile.path, "-o", targetHelper.path]
+            try clang.run()
+            clang.waitUntilExit()
+
+            try? FileManager.default.removeItem(at: sourceFile)
+
+            if clang.terminationStatus == 0 && FileManager.default.isExecutableFile(atPath: targetHelper.path) {
+                return targetHelper
+            }
+        } catch {
+            Task { @MainActor in
+                LoggerService.shared.log("Failed to bootstrap native process group helper: \(error.localizedDescription)", level: .warning)
+            }
+        }
+
+        return nil
+    }
+
     public static func configureProcessCommand(_ process: Process, args: [String]) {
-        if FileManager.default.isExecutableFile(atPath: "/usr/bin/perl") {
-            process.executableURL = URL(fileURLWithPath: "/usr/bin/perl")
-            process.arguments = ["-MPOSIX", "-e", "POSIX::setpgid(0,0); exec @ARGV", "--", "/usr/bin/env"] + args
+        if let helperURL = ensureProcessGroupHelper() {
+            process.executableURL = helperURL
+            process.arguments = ["/usr/bin/env"] + args
         } else {
+            Task { @MainActor in
+                LoggerService.shared.log("Native process group helper unavailable; running directly via /usr/bin/env.", level: .warning)
+            }
             process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
             process.arguments = args
         }

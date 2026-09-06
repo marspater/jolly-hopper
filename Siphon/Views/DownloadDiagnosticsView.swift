@@ -164,10 +164,12 @@ struct DownloadDiagnosticsView: View {
                 diagnosticRow(label: "HDR Action Policy", value: download.options.hdrAction?.title(lang: languageService) ?? "Preserve HDR")
             }
             
-            if let file = download.filePath {
-                diagnosticSection(title: "Local File Target") {
-                    diagnosticRow(label: "Destination Path", value: file.path, isMonospace: true)
-                    diagnosticRow(label: "File Exists", value: FileManager.default.fileExists(atPath: file.path) ? "Yes (Valid)" : "No (Temporary/Moved)")
+            if !download.filePaths.isEmpty {
+                diagnosticSection(title: download.filePaths.count > 1 ? "Local File Targets (\(download.filePaths.count) files)" : "Local File Target") {
+                    ForEach(Array(download.filePaths.enumerated()), id: \.element) { idx, file in
+                        diagnosticRow(label: download.filePaths.count > 1 ? "File \(idx + 1)" : "Destination Path", value: file.path, isMonospace: true)
+                        diagnosticRow(label: download.filePaths.count > 1 ? "Status \(idx + 1)" : "File Exists", value: FileManager.default.fileExists(atPath: file.path) ? "Yes (Valid)" : "No (Temporary/Moved)")
+                    }
                 }
             }
         }
@@ -285,9 +287,10 @@ struct DownloadDiagnosticsView: View {
             }
             .buttonStyle(.siphonSecondary)
             
-            if let file = download.filePath, FileManager.default.fileExists(atPath: file.path) {
+            let validFiles = download.filePaths.filter { FileManager.default.fileExists(atPath: $0.path) }
+            if !validFiles.isEmpty {
                 Button {
-                    NSWorkspace.shared.activateFileViewerSelecting([file])
+                    NSWorkspace.shared.activateFileViewerSelecting(validFiles)
                 } label: {
                     HStack(spacing: 4) {
                         Image(systemName: "folder")
@@ -403,7 +406,7 @@ struct DownloadDiagnosticsView: View {
         - **yt-dlp**: \(download.diagnostics.ytdlpVersion ?? "N/A")
         - **FFmpeg**: \(download.diagnostics.ffmpegVersion ?? "N/A")
         - **Exit Status**: \(download.diagnostics.exitStatus ?? "N/A")
-        - **Path**: \(download.filePath?.path ?? "N/A")
+        - **Path(s)**: \(download.filePaths.isEmpty ? (download.primaryFilePath?.path ?? "N/A") : download.filePaths.map { $0.path }.joined(separator: ", "))
         """
         copyToClipboard(report, label: "Markdown report copied!")
     }

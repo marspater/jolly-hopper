@@ -340,6 +340,7 @@ struct DownloadOptions: Codable {
     var rawCookies: String?
     var selectedFormatId: String?
     var hdrAction: HDRAction?
+    var resolutionFallbackPolicy: ResolutionFallbackPolicy?
 
     enum CodingKeys: String, CodingKey {
         case saveFolder
@@ -366,6 +367,7 @@ struct DownloadOptions: Codable {
         case forceOverwrite
         case selectedFormatId
         case hdrAction
+        case resolutionFallbackPolicy
     }
 
     init(
@@ -393,7 +395,8 @@ struct DownloadOptions: Codable {
         forceOverwrite: Bool? = false,
         rawCookies: String? = nil,
         selectedFormatId: String? = nil,
-        hdrAction: HDRAction? = .preserveHDR
+        hdrAction: HDRAction? = .preserveHDR,
+        resolutionFallbackPolicy: ResolutionFallbackPolicy? = .strictCeiling
     ) {
         self.saveFolder = saveFolder
         self.fileType = fileType
@@ -420,6 +423,7 @@ struct DownloadOptions: Codable {
         self.rawCookies = rawCookies
         self.selectedFormatId = selectedFormatId
         self.hdrAction = hdrAction
+        self.resolutionFallbackPolicy = resolutionFallbackPolicy ?? .strictCeiling
     }
 
     init(from decoder: Decoder) throws {
@@ -449,6 +453,7 @@ struct DownloadOptions: Codable {
         self.rawCookies = nil // Ephemeral only, never loaded from persistent history/json
         self.selectedFormatId = try container.decodeIfPresent(String.self, forKey: .selectedFormatId)
         self.hdrAction = try container.decodeIfPresent(HDRAction.self, forKey: .hdrAction) ?? .preserveHDR
+        self.resolutionFallbackPolicy = try container.decodeIfPresent(ResolutionFallbackPolicy.self, forKey: .resolutionFallbackPolicy) ?? .strictCeiling
     }
     
     static var `default`: DownloadOptions {
@@ -642,6 +647,21 @@ enum VideoResolution: String, Codable, CaseIterable, Identifiable {
     }
 }
 
+enum ResolutionFallbackPolicy: String, Codable, CaseIterable, Identifiable {
+    case strictCeiling = "strictCeiling"
+    case allowHigher = "allowHigher"
+
+    var id: String { rawValue }
+
+    func title(lang: LanguageService) -> String {
+        switch self {
+        case .strictCeiling:
+            return lang.s("res_fallback_strict")
+        case .allowHigher:
+            return lang.s("res_fallback_allow_higher")
+        }
+    }
+}
 
 enum VideoCodec: String, Codable, CaseIterable, Identifiable {
     case auto = "auto"
@@ -1134,9 +1154,13 @@ struct MediaInfo: Codable {
         let sortedVideos: [MediaFormat]
         if !eligibleVideos.isEmpty {
             sortedVideos = eligibleVideos.sorted { MediaFormat.compareVideoFormats($0, $1, options: options) }
-        } else {
-            // Option 2 fallback: when all formats exceed ceiling, select the lowest available format exceeding ceiling
+        } else if options.resolutionFallbackPolicy == .allowHigher {
+            // User explicitly configured policy to allow higher resolution exceeding ceiling
             sortedVideos = candidateVideos.sorted { MediaFormat.compareVideoFormats($0, $1, options: options) }
+        } else {
+            // Strict ceiling (default): Only permit candidate videos with unknown/unspecified height, never formats exceeding ceiling
+            let unknownHeightVideos = candidateVideos.filter { $0.parsedHeight == nil }
+            sortedVideos = unknownHeightVideos.sorted { MediaFormat.compareVideoFormats($0, $1, options: options) }
         }
         
         if let bestVideo = sortedVideos.first {
@@ -1783,6 +1807,7 @@ struct HistoricDownload: Codable, Identifiable {
     let progress: Double
     let options: DownloadOptions
 
+    @available(*, deprecated, message: "HistoricDownload uses filePaths as its canonical representation")
     var filePath: String? {
         filePaths.first
     }
@@ -1825,6 +1850,7 @@ struct HistoricDownload: Codable, Identifiable {
         self.progress = try container.decode(Double.self, forKey: .progress)
         self.options = try container.decode(DownloadOptions.self, forKey: .options)
 
+        // Legacy deserialization fallback: read single filePath only if filePaths is not present
         if let paths = try container.decodeIfPresent([String].self, forKey: .filePaths), !paths.isEmpty {
             self.filePaths = paths
         } else if let single = try container.decodeIfPresent(String.self, forKey: .filePath) {
@@ -1840,7 +1866,6 @@ struct HistoricDownload: Codable, Identifiable {
         try container.encode(url, forKey: .url)
         try container.encode(title, forKey: .title)
         try container.encode(filePaths, forKey: .filePaths)
-        try container.encodeIfPresent(filePaths.first, forKey: .filePath)
         try container.encode(downloadDate, forKey: .downloadDate)
         try container.encode(fileType, forKey: .fileType)
         try container.encode(status, forKey: .status)

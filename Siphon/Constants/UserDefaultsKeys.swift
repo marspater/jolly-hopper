@@ -23,4 +23,5 @@ enum UserDefaultsKeys {
     static let startInBackground = "startInBackground"
     static let selectedCustomPresetId = "selectedCustomPresetId"
     static let downloadSpeedLimit = "downloadSpeedLimit"
+    static let resolutionFallbackPolicy = "resolutionFallbackPolicy"
 }
