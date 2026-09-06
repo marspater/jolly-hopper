@@ -559,8 +559,8 @@ final class QueueAndErrorUXTests: XCTestCase {
         let uniqueSet = Set(resolvedPaths)
         XCTAssertEqual(uniqueSet.count, count, "All simultaneously resolved output paths must be completely unique without collision")
         XCTAssertTrue(resolvedPaths[0].hasSuffix("simultaneous_video.mp4"))
-        XCTAssertTrue(resolvedPaths[1].hasSuffix("simultaneous_video_1.mp4"))
-        XCTAssertTrue(resolvedPaths[2].hasSuffix("simultaneous_video_2.mp4"))
+        XCTAssertTrue(resolvedPaths[1].hasSuffix("simultaneous_video (1).mp4"))
+        XCTAssertTrue(resolvedPaths[2].hasSuffix("simultaneous_video (2).mp4"))
     }
 
     func testInstallerFailureHalfwayThroughPairedFfmpegInstallation() throws {
@@ -855,6 +855,15 @@ final class QueueAndErrorUXTests: XCTestCase {
         let script = UpdateChecker.generateUpdateScript()
         XCTAssertTrue(script.contains("[ -L \"$NEW_APP\" ]"), "Update script must explicitly reject symlinks for the app bundle")
         XCTAssertTrue(script.contains("[ \"$NEW_TEAM_ID\" != \"$EXPECTED_TEAM_ID\" ]"), "Update script must strictly reject team identifier mismatches without bypass")
+    }
+
+    func testGenerateUpdateScriptContainsStatusFileReporting() {
+        let script = UpdateChecker.generateUpdateScript()
+        XCTAssertTrue(script.contains("STATUS_FILE"), "Update script must accept STATUS_FILE environment variable")
+        XCTAssertTrue(script.contains("report_failure"), "Update script must have failure reporter")
+        XCTAssertTrue(script.contains("report_success"), "Update script must have success reporter")
+        XCTAssertTrue(script.contains("SUCCESS"), "Update script must emit SUCCESS status on verified install")
+        XCTAssertTrue(script.contains("FAILED"), "Update script must emit FAILED status on verification failure")
     }
 
     func testTrustedGitHubURLValidation() {
@@ -1296,6 +1305,28 @@ final class QueueAndErrorUXTests: XCTestCase {
         XCTAssertEqual(reconstructed.progress, 1.0)
         XCTAssertEqual(reconstructed.filePath?.path, "/tmp/roundtrip.mp4")
         XCTAssertEqual(reconstructed.log, "Log data")
+    }
+
+    func testMultiFileChapterSplitHistoricRoundtrip() {
+        var options = DownloadOptions.default
+        options.splitChapters = true
+
+        let download = Download(url: "https://example.com/split", options: options, title: "Split Video")
+        download.status = .completed
+        download.progress = 1.0
+        let ch1 = URL(fileURLWithPath: "/tmp/Split Video - 001 Intro.mp4")
+        let ch2 = URL(fileURLWithPath: "/tmp/Split Video - 002 Main.mp4")
+        let ch3 = URL(fileURLWithPath: "/tmp/Split Video - 003 Outro.mp4")
+        download.filePaths = [ch1, ch2, ch3]
+
+        XCTAssertEqual(download.filePath, ch1, "filePath must return the first file for backward-compatibility")
+        XCTAssertEqual(download.filePaths.count, 3)
+
+        let historic = HistoricDownload(download: download)
+        let reconstructed = historic.toDownload()
+        XCTAssertEqual(reconstructed.filePaths.count, 3)
+        XCTAssertEqual(reconstructed.filePaths, [ch1, ch2, ch3])
+        XCTAssertEqual(reconstructed.filePath, ch1)
     }
 
     func testSafariFDALocalizationAndStrings() {

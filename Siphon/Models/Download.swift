@@ -15,7 +15,17 @@ class Download: ObservableObject, Identifiable {
     @Published var progress: Double
     @Published var speed: String?
     @Published var eta: String?
-    @Published var filePath: URL?
+    @Published var filePaths: [URL] = []
+    var filePath: URL? {
+        get { filePaths.first }
+        set {
+            if let val = newValue {
+                filePaths = [val]
+            } else {
+                filePaths = []
+            }
+        }
+    }
     @Published var errorMessage: String?
     @Published var log: String = ""
     @Published var mediaInfo: MediaInfo? = nil
@@ -1113,7 +1123,17 @@ struct MediaInfo: Codable {
         
         // 3. Video formats: filter by hard constraints (codec & resolution), then rank deterministically
         let candidateVideos = formats.filter { !$0.isAudioOnly }
-        let sortedVideos = candidateVideos.sorted { MediaFormat.compareVideoFormats($0, $1, options: options) }
+        let eligibleVideos = candidateVideos.filter { video in
+            guard let maxH = options.videoResolution?.maxHeight else { return true }
+            return (video.parsedHeight ?? 0) <= maxH
+        }
+        let sortedVideos: [MediaFormat]
+        if !eligibleVideos.isEmpty {
+            sortedVideos = eligibleVideos.sorted { MediaFormat.compareVideoFormats($0, $1, options: options) }
+        } else {
+            // Option 2 fallback: when all formats exceed ceiling, select the lowest available format exceeding ceiling
+            sortedVideos = candidateVideos.sorted { MediaFormat.compareVideoFormats($0, $1, options: options) }
+        }
         
         if let bestVideo = sortedVideos.first {
             if bestVideo.isVideoOnly {
@@ -1555,8 +1575,15 @@ struct MediaFormat: Codable, Identifiable, Hashable {
             return ra.meetsResolution
         }
         // 3. Resolution height
-        if ra.height != rb.height {
-            return ra.height > rb.height
+        if !ra.meetsResolution && !rb.meetsResolution {
+            // When all available formats exceed the ceiling, select the lowest resolution exceeding ceiling
+            if ra.height != rb.height {
+                return ra.height < rb.height
+            }
+        } else {
+            if ra.height != rb.height {
+                return ra.height > rb.height
+            }
         }
         // 4. For MP4 containers under auto codec, prefer Apple-native codecs (H.264/HEVC) for QuickTime & Finder QuickLook compatibility
         if options.fileType == .mp4 && (options.videoCodec == nil || options.videoCodec == .auto) {
@@ -1730,6 +1757,7 @@ struct HistoricDownload: Codable, Identifiable {
     let url: String
     let title: String
     let filePath: String?
+    var filePaths: [String]?
     let downloadDate: Date
     let fileType: MediaFileType
     let status: DownloadStatus
@@ -1746,6 +1774,7 @@ struct HistoricDownload: Codable, Identifiable {
         self.url = download.url
         self.title = download.title
         self.filePath = download.filePath?.path
+        self.filePaths = download.filePaths.map { $0.path }
         self.downloadDate = download.createdAt
         self.fileType = download.options.fileType
         self.status = download.status
@@ -1769,7 +1798,9 @@ struct HistoricDownload: Codable, Identifiable {
         download.duration = self.duration
         download.errorMessage = self.errorMessage
         download.log = self.log
-        if let path = self.filePath {
+        if let paths = self.filePaths, !paths.isEmpty {
+            download.filePaths = paths.map { URL(fileURLWithPath: $0) }
+        } else if let path = self.filePath {
             download.filePath = URL(fileURLWithPath: path)
         }
         return download

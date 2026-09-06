@@ -166,8 +166,21 @@ struct AddDownloadView: View {
             }
         }
         .onChange(of: urlInput) { _, newValue in
-            if newValue.hasPrefix("http") && mediaInfo == nil && !isLoading {
-                fetchInfo()
+            fetchTask?.cancel()
+            mediaInfo = nil
+            customFilename = ""
+            selectedFormatId = nil
+            availableSubtitles = []
+            selectedSubtitleLangs.removeAll()
+            availableCodecs = []
+            errorMessage = nil
+            playlistItems = []
+            selectedPlaylistIds.removeAll()
+            isLoading = false
+
+            let clean = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            if clean.hasPrefix("http://") || clean.hasPrefix("https://") {
+                fetchInfo(debounce: true)
             }
         }
         .onChange(of: appState.urlToDownload) { _, newUrl in
@@ -175,7 +188,7 @@ struct AddDownloadView: View {
                 urlInput = newUrl
                 appState.urlToDownload = ""
                 inputMode = .single
-                fetchInfo()
+                fetchInfo(debounce: false)
             }
         }
         .alert(languageService.s("file_exists_title"), isPresented: $showFileExistsAlert) {
@@ -1478,7 +1491,7 @@ struct AddDownloadView: View {
         .padding()
     }
 
-    private func fetchInfo() {
+    private func fetchInfo(debounce: Bool = false) {
         let cleanURL = urlInput.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !cleanURL.isEmpty else { return }
         fetchTask?.cancel()
@@ -1487,6 +1500,10 @@ struct AddDownloadView: View {
         mediaInfo = nil
         selectedFormatId = nil
         fetchTask = Task {
+            if debounce {
+                try? await Task.sleep(nanoseconds: 300_000_000)
+                guard !Task.isCancelled else { return }
+            }
             do {
                 let info = try await downloadManager.ytdlpService.fetchInfo(url: cleanURL, rawCookies: appState.rawCookiesToDownload)
                 guard !Task.isCancelled else { return }
@@ -1792,28 +1809,20 @@ struct AddDownloadView: View {
         guard let options = pendingDownloadOptions else { return }
 
         let originalFilename = customFilename.isEmpty ? (mediaInfo?.title ?? "video") : customFilename
-        let currentFolder = saveFolder
-        let extensionString = fileType.fileExtension
+        var tempOptions = options
+        tempOptions.customFilename = originalFilename
+        let cleanURL = urlInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        let dummyDl = Download(
+            url: cleanURL,
+            options: tempOptions,
+            title: originalFilename
+        )
+        let (uniqueFilename, reservedPath) = downloadManager.reserveUniqueOutputPath(for: dummyDl)
+        downloadManager.unreserveOutputPath(reservedPath)
 
-        Task {
-            let uniqueFilename = await Task.detached {
-                var counter = 1
-                var newFilename = "\(originalFilename) (\(counter))"
-                var potentialPath = currentFolder.appendingPathComponent("\(newFilename).\(extensionString)")
-
-                while FileManager.default.fileExists(atPath: potentialPath.path) {
-                    counter += 1
-                    newFilename = "\(originalFilename) (\(counter))"
-                    potentialPath = currentFolder.appendingPathComponent("\(newFilename).\(extensionString)")
-                }
-
-                return newFilename
-            }.value
-
-            var finalOptions = options
-            finalOptions.customFilename = uniqueFilename
-            proceedWithDownload(options: finalOptions, forceOverwrite: false)
-        }
+        var finalOptions = options
+        finalOptions.customFilename = uniqueFilename
+        proceedWithDownload(options: finalOptions, forceOverwrite: false)
     }
 
     private func selectFolder() {

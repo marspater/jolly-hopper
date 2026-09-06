@@ -176,6 +176,7 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
     @Published var updateProgress: Double = 0
     @Published var isInstalling = false
     @Published var needsRestart = false
+    @Published var updateError: String? = nil
     
     private var currentVersion: String {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "5.1.0"
@@ -488,6 +489,19 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
         return """
         (
             set -e
+            STATUS_FILE="${STATUS_FILE:-}"
+            report_failure() {
+                if [ -n "$STATUS_FILE" ]; then
+                    echo '{"status":"FAILED"}' > "$STATUS_FILE"
+                fi
+            }
+            report_success() {
+                if [ -n "$STATUS_FILE" ]; then
+                    echo '{"status":"SUCCESS"}' > "$STATUS_FILE"
+                fi
+            }
+            trap report_failure ERR
+
             sleep 2
             
             PKG_PATH="${PKG_PATH:-$1}"
@@ -500,7 +514,7 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
             if file "$PKG_PATH" | grep -q "Zip archive"; then
                 /usr/bin/unzip -q "$PKG_PATH" -d "$WORK_DIR"
             else
-                hdiutil mount "$PKG_PATH" -mountpoint "$WORK_DIR" -quiet || exit 1
+                hdiutil mount "$PKG_PATH" -mountpoint "$WORK_DIR" -quiet || { report_failure; exit 1; }
             fi
             
             NEW_APP="$(find "$WORK_DIR" -maxdepth 2 -name "*.app" | head -n 1)"
@@ -509,6 +523,7 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
                 echo "No application bundle found in update payload"
                 hdiutil unmount "$WORK_DIR" -quiet 2>/dev/null || true
                 rm -rf "$WORK_DIR" "$PKG_PATH"
+                report_failure
                 exit 1
             fi
             
@@ -517,6 +532,7 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
                 echo "Code signature verification failed on new app payload"
                 hdiutil unmount "$WORK_DIR" -quiet 2>/dev/null || true
                 rm -rf "$WORK_DIR" "$PKG_PATH"
+                report_failure
                 exit 1
             fi
 
@@ -526,6 +542,7 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
                     echo "Team identifier mismatch: expected $EXPECTED_TEAM_ID, got $NEW_TEAM_ID"
                     hdiutil unmount "$WORK_DIR" -quiet 2>/dev/null || true
                     rm -rf "$WORK_DIR" "$PKG_PATH"
+                    report_failure
                     exit 1
                 fi
             fi
@@ -536,6 +553,7 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
                 echo "Bundle identifier mismatch: expected $EXPECTED_BUNDLE_ID, got $NEW_BUNDLE_ID"
                 hdiutil unmount "$WORK_DIR" -quiet 2>/dev/null || true
                 rm -rf "$WORK_DIR" "$PKG_PATH"
+                report_failure
                 exit 1
             fi
             
@@ -547,6 +565,7 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
                 echo "Failed to create atomic backup of existing app bundle"
                 hdiutil unmount "$WORK_DIR" -quiet 2>/dev/null || true
                 rm -rf "$WORK_DIR" "$PKG_PATH"
+                report_failure
                 exit 1
             fi
             
@@ -558,6 +577,7 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
                     rm -rf "$BACKUP_PATH"
                     hdiutil unmount "$WORK_DIR" -quiet 2>/dev/null || true
                     rm -rf "$WORK_DIR" "$PKG_PATH"
+                    report_success
                     open "$APP_PATH"
                     exit 0
                 else
@@ -566,6 +586,7 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
                     mv "$BACKUP_PATH" "$APP_PATH"
                     hdiutil unmount "$WORK_DIR" -quiet 2>/dev/null || true
                     rm -rf "$WORK_DIR" "$PKG_PATH"
+                    report_failure
                     exit 1
                 fi
             else
@@ -573,6 +594,7 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
                 mv "$BACKUP_PATH" "$APP_PATH"
                 hdiutil unmount "$WORK_DIR" -quiet 2>/dev/null || true
                 rm -rf "$WORK_DIR" "$PKG_PATH"
+                report_failure
                 exit 1
             fi
         ) & disown
@@ -592,6 +614,7 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
             return
         }
         
+        let statusFile = tempDir.appendingPathComponent("status.json")
         let script = Self.generateUpdateScript()
         
         let process = Process()
@@ -601,6 +624,7 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
         env["PKG_PATH"] = packagePath
         env["APP_PATH"] = appPath
         env["WORK_DIR"] = tempDir.path
+        env["STATUS_FILE"] = statusFile.path
         env["EXPECTED_BUNDLE_ID"] = bundleId
         env["EXPECTED_TEAM_ID"] = teamId
         process.environment = env
@@ -608,9 +632,29 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
         do {
             try process.run()
             
-            DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                let deadline = Date().addingTimeInterval(20.0)
+                var statusFound: String? = nil
+
+                while Date() < deadline {
+                    try? await Task.sleep(nanoseconds: 250_000_000)
+                    if let data = try? Data(contentsOf: statusFile),
+                       let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                       let status = json["status"] as? String {
+                        statusFound = status
+                        break
+                    }
+                }
+
                 self.isInstalling = false
-                self.needsRestart = true
+                if statusFound == "SUCCESS" {
+                    self.needsRestart = true
+                } else {
+                    self.needsRestart = false
+                    self.updateError = "Update installation failed or rolled back."
+                    LoggerService.shared.log("Update installation reported failure or timed out. Status: \(statusFound ?? "timeout")", level: .error)
+                }
             }
         } catch {
             LoggerService.shared.log("Update process run error: \(error)", level: .error)
