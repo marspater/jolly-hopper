@@ -291,6 +291,10 @@ class LanguageService: ObservableObject {
         "file_exists_status": "File Exists",
         "playlist_detected": "Playlist Detected",
         "entire_playlist": "Would you like to download the entire playlist or select specific videos?",
-        "load_playlist": "Load Playlist Items"
+        "load_playlist": "Load Playlist Items",
+        "quick_look": "Quick Look",
+        "copy_file_path": "Copy File Path",
+        "view_diagnostics": "View Diagnostics",
+        "click_to_quick_look": "Click to Quick Look"
     ]
 }
