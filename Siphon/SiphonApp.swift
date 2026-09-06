@@ -629,57 +629,46 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
         env["EXPECTED_TEAM_ID"] = teamId
         process.environment = env
         
-        do {
-            try process.run()
-            
-            Task { @MainActor [weak self] in
-                guard let self else { return }
-                // 180-second watchdog to recover from hung child processes without premature timeout
-                let watchdogDeadline = Date().addingTimeInterval(180.0)
+        Task { @MainActor [weak self] in
+            guard let self else { return }
 
-                // Supervise child process execution
-                while process.isRunning && Date() < watchdogDeadline {
-                    try? await Task.sleep(nanoseconds: 250_000_000)
+            await withCheckedContinuation { continuation in
+                process.terminationHandler = { _ in
+                    continuation.resume()
                 }
-
-                if process.isRunning {
-                    process.terminate()
-                    self.isInstalling = false
-                    self.needsRestart = false
-                    self.updateError = "Update installation timed out after 3 minutes."
-                    LoggerService.shared.log("Update installer timed out while process was still running.", level: .error)
-                    return
-                }
-
-                let exitCode = process.terminationStatus
-                var statusFound: String? = nil
-                if let data = try? Data(contentsOf: statusFile),
-                   let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                   let status = json["status"] as? String {
-                    statusFound = status
-                }
-
-                self.isInstalling = false
-                if exitCode == 0 && statusFound == "SUCCESS" {
-                    self.needsRestart = true
-                    LoggerService.shared.log("Update installation completed successfully.", level: .info)
-                } else if statusFound == "FAILED" {
-                    self.needsRestart = false
-                    self.updateError = "Update installation failed or rolled back."
-                    LoggerService.shared.log("Update installer reported failure status.", level: .error)
-                } else if exitCode != 0 {
-                    self.needsRestart = false
-                    self.updateError = "Update installer exited unexpectedly with code \(exitCode)."
-                    LoggerService.shared.log("Update installer exited abnormally with code \(exitCode). Status: \(statusFound ?? "none")", level: .error)
-                } else {
-                    self.needsRestart = false
-                    self.updateError = "Update installation completed without reporting a valid status."
-                    LoggerService.shared.log("Update installer completed with exit code 0 but status file was missing or corrupt.", level: .error)
+                do {
+                    try process.run()
+                } catch {
+                    LoggerService.shared.log("Failed to launch update process: \(error.localizedDescription)", level: .error)
+                    continuation.resume()
                 }
             }
-        } catch {
-            LoggerService.shared.log("Update process run error: \(error)", level: .error)
-            isInstalling = false
+
+            let exitCode = process.terminationStatus
+            var statusFound: String? = nil
+            if let data = try? Data(contentsOf: statusFile),
+               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let status = json["status"] as? String {
+                statusFound = status
+            }
+
+            self.isInstalling = false
+            if exitCode == 0 && statusFound == "SUCCESS" {
+                self.needsRestart = true
+                LoggerService.shared.log("Update installation completed successfully.", level: .info)
+            } else if statusFound == "FAILED" {
+                self.needsRestart = false
+                self.updateError = "Update installation failed or rolled back."
+                LoggerService.shared.log("Update installer reported failure status.", level: .error)
+            } else if exitCode != 0 {
+                self.needsRestart = false
+                self.updateError = "Update installer exited unexpectedly with code \(exitCode)."
+                LoggerService.shared.log("Update installer exited abnormally with code \(exitCode). Status: \(statusFound ?? "none")", level: .error)
+            } else {
+                self.needsRestart = false
+                self.updateError = "Update installation completed without reporting a valid status."
+                LoggerService.shared.log("Update installer completed with exit code 0 but status file was missing or corrupt.", level: .error)
+            }
         }
     }
     

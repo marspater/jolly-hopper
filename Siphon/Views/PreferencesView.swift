@@ -28,6 +28,7 @@ struct PreferencesView: View {
     @AppStorage(UserDefaultsKeys.embedMetadata) private var embedMetadata: Bool = true
     @AppStorage(UserDefaultsKeys.defaultFileType) private var defaultFileType: String = "mp4"
     @AppStorage(UserDefaultsKeys.defaultVideoResolution) private var defaultVideoResolution: String = "r1080p"
+    @AppStorage(UserDefaultsKeys.resolutionFallbackPolicy) private var resolutionFallbackPolicy: String = ResolutionFallbackPolicy.strictCeiling.rawValue
     @AppStorage(UserDefaultsKeys.defaultVideoCodec) private var defaultVideoCodec: String = "h264"
     @AppStorage(UserDefaultsKeys.defaultAudioCodec) private var defaultAudioCodec: String = "aac"
     @AppStorage(UserDefaultsKeys.selectedPreset) private var selectedPreset: String = "max_compatibility"
@@ -595,6 +596,12 @@ struct PreferencesView: View {
                     Text(res.title(lang: languageService)).tag(res.rawValue)
                 }
             }
+
+            Picker(languageService.s("res_fallback_policy"), selection: $resolutionFallbackPolicy) {
+                ForEach(ResolutionFallbackPolicy.allCases) { policy in
+                    Text(policy.title(lang: languageService)).tag(policy.rawValue)
+                }
+            }
             
             HStack {
                 Spacer()
@@ -881,6 +888,7 @@ struct PreferencesView: View {
     private func resetFormatToDefaults() {
         defaultFileType = "mp4"
         defaultVideoResolution = "r1080p"
+        resolutionFallbackPolicy = ResolutionFallbackPolicy.strictCeiling.rawValue
         defaultVideoCodec = "h264"
         defaultAudioCodec = "aac"
         defaultAdditionalArguments = ""

@@ -1283,7 +1283,13 @@ class DownloadManager: ObservableObject {
     }
 
     func showInFinder(_ path: URL) {
-        NSWorkspace.shared.activateFileViewerSelecting([path])
+        showInFinder([path])
+    }
+
+    func showInFinder(_ paths: [URL]) {
+        let validPaths = paths.filter { FileManager.default.fileExists(atPath: $0.path) }
+        guard !validPaths.isEmpty else { return }
+        NSWorkspace.shared.activateFileViewerSelecting(validPaths)
     }
 
     private func updateStatus(for download: Download, to status: DownloadStatus) {

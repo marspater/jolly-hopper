@@ -90,6 +90,7 @@
 		E0000033 /* DebugLogWindowManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugLogWindowManager.swift; sourceTree = "<group>"; };
 		E0000034 /* DebugLogView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugLogView.swift; sourceTree = "<group>"; };
 		E0000035 /* DownloadDiagnosticsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DownloadDiagnosticsView.swift; sourceTree = "<group>"; };
+		E0000070 /* siphon-pgrp.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = "Helpers/siphon-pgrp.c"; sourceTree = "<group>"; };
 		E0000040 /* DownloadManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DownloadManagerTests.swift; sourceTree = "<group>"; };
 		E0000041 /* MediaInfoTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaInfoTests.swift; sourceTree = "<group>"; };
 		E0000042 /* YtdlpServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YtdlpServiceTests.swift; sourceTree = "<group>"; };
@@ -139,6 +140,7 @@
 				E0003009 /* Extensions */,
 				E0003010 /* Constants */,
 				E0000013 /* Siphon.entitlements */,
+				E0000070 /* siphon-pgrp.c */,
 			);
 			path = Siphon;
 			sourceTree = "<group>";
@@ -259,6 +261,7 @@
 				E0004002 /* Sources */,
 				E0002001 /* Frameworks */,
 				E0004003 /* Resources */,
+				E0004030 /* Compile Native Helper */,
 			);
 			buildRules = (
 			);
@@ -286,6 +289,30 @@
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
 /* End PBXNativeTarget section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		E0004030 /* Compile Native Helper */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"$(SRCROOT)/Siphon/Helpers/siphon-pgrp.c",
+			);
+			name = "Compile Native Process Group Helper";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(BUILT_PRODUCTS_DIR)/siphon-pgrp",
+				"$(TARGET_BUILD_DIR)/$(CONTENTS_FOLDER_PATH)/Helpers/siphon-pgrp",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "clang -O2 -arch arm64 -arch x86_64 \"${SRCROOT}/Siphon/Helpers/siphon-pgrp.c\" -o \"${BUILT_PRODUCTS_DIR}/siphon-pgrp\"\nmkdir -p \"${TARGET_BUILD_DIR}/${CONTENTS_FOLDER_PATH}/Helpers\"\ncp -f \"${BUILT_PRODUCTS_DIR}/siphon-pgrp\" \"${TARGET_BUILD_DIR}/${CONTENTS_FOLDER_PATH}/Helpers/siphon-pgrp\"\nchmod +x \"${TARGET_BUILD_DIR}/${CONTENTS_FOLDER_PATH}/Helpers/siphon-pgrp\"\n";
+		};
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXProject section */
 		E0006001 /* Project object */ = {
@@ -572,6 +599,7 @@
 				);
 				MACOSX_DEPLOYMENT_TARGET = "$(RECOMMENDED_MACOSX_DEPLOYMENT_TARGET)";
 				MARKETING_VERSION = 5.1.0;
+				OTHER_CODE_SIGN_FLAGS = "--deep";
 				PRODUCT_BUNDLE_IDENTIFIER = com.marspater.siphon;
 				PRODUCT_MODULE_NAME = Siphon;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -608,6 +636,7 @@
 				MACOSX_DEPLOYMENT_TARGET = "$(RECOMMENDED_MACOSX_DEPLOYMENT_TARGET)";
 				MARKETING_VERSION = 5.1.0;
 				ONLY_ACTIVE_ARCH = NO;
+				OTHER_CODE_SIGN_FLAGS = "--deep";
 				PRODUCT_BUNDLE_IDENTIFIER = com.marspater.siphon;
 				PRODUCT_MODULE_NAME = Siphon;
 				PRODUCT_NAME = "$(TARGET_NAME)";

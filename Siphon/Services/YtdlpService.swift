@@ -1726,7 +1726,12 @@ public struct DownloadResult: Sendable {
         if isSynthesizedDirectStream {
             selector = "b/best"
         } else if let h = maxH {
-            selector = "bestvideo[height<=\(h)]+bestaudio/best[height<=\(h)]/bestvideo[height>\(h)]+bestaudio/best[height>\(h)]/best"
+            if options.resolutionFallbackPolicy == .allowHigher {
+                selector = "bestvideo[height<=\(h)]+bestaudio/best[height<=\(h)]/bestvideo[height>\(h)]+bestaudio/best[height>\(h)]/best"
+            } else {
+                // Strict ceiling: Best available ≤ requested height (e.g. 720p requested -> best <= 720p)
+                selector = "bestvideo[height<=\(h)]+bestaudio/best[height<=\(h)]"
+            }
         } else {
             selector = "bestvideo+bestaudio/best"
         }

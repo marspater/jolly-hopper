@@ -30,6 +30,7 @@ struct AddDownloadView: View {
     @State private var customPresets: [CustomPreset] = []
     @State private var selectedPresetName: String? = nil
     @State private var presetSubtitleLanguage: String = ""
+    @AppStorage(UserDefaultsKeys.resolutionFallbackPolicy) private var resolutionFallbackPolicyRaw: String = ResolutionFallbackPolicy.strictCeiling.rawValue
 
 
     @State private var downloadSubtitles: Bool = false
@@ -1693,7 +1694,8 @@ struct AddDownloadView: View {
             forceOverwrite: false,
             rawCookies: nil,
             selectedFormatId: inputMode == .single ? selectedFormatId : nil,
-            hdrAction: isVideoTab ? (HDRAction(rawValue: selectedHDRAction) ?? .preserveHDR) : nil
+            hdrAction: isVideoTab ? (HDRAction(rawValue: selectedHDRAction) ?? .preserveHDR) : nil,
+            resolutionFallbackPolicy: isVideoTab ? (ResolutionFallbackPolicy(rawValue: resolutionFallbackPolicyRaw) ?? .strictCeiling) : nil
         )
 
         if inputMode == .batch {
