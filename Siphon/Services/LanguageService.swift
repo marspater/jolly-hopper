@@ -22,6 +22,7 @@ class LanguageService: ObservableObject {
     }
     
     private let translations: [String: String] = [
+        "quick_look": "Quick Look",
         "legal_disclaimer": "Legal Disclaimer",
         "about_app": "About Siphon",
         "couldnt_download": "Couldn't download",

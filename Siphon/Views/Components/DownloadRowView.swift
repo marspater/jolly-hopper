@@ -37,6 +37,7 @@ final class QuickLookPreviewHelper: NSObject, QLPreviewPanelDataSource, QLPrevie
 struct DownloadListView: View {
     let downloads: [Download]
     let emptyMessage: String
+    var emptyIcon: String = "tray.fill"
     let showStop: Bool
     
     @EnvironmentObject var downloadManager: DownloadManager
@@ -63,7 +64,7 @@ struct DownloadListView: View {
     
     private var emptyState: some View {
         SiphonEmptyStateView(
-            icon: "tray.fill",
+            icon: emptyIcon,
             title: emptyMessage,
             message: languageService.s("url_placeholder"),
             actionTitle: languageService.s("new_download")
@@ -501,8 +502,8 @@ struct FileThumbnailView: View {
                     }
                     .buttonStyle(.siphonIcon(size: 28))
                     .foregroundColor(SiphonTheme.accent)
-                    .help("Quick Look")
-                    .accessibilityLabel("Quick Look")
+                    .help(languageService.s("quick_look"))
+                    .accessibilityLabel(languageService.s("quick_look"))
                 }
                 
                 Button {
@@ -523,7 +524,7 @@ struct FileThumbnailView: View {
                         Button {
                             QuickLookPreviewHelper.shared.preview(url: path)
                         } label: {
-                            Label("Quick Look", systemImage: "eye")
+                            Label(languageService.s("quick_look"), systemImage: "eye")
                         }
                     }
 
@@ -851,7 +852,7 @@ struct FileThumbnailView: View {
             Button {
                 QuickLookPreviewHelper.shared.preview(url: path)
             } label: {
-                Label("Quick Look", systemImage: "eye")
+                Label(languageService.s("quick_look"), systemImage: "eye")
             }
             
             Button {
