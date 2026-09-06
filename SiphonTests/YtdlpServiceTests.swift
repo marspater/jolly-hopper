@@ -1243,6 +1243,27 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertEqual(resolved.first?.formatId, "h264_1080", "Must fall back gracefully to available high-quality format when preferred codec is absent")
     }
 
+    func testResolutionCeilingEnforcementAndFallback() {
+        let f1080 = MediaFormat(formatId: "f1080", ext: "mp4", resolution: "1920x1080", fps: 30, vcodec: "avc1", acodec: "mp4a", abr: 128, vbr: 3000, filesize: 30000000, filesizeApprox: nil, formatNote: nil, formatProtocol: "https", manifestUrl: nil)
+        let f1440 = MediaFormat(formatId: "f1440", ext: "mp4", resolution: "2560x1440", fps: 30, vcodec: "avc1", acodec: "mp4a", abr: 128, vbr: 5000, filesize: 50000000, filesizeApprox: nil, formatNote: nil, formatProtocol: "https", manifestUrl: nil)
+        let f2160 = MediaFormat(formatId: "f2160", ext: "mp4", resolution: "3840x2160", fps: 60, vcodec: "av01", acodec: "mp4a", abr: 128, vbr: 12000, filesize: 120000000, filesizeApprox: nil, formatNote: nil, formatProtocol: "https", manifestUrl: nil)
+        let f720 = MediaFormat(formatId: "f720", ext: "mp4", resolution: "1280x720", fps: 30, vcodec: "avc1", acodec: "mp4a", abr: 128, vbr: 1500, filesize: 15000000, filesizeApprox: nil, formatNote: nil, formatProtocol: "https", manifestUrl: nil)
+        let f480 = MediaFormat(formatId: "f480", ext: "mp4", resolution: "854x480", fps: 30, vcodec: "avc1", acodec: "mp4a", abr: 128, vbr: 800, filesize: 8000000, filesizeApprox: nil, formatNote: nil, formatProtocol: "https", manifestUrl: nil)
+
+        // Case A: 720p requested, formats 480p, 720p, 1080p, 2160p available -> MUST pick 720p
+        let mediaInfoA = MediaInfo(id: "testA", title: "Test A", formats: [f480, f720, f1080, f2160])
+        var options720 = DownloadOptions.default
+        options720.videoResolution = .r720p
+        let resolvedA = mediaInfoA.resolveSelectedFormats(options: options720)
+        XCTAssertEqual(resolvedA.first?.formatId, "f720", "When 720p is requested and 720p exists, it must strictly not exceed the 720p ceiling")
+
+        // Case B: 720p requested, ONLY 1080p, 1440p, 2160p available (all exceed 720p)
+        // Option 2 fallback: MUST pick the LOWEST resolution exceeding ceiling (1080p), NEVER the highest (2160p)!
+        let mediaInfoB = MediaInfo(id: "testB", title: "Test B", formats: [f2160, f1440, f1080])
+        let resolvedB = mediaInfoB.resolveSelectedFormats(options: options720)
+        XCTAssertEqual(resolvedB.first?.formatId, "f1080", "When all formats exceed the ceiling, fallback must choose the lowest exceeding resolution (1080p), not 4K")
+    }
+
     func testProcessExitNonZeroThrowsErrorEvenIfFileExists() async {
         let service = YtdlpService(processRunner: MockYtdlpProcessRunner(mockDownload: { _ in
             throw YtdlpError.downloadFailed("ffmpeg conversion crashed")
@@ -2251,6 +2272,64 @@ final class YtdlpServiceTests: XCTestCase {
         let env = AdaptiveRenderingEnvironment.shared
         XCTAssertNotNil(env.materialMode)
         XCTAssertNotNil(env.colorGamut)
+    }
+
+    func testConsolidatedNetscapeCookieFileGeneration() throws {
+        let service = YtdlpService(processRunner: MockYtdlpProcessRunner())
+        let url = "https://example.com/video"
+        let rawHeader = "session_id=s123; tracking_pref=0"
+        let additional: [(name: String, value: String)] = [("sucuri_cloudproxy_uuid_123", "sec_val_999")]
+
+        guard let cookieFileURL = service.createConsolidatedCookiesFile(
+            url: url,
+            rawCookies: rawHeader,
+            additionalCookies: additional
+        ) else {
+            XCTFail("Failed to create consolidated cookies file")
+            return
+        }
+        defer { try? FileManager.default.removeItem(at: cookieFileURL) }
+
+        XCTAssertTrue(FileManager.default.fileExists(atPath: cookieFileURL.path))
+
+        // Verify permissions are 0o600
+        let attributes = try FileManager.default.attributesOfItem(atPath: cookieFileURL.path)
+        let posixPerms = attributes[.posixPermissions] as? NSNumber
+        XCTAssertEqual(posixPerms?.intValue, 0o600, "Consolidated cookie file must have 0o600 permissions")
+
+        // Verify file content includes all cookies formatted as Netscape TSV
+        let content = try String(contentsOf: cookieFileURL, encoding: .utf8)
+        XCTAssertTrue(content.hasPrefix("# Netscape HTTP Cookie File"))
+        XCTAssertTrue(content.contains("session_id\ts123"))
+        XCTAssertTrue(content.contains("tracking_pref\t0"))
+        XCTAssertTrue(content.contains("sucuri_cloudproxy_uuid_123\tsec_val_999"))
+        XCTAssertTrue(content.contains("example.com"))
+    }
+
+    func test5xxServerErrorDoesNotTriggerRangeChunkDisabling() async throws {
+        let callCountBox = TestBox<Int>(0)
+        let capturedArgs = TestBox<[[String]]>([])
+
+        service.processRunner = MockYtdlpProcessRunner(mockDownload: { args in
+            callCountBox.value += 1
+            capturedArgs.value.append(args)
+            if callCountBox.value == 1 {
+                throw YtdlpError.commandFailed("ERROR: HTTP Error 502: Bad Gateway")
+            }
+            return "/tmp/server_retry_download.mp4"
+        })
+
+        let result = try await service.download(
+            url: "https://example.com/stream-502.mp4",
+            options: DownloadOptions.default,
+            onProgress: { _, _, _ in },
+            onOutput: { _ in }
+        )
+
+        XCTAssertEqual(callCountBox.value, 2, "Should retry once upon encountering 502 error")
+        XCTAssertTrue(capturedArgs.value[0].contains("--http-chunk-size"), "Initial attempt should include chunk size")
+        XCTAssertTrue(capturedArgs.value[1].contains("--http-chunk-size"), "Retry of 502 Bad Gateway MUST retain chunk size, NOT treat as range error!")
+        XCTAssertEqual(result.lastPathComponent, "server_retry_download.mp4")
     }
 }
 

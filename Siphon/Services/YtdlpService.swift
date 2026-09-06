@@ -840,26 +840,28 @@ class YtdlpService: ObservableObject {
         ]
         appendJsRuntimeArgs(to: &args)
         
-        var tempRawCookieFile: URL? = nil
-        if let raw = rawCookies, !raw.isEmpty {
-            if let tempFile = createTempCookiesFileFromHeader(url: url, cookieHeader: raw) {
-                tempRawCookieFile = tempFile
+        var tempCookieFile: URL? = nil
+        let sucuriCookie = await resolveSucuriCookie(for: url)
+        var additionalCookies: [(name: String, value: String)] = []
+        if let sc = sucuriCookie {
+            additionalCookies.append((name: sc.name, value: sc.value))
+        }
+
+        if (rawCookies != nil && !rawCookies!.isEmpty) || !additionalCookies.isEmpty {
+            if let tempFile = createConsolidatedCookiesFile(url: url, rawCookies: rawCookies, additionalCookies: additionalCookies) {
+                tempCookieFile = tempFile
                 args.append(contentsOf: ["--cookies", tempFile.path])
+                if sucuriCookie != nil {
+                    LoggerService.shared.log("Using temporary Sucuri cookie in consolidated file for \(hostForLog(url)) (cookie values not logged)", level: .info)
+                    args.append(contentsOf: ["--user-agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"])
+                }
+                if let raw = rawCookies, !raw.isEmpty {
+                    LoggerService.shared.log("Using session cookies passed from browser extension for \(hostForLog(url))", level: .info)
+                }
             }
         } else {
             let usingBrowserCookies = appendCookieArgs(for: url, to: &args, force: forceBrowserCookies)
             logCookieUsage(for: url, usingBrowserCookies: usingBrowserCookies)
-        }
-
-        // Handle Sucuri bypass
-        var tempCookieFile: URL? = nil
-        if let sucuriCookie = await resolveSucuriCookie(for: url) {
-            if let tempFile = createTempCookiesFile(url: url, cookieName: sucuriCookie.name, cookieValue: sucuriCookie.value) {
-                tempCookieFile = tempFile
-                LoggerService.shared.log("Using temporary Sucuri cookie file for \(hostForLog(url)) (cookie values not logged)", level: .info)
-                args.append(contentsOf: ["--cookies", tempFile.path])
-                args.append(contentsOf: ["--user-agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"])
-            }
         }
 
         appendSiteSpecificArgs(for: url, to: &args)
@@ -868,9 +870,6 @@ class YtdlpService: ObservableObject {
 
         defer {
             if let fileURL = tempCookieFile {
-                try? FileManager.default.removeItem(at: fileURL)
-            }
-            if let fileURL = tempRawCookieFile {
                 try? FileManager.default.removeItem(at: fileURL)
             }
         }
@@ -906,26 +905,28 @@ class YtdlpService: ObservableObject {
         ]
         appendJsRuntimeArgs(to: &args)
         
-        var tempRawCookieFile: URL? = nil
-        if let raw = rawCookies, !raw.isEmpty {
-            if let tempFile = createTempCookiesFileFromHeader(url: url, cookieHeader: raw) {
-                tempRawCookieFile = tempFile
+        var tempCookieFile: URL? = nil
+        let sucuriCookie = await resolveSucuriCookie(for: url)
+        var additionalCookies: [(name: String, value: String)] = []
+        if let sc = sucuriCookie {
+            additionalCookies.append((name: sc.name, value: sc.value))
+        }
+
+        if (rawCookies != nil && !rawCookies!.isEmpty) || !additionalCookies.isEmpty {
+            if let tempFile = createConsolidatedCookiesFile(url: url, rawCookies: rawCookies, additionalCookies: additionalCookies) {
+                tempCookieFile = tempFile
                 args.append(contentsOf: ["--cookies", tempFile.path])
+                if sucuriCookie != nil {
+                    LoggerService.shared.log("Using temporary Sucuri cookie in consolidated file for \(hostForLog(url)) (cookie values not logged)", level: .info)
+                    args.append(contentsOf: ["--user-agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"])
+                }
+                if let raw = rawCookies, !raw.isEmpty {
+                    LoggerService.shared.log("Using session cookies passed from browser extension for \(hostForLog(url))", level: .info)
+                }
             }
         } else {
             let usingBrowserCookies = appendCookieArgs(for: url, to: &args)
             logCookieUsage(for: url, usingBrowserCookies: usingBrowserCookies)
-        }
-
-        // Handle Sucuri bypass
-        var tempCookieFile: URL? = nil
-        if let sucuriCookie = await resolveSucuriCookie(for: url) {
-            if let tempFile = createTempCookiesFile(url: url, cookieName: sucuriCookie.name, cookieValue: sucuriCookie.value) {
-                tempCookieFile = tempFile
-                LoggerService.shared.log("Using temporary Sucuri cookie file for \(hostForLog(url)) (cookie values not logged)", level: .info)
-                args.append(contentsOf: ["--cookies", tempFile.path])
-                args.append(contentsOf: ["--user-agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"])
-            }
         }
 
         args.append(contentsOf: ["--extractor-args", "generic:impersonate"])
@@ -934,9 +935,6 @@ class YtdlpService: ObservableObject {
 
         defer {
             if let fileURL = tempCookieFile {
-                try? FileManager.default.removeItem(at: fileURL)
-            }
-            if let fileURL = tempRawCookieFile {
                 try? FileManager.default.removeItem(at: fileURL)
             }
         }
@@ -1110,7 +1108,12 @@ class YtdlpService: ObservableObject {
 
         // Safe per-download isolated scratch directory for temporary chunks and thumbnail conversions
         let scratchDirectory = FileManager.default.temporaryDirectory.appendingPathComponent("siphon_scratch_\(UUID().uuidString)")
-        try? FileManager.default.createDirectory(at: scratchDirectory, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+        do {
+            try FileManager.default.createDirectory(at: scratchDirectory, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+        } catch {
+            LoggerService.shared.log("Failed to create temporary scratch directory at \(scratchDirectory.path): \(error.localizedDescription)", level: .error)
+            throw YtdlpError.downloadFailed("Failed to initialize temporary scratch directory: \(error.localizedDescription)")
+        }
         args.append(contentsOf: ["--paths", "temp:\(scratchDirectory.path)"])
         args.append(contentsOf: ["--paths", "thumbnail:\(scratchDirectory.path)"])
         args.append("--no-playlist")
@@ -1200,25 +1203,27 @@ class YtdlpService: ObservableObject {
         }
 
         var tempCookieFiles: [URL] = []
-        if let rawCookies = options.rawCookies, !rawCookies.isEmpty {
-            if let tempFile = createTempCookiesFileFromHeader(url: targetURL, cookieHeader: rawCookies) {
+        let sucuriCookie = await resolveSucuriCookie(for: normalizedURL)
+        var additionalCookies: [(name: String, value: String)] = []
+        if let sc = sucuriCookie {
+            additionalCookies.append((name: sc.name, value: sc.value))
+        }
+
+        if (options.rawCookies != nil && !options.rawCookies!.isEmpty) || !additionalCookies.isEmpty {
+            if let tempFile = createConsolidatedCookiesFile(url: targetURL, rawCookies: options.rawCookies, additionalCookies: additionalCookies) {
                 tempCookieFiles.append(tempFile)
-                LoggerService.shared.log("Using session cookies passed from browser extension for \(hostForLog(targetURL))", level: .info)
                 args.append(contentsOf: ["--cookies", tempFile.path])
+                if sucuriCookie != nil {
+                    LoggerService.shared.log("Using temporary Sucuri cookie in consolidated file for \(hostForLog(normalizedURL)) (cookie values not logged)", level: .info)
+                    args.append(contentsOf: ["--user-agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"])
+                }
+                if let raw = options.rawCookies, !raw.isEmpty {
+                    LoggerService.shared.log("Using session cookies passed from browser extension for \(hostForLog(targetURL))", level: .info)
+                }
             }
         } else {
             let usingBrowserCookies = appendCookieArgs(for: normalizedURL, to: &args)
             logCookieUsage(for: normalizedURL, usingBrowserCookies: usingBrowserCookies)
-        }
-
-        // Handle Sucuri bypass
-        if let sucuriCookie = await resolveSucuriCookie(for: normalizedURL) {
-            if let tempFile = createTempCookiesFile(url: normalizedURL, cookieName: sucuriCookie.name, cookieValue: sucuriCookie.value) {
-                tempCookieFiles.append(tempFile)
-                LoggerService.shared.log("Using temporary Sucuri cookie file for \(hostForLog(normalizedURL)) (cookie values not logged)", level: .info)
-                args.append(contentsOf: ["--cookies", tempFile.path])
-                args.append(contentsOf: ["--user-agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"])
-            }
         }
         
         // Prepare local scratch thumbnail if available to guarantee embedding for direct stream downloads
@@ -1355,11 +1360,11 @@ class YtdlpService: ObservableObject {
                     continue
                 }
 
-                // Strategy 5: Transient CDN connection refusal / reset -> Retry with fresh connection
-                if !errText.isEmpty, (errText.contains("Connection refused") || errText.contains("Failed to establish a new connection") || errText.contains("Connection reset")), !triedStrategies.contains(.retryTransientNetworkError) {
+                // Strategy 5: Transient CDN connection refusal / server error -> Retry with fresh connection
+                if !errText.isEmpty, isTransientServerError(errText), !triedStrategies.contains(.retryTransientNetworkError) {
                     triedStrategies.insert(.retryTransientNetworkError)
-                    LoggerService.shared.log("Transient CDN connection refusal encountered (\(errText.trimmingCharacters(in: .whitespacesAndNewlines))). Retrying download with fresh connection...", level: .warning)
-                    onOutput("[Siphon Info] CDN edge server refused connection. Retrying with fresh stream endpoint...\n")
+                    LoggerService.shared.log("Transient server or network error encountered (\(errText.trimmingCharacters(in: .whitespacesAndNewlines))). Retrying download with fresh connection...", level: .warning)
+                    onOutput("[Siphon Info] Server or network error encountered. Retrying stream download...\n")
                     if processRunner is DefaultYtdlpProcessRunner {
                         try? await Task.sleep(nanoseconds: 1_000_000_000)
                     }
@@ -1702,13 +1707,17 @@ class YtdlpService: ObservableObject {
         if isSynthesizedDirectStream {
             selector = "b/best"
         } else if let h = maxH {
-            selector = "bestvideo[height<=\(h)]+bestaudio/best[height<=\(h)]/bestvideo+bestaudio/best"
+            selector = "bestvideo[height<=\(h)]+bestaudio/best[height<=\(h)]/bestvideo[height>\(h)]+bestaudio/best[height>\(h)]/best"
         } else {
             selector = "bestvideo+bestaudio/best"
         }
 
         args.append(contentsOf: ["-f", selector])
-        args.append(contentsOf: ["-S", "lang,quality,res,height,fps,hdr:12,vbr,abr,filesize"])
+        if let h = maxH {
+            args.append(contentsOf: ["-S", "res:\(h),lang,quality,fps,hdr:12,vbr,abr,filesize"])
+        } else {
+            args.append(contentsOf: ["-S", "lang,quality,res,height,fps,hdr:12,vbr,abr,filesize"])
+        }
 
         var finalMergeFormat = compatibleMergeOutputFormat(for: options)
 
@@ -3736,13 +3745,33 @@ class YtdlpService: ObservableObject {
         if lower.contains("byte range") || lower.contains("byte ranges") {
             return true
         }
-        if lower.contains("range header not supported") || lower.contains("range request not supported") || lower.contains("does not support range") || lower.contains("server does not support ranges") {
+        if lower.contains("range header not supported") ||
+           lower.contains("range request not supported") ||
+           lower.contains("does not support range") ||
+           lower.contains("server does not support ranges") {
             return true
         }
-        if lower.contains("http error 500") || lower.contains("http error 502") || lower.contains("http error 503") || lower.contains("http error 504") || lower.contains("internal server error") || lower.contains("bad gateway") || lower.contains("service unavailable") {
+        // Certain CDNs reject HTTP byte-range slicing with HTTP 500 Internal Server Error.
+        // When chunking is active, stripping chunk size resolves the server error.
+        if lower.contains("http error 500") || lower.contains("internal server error") {
             return true
         }
         return false
+    }
+
+    private func isTransientServerError(_ text: String) -> Bool {
+        let lower = text.lowercased()
+        return lower.contains("http error 500") ||
+               lower.contains("http error 502") ||
+               lower.contains("http error 503") ||
+               lower.contains("http error 504") ||
+               lower.contains("internal server error") ||
+               lower.contains("bad gateway") ||
+               lower.contains("service unavailable") ||
+               lower.contains("gateway timeout") ||
+               lower.contains("connection refused") ||
+               lower.contains("failed to establish a new connection") ||
+               lower.contains("connection reset")
     }
 
     private func appendSiteSpecificArgs(for url: String, options: DownloadOptions? = nil, mediaInfo: MediaInfo? = nil, to args: inout [String]) {
@@ -4245,6 +4274,52 @@ class YtdlpService: ObservableObject {
         }
     }
 
+    func createConsolidatedCookiesFile(
+        url: String,
+        rawCookies: String? = nil,
+        additionalCookies: [(name: String, value: String)] = []
+    ) -> URL? {
+        guard let urlObj = URL(string: url), let host = urlObj.host, !host.isEmpty else { return nil }
+        guard let cookiesDir = YtdlpService.getSecureTempCookiesDirectory() else { return nil }
+        let domain = host.hasPrefix(".") ? host : ".\(host)"
+        let tempCookiesURL = cookiesDir.appendingPathComponent("siphon_consolidated_cookies_\(UUID().uuidString).txt")
+        
+        var lines = ["# Netscape HTTP Cookie File"]
+        let expiry = Int(Date().addingTimeInterval(86400 * 30).timeIntervalSince1970)
+
+        if let raw = rawCookies, !raw.isEmpty {
+            let pairs = raw.components(separatedBy: ";")
+            for pair in pairs {
+                let parts = pair.trimmingCharacters(in: .whitespacesAndNewlines).components(separatedBy: "=")
+                if parts.count >= 2 {
+                    let key = sanitizeCookieToken(parts[0].trimmingCharacters(in: .whitespacesAndNewlines))
+                    let value = sanitizeCookieToken(parts.dropFirst().joined(separator: "=").trimmingCharacters(in: .whitespacesAndNewlines))
+                    if !key.isEmpty && !value.isEmpty {
+                        lines.append("\(domain)\tTRUE\t/\tFALSE\t\(expiry)\t\(key)\t\(value)")
+                    }
+                }
+            }
+        }
+
+        for cookie in additionalCookies {
+            let key = sanitizeCookieToken(cookie.name)
+            let value = sanitizeCookieToken(cookie.value)
+            if !key.isEmpty && !value.isEmpty {
+                lines.append("\(domain)\tTRUE\t/\tFALSE\t\(expiry)\t\(key)\t\(value)")
+            }
+        }
+
+        guard lines.count > 1 else { return nil }
+        let content = lines.joined(separator: "\n") + "\n"
+        guard let data = content.data(using: .utf8) else { return nil }
+
+        if FileManager.default.createFile(atPath: tempCookiesURL.path, contents: data, attributes: [.posixPermissions: 0o600]) {
+            return tempCookiesURL
+        } else {
+            return nil
+        }
+    }
+
     private func sanitizeCookieToken(_ token: String) -> String {
         return token.replacingOccurrences(of: "\t", with: "")
                     .replacingOccurrences(of: "\n", with: "")
@@ -4262,7 +4337,7 @@ class YtdlpService: ObservableObject {
             guard let files = try? fileManager.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil) else { continue }
             for file in files {
                 let name = file.lastPathComponent
-                if (name.hasPrefix("siphon_cookies_") || name.hasPrefix("siphon_header_cookies_")) && name.hasSuffix(".txt") {
+                if (name.hasPrefix("siphon_cookies_") || name.hasPrefix("siphon_header_cookies_") || name.hasPrefix("siphon_consolidated_cookies_")) && name.hasSuffix(".txt") {
                     try? fileManager.removeItem(at: file)
                 } else if name.hasPrefix("siphon_scratch_") || name.hasPrefix("Siphon_Staging_") || name.hasPrefix("Siphon_Update_Package_") {
                     try? fileManager.removeItem(at: file)
@@ -4416,15 +4491,23 @@ final class ThreadSafeOutputState: @unchecked Sendable {
     private static let quoteCharacterSet = CharacterSet(charactersIn: "\"\'")
 
     private var finalPath: String?
+    private var finalPaths: [String] = []
     private var candidatePaths: [String] = []
     private var errorText: String = ""
     private let lock = NSLock()
 
     func setFinalPath(_ path: String) {
+        addFinalPath(path)
+    }
+
+    func addFinalPath(_ path: String) {
         let cleaned = path.trimmingCharacters(in: .whitespacesAndNewlines)
             .trimmingCharacters(in: Self.quoteCharacterSet)
         guard !cleaned.isEmpty else { return }
         lock.lock()
+        if !finalPaths.contains(cleaned) {
+            finalPaths.append(cleaned)
+        }
         finalPath = cleaned
         lock.unlock()
     }
@@ -4433,6 +4516,12 @@ final class ThreadSafeOutputState: @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         return finalPath
+    }
+
+    func getFinalPaths() -> [String] {
+        lock.lock()
+        defer { lock.unlock() }
+        return finalPaths
     }
 
     func addCandidatePath(_ newPath: String) {

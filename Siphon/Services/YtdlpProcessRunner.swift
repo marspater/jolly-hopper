@@ -48,7 +48,24 @@ public final class DownloadProcessController: @unchecked Sendable {
         let resolvedPID = (pid != nil && pid! > 0) ? pid! : (proc?.processIdentifier ?? 0)
         guard resolvedPID > 0 || proc?.isRunning == true else { return }
 
-        // 1. Terminate main parent process immediately
+        // 1. Gather all descendants BEFORE terminating the parent to prevent reparenting to launchd (PID 1)
+        var allSignaledPIDs: Set<pid_t> = []
+        if resolvedPID > 0 {
+            let descendants = getDescendantPIDs(for: resolvedPID)
+            for child in descendants {
+                allSignaledPIDs.insert(child)
+                kill(child, SIGTERM)
+            }
+
+            // Also signal process group if distinct from main process group
+            let pgid = getpgid(resolvedPID)
+            let appPgrp = getpgrp()
+            if pgid > 0 && pgid != appPgrp {
+                kill(-pgid, SIGTERM)
+            }
+        }
+
+        // 2. Terminate main parent process
         if let proc, proc.isRunning {
             proc.terminate()
         }
@@ -56,23 +73,34 @@ public final class DownloadProcessController: @unchecked Sendable {
             kill(resolvedPID, SIGTERM)
         }
 
-        // 2. Multi-pass descendant reaping: catch initial descendants and late spawns during shutdown
-        var allSignaledPIDs: Set<pid_t> = []
+        // 3. Multi-pass sweep to catch any late spawns during shutdown
         if resolvedPID > 0 {
-            for pass in 0..<3 {
+            for _ in 0..<2 {
+                usleep(25_000) // 25ms grace period
                 let currentDescendants = getDescendantPIDs(for: resolvedPID)
                 for child in currentDescendants {
-                    if !allSignaledPIDs.contains(child) {
-                        allSignaledPIDs.insert(child)
+                    if allSignaledPIDs.insert(child).inserted {
                         kill(child, SIGTERM)
                     }
                 }
-                if currentDescendants.isEmpty && pass > 0 {
-                    break
+            }
+
+            // 4. Forceful SIGKILL escalation if processes refuse SIGTERM
+            var lingering = allSignaledPIDs.filter { kill($0, 0) == 0 }
+            if kill(resolvedPID, 0) == 0 {
+                lingering.insert(resolvedPID)
+            }
+            if !lingering.isEmpty {
+                usleep(50_000) // 50ms final grace period
+                for targetPID in lingering {
+                    if kill(targetPID, 0) == 0 {
+                        kill(targetPID, SIGKILL)
+                    }
                 }
-                // Short yield before next sweep to allow processes to terminate
-                if pass < 2 {
-                    usleep(25_000) // 25ms
+                let pgid = getpgid(resolvedPID)
+                let appPgrp = getpgrp()
+                if pgid > 0 && pgid != appPgrp {
+                    kill(-pgid, SIGKILL)
                 }
             }
         }
@@ -287,6 +315,7 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
                             outputState.setFinalPath(extracted)
                         }
                     }
+                    onOutput(line)
                     return
                 }
 

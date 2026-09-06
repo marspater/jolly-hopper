@@ -725,6 +725,9 @@ class DownloadManager: ObservableObject {
                 }
             }
 
+            let targetSaveFolder = download.options.saveFolder
+            let pathCollector = ThreadSafePathCollector()
+
             let outputPath = try await ytdlpService.download(
                 url: download.url,
                 options: download.options,
@@ -735,13 +738,29 @@ class DownloadManager: ObservableObject {
                     coalescer.recordProgress(progress: safeProgress, speed: speed, eta: eta)
                 },
                 onOutput: { line in
+                    if line.contains("SIPHON_FINAL_PATH:") {
+                        let parts = line.components(separatedBy: "SIPHON_FINAL_PATH:")
+                        if parts.count > 1 {
+                            let extracted = parts[1].trimmingCharacters(in: .whitespacesAndNewlines)
+                                .trimmingCharacters(in: CharacterSet(charactersIn: "\"\'"))
+                            if !extracted.isEmpty {
+                                let url = extracted.hasPrefix("/") ? URL(fileURLWithPath: extracted) : targetSaveFolder.appendingPathComponent(extracted)
+                                pathCollector.add(url)
+                            }
+                        }
+                    }
                     coalescer.recordLogLine(line)
                 }
             )
 
             coalescer.flushRemaining()
 
-            download.filePath = outputPath
+            let collectedPaths = pathCollector.getPaths()
+            if !collectedPaths.isEmpty {
+                download.filePaths = collectedPaths
+            } else {
+                download.filePath = outputPath
+            }
             download.diagnostics.exitStatus = "Completed (0)"
             updateStatus(for: download, to: .completed)
             download.progress = 1.0
@@ -982,28 +1001,8 @@ class DownloadManager: ObservableObject {
     }
     
     func resumeWithNewName(_ download: Download) {
-        let rawBase = download.options.customFilename ?? download.title
-        let sanitizedBase = YtdlpService.sanitizeFilename(rawBase)
-        let folder = download.options.saveFolder
-        let ext = download.options.fileType.fileExtension
-
-        var counter = 1
-        var candidateName = "\(sanitizedBase) (\(counter))"
-        var candidatePath = folder.appendingPathComponent("\(candidateName).\(ext)").path
-
-        let existingFiles = (try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)) ?? []
-        let existingBaseNames = Set(existingFiles.compactMap { file -> String? in
-            guard YtdlpService.isMediaFilePath(file.path) else { return nil }
-            return file.deletingPathExtension().lastPathComponent
-        })
-
-        while existingBaseNames.contains(candidateName) || FileManager.default.fileExists(atPath: candidatePath) || reservedOutputPaths.contains(candidatePath) {
-            counter += 1
-            candidateName = "\(sanitizedBase) (\(counter))"
-            candidatePath = folder.appendingPathComponent("\(candidateName).\(ext)").path
-        }
-
-        download.options.customFilename = candidateName
+        let (_, candidatePath) = reserveUniqueOutputPath(for: download, forceIncrement: true)
+        unreserveOutputPath(candidatePath) // Released so processQueue can reserve it when executing
         download.options.forceOverwrite = false
         updateStatus(for: download, to: .queued)
         objectWillChange.send()
@@ -1021,20 +1020,42 @@ class DownloadManager: ObservableObject {
         activeControllers.removeAll()
     }
 
-    func resolveUniqueOutputPath(for download: Download) -> (resolvedBaseName: String, candidatePath: String) {
+    @discardableResult
+    func reserveUniqueOutputPath(for download: Download, forceIncrement: Bool = false) -> (resolvedBaseName: String, candidatePath: String) {
         let rawBaseName = download.options.customFilename ?? download.title
-        let sanitizedBaseName = YtdlpService.sanitizeFilename(rawBaseName)
+        let sanitizedBase = YtdlpService.sanitizeFilename(rawBaseName)
+        let folder = download.options.saveFolder
+        let ext = download.options.fileType.fileExtension
 
-        let folderPath = download.options.saveFolder
-        var resolvedBaseName = sanitizedBaseName
+        let existingFiles = (try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)) ?? []
+        let existingBaseNames = Set(existingFiles.compactMap { file -> String? in
+            guard YtdlpService.isMediaFilePath(file.path) else { return nil }
+            return file.deletingPathExtension().lastPathComponent
+        })
+
         var counter = 1
-        var candidateKey = folderPath.appendingPathComponent("\(resolvedBaseName).\(download.options.fileType.fileExtension)").path
-        while reservedOutputPaths.contains(candidateKey) {
-            resolvedBaseName = "\(sanitizedBaseName)_\(counter)"
-            candidateKey = folderPath.appendingPathComponent("\(resolvedBaseName).\(download.options.fileType.fileExtension)").path
+        var candidateName = sanitizedBase
+        if forceIncrement {
+            candidateName = "\(sanitizedBase) (\(counter))"
             counter += 1
         }
-        return (resolvedBaseName, candidateKey)
+        var candidatePath = folder.appendingPathComponent("\(candidateName).\(ext)").path
+
+        while existingBaseNames.contains(candidateName) ||
+              FileManager.default.fileExists(atPath: candidatePath) ||
+              reservedOutputPaths.contains(candidatePath) {
+            candidateName = "\(sanitizedBase) (\(counter))"
+            candidatePath = folder.appendingPathComponent("\(candidateName).\(ext)").path
+            counter += 1
+        }
+
+        reservedOutputPaths.insert(candidatePath)
+        download.options.customFilename = candidateName
+        return (candidateName, candidatePath)
+    }
+
+    func resolveUniqueOutputPath(for download: Download) -> (resolvedBaseName: String, candidatePath: String) {
+        return reserveUniqueOutputPath(for: download)
     }
 
     func reserveOutputPath(_ path: String) {
@@ -1285,4 +1306,23 @@ struct YtdlpUpdateMessage: Identifiable {
     let id = UUID()
     let title: String
     let message: String
+}
+
+final class ThreadSafePathCollector: @unchecked Sendable {
+    private var paths: [URL] = []
+    private let lock = NSLock()
+
+    func add(_ url: URL) {
+        lock.lock()
+        if !paths.contains(url) {
+            paths.append(url)
+        }
+        lock.unlock()
+    }
+
+    func getPaths() -> [URL] {
+        lock.lock()
+        defer { lock.unlock() }
+        return paths
+    }
 }
