@@ -254,14 +254,18 @@ class DownloadManager: ObservableObject {
 
 
 
-    func initialize(languageService: LanguageService) async {
+    func initialize(languageService: LanguageService, skipBinarySetup: Bool = false) async {
         self.languageService = languageService
 
-        await ytdlpService.setupBinaries()
-        // Wait a bit for version to be populated if needed, or better, fetch it explicitly
-        await ytdlpService.getVersion()
-        ytdlpVersion = ytdlpService.version
-
+        if !skipBinarySetup && (ytdlpService.processRunner is DefaultYtdlpProcessRunner) {
+            await ytdlpService.setupBinaries()
+            ytdlpVersion = ytdlpService.version
+        } else if let version = ytdlpService.version {
+            ytdlpVersion = version
+        } else if !(ytdlpService.processRunner is DefaultYtdlpProcessRunner) {
+            await ytdlpService.getVersion()
+            ytdlpVersion = ytdlpService.version
+        }
 
         loadHistory()
 

@@ -22,7 +22,6 @@ class LanguageService: ObservableObject {
     }
     
     private let translations: [String: String] = [
-        "quick_look": "Quick Look",
         "legal_disclaimer": "Legal Disclaimer",
         "about_app": "About Siphon",
         "couldnt_download": "Couldn't download",
@@ -109,6 +108,7 @@ class LanguageService: ObservableObject {
         "version": "Version",
         "special_thanks": "Special Thanks",
         "credits": "Credits",
+        "maintainer": "Maintainer",
         "license": "License",
         "license_desc": "This software is free software. You can modify and redistribute it.",
         "supported_sites": "Supported Sites",
@@ -212,7 +212,12 @@ class LanguageService: ObservableObject {
         "fix_signin_error": "Fix in Settings",
         "safari_warning": "To allow Siphon to access Safari cookies for authenticated downloads on macOS, grant Full Disk Access in System Settings > Privacy & Security > Full Disk Access.",
         "safari_fda_required": "Safari cookies require Full Disk Access on macOS. Please grant Full Disk Access to Siphon in System Settings > Privacy & Security > Full Disk Access, or choose another browser in Settings > Advanced.",
+        "safari_fda_restart_hint": "Note: After toggling Full Disk Access in System Settings, restart Siphon for permissions to take effect.",
         "open_system_settings": "Open System Settings",
+        "check_permission": "Check Permission",
+        "restart_siphon": "Restart Siphon",
+        "safari_fda_granted_feedback": "Full Disk Access detected. Safari cookies are accessible.",
+        "safari_fda_not_detected_hint": "Full Disk Access not detected. macOS requires Siphon to restart for permissions to apply. If you already restarted, toggle Siphon OFF and ON in System Settings.",
         "video_codec": "Video Codec",
         "audio_codec": "Audio Codec",
         "codec_auto": "Auto (Best Available)",

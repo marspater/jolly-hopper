@@ -301,8 +301,10 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
                             body: "Version \(currentVersion) is the latest version available."
                         )
                     }
-                    try? await Task.sleep(nanoseconds: 3 * 1_000_000_000)
-                    showUpToDateMessage = false
+                    Task { @MainActor [weak self] in
+                        try? await Task.sleep(nanoseconds: 3 * 1_000_000_000)
+                        self?.showUpToDateMessage = false
+                    }
                 } else if manual {
                     NotificationService.shared.sendAppUpdateNotification(
                         title: "Update Available",
@@ -620,9 +622,13 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
         let appURL = Bundle.main.bundleURL
         let configuration = NSWorkspace.OpenConfiguration()
         configuration.createsNewApplicationInstance = true
-        NSWorkspace.shared.openApplication(at: appURL, configuration: configuration) { _, _ in
+        NSWorkspace.shared.openApplication(at: appURL, configuration: configuration) { _, error in
             DispatchQueue.main.async {
-                NSApp.terminate(nil)
+                if let error = error {
+                    LoggerService.shared.log("Failed to restart application: \(error.localizedDescription)", level: .error)
+                } else {
+                    NSApp.terminate(nil)
+                }
             }
         }
     }
