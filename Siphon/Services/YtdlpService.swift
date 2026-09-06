@@ -1097,7 +1097,7 @@ class YtdlpService: ObservableObject {
 
         // Safe per-download isolated scratch directory for temporary chunks and thumbnail conversions
         let scratchDirectory = FileManager.default.temporaryDirectory.appendingPathComponent("siphon_scratch_\(UUID().uuidString)")
-        try? FileManager.default.createDirectory(at: scratchDirectory, withIntermediateDirectories: true)
+        try? FileManager.default.createDirectory(at: scratchDirectory, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
         args.append(contentsOf: ["--paths", "temp:\(scratchDirectory.path)"])
         args.append(contentsOf: ["--paths", "thumbnail:\(scratchDirectory.path)"])
         args.append("--no-playlist")
