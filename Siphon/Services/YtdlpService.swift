@@ -2602,7 +2602,7 @@ class YtdlpService: ObservableObject {
         "/embed/(\\d+)"
     ].compactMap { try? NSRegularExpression(pattern: $0, options: [.caseInsensitive]) }
 
-    private func resolveGFFMediaInfo(url: String, rawCookies: String? = nil) async -> GFFExtractedMedia?
+    private func resolveGFFMediaInfo(url: String, rawCookies: String? = nil) async -> GFFExtractedMedia? {
         let targetUrl = normalizeURLForYtdlp(url)
         guard let pageURL = URL(string: targetUrl) else { return nil }
         
