@@ -9,13 +9,16 @@ final class TestBox<T>: @unchecked Sendable {
 final class MockYtdlpProcessRunner: YtdlpProcessRunning, @unchecked Sendable {
     var mockCommand: (@Sendable ([String]) async throws -> String)?
     var mockDownload: (@Sendable ([String]) async throws -> String)?
+    var mockDownloadResult: (@Sendable ([String]) async throws -> DownloadProcessResult)?
 
     init(
         mockCommand: (@Sendable ([String]) async throws -> String)? = nil,
-        mockDownload: (@Sendable ([String]) async throws -> String)? = nil
+        mockDownload: (@Sendable ([String]) async throws -> String)? = nil,
+        mockDownloadResult: (@Sendable ([String]) async throws -> DownloadProcessResult)? = nil
     ) {
         self.mockCommand = mockCommand
         self.mockDownload = mockDownload
+        self.mockDownloadResult = mockDownloadResult
     }
 
     func runCommand(_ args: [String]) async throws -> String {
@@ -31,11 +34,15 @@ final class MockYtdlpProcessRunner: YtdlpProcessRunning, @unchecked Sendable {
         processController: DownloadProcessController?,
         onProgress: @escaping @Sendable (Double, String?, String?) -> Void,
         onOutput: @escaping @Sendable (String) -> Void
-    ) async throws -> String {
-        if let mock = mockDownload {
+    ) async throws -> DownloadProcessResult {
+        if let mock = mockDownloadResult {
             return try await mock(args)
         }
-        return ""
+        if let mock = mockDownload {
+            let res = try await mock(args)
+            return DownloadProcessResult(primaryPath: res)
+        }
+        return DownloadProcessResult(primaryPath: "")
     }
 }
 
@@ -2306,6 +2313,73 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertTrue(content.contains("example.com"))
     }
 
+    func testConsolidatedCookiesMergeSameNameSameDomainOverridesExisting() throws {
+        let url = "https://example.com/watch"
+        let rawHeader = "session_id=old_session; token=secret1"
+        let additional: [(name: String, value: String)] = [("session_id", "new_session")]
+
+        guard let cookieFileURL = service.createConsolidatedCookiesFile(
+            url: url,
+            rawCookies: rawHeader,
+            additionalCookies: additional
+        ) else {
+            XCTFail("Failed to create consolidated cookies file")
+            return
+        }
+        defer { try? FileManager.default.removeItem(at: cookieFileURL) }
+
+        let content = try String(contentsOf: cookieFileURL, encoding: .utf8)
+        XCTAssertTrue(content.contains("session_id\tnew_session"))
+        XCTAssertFalse(content.contains("old_session"), "Old session cookie must be deterministically replaced")
+        XCTAssertTrue(content.contains("token\tsecret1"))
+    }
+
+    func testConsolidatedCookiesMergePreservesDifferentDomainsAndPaths() throws {
+        let url = "https://example.com/watch"
+        let rawHeader = "token=root_val"
+        let additionalNetscapeLines = [
+            ".example.com\tTRUE\t/api\tFALSE\t2000000000\ttoken\tapi_val",
+            ".sub.example.com\tTRUE\t/\tFALSE\t2000000000\ttoken\tsub_val"
+        ]
+
+        guard let cookieFileURL = service.createConsolidatedCookiesFile(
+            url: url,
+            rawCookies: rawHeader,
+            additionalCookies: [],
+            additionalNetscapeLines: additionalNetscapeLines
+        ) else {
+            XCTFail("Failed to create consolidated cookies file")
+            return
+        }
+        defer { try? FileManager.default.removeItem(at: cookieFileURL) }
+
+        let content = try String(contentsOf: cookieFileURL, encoding: .utf8)
+        XCTAssertTrue(content.contains("/\tFALSE\t") && content.contains("token\troot_val"))
+        XCTAssertTrue(content.contains("/api\tFALSE\t") && content.contains("token\tapi_val"))
+        XCTAssertTrue(content.contains(".sub.example.com") && content.contains("token\tsub_val"))
+    }
+
+    func testConsolidatedCookiesMalformedInputResilience() throws {
+        let url = "https://example.com/watch"
+        let malformedHeader = ";;; invalid; =missing_name; empty_val=;   valid_key = valid_val \t\n ;;"
+
+        guard let cookieFileURL = service.createConsolidatedCookiesFile(
+            url: url,
+            rawCookies: malformedHeader,
+            additionalCookies: [("", "empty_name"), ("valid_added", "added_val\twith\nnewlines")]
+        ) else {
+            XCTFail("Failed to create consolidated cookies file")
+            return
+        }
+        defer { try? FileManager.default.removeItem(at: cookieFileURL) }
+
+        let content = try String(contentsOf: cookieFileURL, encoding: .utf8)
+        XCTAssertTrue(content.contains("valid_key\tvalid_val"))
+        XCTAssertTrue(content.contains("valid_added\tadded_valwithnewlines"))
+        XCTAssertFalse(content.contains("invalid"))
+        XCTAssertFalse(content.contains("missing_name"))
+    }
+
     func test5xxServerErrorDoesNotTriggerRangeChunkDisabling() async throws {
         let callCountBox = TestBox<Int>(0)
         let capturedArgs = TestBox<[[String]]>([])
@@ -2330,6 +2404,107 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertTrue(capturedArgs.value[0].contains("--http-chunk-size"), "Initial attempt should include chunk size")
         XCTAssertTrue(capturedArgs.value[1].contains("--http-chunk-size"), "Retry of 502 Bad Gateway MUST retain chunk size, NOT treat as range error!")
         XCTAssertEqual(result.lastPathComponent, "server_retry_download.mp4")
+    }
+
+    func testStructuredDownloadResultMultiFileSplitChapters() async throws {
+        let chapterPaths = [
+            "/tmp/video_chapter_01.mp4",
+            "/tmp/video_chapter_02.mp4",
+            "/tmp/video_chapter_03.mp4"
+        ]
+
+        service.processRunner = MockYtdlpProcessRunner(mockDownloadResult: { _ in
+            return DownloadProcessResult(primaryPath: chapterPaths[0], allPaths: chapterPaths)
+        })
+
+        let downloadResult = try await service.download(
+            url: "https://example.com/split-video",
+            options: DownloadOptions.default,
+            onProgress: { _, _, _ in },
+            onOutput: { _ in }
+        )
+
+        XCTAssertEqual(downloadResult.files.count, 3, "Structured DownloadResult must contain all chapter files")
+        XCTAssertEqual(downloadResult.primaryFile?.path, chapterPaths[0])
+        XCTAssertEqual(downloadResult.path, chapterPaths[0], "Backwards-compatible path property must match primary file")
+        XCTAssertEqual(downloadResult.files.map { $0.path }, chapterPaths)
+    }
+
+    func testResolutionCeilingExceededDetectionAndWarning() {
+        var options = DownloadOptions.default
+        options.fileType = .mp4
+        options.videoResolution = .r720p // Ceiling is 720p
+
+        let formats = [
+            MediaFormat(formatId: "1080p", ext: "mp4", resolution: "1920x1080", vcodec: "avc1", acodec: "none", formatNote: "1080p"),
+            MediaFormat(formatId: "2160p", ext: "mp4", resolution: "3840x2160", vcodec: "avc1", acodec: "none", formatNote: "4K"),
+            MediaFormat(formatId: "audio", ext: "m4a", resolution: nil, vcodec: "none", acodec: "mp4a.40.2", formatNote: "Audio")
+        ]
+        let info = MediaInfo(id: "test", title: "Test Exceeded", formats: formats)
+
+        let check = info.formatResolutionExceedsCeiling(options: options)
+        XCTAssertTrue(check.exceeded, "Must detect that lowest available video format exceeds requested 720p ceiling")
+        XCTAssertEqual(check.requestedHeight, 720)
+        XCTAssertEqual(check.actualHeight, 1080)
+
+        // When eligible format exists, ceiling is not exceeded
+        options.videoResolution = .r1080p
+        let okCheck = info.formatResolutionExceedsCeiling(options: options)
+        XCTAssertFalse(okCheck.exceeded)
+    }
+
+    func testHistoricDownloadMigrationAndForwardCompatibility() throws {
+        // 1. Legacy JSON with only filePath
+        let legacyJSON = """
+        {
+            "id": "A1B2C3D4-E5F6-7890-ABCD-EF1234567890",
+            "url": "https://example.com/legacy",
+            "title": "Legacy Download",
+            "filePath": "/Users/test/Downloads/legacy.mp4",
+            "downloadDate": 0,
+            "fileType": "MP4",
+            "status": "\(DownloadStatus.completed.rawValue)",
+            "log": "",
+            "progress": 1.0,
+            "options": {
+                "fileType": "MP4",
+                "saveFolder": "file:///tmp/"
+            }
+        }
+        """.data(using: .utf8)!
+
+        let legacyDecoded = try JSONDecoder().decode(HistoricDownload.self, from: legacyJSON)
+        XCTAssertEqual(legacyDecoded.filePaths, ["/Users/test/Downloads/legacy.mp4"])
+        XCTAssertEqual(legacyDecoded.filePath, "/Users/test/Downloads/legacy.mp4")
+
+        // 2. Modern JSON with filePaths array
+        let modernJSON = """
+        {
+            "id": "A1B2C3D4-E5F6-7890-ABCD-EF1234567890",
+            "url": "https://example.com/modern",
+            "title": "Modern Download",
+            "filePaths": ["/Users/test/Downloads/ch1.mp4", "/Users/test/Downloads/ch2.mp4"],
+            "downloadDate": 0,
+            "fileType": "MP4",
+            "status": "\(DownloadStatus.completed.rawValue)",
+            "log": "",
+            "progress": 1.0,
+            "options": {
+                "fileType": "MP4",
+                "saveFolder": "file:///tmp/"
+            }
+        }
+        """.data(using: .utf8)!
+
+        let modernDecoded = try JSONDecoder().decode(HistoricDownload.self, from: modernJSON)
+        XCTAssertEqual(modernDecoded.filePaths.count, 2)
+        XCTAssertEqual(modernDecoded.filePath, "/Users/test/Downloads/ch1.mp4")
+
+        // 3. Re-encode encodes both fields
+        let reEncoded = try JSONEncoder().encode(modernDecoded)
+        let jsonDict = try JSONSerialization.jsonObject(with: reEncoded) as? [String: Any]
+        XCTAssertNotNil(jsonDict?["filePaths"])
+        XCTAssertEqual(jsonDict?["filePath"] as? String, "/Users/test/Downloads/ch1.mp4")
     }
 }
 

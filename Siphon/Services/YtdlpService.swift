@@ -1042,6 +1042,24 @@ class YtdlpService: ObservableObject {
 
 
 
+public struct DownloadResult: Sendable {
+    public let files: [URL]
+    public let primaryFile: URL?
+
+    public init(files: [URL], primaryFile: URL? = nil) {
+        self.files = files
+        self.primaryFile = primaryFile ?? files.first
+    }
+
+    public var path: String {
+        (primaryFile ?? files.first)?.path ?? ""
+    }
+
+    public var lastPathComponent: String {
+        (primaryFile ?? files.first)?.lastPathComponent ?? ""
+    }
+}
+
     func download(
         url: String,
         options: DownloadOptions,
@@ -1049,7 +1067,7 @@ class YtdlpService: ObservableObject {
         processController: DownloadProcessController? = nil,
         onProgress: @escaping @Sendable (Double, String?, String?) -> Void,
         onOutput: @escaping @Sendable (String) -> Void
-    ) async throws -> URL {
+    ) async throws -> DownloadResult {
         guard let path = ytdlpPath else {
             throw YtdlpError.notFound
         }
@@ -1268,11 +1286,11 @@ class YtdlpService: ObservableObject {
         var triedStrategies = Set<DownloadRecoveryStrategy>()
         var triedAltBrowsers = Set<String>()
         var currentArgs = args
-        var outputPath: String? = nil
+        var processResult: DownloadProcessResult? = nil
 
-        while outputPath == nil {
+        while processResult == nil {
             do {
-                outputPath = try await runDownloadProcess(
+                processResult = try await runDownloadProcess(
                     args: currentArgs,
                     saveFolder: options.saveFolder,
                     processController: processController,
@@ -1393,10 +1411,11 @@ class YtdlpService: ObservableObject {
             }
         }
 
-        guard let finalOutputPath = outputPath else {
+        guard let finalResult = processResult else {
             throw YtdlpError.downloadFailed("Download failed across all recovery strategies.")
         }
-        let finalFileURL = URL(fileURLWithPath: finalOutputPath, relativeTo: options.saveFolder).absoluteURL
+        let finalFileURL = URL(fileURLWithPath: finalResult.primaryPath, relativeTo: options.saveFolder).absoluteURL
+        let allFileURLs = finalResult.allPaths.map { URL(fileURLWithPath: $0, relativeTo: options.saveFolder).absoluteURL }
 
         if let key = bestCamDecryptionKey {
             onOutput("[Siphon Info] Decrypting downloaded stream...\n")
@@ -1448,7 +1467,7 @@ class YtdlpService: ObservableObject {
             }
         }
 
-        return finalFileURL
+        return DownloadResult(files: allFileURLs, primaryFile: finalFileURL)
     }
 
     private func downloadThumbnailLocally(from urlString: String, to destinationURL: URL) async -> Bool {
@@ -4041,7 +4060,7 @@ class YtdlpService: ObservableObject {
         processController: DownloadProcessController? = nil,
         onProgress: @escaping @Sendable (Double, String?, String?) -> Void,
         onOutput: @escaping @Sendable (String) -> Void
-    ) async throws -> String {
+    ) async throws -> DownloadProcessResult {
         try await processRunner.runDownloadProcess(
             args: args,
             saveFolder: saveFolder,
@@ -4274,42 +4293,127 @@ class YtdlpService: ObservableObject {
         }
     }
 
+    private struct ConsolidatedCookieEntry: Hashable {
+        let domain: String
+        let includeSubdomains: Bool
+        let path: String
+        let isSecure: Bool
+        var expiry: Int
+        let name: String
+        var value: String
+
+        var netscapeLine: String {
+            "\(domain)\t\(includeSubdomains ? "TRUE" : "FALSE")\t\(path)\t\(isSecure ? "TRUE" : "FALSE")\t\(expiry)\t\(name)\t\(value)"
+        }
+    }
+
+    private struct CookieKey: Hashable {
+        let domain: String
+        let path: String
+        let name: String
+    }
+
     func createConsolidatedCookiesFile(
         url: String,
         rawCookies: String? = nil,
-        additionalCookies: [(name: String, value: String)] = []
+        additionalCookies: [(name: String, value: String)] = [],
+        additionalNetscapeLines: [String] = []
     ) -> URL? {
         guard let urlObj = URL(string: url), let host = urlObj.host, !host.isEmpty else { return nil }
         guard let cookiesDir = YtdlpService.getSecureTempCookiesDirectory() else { return nil }
-        let domain = host.hasPrefix(".") ? host : ".\(host)"
+        let defaultDomain = host.hasPrefix(".") ? host : ".\(host)"
         let tempCookiesURL = cookiesDir.appendingPathComponent("siphon_consolidated_cookies_\(UUID().uuidString).txt")
-        
-        var lines = ["# Netscape HTTP Cookie File"]
-        let expiry = Int(Date().addingTimeInterval(86400 * 30).timeIntervalSince1970)
+        let defaultExpiry = Int(Date().addingTimeInterval(86400 * 30).timeIntervalSince1970)
 
+        var cookieMap: [CookieKey: ConsolidatedCookieEntry] = [:]
+
+        // 1. Process raw cookie header pairs (default path: "/", default domain: defaultDomain)
         if let raw = rawCookies, !raw.isEmpty {
             let pairs = raw.components(separatedBy: ";")
             for pair in pairs {
-                let parts = pair.trimmingCharacters(in: .whitespacesAndNewlines).components(separatedBy: "=")
+                let trimmed = pair.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !trimmed.isEmpty else { continue }
+                let parts = trimmed.components(separatedBy: "=")
                 if parts.count >= 2 {
                     let key = sanitizeCookieToken(parts[0].trimmingCharacters(in: .whitespacesAndNewlines))
                     let value = sanitizeCookieToken(parts.dropFirst().joined(separator: "=").trimmingCharacters(in: .whitespacesAndNewlines))
                     if !key.isEmpty && !value.isEmpty {
-                        lines.append("\(domain)\tTRUE\t/\tFALSE\t\(expiry)\t\(key)\t\(value)")
+                        let mapKey = CookieKey(domain: defaultDomain.lowercased(), path: "/", name: key)
+                        cookieMap[mapKey] = ConsolidatedCookieEntry(
+                            domain: defaultDomain,
+                            includeSubdomains: true,
+                            path: "/",
+                            isSecure: false,
+                            expiry: defaultExpiry,
+                            name: key,
+                            value: value
+                        )
                     }
                 }
             }
         }
 
-        for cookie in additionalCookies {
-            let key = sanitizeCookieToken(cookie.name)
-            let value = sanitizeCookieToken(cookie.value)
-            if !key.isEmpty && !value.isEmpty {
-                lines.append("\(domain)\tTRUE\t/\tFALSE\t\(expiry)\t\(key)\t\(value)")
+        // 2. Process additional Netscape lines if provided
+        for line in additionalNetscapeLines {
+            let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty && !trimmed.hasPrefix("#") else { continue }
+            let columns = trimmed.components(separatedBy: "\t")
+            if columns.count >= 7 {
+                let domain = sanitizeCookieToken(columns[0])
+                let includeSub = columns[1].uppercased() == "TRUE"
+                let path = sanitizeCookieToken(columns[2])
+                let isSec = columns[3].uppercased() == "TRUE"
+                let exp = Int(columns[4]) ?? defaultExpiry
+                let name = sanitizeCookieToken(columns[5])
+                let val = sanitizeCookieToken(columns[6])
+                if !name.isEmpty && !val.isEmpty {
+                    let mapKey = CookieKey(domain: domain.lowercased(), path: path.isEmpty ? "/" : path, name: name)
+                    cookieMap[mapKey] = ConsolidatedCookieEntry(
+                        domain: domain,
+                        includeSubdomains: includeSub,
+                        path: path.isEmpty ? "/" : path,
+                        isSecure: isSec,
+                        expiry: exp,
+                        name: name,
+                        value: val
+                    )
+                }
             }
         }
 
-        guard lines.count > 1 else { return nil }
+        // 3. Process additionalCookies (e.g. Sucuri or dynamically extracted tokens)
+        // These deterministically overwrite any existing entry for (defaultDomain, "/", name)
+        for cookie in additionalCookies {
+            let key = sanitizeCookieToken(cookie.name.trimmingCharacters(in: .whitespacesAndNewlines))
+            let value = sanitizeCookieToken(cookie.value.trimmingCharacters(in: .whitespacesAndNewlines))
+            if !key.isEmpty && !value.isEmpty {
+                let mapKey = CookieKey(domain: defaultDomain.lowercased(), path: "/", name: key)
+                cookieMap[mapKey] = ConsolidatedCookieEntry(
+                    domain: defaultDomain,
+                    includeSubdomains: true,
+                    path: "/",
+                    isSecure: false,
+                    expiry: defaultExpiry,
+                    name: key,
+                    value: value
+                )
+            }
+        }
+
+        guard !cookieMap.isEmpty else { return nil }
+
+        // Deterministic sorting by domain, path, name
+        let sortedEntries = cookieMap.values.sorted {
+            if $0.domain != $1.domain { return $0.domain < $1.domain }
+            if $0.path != $1.path { return $0.path < $1.path }
+            return $0.name < $1.name
+        }
+
+        var lines = ["# Netscape HTTP Cookie File"]
+        for entry in sortedEntries {
+            lines.append(entry.netscapeLine)
+        }
+
         let content = lines.joined(separator: "\n") + "\n"
         guard let data = content.data(using: .utf8) else { return nil }
 
