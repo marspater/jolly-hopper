@@ -408,7 +408,7 @@ struct DownloadRowView: View {
                 QuickLookPreviewHelper.shared.preview(url: path)
             }
         }
-        .help(download.status == .completed ? "Click to Quick Look" : "")
+        .help(download.status == .completed ? languageService.s("click_to_quick_look") : "")
     }
     
     private var thumbnailPlaceholder: some View {
@@ -501,8 +501,8 @@ struct FileThumbnailView: View {
                     }
                     .buttonStyle(.siphonIcon(size: 28))
                     .foregroundColor(SiphonTheme.accent)
-                    .help("Quick Look")
-                    .accessibilityLabel("Quick Look")
+                    .help(languageService.s("quick_look"))
+                    .accessibilityLabel(languageService.s("quick_look"))
                 }
                 
                 Button {
@@ -523,7 +523,7 @@ struct FileThumbnailView: View {
                         Button {
                             QuickLookPreviewHelper.shared.preview(url: path)
                         } label: {
-                            Label("Quick Look", systemImage: "eye")
+                            Label(languageService.s("quick_look"), systemImage: "eye")
                         }
                     }
 
@@ -546,14 +546,14 @@ struct FileThumbnailView: View {
                             NSPasteboard.general.clearContents()
                             NSPasteboard.general.setString(path.path, forType: .string)
                         } label: {
-                            Label("Copy File Path", systemImage: "doc.on.doc")
+                            Label(languageService.s("copy_file_path"), systemImage: "doc.on.doc")
                         }
                     }
                     
                     Button {
                         showDiagnostics = true
                     } label: {
-                        Label("View Diagnostics", systemImage: "cpu")
+                        Label(languageService.s("view_diagnostics"), systemImage: "cpu")
                     }
                     
                     Button {
@@ -851,7 +851,7 @@ struct FileThumbnailView: View {
             Button {
                 QuickLookPreviewHelper.shared.preview(url: path)
             } label: {
-                Label("Quick Look", systemImage: "eye")
+                Label(languageService.s("quick_look"), systemImage: "eye")
             }
             
             Button {
@@ -870,7 +870,7 @@ struct FileThumbnailView: View {
                 NSPasteboard.general.clearContents()
                 NSPasteboard.general.setString(path.path, forType: .string)
             } label: {
-                Label("Copy File Path", systemImage: "doc.on.doc")
+                Label(languageService.s("copy_file_path"), systemImage: "doc.on.doc")
             }
             
             Divider()
@@ -879,7 +879,7 @@ struct FileThumbnailView: View {
         Button {
             showDiagnostics = true
         } label: {
-            Label("View Diagnostics", systemImage: "cpu")
+            Label(languageService.s("view_diagnostics"), systemImage: "cpu")
         }
         
         if download.status == .downloading || download.status == .fetching || download.status == .processing {
