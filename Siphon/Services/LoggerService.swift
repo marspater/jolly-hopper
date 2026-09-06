@@ -155,14 +155,24 @@ class LoggerService: ObservableObject {
         return Array(result.suffix(maxEntries))
     }
 
+    // Bolt Performance Optimization: Static pre-compiled regular expressions to avoid repeated compilation during log sanitization
+    nonisolated private static let urlRegex = try? NSRegularExpression(pattern: #"https?://[^\s"'<>]+"#, options: [])
+    nonisolated private static let redactionRegexes: [(NSRegularExpression, String)] = [
+        (try! NSRegularExpression(pattern: #"(?i)bearer\s+[A-Za-z0-9\-_\.]+"#, options: []), "Bearer <REDACTED>"),
+        (try! NSRegularExpression(pattern: #"(?i)authorization:\s*[^\r\n]+"#, options: []), "Authorization: <REDACTED>"),
+        (try! NSRegularExpression(pattern: #"(?i)cookie:\s*[^\r\n]+"#, options: []), "Cookie: <REDACTED>"),
+        (try! NSRegularExpression(pattern: #"(?i)(token|api_key|password|pass|secret|auth|signature|sig|access_token)=([A-Za-z0-9\-_%]+)"#, options: []), "$1=<REDACTED>")
+    ]
+
     nonisolated static func sanitizeDiagnosticText(_ text: String) -> String {
         guard !text.isEmpty else { return text }
         var result = text
 
         // 1. Sanitize URLs (strip query strings, fragments, credentials)
-        if let urlRegex = try? NSRegularExpression(pattern: #"https?://[^\s"'<>]+"#, options: []) {
+        // Fast guard: check for http scheme before running regex matching
+        if (result.contains("http://") || result.contains("https://")), let regex = Self.urlRegex {
             let nsString = result as NSString
-            let matches = urlRegex.matches(in: result, options: [], range: NSRange(location: 0, length: nsString.length))
+            let matches = regex.matches(in: result, options: [], range: NSRange(location: 0, length: nsString.length))
             for match in matches.reversed() {
                 let urlStr = nsString.substring(with: match.range)
                 let sanitizedURL = sanitizeURLForLog(urlStr)
@@ -172,17 +182,12 @@ class LoggerService: ObservableObject {
             }
         }
 
-        // 2. Redact Bearer / API tokens and credentials
-        let redactionPatterns: [(String, String)] = [
-            (#"(?i)bearer\s+[A-Za-z0-9\-_\.]+"#, "Bearer <REDACTED>"),
-            (#"(?i)authorization:\s*[^\r\n]+"#, "Authorization: <REDACTED>"),
-            (#"(?i)cookie:\s*[^\r\n]+"#, "Cookie: <REDACTED>"),
-            (#"(?i)(token|api_key|password|pass|secret|auth|signature|sig|access_token)=([A-Za-z0-9\-_%]+)"#, "$1=<REDACTED>")
-        ]
-
-        for (pattern, replacement) in redactionPatterns {
-            if let regex = try? NSRegularExpression(pattern: pattern, options: []) {
-                result = regex.stringByReplacingMatches(in: result, options: [], range: NSRange(location: 0, length: (result as NSString).length), withTemplate: replacement)
+        // 2. Redact Bearer / API tokens and credentials using pre-compiled regexes
+        for (regex, replacement) in Self.redactionRegexes {
+            let nsString = result as NSString
+            let length = nsString.length
+            if length > 0 {
+                result = regex.stringByReplacingMatches(in: result, options: [], range: NSRange(location: 0, length: length), withTemplate: replacement)
             }
         }
 
