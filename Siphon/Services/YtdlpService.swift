@@ -2221,21 +2221,20 @@ class YtdlpService: ObservableObject {
     private func extractStreamURLFromHTML(_ html: String) -> String? {
         for regex in Self.boyfriendStreamRegexes {
             let matches = regex.matches(in: html, options: [], range: NSRange(location: 0, length: (html as NSString).length))
-                for match in matches where match.numberOfRanges > 1 {
-                    let rawVal = (html as NSString).substring(with: match.range(at: 1)).replacingOccurrences(of: "\\/", with: "/")
-                    if rawVal.hasPrefix("http") {
-                        let lowerVal = rawVal.lowercased()
-                        // Ignore teaser / preview / rollover clips
-                        if lowerVal.contains("/pv/") ||
-                           lowerVal.contains("pv_") ||
-                           lowerVal.contains("/preview/") ||
-                           lowerVal.contains("preview_") ||
-                           lowerVal.contains("trailer") ||
-                           lowerVal.contains("teaser") {
-                            continue
-                        }
-                        return rawVal
+            for match in matches where match.numberOfRanges > 1 {
+                let rawVal = (html as NSString).substring(with: match.range(at: 1)).replacingOccurrences(of: "\\/", with: "/")
+                if rawVal.hasPrefix("http") {
+                    let lowerVal = rawVal.lowercased()
+                    // Ignore teaser / preview / rollover clips
+                    if lowerVal.contains("/pv/") ||
+                       lowerVal.contains("pv_") ||
+                       lowerVal.contains("/preview/") ||
+                       lowerVal.contains("preview_") ||
+                       lowerVal.contains("trailer") ||
+                       lowerVal.contains("teaser") {
+                        continue
                     }
+                    return rawVal
                 }
             }
         }
