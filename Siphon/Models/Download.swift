@@ -94,13 +94,13 @@ class Download: ObservableObject, Identifiable {
                 parts.append(res.rawValue.replacingOccurrences(of: "r", with: ""))
             } else if let diagRes = diagnostics.resolution, !diagRes.isEmpty {
                 parts.append(diagRes)
-            } else if let h = mediaInfo?.formats?.compactMap({ $0.parsedHeight }).max() {
+            } else if let h = mediaInfo?.maxFormatHeight {
                 parts.append("\(h)p")
             }
             if let codec = options.videoCodec, codec != .auto {
                 parts.append(codec.rawValue.uppercased())
             }
-            if let hdr = diagnostics.hdrSummary ?? mediaInfo?.formats?.first(where: { $0.isHDR })?.hdrSummary {
+            if let hdr = diagnostics.hdrSummary ?? mediaInfo?.firstHDRSummary {
                 parts.append(hdr)
             }
         } else {
@@ -925,6 +925,11 @@ struct MediaInfo: Codable {
     let formatProtocol: String?
     let manifestUrl: String?
     
+    // Bolt Performance Optimization: Pre-calculate max format height and HDR summary once upon initialization
+    // to prevent repetitive O(N) format array iterations and string parsing during SwiftUI view redraws.
+    let maxFormatHeight: Int?
+    let firstHDRSummary: String?
+
     enum CodingKeys: String, CodingKey {
         case id
         case title
@@ -990,6 +995,14 @@ struct MediaInfo: Codable {
         self.originalUrl = originalUrl
         self.formatProtocol = formatProtocol
         self.manifestUrl = manifestUrl
+
+        if let fmts = formats, !fmts.isEmpty {
+            self.maxFormatHeight = fmts.compactMap { $0.parsedHeight }.max()
+            self.firstHDRSummary = fmts.first(where: { $0.isHDR })?.hdrSummary
+        } else {
+            self.maxFormatHeight = nil
+            self.firstHDRSummary = nil
+        }
     }
 
     init(from decoder: Decoder) throws {
@@ -1015,6 +1028,14 @@ struct MediaInfo: Codable {
         self.originalUrl = try container.decodeIfPresent(String.self, forKey: .originalUrl)
         self.formatProtocol = try container.decodeIfPresent(String.self, forKey: .formatProtocol)
         self.manifestUrl = try container.decodeIfPresent(String.self, forKey: .manifestUrl)
+
+        if let fmts = self.formats, !fmts.isEmpty {
+            self.maxFormatHeight = fmts.compactMap { $0.parsedHeight }.max()
+            self.firstHDRSummary = fmts.first(where: { $0.isHDR })?.hdrSummary
+        } else {
+            self.maxFormatHeight = nil
+            self.firstHDRSummary = nil
+        }
     }
 
     func encode(to encoder: Encoder) throws {
