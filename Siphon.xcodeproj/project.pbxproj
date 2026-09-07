@@ -310,7 +310,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "clang -O2 -arch arm64 -arch x86_64 \"${SRCROOT}/Siphon/Helpers/siphon-pgrp.c\" -o \"${BUILT_PRODUCTS_DIR}/siphon-pgrp\"\nmkdir -p \"${TARGET_BUILD_DIR}/${CONTENTS_FOLDER_PATH}/Helpers\"\ncp -f \"${BUILT_PRODUCTS_DIR}/siphon-pgrp\" \"${TARGET_BUILD_DIR}/${CONTENTS_FOLDER_PATH}/Helpers/siphon-pgrp\"\nchmod +x \"${TARGET_BUILD_DIR}/${CONTENTS_FOLDER_PATH}/Helpers/siphon-pgrp\"\n";
+			shellScript = "clang -O2 -arch arm64 -arch x86_64 -isysroot \"${SDKROOT}\" -mmacosx-version-min=14.0 \"${SRCROOT}/Siphon/Helpers/siphon-pgrp.c\" -o \"${TEMP_DIR}/siphon-pgrp\"\ncp -f \"${TEMP_DIR}/siphon-pgrp\" \"${BUILT_PRODUCTS_DIR}/siphon-pgrp\"\nmkdir -p \"${TARGET_BUILD_DIR}/${CONTENTS_FOLDER_PATH}/Helpers\"\ncp -f \"${TEMP_DIR}/siphon-pgrp\" \"${TARGET_BUILD_DIR}/${CONTENTS_FOLDER_PATH}/Helpers/siphon-pgrp\"\nchmod +x \"${BUILT_PRODUCTS_DIR}/siphon-pgrp\" \"${TARGET_BUILD_DIR}/${CONTENTS_FOLDER_PATH}/Helpers/siphon-pgrp\"\nif [ \"${CODE_SIGNING_ALLOWED:-YES}\" != \"NO\" ]; then\n    codesign --force --sign \"${EXPANDED_CODE_SIGN_IDENTITY:--}\" \"${TARGET_BUILD_DIR}/${CONTENTS_FOLDER_PATH}/Helpers/siphon-pgrp\" 2>/dev/null || true\nfi\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 

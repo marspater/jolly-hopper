@@ -12,7 +12,7 @@ chrome.runtime.onInstalled.addListener(() => {
     });
 });
 
-chrome.contextMenus.onClicked.addListener((info, tab) => {
+chrome.contextMenus.onClicked.addListener((info) => {
     const url = info.linkUrl || info.srcUrl || info.pageUrl;
     if (!url) return;
 
