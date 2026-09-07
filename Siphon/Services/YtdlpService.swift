@@ -412,7 +412,11 @@ class YtdlpService: ObservableObject {
     nonisolated static func createSanitizedEnvironment() -> [String: String] {
         let appSupport = Self.getAppSupportDirectory()
         let isolatedHome = appSupport.appendingPathComponent("SandboxHome")
-        try? FileManager.default.createDirectory(at: isolatedHome, withIntermediateDirectories: true)
+        if !FileManager.default.fileExists(atPath: isolatedHome.path) {
+            try? FileManager.default.createDirectory(at: isolatedHome, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+        } else {
+            try? FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: isolatedHome.path)
+        }
 
         let homeDir = NSHomeDirectory()
         let searchPaths = [
@@ -4086,8 +4090,11 @@ public struct DownloadResult: Sendable {
                 try? FileManager.default.copyItem(at: lumaDir, to: siphonDir)
             } else if FileManager.default.fileExists(atPath: legacyDir.path) {
                 try? FileManager.default.moveItem(at: legacyDir, to: siphonDir)
+            } else {
+                try? FileManager.default.createDirectory(at: siphonDir, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
             }
         }
+        try? FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: siphonDir.path)
 
         return siphonDir
     }

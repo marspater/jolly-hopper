@@ -1972,6 +1972,16 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertTrue(env["XDG_CACHE_HOME"]?.contains("SandboxHome") == true, "XDG_CACHE_HOME must be isolated to SandboxHome")
     }
 
+    func testSanitizedEnvironmentRestrictsSandboxHomePermissions() {
+        _ = YtdlpService.createSanitizedEnvironment()
+        let appSupport = YtdlpService.getAppSupportDirectory()
+        let isolatedHome = appSupport.appendingPathComponent("SandboxHome")
+
+        let attrs = try? FileManager.default.attributesOfItem(atPath: isolatedHome.path)
+        let posixPermissions = attrs?[.posixPermissions] as? NSNumber
+        XCTAssertEqual(posixPermissions?.uint16Value, 0o700, "SandboxHome directory must have restricted 0o700 POSIX permissions")
+    }
+
     func testJsRuntimeArgsAppendedInDownload() async throws {
         let capturedArgsBox = TestBox<[String]>([])
         service.processRunner = MockYtdlpProcessRunner(mockDownload: { args in
