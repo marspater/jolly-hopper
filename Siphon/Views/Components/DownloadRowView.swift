@@ -384,7 +384,7 @@ struct DownloadRowView: View {
             }
             
             // HDR Badge tag on thumbnail if HDR detected
-            if let hdr = download.diagnostics.hdrSummary ?? download.mediaInfo?.formats?.first(where: { $0.isHDR })?.hdrSummary {
+            if let hdr = download.diagnostics.hdrSummary ?? download.mediaInfo?.firstHDRSummary {
                 VStack {
                     HStack {
                         SiphonTagBadge(text: hdr.components(separatedBy: " • ").first ?? "HDR", isHdr: true)
