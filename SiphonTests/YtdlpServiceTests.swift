@@ -2482,6 +2482,15 @@ final class YtdlpServiceTests: XCTestCase {
         let infoWith720p = MediaInfo(id: "test", title: "Strict Test 2", formats: formatsWith720p)
         let selectedEligible = infoWith720p.resolveSelectedFormats(options: options)
         XCTAssertEqual(selectedEligible.first?.formatId, "480p", "Strict ceiling must choose the highest format <= 720p")
+
+        // When all known candidates exceed ceiling but an unknown-height format exists, permit the uncertain format
+        let formatsWithUnknown = [
+            MediaFormat(formatId: "1080p", ext: "mp4", resolution: "1920x1080", vcodec: "avc1", acodec: "none", formatNote: "1080p"),
+            MediaFormat(formatId: "unknown_res", ext: "mp4", resolution: nil, vcodec: "avc1", acodec: "none", formatNote: "unknown")
+        ]
+        let infoWithUnknown = MediaInfo(id: "test", title: "Strict Test 3", formats: formatsWithUnknown)
+        let selectedUnknown = infoWithUnknown.resolveSelectedFormats(options: options)
+        XCTAssertEqual(selectedUnknown.first?.formatId, "unknown_res", "Strict ceiling must permit unknown height format when known formats exceed ceiling")
     }
 
     func testNativeProcessGroupHelperDiscoveryAndExecution() throws {

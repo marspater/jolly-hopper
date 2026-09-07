@@ -1149,7 +1149,10 @@ struct MediaInfo: Codable {
         let candidateVideos = formats.filter { !$0.isAudioOnly }
         let eligibleVideos = candidateVideos.filter { video in
             guard let maxH = options.videoResolution?.maxHeight else { return true }
-            return (video.parsedHeight ?? 0) <= maxH
+            if let h = video.parsedHeight {
+                return h <= maxH
+            }
+            return false
         }
         let sortedVideos: [MediaFormat]
         if !eligibleVideos.isEmpty {
@@ -1158,7 +1161,8 @@ struct MediaInfo: Codable {
             // User explicitly configured policy to allow higher resolution exceeding ceiling
             sortedVideos = candidateVideos.sorted { MediaFormat.compareVideoFormats($0, $1, options: options) }
         } else {
-            // Strict ceiling (default): Only permit candidate videos with unknown/unspecified height, never formats exceeding ceiling
+            // Strict ceiling (default): When no format with known height <= ceiling exists,
+            // permit candidates with unknown/unspecified height (uncertain), but strictly reject formats with known height > ceiling
             let unknownHeightVideos = candidateVideos.filter { $0.parsedHeight == nil }
             sortedVideos = unknownHeightVideos.sorted { MediaFormat.compareVideoFormats($0, $1, options: options) }
         }
