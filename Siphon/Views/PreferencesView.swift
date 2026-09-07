@@ -555,6 +555,8 @@ struct PreferencesView: View {
                 }
             }
             .buttonStyle(.plain)
+            .accessibilityElement(children: .combine)
+            .accessibilityAddTraits(selectedCustomPresetIdString == preset.id.uuidString ? [.isButton, .isSelected] : [.isButton])
             
             Spacer()
             
