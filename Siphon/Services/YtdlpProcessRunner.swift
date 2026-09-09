@@ -359,33 +359,28 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
 
             let outputState = ThreadSafeOutputState()
 
+            // Bolt Performance Optimization: Process output lines using Substring slices and range searches to eliminate intermediate String array allocations during real-time output stream handling
             let processOutputLine: @Sendable (String) -> Void = { line in
-                if line.contains("SIPHON_FINAL_PATH:") {
-                    let parts = line.components(separatedBy: "SIPHON_FINAL_PATH:")
-                    if parts.count > 1 {
-                        let extracted = parts[1].trimmingCharacters(in: .whitespacesAndNewlines)
-                        if !extracted.isEmpty {
-                            outputState.addFinalPath(extracted)
-                        }
+                if let range = line.range(of: "SIPHON_FINAL_PATH:") {
+                    let extracted = line[range.upperBound...].trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !extracted.isEmpty {
+                        outputState.addFinalPath(extracted)
                     }
                     onOutput(line)
                     return
                 }
 
-                if line.contains("SIPHON_PROG:") {
-                    let parts = line.components(separatedBy: "SIPHON_PROG:")
-                    if parts.count > 1 {
-                        let fields = parts[1].components(separatedBy: "|")
-                        let percentStr = fields.first?.trimmingCharacters(in: .whitespaces) ?? ""
-                        let stripped = percentStr.hasSuffix("%") ? String(percentStr.dropLast()) : percentStr
-                        let normalized = stripped.trimmingCharacters(in: .whitespaces).replacingOccurrences(of: ",", with: ".")
-                        let speed = fields.count > 1 ? fields[1].trimmingCharacters(in: .whitespaces) : nil
-                        let eta = fields.count > 2 ? fields[2].trimmingCharacters(in: .whitespaces) : nil
-                        if normalized != "NA" && !normalized.isEmpty, let percent = Double(normalized), !percent.isNaN && !percent.isInfinite {
-                            let safeSpeed = (speed == "NA" || speed?.isEmpty == true) ? nil : speed
-                            let safeEta = (eta == "NA" || eta?.isEmpty == true) ? nil : eta
-                            onProgress(max(0.0, min(1.0, percent / 100.0)), safeSpeed, safeEta)
-                        }
+                if let range = line.range(of: "SIPHON_PROG:") {
+                    let fields = line[range.upperBound...].split(separator: "|", omittingEmptySubsequences: false)
+                    let percentSub = fields.first?.trimmingCharacters(in: .whitespaces) ?? ""
+                    let stripped = percentSub.hasSuffix("%") ? String(percentSub.dropLast()) : percentSub
+                    let normalized = stripped.trimmingCharacters(in: .whitespaces).replacingOccurrences(of: ",", with: ".")
+                    let speed = fields.count > 1 ? String(fields[1]).trimmingCharacters(in: .whitespaces) : nil
+                    let eta = fields.count > 2 ? String(fields[2]).trimmingCharacters(in: .whitespaces) : nil
+                    if normalized != "NA" && !normalized.isEmpty, let percent = Double(normalized), !percent.isNaN && !percent.isInfinite {
+                        let safeSpeed = (speed == "NA" || speed?.isEmpty == true) ? nil : speed
+                        let safeEta = (eta == "NA" || eta?.isEmpty == true) ? nil : eta
+                        onProgress(max(0.0, min(1.0, percent / 100.0)), safeSpeed, safeEta)
                     }
                     return
                 }
@@ -431,41 +426,37 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
                     return
                 }
 
-                if line.contains("[download] Destination:") {
-                    let parts = line.components(separatedBy: "[download] Destination: ")
-                    if parts.count > 1 {
-                        outputState.addCandidatePath(parts[1])
-                    }
+                if let range = line.range(of: "[download] Destination: ") {
+                    outputState.addCandidatePath(String(line[range.upperBound...]))
                 }
 
-                if line.contains("has already been downloaded") {
-                    let parts = line.components(separatedBy: "[download] ")
-                    if parts.count > 1 {
-                        let pathPart = parts[1].components(separatedBy: " has already been downloaded")
-                        if !pathPart.isEmpty {
-                            outputState.addCandidatePath(pathPart[0])
-                        }
+                if let range = line.range(of: " has already been downloaded"),
+                   let dlRange = line.range(of: "[download] "),
+                   dlRange.upperBound <= range.lowerBound {
+                    let pathPart = String(line[dlRange.upperBound..<range.lowerBound])
+                    if !pathPart.isEmpty {
+                        outputState.addCandidatePath(pathPart)
                     }
                 }
 
                 if line.contains("[Merger] Merging formats into") {
-                    let parts = line.components(separatedBy: "\"")
+                    let parts = line.split(separator: "\"")
                     if parts.count > 1 {
-                        outputState.addCandidatePath(parts[1])
+                        outputState.addCandidatePath(String(parts[1]))
                     }
                 }
 
-                if line.contains("[ExtractAudio] Destination:") {
-                    let parts = line.components(separatedBy: "[ExtractAudio] Destination: ")
-                    if parts.count > 1 {
-                        outputState.addCandidatePath(parts[1])
-                    }
+                if let range = line.range(of: "[ExtractAudio] Destination: ") {
+                    outputState.addCandidatePath(String(line[range.upperBound...]))
                 }
 
-                if line.contains(" to \"") {
-                    let parts = line.components(separatedBy: " to \"")
-                    if let target = parts.last?.components(separatedBy: "\"").first, !target.isEmpty {
-                        outputState.addCandidatePath(target)
+                if let range = line.range(of: " to \"", options: .backwards) {
+                    let afterTo = line[range.upperBound...]
+                    if let endQuote = afterTo.firstIndex(of: "\"") {
+                        let target = String(afterTo[..<endQuote])
+                        if !target.isEmpty {
+                            outputState.addCandidatePath(target)
+                        }
                     }
                 }
 
@@ -473,12 +464,12 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
                     onOutput(line)
 
                     if line.contains("%") {
-                        let components = line.split(whereSeparator: \.isWhitespace).map(String.init)
+                        let components = line.split(whereSeparator: \.isWhitespace)
                         if let percentIndex = components.firstIndex(where: { $0.hasSuffix("%") }) {
                             let percentStr = components[percentIndex].dropLast()
                             if let percent = Double(percentStr), !percent.isNaN && !percent.isInfinite {
-                                let speed = components.indices.contains(percentIndex + 3) ? components[percentIndex + 3] : nil
-                                let eta = components.indices.contains(percentIndex + 5) ? components[percentIndex + 5] : nil
+                                let speed = components.indices.contains(percentIndex + 3) ? String(components[percentIndex + 3]) : nil
+                                let eta = components.indices.contains(percentIndex + 5) ? String(components[percentIndex + 5]) : nil
                                 onProgress(max(0.0, min(1.0, percent / 100.0)), speed, eta)
                             }
                         }
