@@ -30,3 +30,7 @@
 ## 2026-09-06 - Pre-Compiling Static Regex Patterns in Swift Services
 **Learning:** In Swift, re-instantiating `NSRegularExpression(pattern:options:)` inside nested parsing or extraction loops adds significant compilation, memory allocation, and string parsing overhead per iteration. Storing pre-compiled regex arrays as `nonisolated private static let` properties eliminates regex compilation overhead altogether during runtime media metadata resolution.
 **Action:** Pre-compile static regex patterns into `nonisolated private static let` constants or arrays when performing repetitive string or HTML extraction.
+
+## 2026-09-09 - Zero-Copy Substring Slicing for High-Frequency Output Stream Parsing
+**Learning:** High-frequency stdout line callbacks from background process execution (like `yt-dlp` download updates) allocate multiple intermediate `[String]` arrays when using `components(separatedBy:)` or `.map(String.init)`. Using range search (`range(of:)`) with safe bound guards and `Substring` slices via `split(separator:)` avoids intermediate heap allocations per line.
+**Action:** In process runner output stream handlers, prefer range slicing and Substring `split` over `components(separatedBy:)` array allocations.
