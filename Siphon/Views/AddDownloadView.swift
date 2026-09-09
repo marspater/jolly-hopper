@@ -1740,13 +1740,17 @@ struct AddDownloadView: View {
         proceedWithDownload(options: options, forceOverwrite: false)
     }
 
+    // Bolt Performance Optimization: Pre-allocated CharacterSet to prevent allocation overhead during keystrokes
+    private static let batchUrlStripSet = CharacterSet(charactersIn: "\"',;:()[]{}<>").union(.whitespacesAndNewlines)
+
     private func extractBatchUrls(from text: String) -> [String] {
-        let lines = text.components(separatedBy: CharacterSet.newlines.union(CharacterSet.whitespaces))
+        // Bolt Performance Optimization: Use split(whereSeparator:) with Substring to eliminate intermediate String array allocations
+        let tokens = text.split(whereSeparator: \.isWhitespace)
         var valid: [String] = []
         var seen = Set<String>()
-        let stripSet = CharacterSet(charactersIn: "\"',;:()[]{}<>").union(.whitespacesAndNewlines)
-        for line in lines {
-            let trimmed = line.trimmingCharacters(in: stripSet)
+        for token in tokens {
+            let line = String(token)
+            let trimmed = line.trimmingCharacters(in: Self.batchUrlStripSet)
             if (trimmed.hasPrefix("http://") || trimmed.hasPrefix("https://")) && !seen.contains(trimmed) {
                 seen.insert(trimmed)
                 valid.append(trimmed)
