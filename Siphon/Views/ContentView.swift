@@ -224,6 +224,8 @@ struct SidebarView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.bouncy(scale: 0.98, hover: 1.01))
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : [.isButton])
         .listRowInsets(EdgeInsets(top: 2, leading: 6, bottom: 2, trailing: 6))
         .listRowBackground(
             RoundedRectangle(cornerRadius: SiphonTheme.radiusControl)
@@ -398,6 +400,8 @@ struct StatCard: View {
             .siphonInteractiveGlass(cornerRadius: SiphonTheme.radiusCard, tintColor: color)
         }
         .buttonStyle(.bouncy(scale: 0.97, hover: 1.015))
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(title): \(count)")
     }
 }
 
