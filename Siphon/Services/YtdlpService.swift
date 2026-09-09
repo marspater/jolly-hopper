@@ -56,7 +56,7 @@ actor DependencyInstaller {
         appSupportDir: URL,
         onProgress: (@Sendable (Double) -> Void)? = nil
     ) async throws -> URL {
-        try FileManager.default.createDirectory(at: appSupportDir, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: appSupportDir, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
         let destination = appSupportDir.appendingPathComponent("yt-dlp")
         let tempStaging = appSupportDir.appendingPathComponent("yt-dlp.tmp_\(UUID().uuidString)")
 
@@ -128,7 +128,7 @@ actor DependencyInstaller {
         ffprobeExecutableSHA256: String,
         appSupportDir: URL
     ) async throws -> (ffmpeg: URL, ffprobe: URL) {
-        try FileManager.default.createDirectory(at: appSupportDir, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: appSupportDir, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
 
         let ffmpegFinal = appSupportDir.appendingPathComponent("ffmpeg")
         let ffprobeFinal = appSupportDir.appendingPathComponent("ffprobe")
@@ -3139,7 +3139,7 @@ public struct DownloadResult: Sendable {
         defer { CCCryptorRelease(ref) }
 
         let tempOutputURL = fileURL.deletingLastPathComponent().appendingPathComponent("decrypted_\(UUID().uuidString)_\(fileURL.lastPathComponent)")
-        FileManager.default.createFile(atPath: tempOutputURL.path, contents: nil)
+        FileManager.default.createFile(atPath: tempOutputURL.path, contents: nil, attributes: [.posixPermissions: 0o600])
         guard let readHandle = try? FileHandle(forReadingFrom: fileURL),
               let writeHandle = try? FileHandle(forWritingTo: tempOutputURL) else {
             try? FileManager.default.removeItem(at: tempOutputURL)
