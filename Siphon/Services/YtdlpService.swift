@@ -3139,7 +3139,9 @@ public struct DownloadResult: Sendable {
         defer { CCCryptorRelease(ref) }
 
         let tempOutputURL = fileURL.deletingLastPathComponent().appendingPathComponent("decrypted_\(UUID().uuidString)_\(fileURL.lastPathComponent)")
-        FileManager.default.createFile(atPath: tempOutputURL.path, contents: nil, attributes: [.posixPermissions: 0o600])
+        guard FileManager.default.createFile(atPath: tempOutputURL.path, contents: nil, attributes: [.posixPermissions: 0o600]) else {
+            throw YtdlpError.downloadFailed("Failed to create temporary file for stream decryption with restricted permissions")
+        }
         guard let readHandle = try? FileHandle(forReadingFrom: fileURL),
               let writeHandle = try? FileHandle(forWritingTo: tempOutputURL) else {
             try? FileManager.default.removeItem(at: tempOutputURL)
