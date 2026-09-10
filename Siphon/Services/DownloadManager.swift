@@ -180,7 +180,6 @@ class DownloadManager: ObservableObject {
     private var isProcessingQueue = false
     var languageService: LanguageService?
     private var reservedOutputPaths: Set<String> = []
-    private var userDefaultsObserver: (any NSObjectProtocol & Sendable)?
 
     init() {
         ytdlpService.$isUpdating
@@ -188,7 +187,7 @@ class DownloadManager: ObservableObject {
         ytdlpService.$updateProgress
             .assign(to: &$ytdlpUpdateProgress)
 
-        userDefaultsObserver = NotificationCenter.default.addObserver(
+        NotificationCenter.default.addObserver(
             forName: UserDefaults.didChangeNotification,
             object: nil,
             queue: .main
@@ -196,12 +195,6 @@ class DownloadManager: ObservableObject {
             MainActor.assumeIsolated {
                 self?.processQueue()
             }
-        }
-    }
-
-    deinit {
-        if let userDefaultsObserver {
-            NotificationCenter.default.removeObserver(userDefaultsObserver)
         }
     }
 
