@@ -490,7 +490,11 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
         (
             set -e
             STATUS_FILE="${STATUS_FILE:-}"
+            MOUNT_POINT=""
             report_failure() {
+                if [ -n "$MOUNT_POINT" ] && [ -d "$MOUNT_POINT" ]; then
+                    hdiutil unmount "$MOUNT_POINT" -quiet 2>/dev/null || true
+                fi
                 if [ -n "$STATUS_FILE" ]; then
                     echo '{"status":"FAILED"}' > "$STATUS_FILE"
                 fi
@@ -510,18 +514,25 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
             EXPECTED_BUNDLE_ID="${EXPECTED_BUNDLE_ID:-$4}"
             EXPECTED_TEAM_ID="${EXPECTED_TEAM_ID:-$5}"
             
+            mkdir -p "$WORK_DIR"
+
             # Step 1: Unpack into staging directory
             if file "$PKG_PATH" | grep -q "Zip archive"; then
                 /usr/bin/unzip -q "$PKG_PATH" -d "$WORK_DIR"
             else
-                hdiutil mount "$PKG_PATH" -mountpoint "$WORK_DIR" -quiet || { report_failure; exit 1; }
+                MOUNT_POINT="$WORK_DIR/mount"
+                mkdir -p "$MOUNT_POINT"
+                hdiutil mount "$PKG_PATH" -mountpoint "$MOUNT_POINT" -quiet -nobrowse || { report_failure; exit 1; }
             fi
             
-            NEW_APP="$(find "$WORK_DIR" -maxdepth 2 -name "*.app" | head -n 1)"
+            SEARCH_DIR="${MOUNT_POINT:-$WORK_DIR}"
+            NEW_APP="$(find "$SEARCH_DIR" -maxdepth 2 -name "*.app" | head -n 1)"
             
             if [ -z "$NEW_APP" ] || [ ! -d "$NEW_APP" ] || [ -L "$NEW_APP" ]; then
                 echo "No application bundle found in update payload"
-                hdiutil unmount "$WORK_DIR" -quiet 2>/dev/null || true
+                if [ -n "$MOUNT_POINT" ]; then
+                    hdiutil unmount "$MOUNT_POINT" -quiet 2>/dev/null || true
+                fi
                 rm -rf "$WORK_DIR" "$PKG_PATH"
                 report_failure
                 exit 1
@@ -530,7 +541,9 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
             # Step 2: Verify Code Signature Integrity & Team Identifier
             if ! /usr/bin/codesign --verify --deep --strict --verbose=2 "$NEW_APP" 2>/dev/null; then
                 echo "Code signature verification failed on new app payload"
-                hdiutil unmount "$WORK_DIR" -quiet 2>/dev/null || true
+                if [ -n "$MOUNT_POINT" ]; then
+                    hdiutil unmount "$MOUNT_POINT" -quiet 2>/dev/null || true
+                fi
                 rm -rf "$WORK_DIR" "$PKG_PATH"
                 report_failure
                 exit 1
@@ -540,7 +553,9 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
                 NEW_TEAM_ID="$(/usr/bin/codesign -d --verbose=2 "$NEW_APP" 2>&1 | awk -F= '/^TeamIdentifier=/ {print $2}' || true)"
                 if [ "$NEW_TEAM_ID" != "$EXPECTED_TEAM_ID" ]; then
                     echo "Team identifier mismatch: expected $EXPECTED_TEAM_ID, got $NEW_TEAM_ID"
-                    hdiutil unmount "$WORK_DIR" -quiet 2>/dev/null || true
+                    if [ -n "$MOUNT_POINT" ]; then
+                        hdiutil unmount "$MOUNT_POINT" -quiet 2>/dev/null || true
+                    fi
                     rm -rf "$WORK_DIR" "$PKG_PATH"
                     report_failure
                     exit 1
@@ -551,7 +566,9 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
             NEW_BUNDLE_ID="$(/usr/libexec/PlistBuddy -c "Print CFBundleIdentifier" "$NEW_APP/Contents/Info.plist" 2>/dev/null || true)"
             if [ -n "$EXPECTED_BUNDLE_ID" ] && [ "$NEW_BUNDLE_ID" != "$EXPECTED_BUNDLE_ID" ]; then
                 echo "Bundle identifier mismatch: expected $EXPECTED_BUNDLE_ID, got $NEW_BUNDLE_ID"
-                hdiutil unmount "$WORK_DIR" -quiet 2>/dev/null || true
+                if [ -n "$MOUNT_POINT" ]; then
+                    hdiutil unmount "$MOUNT_POINT" -quiet 2>/dev/null || true
+                fi
                 rm -rf "$WORK_DIR" "$PKG_PATH"
                 report_failure
                 exit 1
@@ -563,7 +580,9 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
             # Move existing app to backup
             if ! mv "$APP_PATH" "$BACKUP_PATH"; then
                 echo "Failed to create atomic backup of existing app bundle"
-                hdiutil unmount "$WORK_DIR" -quiet 2>/dev/null || true
+                if [ -n "$MOUNT_POINT" ]; then
+                    hdiutil unmount "$MOUNT_POINT" -quiet 2>/dev/null || true
+                fi
                 rm -rf "$WORK_DIR" "$PKG_PATH"
                 report_failure
                 exit 1
@@ -575,7 +594,9 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
                 if [ -d "$APP_PATH" ] && /usr/bin/codesign --verify --deep --strict "$APP_PATH" 2>/dev/null; then
                     # Success: remove backup and clean up staging
                     rm -rf "$BACKUP_PATH"
-                    hdiutil unmount "$WORK_DIR" -quiet 2>/dev/null || true
+                    if [ -n "$MOUNT_POINT" ]; then
+                        hdiutil unmount "$MOUNT_POINT" -quiet 2>/dev/null || true
+                    fi
                     rm -rf "$WORK_DIR" "$PKG_PATH"
                     report_success
                     open "$APP_PATH"
@@ -584,7 +605,9 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
                     # Verification of installed target failed -> rollback
                     rm -rf "$APP_PATH"
                     mv "$BACKUP_PATH" "$APP_PATH"
-                    hdiutil unmount "$WORK_DIR" -quiet 2>/dev/null || true
+                    if [ -n "$MOUNT_POINT" ]; then
+                        hdiutil unmount "$MOUNT_POINT" -quiet 2>/dev/null || true
+                    fi
                     rm -rf "$WORK_DIR" "$PKG_PATH"
                     report_failure
                     exit 1
@@ -592,7 +615,9 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
             else
                 # Copy failed -> rollback
                 mv "$BACKUP_PATH" "$APP_PATH"
-                hdiutil unmount "$WORK_DIR" -quiet 2>/dev/null || true
+                if [ -n "$MOUNT_POINT" ]; then
+                    hdiutil unmount "$MOUNT_POINT" -quiet 2>/dev/null || true
+                fi
                 rm -rf "$WORK_DIR" "$PKG_PATH"
                 report_failure
                 exit 1
@@ -615,6 +640,7 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
         }
         
         let statusFile = tempDir.appendingPathComponent("status.json")
+        let payloadDir = tempDir.appendingPathComponent("payload")
         let script = Self.generateUpdateScript()
         
         let process = Process()
@@ -623,7 +649,7 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
         var env = ProcessInfo.processInfo.environment
         env["PKG_PATH"] = packagePath
         env["APP_PATH"] = appPath
-        env["WORK_DIR"] = tempDir.path
+        env["WORK_DIR"] = payloadDir.path
         env["STATUS_FILE"] = statusFile.path
         env["EXPECTED_BUNDLE_ID"] = bundleId
         env["EXPECTED_TEAM_ID"] = teamId
@@ -669,6 +695,8 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
                 self.updateError = "Update installation completed without reporting a valid status."
                 LoggerService.shared.log("Update installer completed with exit code 0 but status file was missing or corrupt.", level: .error)
             }
+            try? FileManager.default.removeItem(at: tempDir)
+            try? FileManager.default.removeItem(atPath: packagePath)
         }
     }
     
