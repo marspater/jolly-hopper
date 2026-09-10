@@ -866,6 +866,13 @@ final class QueueAndErrorUXTests: XCTestCase {
         XCTAssertTrue(script.contains("FAILED"), "Update script must emit FAILED status on verification failure")
     }
 
+    func testUpdateScriptMountPointIsolationAndDirectoryCleanup() {
+        let script = UpdateChecker.generateUpdateScript()
+        XCTAssertTrue(script.contains("MOUNT_POINT=\"$WORK_DIR/mount\""), "Update script must isolate DMG mount point to avoid masking staging directory")
+        XCTAssertTrue(script.contains("hdiutil mount \"$PKG_PATH\" -mountpoint \"$MOUNT_POINT\""), "Update script must mount DMG at isolated mount point")
+        XCTAssertTrue(script.contains("SEARCH_DIR=\"${MOUNT_POINT:-$WORK_DIR}\""), "Update script must search inside mounted volume or unpacked zip")
+    }
+
     func testTrustedGitHubURLValidation() {
         let valid1 = URL(string: "https://github.com/marspater/jolly-hopper/releases/download/v5.0.0/Siphon.dmg")!
         let valid2 = URL(string: "https://objects.githubusercontent.com/github-production-release-asset/12345/abcde")!

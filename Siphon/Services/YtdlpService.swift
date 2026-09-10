@@ -887,8 +887,6 @@ class YtdlpService: ObservableObject {
                 LoggerService.shared.log("Failed to decode MediaInfo JSON: \(error)", level: .error)
                 throw YtdlpError.parseError
             }
-        } catch let err as YtdlpError {
-            throw err
         } catch {
             let usingBrowserCookies = args.contains("--cookies-from-browser")
             if shouldRetryWithBrowserCookies(error: error, url: url, usingBrowserCookies: usingBrowserCookies, forceBrowserCookies: forceBrowserCookies) {
@@ -985,26 +983,28 @@ class YtdlpService: ObservableObject {
         ]
         appendJsRuntimeArgs(to: &args)
         
-        var tempRawCookieFile: URL? = nil
-        if let raw = rawCookies, !raw.isEmpty {
-            if let tempFile = createTempCookiesFileFromHeader(url: url, cookieHeader: raw) {
-                tempRawCookieFile = tempFile
+        var tempCookieFile: URL? = nil
+        let sucuriCookie = await resolveSucuriCookie(for: url)
+        var additionalCookies: [(name: String, value: String)] = []
+        if let sc = sucuriCookie {
+            additionalCookies.append((name: sc.name, value: sc.value))
+        }
+
+        if (rawCookies != nil && !rawCookies!.isEmpty) || !additionalCookies.isEmpty {
+            if let tempFile = createConsolidatedCookiesFile(url: url, rawCookies: rawCookies, additionalCookies: additionalCookies) {
+                tempCookieFile = tempFile
                 args.append(contentsOf: ["--cookies", tempFile.path])
+                if sucuriCookie != nil {
+                    LoggerService.shared.log("Using temporary Sucuri cookie in consolidated file for \(hostForLog(url)) (cookie values not logged)", level: .info)
+                    args.append(contentsOf: ["--user-agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"])
+                }
+                if let raw = rawCookies, !raw.isEmpty {
+                    LoggerService.shared.log("Using session cookies passed from browser extension for \(hostForLog(url))", level: .info)
+                }
             }
         } else {
             let usingBrowserCookies = appendCookieArgs(for: url, to: &args)
             logCookieUsage(for: url, usingBrowserCookies: usingBrowserCookies)
-        }
-
-        // Handle Sucuri bypass
-        var tempCookieFile: URL? = nil
-        if let sucuriCookie = await resolveSucuriCookie(for: url) {
-            if let tempFile = createTempCookiesFile(url: url, cookieName: sucuriCookie.name, cookieValue: sucuriCookie.value) {
-                tempCookieFile = tempFile
-                LoggerService.shared.log("Using temporary Sucuri cookie file for \(hostForLog(url)) (cookie values not logged)", level: .info)
-                args.append(contentsOf: ["--cookies", tempFile.path])
-                args.append(contentsOf: ["--user-agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"])
-            }
         }
 
         let parsedHost = (URL(string: url)?.host ?? url).lowercased()
@@ -1017,9 +1017,6 @@ class YtdlpService: ObservableObject {
 
         defer {
             if let fileURL = tempCookieFile {
-                try? FileManager.default.removeItem(at: fileURL)
-            }
-            if let fileURL = tempRawCookieFile {
                 try? FileManager.default.removeItem(at: fileURL)
             }
         }

@@ -73,7 +73,12 @@ struct ContentView: View {
         }
         .alert(languageService.s("update_available_title"), isPresented: $showUpdateAlert) {
             Button(languageService.s("update_now")) {
-                showNativeSettingsWindow()
+                PreferencesWindowManager.shared.showPreferencesWindow(
+                    languageService: languageService,
+                    updateChecker: updateChecker,
+                    downloadManager: downloadManager,
+                    initialTab: .about
+                )
             }
             Button(languageService.s("later"), role: .cancel) { }
         } message: {
@@ -133,12 +138,7 @@ struct ContentView: View {
     }
 }
 
-#if os(macOS)
-@MainActor
-private func showNativeSettingsWindow() {
-    NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
-}
-#endif
+
 
 struct SidebarView: View {
     @EnvironmentObject var appState: AppState

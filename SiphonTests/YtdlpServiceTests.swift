@@ -2597,6 +2597,67 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertNotNil(jsonDict?["filePaths"])
         XCTAssertNil(jsonDict?["filePath"], "filePath must be omitted from new encodings; it is legacy-only deserialization")
     }
+
+    func testFetchSingleVideoInfoRetriesWithBrowserCookiesOnSiteError() async throws {
+        let savedBrowser = UserDefaults.standard.string(forKey: "browser")
+        UserDefaults.standard.set("chrome", forKey: "browser")
+        defer {
+            if let saved = savedBrowser {
+                UserDefaults.standard.set(saved, forKey: "browser")
+            } else {
+                UserDefaults.standard.removeObject(forKey: "browser")
+            }
+        }
+
+        let validJSON = """
+        {
+            \"id\": \"bf_123\",
+            \"title\": \"BoyfriendTV Video\",
+            \"duration\": 60.0
+        }
+        """
+
+        let dumpJsonCallCountBox = TestBox(0)
+        let usedBrowserCookiesBox = TestBox(false)
+        service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
+            if args.contains("--dump-json") {
+                dumpJsonCallCountBox.value += 1
+                if args.contains("--cookies-from-browser") {
+                    usedBrowserCookiesBox.value = true
+                    return validJSON
+                } else {
+                    throw YtdlpError.commandFailed("ERROR: Sign in to confirm you're not a bot or cookies required")
+                }
+            }
+            return ""
+        })
+
+        let info = try await service.fetchInfo(url: "https://www.boyfriendtv.com/videos/12345/test-video")
+        XCTAssertEqual(dumpJsonCallCountBox.value, 2, "Expected initial fetch to fail and retry with browser cookies")
+        XCTAssertTrue(usedBrowserCookiesBox.value, "Expected retry call to pass --cookies-from-browser")
+        XCTAssertEqual(info.id, "bf_123")
+    }
+
+    func testFetchPlaylistInfoUsesSingleCookiesFlag() async throws {
+        let playlistJSON = """
+        {
+            \"id\": \"item1\",
+            \"title\": \"Playlist Item 1\",
+            \"duration\": 10.0
+        }
+        """
+
+        let recordedArgsBox = TestBox<[String]>([])
+        service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
+            recordedArgsBox.value = args
+            return playlistJSON
+        })
+
+        _ = try await service.fetchPlaylistInfo(url: "https://example.com/playlist", rawCookies: "session=token123")
+        
+        let cookiesFlagCount = recordedArgsBox.value.filter { $0 == "--cookies" }.count
+        XCTAssertEqual(cookiesFlagCount, 1, "fetchPlaylistInfo must pass exactly one --cookies flag")
+    }
 }
 
 
