@@ -2266,6 +2266,23 @@ public struct DownloadResult: Sendable {
         "<source[^>]+src=[\"'](https?://[^\"']+)[\"']"
     ].compactMap { try? NSRegularExpression(pattern: $0, options: .caseInsensitive) }
 
+    nonisolated private static let bestCamTitleRegexes: [NSRegularExpression] = [
+        "property=[\"']og:title[\"']\\s+content=[\"']([^\"']+)[\"']",
+        "<h1[^>]*>([^<]+)</h1>",
+        "<title>(.*?)</title>"
+    ].compactMap { try? NSRegularExpression(pattern: $0, options: .caseInsensitive) }
+
+    nonisolated private static let bestCamThumbRegexes: [NSRegularExpression] = [
+        "property=[\"']og:image[\"']\\s+content=[\"'](https?://[^\"']+)[\"']",
+        "preview_url\\s*:\\s*['\"](https?://[^'\"]+)[\"']",
+        "poster=[\"'](https?://[^\"']+)[\"']"
+    ].compactMap { try? NSRegularExpression(pattern: $0, options: .caseInsensitive) }
+
+    nonisolated private static let bestCamIframeRegexes: [NSRegularExpression] = [
+        "abyssplayer\\.com/([a-zA-Z0-9_-]+)",
+        "abyss\\.to/([a-zA-Z0-9_-]+)"
+    ].compactMap { try? NSRegularExpression(pattern: $0, options: .caseInsensitive) }
+
     private func extractStreamURLFromHTML(_ html: String) -> String? {
         for regex in Self.boyfriendStreamRegexes {
             let matches = regex.matches(in: html, options: [], range: NSRange(location: 0, length: (html as NSString).length))
@@ -3382,14 +3399,8 @@ public struct DownloadResult: Sendable {
             guard !html.isEmpty else { return nil }
 
             // Extract Title
-            let titlePatterns = [
-                "property=[\"']og:title[\"']\\s+content=[\"']([^\"']+)[\"']",
-                "<h1[^>]*>([^<]+)</h1>",
-                "<title>(.*?)</title>"
-            ]
-            for pattern in titlePatterns {
-                if let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]),
-                   let match = regex.firstMatch(in: html, options: [], range: NSRange(location: 0, length: (html as NSString).length)),
+            for regex in Self.bestCamTitleRegexes {
+                if let match = regex.firstMatch(in: html, options: [], range: NSRange(location: 0, length: (html as NSString).length)),
                    match.numberOfRanges > 1 {
                     let rawTitle = (html as NSString).substring(with: match.range(at: 1))
                         .replacingOccurrences(of: "(?i) - bestcam\\.tv", with: "", options: .regularExpression)
@@ -3404,14 +3415,8 @@ public struct DownloadResult: Sendable {
             }
 
             // Extract Thumbnail
-            let thumbPatterns = [
-                "property=[\"']og:image[\"']\\s+content=[\"'](https?://[^\"']+)[\"']",
-                "preview_url\\s*:\\s*['\"](https?://[^'\"]+)[\"']",
-                "poster=[\"'](https?://[^\"']+)[\"']"
-            ]
-            for pattern in thumbPatterns {
-                if let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]),
-                   let match = regex.firstMatch(in: html, options: [], range: NSRange(location: 0, length: (html as NSString).length)),
+            for regex in Self.bestCamThumbRegexes {
+                if let match = regex.firstMatch(in: html, options: [], range: NSRange(location: 0, length: (html as NSString).length)),
                    match.numberOfRanges > 1 {
                     let candidate = (html as NSString).substring(with: match.range(at: 1))
                         .replacingOccurrences(of: "\\/", with: "/")
@@ -3423,13 +3428,8 @@ public struct DownloadResult: Sendable {
             }
 
             // Extract Abyss slug from iframe
-            let iframePatterns = [
-                "abyssplayer\\.com/([a-zA-Z0-9_-]+)",
-                "abyss\\.to/([a-zA-Z0-9_-]+)"
-            ]
-            for pattern in iframePatterns {
-                if let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]),
-                   let match = regex.firstMatch(in: html, options: [], range: NSRange(location: 0, length: (html as NSString).length)),
+            for regex in Self.bestCamIframeRegexes {
+                if let match = regex.firstMatch(in: html, options: [], range: NSRange(location: 0, length: (html as NSString).length)),
                    match.numberOfRanges > 1 {
                     abyssSlug = (html as NSString).substring(with: match.range(at: 1))
                     break
