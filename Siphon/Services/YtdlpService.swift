@@ -2267,6 +2267,26 @@ public struct DownloadResult: Sendable {
         "<source[^>]+src=[\"'](https?://[^\"']+)[\"']"
     ].compactMap { try? NSRegularExpression(pattern: $0, options: .caseInsensitive) }
 
+    nonisolated private static let guywhTitleRegexes: [NSRegularExpression] = [
+        "video_title\\s*:\\s*['\"]([^'\"]+)['\"]",
+        "property=[\"']og:title[\"']\\s+content=[\"']([^\"']+)[\"']",
+        "<h1[^>]*>([^<]+)</h1>",
+        "<title>(.*?)</title>"
+    ].compactMap { try? NSRegularExpression(pattern: $0, options: .caseInsensitive) }
+
+    nonisolated private static let guywhThumbRegexes: [NSRegularExpression] = [
+        "preview_url\\s*:\\s*['\"](https?://[^'\"]+)['\"]",
+        "preview_url1\\s*:\\s*['\"](https?://[^'\"]+)['\"]",
+        "property=[\"']og:image[\"']\\s+content=[\"'](https?://[^\"']+)[\"']",
+        "poster=[\"'](https?://[^\"']+)[\"']"
+    ].compactMap { try? NSRegularExpression(pattern: $0, options: .caseInsensitive) }
+
+    nonisolated private static let guywhVideoIDRegexes: [NSRegularExpression] = [
+        "/videos/(\\d+)",
+        "video_id\\s*:\\s*['\"](\\d+)['\"]",
+        "/embed/(\\d+)"
+    ].compactMap { try? NSRegularExpression(pattern: $0, options: .caseInsensitive) }
+
     private func extractStreamURLFromHTML(_ html: String) -> String? {
         for regex in Self.boyfriendStreamRegexes {
             let matches = regex.matches(in: html, options: [], range: NSRange(location: 0, length: (html as NSString).length))
@@ -2461,15 +2481,8 @@ public struct DownloadResult: Sendable {
         
         // Extract Title
         var title = "Guywh Video"
-        let titlePatterns = [
-            "video_title\\s*:\\s*['\"]([^'\"]+)['\"]",
-            "property=[\"']og:title[\"']\\s+content=[\"']([^\"']+)[\"']",
-            "<h1[^>]*>([^<]+)</h1>",
-            "<title>(.*?)</title>"
-        ]
-        for pattern in titlePatterns {
-            if let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]),
-               let match = regex.firstMatch(in: html, options: [], range: NSRange(location: 0, length: (html as NSString).length)),
+        for regex in Self.guywhTitleRegexes {
+            if let match = regex.firstMatch(in: html, options: [], range: NSRange(location: 0, length: (html as NSString).length)),
                match.numberOfRanges > 1 {
                 let rawTitle = (html as NSString).substring(with: match.range(at: 1))
                     .replacingOccurrences(of: "(?i) - guywh\\.com", with: "", options: .regularExpression)
@@ -2485,15 +2498,8 @@ public struct DownloadResult: Sendable {
         
         // Extract Thumbnail
         var thumbnailURL: String? = nil
-        let thumbPatterns = [
-            "preview_url\\s*:\\s*['\"](https?://[^'\"]+)['\"]",
-            "preview_url1\\s*:\\s*['\"](https?://[^'\"]+)['\"]",
-            "property=[\"']og:image[\"']\\s+content=[\"'](https?://[^\"']+)[\"']",
-            "poster=[\"'](https?://[^\"']+)[\"']"
-        ]
-        for pattern in thumbPatterns {
-            if let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]),
-               let match = regex.firstMatch(in: html, options: [], range: NSRange(location: 0, length: (html as NSString).length)),
+        for regex in Self.guywhThumbRegexes {
+            if let match = regex.firstMatch(in: html, options: [], range: NSRange(location: 0, length: (html as NSString).length)),
                match.numberOfRanges > 1 {
                 let candidate = (html as NSString).substring(with: match.range(at: 1))
                     .replacingOccurrences(of: "\\/", with: "/")
@@ -2535,12 +2541,12 @@ public struct DownloadResult: Sendable {
         
         // Extract Embed URL or generate standard embed URL
         var embedURL = targetUrl
-        let videoIdPatterns = ["/videos/(\\d+)", "video_id\\s*:\\s*['\"](\\d+)['\"]", "/embed/(\\d+)"]
-        for pattern in videoIdPatterns {
-            if let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]),
-               let match = regex.firstMatch(in: targetUrl + "\n" + html, options: [], range: NSRange(location: 0, length: ((targetUrl + "\n" + html) as NSString).length)),
+        let targetAndHtml = targetUrl + "\n" + html
+        let targetAndHtmlLength = (targetAndHtml as NSString).length
+        for regex in Self.guywhVideoIDRegexes {
+            if let match = regex.firstMatch(in: targetAndHtml, options: [], range: NSRange(location: 0, length: targetAndHtmlLength)),
                match.numberOfRanges > 1 {
-                let vidId = ((targetUrl + "\n" + html) as NSString).substring(with: match.range(at: 1))
+                let vidId = (targetAndHtml as NSString).substring(with: match.range(at: 1))
                 embedURL = "https://guywh.com/embed/\(vidId)"
                 break
             }
