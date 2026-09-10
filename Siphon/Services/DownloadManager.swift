@@ -319,12 +319,11 @@ class DownloadManager: ObservableObject {
 
     func parseReleaseFeatures(from text: String) -> [ReleaseFeature] {
         var features: [ReleaseFeature] = []
-        let lines = text.components(separatedBy: .newlines)
 
-        for line in lines {
+        text.enumerateLines { line, _ in
             let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
             if trimmed.isEmpty || trimmed.hasPrefix("#") || trimmed.hasPrefix("---") || trimmed.hasPrefix("===") {
-                continue
+                return
             }
 
             var cleanLine = trimmed
@@ -344,7 +343,7 @@ class DownloadManager: ObservableObject {
                     .replacingOccurrences(of: "`", with: "")
                     .trimmingCharacters(in: .whitespacesAndNewlines)
 
-                guard !cleanTitle.isEmpty && !cleanDesc.isEmpty else { continue }
+                guard !cleanTitle.isEmpty && !cleanDesc.isEmpty else { return }
 
                 let lower = cleanTitle.lowercased() + " " + cleanDesc.lowercased()
                 let icon: String

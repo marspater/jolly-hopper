@@ -511,6 +511,52 @@ final class DownloadManagerTests: XCTestCase {
         XCTAssertFalse(DownloadManager.shouldCleanupTemporaryFiles(for: .fileExists))
     }
 
+    func testParseReleaseFeatures() {
+        let manager = DownloadManager()
+        let sampleReleaseText = """
+        # Release Notes v2.5.0
+        ---
+        - **Anti-Bot Engine**: Improved stream download speed and stability.
+        * UI & Layout: New macOS translucent liquid glass interface.
+        • Typography: Updated Geist font family integration.
+        - Menu Bar Control: Status bar control center menu.
+        - Security & Cookie Sandbox: Hardened cookie isolation and log redaction.
+        - VoiceOver Accessibility: Full screen reader support and accessible buttons.
+        - Custom Feature: Plain feature description without category key.
+        ===
+        Invalid line without colon
+        - : Invalid line with empty title
+        - EmptyDesc:
+        """
+
+        let features = manager.parseReleaseFeatures(from: sampleReleaseText)
+        XCTAssertEqual(features.count, 7)
+        XCTAssertEqual(features[0].title, "Anti-Bot Engine")
+        XCTAssertEqual(features[0].description, "Improved stream download speed and stability.")
+        XCTAssertEqual(features[0].icon, "bolt.fill")
+
+        XCTAssertEqual(features[1].title, "UI & Layout")
+        XCTAssertEqual(features[1].icon, "macwindow")
+
+        XCTAssertEqual(features[2].title, "Typography")
+        XCTAssertEqual(features[2].icon, "textformat")
+
+        XCTAssertEqual(features[3].title, "Menu Bar Control")
+        XCTAssertEqual(features[3].icon, "menubar.rectangle")
+
+        XCTAssertEqual(features[4].title, "Security & Cookie Sandbox")
+        XCTAssertEqual(features[4].icon, "shield.checkerboard")
+
+        XCTAssertEqual(features[5].title, "VoiceOver Accessibility")
+        XCTAssertEqual(features[5].icon, "accessibility")
+
+        XCTAssertEqual(features[6].title, "Custom Feature")
+        XCTAssertEqual(features[6].icon, "sparkles")
+
+        let emptyFeatures = manager.parseReleaseFeatures(from: "# Header only\n---\n")
+        XCTAssertEqual(emptyFeatures.count, DownloadManager.defaultFeatures.count)
+    }
+
     func testExtractVideoId() {
         XCTAssertEqual(
             DownloadManager.extractVideoId(from: "https://www.youtube.com/watch?v=dQw4w9WgXcQ"),

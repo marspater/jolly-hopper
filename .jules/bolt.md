@@ -34,3 +34,7 @@
 ## 2026-09-09 - Zero-Copy Substring Slicing for High-Frequency Output Stream Parsing
 **Learning:** High-frequency stdout line callbacks from background process execution (like `yt-dlp` download updates) allocate multiple intermediate `[String]` arrays when using `components(separatedBy:)` or `.map(String.init)`. Using range search (`range(of:)`) with safe bound guards and `Substring` slices via `split(separator:)` avoids intermediate heap allocations per line.
 **Action:** In process runner output stream handlers, prefer range slicing and Substring `split` over `components(separatedBy:)` array allocations.
+
+## 2026-09-12 - Zero-Allocation Line Enumeration for Release Notes Parsing
+**Learning:** Calling `text.components(separatedBy: .newlines)` allocates an intermediate `[String]` array on the heap containing every line of the release notes text before processing. Switching to `text.enumerateLines` yields strings line-by-line without pre-allocating an intermediate array.
+**Action:** In Swift string parsing methods, use `text.enumerateLines` instead of `components(separatedBy: .newlines)` to eliminate intermediate array heap allocations.
