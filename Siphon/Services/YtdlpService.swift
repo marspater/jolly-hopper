@@ -2270,6 +2270,7 @@ public struct DownloadResult: Sendable {
     nonisolated private static let gffTitleRegexes: [NSRegularExpression] = [
         "video_title\\s*:\\s*['\"]([^'\"]+)['\"]",
         "property=[\"']og:title[\"']\\s+content=[\"']([^\"']+)[\"']",
+        "<title>(.*?)</title>",
         "<h1[^>]*>([^<]+)</h1>"
     ].compactMap { try? NSRegularExpression(pattern: $0, options: .caseInsensitive) }
 
