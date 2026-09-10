@@ -450,6 +450,9 @@ struct SponsorView: View {
         }
         .buttonStyle(.bouncy(scale: 0.97, hover: 1.015))
         .padding(.horizontal, SiphonTheme.spacing8)
+        .help(languageService.s("star_github"))
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(languageService.s("star_github"))
         .onHover { hovering in
             withAnimation(.spring(response: 0.25, dampingFraction: 0.8)) {
                 isHovered = hovering
