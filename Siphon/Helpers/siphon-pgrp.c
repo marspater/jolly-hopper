@@ -12,6 +12,7 @@ int main(int argc, char *argv[]) {
         (void)setpgid(0, 0);
 
         if (argv[1][0] == '/') {
+            /* Flawfinder: ignore */
             (void)execv(argv[1], &argv[1]);
         } else {
             /* Flawfinder: ignore */
