@@ -179,7 +179,7 @@ struct DownloadDiagnosticsView: View {
     
     private var commandAndLogsTab: some View {
         VStack(spacing: 14) {
-            if let cmd = download.diagnostics.commandLine ?? (download.log.components(separatedBy: "\n").first(where: { $0.contains("yt-dlp") })) {
+            if let cmd = download.diagnostics.commandLine ?? (download.log.split(whereSeparator: \.isNewline).first(where: { $0.contains("yt-dlp") }).map(String.init)) {
                 VStack(alignment: .leading, spacing: 6) {
                     HStack {
                         Text("Executed Command")
