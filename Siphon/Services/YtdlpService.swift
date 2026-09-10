@@ -4279,14 +4279,16 @@ public struct DownloadResult: Sendable {
         let tempCookiesURL = cookiesDir.appendingPathComponent("siphon_header_cookies_\(UUID().uuidString).txt")
         
         var lines = ["# Netscape HTTP Cookie File"]
-        let pairs = cookieHeader.components(separatedBy: ";")
+        let pairs = cookieHeader.split(whereSeparator: { $0 == ";" })
         let expiry = Int(Date().addingTimeInterval(86400 * 30).timeIntervalSince1970)
         
         for pair in pairs {
-            let parts = pair.trimmingCharacters(in: .whitespacesAndNewlines).components(separatedBy: "=")
-            if parts.count >= 2 {
-                let key = sanitizeCookieToken(parts[0].trimmingCharacters(in: .whitespacesAndNewlines))
-                let value = sanitizeCookieToken(parts.dropFirst().joined(separator: "=").trimmingCharacters(in: .whitespacesAndNewlines))
+            let trimmedPair = pair.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmedPair.isEmpty else { continue }
+            let parts = trimmedPair.split(separator: "=", maxSplits: 1)
+            if parts.count == 2 {
+                let key = sanitizeCookieToken(String(parts[0].trimmingCharacters(in: .whitespacesAndNewlines)))
+                let value = sanitizeCookieToken(String(parts[1].trimmingCharacters(in: .whitespacesAndNewlines)))
                 if !key.isEmpty && !value.isEmpty {
                     lines.append("\(domain)\tTRUE\t/\tFALSE\t\(expiry)\t\(key)\t\(value)")
                 }
@@ -4340,14 +4342,14 @@ public struct DownloadResult: Sendable {
 
         // 1. Process raw cookie header pairs (default path: "/", default domain: defaultDomain)
         if let raw = rawCookies, !raw.isEmpty {
-            let pairs = raw.components(separatedBy: ";")
+            let pairs = raw.split(whereSeparator: { $0 == ";" })
             for pair in pairs {
                 let trimmed = pair.trimmingCharacters(in: .whitespacesAndNewlines)
                 guard !trimmed.isEmpty else { continue }
-                let parts = trimmed.components(separatedBy: "=")
-                if parts.count >= 2 {
-                    let key = sanitizeCookieToken(parts[0].trimmingCharacters(in: .whitespacesAndNewlines))
-                    let value = sanitizeCookieToken(parts.dropFirst().joined(separator: "=").trimmingCharacters(in: .whitespacesAndNewlines))
+                let parts = trimmed.split(separator: "=", maxSplits: 1)
+                if parts.count == 2 {
+                    let key = sanitizeCookieToken(String(parts[0].trimmingCharacters(in: .whitespacesAndNewlines)))
+                    let value = sanitizeCookieToken(String(parts[1].trimmingCharacters(in: .whitespacesAndNewlines)))
                     if !key.isEmpty && !value.isEmpty {
                         let mapKey = CookieKey(domain: defaultDomain.lowercased(), path: "/", name: key)
                         cookieMap[mapKey] = ConsolidatedCookieEntry(
