@@ -2083,14 +2083,8 @@ public struct DownloadResult: Sendable {
         
         // Extract Embed URL
         var embedUrl: String? = nil
-        let embedPatterns = [
-            "\"embedUrl\"\\s*:\\s*\"([^\"]+)\"",
-            "<iframe[^>]+src=[\"'](https?://(?:www\\.)?boyfriend(?:tv)?\\.(?:tv|com)/embed/[^\"']+)[\"']",
-            "<iframe[^>]+src=[\"'](/embed/[^\"']+)[\"']"
-        ]
-        for pattern in embedPatterns {
-            if let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive),
-               let match = regex.firstMatch(in: html, options: [], range: NSRange(location: 0, length: (html as NSString).length)),
+        for regex in Self.boyfriendEmbedRegexes {
+            if let match = regex.firstMatch(in: html, options: [], range: NSRange(location: 0, length: (html as NSString).length)),
                match.numberOfRanges > 1 {
                 let val = (html as NSString).substring(with: match.range(at: 1))
                     .replacingOccurrences(of: "\\/", with: "/")
@@ -2115,8 +2109,7 @@ public struct DownloadResult: Sendable {
                 candidateEmbeds.append(embed.replacingOccurrences(of: "boyfriendtv.com", with: "boyfriend.tv"))
             }
         }
-        let videoIdPattern = "/videos/(\\d+)"
-        if let regex = try? NSRegularExpression(pattern: videoIdPattern, options: .caseInsensitive),
+        if let regex = Self.boyfriendVideoIdRegex,
            let match = regex.firstMatch(in: targetUrl, options: [], range: NSRange(location: 0, length: (targetUrl as NSString).length)),
            match.numberOfRanges > 1 {
             let videoId = (targetUrl as NSString).substring(with: match.range(at: 1))
@@ -2224,6 +2217,14 @@ public struct DownloadResult: Sendable {
         
         return nil
     }
+
+    nonisolated private static let boyfriendEmbedRegexes: [NSRegularExpression] = [
+        "\"embedUrl\"\\s*:\\s*\"([^\"]+)\"",
+        "<iframe[^>]+src=[\"'](https?://(?:www\\.)?boyfriend(?:tv)?\\.(?:tv|com)/embed/[^\"']+)[\"']",
+        "<iframe[^>]+src=[\"'](/embed/[^\"']+)[\"']"
+    ].compactMap { try? NSRegularExpression(pattern: $0, options: .caseInsensitive) }
+
+    nonisolated private static let boyfriendVideoIdRegex: NSRegularExpression? = try? NSRegularExpression(pattern: "/videos/(\\d+)", options: .caseInsensitive)
 
     nonisolated private static let boyfriendStreamRegexes: [NSRegularExpression] = [
         "\"(?:hlsAuto|hls|videoUrl|media|src|file|video_url)\"\\s*:\\s*\"(https?:[^\"]+)\"",
