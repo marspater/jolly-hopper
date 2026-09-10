@@ -437,7 +437,7 @@ struct FileThumbnailView: View {
                     .fill(Color.primary.opacity(0.06))
                     .overlay {
                         Image(systemName: "play.rectangle.fill")
-                            .font(.geist(24))
+                            .font(.system(size: 24))
                             .foregroundColor(.secondary.opacity(0.6))
                     }
             }
