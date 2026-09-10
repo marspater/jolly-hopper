@@ -47,6 +47,7 @@ class LoggerService: ObservableObject {
             "--cookies": "\"<COOKIE_FILE>\"",
             "--cookies-from-browser": "\"<BROWSER>\"",
             "--add-header": "\"<REDACTED_HEADER>\"",
+            "--add-headers": "\"<REDACTED_HEADER>\"",
             "--header": "\"<REDACTED_HEADER>\"",
             "--http-header": "\"<REDACTED_HEADER>\"",
             "-H": "\"<REDACTED_HEADER>\"",

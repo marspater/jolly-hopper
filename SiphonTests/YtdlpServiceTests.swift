@@ -888,6 +888,11 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertTrue(sanitized.contains("--cookies \"<COOKIE_FILE>\""))
         XCTAssertTrue(sanitized.contains("--add-header \"<REDACTED_HEADER>\""))
         XCTAssertTrue(sanitized.contains("https://site.example/watch"))
+
+        let addHeadersArgs = ["yt-dlp", "--add-headers", "Authorization:Bearer secret123", "https://example.com"]
+        let addHeadersSanitized = LoggerService.sanitizeCommandForLog(addHeadersArgs)
+        XCTAssertTrue(addHeadersSanitized.contains("--add-headers \"<REDACTED_HEADER>\""))
+        XCTAssertFalse(addHeadersSanitized.contains("secret123"))
         XCTAssertFalse(sanitized.contains("siphon_cookie_secret_123"))
         XCTAssertFalse(sanitized.contains("SECRET_TOKEN_ABC"))
         XCTAssertFalse(sanitized.contains("token=SECRET999"))
@@ -2347,6 +2352,25 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertTrue(content.contains("session_id\tnew_session"))
         XCTAssertFalse(content.contains("old_session"), "Old session cookie must be deterministically replaced")
         XCTAssertTrue(content.contains("token\tsecret1"))
+    }
+
+    func testConsolidatedCookiesSanitizesNullBytes() throws {
+        let url = "https://example.com/watch"
+        let rawHeader = "sess\0ion_id=val\0ue123; bad_key\0=bad_val"
+
+        guard let cookieFileURL = service.createConsolidatedCookiesFile(
+            url: url,
+            rawCookies: rawHeader
+        ) else {
+            XCTFail("Failed to create consolidated cookies file")
+            return
+        }
+        defer { try? FileManager.default.removeItem(at: cookieFileURL) }
+
+        let content = try String(contentsOf: cookieFileURL, encoding: .utf8)
+        XCTAssertFalse(content.contains("\0"), "Cookie file content must not contain null bytes")
+        XCTAssertTrue(content.contains("session_id\tvalue123"))
+        XCTAssertTrue(content.contains("bad_key\tbad_val"))
     }
 
     func testConsolidatedCookiesMergePreservesDifferentDomainsAndPaths() throws {
