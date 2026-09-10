@@ -4442,6 +4442,7 @@ public struct DownloadResult: Sendable {
         return token.replacingOccurrences(of: "\t", with: "")
                     .replacingOccurrences(of: "\n", with: "")
                     .replacingOccurrences(of: "\r", with: "")
+                    .replacingOccurrences(of: "\0", with: "")
     }
 
     static func purgeOrphanedTempCookieFiles() {
