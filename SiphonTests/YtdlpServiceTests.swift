@@ -2599,13 +2599,13 @@ final class YtdlpServiceTests: XCTestCase {
     }
 
     func testFetchSingleVideoInfoRetriesWithBrowserCookiesOnSiteError() async throws {
-        let savedBrowser = UserDefaults.standard.string(forKey: UserDefaultsKeys.browserForCookies)
-        UserDefaults.standard.set("chrome", forKey: UserDefaultsKeys.browserForCookies)
+        let savedBrowser = UserDefaults.standard.string(forKey: "browser")
+        UserDefaults.standard.set("chrome", forKey: "browser")
         defer {
             if let saved = savedBrowser {
-                UserDefaults.standard.set(saved, forKey: UserDefaultsKeys.browserForCookies)
+                UserDefaults.standard.set(saved, forKey: "browser")
             } else {
-                UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.browserForCookies)
+                UserDefaults.standard.removeObject(forKey: "browser")
             }
         }
 
