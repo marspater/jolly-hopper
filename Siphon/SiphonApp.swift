@@ -672,10 +672,13 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
 
             let exitCode = process.terminationStatus
             var statusFound: String? = nil
-            if let data = try? Data(contentsOf: statusFile),
-               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-               let status = json["status"] as? String {
-                statusFound = status
+            if let fileHandle = try? FileHandle(forReadingFrom: statusFile) {
+                defer { try? fileHandle.close() }
+                if let data = try? fileHandle.readToEnd(),
+                   let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                   let status = json["status"] as? String {
+                    statusFound = status
+                }
             }
 
             self.isInstalling = false
