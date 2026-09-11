@@ -473,7 +473,7 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
             let data = pipe.fileHandleForReading.readDataToEndOfFile()
             proc.waitUntilExit()
             guard let output = String(data: data, encoding: .utf8) else { return nil }
-            for line in output.components(separatedBy: .newlines) {
+            for line in output.split(whereSeparator: \.isNewline) {
                 if line.hasPrefix("TeamIdentifier=") {
                     let id = line.replacingOccurrences(of: "TeamIdentifier=", with: "").trimmingCharacters(in: .whitespacesAndNewlines)
                     return (id == "not set" || id.isEmpty) ? nil : id
