@@ -1085,7 +1085,7 @@ struct LinearProgressBar: View {
     let value: Double
 
     // Bug #3 fix: Guard against NaN to prevent SwiftUI layout crash
-    private var safeValue: Double {
+    var safeValue: Double {
         value.isNaN ? 0 : max(0, min(1, value))
     }
 
