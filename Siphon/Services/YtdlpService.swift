@@ -2232,6 +2232,13 @@ public struct DownloadResult: Sendable {
         "(https?:\\\\?/\\\\?/[^\\s\"'<>]+\\.boyfriend(?:tv)?\\.(?:tv|com)[^\\s\"'<>]+?\\.mp4)"
     ].compactMap { try? NSRegularExpression(pattern: $0, options: .caseInsensitive) }
 
+    nonisolated private static let gffTitleRegexes: [NSRegularExpression] = [
+        "video_title\\s*:\\s*['\"]([^'\"]+)['\"]",
+        "property=[\"']og:title[\"']\\s+content=[\"']([^\"']+)[\"']",
+        "<title>(.*?)</title>",
+        "<h1[^>]*>([^<]+)</h1>"
+    ].compactMap { try? NSRegularExpression(pattern: $0, options: .caseInsensitive) }
+
     nonisolated private static let gffStreamRegexes: [NSRegularExpression] = [
         "video_url\\s*:\\s*['\"]([^'\"]+)['\"]",
         "video_alt_url\\s*:\\s*['\"]([^'\"]+)['\"]",
@@ -2816,15 +2823,8 @@ public struct DownloadResult: Sendable {
         
         // Extract Title
         var title = "GayForFans Video"
-        let titlePatterns = [
-            "video_title\\s*:\\s*['\"]([^'\"]+)['\"]",
-            "property=[\"']og:title[\"']\\s+content=[\"']([^\"']+)[\"']",
-            "<title>(.*?)</title>",
-            "<h1[^>]*>([^<]+)</h1>"
-        ]
-        for pattern in titlePatterns {
-            if let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]),
-               let match = regex.firstMatch(in: html, options: [], range: NSRange(location: 0, length: (html as NSString).length)),
+        for regex in Self.gffTitleRegexes {
+            if let match = regex.firstMatch(in: html, options: [], range: NSRange(location: 0, length: (html as NSString).length)),
                match.numberOfRanges > 1 {
                 let rawTitle = (html as NSString).substring(with: match.range(at: 1))
                     .replacingOccurrences(of: "(?i)<title>", with: "", options: .regularExpression)
@@ -2845,16 +2845,8 @@ public struct DownloadResult: Sendable {
         
         // Extract Thumbnail
         var thumbnailURL: String? = nil
-        let thumbPatterns = [
-            "preview_url\\s*:\\s*['\"](https?://[^'\"]+)['\"]",
-            "preview_url1\\s*:\\s*['\"](https?://[^'\"]+)['\"]",
-            "property=[\"']og:image[\"']\\s+content=[\"'](https?://[^\"']+)[\"']",
-            "poster=[\"'](https?://[^\"']+)[\"']",
-            "\"thumbnailUrl\"\\s*:\\s*\"(https?://[^\"]+)\""
-        ]
-        for pattern in thumbPatterns {
-            if let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]),
-               let match = regex.firstMatch(in: html, options: [], range: NSRange(location: 0, length: (html as NSString).length)),
+        for regex in Self.gffThumbRegexes {
+            if let match = regex.firstMatch(in: html, options: [], range: NSRange(location: 0, length: (html as NSString).length)),
                match.numberOfRanges > 1 {
                 let candidate = (html as NSString).substring(with: match.range(at: 1))
                     .replacingOccurrences(of: "\\/", with: "/")
