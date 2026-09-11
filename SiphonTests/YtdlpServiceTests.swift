@@ -2599,20 +2599,20 @@ final class YtdlpServiceTests: XCTestCase {
     }
 
     func testFetchSingleVideoInfoRetriesWithBrowserCookiesOnSiteError() async throws {
-        let savedBrowser = UserDefaults.standard.string(forKey: UserDefaultsKeys.browserForCookies)
-        UserDefaults.standard.set("chrome", forKey: UserDefaultsKeys.browserForCookies)
+        let savedBrowser = UserDefaults.standard.string(forKey: "browser")
+        UserDefaults.standard.set("chrome", forKey: "browser")
         defer {
             if let saved = savedBrowser {
-                UserDefaults.standard.set(saved, forKey: UserDefaultsKeys.browserForCookies)
+                UserDefaults.standard.set(saved, forKey: "browser")
             } else {
-                UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.browserForCookies)
+                UserDefaults.standard.removeObject(forKey: "browser")
             }
         }
 
         let validJSON = """
         {
             \"id\": \"bf_123\",
-            \"title\": \"Sample Video\",
+            \"title\": \"BoyfriendTV Video\",
             \"duration\": 60.0
         }
         """
@@ -2632,7 +2632,7 @@ final class YtdlpServiceTests: XCTestCase {
             return ""
         })
 
-        let info = try await service.fetchInfo(url: "https://www.youtube.com/watch?v=bf_123")
+        let info = try await service.fetchInfo(url: "https://www.boyfriendtv.com/videos/12345/test-video")
         XCTAssertEqual(dumpJsonCallCountBox.value, 2, "Expected initial fetch to fail and retry with browser cookies")
         XCTAssertTrue(usedBrowserCookiesBox.value, "Expected retry call to pass --cookies-from-browser")
         XCTAssertEqual(info.id, "bf_123")
