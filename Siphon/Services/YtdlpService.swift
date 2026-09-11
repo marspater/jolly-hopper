@@ -2082,14 +2082,8 @@ public struct DownloadResult: Sendable {
         
         // Extract Embed URL
         var embedUrl: String? = nil
-        let embedPatterns = [
-            "\"embedUrl\"\\s*:\\s*\"([^\"]+)\"",
-            "<iframe[^>]+src=[\"'](https?://(?:www\\.)?boyfriend(?:tv)?\\.(?:tv|com)/embed/[^\"']+)[\"']",
-            "<iframe[^>]+src=[\"'](/embed/[^\"']+)[\"']"
-        ]
-        for pattern in embedPatterns {
-            if let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive),
-               let match = regex.firstMatch(in: html, options: [], range: NSRange(location: 0, length: (html as NSString).length)),
+        for regex in Self.boyfriendEmbedRegexes {
+            if let match = regex.firstMatch(in: html, options: [], range: NSRange(location: 0, length: (html as NSString).length)),
                match.numberOfRanges > 1 {
                 let val = (html as NSString).substring(with: match.range(at: 1))
                     .replacingOccurrences(of: "\\/", with: "/")
@@ -2114,8 +2108,7 @@ public struct DownloadResult: Sendable {
                 candidateEmbeds.append(embed.replacingOccurrences(of: "boyfriendtv.com", with: "boyfriend.tv"))
             }
         }
-        let videoIdPattern = "/videos/(\\d+)"
-        if let regex = try? NSRegularExpression(pattern: videoIdPattern, options: .caseInsensitive),
+        if let regex = Self.boyfriendVideoIdRegex,
            let match = regex.firstMatch(in: targetUrl, options: [], range: NSRange(location: 0, length: (targetUrl as NSString).length)),
            match.numberOfRanges > 1 {
             let videoId = (targetUrl as NSString).substring(with: match.range(at: 1))
@@ -2223,6 +2216,18 @@ public struct DownloadResult: Sendable {
         
         return nil
     }
+
+    // Bolt Performance Optimization: Pre-compile static NSRegularExpression patterns as `nonisolated private static let` constants to eliminate compilation and allocation overhead during high-frequency parsing.
+    nonisolated private static let boyfriendEmbedRegexes: [NSRegularExpression] = [
+        "\"embedUrl\"\\s*:\\s*\"([^\"]+)\"",
+        "<iframe[^>]+src=[\"'](https?://(?:www\\.)?boyfriend(?:tv)?\\.(?:tv|com)/embed/[^\"']+)[\"']",
+        "<iframe[^>]+src=[\"'](/embed/[^\"']+)[\"']"
+    ].compactMap { try? NSRegularExpression(pattern: $0, options: .caseInsensitive) }
+
+    nonisolated private static let boyfriendVideoIdRegex = try? NSRegularExpression(pattern: "/videos/(\\d+)", options: .caseInsensitive)
+    nonisolated private static let boyfriendPathVideoIdRegex = try? NSRegularExpression(pattern: "(?:^|/)(?:videos|embed|v)/(\\d+)", options: .caseInsensitive)
+    nonisolated private static let galleryVideoSlugRegex = try? NSRegularExpression(pattern: "^/(?:playlist|album|galleries)/\\d+/video/([^/]+)", options: .caseInsensitive)
+    nonisolated private static let singleVideoSlugRegex = try? NSRegularExpression(pattern: "^/video/([^/]+)", options: .caseInsensitive)
 
     nonisolated private static let boyfriendStreamRegexes: [NSRegularExpression] = [
         "\"(?:hlsAuto|hls|videoUrl|media|src|file|video_url)\"\\s*:\\s*\"(https?:[^\"]+)\"",
@@ -3587,7 +3592,7 @@ public struct DownloadResult: Sendable {
             let path = components.path
             // Extract video ID from path or query across all language/subdomain variations
             let videoId: String? = {
-                if let regex = try? NSRegularExpression(pattern: "(?:^|/)(?:videos|embed|v)/(\\d+)", options: .caseInsensitive),
+                if let regex = Self.boyfriendPathVideoIdRegex,
                    let match = regex.firstMatch(in: path, options: [], range: NSRange(location: 0, length: (path as NSString).length)),
                    match.numberOfRanges > 1 {
                     return (path as NSString).substring(with: match.range(at: 1))
@@ -3610,16 +3615,14 @@ public struct DownloadResult: Sendable {
 
         // 2. Generic Tube / Gallery / Playlist URL normalization (e.g. /playlist/123/video/slug or /album/123/video/slug)
         let path = components.path
-        let galleryVideoPattern = "^/(?:playlist|album|galleries)/\\d+/video/([^/]+)"
-        let singleVideoPattern = "^/video/([^/]+)"
-        if let regex = try? NSRegularExpression(pattern: galleryVideoPattern, options: .caseInsensitive),
+        if let regex = Self.galleryVideoSlugRegex,
            let match = regex.firstMatch(in: path, options: [], range: NSRange(location: 0, length: (path as NSString).length)),
            match.numberOfRanges > 1 {
             let videoSlug = (path as NSString).substring(with: match.range(at: 1))
             components.path = "/videos/\(videoSlug)/"
             return components.url?.absoluteString ?? components.string ?? urlString
         } else if host.contains("thisvid") {
-            if let regex = try? NSRegularExpression(pattern: singleVideoPattern, options: .caseInsensitive),
+            if let regex = Self.singleVideoSlugRegex,
                let match = regex.firstMatch(in: path, options: [], range: NSRange(location: 0, length: (path as NSString).length)),
                match.numberOfRanges > 1 {
                 let videoSlug = (path as NSString).substring(with: match.range(at: 1))
