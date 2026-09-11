@@ -1845,7 +1845,7 @@ public struct DownloadResult: Sendable {
     private func appendCookieArgs(for url: String, to args: inout [String], force: Bool = false) -> Bool {
         guard let browser = configuredBrowserCookieSource() else { return false }
         if isCookieDenied(browser: browser, url: url) { return false }
-        if browser == "safari" && !Self.hasFullDiskAccess && !force {
+        if !force && (isBoyfriendTVURL(url) || isGFFURL(url) || (browser == "safari" && !Self.hasFullDiskAccess)) {
             return false
         }
         if force || !args.contains("--cookies-from-browser") {
