@@ -2611,8 +2611,8 @@ final class YtdlpServiceTests: XCTestCase {
 
         let validJSON = """
         {
-            \"id\": \"bf_123\",
-            \"title\": \"BoyfriendTV Video\",
+            \"id\": \"yt_123\",
+            \"title\": \"Sample Video\",
             \"duration\": 60.0
         }
         """
@@ -2632,10 +2632,10 @@ final class YtdlpServiceTests: XCTestCase {
             return ""
         })
 
-        let info = try await service.fetchInfo(url: "https://www.boyfriendtv.com/videos/12345/test-video")
+        let info = try await service.fetchInfo(url: "https://www.youtube.com/watch?v=yt_123")
         XCTAssertEqual(dumpJsonCallCountBox.value, 2, "Expected initial fetch to fail and retry with browser cookies")
         XCTAssertTrue(usedBrowserCookiesBox.value, "Expected retry call to pass --cookies-from-browser")
-        XCTAssertEqual(info.id, "bf_123")
+        XCTAssertEqual(info.id, "yt_123")
     }
 
     func testFetchPlaylistInfoUsesSingleCookiesFlag() async throws {
