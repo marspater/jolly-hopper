@@ -89,7 +89,7 @@ struct MenuBarView: View {
             }
             .buttonStyle(.plain)
             .help(languageService.s("paste_from_clipboard"))
-            .accessibilityLabel(languageService.s("paste_from_clipboard"))
+            .accessibilityLabel(isPasted ? languageService.s("paste") : languageService.s("paste_from_clipboard"))
         }
         .padding(.horizontal, SiphonTheme.spacing10)
         .padding(.vertical, 8)
