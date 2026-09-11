@@ -975,6 +975,21 @@ final class QueueAndErrorUXTests: XCTestCase {
 
     // MARK: - Bug Audit Regression Tests
 
+    func testLinearProgressBarSafeValueClampingAndNaNGuard() {
+        let computeSafeValue: (Double) -> Double = { val in
+            val.isNaN ? 0 : max(0, min(1, val))
+        }
+
+        XCTAssertEqual(computeSafeValue(Double.nan), 0.0, "NaN input must evaluate to 0.0")
+        XCTAssertEqual(computeSafeValue(-0.5), 0.0, "Negative values must be clamped to 0.0")
+        XCTAssertEqual(computeSafeValue(1.5), 1.0, "Values greater than 1.0 must be clamped to 1.0")
+        XCTAssertEqual(computeSafeValue(0.75), 0.75, "Normal progress values between 0.0 and 1.0 must be preserved")
+        XCTAssertEqual(computeSafeValue(0.0), 0.0, "0.0 progress must remain 0.0")
+        XCTAssertEqual(computeSafeValue(1.0), 1.0, "1.0 progress must remain 1.0")
+        XCTAssertEqual(computeSafeValue(Double.infinity), 1.0, "Positive infinity must clamp to 1.0")
+        XCTAssertEqual(computeSafeValue(-Double.infinity), 0.0, "Negative infinity must clamp to 0.0")
+    }
+
     func testDisplayProgressGuardsAgainstNaNAndInfinity() {
         let download = Download(url: "https://example.com/video", options: .default)
         download.progress = Double.nan
