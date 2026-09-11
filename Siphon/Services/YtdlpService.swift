@@ -2276,6 +2276,18 @@ public struct DownloadResult: Sendable {
         "\"thumbnailUrl\"\\s*:\\s*\"(https?://[^\"]+)\""
     ].compactMap { try? NSRegularExpression(pattern: $0, options: .caseInsensitive) }
 
+    nonisolated private static let gffEmbedRegexes: [NSRegularExpression] = [
+        "\"embedUrl\"\\s*:\\s*\"([^\"]+)\"",
+        "<iframe[^>]+src=[\"'](https?://(?:www\\.)?gayforfans\\.com/embed/[^\"']+)[\"']",
+        "<iframe[^>]+src=[\"'](/embed/[^\"']+)[\"']"
+    ].compactMap { try? NSRegularExpression(pattern: $0, options: .caseInsensitive) }
+
+    nonisolated private static let gffVideoIdRegexes: [NSRegularExpression] = [
+        "/videos?/(\\d+)",
+        "video_id\\s*:\\s*['\"](\\d+)['\"]",
+        "/embed/(\\d+)"
+    ].compactMap { try? NSRegularExpression(pattern: $0, options: .caseInsensitive) }
+
     nonisolated private static let guywhTitleRegexes: [NSRegularExpression] = [
         "video_title\\s*:\\s*['\"]([^'\"]+)['\"]",
         "property=[\"']og:title[\"']\\s+content=[\"']([^\"']+)[\"']",
@@ -2897,14 +2909,8 @@ public struct DownloadResult: Sendable {
         
         // Extract Candidate Embed URLs
         var candidateEmbeds: [String] = []
-        let embedPatterns = [
-            "\"embedUrl\"\\s*:\\s*\"([^\"]+)\"",
-            "<iframe[^>]+src=[\"'](https?://(?:www\\.)?gayforfans\\.com/embed/[^\"']+)[\"']",
-            "<iframe[^>]+src=[\"'](/embed/[^\"']+)[\"']"
-        ]
-        for pattern in embedPatterns {
-            if let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]),
-               let match = regex.firstMatch(in: html, options: [], range: NSRange(location: 0, length: (html as NSString).length)),
+        for regex in Self.gffEmbedRegexes {
+            if let match = regex.firstMatch(in: html, options: [], range: NSRange(location: 0, length: (html as NSString).length)),
                match.numberOfRanges > 1 {
                 let val = (html as NSString).substring(with: match.range(at: 1))
                     .replacingOccurrences(of: "\\/", with: "/")
@@ -2917,10 +2923,8 @@ public struct DownloadResult: Sendable {
             }
         }
 
-        let videoIdPatterns = ["/videos?/(\\d+)", "video_id\\s*:\\s*['\"](\\d+)['\"]", "/embed/(\\d+)"]
-        for pattern in videoIdPatterns {
-            if let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]),
-               let match = regex.firstMatch(in: targetUrl + "\n" + html, options: [], range: NSRange(location: 0, length: ((targetUrl + "\n" + html) as NSString).length)),
+        for regex in Self.gffVideoIdRegexes {
+            if let match = regex.firstMatch(in: targetUrl + "\n" + html, options: [], range: NSRange(location: 0, length: ((targetUrl + "\n" + html) as NSString).length)),
                match.numberOfRanges > 1 {
                 let vidId = ((targetUrl + "\n" + html) as NSString).substring(with: match.range(at: 1))
                 let defaultEmbed = "https://gayforfans.com/embed/\(vidId)/"
