@@ -60,7 +60,11 @@ class LoggerService: ObservableObject {
             "--ap-password": "\"<PASSWORD>\"",
             "--token": "\"<TOKEN>\"",
             "--api-key": "\"<API_KEY>\"",
-            "--proxy": "\"<PROXY_REDACTED>\""
+            "--proxy": "\"<PROXY_REDACTED>\"",
+            "--ffmpeg-location": "\"<LOCATION_REDACTED>\"",
+            "--netrc-cmd": "\"<COMMAND_REDACTED>\"",
+            "--exec": "\"<EXEC_REDACTED>\"",
+            "--postprocessor-args": "\"<ARGS_REDACTED>\""
         ]
 
         for arg in args {
