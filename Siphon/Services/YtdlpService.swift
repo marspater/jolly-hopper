@@ -1621,9 +1621,8 @@ public struct DownloadResult: Sendable {
             let data = pipe.fileHandleForReading.readDataToEndOfFile()
             proc.waitUntilExit()
             let output = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            return output.components(separatedBy: .newlines).contains { line in
-                let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
-                return trimmed == "1" || !trimmed.isEmpty
+            return output.lazy.split(whereSeparator: \.isNewline).contains { line in
+                line.contains { !$0.isWhitespace }
             }
         } catch {
             return false
