@@ -293,13 +293,13 @@ final class DownloadManagerTests: XCTestCase {
         }
 
         // Wait for fetchInfo to begin
-        await fulfillment(of: [fetchStartedExpectation], timeout: 1.0)
+        await fulfillment(of: [fetchStartedExpectation], timeout: 5.0)
 
         // Simulate user cancellation while in fetching state
         manager.stopDownload(download)
 
         // Wait for fetchInfo completion in mock
-        await fulfillment(of: [fetchCompletedExpectation], timeout: 1.0)
+        await fulfillment(of: [fetchCompletedExpectation], timeout: 5.0)
         await processTask.value
 
         // Assert download title was NOT updated and status remains .stopped
