@@ -2658,6 +2658,26 @@ final class YtdlpServiceTests: XCTestCase {
         let cookiesFlagCount = recordedArgsBox.value.filter { $0 == "--cookies" }.count
         XCTAssertEqual(cookiesFlagCount, 1, "fetchPlaylistInfo must pass exactly one --cookies flag")
     }
+
+    func testSanitizeCommandForLogRedactsExecutionAndLocationFlags() throws {
+        let args = [
+            "yt-dlp",
+            "--ffmpeg-location", "/usr/local/bin/ffmpeg",
+            "--netrc-cmd", "echo password",
+            "--exec", "rm -rf /",
+            "--postprocessor-args", "VideoConvertor:-y -c:v libx264",
+            "https://example.com/video"
+        ]
+
+        let sanitized = LoggerService.sanitizeCommandForLog(args)
+        XCTAssertTrue(sanitized.contains("--ffmpeg-location \"<LOCATION_REDACTED>\""))
+        XCTAssertTrue(sanitized.contains("--netrc-cmd \"<COMMAND_REDACTED>\""))
+        XCTAssertTrue(sanitized.contains("--exec \"<EXEC_REDACTED>\""))
+        XCTAssertTrue(sanitized.contains("--postprocessor-args \"<ARGS_REDACTED>\""))
+        XCTAssertFalse(sanitized.contains("/usr/local/bin/ffmpeg"))
+        XCTAssertFalse(sanitized.contains("echo password"))
+        XCTAssertFalse(sanitized.contains("rm -rf /"))
+    }
 }
 
 
