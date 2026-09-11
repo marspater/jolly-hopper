@@ -1297,7 +1297,7 @@ final class QueueAndErrorUXTests: XCTestCase {
         let download = Download(url: "https://example.com/roundtrip", options: options, title: "Roundtrip Video")
         download.status = .completed
         download.progress = 1.0
-        download.filePath = URL(fileURLWithPath: "/tmp/roundtrip.mp4")
+        download.filePaths = [URL(fileURLWithPath: "/tmp/roundtrip.mp4")]
         download.errorMessage = "None"
         download.log = "Log data"
 
@@ -1310,7 +1310,7 @@ final class QueueAndErrorUXTests: XCTestCase {
         XCTAssertEqual(reconstructed.title, download.title)
         XCTAssertEqual(reconstructed.status, .completed)
         XCTAssertEqual(reconstructed.progress, 1.0)
-        XCTAssertEqual(reconstructed.filePath?.path, "/tmp/roundtrip.mp4")
+        XCTAssertEqual(reconstructed.primaryFilePath?.path, "/tmp/roundtrip.mp4")
         XCTAssertEqual(reconstructed.log, "Log data")
     }
 
@@ -1326,14 +1326,14 @@ final class QueueAndErrorUXTests: XCTestCase {
         let ch3 = URL(fileURLWithPath: "/tmp/Split Video - 003 Outro.mp4")
         download.filePaths = [ch1, ch2, ch3]
 
-        XCTAssertEqual(download.filePath, ch1, "filePath must return the first file for backward-compatibility")
+        XCTAssertEqual(download.primaryFilePath, ch1, "primaryFilePath must return the first file")
         XCTAssertEqual(download.filePaths.count, 3)
 
         let historic = HistoricDownload(download: download)
         let reconstructed = historic.toDownload()
         XCTAssertEqual(reconstructed.filePaths.count, 3)
         XCTAssertEqual(reconstructed.filePaths, [ch1, ch2, ch3])
-        XCTAssertEqual(reconstructed.filePath, ch1)
+        XCTAssertEqual(reconstructed.primaryFilePath, ch1)
     }
 
     func testSafariFDALocalizationAndStrings() {

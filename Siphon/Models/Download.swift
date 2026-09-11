@@ -19,17 +19,7 @@ class Download: ObservableObject, Identifiable {
     var primaryFilePath: URL? {
         filePaths.first
     }
-    @available(*, deprecated, message: "Use primaryFilePath or filePaths directly for multi-file output safety")
-    var filePath: URL? {
-        get { filePaths.first }
-        set {
-            if let val = newValue {
-                filePaths = [val]
-            } else {
-                filePaths = []
-            }
-        }
-    }
+
     @Published var errorMessage: String?
     @Published var log: String = ""
     @Published var mediaInfo: MediaInfo? = nil
@@ -1837,10 +1827,6 @@ struct HistoricDownload: Codable, Identifiable {
     let progress: Double
     let options: DownloadOptions
 
-    @available(*, deprecated, message: "HistoricDownload uses filePaths as its canonical representation")
-    var filePath: String? {
-        filePaths.first
-    }
 
     enum CodingKeys: String, CodingKey {
         case id, url, title, filePath, filePaths, downloadDate, fileType, status, thumbnailURL, duration, errorMessage, log, progress, options
