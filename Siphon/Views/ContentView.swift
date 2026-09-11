@@ -20,7 +20,9 @@ struct MainWindowConfigurator: NSViewRepresentable {
         }
         return view
     }
-    func updateNSView(_ nsView: NSView, context: Context) {}
+    func updateNSView(_ nsView: NSView, context: Context) {
+        // No-op: Window configuration does not require dynamic view updates
+    }
 }
 
 struct ContentView: View {
@@ -229,7 +231,7 @@ struct SidebarView: View {
         .listRowInsets(EdgeInsets(top: 2, leading: 6, bottom: 2, trailing: 6))
         .listRowBackground(
             RoundedRectangle(cornerRadius: SiphonTheme.radiusControl)
-                .fill(isSelected ? SiphonTheme.accent.opacity(0.12) : Color.clear)
+                .fill(isSelected ? SiphonTheme.accent.opacity(0.18) : Color.clear)
                 .padding(.horizontal, 2)
         )
     }
@@ -298,10 +300,10 @@ struct HomeView: View {
                     
                     VStack(spacing: SiphonTheme.spacing6) {
                         Text("Siphon")
-                            .font(.geist(36, weight: .bold))
+                            .font(.siphonHomeTitle)
                         
                         Text(languageService.s("url_placeholder"))
-                            .font(.geist(15))
+                            .font(.siphonStandard)
                             .foregroundColor(.secondary)
                             .multilineTextAlignment(.center)
                             .padding(.horizontal, SiphonTheme.spacing24)
@@ -336,16 +338,16 @@ struct HomeView: View {
                 
                 // Stats Grid
                 LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: SiphonTheme.spacing14), count: 4), spacing: SiphonTheme.spacing14) {
-                    StatCard(title: languageService.s("stat_downloading"), count: downloadManager.downloadingCount, color: SiphonTheme.downloading) {
+                    StatCard(item: .downloading, title: languageService.s("stat_downloading"), count: downloadManager.downloadingCount, color: SiphonTheme.downloading) {
                         appState.selectedNavItem = .downloading
                     }
-                    StatCard(title: languageService.s("stat_queued"), count: downloadManager.queuedCount, color: SiphonTheme.queued) {
+                    StatCard(item: .queued, title: languageService.s("stat_queued"), count: downloadManager.queuedCount, color: SiphonTheme.queued) {
                         appState.selectedNavItem = .queued
                     }
-                    StatCard(title: languageService.s("stat_completed"), count: downloadManager.completedCount, color: SiphonTheme.completed) {
+                    StatCard(item: .completed, title: languageService.s("stat_completed"), count: downloadManager.completedCount, color: SiphonTheme.completed) {
                         appState.selectedNavItem = .completed
                     }
-                    StatCard(title: languageService.s("stat_failed"), count: downloadManager.failedCount, color: SiphonTheme.failed) {
+                    StatCard(item: .failed, title: languageService.s("stat_failed"), count: downloadManager.failedCount, color: SiphonTheme.failed) {
                         appState.selectedNavItem = .failed
                     }
                 }
@@ -375,33 +377,87 @@ struct HomeView: View {
 
 struct StatCard: View {
     @EnvironmentObject var languageService: LanguageService
+    @EnvironmentObject var appState: AppState
+    let item: NavigationItem
     let title: String
     let count: Int
     let color: Color
     let action: () -> Void
-    
+    @State private var isHovered = false
+
+    private var isSelected: Bool {
+        appState.selectedNavItem == item
+    }
+
     var body: some View {
         Button(action: action) {
-            VStack(spacing: SiphonTheme.spacing4) {
+            VStack(alignment: .leading, spacing: SiphonTheme.spacing6) {
+                HStack(alignment: .center) {
+                    Image(systemName: item.icon)
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundColor(isSelected ? color : color.opacity(0.85))
+
+                    Spacer()
+
+                    if isSelected {
+                        Circle()
+                            .fill(color)
+                            .frame(width: 6, height: 6)
+                    } else if isHovered {
+                        Image(systemName: "arrow.right")
+                            .font(.system(size: 9, weight: .semibold))
+                            .foregroundColor(color.opacity(0.75))
+                            .transition(.opacity)
+                    }
+                }
+
+                Spacer(minLength: 0)
+
                 Text("\(count)")
-                    .font(.geist(26, weight: .bold))
+                    .font(.siphonKPI)
                     .monospacedDigit()
-                    .foregroundColor(color)
+                    .foregroundColor(isSelected ? .primary : color)
+
                 Text(title)
-                    .font(.geist(12, weight: .semibold))
-                    .foregroundColor(.primary.opacity(0.85))
-                    .multilineTextAlignment(.center)
-                    .lineLimit(2)
+                    .font(.siphonSecondaryMedium)
+                    .foregroundColor(isSelected ? .primary : .secondary)
+                    .lineLimit(1)
             }
-            .frame(maxWidth: .infinity)
-            .frame(height: 90)
-            .padding(.vertical, SiphonTheme.spacing8)
-            .padding(.horizontal, SiphonTheme.spacing6)
-            .siphonInteractiveGlass(cornerRadius: SiphonTheme.radiusCard, tintColor: color)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(height: 94)
+            .padding(.vertical, SiphonTheme.spacing10)
+            .padding(.horizontal, SiphonTheme.spacing12)
+            .background(
+                RoundedRectangle(cornerRadius: SiphonTheme.radiusCard)
+                    .fill(
+                        isSelected ?
+                        color.opacity(0.16) :
+                        (isHovered ? Color(nsColor: .controlBackgroundColor).opacity(0.92) : Color(nsColor: .controlBackgroundColor).opacity(0.75))
+                    )
+            )
+            .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusCard))
+            .overlay(
+                RoundedRectangle(cornerRadius: SiphonTheme.radiusCard)
+                    .stroke(
+                        isSelected ? color.opacity(0.65) : (isHovered ? color.opacity(0.35) : Color.primary.opacity(0.08)),
+                        lineWidth: isSelected ? 1.5 : 1
+                    )
+            )
+            .shadow(
+                color: isHovered ? color.opacity(0.15) : .clear,
+                radius: 6,
+                y: 2
+            )
         }
         .buttonStyle(.bouncy(scale: 0.97, hover: 1.015))
+        .onHover { hovering in
+            withAnimation(.easeInOut(duration: 0.15)) {
+                isHovered = hovering
+            }
+        }
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(title): \(count)")
+        .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : [.isButton])
     }
 }
 
@@ -573,11 +629,11 @@ private struct FeatureCardRow: View {
         HStack(alignment: .top, spacing: 14) {
             // Category Icon Squircle
             ZStack {
-                RoundedRectangle(cornerRadius: 10)
+                RoundedRectangle(cornerRadius: SiphonTheme.radiusControl)
                     .fill(feature.iconColor.opacity(isHovered ? 0.18 : 0.12))
                     .frame(width: 36, height: 36)
                     .overlay(
-                        RoundedRectangle(cornerRadius: 10)
+                        RoundedRectangle(cornerRadius: SiphonTheme.radiusControl)
                             .stroke(feature.iconColor.opacity(isHovered ? 0.35 : 0.20), lineWidth: 1)
                     )
 

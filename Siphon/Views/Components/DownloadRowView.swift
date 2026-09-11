@@ -282,11 +282,11 @@ struct DownloadRowView: View {
                                 .padding(8)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .background(
-                                    SiphonTheme.controlBackground(cornerRadius: 6)
+                                    SiphonTheme.controlBackground(cornerRadius: SiphonTheme.radiusSmall)
                                 )
-                                .cornerRadius(6)
+                                .cornerRadius(SiphonTheme.radiusSmall)
                                 .overlay(
-                                    SiphonTheme.controlBorder(cornerRadius: 6)
+                                    SiphonTheme.controlBorder(cornerRadius: SiphonTheme.radiusSmall)
                                 )
                             
                             HStack {
@@ -302,14 +302,14 @@ struct DownloadRowView: View {
                                     HStack(spacing: 3) {
                                         Image(systemName: isCopiedError ? "checkmark" : "doc.on.doc")
                                             .font(.geist(9))
-                                        Text(isCopiedError ? "Copied!" : languageService.s("copy_error"))
+                                        Text(isCopiedError ? languageService.s("copied") : languageService.s("copy_error"))
                                             .font(.geist(10, weight: .medium))
                                     }
                                 }
                                 .buttonStyle(.plain)
                                 .foregroundColor(isCopiedError ? SiphonTheme.statusCompleted : SiphonTheme.accent)
                                 .help(languageService.s("copy_error"))
-                                .accessibilityLabel(isCopiedError ? "Copied!" : languageService.s("copy_error"))
+                                .accessibilityLabel(isCopiedError ? languageService.s("copied") : languageService.s("copy_error"))
                                 
                                 Spacer()
                                 
@@ -1055,7 +1055,7 @@ struct FileThumbnailView: View {
                         isCopiedLog = false
                     }
                 } label: {
-                    Label(isCopiedLog ? "Copied!" : "Copy Log", systemImage: isCopiedLog ? "checkmark" : "doc.on.doc")
+                    Label(isCopiedLog ? languageService.s("copied") : languageService.s("copy_log"), systemImage: isCopiedLog ? "checkmark" : "doc.on.doc")
                         .font(.caption)
                 }
                 .buttonStyle(.bordered)

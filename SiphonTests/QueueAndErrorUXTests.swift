@@ -327,8 +327,8 @@ final class QueueAndErrorUXTests: XCTestCase {
         let result = try await service.download(
             url: "https://example.com/live-channel",
             options: DownloadOptions.default,
-            onProgress: { _, _, _ in },
-            onOutput: { _ in }
+            onProgress: { _, _, _ in /* Progress ignored in test */ },
+            onOutput: { _ in /* Output ignored in test */ }
         )
 
         XCTAssertEqual(callCountBox.value, 2, "Must retry download when native downloader fails on live HLS stream")
@@ -353,8 +353,8 @@ final class QueueAndErrorUXTests: XCTestCase {
         _ = try await service.download(
             url: "https://example.com/live-stream.m3u8",
             options: DownloadOptions.default,
-            onProgress: { _, _, _ in },
-            onOutput: { _ in }
+            onProgress: { _, _, _ in /* Progress ignored in test */ },
+            onOutput: { _ in /* Output ignored in test */ }
         )
 
         XCTAssertTrue(capturedArgs.value.contains("--downloader"), "Metadata-first detection must add --downloader ffmpeg on attempt 1 for .m3u8 streams")
@@ -405,8 +405,8 @@ final class QueueAndErrorUXTests: XCTestCase {
         let result = try await service.download(
             url: "https://thisvid.com/videos/test-slug/",
             options: DownloadOptions.default,
-            onProgress: { _, _, _ in },
-            onOutput: { _ in }
+            onProgress: { _, _, _ in /* Progress ignored in test */ },
+            onOutput: { _ in /* Output ignored in test */ }
         )
 
         XCTAssertEqual(callCountBox.value, 2, "Must retry download when transient CDN connection refused is encountered")
@@ -523,7 +523,7 @@ final class QueueAndErrorUXTests: XCTestCase {
                 args: ["/bin/sh", "-c", "echo '[download] Destination: \(tempDir.path)/rapid_test.mp4'; touch '\(tempDir.path)/rapid_test.mp4'; echo '[download]  50.0% of ~10.00MiB at 2.00MiB/s ETA 00:05'; echo 'Exiting rapidly'"],
                 saveFolder: tempDir,
                 processController: controller,
-                onProgress: { _, _, _ in },
+                onProgress: { _, _, _ in /* Progress ignored in test */ },
                 onOutput: { line in
                     receivedOutputBox.value.append(line)
                 }

@@ -176,11 +176,21 @@ public enum SiphonTheme {
     public static let spacing24: CGFloat = 24
     public static let spacing32: CGFloat = 32
     
-    // Semantic Radii Tokens
+    // Semantic Radii Tokens:
+    // 6 = compact metadata / code blocks
+    // 8 = buttons, inputs, controls
+    // 12 = cards / list rows
+    // 16 = modal/sheet container
+    // Capsule = status / segmented / compact selection
     public static let radiusSmall: CGFloat = 6
+    public static let radiusMetadata: CGFloat = 6
     public static let radiusControl: CGFloat = 8
+    public static let radiusButton: CGFloat = 8
+    public static let radiusInput: CGFloat = 8
     public static let radiusCard: CGFloat = 12
+    public static let radiusRow: CGFloat = 12
     public static let radiusSheet: CGFloat = 16
+    public static let radiusModal: CGFloat = 16
     
     // Elevated Card & Tile Backgrounds (Less transparency on cards, solid separation from window)
     @ViewBuilder
@@ -756,7 +766,7 @@ public struct SiphonEmptyStateView: View {
                             .font(.geist(13, weight: .semibold))
                     }
                 }
-                .buttonStyle(.siphonPrimary(cornerRadius: 16))
+                .buttonStyle(.siphonPrimary(cornerRadius: SiphonTheme.radiusControl))
                 .padding(.top, SiphonTheme.spacing4)
             }
         }

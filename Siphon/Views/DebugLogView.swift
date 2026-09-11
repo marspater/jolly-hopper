@@ -82,7 +82,7 @@ struct DebugLogView: View {
                     HStack(spacing: 6) {
                         Image(systemName: isCopied ? "checkmark" : "doc.on.doc")
                             .font(.system(size: 11, weight: .semibold))
-                        Text(isCopied ? "Copied" : "Copy All")
+                        Text(isCopied ? "Copied" : "Copy Log")
                             .font(.geist(12, weight: .medium))
                     }
                     .foregroundColor(isCopied ? SiphonTheme.statusCompleted : .primary)
@@ -90,8 +90,8 @@ struct DebugLogView: View {
                 }
                 .buttonStyle(.siphonSecondary)
                 .disabled(logger.logs.isEmpty)
-                .help("Copy all debug logs to clipboard")
-                .accessibilityLabel("Copy All Debug Logs")
+                .help("Copy debug logs to clipboard")
+                .accessibilityLabel("Copy Debug Logs")
 
                 Button {
                     logger.clearLogs()
@@ -118,26 +118,26 @@ struct DebugLogView: View {
                     HStack(spacing: 6) {
                         Image(systemName: "folder")
                             .font(.system(size: 11, weight: .semibold))
-                        Text("Show in Finder")
+                        Text("Reveal in Finder")
                             .font(.geist(12, weight: .medium))
                     }
                     .foregroundColor(.secondary)
                 }
                 .buttonStyle(.siphonSecondary)
-                .help("Show log file location in Finder")
-                .accessibilityLabel("Show Logs in Finder")
+                .help("Reveal log file location in Finder")
+                .accessibilityLabel("Reveal Logs in Finder")
             }
             .padding(.horizontal, 18)
             .padding(.bottom, 16)
         }
         .frame(minWidth: 550, minHeight: 350)
         .background(
-            RoundedRectangle(cornerRadius: SiphonTheme.radiusCard)
+            RoundedRectangle(cornerRadius: SiphonTheme.radiusSheet)
                 .fill(.ultraThinMaterial)
                 .ignoresSafeArea()
         )
         .overlay(
-            RoundedRectangle(cornerRadius: SiphonTheme.radiusCard)
+            RoundedRectangle(cornerRadius: SiphonTheme.radiusSheet)
                 .stroke(Color.primary.opacity(0.08), lineWidth: 1)
                 .ignoresSafeArea()
         )

@@ -5,7 +5,9 @@ import ServiceManagement
 class LoginItemHelper {
     static let shared = LoginItemHelper()
     
-    private init() {}
+    private init() {
+        // Private initializer for singleton instance
+    }
     
     var isEnabled: Bool {
         if #available(macOS 13.0, *) {

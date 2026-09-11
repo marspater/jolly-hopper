@@ -1041,7 +1041,9 @@ final class MockURLProtocol: URLProtocol, @unchecked Sendable {
         }
     }
 
-    override func stopLoading() {}
+    override func stopLoading() {
+        // No-op: Mock protocol requires no tear-down
+    }
 }
 
 // MARK: - NotificationService Tests
