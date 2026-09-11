@@ -2600,8 +2600,10 @@ final class YtdlpServiceTests: XCTestCase {
 
     func testFetchSingleVideoInfoRetriesWithBrowserCookiesOnSiteError() async throws {
         let savedBrowser = UserDefaults.standard.string(forKey: UserDefaultsKeys.browserForCookies)
-        UserDefaults.standard.set("chrome", forKey: UserDefaultsKeys.browserForCookies)
+        UserDefaults.standard.set("safari", forKey: UserDefaultsKeys.browserForCookies)
+        YtdlpService.hasFullDiskAccessOverride = false
         defer {
+            YtdlpService.hasFullDiskAccessOverride = nil
             if let saved = savedBrowser {
                 UserDefaults.standard.set(saved, forKey: UserDefaultsKeys.browserForCookies)
             } else {
