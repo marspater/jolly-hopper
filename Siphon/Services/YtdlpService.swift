@@ -4198,9 +4198,13 @@ public struct DownloadResult: Sendable {
         return nil
     }
 
+    // Bolt Performance Optimization: Pre-compile static NSRegularExpression to avoid compiling pattern and heap allocations on every validation call.
+    nonisolated private static let timeFrameRegex = try? NSRegularExpression(pattern: #"^\d{1,2}(?::\d{2}){0,2}(?:\.\d+)?$|^\d+(?:\.\d+)?$"#, options: [])
+
     nonisolated static func isValidTimeFrame(_ time: String) -> Bool {
-        let pattern = #"^\d{1,2}(?::\d{2}){0,2}(?:\.\d+)?$|^\d+(?:\.\d+)?$"#
-        return time.range(of: pattern, options: .regularExpression) != nil
+        guard let regex = timeFrameRegex else { return false }
+        let nsRange = NSRange(time.startIndex..<time.endIndex, in: time)
+        return regex.firstMatch(in: time, options: [], range: nsRange) != nil
     }
 
     nonisolated static func isSafeFormatId(_ formatId: String) -> Bool {
