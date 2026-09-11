@@ -16,7 +16,9 @@ public final class DownloadProcessController: @unchecked Sendable {
     private var state: State = .idle
     private let lock = NSLock()
 
-    public init() {}
+    public init() {
+        // Default initializer for ProcessController
+    }
 
     private static func getDescendantPIDs(for parentPID: pid_t) -> [pid_t] {
         guard parentPID > 0 else { return [] }
@@ -222,7 +224,9 @@ public protocol YtdlpProcessRunning: Sendable {
 }
 
 public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
-    public init() {}
+    public init() {
+        // Default initializer for DefaultYtdlpProcessRunner
+    }
 
     public static func helperExecutableURL() -> URL? {
         // 1. Auxiliary executable in application bundle

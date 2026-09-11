@@ -48,7 +48,9 @@ struct AddDownloadView: View {
     @State private var pendingDownloadOptions: DownloadOptions? = nil
     @State private var existingFilePath: String = ""
 
-    @State private var showAdvancedOptions: Bool = false
+    @State private var showOptionalSettings: Bool = false
+    @State private var showAdvancedSettings: Bool = false
+    @State private var additionalArguments: String = ""
 
     @State private var playlistItems: [MediaInfo] = []
     @State private var selectedPlaylistIds: Set<String> = []
@@ -115,15 +117,14 @@ struct AddDownloadView: View {
                                 if info.playlist != nil {
                                     playlistDetectedBanner
                                 }
-
-                                streamInspectorSection(info)
                             } else {
                                 playlistSelectorSection
                             }
 
                             formatSection
                             saveSection
-                            extraOptionsToggleSection
+                            optionalSettingsSection
+                            advancedSettingsSection(info)
                         }
 
                         if let error = errorMessage {
@@ -164,6 +165,10 @@ struct AddDownloadView: View {
             if !appState.urlToDownload.isEmpty {
                 urlInput = appState.urlToDownload
                 appState.urlToDownload = ""
+            }
+
+            if additionalArguments.isEmpty && !defaultAdditionalArguments.isEmpty {
+                additionalArguments = defaultAdditionalArguments
             }
         }
         .onChange(of: urlInput) { _, newValue in
@@ -391,45 +396,57 @@ struct AddDownloadView: View {
 
             formatSection
             saveSection
-            extraOptionsToggleSection
+            optionalSettingsSection
+            advancedSettingsSection(nil)
         }
     }
 
     private func streamInspectorSection(_ info: MediaInfo) -> some View {
         Group {
             if let formats = info.formats, !formats.isEmpty {
-                VStack(alignment: .leading, spacing: 10) {
+                VStack(alignment: .leading, spacing: 8) {
                     Button {
                         withAnimation(.easeInOut(duration: 0.2)) {
                             showStreamInspector.toggle()
                         }
                     } label: {
-                        HStack {
+                        HStack(spacing: 8) {
                             Image(systemName: showStreamInspector ? "chevron.down" : "chevron.right")
-                                .font(.geist(11, weight: .bold))
-                                .foregroundColor(SiphonTheme.accent)
+                                .font(.system(size: 10, weight: .semibold))
+                                .foregroundColor(.secondary)
+                                .frame(width: 12)
+
                             Text(languageService.s("stream_inspector"))
-                                .font(.geist(13, weight: .medium))
-                                .foregroundColor(.primary)
+                                .font(.siphonSecondaryMedium)
+                                .foregroundColor(.secondary)
+
+                            Text(languageService.s("advanced_badge"))
+                                .font(.geistMono(9, weight: .semibold))
+                                .padding(.horizontal, 5)
+                                .padding(.vertical, 1.5)
+                                .background(Color.primary.opacity(0.06))
+                                .foregroundColor(.secondary)
+                                .clipShape(Capsule())
+
                             Spacer()
+
                             if let selected = selectedFormatId {
                                 Text("\(languageService.s("custom_stream")): \(selected)")
-                                    .font(.geistMono(11, weight: .semibold))
+                                    .font(.geistMono(11, weight: .medium))
                                     .padding(.horizontal, 6)
                                     .padding(.vertical, 2)
                                     .background(SiphonTheme.accent.opacity(0.15))
                                     .foregroundColor(SiphonTheme.accent)
-                                    .clipShape(RoundedRectangle(cornerRadius: 4))
+                                    .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusSmall))
                             }
                         }
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 10)
-                        .background(
-                            SiphonTheme.cardBackground(cornerRadius: SiphonTheme.radiusControl)
-                        )
-                        .cornerRadius(SiphonTheme.radiusControl)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(Color.primary.opacity(0.03))
+                        .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusControl))
                         .overlay(
-                            SiphonTheme.cardBorder(cornerRadius: SiphonTheme.radiusControl)
+                            RoundedRectangle(cornerRadius: SiphonTheme.radiusControl)
+                                .stroke(Color.primary.opacity(0.06), lineWidth: 1)
                         )
                     }
                     .buttonStyle(.plain)
@@ -440,16 +457,16 @@ struct AddDownloadView: View {
                                 Button {
                                     selectedFormatId = nil
                                 } label: {
-                                    HStack {
+                                    HStack(spacing: 6) {
                                         Image(systemName: selectedFormatId == nil ? "checkmark.circle.fill" : "circle")
                                             .foregroundColor(selectedFormatId == nil ? .accentColor : .secondary)
                                         Text(languageService.s("auto_recommended"))
-                                            .font(.geist(12, weight: .semibold))
+                                            .font(.siphonSecondaryMedium)
                                     }
                                     .padding(.horizontal, 10)
-                                    .padding(.vertical, 6)
+                                    .padding(.vertical, 5)
                                     .background(selectedFormatId == nil ? Color.accentColor.opacity(0.15) : Color.gray.opacity(0.08))
-                                    .cornerRadius(6)
+                                    .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusSmall))
                                 }
                                 .buttonStyle(.plain)
 
@@ -468,14 +485,14 @@ struct AddDownloadView: View {
                                                     .foregroundColor(selectedFormatId == fmt.formatId ? .accentColor : .secondary)
 
                                                 Text(fmt.formatId)
-                                                    .font(.geistMono(11, weight: .bold))
+                                                    .font(.geistMono(11, weight: .semibold))
                                                     .padding(.horizontal, 6)
                                                     .padding(.vertical, 2)
                                                     .background(Color.primary.opacity(0.08))
-                                                    .cornerRadius(4)
+                                                    .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusSmall))
 
                                                 Text(fmt.ext.uppercased())
-                                                    .font(.geist(11, weight: .bold))
+                                                    .font(.geist(11, weight: .semibold))
                                                     .foregroundColor(.primary)
 
                                                 Text(fmt.displaySummary)
@@ -488,7 +505,7 @@ struct AddDownloadView: View {
                                             .padding(.horizontal, 10)
                                             .padding(.vertical, 6)
                                             .background(selectedFormatId == fmt.formatId ? Color.accentColor.opacity(0.12) : Color.clear)
-                                            .cornerRadius(6)
+                                            .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusSmall))
                                         }
                                         .buttonStyle(.plain)
                                     }
@@ -496,13 +513,12 @@ struct AddDownloadView: View {
                             }
                             .frame(maxHeight: 180)
                         }
-                        .padding(12)
-                        .background(
-                            SiphonTheme.controlBackground(cornerRadius: SiphonTheme.radiusControl)
-                        )
-                        .cornerRadius(SiphonTheme.radiusControl)
+                        .padding(10)
+                        .background(Color.primary.opacity(0.02))
+                        .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusControl))
                         .overlay(
-                            SiphonTheme.controlBorder(cornerRadius: SiphonTheme.radiusControl)
+                            RoundedRectangle(cornerRadius: SiphonTheme.radiusControl)
+                                .stroke(Color.primary.opacity(0.06), lineWidth: 1)
                         )
                     }
                 }
@@ -636,7 +652,7 @@ struct AddDownloadView: View {
                     .overlay { Image(systemName: "photo").font(.largeTitle).foregroundColor(.gray) }
             }
             .frame(width: 180, height: 100)
-            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusControl))
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(info.title).font(.geist(15, weight: .semibold)).lineLimit(2)
@@ -722,7 +738,7 @@ struct AddDownloadView: View {
                             AsyncImage(url: item.thumbnailURL) { image in image.resizable().aspectRatio(contentMode: .fill) }
                             placeholder: { Rectangle().fill(Color.gray.opacity(0.2)) }
                             .frame(width: 50, height: 30)
-                            .clipShape(RoundedRectangle(cornerRadius: 4))
+                            .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusSmall))
 
                             VStack(alignment: .leading) {
                                 Text(item.title).font(.geist(13, weight: .medium)).lineLimit(1)
@@ -945,68 +961,6 @@ struct AddDownloadView: View {
                             }
                         }
                     }
-
-                    if isVideoTab {
-                        GridRow {
-                            VStack(alignment: .leading, spacing: 5) {
-                                Text(languageService.s("video_codec"))
-                                    .font(.geist(11, weight: .medium))
-                                    .foregroundColor(.secondary)
-                                Picker("", selection: $selectedCodec) {
-                                    ForEach(VideoCodec.allCases) { codec in
-                                        Text(videoCodecLabel(for: codec)).tag(codec.rawValue)
-                                    }
-                                }
-                                .labelsHidden()
-                                .pickerStyle(.menu)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                            }
-                            
-                            VStack(alignment: .leading, spacing: 5) {
-                                Text(languageService.s("audio_codec"))
-                                    .font(.geist(11, weight: .medium))
-                                    .foregroundColor(.secondary)
-                                Picker("", selection: $selectedAudioCodec) {
-                                    ForEach(AudioCodec.allCases) { codec in
-                                        Text(codec.title(lang: languageService)).tag(codec.rawValue)
-                                    }
-                                }
-                                .labelsHidden()
-                                .pickerStyle(.menu)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                            }
-                        }
-
-                        GridRow {
-                            VStack(alignment: .leading, spacing: 5) {
-                                Text("Post-Processing")
-                                    .font(.geist(11, weight: .medium))
-                                    .foregroundColor(.secondary)
-                                Picker("", selection: $selectedConversionCodec) {
-                                    ForEach(ConversionCodec.allCases) { codec in
-                                        Text(codec.title(lang: languageService)).tag(codec.rawValue)
-                                    }
-                                }
-                                .labelsHidden()
-                                .pickerStyle(.menu)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                            }
-                            
-                            VStack(alignment: .leading, spacing: 5) {
-                                Text("HDR / Dynamic Range")
-                                    .font(.geist(11, weight: .medium))
-                                    .foregroundColor(.secondary)
-                                Picker("", selection: $selectedHDRAction) {
-                                    ForEach(HDRAction.allCases) { action in
-                                        Text(action.title(lang: languageService)).tag(action.rawValue)
-                                    }
-                                }
-                                .labelsHidden()
-                                .pickerStyle(.menu)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                            }
-                        }
-                    }
                 }
             }
 
@@ -1099,62 +1053,41 @@ struct AddDownloadView: View {
                     .font(.geist(14, weight: .bold))
             }
 
-            VStack(alignment: .leading, spacing: 10) {
-                // Save Folder Row
-                HStack(spacing: 8) {
-                    HStack(spacing: 6) {
-                        Image(systemName: "folder")
-                            .font(.geist(12))
-                            .foregroundColor(.secondary)
-                        Text(saveFolder.path)
-                            .font(.geistMono(11, weight: .medium))
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                    }
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Color.primary.opacity(0.04))
-                    .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusControl))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: SiphonTheme.radiusControl)
-                            .stroke(Color.primary.opacity(0.08), lineWidth: 1)
-                    )
-
-                    Button {
-                        selectFolder()
-                    } label: {
-                        Text(languageService.s("select"))
-                            .font(.geist(12, weight: .medium))
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 5)
-                            .background(SiphonTheme.controlBackground(cornerRadius: SiphonTheme.radiusControl))
-                            .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusControl))
-                            .overlay(
-                                SiphonTheme.controlBorder(cornerRadius: SiphonTheme.radiusControl)
-                            )
-                    }
-                    .buttonStyle(.plain)
-                }
-
-                // Custom Filename Row
-                HStack(spacing: 8) {
-                    Image(systemName: "pencil")
+            // Save Folder Row
+            HStack(spacing: 8) {
+                HStack(spacing: 6) {
+                    Image(systemName: "folder")
                         .font(.geist(12))
                         .foregroundColor(.secondary)
-                        .frame(width: 14)
-                    TextField(languageService.s("custom_filename_hint"), text: $customFilename)
-                        .font(.geist(12))
-                        .textFieldStyle(.plain)
+                    Text(saveFolder.path)
+                        .font(.geistMono(11, weight: .medium))
+                        .lineLimit(1)
+                        .truncationMode(.middle)
                 }
                 .padding(.horizontal, 10)
                 .padding(.vertical, 6)
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .background(Color.primary.opacity(0.04))
                 .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusControl))
                 .overlay(
                     RoundedRectangle(cornerRadius: SiphonTheme.radiusControl)
                         .stroke(Color.primary.opacity(0.08), lineWidth: 1)
                 )
+
+                Button {
+                    selectFolder()
+                } label: {
+                    Text(languageService.s("choose_folder"))
+                        .font(.geist(12, weight: .medium))
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 5)
+                        .background(SiphonTheme.controlBackground(cornerRadius: SiphonTheme.radiusControl))
+                        .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusControl))
+                        .overlay(
+                            SiphonTheme.controlBorder(cornerRadius: SiphonTheme.radiusControl)
+                        )
+                }
+                .buttonStyle(.plain)
             }
         }
         .padding(14)
@@ -1167,19 +1100,19 @@ struct AddDownloadView: View {
         )
     }
 
-    private var extraOptionsToggleSection: some View {
+    private var optionalSettingsSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             Button {
                 withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) {
-                    showAdvancedOptions.toggle()
+                    showOptionalSettings.toggle()
                 }
             } label: {
                 HStack(spacing: 8) {
-                    Image(systemName: showAdvancedOptions ? "chevron.down" : "chevron.right")
+                    Image(systemName: showOptionalSettings ? "chevron.down" : "chevron.right")
                         .font(.geist(11, weight: .bold))
                         .foregroundColor(SiphonTheme.accent)
                         .frame(width: 12)
-                    Text(languageService.s("extra_settings"))
+                    Text(languageService.s("optional_settings"))
                         .font(.geist(13, weight: .semibold))
                         .foregroundColor(.primary)
                     Spacer()
@@ -1196,132 +1129,317 @@ struct AddDownloadView: View {
             }
             .buttonStyle(.plain)
 
-            if showAdvancedOptions {
-                extraOptionsSection
-                    .transition(.opacity.combined(with: .move(edge: .top)))
+            if showOptionalSettings {
+                VStack(alignment: .leading, spacing: 14) {
+                    // Custom Filename Row
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(languageService.s("custom_filename"))
+                            .font(.geist(12, weight: .semibold))
+                            .foregroundColor(.secondary)
+
+                        HStack(spacing: 8) {
+                            Image(systemName: "pencil")
+                                .font(.geist(12))
+                                .foregroundColor(.secondary)
+                                .frame(width: 14)
+                            TextField(languageService.s("custom_filename_hint"), text: $customFilename)
+                                .font(.geist(12))
+                                .textFieldStyle(.plain)
+                        }
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(Color.primary.opacity(0.04))
+                        .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusControl))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: SiphonTheme.radiusControl)
+                                .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+                        )
+                    }
+
+                    if isVideoTab {
+                        Divider()
+                            .opacity(0.5)
+
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack {
+                                Text(languageService.s("subtitles"))
+                                    .font(.geist(12, weight: .semibold))
+                                    .foregroundColor(.secondary)
+                                Spacer()
+                            }
+
+                            Toggle(languageService.s("download_subtitles"), isOn: $downloadSubtitles)
+                                .disabled(availableSubtitles.isEmpty)
+                                .tint(SiphonTheme.accent)
+
+                            if availableSubtitles.isEmpty && mediaInfo != nil {
+                                Text(languageService.s("no_subtitles"))
+                                    .font(.geist(11))
+                                    .foregroundColor(.secondary)
+                            } else if downloadSubtitles {
+                                HStack(spacing: 12) {
+                                    Menu {
+                                        let manualSubs = availableSubtitles.filter { !$0.isAuto }.sorted(by: { $0.name < $1.name })
+                                        let autoSubs = availableSubtitles.filter { $0.isAuto }.sorted(by: { $0.name < $1.name })
+
+                                        if !manualSubs.isEmpty {
+                                            Section(header: Text(languageService.s("internal"))) {
+                                                ForEach(manualSubs) { sub in
+                                                    Button {
+                                                        toggleSubtitle(sub.id)
+                                                    } label: {
+                                                        HStack {
+                                                            if selectedSubtitleLangs.contains(sub.id) {
+                                                                Image(systemName: "checkmark")
+                                                            }
+                                                            Text(sub.name)
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+
+                                        if !autoSubs.isEmpty {
+                                            Section(header: Text(languageService.s("auto_subs"))) {
+                                                ForEach(autoSubs) { sub in
+                                                    Button {
+                                                        toggleSubtitle(sub.id)
+                                                    } label: {
+                                                        HStack {
+                                                            if selectedSubtitleLangs.contains(sub.id) {
+                                                                Image(systemName: "checkmark")
+                                                            }
+                                                            Text("\(sub.name) [Auto]")
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    } label: {
+                                        HStack {
+                                            Text(languageService.s("languages"))
+                                            Spacer()
+                                            if selectedSubtitleLangs.isEmpty {
+                                                Text(languageService.s("select"))
+                                            } else {
+                                                Text(String(format: languageService.s("subtitles_selected"), selectedSubtitleLangs.count))
+                                            }
+                                        }
+                                    }
+                                    .menuStyle(.borderedButton)
+
+                                    Picker(languageService.s("subtitle_format"), selection: $subtitleFormat) {
+                                        ForEach(SubtitleFormat.allCases) { format in
+                                            Text(format.displayName).tag(format)
+                                        }
+                                    }
+                                    .pickerStyle(.menu)
+                                }
+
+                                Toggle(languageService.s("embed_video"), isOn: $embedSubtitles)
+                                    .tint(SiphonTheme.accent)
+                            }
+                        }
+                    }
+
+                    Divider()
+                        .opacity(0.5)
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(languageService.s("embedded_data"))
+                            .font(.geist(12, weight: .semibold))
+                            .foregroundColor(.secondary)
+                        Toggle(languageService.s("embed_thumbnail"), isOn: $embedThumbnail)
+                            .tint(SiphonTheme.accent)
+                        Toggle(languageService.s("metadata_desc"), isOn: $embedMetadata)
+                            .tint(SiphonTheme.accent)
+                    }
+                }
+                .padding(14)
+                .background(
+                    SiphonTheme.cardBackground(cornerRadius: SiphonTheme.radiusCard)
+                )
+                .cornerRadius(SiphonTheme.radiusCard)
+                .overlay(
+                    SiphonTheme.cardBorder(cornerRadius: SiphonTheme.radiusCard)
+                )
+                .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
     }
 
-    private var extraOptionsSection: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            if isVideoTab {
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack {
-                        Text(languageService.s("subtitles"))
-                            .font(.geist(12, weight: .semibold))
-                            .foregroundColor(.secondary)
-                        Spacer()
+    private func advancedSettingsSection(_ info: MediaInfo?) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Button {
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) {
+                    showAdvancedSettings.toggle()
+                }
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: showAdvancedSettings ? "chevron.down" : "chevron.right")
+                        .font(.geist(11, weight: .bold))
+                        .foregroundColor(SiphonTheme.accent)
+                        .frame(width: 12)
+                    Text(languageService.s("advanced_settings"))
+                        .font(.geist(13, weight: .semibold))
+                        .foregroundColor(.primary)
+
+                    Text(languageService.s("advanced_badge"))
+                        .font(.geistMono(9, weight: .semibold))
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 1.5)
+                        .background(Color.primary.opacity(0.06))
+                        .foregroundColor(.secondary)
+                        .clipShape(Capsule())
+
+                    Spacer()
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .background(
+                    SiphonTheme.cardBackground(cornerRadius: SiphonTheme.radiusControl)
+                )
+                .cornerRadius(SiphonTheme.radiusControl)
+                .overlay(
+                    SiphonTheme.cardBorder(cornerRadius: SiphonTheme.radiusControl)
+                )
+            }
+            .buttonStyle(.plain)
+
+            if showAdvancedSettings {
+                VStack(alignment: .leading, spacing: 14) {
+                    // Stream Inspector (if info available)
+                    if let info = info {
+                        streamInspectorSection(info)
+
+                        Divider()
+                            .opacity(0.5)
                     }
-                    
-                    Toggle(languageService.s("download_subtitles"), isOn: $downloadSubtitles)
-                        .disabled(availableSubtitles.isEmpty)
-                        .tint(SiphonTheme.accent)
 
-                    if availableSubtitles.isEmpty && mediaInfo != nil {
-                        Text(languageService.s("no_subtitles"))
-                            .font(.geist(11))
-                            .foregroundColor(.secondary)
-                    } else if downloadSubtitles {
-                        HStack(spacing: 12) {
-                            Menu {
-                                let manualSubs = availableSubtitles.filter { !$0.isAuto }.sorted(by: { $0.name < $1.name })
-                                let autoSubs = availableSubtitles.filter { $0.isAuto }.sorted(by: { $0.name < $1.name })
+                    // Codecs & Dynamic Range (if video tab)
+                    if isVideoTab {
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text(languageService.s("codec_settings"))
+                                .font(.geist(12, weight: .semibold))
+                                .foregroundColor(.secondary)
 
-                                if !manualSubs.isEmpty {
-                                    Section(header: Text(languageService.s("internal"))) {
-                                        ForEach(manualSubs) { sub in
-                                            Button {
-                                                toggleSubtitle(sub.id)
-                                            } label: {
-                                                HStack {
-                                                    if selectedSubtitleLangs.contains(sub.id) {
-                                                        Image(systemName: "checkmark")
-                                                    }
-                                                    Text(sub.name)
-                                                }
+                            Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 12) {
+                                GridRow {
+                                    VStack(alignment: .leading, spacing: 5) {
+                                        Text(languageService.s("video_codec"))
+                                            .font(.geist(11, weight: .medium))
+                                            .foregroundColor(.secondary)
+                                        Picker("", selection: $selectedCodec) {
+                                            ForEach(VideoCodec.allCases) { codec in
+                                                Text(videoCodecLabel(for: codec)).tag(codec.rawValue)
                                             }
                                         }
+                                        .labelsHidden()
+                                        .pickerStyle(.menu)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                    }
+
+                                    VStack(alignment: .leading, spacing: 5) {
+                                        Text(languageService.s("audio_codec"))
+                                            .font(.geist(11, weight: .medium))
+                                            .foregroundColor(.secondary)
+                                        Picker("", selection: $selectedAudioCodec) {
+                                            ForEach(AudioCodec.allCases) { codec in
+                                                Text(codec.title(lang: languageService)).tag(codec.rawValue)
+                                            }
+                                        }
+                                        .labelsHidden()
+                                        .pickerStyle(.menu)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
                                     }
                                 }
 
-                                if !autoSubs.isEmpty {
-                                    Section(header: Text(languageService.s("auto_subs"))) {
-                                        ForEach(autoSubs) { sub in
-                                            Button {
-                                                toggleSubtitle(sub.id)
-                                            } label: {
-                                                HStack {
-                                                    if selectedSubtitleLangs.contains(sub.id) {
-                                                        Image(systemName: "checkmark")
-                                                    }
-                                                    Text("\(sub.name) [Auto]")
-                                                }
+                                GridRow {
+                                    VStack(alignment: .leading, spacing: 5) {
+                                        Text("Post-Processing")
+                                            .font(.geist(11, weight: .medium))
+                                            .foregroundColor(.secondary)
+                                        Picker("", selection: $selectedConversionCodec) {
+                                            ForEach(ConversionCodec.allCases) { codec in
+                                                Text(codec.title(lang: languageService)).tag(codec.rawValue)
                                             }
                                         }
+                                        .labelsHidden()
+                                        .pickerStyle(.menu)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
                                     }
-                                }
-                            } label: {
-                                HStack {
-                                    Text(languageService.s("languages"))
-                                    Spacer()
-                                    if selectedSubtitleLangs.isEmpty {
-                                        Text(languageService.s("select"))
-                                    } else {
-                                        Text(String(format: languageService.s("subtitles_selected"), selectedSubtitleLangs.count))
+
+                                    VStack(alignment: .leading, spacing: 5) {
+                                        Text("HDR / Dynamic Range")
+                                            .font(.geist(11, weight: .medium))
+                                            .foregroundColor(.secondary)
+                                        Picker("", selection: $selectedHDRAction) {
+                                            ForEach(HDRAction.allCases) { action in
+                                                Text(action.title(lang: languageService)).tag(action.rawValue)
+                                            }
+                                        }
+                                        .labelsHidden()
+                                        .pickerStyle(.menu)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
                                     }
                                 }
                             }
-                            .menuStyle(.borderedButton)
-
-                            Picker(languageService.s("subtitle_format"), selection: $subtitleFormat) {
-                                ForEach(SubtitleFormat.allCases) { format in
-                                    Text(format.displayName).tag(format)
-                                }
-                            }
-                            .pickerStyle(.menu)
                         }
 
-                        Toggle(languageService.s("embed_video"), isOn: $embedSubtitles)
+                        Divider()
+                            .opacity(0.5)
+                    }
+
+                    // Additional Arguments
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(languageService.s("additional_arguments"))
+                            .font(.geist(12, weight: .semibold))
+                            .foregroundColor(.secondary)
+
+                        HStack(spacing: 8) {
+                            Image(systemName: "terminal")
+                                .font(.geist(12))
+                                .foregroundColor(.secondary)
+                                .frame(width: 14)
+                            TextField(languageService.s("additional_arguments_hint"), text: $additionalArguments)
+                                .font(.geistMono(11))
+                                .textFieldStyle(.plain)
+                        }
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(Color.primary.opacity(0.04))
+                        .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusControl))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: SiphonTheme.radiusControl)
+                                .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+                        )
+                    }
+
+                    Divider()
+                        .opacity(0.5)
+
+                    // Chapter Splitting & SponsorBlock
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(languageService.s("advanced"))
+                            .font(.geist(12, weight: .semibold))
+                            .foregroundColor(.secondary)
+                        Toggle(languageService.s("split_chapters"), isOn: $splitChapters)
+                            .tint(SiphonTheme.accent)
+                        Toggle(languageService.s("sponsorblock_hint"), isOn: $sponsorBlock)
                             .tint(SiphonTheme.accent)
                     }
                 }
-                
-                Divider()
-                    .opacity(0.5)
-            }
-
-            VStack(alignment: .leading, spacing: 8) {
-                Text(languageService.s("embedded_data"))
-                    .font(.geist(12, weight: .semibold))
-                    .foregroundColor(.secondary)
-                Toggle(languageService.s("embed_thumbnail"), isOn: $embedThumbnail)
-                    .tint(SiphonTheme.accent)
-                Toggle(languageService.s("metadata_desc"), isOn: $embedMetadata)
-                    .tint(SiphonTheme.accent)
-            }
-
-            Divider()
-                .opacity(0.5)
-
-            VStack(alignment: .leading, spacing: 8) {
-                Text(languageService.s("advanced"))
-                    .font(.geist(12, weight: .semibold))
-                    .foregroundColor(.secondary)
-                Toggle(languageService.s("split_chapters"), isOn: $splitChapters)
-                    .tint(SiphonTheme.accent)
-                Toggle(languageService.s("sponsorblock_hint"), isOn: $sponsorBlock)
-                    .tint(SiphonTheme.accent)
+                .padding(14)
+                .background(
+                    SiphonTheme.cardBackground(cornerRadius: SiphonTheme.radiusCard)
+                )
+                .cornerRadius(SiphonTheme.radiusCard)
+                .overlay(
+                    SiphonTheme.cardBorder(cornerRadius: SiphonTheme.radiusCard)
+                )
+                .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
-        .padding(14)
-        .background(
-            SiphonTheme.cardBackground(cornerRadius: SiphonTheme.radiusCard)
-        )
-        .cornerRadius(SiphonTheme.radiusCard)
-        .overlay(
-            SiphonTheme.cardBorder(cornerRadius: SiphonTheme.radiusCard)
-        )
     }
 
     private func errorSection(_ error: String) -> some View {
@@ -1695,7 +1813,8 @@ struct AddDownloadView: View {
             rawCookies: nil,
             selectedFormatId: inputMode == .single ? selectedFormatId : nil,
             hdrAction: isVideoTab ? (HDRAction(rawValue: selectedHDRAction) ?? .preserveHDR) : nil,
-            resolutionFallbackPolicy: isVideoTab ? (ResolutionFallbackPolicy(rawValue: resolutionFallbackPolicyRaw) ?? .strictCeiling) : nil
+            resolutionFallbackPolicy: isVideoTab ? (ResolutionFallbackPolicy(rawValue: resolutionFallbackPolicyRaw) ?? .strictCeiling) : nil,
+            additionalArguments: additionalArguments.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : additionalArguments.trimmingCharacters(in: .whitespacesAndNewlines)
         )
 
         if inputMode == .batch {

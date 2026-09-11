@@ -17,7 +17,9 @@ struct PreferencesWindowConfigurator: NSViewRepresentable {
         }
         return view
     }
-    func updateNSView(_ nsView: NSView, context: Context) {}
+    func updateNSView(_ nsView: NSView, context: Context) {
+        // No-op: Window configuration does not require dynamic view updates
+    }
 }
 
 struct PreferencesView: View {
@@ -372,7 +374,7 @@ struct PreferencesView: View {
                 } label: {
                     HStack(spacing: 6) {
                         Image(systemName: "folder.badge.plus")
-                        Text(languageService.s("select"))
+                        Text(languageService.s("choose_folder"))
                     }
                     .font(.geist(12, weight: .semibold))
                     .foregroundColor(.white)
@@ -427,7 +429,7 @@ struct PreferencesView: View {
                             .font(.geist(12, weight: .medium))
                             .padding(.horizontal, 10)
                             .padding(.vertical, 4)
-                            .siphonInteractiveGlass(cornerRadius: 6)
+                            .siphonInteractiveGlass(cornerRadius: SiphonTheme.radiusControl)
                     }
                     .buttonStyle(.bouncy(scale: 0.95, hover: 1.025))
                 }

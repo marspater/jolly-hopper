@@ -1221,6 +1221,11 @@ public struct DownloadResult: Sendable {
             args.append(contentsOf: ["--limit-rate", "\(speedLimit)K"])
         }
 
+        if let extra = options.additionalArguments?.trimmingCharacters(in: .whitespacesAndNewlines), !extra.isEmpty {
+            let extraArgs = Self.parseArgumentString(extra)
+            args.append(contentsOf: extraArgs)
+        }
+
         var tempCookieFiles: [URL] = []
         let sucuriCookie = await resolveSucuriCookie(for: normalizedURL)
         var additionalCookies: [(name: String, value: String)] = []
@@ -3083,7 +3088,8 @@ public struct DownloadResult: Sendable {
     }
 
     private func decryptAES256CTRData(data: Data, keyStr: String) -> Data? {
-        let digest = Insecure.MD5.hash(data: Data(keyStr.utf8))
+        // NOSONAR: MD5 hash is explicitly required by the BestCam/Abyss proprietary AES-CTR stream cipher protocol.
+        let digest = Insecure.MD5.hash(data: Data(keyStr.utf8)) // NOSONAR
         let keyHex = digest.map { String(format: "%02x", $0) }.joined()
         guard let keyData = keyHex.data(using: .ascii), keyData.count == 32 else { return nil }
         let ivData = keyData.prefix(16)
@@ -3127,7 +3133,8 @@ public struct DownloadResult: Sendable {
     }
 
     func decryptBestCamFile(at fileURL: URL, filename: String) throws {
-        let digest = Insecure.MD5.hash(data: Data(filename.utf8))
+        // NOSONAR: MD5 hash is explicitly required by the BestCam/Abyss proprietary AES-CTR stream cipher protocol.
+        let digest = Insecure.MD5.hash(data: Data(filename.utf8)) // NOSONAR
         let keyHex = digest.map { String(format: "%02x", $0) }.joined()
         guard let keyData = keyHex.data(using: .ascii), keyData.count == 32 else {
             throw YtdlpError.downloadFailed("Invalid stream decryption key")
@@ -4239,6 +4246,37 @@ public struct DownloadResult: Sendable {
         }
         
         return trimmed.isEmpty ? "download" : trimmed
+    }
+
+    nonisolated static func parseArgumentString(_ argString: String) -> [String] {
+        var args: [String] = []
+        var current = ""
+        var inQuotes = false
+        var quoteChar: Character = "\""
+        
+        for char in argString {
+            if char == "\"" || char == "'" {
+                if inQuotes && char == quoteChar {
+                    inQuotes = false
+                } else if !inQuotes {
+                    inQuotes = true
+                    quoteChar = char
+                } else {
+                    current.append(char)
+                }
+            } else if char == " " && !inQuotes {
+                if !current.isEmpty {
+                    args.append(current)
+                    current = ""
+                }
+            } else {
+                current.append(char)
+            }
+        }
+        if !current.isEmpty {
+            args.append(current)
+        }
+        return args
     }
 
     static func getSecureTempCookiesDirectory() -> URL? {

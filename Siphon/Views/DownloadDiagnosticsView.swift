@@ -58,13 +58,13 @@ struct DownloadDiagnosticsView: View {
                             .resizable()
                             .aspectRatio(contentMode: .fill)
                             .frame(width: 54, height: 36)
-                            .cornerRadius(6)
+                            .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusSmall))
                             .clipped()
                     } else {
                         Rectangle()
                             .fill(Color.primary.opacity(0.06))
                             .frame(width: 54, height: 36)
-                            .cornerRadius(6)
+                            .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusSmall))
                     }
                 }
             } else {
@@ -189,7 +189,7 @@ struct DownloadDiagnosticsView: View {
                         Spacer()
                         
                         Button {
-                            copyToClipboard(cmd, label: "Command copied")
+                            copyToClipboard(cmd, label: languageService.s("copied"))
                         } label: {
                             HStack(spacing: 4) {
                                 Image(systemName: "doc.on.doc")
@@ -207,9 +207,9 @@ struct DownloadDiagnosticsView: View {
                         .padding(10)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .background(Color.primary.opacity(0.04))
-                        .cornerRadius(6)
+                        .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusSmall))
                         .overlay(
-                            RoundedRectangle(cornerRadius: 6)
+                            RoundedRectangle(cornerRadius: SiphonTheme.radiusSmall)
                                 .stroke(Color.primary.opacity(0.08), lineWidth: 1)
                         )
                 }
@@ -224,11 +224,11 @@ struct DownloadDiagnosticsView: View {
                     Spacer()
                     
                     Button {
-                        copyToClipboard(download.log, label: "Log copied")
+                        copyToClipboard(download.log, label: languageService.s("copied"))
                     } label: {
                         HStack(spacing: 4) {
                             Image(systemName: "doc.on.doc")
-                            Text("Copy Full Log")
+                            Text(languageService.s("copy_log"))
                         }
                         .font(.geist(11))
                     }
@@ -249,9 +249,9 @@ struct DownloadDiagnosticsView: View {
                 }
                 .frame(minHeight: 180, maxHeight: 240)
                 .background(Color.primary.opacity(0.03))
-                .cornerRadius(6)
+                .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusSmall))
                 .overlay(
-                    RoundedRectangle(cornerRadius: 6)
+                    RoundedRectangle(cornerRadius: SiphonTheme.radiusSmall)
                         .stroke(Color.primary.opacity(0.08), lineWidth: 1)
                 )
             }
@@ -281,7 +281,7 @@ struct DownloadDiagnosticsView: View {
                 HStack(spacing: 4) {
                     Image(systemName: "doc.on.clipboard")
                         .font(.system(size: 12))
-                    Text("Copy Markdown Report")
+                    Text(languageService.s("copy_report"))
                         .font(.geist(12, weight: .medium))
                 }
             }
@@ -295,7 +295,7 @@ struct DownloadDiagnosticsView: View {
                     HStack(spacing: 4) {
                         Image(systemName: "folder")
                             .font(.system(size: 12))
-                        Text("Show in Finder")
+                        Text(languageService.s("show_in_finder"))
                             .font(.geist(12, weight: .medium))
                     }
                 }

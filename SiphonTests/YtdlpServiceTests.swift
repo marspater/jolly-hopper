@@ -325,8 +325,8 @@ final class YtdlpServiceTests: XCTestCase {
         _ = try await service.download(
             url: "https://example.com/video",
             options: options,
-            onProgress: { _, _, _ in },
-            onOutput: { _ in }
+            onProgress: { _, _, _ in /* Progress ignored in test */ },
+            onOutput: { _ in /* Output ignored in test */ }
         )
 
         XCTAssertTrue(capturedArgsBox.value.contains("--limit-rate"))
@@ -348,8 +348,8 @@ final class YtdlpServiceTests: XCTestCase {
         _ = try await service.download(
             url: "https://example.com/video",
             options: options,
-            onProgress: { _, _, _ in },
-            onOutput: { _ in }
+            onProgress: { _, _, _ in /* Progress ignored in test */ },
+            onOutput: { _ in /* Output ignored in test */ }
         )
 
         XCTAssertTrue(capturedArgsBox.value.contains("-f"))
@@ -373,8 +373,8 @@ final class YtdlpServiceTests: XCTestCase {
         _ = try await service.download(
             url: "https://example.com/audio",
             options: options,
-            onProgress: { _, _, _ in },
-            onOutput: { _ in }
+            onProgress: { _, _, _ in /* Progress ignored in test */ },
+            onOutput: { _ in /* Output ignored in test */ }
         )
 
         XCTAssertTrue(capturedArgsBox.value.contains("-x"))
@@ -397,8 +397,8 @@ final class YtdlpServiceTests: XCTestCase {
         _ = try await service.download(
             url: "https://thisvid.com/playlist/461301/video/huge-butt5/",
             options: options,
-            onProgress: { _, _, _ in },
-            onOutput: { _ in }
+            onProgress: { _, _, _ in /* Progress ignored in test */ },
+            onOutput: { _ in /* Output ignored in test */ }
         )
 
         // Verify URL was normalized/resolved for ThisVid extractor with required headers
@@ -420,8 +420,8 @@ final class YtdlpServiceTests: XCTestCase {
         _ = try await service.download(
             url: "https://guywh.com/videos/7279/sample-title/",
             options: options,
-            onProgress: { _, _, _ in },
-            onOutput: { _ in }
+            onProgress: { _, _, _ in /* Progress ignored in test */ },
+            onOutput: { _ in /* Output ignored in test */ }
         )
 
         // Verify Guywh headers and direct stream format fallback are appended
@@ -446,8 +446,8 @@ final class YtdlpServiceTests: XCTestCase {
         _ = try await service.download(
             url: "https://gayforfans.com/video/8831/sample-title/?utm_source=feed&ref=banner",
             options: options,
-            onProgress: { _, _, _ in },
-            onOutput: { _ in }
+            onProgress: { _, _, _ in /* Progress ignored in test */ },
+            onOutput: { _ in /* Output ignored in test */ }
         )
 
         // Verify GFF headers and direct stream format selector are appended
@@ -473,8 +473,8 @@ final class YtdlpServiceTests: XCTestCase {
         _ = try await service.download(
             url: "https://bestcam.tv/21323036",
             options: options,
-            onProgress: { _, _, _ in },
-            onOutput: { _ in }
+            onProgress: { _, _, _ in /* Progress ignored in test */ },
+            onOutput: { _ in /* Output ignored in test */ }
         )
 
         XCTAssertTrue(capturedArgsBox.value.contains("Referer: https://abyssplayer.com/"))
@@ -668,8 +668,8 @@ final class YtdlpServiceTests: XCTestCase {
         _ = try await service.download(
             url: "https://pl.eporner.com/video-rS36Amplbu9/jonas-smith-18-02-2025/",
             options: options,
-            onProgress: { _, _, _ in },
-            onOutput: { _ in }
+            onProgress: { _, _, _ in /* Progress ignored in test */ },
+            onOutput: { _ in /* Output ignored in test */ }
         )
 
         // Verify localized subdomain pl.eporner.com was normalized to www.eporner.com and http-chunk-size excluded
@@ -701,8 +701,8 @@ final class YtdlpServiceTests: XCTestCase {
         let result = try await service.download(
             url: "https://example.com/stream-server-error.mp4",
             options: DownloadOptions.default,
-            onProgress: { _, _, _ in },
-            onOutput: { _ in }
+            onProgress: { _, _, _ in /* Progress ignored in test */ },
+            onOutput: { _ in /* Output ignored in test */ }
         )
 
         XCTAssertEqual(callCountBox.value, 2, "Should retry once upon encountering HTTP Error 500 Range/Chunking error")
@@ -724,8 +724,8 @@ final class YtdlpServiceTests: XCTestCase {
         _ = try await service.download(
             url: "https://example.com/video",
             options: options,
-            onProgress: { _, _, _ in },
-            onOutput: { _ in }
+            onProgress: { _, _, _ in /* Progress ignored in test */ },
+            onOutput: { _ in /* Output ignored in test */ }
         )
 
         XCTAssertFalse(capturedArgsBox.value.contains("--embed-metadata"))
@@ -831,15 +831,15 @@ final class YtdlpServiceTests: XCTestCase {
         async let resultA = serviceA.download(
             url: "https://example.com/videoA",
             options: optionsA,
-            onProgress: { _, _, _ in },
-            onOutput: { _ in }
+            onProgress: { _, _, _ in /* Progress ignored in test */ },
+            onOutput: { _ in /* Output ignored in test */ }
         )
 
         async let resultB = serviceB.download(
             url: "https://example.com/videoB",
             options: optionsB,
-            onProgress: { _, _, _ in },
-            onOutput: { _ in }
+            onProgress: { _, _, _ in /* Progress ignored in test */ },
+            onOutput: { _ in /* Output ignored in test */ }
         )
 
         let (urlA, urlB) = try await (resultA, resultB)
@@ -1057,8 +1057,8 @@ final class YtdlpServiceTests: XCTestCase {
         _ = try await service.download(
             url: "https://example.com/videos/test-progressive-stream.mp4",
             options: DownloadOptions.default,
-            onProgress: { _, _, _ in },
-            onOutput: { _ in }
+            onProgress: { _, _, _ in /* Progress ignored in test */ },
+            onOutput: { _ in /* Output ignored in test */ }
         )
 
         let genericArgs = capturedArgsBox.value
@@ -1077,8 +1077,8 @@ final class YtdlpServiceTests: XCTestCase {
         _ = try await service.download(
             url: "https://thisvid.com/videos/test-rate-limited-stream",
             options: DownloadOptions.default,
-            onProgress: { _, _, _ in },
-            onOutput: { _ in }
+            onProgress: { _, _, _ in /* Progress ignored in test */ },
+            onOutput: { _ in /* Output ignored in test */ }
         )
 
         let thisVidArgs = capturedArgsBox.value
@@ -1108,8 +1108,8 @@ final class YtdlpServiceTests: XCTestCase {
             url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
             options: directOptions,
             mediaInfo: mixedInfo,
-            onProgress: { _, _, _ in },
-            onOutput: { _ in }
+            onProgress: { _, _, _ in /* Progress ignored in test */ },
+            onOutput: { _ in /* Output ignored in test */ }
         )
 
         let selectedDirectArgs = capturedArgsBox.value
@@ -1125,8 +1125,8 @@ final class YtdlpServiceTests: XCTestCase {
             url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
             options: dashOptions,
             mediaInfo: mixedInfo,
-            onProgress: { _, _, _ in },
-            onOutput: { _ in }
+            onProgress: { _, _, _ in /* Progress ignored in test */ },
+            onOutput: { _ in /* Output ignored in test */ }
         )
 
         let selectedDashArgs = capturedArgsBox.value
@@ -1142,8 +1142,8 @@ final class YtdlpServiceTests: XCTestCase {
         _ = try await service.download(
             url: "https://www.boyfriend.tv/videos/12345/test-hls-stream",
             options: DownloadOptions.default,
-            onProgress: { _, _, _ in },
-            onOutput: { _ in }
+            onProgress: { _, _, _ in /* Progress ignored in test */ },
+            onOutput: { _ in /* Output ignored in test */ }
         )
 
         let hlsArgs = capturedArgsBox.value
@@ -1169,8 +1169,8 @@ final class YtdlpServiceTests: XCTestCase {
         let result = try await service.download(
             url: "https://example.com/legacy-server-no-range.mp4",
             options: DownloadOptions.default,
-            onProgress: { _, _, _ in },
-            onOutput: { _ in }
+            onProgress: { _, _, _ in /* Progress ignored in test */ },
+            onOutput: { _ in /* Output ignored in test */ }
         )
 
         XCTAssertEqual(callCountBox.value, 2, "Should retry once upon encountering Range error")
@@ -1290,8 +1290,8 @@ final class YtdlpServiceTests: XCTestCase {
             _ = try await service.download(
                 url: "https://example.com/test",
                 options: DownloadOptions.default,
-                onProgress: { _, _, _ in },
-                onOutput: { _ in }
+                onProgress: { _, _, _ in /* Progress ignored in test */ },
+                onOutput: { _ in /* Output ignored in test */ }
             )
             XCTFail("Non-zero/error exit must not succeed")
         } catch {
@@ -1382,8 +1382,8 @@ final class YtdlpServiceTests: XCTestCase {
         _ = try await service.download(
             url: "https://www.boyfriendtv.com/videos/1140993/horus-scat-piss-chute/",
             options: DownloadOptions.default,
-            onProgress: { _, _, _ in },
-            onOutput: { _ in }
+            onProgress: { _, _, _ in /* Progress ignored in test */ },
+            onOutput: { _ in /* Output ignored in test */ }
         )
         
         let lastArg = capturedArgsBox.value.last ?? ""
@@ -1695,8 +1695,8 @@ final class YtdlpServiceTests: XCTestCase {
         _ = try await service.download(
             url: "https://www.eporner.com/video-12345/sample-video/",
             options: options,
-            onProgress: { _, _, _ in },
-            onOutput: { _ in }
+            onProgress: { _, _, _ in /* Progress ignored in test */ },
+            onOutput: { _ in /* Output ignored in test */ }
         )
 
         XCTAssertTrue(attemptedCookieRunBox.value || succeededWithoutCookiesBox.value)
@@ -1917,8 +1917,8 @@ final class YtdlpServiceTests: XCTestCase {
         _ = try await service.download(
             url: "https://de.xhamster.com/videos/cam-cum-big-fat-cock-erupts-xhQvXns?from=search",
             options: DownloadOptions.default,
-            onProgress: { _, _, _ in },
-            onOutput: { _ in }
+            onProgress: { _, _, _ in /* Progress ignored in test */ },
+            onOutput: { _ in /* Output ignored in test */ }
         )
 
         let args = capturedArgsBox.value
@@ -1997,8 +1997,8 @@ final class YtdlpServiceTests: XCTestCase {
         _ = try await service.download(
             url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
             options: DownloadOptions.default,
-            onProgress: { _, _, _ in },
-            onOutput: { _ in }
+            onProgress: { _, _, _ in /* Progress ignored in test */ },
+            onOutput: { _ in /* Output ignored in test */ }
         )
 
         let args = capturedArgsBox.value
@@ -2016,8 +2016,8 @@ final class YtdlpServiceTests: XCTestCase {
         _ = try await service.download(
             url: "https://thisvid.com/videos/hung-bodybuilder-jerk-flex-and-shoot-a-huge-load/",
             options: DownloadOptions.default,
-            onProgress: { _, _, _ in },
-            onOutput: { _ in }
+            onProgress: { _, _, _ in /* Progress ignored in test */ },
+            onOutput: { _ in /* Output ignored in test */ }
         )
 
         let args = capturedArgsBox.value
@@ -2042,8 +2042,8 @@ final class YtdlpServiceTests: XCTestCase {
         _ = try await service.download(
             url: "https://justthegays.tv/video/valentinoboy-fucks-romeo-twink-yet-again-100",
             options: DownloadOptions.default,
-            onProgress: { _, _, _ in },
-            onOutput: { _ in }
+            onProgress: { _, _, _ in /* Progress ignored in test */ },
+            onOutput: { _ in /* Output ignored in test */ }
         )
 
         let args = capturedArgsBox.value
@@ -2073,8 +2073,8 @@ final class YtdlpServiceTests: XCTestCase {
         let result = try await service.download(
             url: "https://example.com/video-hls-stream",
             options: DownloadOptions.default,
-            onProgress: { _, _, _ in },
-            onOutput: { _ in }
+            onProgress: { _, _, _ in /* Progress ignored in test */ },
+            onOutput: { _ in /* Output ignored in test */ }
         )
 
         XCTAssertEqual(callCountBox.value, 2, "Must retry download when HLS postprocessing stream error is encountered")
@@ -2273,8 +2273,8 @@ final class YtdlpServiceTests: XCTestCase {
         _ = try await service.download(
             url: "https://example.com/hdr-video",
             options: options,
-            onProgress: { _, _, _ in },
-            onOutput: { _ in }
+            onProgress: { _, _, _ in /* Progress ignored in test */ },
+            onOutput: { _ in /* Output ignored in test */ }
         )
 
         XCTAssertTrue(capturedArgsBox.value.contains("--postprocessor-args"))
@@ -2435,8 +2435,8 @@ final class YtdlpServiceTests: XCTestCase {
         let result = try await service.download(
             url: "https://example.com/stream-502.mp4",
             options: DownloadOptions.default,
-            onProgress: { _, _, _ in },
-            onOutput: { _ in }
+            onProgress: { _, _, _ in /* Progress ignored in test */ },
+            onOutput: { _ in /* Output ignored in test */ }
         )
 
         XCTAssertEqual(callCountBox.value, 2, "Should retry once upon encountering 502 error")
@@ -2459,8 +2459,8 @@ final class YtdlpServiceTests: XCTestCase {
         let downloadResult = try await service.download(
             url: "https://example.com/split-video",
             options: DownloadOptions.default,
-            onProgress: { _, _, _ in },
-            onOutput: { _ in }
+            onProgress: { _, _, _ in /* Progress ignored in test */ },
+            onOutput: { _ in /* Output ignored in test */ }
         )
 
         XCTAssertEqual(downloadResult.files.count, 3, "Structured DownloadResult must contain all chapter files")
@@ -2679,6 +2679,80 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertFalse(sanitized.contains("/usr/local/bin/ffmpeg"))
         XCTAssertFalse(sanitized.contains("echo password"))
         XCTAssertFalse(sanitized.contains("rm -rf /"))
+    }
+
+    func testParseArgumentString() {
+        // Plain flags
+        let args1 = YtdlpService.parseArgumentString("--limit-rate 5M --restrict-filenames")
+        XCTAssertEqual(args1, ["--limit-rate", "5M", "--restrict-filenames"])
+
+        // Double quoted arguments
+        let args2 = YtdlpService.parseArgumentString("--user-agent \"Mozilla/5.0 (Macintosh)\" --no-mtime")
+        XCTAssertEqual(args2, ["--user-agent", "Mozilla/5.0 (Macintosh)", "--no-mtime"])
+
+        // Single quoted arguments
+        let args3 = YtdlpService.parseArgumentString("--referer 'https://example.com/test page'")
+        XCTAssertEqual(args3, ["--referer", "https://example.com/test page"])
+
+        // Empty or whitespace
+        let args4 = YtdlpService.parseArgumentString("   ")
+        XCTAssertTrue(args4.isEmpty)
+    }
+
+    func testAdditionalArgumentsForwardedInDownload() async throws {
+        let recordedArgsBox = TestBox<[String]>([])
+        service.processRunner = MockYtdlpProcessRunner(mockDownloadResult: { args in
+            recordedArgsBox.value = args
+            return DownloadProcessResult(primaryPath: "/tmp/output.mp4")
+        })
+
+        var options = DownloadOptions.default
+        options.additionalArguments = "--limit-rate 2M --geo-bypass"
+
+        _ = try await service.download(
+            url: "https://example.com/watch?v=12345",
+            options: options,
+            processController: nil,
+            onProgress: { _, _, _ in /* Progress ignored in test */ },
+            onOutput: { _ in /* Output ignored in test */ }
+        )
+
+        let args = recordedArgsBox.value
+        XCTAssertTrue(args.contains("--limit-rate"), "yt-dlp args must contain --limit-rate")
+        XCTAssertTrue(args.contains("2M"), "yt-dlp args must contain 2M")
+        XCTAssertTrue(args.contains("--geo-bypass"), "yt-dlp args must contain --geo-bypass")
+    }
+
+    func testDownloadOptionsCodableWithAdditionalArguments() throws {
+        var options = DownloadOptions.default
+        options.additionalArguments = "--limit-rate 1M"
+
+        let encoder = JSONEncoder()
+        let data = try encoder.encode(options)
+
+        let decoder = JSONDecoder()
+        let decoded = try decoder.decode(DownloadOptions.self, from: data)
+        XCTAssertEqual(decoded.additionalArguments, "--limit-rate 1M")
+
+        // Backwards compatibility: JSON without additionalArguments field
+        let legacyJSON = """
+        {
+            "saveFolder": "\(options.saveFolder.absoluteString)",
+            "fileType": "MP4",
+            "downloadSubtitles": false,
+            "subtitleLanguages": [],
+            "subtitleFormat": "srt",
+            "embedSubtitles": false,
+            "downloadThumbnail": false,
+            "embedThumbnail": false,
+            "embedMetadata": false,
+            "splitChapters": false,
+            "sponsorBlock": false,
+            "forceOverwrite": false
+        }
+        """.data(using: .utf8)!
+        let legacyDecoded = try decoder.decode(DownloadOptions.self, from: legacyJSON)
+        XCTAssertNil(legacyDecoded.additionalArguments)
     }
 }
 

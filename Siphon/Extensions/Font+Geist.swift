@@ -35,6 +35,31 @@ extension Font {
         }
         return .custom(fontName, size: size, relativeTo: textStyle)
     }
+
+    // MARK: - Standardized Semantic Typography Scale
+    // UI Scale
+    public static var siphonMetadata: Font { .geist(11, weight: .regular, relativeTo: .caption) }
+    public static var siphonMetadataMedium: Font { .geist(11, weight: .medium, relativeTo: .caption) }
+    public static var siphonMetadataSemibold: Font { .geist(11, weight: .semibold, relativeTo: .caption) }
+    public static var siphonMetadataMono: Font { .geistMono(11, weight: .regular, relativeTo: .caption) }
+    public static var siphonMetadataMonoSemibold: Font { .geistMono(11, weight: .semibold, relativeTo: .caption) }
+
+    public static var siphonSecondary: Font { .geist(12, weight: .regular, relativeTo: .subheadline) }
+    public static var siphonSecondaryMedium: Font { .geist(12, weight: .medium, relativeTo: .subheadline) }
+    public static var siphonSecondarySemibold: Font { .geist(12, weight: .semibold, relativeTo: .subheadline) }
+
+    public static var siphonStandard: Font { .geist(13, weight: .regular, relativeTo: .body) }
+    public static var siphonStandardMedium: Font { .geist(13, weight: .medium, relativeTo: .body) }
+    public static var siphonStandardSemibold: Font { .geist(13, weight: .semibold, relativeTo: .body) }
+
+    public static var siphonPrimary: Font { .geist(14, weight: .medium, relativeTo: .headline) }
+    public static var siphonPrimarySemibold: Font { .geist(14, weight: .semibold, relativeTo: .headline) }
+
+    public static var siphonWindowTitle: Font { .geist(18, weight: .semibold, relativeTo: .title3) }
+
+    // Display Scale
+    public static var siphonKPI: Font { .geist(26, weight: .bold, relativeTo: .title) }
+    public static var siphonHomeTitle: Font { .geist(30, weight: .bold, relativeTo: .largeTitle) }
 }
 
 public struct GeistFontRegistrar {

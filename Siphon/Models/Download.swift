@@ -341,6 +341,7 @@ struct DownloadOptions: Codable {
     var selectedFormatId: String?
     var hdrAction: HDRAction?
     var resolutionFallbackPolicy: ResolutionFallbackPolicy?
+    var additionalArguments: String?
 
     enum CodingKeys: String, CodingKey {
         case saveFolder
@@ -368,6 +369,7 @@ struct DownloadOptions: Codable {
         case selectedFormatId
         case hdrAction
         case resolutionFallbackPolicy
+        case additionalArguments
     }
 
     init(
@@ -396,7 +398,8 @@ struct DownloadOptions: Codable {
         rawCookies: String? = nil,
         selectedFormatId: String? = nil,
         hdrAction: HDRAction? = .preserveHDR,
-        resolutionFallbackPolicy: ResolutionFallbackPolicy? = .strictCeiling
+        resolutionFallbackPolicy: ResolutionFallbackPolicy? = .strictCeiling,
+        additionalArguments: String? = nil
     ) {
         self.saveFolder = saveFolder
         self.fileType = fileType
@@ -424,6 +427,7 @@ struct DownloadOptions: Codable {
         self.selectedFormatId = selectedFormatId
         self.hdrAction = hdrAction
         self.resolutionFallbackPolicy = resolutionFallbackPolicy ?? .strictCeiling
+        self.additionalArguments = additionalArguments
     }
 
     init(from decoder: Decoder) throws {
@@ -454,6 +458,7 @@ struct DownloadOptions: Codable {
         self.selectedFormatId = try container.decodeIfPresent(String.self, forKey: .selectedFormatId)
         self.hdrAction = try container.decodeIfPresent(HDRAction.self, forKey: .hdrAction) ?? .preserveHDR
         self.resolutionFallbackPolicy = try container.decodeIfPresent(ResolutionFallbackPolicy.self, forKey: .resolutionFallbackPolicy) ?? .strictCeiling
+        self.additionalArguments = try container.decodeIfPresent(String.self, forKey: .additionalArguments)
     }
     
     static var `default`: DownloadOptions {
