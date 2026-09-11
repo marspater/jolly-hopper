@@ -179,7 +179,7 @@ struct DownloadDiagnosticsView: View {
     
     private var commandAndLogsTab: some View {
         VStack(spacing: 14) {
-            if let cmd = download.diagnostics.commandLine ?? (download.log.components(separatedBy: "\n").first(where: { $0.contains("yt-dlp") })) {
+            if let cmd = download.diagnostics.commandLine ?? (download.log.split(whereSeparator: \.isNewline).first(where: { $0.contains("yt-dlp") }).map(String.init)) {
                 VStack(alignment: .leading, spacing: 6) {
                     HStack {
                         Text("Executed Command")
@@ -359,11 +359,11 @@ struct DownloadDiagnosticsView: View {
     }
     
     private var filteredLogs: String {
-        let lines = download.log.components(separatedBy: "\n")
         if logSearchText.isEmpty {
             return download.log.isEmpty ? "No log output recorded." : download.log
         }
-        let matches = lines.filter { $0.localizedCaseInsensitiveContains(logSearchText) }
+        let matches = download.log.split(whereSeparator: \.isNewline)
+            .filter { $0.localizedCaseInsensitiveContains(logSearchText) }
         return matches.isEmpty ? "No matches for '\(logSearchText)'" : matches.joined(separator: "\n")
     }
     
