@@ -2600,13 +2600,15 @@ final class YtdlpServiceTests: XCTestCase {
 
     func testFetchSingleVideoInfoRetriesWithBrowserCookiesOnSiteError() async throws {
         let savedBrowser = UserDefaults.standard.string(forKey: UserDefaultsKeys.browserForCookies)
-        UserDefaults.standard.set("chrome", forKey: UserDefaultsKeys.browserForCookies)
+        UserDefaults.standard.set("safari", forKey: UserDefaultsKeys.browserForCookies)
+        YtdlpService.hasFullDiskAccessOverride = false
         defer {
             if let saved = savedBrowser {
                 UserDefaults.standard.set(saved, forKey: UserDefaultsKeys.browserForCookies)
             } else {
                 UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.browserForCookies)
             }
+            YtdlpService.hasFullDiskAccessOverride = nil
         }
 
         let validJSON = """
@@ -2657,6 +2659,26 @@ final class YtdlpServiceTests: XCTestCase {
         
         let cookiesFlagCount = recordedArgsBox.value.filter { $0 == "--cookies" }.count
         XCTAssertEqual(cookiesFlagCount, 1, "fetchPlaylistInfo must pass exactly one --cookies flag")
+    }
+
+    func testSanitizeCommandForLogRedactsExecutionAndLocationFlags() throws {
+        let args = [
+            "yt-dlp",
+            "--ffmpeg-location", "/usr/local/bin/ffmpeg",
+            "--netrc-cmd", "echo password",
+            "--exec", "rm -rf /",
+            "--postprocessor-args", "VideoConvertor:-y -c:v libx264",
+            "https://example.com/video"
+        ]
+
+        let sanitized = LoggerService.sanitizeCommandForLog(args)
+        XCTAssertTrue(sanitized.contains("--ffmpeg-location \"<LOCATION_REDACTED>\""))
+        XCTAssertTrue(sanitized.contains("--netrc-cmd \"<COMMAND_REDACTED>\""))
+        XCTAssertTrue(sanitized.contains("--exec \"<EXEC_REDACTED>\""))
+        XCTAssertTrue(sanitized.contains("--postprocessor-args \"<ARGS_REDACTED>\""))
+        XCTAssertFalse(sanitized.contains("/usr/local/bin/ffmpeg"))
+        XCTAssertFalse(sanitized.contains("echo password"))
+        XCTAssertFalse(sanitized.contains("rm -rf /"))
     }
 }
 

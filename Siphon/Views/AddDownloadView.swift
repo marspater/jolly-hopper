@@ -579,7 +579,7 @@ struct AddDownloadView: View {
                 }
                 .buttonStyle(.bouncy(scale: 0.97, hover: 1.015))
                 .help(languageService.s("paste_from_clipboard"))
-                .accessibilityLabel(languageService.s("paste_from_clipboard"))
+                .accessibilityLabel(isPasted ? languageService.s("paste") : languageService.s("paste_from_clipboard"))
 
                 Button {
                     fetchInfo()
@@ -1768,9 +1768,13 @@ struct AddDownloadView: View {
         panel.allowedContentTypes = [.plainText, .text, .item]
         
         if panel.runModal() == .OK, let selectedURL = panel.url {
-            if let content = try? String(contentsOf: selectedURL, encoding: .utf8) {
-                let existing = batchUrlsText.isEmpty ? "" : batchUrlsText + "\n"
-                batchUrlsText = existing + content
+            Task {
+                if let content = await Task.detached(priority: .userInitiated, operation: {
+                    try? String(contentsOf: selectedURL, encoding: .utf8)
+                }).value {
+                    let existing = batchUrlsText.isEmpty ? "" : batchUrlsText + "\n"
+                    batchUrlsText = existing + content
+                }
             }
         }
     }

@@ -34,3 +34,15 @@
 ## 2026-09-09 - Zero-Copy Substring Slicing for High-Frequency Output Stream Parsing
 **Learning:** High-frequency stdout line callbacks from background process execution (like `yt-dlp` download updates) allocate multiple intermediate `[String]` arrays when using `components(separatedBy:)` or `.map(String.init)`. Using range search (`range(of:)`) with safe bound guards and `Substring` slices via `split(separator:)` avoids intermediate heap allocations per line.
 **Action:** In process runner output stream handlers, prefer range slicing and Substring `split` over `components(separatedBy:)` array allocations.
+
+## 2026-09-10 - Lazy Substring Splitting via `split(whereSeparator: \.isNewline)`
+**Learning:** Calling `components(separatedBy: .newlines)` on process outputs (such as `codesign` inspection output) creates an intermediate array of heap-allocated `String` objects for every single line. Using `split(whereSeparator: \.isNewline)` operates lazily over `Substring` views, avoiding intermediate array allocations entirely.
+**Action:** Replace `components(separatedBy: .newlines)` with `split(whereSeparator: \.isNewline)` when iterating over output lines.
+
+## 2026-09-10 - Asynchronous Offloading for File Panel String Initialization
+**Learning:** Initializing `String(contentsOf:encoding:)` directly inside `@MainActor` file panel selection handlers blocks the main UI thread during disk or network file reads. Wrapping the operation in `Task.detached(priority: .userInitiated)` offloads blocking file I/O to background worker threads, returning the result safely to `@MainActor`.
+**Action:** Always offload `String(contentsOf:)` or heavy file reads in open panel callbacks using `Task.detached` to keep the UI responsive.
+
+## 2026-09-11 - Lazy Substring Slicing and Upfront Empty-Check for Log Views
+**Learning:** Calling `.components(separatedBy: "\n")` on large log strings creates thousands of intermediate String heap allocations. In SwiftUI views, doing line-splitting before checking if search text is empty wastes memory and CPU on every re-render. Checking search emptiness upfront and using `.split(whereSeparator: \.isNewline)` for non-empty search queries avoids intermediate array allocations.
+**Action:** In log output display views, check for empty search strings upfront and use `Substring` splitting (`split(whereSeparator: \.isNewline)`) to prevent unnecessary heap allocations.

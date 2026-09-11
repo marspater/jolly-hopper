@@ -605,10 +605,10 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
                     } else if errorOutput.contains("subtitle") || errorOutput.contains("caption") {
                         safeContinuation.resume(throwing: YtdlpError.subtitleError(errorOutput))
                     } else {
-                        let cleanError = errorOutput.components(separatedBy: "\n")
-                            .filter { $0.contains("ERROR:") }
-                            .last?
-                            .replacingOccurrences(of: "ERROR: ", with: "")
+                        let cleanError = errorOutput.split(whereSeparator: \.isNewline)
+                            .reversed()
+                            .first(where: { $0.contains("ERROR:") })
+                            .map { String($0).replacingOccurrences(of: "ERROR: ", with: "") }
                             ?? errorOutput
                         safeContinuation.resume(throwing: YtdlpError.downloadFailed(cleanError.isEmpty ? "Process exited with code \(proc.terminationStatus)" : cleanError))
                     }

@@ -1621,9 +1621,8 @@ public struct DownloadResult: Sendable {
             let data = pipe.fileHandleForReading.readDataToEndOfFile()
             proc.waitUntilExit()
             let output = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            return output.components(separatedBy: .newlines).contains { line in
-                let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
-                return trimmed == "1" || !trimmed.isEmpty
+            return output.lazy.split(whereSeparator: \.isNewline).contains { line in
+                line.contains { !$0.isWhitespace }
             }
         } catch {
             return false
@@ -2260,13 +2259,6 @@ public struct DownloadResult: Sendable {
         "\"thumbnailUrl\"\\s*:\\s*\"(https?://[^\"]+)\""
     ].compactMap { try? NSRegularExpression(pattern: $0, options: .caseInsensitive) }
 
-    nonisolated private static let guywhThumbRegexes: [NSRegularExpression] = [
-        "preview_url\\s*:\\s*['\"](https?://[^'\"]+)['\"]",
-        "preview_url1\\s*:\\s*['\"](https?://[^'\"]+)['\"]",
-        "property=[\"']og:image[\"']\\s+content=[\"'](https?://[^\"']+)[\"']",
-        "poster=[\"'](https?://[^\"']+)[\"']"
-    ].compactMap { try? NSRegularExpression(pattern: $0, options: .caseInsensitive) }
-
     nonisolated private static let guywhStreamRegexes: [NSRegularExpression] = [
         "video_url\\s*:\\s*['\"](https?://[^'\"]+)['\"]",
         "\"contentUrl\"\\s*:\\s*\"(https?://[^\"]+)\"",
@@ -2492,8 +2484,15 @@ public struct DownloadResult: Sendable {
         
         // Extract Thumbnail
         var thumbnailURL: String? = nil
-        for regex in Self.guywhThumbRegexes {
-            if let match = regex.firstMatch(in: html, options: [], range: NSRange(location: 0, length: (html as NSString).length)),
+        let thumbPatterns = [
+            "preview_url\\s*:\\s*['\"](https?://[^'\"]+)['\"]",
+            "preview_url1\\s*:\\s*['\"](https?://[^'\"]+)['\"]",
+            "property=[\"']og:image[\"']\\s+content=[\"'](https?://[^\"']+)[\"']",
+            "poster=[\"'](https?://[^\"']+)[\"']"
+        ]
+        for pattern in thumbPatterns {
+            if let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]),
+               let match = regex.firstMatch(in: html, options: [], range: NSRange(location: 0, length: (html as NSString).length)),
                match.numberOfRanges > 1 {
                 let candidate = (html as NSString).substring(with: match.range(at: 1))
                     .replacingOccurrences(of: "\\/", with: "/")
@@ -4279,14 +4278,15 @@ public struct DownloadResult: Sendable {
         let tempCookiesURL = cookiesDir.appendingPathComponent("siphon_header_cookies_\(UUID().uuidString).txt")
         
         var lines = ["# Netscape HTTP Cookie File"]
-        let pairs = cookieHeader.components(separatedBy: ";")
+        let pairs = cookieHeader.split(separator: ";")
         let expiry = Int(Date().addingTimeInterval(86400 * 30).timeIntervalSince1970)
         
         for pair in pairs {
-            let parts = pair.trimmingCharacters(in: .whitespacesAndNewlines).components(separatedBy: "=")
-            if parts.count >= 2 {
+            let trimmedPair = pair.trimmingCharacters(in: .whitespacesAndNewlines)
+            let parts = trimmedPair.split(separator: "=", maxSplits: 1)
+            if parts.count == 2 {
                 let key = sanitizeCookieToken(parts[0].trimmingCharacters(in: .whitespacesAndNewlines))
-                let value = sanitizeCookieToken(parts.dropFirst().joined(separator: "=").trimmingCharacters(in: .whitespacesAndNewlines))
+                let value = sanitizeCookieToken(parts[1].trimmingCharacters(in: .whitespacesAndNewlines))
                 if !key.isEmpty && !value.isEmpty {
                     lines.append("\(domain)\tTRUE\t/\tFALSE\t\(expiry)\t\(key)\t\(value)")
                 }
@@ -4340,14 +4340,14 @@ public struct DownloadResult: Sendable {
 
         // 1. Process raw cookie header pairs (default path: "/", default domain: defaultDomain)
         if let raw = rawCookies, !raw.isEmpty {
-            let pairs = raw.components(separatedBy: ";")
+            let pairs = raw.split(separator: ";")
             for pair in pairs {
                 let trimmed = pair.trimmingCharacters(in: .whitespacesAndNewlines)
                 guard !trimmed.isEmpty else { continue }
-                let parts = trimmed.components(separatedBy: "=")
-                if parts.count >= 2 {
+                let parts = trimmed.split(separator: "=", maxSplits: 1)
+                if parts.count == 2 {
                     let key = sanitizeCookieToken(parts[0].trimmingCharacters(in: .whitespacesAndNewlines))
-                    let value = sanitizeCookieToken(parts.dropFirst().joined(separator: "=").trimmingCharacters(in: .whitespacesAndNewlines))
+                    let value = sanitizeCookieToken(parts[1].trimmingCharacters(in: .whitespacesAndNewlines))
                     if !key.isEmpty && !value.isEmpty {
                         let mapKey = CookieKey(domain: defaultDomain.lowercased(), path: "/", name: key)
                         cookieMap[mapKey] = ConsolidatedCookieEntry(
