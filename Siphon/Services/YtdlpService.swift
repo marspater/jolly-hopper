@@ -2249,6 +2249,12 @@ public struct DownloadResult: Sendable {
         "<h1[^>]*>([^<]+)</h1>"
     ].compactMap { try? NSRegularExpression(pattern: $0, options: .caseInsensitive) }
 
+    nonisolated private static let gffEmbedRegexes: [NSRegularExpression] = [
+        "\"embedUrl\"\\s*:\\s*\"([^\"]+)\"",
+        "<iframe[^>]+src=[\"'](https?://(?:www\\.)?gayforfans\\.com/embed/[^\"']+)[\"']",
+        "<iframe[^>]+src=[\"'](/embed/[^\"']+)[\"']"
+    ].compactMap { try? NSRegularExpression(pattern: $0, options: .caseInsensitive) }
+
     nonisolated private static let gffStreamRegexes: [NSRegularExpression] = [
         "video_url\\s*:\\s*['\"]([^'\"]+)['\"]",
         "video_alt_url\\s*:\\s*['\"]([^'\"]+)['\"]",
@@ -2897,14 +2903,8 @@ public struct DownloadResult: Sendable {
         
         // Extract Candidate Embed URLs
         var candidateEmbeds: [String] = []
-        let embedPatterns = [
-            "\"embedUrl\"\\s*:\\s*\"([^\"]+)\"",
-            "<iframe[^>]+src=[\"'](https?://(?:www\\.)?gayforfans\\.com/embed/[^\"']+)[\"']",
-            "<iframe[^>]+src=[\"'](/embed/[^\"']+)[\"']"
-        ]
-        for pattern in embedPatterns {
-            if let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]),
-               let match = regex.firstMatch(in: html, options: [], range: NSRange(location: 0, length: (html as NSString).length)),
+        for regex in Self.gffEmbedRegexes {
+            if let match = regex.firstMatch(in: html, options: [], range: NSRange(location: 0, length: (html as NSString).length)),
                match.numberOfRanges > 1 {
                 let val = (html as NSString).substring(with: match.range(at: 1))
                     .replacingOccurrences(of: "\\/", with: "/")
