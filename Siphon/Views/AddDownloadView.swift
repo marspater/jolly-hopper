@@ -579,7 +579,7 @@ struct AddDownloadView: View {
                 }
                 .buttonStyle(.bouncy(scale: 0.97, hover: 1.015))
                 .help(languageService.s("paste_from_clipboard"))
-                .accessibilityLabel(languageService.s("paste_from_clipboard"))
+                .accessibilityLabel(isPasted ? languageService.s("paste") : languageService.s("paste_from_clipboard"))
 
                 Button {
                     fetchInfo()

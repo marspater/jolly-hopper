@@ -1059,6 +1059,8 @@ struct FileThumbnailView: View {
                         .font(.caption)
                 }
                 .buttonStyle(.bordered)
+                .help(isCopiedLog ? languageService.s("completed") : languageService.s("download_log"))
+                .accessibilityLabel(isCopiedLog ? languageService.s("completed") : languageService.s("download_log"))
                 
                 Button(languageService.s("close")) {
                     showLog = false

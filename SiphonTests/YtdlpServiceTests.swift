@@ -2599,14 +2599,16 @@ final class YtdlpServiceTests: XCTestCase {
     }
 
     func testFetchSingleVideoInfoRetriesWithBrowserCookiesOnSiteError() async throws {
-        let savedBrowser = UserDefaults.standard.string(forKey: "browser")
-        UserDefaults.standard.set("chrome", forKey: "browser")
+        let savedBrowser = UserDefaults.standard.string(forKey: UserDefaultsKeys.browserForCookies)
+        UserDefaults.standard.set("safari", forKey: UserDefaultsKeys.browserForCookies)
+        YtdlpService.hasFullDiskAccessOverride = false
         defer {
             if let saved = savedBrowser {
-                UserDefaults.standard.set(saved, forKey: "browser")
+                UserDefaults.standard.set(saved, forKey: UserDefaultsKeys.browserForCookies)
             } else {
-                UserDefaults.standard.removeObject(forKey: "browser")
+                UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.browserForCookies)
             }
+            YtdlpService.hasFullDiskAccessOverride = nil
         }
 
         let validJSON = """
