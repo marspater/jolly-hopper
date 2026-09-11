@@ -2566,7 +2566,7 @@ final class YtdlpServiceTests: XCTestCase {
 
         let legacyDecoded = try JSONDecoder().decode(HistoricDownload.self, from: legacyJSON)
         XCTAssertEqual(legacyDecoded.filePaths, ["/Users/test/Downloads/legacy.mp4"])
-        XCTAssertEqual(legacyDecoded.filePath, "/Users/test/Downloads/legacy.mp4")
+        XCTAssertEqual(legacyDecoded.filePaths.first, "/Users/test/Downloads/legacy.mp4")
 
         // 2. Modern JSON with filePaths array
         let modernJSON = """
@@ -2589,7 +2589,7 @@ final class YtdlpServiceTests: XCTestCase {
 
         let modernDecoded = try JSONDecoder().decode(HistoricDownload.self, from: modernJSON)
         XCTAssertEqual(modernDecoded.filePaths.count, 2)
-        XCTAssertEqual(modernDecoded.filePath, "/Users/test/Downloads/ch1.mp4")
+        XCTAssertEqual(modernDecoded.filePaths.first, "/Users/test/Downloads/ch1.mp4")
 
         // 3. Modern re-encode encodes ONLY filePaths (conceptual model cleanup)
         let reEncoded = try JSONEncoder().encode(modernDecoded)
