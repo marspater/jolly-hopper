@@ -893,6 +893,14 @@ final class YtdlpServiceTests: XCTestCase {
         let addHeadersSanitized = LoggerService.sanitizeCommandForLog(addHeadersArgs)
         XCTAssertTrue(addHeadersSanitized.contains("--add-headers \"<REDACTED_HEADER>\""))
         XCTAssertFalse(addHeadersSanitized.contains("secret123"))
+
+        let downloaderArgs = ["yt-dlp", "--downloader-args", "ffmpeg:-secret_flag 123", "--external-downloader-args", "aria2c:-s 16", "https://example.com"]
+        let downloaderSanitized = LoggerService.sanitizeCommandForLog(downloaderArgs)
+        XCTAssertTrue(downloaderSanitized.contains("--downloader-args \"<ARGS_REDACTED>\""))
+        XCTAssertTrue(downloaderSanitized.contains("--external-downloader-args \"<ARGS_REDACTED>\""))
+        XCTAssertFalse(downloaderSanitized.contains("secret_flag"))
+        XCTAssertFalse(downloaderSanitized.contains("aria2c"))
+
         XCTAssertFalse(sanitized.contains("siphon_cookie_secret_123"))
         XCTAssertFalse(sanitized.contains("SECRET_TOKEN_ABC"))
         XCTAssertFalse(sanitized.contains("token=SECRET999"))
