@@ -612,7 +612,7 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
                     }
                 } else {
                     let lower = errorOutput.lowercased()
-                    if errorOutput.contains("Cloudflare") || (errorOutput.contains("403") && (errorOutput.contains("anti-bot") || errorOutput.contains("Forbidden") || lower.contains("bot"))) || lower.contains("sign in to confirm you're not a bot") || lower.contains("sign in to confirm you’re not a bot") {
+                    if errorOutput.contains("Cloudflare") || (errorOutput.contains("403") && (errorOutput.contains("anti-bot") || lower.contains("cloudflare") || lower.contains("turnstile") || lower.contains("bot"))) || lower.contains("sign in to confirm you're not a bot") || lower.contains("sign in to confirm you’re not a bot") {
                         safeContinuation.resume(throwing: YtdlpError.cloudflareBlocked)
                     } else if errorOutput.contains("429") || errorOutput.contains("Too Many Requests") {
                         safeContinuation.resume(throwing: YtdlpError.tooManyRequests)

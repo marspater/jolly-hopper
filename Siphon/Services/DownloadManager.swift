@@ -477,8 +477,13 @@ class DownloadManager: ObservableObject {
 
 
 
-    func addDownload(url: String, options: DownloadOptions) {
-        let download = Download(url: url, options: options)
+    func addDownload(url: String, options: DownloadOptions, mediaInfo: MediaInfo? = nil) {
+        let download = Download(url: url, options: options, title: mediaInfo?.title ?? "___FETCHING___")
+        if let info = mediaInfo {
+            download.mediaInfo = info
+            download.thumbnailURL = info.thumbnailURL
+            download.duration = info.durationString
+        }
         downloads.append(download)
         processQueue()
     }
@@ -631,7 +636,12 @@ class DownloadManager: ObservableObject {
         objectWillChange.send()
 
         do {
-            let info = try await ytdlpService.fetchInfo(url: download.url, rawCookies: download.options.rawCookies)
+            let info: MediaInfo
+            if let existing = download.mediaInfo {
+                info = existing
+            } else {
+                info = try await ytdlpService.fetchInfo(url: download.url, rawCookies: download.options.rawCookies)
+            }
 
             guard !Task.isCancelled else { return }
             guard download.status == .fetching else { return }

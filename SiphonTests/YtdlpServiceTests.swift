@@ -1853,6 +1853,130 @@ final class YtdlpServiceTests: XCTestCase {
         }
     }
 
+    func testBoyfriendTVBannedUserRejectsThumbnailAsVideoAndRequiresLogin() async throws {
+        service.ytdlpPath = URL(fileURLWithPath: "/usr/local/bin/yt-dlp")
+
+        // Real-world HTML structure of a banned user video: loginProtected with thumbnail image ending in .mp4-full-1.jpg
+        let bannedUserHTML = """
+        <!DOCTYPE html><html><head><title>brazilian with hairy big cock fucks slut | BoyFriendTV</title>
+        <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"thumbnailUrl":["https://cdn77-t.boyfriendtv.com/b-boyfriendtv/thumbs/bftv-full/2025-10/b8/aa7a496b8b28718a3fbd56eacb5f02732.mp4-full-1.jpg"]}]}</script>
+        </head><body>
+        <div class="videoContainer" style="background-image: url('https://cdn77-t.boyfriendtv.com/b-boyfriendtv/thumbs/bftv-full/2025-10/b8/aa7a496b8b28718a3fbd56eacb5f02732.mp4-full-1.jpg');">
+            <div class="loginProtected">To watch this video please <a href="/login/">Login</a> / <a href="/registration/">Register</a>.</div>
+        </div>
+        </body></html>
+        """
+        let bannedB64 = bannedUserHTML.data(using: .utf8)!.base64EncodedString()
+
+        service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
+            if args.contains("--dump-pages") {
+                return bannedB64
+            }
+            if args.contains("--dump-json") {
+                // Assert that yt-dlp is never invoked with the thumbnail .mp4 URL
+                XCTAssertFalse(args.contains(where: { $0.contains("cdn77-t.boyfriendtv.com") }), "yt-dlp must never attempt to process thumbnail URLs as media streams")
+                XCTAssertFalse(args.contains(where: { $0.contains("aa7a496b8b28718a3fbd56eacb5f02732.mp4") }), "yt-dlp must never attempt to process truncated image URLs")
+                throw YtdlpError.commandFailed("ERROR: Unsupported URL")
+            }
+            return "{}"
+        })
+
+        do {
+            _ = try await service.fetchInfo(url: "https://www.boyfriendtv.com/videos/1505137/brazilian-with-hairy-big-cock-fucks-slut/")
+            XCTFail("Should fail and require login for banned uploader videos, not succeed with a thumbnail URL")
+        } catch let err as YtdlpError {
+            switch err {
+            case .safariCookiesFullDiskAccessRequired, .boyfriendTVLoginRequired, .boyfriendTVNeedsBrowserCookies:
+                break // Expected authentication error
+            default:
+                XCTFail("Expected login or cookie error for banned uploader video, but got: \(err)")
+            }
+        }
+    }
+
+    func testBoyfriendTVBannedUserSucceedsWithBrowserOrRawCookies() async throws {
+        service.ytdlpPath = URL(fileURLWithPath: "/usr/local/bin/yt-dlp")
+
+        let authenticatedHTML = """
+        <!DOCTYPE html><html><head><title>brazilian with hairy big cock fucks slut | BoyFriendTV</title>
+        <script>
+        var playerConfig = {
+            sources: {"hlsAuto":"https://cdn.boyfriend.tv/key=abc,end=123/media=hls4A/multi=854x480:v480,1280x720:v720/2025-10/_TPL_.mp4"},
+            poster: 'https://cdn77-t.boyfriendtv.com/thumb.jpg'
+        };
+        </script>
+        </head><body></body></html>
+        """
+        let authB64 = authenticatedHTML.data(using: .utf8)!.base64EncodedString()
+
+        let jsonManifestOutput = """
+        {
+            "id": "_TPL_",
+            "title": "_TPL_",
+            "duration": 600,
+            "thumbnail": "https://cdn77-t.boyfriendtv.com/thumb.jpg",
+            "formats": [
+                {"format_id": "480", "width": 854, "height": 480, "ext": "mp4", "protocol": "m3u8_native"},
+                {"format_id": "720", "width": 1280, "height": 720, "ext": "mp4", "protocol": "m3u8_native"}
+            ]
+        }
+        """
+
+        service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
+            if args.contains("--dump-pages") {
+                if args.contains("--cookies") {
+                    return authB64
+                }
+                // Unauthenticated returns loginProtected
+                let loginRequiredHTML = "<div class=\"loginProtected\">To watch this video please Login</div>"
+                return loginRequiredHTML.data(using: .utf8)!.base64EncodedString()
+            }
+            if args.contains("--dump-json") {
+                return jsonManifestOutput
+            }
+            return "{}"
+        })
+
+        let info = try await service.fetchInfo(
+            url: "https://www.boyfriendtv.com/videos/1505137/brazilian-with-hairy-big-cock-fucks-slut/",
+            rawCookies: "bftv_session=valid_token_12345"
+        )
+        XCTAssertEqual(info.title, "brazilian with hairy big cock fucks slut")
+        XCTAssertEqual(info.duration, 600)
+        XCTAssertEqual(info.formats?.count, 2)
+    }
+
+    func testBoyfriendTVCookieFilesIncludeCrossDomainEntries() throws {
+        let rawCookies = "session=xyz123; user_token=abc987"
+        
+        // 1. Header cookies file
+        let headerFile = service.createTempCookiesFileFromHeader(
+            url: "https://www.boyfriendtv.com/videos/1505137/test/",
+            cookieHeader: rawCookies
+        )
+        XCTAssertNotNil(headerFile)
+        defer { if let file = headerFile { try? FileManager.default.removeItem(at: file) } }
+        
+        let headerContent = try String(contentsOf: headerFile!, encoding: .utf8)
+        XCTAssertTrue(headerContent.contains(".boyfriendtv.com\tTRUE\t/\tFALSE\t"), "Must contain .boyfriendtv.com domain entry")
+        XCTAssertTrue(headerContent.contains(".boyfriend.tv\tTRUE\t/\tFALSE\t"), "Must contain cross-domain .boyfriend.tv entry")
+        XCTAssertTrue(headerContent.contains("session\txyz123"), "Must contain session cookie")
+
+        // 2. Consolidated cookies file
+        let consolidatedFile = service.createConsolidatedCookiesFile(
+            url: "https://www.boyfriendtv.com/videos/1505137/test/",
+            rawCookies: rawCookies
+        )
+        XCTAssertNotNil(consolidatedFile)
+        defer { if let file = consolidatedFile { try? FileManager.default.removeItem(at: file) } }
+        
+        let consolidatedContent = try String(contentsOf: consolidatedFile!, encoding: .utf8)
+        XCTAssertTrue(consolidatedContent.contains(".boyfriendtv.com\tTRUE\t/\tFALSE\t"), "Consolidated file must contain .boyfriendtv.com domain")
+        XCTAssertTrue(consolidatedContent.contains(".boyfriend.tv\tTRUE\t/\tFALSE\t"), "Consolidated file must contain cross-domain .boyfriend.tv entry")
+    }
+
+
+
     func testMediaFormatDecodesTBRAndNeedsTesting() throws {
         let json = """
         {

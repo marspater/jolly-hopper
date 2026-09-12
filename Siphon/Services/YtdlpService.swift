@@ -747,7 +747,11 @@ class YtdlpService: ObservableObject {
                     chapters: parsedInfo?.chapters,
                     playlist: nil,
                     playlistIndex: nil,
-                    playlistCount: nil
+                    playlistCount: nil,
+                    webpageUrl: btvMedia.embedURL,
+                    originalUrl: btvMedia.streamURL,
+                    formatProtocol: "m3u8_native",
+                    manifestUrl: btvMedia.streamURL
                 )
             }
         }
@@ -1080,7 +1084,12 @@ public struct DownloadResult: Sendable {
         var bestCamDecryptionKey: String? = nil
 
         if isBoyfriendTVURL(url) {
-            if let btvMedia = await resolveBoyfriendTVMediaInfo(url: url, rawCookies: options.rawCookies) {
+            if let streamURL = mediaInfo?.manifestUrl ?? mediaInfo?.originalUrl, !streamURL.isEmpty, streamURL.contains("boyfriend") {
+                targetURL = resolveBoyfriendTVStreamURLForDownload(streamURL: streamURL, options: options)
+                customResolvedTitle = mediaInfo?.title
+                customEmbedURL = mediaInfo?.webpageUrl
+                customThumbnailURL = mediaInfo?.thumbnail
+            } else if let btvMedia = await resolveBoyfriendTVMediaInfo(url: url, rawCookies: options.rawCookies) {
                 targetURL = resolveBoyfriendTVStreamURLForDownload(streamURL: btvMedia.streamURL, options: options)
                 customResolvedTitle = btvMedia.title
                 customEmbedURL = btvMedia.embedURL
@@ -1963,15 +1972,19 @@ public struct DownloadResult: Sendable {
                 }
                 if !rawChunks.isEmpty {
                     let rawHtml = rawChunks.joined()
-                    let hasMediaData = rawHtml.contains("hlsAuto") ||
-                                       rawHtml.contains("videoPlayerData") ||
-                                       rawHtml.contains("sources") ||
-                                       rawHtml.contains("cdn.boyfriend") ||
-                                       rawHtml.contains("boyfriend") ||
-                                       rawHtml.contains("embedUrl") ||
-                                       rawHtml.contains("/embed/") ||
-                                       rawHtml.contains("<title>") ||
-                                       rawHtml.contains("playerConfig")
+                    let isLoginProtected = rawHtml.contains("loginProtected") ||
+                                           rawHtml.contains("loginLinks") ||
+                                           rawHtml.contains("To watch this video please") ||
+                                           rawHtml.contains("User has been banned")
+                    let hasMediaData = !isLoginProtected && (
+                        rawHtml.contains("hlsAuto") ||
+                        rawHtml.contains("videoPlayerData") ||
+                        rawHtml.contains("sources") ||
+                        rawHtml.contains("playerConfig") ||
+                        rawHtml.contains("embedUrl") ||
+                        rawHtml.contains("/embed/") ||
+                        extractStreamURLFromHTML(rawHtml) != nil
+                    )
                     if hasMediaData {
                         html = rawHtml
                         LoggerService.shared.log("Successfully extracted BoyfriendTV page dump using session cookies", level: .info)
@@ -1986,7 +1999,7 @@ public struct DownloadResult: Sendable {
                 browsersToTry.append(configured)
             }
         }
-        for candidate in ["safari", "chrome", "brave", "firefox", "edge"] {
+        for candidate in SupportedBrowser.allCases.map(\.rawValue) {
             if candidate == "safari" && !Self.hasFullDiskAccess {
                 continue
             }
@@ -2032,15 +2045,19 @@ public struct DownloadResult: Sendable {
                     }
                     if !browserChunks.isEmpty {
                         let browserHtml = browserChunks.joined()
-                        let hasMediaData = browserHtml.contains("hlsAuto") ||
-                                           browserHtml.contains("videoPlayerData") ||
-                                           browserHtml.contains("sources") ||
-                                           browserHtml.contains("cdn.boyfriend") ||
-                                           browserHtml.contains("boyfriend") ||
-                                           browserHtml.contains("embedUrl") ||
-                                           browserHtml.contains("/embed/") ||
-                                           browserHtml.contains("<title>") ||
-                                           browserHtml.contains("playerConfig")
+                        let isLoginProtected = browserHtml.contains("loginProtected") ||
+                                               browserHtml.contains("loginLinks") ||
+                                               browserHtml.contains("To watch this video please") ||
+                                               browserHtml.contains("User has been banned")
+                        let hasMediaData = !isLoginProtected && (
+                            browserHtml.contains("hlsAuto") ||
+                            browserHtml.contains("videoPlayerData") ||
+                            browserHtml.contains("sources") ||
+                            browserHtml.contains("playerConfig") ||
+                            browserHtml.contains("embedUrl") ||
+                            browserHtml.contains("/embed/") ||
+                            extractStreamURLFromHTML(browserHtml) != nil
+                        )
                         if hasMediaData {
                             html = browserHtml
                             let sourceLog = browser == nil ? "impersonated HTTP request" : "browser cookies from '\(browser!)'"
@@ -2059,13 +2076,23 @@ public struct DownloadResult: Sendable {
             request.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36", forHTTPHeaderField: "User-Agent")
             request.setValue("https://www.boyfriend.tv/", forHTTPHeaderField: "Referer")
             request.setValue("https://www.boyfriend.tv", forHTTPHeaderField: "Origin")
+            if let raw = rawCookies, !raw.isEmpty {
+                request.setValue(raw, forHTTPHeaderField: "Cookie")
+            }
             
             if let (data, response) = try? await URLSession.shared.data(for: request),
                let httpResponse = response as? HTTPURLResponse,
                httpResponse.statusCode == 200,
                let fetched = String(data: data, encoding: .utf8) {
-                html = fetched
-            } else {
+                let isLoginProtected = fetched.contains("loginProtected") ||
+                                       fetched.contains("loginLinks") ||
+                                       fetched.contains("To watch this video please") ||
+                                       fetched.contains("User has been banned")
+                if !isLoginProtected {
+                    html = fetched
+                }
+            }
+            if html.isEmpty {
                 return nil
             }
         }
@@ -2148,6 +2175,49 @@ public struct DownloadResult: Sendable {
             for embed in candidateEmbeds {
                 if streamUrl != nil { break }
                 if let ytdlp = ytdlpBinary {
+                    if let raw = rawCookies, !raw.isEmpty,
+                       let tempFile = createTempCookiesFileFromHeader(url: embed, cookieHeader: raw) {
+                        defer { try? FileManager.default.removeItem(at: tempFile) }
+                        var rawEmbedArgs = [ytdlp.path, "--ignore-config", "--dump-pages", "--cookies", tempFile.path]
+                        appendSiteSpecificArgs(for: embed, to: &rawEmbedArgs)
+                        rawEmbedArgs.append("--")
+                        rawEmbedArgs.append(embed)
+
+                        var rawEmbedDump: String? = nil
+                        do {
+                            rawEmbedDump = try await processRunner.runCommand(rawEmbedArgs)
+                        } catch let error as YtdlpError {
+                            if case .commandFailed(let output) = error {
+                                rawEmbedDump = output
+                            }
+                        } catch {
+                            LoggerService.shared.log("Non-YtdlpError during embed raw cookie dump-pages: \(error.localizedDescription)", level: .debug)
+                        }
+
+                        if let output = rawEmbedDump, !output.isEmpty {
+                            var embedChunks: [String] = []
+                            for line in output.split(whereSeparator: \.isNewline) {
+                                let trimmed = String(line).trimmingCharacters(in: .whitespaces)
+                                if !trimmed.starts(with: "#") && !trimmed.starts(with: "[") && !trimmed.starts(with: "WARNING") && !trimmed.starts(with: "ERROR") {
+                                    if let decodedData = Data(base64Encoded: trimmed, options: .ignoreUnknownCharacters) {
+                                        let decodedString = String(decoding: decodedData, as: UTF8.self)
+                                        if !decodedString.isEmpty {
+                                            embedChunks.append(decodedString)
+                                        }
+                                    }
+                                }
+                            }
+                            if !embedChunks.isEmpty {
+                                let embedHtml = embedChunks.joined()
+                                if let extracted = extractStreamURLFromHTML(embedHtml) {
+                                    streamUrl = extracted
+                                    embedUrl = embed
+                                    break
+                                }
+                            }
+                        }
+                    }
+
                     for browser in browsersToTry {
                         var embedArgs = [ytdlp.path, "--ignore-config", "--dump-pages"]
                         if let browserName = browser {
@@ -2200,6 +2270,9 @@ public struct DownloadResult: Sendable {
                     embedRequest.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36", forHTTPHeaderField: "User-Agent")
                     embedRequest.setValue("https://www.boyfriend.tv/", forHTTPHeaderField: "Referer")
                     embedRequest.setValue("https://www.boyfriend.tv", forHTTPHeaderField: "Origin")
+                    if let raw = rawCookies, !raw.isEmpty {
+                        embedRequest.setValue(raw, forHTTPHeaderField: "Cookie")
+                    }
 
                     if let (data, response) = try? await URLSession.shared.data(for: embedRequest),
                        let httpResponse = response as? HTTPURLResponse,
@@ -2236,10 +2309,10 @@ public struct DownloadResult: Sendable {
 
     nonisolated private static let boyfriendStreamRegexes: [NSRegularExpression] = [
         "\"(?:hlsAuto|hls|videoUrl|media|src|file|video_url)\"\\s*:\\s*\"(https?:[^\"]+)\"",
-        "(https?:\\\\?/\\\\?/cdn\\.boyfriend(?:tv)?\\.(?:tv|com)[^\\s\"'<>]+?\\.mp4)",
-        "(https?:\\\\?/\\\\?/cdn\\.boyfriend(?:tv)?\\.(?:tv|com)[^\\s\"'<>]+?\\.m3u8)",
-        "(https?:\\\\?/\\\\?/[^\\s\"'<>]+\\.boyfriend(?:tv)?\\.(?:tv|com)[^\\s\"'<>]+?\\.m3u8)",
-        "(https?:\\\\?/\\\\?/[^\\s\"'<>]+\\.boyfriend(?:tv)?\\.(?:tv|com)[^\\s\"'<>]+?\\.mp4)"
+        "(https?:\\\\?/\\\\?/cdn\\.boyfriend(?:tv)?\\.(?:tv|com)[^\\s\"'<>]+?\\.mp4(?=[?\"'\\s<>]|$))",
+        "(https?:\\\\?/\\\\?/cdn\\.boyfriend(?:tv)?\\.(?:tv|com)[^\\s\"'<>]+?\\.m3u8(?=[?\"'\\s<>]|$))",
+        "(https?:\\\\?/\\\\?/[^\\s\"'<>]+\\.boyfriend(?:tv)?\\.(?:tv|com)[^\\s\"'<>]+?\\.m3u8(?=[?\"'\\s<>]|$))",
+        "(https?:\\\\?/\\\\?/[^\\s\"'<>]+\\.boyfriend(?:tv)?\\.(?:tv|com)[^\\s\"'<>]+?\\.mp4(?=[?\"'\\s<>]|$))"
     ].compactMap { try? NSRegularExpression(pattern: $0, options: .caseInsensitive) }
 
     nonisolated private static let gffTitleRegexes: [NSRegularExpression] = [
@@ -2339,13 +2412,21 @@ public struct DownloadResult: Sendable {
                 let rawVal = (html as NSString).substring(with: match.range(at: 1)).replacingOccurrences(of: "\\/", with: "/")
                 if rawVal.hasPrefix("http") {
                     let lowerVal = rawVal.lowercased()
-                    // Ignore teaser / preview / rollover clips
+                    // Ignore teaser / preview / rollover / thumbnail clips or image assets
                     if lowerVal.contains("/pv/") ||
                        lowerVal.contains("pv_") ||
                        lowerVal.contains("/preview/") ||
                        lowerVal.contains("preview_") ||
                        lowerVal.contains("trailer") ||
-                       lowerVal.contains("teaser") {
+                       lowerVal.contains("teaser") ||
+                       lowerVal.contains("/thumbs/") ||
+                       lowerVal.contains("/thumb/") ||
+                       lowerVal.contains("cdn77-t.") ||
+                       lowerVal.contains("-t.boyfriend") ||
+                       lowerVal.hasSuffix(".jpg") ||
+                       lowerVal.hasSuffix(".jpeg") ||
+                       lowerVal.hasSuffix(".png") ||
+                       lowerVal.hasSuffix(".webp") {
                         continue
                     }
                     return rawVal
@@ -3800,14 +3881,14 @@ public struct DownloadResult: Sendable {
         }
 
         if isBoyfriendTVURL(url) {
-            if lowerErr.contains("cloudflare") || lowerErr.contains("403") || lowerErr.contains("anti-bot") || lowerErr.contains("captcha") || lowerErr.contains("challenge") {
+            if lowerErr.contains("cloudflare") || lowerErr.contains("anti-bot") || lowerErr.contains("captcha") || lowerErr.contains("challenge") || lowerErr.contains("turnstile") {
                 return YtdlpError.cloudflareBlocked
             }
             if (lowerErr.contains("video is unavailable") || lowerErr.contains("video unavailable") || lowerErr.contains("video has been removed") || lowerErr.contains("video removed") || lowerErr.contains("404 not found") || lowerErr.contains("page not found") || lowerErr.contains("http error 404")) && !lowerErr.contains("cookie") {
                 return YtdlpError.downloadFailed("This video is unavailable, private, or has been removed.")
             }
             let isVideoPage = url.contains("/videos/") || url.contains("/embed/") || url.contains("/v/")
-            if lowerErr.contains("sign in") || lowerErr.contains("private video") || lowerErr.contains("login") || lowerErr.contains("members-only") || (isVideoPage && lowerErr.contains("unsupported url")) {
+            if lowerErr.contains("sign in") || lowerErr.contains("private video") || lowerErr.contains("login") || lowerErr.contains("members-only") || lowerErr.contains("403") || lowerErr.contains("forbidden") || (isVideoPage && lowerErr.contains("unsupported url")) {
                 if configuredBrowser == "safari" && !Self.hasFullDiskAccess {
                     return YtdlpError.safariCookiesFullDiskAccessRequired
                 }
@@ -3904,17 +3985,25 @@ public struct DownloadResult: Sendable {
         args.append("--no-mtime")
 
         if !isYouTube {
-            // Common modern browser headers & Cloudflare extraction options
-            let defaultUA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
-            let secChUa = "\"Chromium\";v=\"124\", \"Google Chrome\";v=\"124\", \"Not-A.Brand\";v=\"99\""
+            let isSafari = args.contains("safari")
+            if isSafari {
+                let safariUA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.6 Safari/605.1.15"
+                args.append(contentsOf: ["--user-agent", safariUA])
+                args.append(contentsOf: ["--add-header", "Accept-Language:en-US,en;q=0.9"])
+                args.append(contentsOf: ["--extractor-args", "generic:impersonate"])
+            } else {
+                // Common modern browser headers & Cloudflare extraction options
+                let defaultUA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+                let secChUa = "\"Chromium\";v=\"124\", \"Google Chrome\";v=\"124\", \"Not-A.Brand\";v=\"99\""
 
-            // Anti-bot flags for Cloudflare & rate limits
-            args.append(contentsOf: ["--user-agent", defaultUA])
-            args.append(contentsOf: ["--add-header", "Sec-Ch-Ua:\(secChUa)"])
-            args.append(contentsOf: ["--add-header", "Sec-Ch-Ua-Mobile:?0"])
-            args.append(contentsOf: ["--add-header", "Sec-Ch-Ua-Platform:\"macOS\""])
-            args.append(contentsOf: ["--add-header", "Accept-Language:en-US,en;q=0.9"])
-            args.append(contentsOf: ["--extractor-args", "generic:impersonate"])
+                // Anti-bot flags for Cloudflare & rate limits
+                args.append(contentsOf: ["--user-agent", defaultUA])
+                args.append(contentsOf: ["--add-header", "Sec-Ch-Ua:\(secChUa)"])
+                args.append(contentsOf: ["--add-header", "Sec-Ch-Ua-Mobile:?0"])
+                args.append(contentsOf: ["--add-header", "Sec-Ch-Ua-Platform:\"macOS\""])
+                args.append(contentsOf: ["--add-header", "Accept-Language:en-US,en;q=0.9"])
+                args.append(contentsOf: ["--extractor-args", "generic:impersonate"])
+            }
         }
 
         let isFragmented: Bool
@@ -4398,6 +4487,18 @@ public struct DownloadResult: Sendable {
         guard let cookiesDir = YtdlpService.getSecureTempCookiesDirectory() else { return nil }
         let domain = host.hasPrefix(".") ? host : ".\(host)"
         let tempCookiesURL = cookiesDir.appendingPathComponent("siphon_header_cookies_\(UUID().uuidString).txt")
+
+        var domains: [String] = [domain]
+        let lowerHost = host.lowercased()
+        if lowerHost.hasPrefix("www.") {
+            domains.append(".\(lowerHost.dropFirst(4))")
+        }
+        if lowerHost.contains("boyfriendtv.com") || lowerHost.contains("boyfriend.tv") {
+            domains.append(".boyfriend.tv")
+            domains.append(".boyfriendtv.com")
+        }
+        var seenDomains = Set<String>()
+        let uniqueDomains = domains.filter { seenDomains.insert($0).inserted }
         
         var lines = ["# Netscape HTTP Cookie File"]
         let pairs = cookieHeader.split(separator: ";")
@@ -4410,7 +4511,9 @@ public struct DownloadResult: Sendable {
                 let key = sanitizeCookieToken(parts[0].trimmingCharacters(in: .whitespacesAndNewlines))
                 let value = sanitizeCookieToken(parts[1].trimmingCharacters(in: .whitespacesAndNewlines))
                 if !key.isEmpty && !value.isEmpty {
-                    lines.append("\(domain)\tTRUE\t/\tFALSE\t\(expiry)\t\(key)\t\(value)")
+                    for d in uniqueDomains {
+                        lines.append("\(d)\tTRUE\t/\tFALSE\t\(expiry)\t\(key)\t\(value)")
+                    }
                 }
             }
         }
@@ -4458,6 +4561,18 @@ public struct DownloadResult: Sendable {
         let tempCookiesURL = cookiesDir.appendingPathComponent("siphon_consolidated_cookies_\(UUID().uuidString).txt")
         let defaultExpiry = Int(Date().addingTimeInterval(86400 * 30).timeIntervalSince1970)
 
+        var domains: [String] = [defaultDomain]
+        let lowerHost = host.lowercased()
+        if lowerHost.hasPrefix("www.") {
+            domains.append(".\(lowerHost.dropFirst(4))")
+        }
+        if lowerHost.contains("boyfriendtv.com") || lowerHost.contains("boyfriend.tv") {
+            domains.append(".boyfriend.tv")
+            domains.append(".boyfriendtv.com")
+        }
+        var seenDomains = Set<String>()
+        let uniqueDomains = domains.filter { seenDomains.insert($0).inserted }
+
         var cookieMap: [CookieKey: ConsolidatedCookieEntry] = [:]
 
         // 1. Process raw cookie header pairs (default path: "/", default domain: defaultDomain)
@@ -4471,16 +4586,18 @@ public struct DownloadResult: Sendable {
                     let key = sanitizeCookieToken(parts[0].trimmingCharacters(in: .whitespacesAndNewlines))
                     let value = sanitizeCookieToken(parts[1].trimmingCharacters(in: .whitespacesAndNewlines))
                     if !key.isEmpty && !value.isEmpty {
-                        let mapKey = CookieKey(domain: defaultDomain.lowercased(), path: "/", name: key)
-                        cookieMap[mapKey] = ConsolidatedCookieEntry(
-                            domain: defaultDomain,
-                            includeSubdomains: true,
-                            path: "/",
-                            isSecure: false,
-                            expiry: defaultExpiry,
-                            name: key,
-                            value: value
-                        )
+                        for d in uniqueDomains {
+                            let mapKey = CookieKey(domain: d.lowercased(), path: "/", name: key)
+                            cookieMap[mapKey] = ConsolidatedCookieEntry(
+                                domain: d,
+                                includeSubdomains: true,
+                                path: "/",
+                                isSecure: false,
+                                expiry: defaultExpiry,
+                                name: key,
+                                value: value
+                            )
+                        }
                     }
                 }
             }

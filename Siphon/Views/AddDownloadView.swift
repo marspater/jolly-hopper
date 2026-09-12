@@ -1923,7 +1923,7 @@ struct AddDownloadView: View {
 
         let cleanURL = urlInput.trimmingCharacters(in: .whitespacesAndNewlines)
         if downloadMode == .single {
-            downloadManager.addDownload(url: cleanURL, options: finalOptions)
+            downloadManager.addDownload(url: cleanURL, options: finalOptions, mediaInfo: mediaInfo)
         } else {
             let selectedItems = playlistItems.filter { selectedPlaylistIds.contains($0.id) }
             let urls = selectedItems.map { $0.resolvedURL }
