@@ -50,6 +50,7 @@
 		E0001045 /* QueueAndErrorUXTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000045 /* QueueAndErrorUXTests.swift */; };
 		E0001046 /* AdversarialAndPropertyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000046 /* AdversarialAndPropertyTests.swift */; };
 		E0001047 /* UserDefaultsKeysTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000047 /* UserDefaultsKeysTests.swift */; };
+		E0001048 /* CustomPresetTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000048 /* CustomPresetTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -99,6 +100,7 @@
 		E0000045 /* QueueAndErrorUXTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QueueAndErrorUXTests.swift; sourceTree = "<group>"; };
 		E0000046 /* AdversarialAndPropertyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdversarialAndPropertyTests.swift; sourceTree = "<group>"; };
 		E0000047 /* UserDefaultsKeysTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserDefaultsKeysTests.swift; sourceTree = "<group>"; };
+		E0000048 /* CustomPresetTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CustomPresetTests.swift; sourceTree = "<group>"; };
 		E0000043 /* SiphonTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SiphonTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -157,6 +159,7 @@
 				E0000045 /* QueueAndErrorUXTests.swift */,
 				E0000046 /* AdversarialAndPropertyTests.swift */,
 				E0000047 /* UserDefaultsKeysTests.swift */,
+				E0000048 /* CustomPresetTests.swift */,
 			);
 			path = SiphonTests;
 			sourceTree = "<group>";
@@ -418,6 +421,7 @@
 				E0001045 /* QueueAndErrorUXTests.swift in Sources */,
 				E0001046 /* AdversarialAndPropertyTests.swift in Sources */,
 				E0001047 /* UserDefaultsKeysTests.swift in Sources */,
+				E0001048 /* CustomPresetTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
