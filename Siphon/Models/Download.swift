@@ -1129,7 +1129,8 @@ struct MediaInfo: Codable {
         
         // 1. If explicit selectedFormatId is specified (can be single like "137" or combined like "137+140"):
         if let customId = options.selectedFormatId?.trimmingCharacters(in: .whitespacesAndNewlines), !customId.isEmpty {
-            let ids = customId.components(separatedBy: "+").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+            // Bolt Performance Optimization: Use Substring `split` to avoid allocating intermediate String arrays.
+            let ids = customId.split(separator: "+").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
             let matched = ids.compactMap { id in formats.first(where: { $0.formatId == id }) }
             if matched.count == ids.count && !matched.isEmpty {
                 if matched.count == 2 {
