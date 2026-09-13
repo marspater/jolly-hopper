@@ -64,7 +64,9 @@ class LoggerService: ObservableObject {
             "--ffmpeg-location": "\"<LOCATION_REDACTED>\"",
             "--netrc-cmd": "\"<COMMAND_REDACTED>\"",
             "--exec": "\"<EXEC_REDACTED>\"",
-            "--postprocessor-args": "\"<ARGS_REDACTED>\""
+            "--postprocessor-args": "\"<ARGS_REDACTED>\"",
+            "--downloader-args": "\"<ARGS_REDACTED>\"",
+            "--external-downloader-args": "\"<ARGS_REDACTED>\""
         ]
 
         for arg in args {
