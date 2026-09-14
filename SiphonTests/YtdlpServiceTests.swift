@@ -897,6 +897,13 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertFalse(sanitized.contains("SECRET_TOKEN_ABC"))
         XCTAssertFalse(sanitized.contains("token=SECRET999"))
         XCTAssertFalse(sanitized.contains("sig=ABCDEF"))
+
+        let downloaderArgs = ["yt-dlp", "--downloader-args", "aria2c:--header=SecretAuth", "--external-downloader-args", "ffmpeg:-headers secret", "https://example.com"]
+        let downloaderSanitized = LoggerService.sanitizeCommandForLog(downloaderArgs)
+        XCTAssertTrue(downloaderSanitized.contains("--downloader-args \"<ARGS_REDACTED>\""))
+        XCTAssertTrue(downloaderSanitized.contains("--external-downloader-args \"<ARGS_REDACTED>\""))
+        XCTAssertFalse(downloaderSanitized.contains("SecretAuth"))
+        XCTAssertFalse(downloaderSanitized.contains("secret"))
     }
 
     func testMediaExtensionAllowlist() {
