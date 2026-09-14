@@ -237,7 +237,9 @@ struct PreferencesView: View {
         }
         .buttonStyle(.bouncy(scale: 0.97, hover: 1.015))
         .help(title)
+        .accessibilityElement(children: .combine)
         .accessibilityLabel(title)
+        .accessibilityAddTraits(selectedTab == tab ? [.isButton, .isSelected] : [.isButton])
     }
 
     private var generalTab: some View {
