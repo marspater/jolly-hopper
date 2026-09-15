@@ -371,6 +371,21 @@ struct HomeView: View {
             .frame(maxWidth: .infinity, minHeight: 500)
             .padding(.vertical, SiphonTheme.spacing20)
         }
+        .background(
+            GeometryReader { proxy in
+                RadialGradient(
+                    gradient: Gradient(colors: [
+                        SiphonTheme.accent.opacity(0.14),
+                        SiphonTheme.accent.opacity(0.04),
+                        Color.clear
+                    ]),
+                    center: UnitPoint(x: 0.5, y: 0.22),
+                    startRadius: 20,
+                    endRadius: max(proxy.size.width * 0.45, 380)
+                )
+                .allowsHitTesting(false)
+            }
+        )
         .background(.ultraThinMaterial)
     }
 }
@@ -393,9 +408,14 @@ struct StatCard: View {
         Button(action: action) {
             VStack(alignment: .leading, spacing: SiphonTheme.spacing6) {
                 HStack(alignment: .center) {
-                    Image(systemName: item.icon)
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundColor(isSelected ? color : color.opacity(0.85))
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .fill(color.opacity(isSelected ? 0.24 : (isHovered ? 0.18 : 0.12)))
+                            .frame(width: 26, height: 26)
+                        Image(systemName: item.icon)
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundColor(color)
+                    }
 
                     Spacer()
 
@@ -406,7 +426,7 @@ struct StatCard: View {
                     } else if isHovered {
                         Image(systemName: "arrow.right")
                             .font(.system(size: 9, weight: .semibold))
-                            .foregroundColor(color.opacity(0.75))
+                            .foregroundColor(color.opacity(0.85))
                             .transition(.opacity)
                     }
                 }
@@ -416,7 +436,7 @@ struct StatCard: View {
                 Text("\(count)")
                     .font(.siphonKPI)
                     .monospacedDigit()
-                    .foregroundColor(isSelected ? .primary : color)
+                    .foregroundColor(isSelected ? .primary : (count > 0 ? color : .primary.opacity(0.90)))
 
                 Text(title)
                     .font(.siphonSecondaryMedium)
@@ -424,29 +444,35 @@ struct StatCard: View {
                     .lineLimit(1)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .frame(height: 94)
-            .padding(.vertical, SiphonTheme.spacing10)
-            .padding(.horizontal, SiphonTheme.spacing12)
+            .frame(height: 104)
+            .padding(.vertical, SiphonTheme.spacing12)
+            .padding(.horizontal, SiphonTheme.spacing14)
             .background(
-                RoundedRectangle(cornerRadius: SiphonTheme.radiusCard)
+                RoundedRectangle(cornerRadius: SiphonTheme.radiusCard, style: .continuous)
                     .fill(
                         isSelected ?
-                        color.opacity(0.16) :
-                        (isHovered ? Color(nsColor: .controlBackgroundColor).opacity(0.92) : Color(nsColor: .controlBackgroundColor).opacity(0.75))
+                        color.opacity(0.18) :
+                        (isHovered ? Color(nsColor: .controlBackgroundColor).opacity(0.96) : Color(nsColor: .controlBackgroundColor).opacity(0.88))
                     )
             )
-            .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusCard))
+            .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusCard, style: .continuous))
             .overlay(
-                RoundedRectangle(cornerRadius: SiphonTheme.radiusCard)
+                RoundedRectangle(cornerRadius: SiphonTheme.radiusCard, style: .continuous)
                     .stroke(
-                        isSelected ? color.opacity(0.65) : (isHovered ? color.opacity(0.35) : Color.primary.opacity(0.08)),
+                        isSelected ? color.opacity(0.70) : (isHovered ? color.opacity(0.40) : Color.primary.opacity(0.14)),
                         lineWidth: isSelected ? 1.5 : 1
                     )
             )
+            .overlay(alignment: .top) {
+                RoundedRectangle(cornerRadius: 1)
+                    .fill(color.opacity(isSelected ? 0.95 : (isHovered ? 0.85 : 0.65)))
+                    .frame(height: 2.5)
+                    .padding(.horizontal, 4)
+            }
             .shadow(
-                color: isHovered ? color.opacity(0.15) : .clear,
-                radius: 6,
-                y: 2
+                color: isSelected ? color.opacity(0.20) : (isHovered ? color.opacity(0.12) : Color.black.opacity(0.04)),
+                radius: isHovered ? 8 : 4,
+                y: isHovered ? 3 : 1
             )
         }
         .buttonStyle(.bouncy(scale: 0.97, hover: 1.015))

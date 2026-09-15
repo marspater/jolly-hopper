@@ -58,7 +58,7 @@ extension Font {
     public static var siphonWindowTitle: Font { .geist(18, weight: .semibold, relativeTo: .title3) }
 
     // Display Scale
-    public static var siphonKPI: Font { .geist(26, weight: .bold, relativeTo: .title) }
+    public static var siphonKPI: Font { .geist(32, weight: .bold, relativeTo: .largeTitle) }
     public static var siphonHomeTitle: Font { .geist(30, weight: .bold, relativeTo: .largeTitle) }
 }
 

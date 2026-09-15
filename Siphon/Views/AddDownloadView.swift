@@ -1284,14 +1284,6 @@ struct AddDownloadView: View {
                         .font(.geist(13, weight: .semibold))
                         .foregroundColor(.primary)
 
-                    Text(languageService.s("advanced_badge"))
-                        .font(.geistMono(9, weight: .semibold))
-                        .padding(.horizontal, 5)
-                        .padding(.vertical, 1.5)
-                        .background(Color.primary.opacity(0.06))
-                        .foregroundColor(.secondary)
-                        .clipShape(Capsule())
-
                     Spacer()
                 }
                 .padding(.horizontal, 14)
