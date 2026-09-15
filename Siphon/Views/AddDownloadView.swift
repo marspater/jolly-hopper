@@ -1888,9 +1888,8 @@ struct AddDownloadView: View {
         
         if panel.runModal() == .OK, let selectedURL = panel.url {
             Task {
-                if let content = await Task.detached(priority: .userInitiated, operation: {
-                    try? String(contentsOf: selectedURL, encoding: .utf8)
-                }).value {
+                if let (data, _) = try? await URLSession.shared.data(from: selectedURL),
+                   let content = String(data: data, encoding: .utf8) {
                     let existing = batchUrlsText.isEmpty ? "" : batchUrlsText + "\n"
                     batchUrlsText = existing + content
                 }
