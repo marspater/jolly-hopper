@@ -1244,8 +1244,8 @@ struct MediaInfo: Codable {
 
 // MARK: - HTML Entity Decoding Extension
 public extension String {
-    private static let decimalRegex = try? NSRegularExpression(pattern: "&#([0-9]{1,7});", options: [])
-    private static let hexRegex = try? NSRegularExpression(pattern: "&#[xX]([0-9a-fA-F]{1,6});", options: [])
+    nonisolated private static let decimalRegex = try? NSRegularExpression(pattern: "&#([0-9]{1,7});", options: [])
+    nonisolated private static let hexRegex = try? NSRegularExpression(pattern: "&#[xX]([0-9a-fA-F]{1,6});", options: [])
 
     // Bolt Performance Optimization: Cached static array of named HTML entities to avoid re-allocation on every invocation
     private static let namedHTMLEntities: [(String, String)] = [
@@ -1281,33 +1281,33 @@ public extension String {
             }
         }
         
-        // Bolt Performance Optimization: Fast guard check before executing regular expression matching
+        // Bolt Performance Optimization: Perform numeric entity replacements using a single NSMutableString allocation
         if result.contains("&#") {
+            let mutable = NSMutableString(string: result)
+
             // Replace numeric decimal entities (e.g., &#039; or &#39; or &#160;)
             if let regex = String.decimalRegex {
-                let mutable = NSMutableString(string: result)
-                let matches = regex.matches(in: result, options: [], range: NSRange(location: 0, length: mutable.length))
+                let matches = regex.matches(in: mutable as String, options: [], range: NSRange(location: 0, length: mutable.length))
                 for match in matches.reversed() {
                     let codeStr = mutable.substring(with: match.range(at: 1))
                     if let codePoint = UInt32(codeStr), let scalar = UnicodeScalar(codePoint) {
                         mutable.replaceCharacters(in: match.range, with: String(scalar))
                     }
                 }
-                result = mutable as String
             }
 
             // Replace numeric hexadecimal entities (e.g., &#x27; or &#X27;)
             if let regex = String.hexRegex {
-                let mutable = NSMutableString(string: result)
-                let matches = regex.matches(in: result, options: [], range: NSRange(location: 0, length: mutable.length))
+                let matches = regex.matches(in: mutable as String, options: [], range: NSRange(location: 0, length: mutable.length))
                 for match in matches.reversed() {
                     let hexStr = mutable.substring(with: match.range(at: 1))
                     if let codePoint = UInt32(hexStr, radix: 16), let scalar = UnicodeScalar(codePoint) {
                         mutable.replaceCharacters(in: match.range, with: String(scalar))
                     }
                 }
-                result = mutable as String
             }
+
+            result = mutable as String
         }
         
         return result
