@@ -275,45 +275,39 @@ class DownloadManager: ObservableObject {
     }
 
     var appVersion: String {
-        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "5.1.0"
+        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "5.2.0"
     }
 
     static let defaultFeatures: [ReleaseFeature] = [
         ReleaseFeature(
-            icon: "textformat",
-            iconColor: .purple,
-            title: "Native Geist Typography",
-            description: "Integrated Vercel Geist and Geist Mono font families natively across all views, controls, and badges."
-        ),
-        ReleaseFeature(
-            icon: "macwindow",
-            iconColor: .cyan,
-            title: "Translucent Liquid Glass",
-            description: "Deep desktop translucency, smooth materials, and refined responsive split-view layouts."
-        ),
-        ReleaseFeature(
             icon: "bolt.fill",
             iconColor: .blue,
-            title: "Multi-Stream & Anti-Bot Engine",
-            description: "Chrome Client Hints emulation, multi-connection pooling, and automatic video-only audio multiplexing."
-        ),
-        ReleaseFeature(
-            icon: "menubar.rectangle",
-            iconColor: .indigo,
-            title: "Control Center Menu Bar",
-            description: "Instant download initiation directly from the macOS status bar with quality presets and quick controls."
+            title: "BoyfriendTV Stream Resolution",
+            description: "Full extraction and authenticated download support for restricted and banned uploaders across BoyfriendTV domains."
         ),
         ReleaseFeature(
             icon: "shield.checkerboard",
             iconColor: .green,
-            title: "Hardened Security & Cookie Isolation",
-            description: "Automated session cookie cleanup, sensitive header redaction in logs, and cryptographic validation."
+            title: "Hardened Security & Process Isolation",
+            description: "Redacted downloader credentials in debug logs, strict helper path containment, and automated cookie cleanup."
+        ),
+        ReleaseFeature(
+            icon: "bolt.badge.clock.fill",
+            iconColor: .cyan,
+            title: "Zero-Allocation Parsing & Regex Speedups",
+            description: "Pre-compiled Sucuri regexes, zero-allocation substring format splitting, and optimized single-pass HTML entity decoding."
         ),
         ReleaseFeature(
             icon: "accessibility",
             iconColor: .orange,
-            title: "Speed & Accessibility",
-            description: "Optimized HTML entity decoding, full VoiceOver screen reader support, and fluid animation feedback."
+            title: "VoiceOver Accessibility & Controls",
+            description: "Comprehensive accessibility labels across MenuBar controls, preferences tabs, switch toggles, and playlist pickers."
+        ),
+        ReleaseFeature(
+            icon: "checkmark.seal.fill",
+            iconColor: .purple,
+            title: "Custom Preset Serialization & Tests",
+            description: "Robust JSON serialization and deserialization test suite for custom presets and UserDefaults key integrity."
         )
     ]
 
