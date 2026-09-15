@@ -855,7 +855,7 @@ class YtdlpService: ObservableObject {
             additionalCookies.append((name: sc.name, value: sc.value))
         }
 
-        if (rawCookies != nil && !rawCookies!.isEmpty) || !additionalCookies.isEmpty {
+        if (rawCookies?.isEmpty == false) || !additionalCookies.isEmpty {
             if let tempFile = createConsolidatedCookiesFile(url: url, rawCookies: rawCookies, additionalCookies: additionalCookies) {
                 tempCookieFile = tempFile
                 args.append(contentsOf: ["--cookies", tempFile.path])
@@ -918,7 +918,7 @@ class YtdlpService: ObservableObject {
             additionalCookies.append((name: sc.name, value: sc.value))
         }
 
-        if (rawCookies != nil && !rawCookies!.isEmpty) || !additionalCookies.isEmpty {
+        if (rawCookies?.isEmpty == false) || !additionalCookies.isEmpty {
             if let tempFile = createConsolidatedCookiesFile(url: url, rawCookies: rawCookies, additionalCookies: additionalCookies) {
                 tempCookieFile = tempFile
                 args.append(contentsOf: ["--cookies", tempFile.path])
@@ -994,7 +994,7 @@ class YtdlpService: ObservableObject {
             additionalCookies.append((name: sc.name, value: sc.value))
         }
 
-        if (rawCookies != nil && !rawCookies!.isEmpty) || !additionalCookies.isEmpty {
+        if (rawCookies?.isEmpty == false) || !additionalCookies.isEmpty {
             if let tempFile = createConsolidatedCookiesFile(url: url, rawCookies: rawCookies, additionalCookies: additionalCookies) {
                 tempCookieFile = tempFile
                 args.append(contentsOf: ["--cookies", tempFile.path])
@@ -1242,7 +1242,7 @@ public struct DownloadResult: Sendable {
             additionalCookies.append((name: sc.name, value: sc.value))
         }
 
-        if (options.rawCookies != nil && !options.rawCookies!.isEmpty) || !additionalCookies.isEmpty {
+        if (options.rawCookies?.isEmpty == false) || !additionalCookies.isEmpty {
             if let tempFile = createConsolidatedCookiesFile(url: targetURL, rawCookies: options.rawCookies, additionalCookies: additionalCookies) {
                 tempCookieFiles.append(tempFile)
                 args.append(contentsOf: ["--cookies", tempFile.path])
@@ -2060,7 +2060,7 @@ public struct DownloadResult: Sendable {
                         )
                         if hasMediaData {
                             html = browserHtml
-                            let sourceLog = browser == nil ? "impersonated HTTP request" : "browser cookies from '\(browser!)'"
+                            let sourceLog = browser.map { "browser cookies from '\($0)'" } ?? "impersonated HTTP request"
                             LoggerService.shared.log("Successfully extracted BoyfriendTV page dump using \(sourceLog)", level: .info)
                             break
                         }
@@ -2893,7 +2893,7 @@ public struct DownloadResult: Sendable {
                                            browserHtml.contains("playerConfig")
                         if hasMediaData {
                             html = browserHtml
-                            let sourceLog = browser == nil ? "impersonated HTTP request" : "browser cookies from '\(browser!)'"
+                            let sourceLog = browser.map { "browser cookies from '\($0)'" } ?? "impersonated HTTP request"
                             LoggerService.shared.log("[GFF] Successfully extracted GayForFans page dump using \(sourceLog) (length: \(browserHtml.count) bytes)", level: .info)
                             break
                         }
@@ -3612,7 +3612,7 @@ public struct DownloadResult: Sendable {
         var datasB64: String? = nil
         var infoJSON: [String: Any]? = nil
 
-        let abyssPageURL = URL(string: embedURL)!
+        guard let abyssPageURL = URL(string: embedURL) else { return nil }
         var abyssReq = URLRequest(url: abyssPageURL)
         abyssReq.timeoutInterval = 8.0
         abyssReq.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36", forHTTPHeaderField: "User-Agent")
@@ -3704,11 +3704,8 @@ public struct DownloadResult: Sendable {
         let parsedSources = parseBestCamSources(from: decryptedJson)
         guard !parsedSources.isEmpty else { return nil }
 
-        let chosenSource: BestCamSource
-        if let reqFmt = requestedFormat, let matched = parsedSources.first(where: { $0.label.lowercased() == reqFmt.lowercased() }) {
-            chosenSource = matched
-        } else {
-            chosenSource = parsedSources.first!
+        guard let chosenSource = (requestedFormat.flatMap { reqFmt in parsedSources.first(where: { $0.label.lowercased() == reqFmt.lowercased() }) } ?? parsedSources.first) else {
+            return nil
         }
 
         let streamURL = "\(chosenSource.url)/\(chosenSource.path)"
