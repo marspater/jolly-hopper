@@ -758,6 +758,40 @@ final class QueueAndErrorUXTests: XCTestCase {
         XCTAssertTrue(sanitized.contains("Cookie: <REDACTED>"))
     }
 
+    func testLoggerServiceExtractTailLines() {
+        // 1. Empty Data input
+        let emptyData = Data()
+        XCTAssertEqual(LoggerService.extractTailLines(from: emptyData, maxEntries: 10), [])
+
+        // 2. Single line without trailing newline
+        let singleLineNoNewline = "Single line without newline".data(using: .utf8)!
+        XCTAssertEqual(LoggerService.extractTailLines(from: singleLineNoNewline, maxEntries: 5), ["Single line without newline"])
+
+        // 3. Single line with trailing newline
+        let singleLineWithNewline = "Single line with newline\n".data(using: .utf8)!
+        XCTAssertEqual(LoggerService.extractTailLines(from: singleLineWithNewline, maxEntries: 5), ["Single line with newline"])
+
+        // 4. Multiple lines under maxEntries
+        let multiLines = "Line 1\nLine 2\nLine 3\n".data(using: .utf8)!
+        XCTAssertEqual(LoggerService.extractTailLines(from: multiLines, maxEntries: 5), ["Line 1", "Line 2", "Line 3"])
+
+        // 5. Lines exceeding maxEntries (tail truncation)
+        let manyLines = "Line 1\nLine 2\nLine 3\nLine 4\nLine 5\nLine 6\n".data(using: .utf8)!
+        XCTAssertEqual(LoggerService.extractTailLines(from: manyLines, maxEntries: 3), ["Line 4", "Line 5", "Line 6"])
+
+        // 6. maxEntries = 0
+        let someLines = "Line A\nLine B\n".data(using: .utf8)!
+        XCTAssertEqual(LoggerService.extractTailLines(from: someLines, maxEntries: 0), [])
+
+        // 7. Empty lines and whitespace-only lines are trimmed/filtered out
+        let whitespaceLines = "Line 1\n\n   \nLine 2\n\n".data(using: .utf8)!
+        XCTAssertEqual(LoggerService.extractTailLines(from: whitespaceLines, maxEntries: 5), ["Line 1", "Line 2"])
+
+        // 8. Multi-byte UTF-8 data (emojis and unicode characters)
+        let unicodeLines = "Log entry 1: ✅ Completed\nLog entry 2: 🚀 Launched\nLog entry 3: ⚠️ Warning\n".data(using: .utf8)!
+        XCTAssertEqual(LoggerService.extractTailLines(from: unicodeLines, maxEntries: 2), ["Log entry 2: 🚀 Launched", "Log entry 3: ⚠️ Warning"])
+    }
+
     func testAppUpdateScriptIncludesTeamIDVerification() {
         let script = UpdateChecker.generateUpdateScript()
 
