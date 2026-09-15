@@ -103,7 +103,7 @@ struct AddDownloadView: View {
     var body: some View {
         VStack(spacing: 0) {
             header
-            Divider()
+            SiphonTheme.subtleDivider
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
@@ -137,7 +137,7 @@ struct AddDownloadView: View {
                 .padding(20)
             }
 
-            Divider()
+            SiphonTheme.subtleDivider
             footer
         }
         .frame(minWidth: 480, idealWidth: 520, maxWidth: 620, minHeight: 560, idealHeight: 700, maxHeight: .infinity)
@@ -1159,8 +1159,7 @@ struct AddDownloadView: View {
                     }
 
                     if isVideoTab {
-                        Divider()
-                            .opacity(0.5)
+                        SiphonTheme.subtleDivider
 
                         VStack(alignment: .leading, spacing: 8) {
                             HStack {
@@ -1244,8 +1243,7 @@ struct AddDownloadView: View {
                         }
                     }
 
-                    Divider()
-                        .opacity(0.5)
+                    SiphonTheme.subtleDivider
 
                     VStack(alignment: .leading, spacing: 8) {
                         Text(languageService.s("embedded_data"))
@@ -1261,7 +1259,7 @@ struct AddDownloadView: View {
                 .background(
                     SiphonTheme.cardBackground(cornerRadius: SiphonTheme.radiusCard)
                 )
-                .cornerRadius(SiphonTheme.radiusCard)
+                .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusCard))
                 .overlay(
                     SiphonTheme.cardBorder(cornerRadius: SiphonTheme.radiusCard)
                 )
@@ -1301,7 +1299,7 @@ struct AddDownloadView: View {
                 .background(
                     SiphonTheme.cardBackground(cornerRadius: SiphonTheme.radiusControl)
                 )
-                .cornerRadius(SiphonTheme.radiusControl)
+                .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusControl))
                 .overlay(
                     SiphonTheme.cardBorder(cornerRadius: SiphonTheme.radiusControl)
                 )
@@ -1314,8 +1312,7 @@ struct AddDownloadView: View {
                     if let info = info {
                         streamInspectorSection(info)
 
-                        Divider()
-                            .opacity(0.5)
+                        SiphonTheme.subtleDivider
                     }
 
                     // Codecs & Dynamic Range (if video tab)
@@ -1388,8 +1385,7 @@ struct AddDownloadView: View {
                             }
                         }
 
-                        Divider()
-                            .opacity(0.5)
+                        SiphonTheme.subtleDivider
                     }
 
                     // Additional Arguments
@@ -1417,8 +1413,7 @@ struct AddDownloadView: View {
                         )
                     }
 
-                    Divider()
-                        .opacity(0.5)
+                    SiphonTheme.subtleDivider
 
                     // Chapter Splitting & SponsorBlock
                     VStack(alignment: .leading, spacing: 8) {

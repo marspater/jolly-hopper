@@ -225,7 +225,7 @@ struct SidebarView: View {
             .padding(.vertical, 6)
             .contentShape(Rectangle())
         }
-        .buttonStyle(.bouncy(scale: 0.98, hover: 1.01))
+        .buttonStyle(.bouncySubtle)
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : [.isButton])
         .listRowInsets(EdgeInsets(top: 2, leading: 6, bottom: 2, trailing: 6))
@@ -527,7 +527,7 @@ struct WhatsNewSheetView: View {
             // Header - Clean, non-redundant title and version pill
             VStack(spacing: 8) {
                 HStack(spacing: 8) {
-                    Text("WHAT'S NEW")
+                    Text(languageService.s("whats_new_badge"))
                         .font(.geist(10, weight: .bold))
                         .tracking(1.2)
                         .foregroundColor(SiphonTheme.accent)
@@ -543,7 +543,7 @@ struct WhatsNewSheetView: View {
                     )
                 }
 
-                Text("What's New in Siphon")
+                Text(languageService.s("whats_new_title"))
                     .font(.geist(22, weight: .bold))
                     .foregroundColor(.primary)
 
@@ -556,7 +556,7 @@ struct WhatsNewSheetView: View {
             .padding(.horizontal, SiphonTheme.spacing24)
             .padding(.bottom, SiphonTheme.spacing16)
 
-            Divider()
+            SiphonTheme.subtleDivider
                 .padding(.horizontal, SiphonTheme.spacing20)
 
             // Feature Showcase - Beautiful structured cards instead of raw unstyled markdown
@@ -571,7 +571,7 @@ struct WhatsNewSheetView: View {
             }
             .frame(maxHeight: 330)
 
-            Divider()
+            SiphonTheme.subtleDivider
                 .padding(.horizontal, SiphonTheme.spacing20)
 
             // Footer Actions

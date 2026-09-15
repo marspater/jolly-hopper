@@ -3,6 +3,7 @@ import AppKit
 
 struct DebugLogView: View {
     @ObservedObject private var logger = LoggerService.shared
+    @ObservedObject private var languageService = LanguageService.shared
     @AppStorage(UserDefaultsKeys.theme) private var theme: String = "system"
     @State private var isCopied = false
 
@@ -14,11 +15,11 @@ struct DebugLogView: View {
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundColor(SiphonTheme.accent)
 
-                Text("Debug Logs")
+                Text(languageService.s("debug_logs"))
                     .font(.geist(15, weight: .bold))
 
                 SiphonTagBadge(
-                    text: "\(logger.logs.count) entries",
+                    text: "\(logger.logs.count) \(languageService.s("entries"))",
                     tintColor: .secondary,
                     isMonospaced: true
                 )
@@ -33,13 +34,13 @@ struct DebugLogView: View {
                         .foregroundColor(.secondary)
                 }
                 .buttonStyle(.siphonIcon(size: 24))
-                .help("Close")
-                .accessibilityLabel("Close")
+                .help(languageService.s("close"))
+                .accessibilityLabel(languageService.s("close"))
                 .keyboardShortcut(.cancelAction)
             }
-            .padding(.horizontal, 18)
-            .padding(.top, 16)
-            .padding(.bottom, 12)
+            .padding(.horizontal, SiphonTheme.spacing16)
+            .padding(.top, SiphonTheme.spacing16)
+            .padding(.bottom, SiphonTheme.spacing12)
 
             // Log Console Container
             ZStack {
@@ -55,13 +56,13 @@ struct DebugLogView: View {
                     )
 
                 ReadOnlyLogView(
-                    text: logger.logs.isEmpty ? "No logs recorded yet." : logger.logs.joined(separator: "\n"),
+                    text: logger.logs.isEmpty ? languageService.s("no_log_output") : logger.logs.joined(separator: "\n"),
                     fontSize: 11
                 )
-                .padding(8)
+                .padding(SiphonTheme.spacing8)
             }
-            .padding(.horizontal, 18)
-            .padding(.bottom, 14)
+            .padding(.horizontal, SiphonTheme.spacing16)
+            .padding(.bottom, SiphonTheme.spacing14)
 
             // Bottom Action Bar
             HStack(spacing: SiphonTheme.spacing10) {
@@ -82,7 +83,7 @@ struct DebugLogView: View {
                     HStack(spacing: 6) {
                         Image(systemName: isCopied ? "checkmark" : "doc.on.doc")
                             .font(.system(size: 11, weight: .semibold))
-                        Text(isCopied ? "Copied" : "Copy Log")
+                        Text(isCopied ? languageService.s("copied") : languageService.s("copy_log"))
                             .font(.geist(12, weight: .medium))
                     }
                     .foregroundColor(isCopied ? SiphonTheme.statusCompleted : .primary)
@@ -90,8 +91,8 @@ struct DebugLogView: View {
                 }
                 .buttonStyle(.siphonSecondary)
                 .disabled(logger.logs.isEmpty)
-                .help("Copy debug logs to clipboard")
-                .accessibilityLabel("Copy Debug Logs")
+                .help(languageService.s("copy_log"))
+                .accessibilityLabel(languageService.s("copy_log"))
 
                 Button {
                     logger.clearLogs()
@@ -99,7 +100,7 @@ struct DebugLogView: View {
                     HStack(spacing: 6) {
                         Image(systemName: "trash")
                             .font(.system(size: 11, weight: .semibold))
-                        Text("Clear")
+                        Text(languageService.s("clear"))
                             .font(.geist(12, weight: .medium))
                     }
                     .foregroundColor(.secondary)
@@ -107,8 +108,8 @@ struct DebugLogView: View {
                 }
                 .buttonStyle(.siphonSecondary)
                 .disabled(logger.logs.isEmpty)
-                .help("Clear debug logs")
-                .accessibilityLabel("Clear Debug Logs")
+                .help(languageService.s("clear"))
+                .accessibilityLabel(languageService.s("clear"))
 
                 Spacer()
 
@@ -118,17 +119,17 @@ struct DebugLogView: View {
                     HStack(spacing: 6) {
                         Image(systemName: "folder")
                             .font(.system(size: 11, weight: .semibold))
-                        Text("Reveal in Finder")
+                        Text(languageService.s("reveal_in_finder"))
                             .font(.geist(12, weight: .medium))
                     }
                     .foregroundColor(.secondary)
                 }
                 .buttonStyle(.siphonSecondary)
-                .help("Reveal log file location in Finder")
-                .accessibilityLabel("Reveal Logs in Finder")
+                .help(languageService.s("reveal_in_finder"))
+                .accessibilityLabel(languageService.s("reveal_in_finder"))
             }
-            .padding(.horizontal, 18)
-            .padding(.bottom, 16)
+            .padding(.horizontal, SiphonTheme.spacing16)
+            .padding(.bottom, SiphonTheme.spacing16)
         }
         .frame(minWidth: 550, minHeight: 350)
         .background(

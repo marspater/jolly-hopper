@@ -137,7 +137,7 @@ struct DownloadRowView: View {
                                             .foregroundColor(.secondary.opacity(0.4))
                                         Text("~\(eta)")
                                             .font(.geistMono(11, weight: .medium))
-                                            .foregroundColor(.secondary.opacity(0.8))
+                                            .foregroundColor(.secondary)
                                     }
                                 }
                             }
@@ -166,11 +166,11 @@ struct DownloadRowView: View {
                 LinearProgressBar(value: max(0, min(1, download.progress)))
             }
         }
-        .padding(14)
+        .padding(SiphonTheme.spacing14)
         .background(
             SiphonTheme.cardBackground(cornerRadius: SiphonTheme.radiusCard, isHovered: isHovering)
         )
-        .cornerRadius(SiphonTheme.radiusCard)
+        .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusCard))
         .overlay(
             SiphonTheme.cardBorder(cornerRadius: SiphonTheme.radiusCard, isHovered: isHovering)
         )
@@ -284,7 +284,7 @@ struct DownloadRowView: View {
                                 .background(
                                     SiphonTheme.controlBackground(cornerRadius: SiphonTheme.radiusSmall)
                                 )
-                                .cornerRadius(SiphonTheme.radiusSmall)
+                                .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusSmall))
                                 .overlay(
                                     SiphonTheme.controlBorder(cornerRadius: SiphonTheme.radiusSmall)
                                 )
@@ -1065,13 +1065,13 @@ struct FileThumbnailView: View {
                 Button(languageService.s("close")) {
                     showLog = false
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.siphonPrimary)
                 .keyboardShortcut(.cancelAction)
             }
-            .padding(14)
+            .padding(SiphonTheme.spacing14)
             .background(.ultraThinMaterial)
             
-            Divider()
+            SiphonTheme.subtleDivider
             
             ReadOnlyLogView(text: download.log.isEmpty ? languageService.s("no_log") : download.log)
                 .padding(8)
