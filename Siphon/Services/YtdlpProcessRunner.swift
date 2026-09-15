@@ -47,7 +47,7 @@ public final class DownloadProcessController: @unchecked Sendable {
     }
 
     public static func terminateProcessTree(_ proc: Process?, pid: pid_t? = nil) {
-        let resolvedPID = (pid != nil && pid! > 0) ? pid! : (proc?.processIdentifier ?? 0)
+        let resolvedPID = (pid.map { $0 > 0 ? $0 : 0 } ?? (proc?.processIdentifier ?? 0))
         guard resolvedPID > 0 || proc?.isRunning == true else { return }
 
         // 1. Gather all descendants BEFORE terminating the parent to prevent reparenting to launchd (PID 1)
