@@ -228,6 +228,28 @@ final class QueueAndErrorUXTests: XCTestCase {
         XCTAssertEqual(computed?.lowercased(), expectedHex.lowercased())
     }
 
+    func testSHA256ChecksumCalculation_ErrorHandling() throws {
+        // Test non-existent file
+        let nonExistentURL = FileManager.default.temporaryDirectory.appendingPathComponent("test_checksum_missing_\(UUID().uuidString).txt")
+        let computedMissing = UpdateChecker.computeSHA256(for: nonExistentURL)
+        XCTAssertNil(computedMissing, "Expected computeSHA256 to return nil for a non-existent file")
+
+        // Test file without read permissions
+        let unreadableURL = FileManager.default.temporaryDirectory.appendingPathComponent("test_checksum_unreadable_\(UUID().uuidString).txt")
+        try "Secret Content".data(using: .utf8)?.write(to: unreadableURL)
+        defer {
+            // Restore permissions so it can be deleted
+            try? FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: unreadableURL.path)
+            try? FileManager.default.removeItem(at: unreadableURL)
+        }
+
+        // Remove read permissions
+        try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: unreadableURL.path)
+
+        let computedUnreadable = UpdateChecker.computeSHA256(for: unreadableURL)
+        XCTAssertNil(computedUnreadable, "Expected computeSHA256 to return nil for a file without read permissions")
+    }
+
     func testDownloadProcessControllerCancellationLifecycle() {
         // Lifecycle Test 1: Normal attach -> detach
         let normalController = DownloadProcessController()
