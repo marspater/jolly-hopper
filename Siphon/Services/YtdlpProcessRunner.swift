@@ -254,15 +254,25 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
 
     public static func configureProcessCommand(_ process: Process, args: [String]) {
         if let helperURL = ensureProcessGroupHelper() {
-            process.executableURL = helperURL
-            process.arguments = ["/usr/bin/env"] + args
-        } else {
-            Task { @MainActor in
-                LoggerService.shared.log("Native process group helper unavailable; running directly via /usr/bin/env.", level: .warning)
+            let appBundleURL = Bundle.main.bundleURL
+            let testBundleURL = Bundle(for: DownloadProcessController.self).bundleURL.deletingLastPathComponent()
+            let isSafe = YtdlpService.isPathContained(targetURL: helperURL, inside: appBundleURL) ||
+                         YtdlpService.isPathContained(targetURL: helperURL, inside: testBundleURL)
+            if isSafe {
+                process.executableURL = helperURL
+                process.arguments = ["/usr/bin/env"] + args
+                return
+            } else {
+                Task { @MainActor in
+                    LoggerService.shared.log("Process group helper at \(helperURL.path) is outside trusted bundle directory; falling back to /usr/bin/env.", level: .warning)
+                }
             }
-            process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-            process.arguments = args
         }
+        Task { @MainActor in
+            LoggerService.shared.log("Native process group helper unavailable; running directly via /usr/bin/env.", level: .warning)
+        }
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+        process.arguments = args
     }
 
     public func runCommand(_ args: [String]) async throws -> String {
