@@ -368,7 +368,7 @@ final class QueueAndErrorUXTests: XCTestCase {
         cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc *Siphon-arm64.dmg
         dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd  Siphon-x86_64.dmg
         """
-        let lines = manifest.components(separatedBy: .newlines)
+        let lines = manifest.split(whereSeparator: \.isNewline)
         let targetAssetName = "siphon-arm64.dmg"
 
         var parsedHash: String? = nil
