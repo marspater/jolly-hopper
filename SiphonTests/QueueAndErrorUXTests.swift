@@ -756,6 +756,29 @@ final class QueueAndErrorUXTests: XCTestCase {
         XCTAssertFalse(sanitized.contains("session=12345"))
         XCTAssertTrue(sanitized.contains("Bearer <REDACTED>"))
         XCTAssertTrue(sanitized.contains("Cookie: <REDACTED>"))
+
+        // Comprehensive header and token redaction tests
+        let complexDiagnostic = """
+        Set-Cookie: session_id=abc123xyz; Secure; HttpOnly
+        X-Api-Key: 1234567890abcdef
+        X-Auth-Token: my-secret-token-123
+        "access_token": "eyJhbGciOiJIUzI1Ni..."
+        'sessionid': 'abcdef123456'
+        https://example.com/api?jwt=header.payload.sig&private_key=secretKey123
+        """
+        let sanitizedComplex = LoggerService.sanitizeDiagnosticText(complexDiagnostic)
+        XCTAssertFalse(sanitizedComplex.contains("abc123xyz"))
+        XCTAssertFalse(sanitizedComplex.contains("1234567890abcdef"))
+        XCTAssertFalse(sanitizedComplex.contains("my-secret-token-123"))
+        XCTAssertFalse(sanitizedComplex.contains("eyJhbGciOiJIUzI1Ni..."))
+        XCTAssertFalse(sanitizedComplex.contains("abcdef123456"))
+        XCTAssertFalse(sanitizedComplex.contains("header.payload.sig"))
+        XCTAssertFalse(sanitizedComplex.contains("secretKey123"))
+        XCTAssertTrue(sanitizedComplex.contains("Set-Cookie: <REDACTED>"))
+        XCTAssertTrue(sanitizedComplex.contains("X-Api-Key: <REDACTED>"))
+        XCTAssertTrue(sanitizedComplex.contains("X-Auth-Token: <REDACTED>"))
+        XCTAssertTrue(sanitizedComplex.contains("jwt=<REDACTED>"))
+        XCTAssertTrue(sanitizedComplex.contains("private_key=<REDACTED>"))
     }
 
     func testAppUpdateScriptIncludesTeamIDVerification() {

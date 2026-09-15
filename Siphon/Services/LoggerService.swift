@@ -23,7 +23,10 @@ class LoggerService: ObservableObject {
         (#"(?i)bearer\s+[A-Za-z0-9\-_\.]+"#, "Bearer <REDACTED>"),
         (#"(?i)authorization:\s*[^\r\n]+"#, "Authorization: <REDACTED>"),
         (#"(?i)cookie:\s*[^\r\n]+"#, "Cookie: <REDACTED>"),
-        (#"(?i)(token|api_key|password|pass|secret|auth|signature|sig|access_token)=([A-Za-z0-9\-_%]+)"#, "$1=<REDACTED>")
+        (#"(?i)set-cookie:\s*[^\r\n]+"#, "Set-Cookie: <REDACTED>"),
+        (#"(?i)(x-[a-z0-9\-]*api-key|x-[a-z0-9\-]*token|x-[a-z0-9\-]*auth[a-z0-9\-]*):\s*[^\r\n]+"#, "$1: <REDACTED>"),
+        (#"(?i)(token|api_key|password|pass|secret|auth|signature|sig|access_token|session|sessionid|sess|jwt|key|apikey|private_key|client_secret|pcode|oauth_token)=([^\s&"'<>]+)"#, "$1=<REDACTED>"),
+        (#"(?i)("|\')(token|api_key|password|pass|secret|auth|signature|sig|access_token|session|sessionid|sess|jwt|key|apikey|private_key|client_secret|pcode|oauth_token)("|\')\s*:\s*("|\')[^"']+\1"#, "$1$2$3: $4<REDACTED>$1")
     ].compactMap { pattern, replacement in
         guard let regex = try? NSRegularExpression(pattern: pattern, options: []) else { return nil }
         return (regex, replacement)
