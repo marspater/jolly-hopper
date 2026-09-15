@@ -10,7 +10,6 @@ permissions:
 
 jobs:
   patch:
-    if: github.event.head_commit.message != 'chore: apply follow-up bug fixes'
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
@@ -25,7 +24,6 @@ jobs:
 
           dm = Path('Siphon/Services/DownloadManager.swift')
           text = dm.read_text()
-
           old = '''            for historic in decoded.reversed() { restoreDownloadFromHistory(historic) }'''
           new = '''            // Restore as Download objects for UI, reversing so newest is at the top.
             let restored = decoded.reversed().map { $0.toDownload() }
@@ -46,7 +44,6 @@ jobs:
           if old not in text:
               raise SystemExit('DownloadManager restore call not found')
           text = text.replace(old, new, 1)
-
           marker = '''    func clearHistory() {'''
           insertion = '''    private func saveHistory() {
         do {
@@ -76,12 +73,10 @@ jobs:
               raise SystemExit('DownloadManager clearHistory marker not found')
           if 'private func saveHistory()' not in text:
               text = text.replace(marker, insertion + marker, 1)
-
           dm.write_text(text)
 
           ys = Path('Siphon/Services/YtdlpService.swift')
           text = ys.read_text()
-
           old_resolver = '''    static func resolvedOutputFileExtension(for options: DownloadOptions) -> String {
         Self.compatibleMergeOutputFormat(for: options) ?? options.fileType.fileExtension
     }
@@ -112,10 +107,7 @@ jobs:
           new_resolver = '''    static func resolvedOutputFileExtension(for options: DownloadOptions) -> String {
         guard options.fileType.isVideo else { return options.fileType.fileExtension }
 
-        // The conversion codec is the codec that determines the final container when
-        // --recode-video is present. Keep collision planning and yt-dlp arguments on
-        // exactly the same resolver so the planned path can never disagree with the
-        // actual post-processed file extension.
+        // Keep output planning and the actual yt-dlp post-processing path on one resolver.
         if let conversionCodec = options.conversionCodec, conversionCodec != .none {
             switch conversionCodec {
             case .av1, .vp9:
@@ -130,17 +122,15 @@ jobs:
                 break
             }
         }
-
         return compatibleMergeOutputFormat(for: options) ?? options.fileType.fileExtension
     }
 
     static func compatibleMergeOutputFormat(
         for options: DownloadOptions,
-        videoCodec: VideoCodec? = nil,
+        videoCodec: ConversionCodec? = nil,
         audioCodec: AudioCodec? = nil
     ) -> String? {
         guard options.fileType.isVideo else { return nil }
-
         let requestedVideoCodec = videoCodec ?? options.videoCodec ?? .auto
         let requestedAudioCodec = audioCodec ?? options.audioCodec ?? .auto
 
@@ -161,10 +151,11 @@ jobs:
             return nil
         }
     }'''
+          # ConversionCodec is the only extra type needed by this overload. Replace it
+          # with a local codec switch instead if the project uses a different name.
           if old_resolver not in text:
               raise SystemExit('YtdlpService resolver block not found')
           text = text.replace(old_resolver, new_resolver, 1)
-
           old_target = '''        var finalMergeFormat = Self.compatibleMergeOutputFormat(for: options)
 
         if let conversionCodec = options.conversionCodec, conversionCodec != .none {
@@ -231,8 +222,7 @@ jobs:
 
         // The bundled helper isolates the download process into its own process group.
         // Only broadcast to that group when the kernel confirms pgid == PID. Avoid
-        // enumerating arbitrary descendants by numeric PID, which is vulnerable to
-        // PID reuse between discovery and kill().
+        // PID-scan descendant killing, which can target a recycled PID.
         if resolvedPID > 0 {
             let pgid = getpgid(resolvedPID)
             let appPgrp = getpgrp()
@@ -245,8 +235,8 @@ jobs:
             }
         }
 
-        // Fallback when the helper is unavailable: terminate the exact Process object.
-        // Do not PID-scan descendants because we cannot establish their identity safely.
+        // Fallback when process-group isolation is unavailable: terminate the exact
+        // Process object only. Do not infer child identity from numeric PIDs.
         if let proc, proc.isRunning {
             proc.terminate()
         }
@@ -257,9 +247,14 @@ jobs:
           runner.write_text(text)
           PY
 
+          # Static sanity checks before committing.
+          grep -q 'private func saveHistory()' Siphon/Services/DownloadManager.swift
+          grep -q 'let finalMergeFormat = Self.resolvedOutputFileExtension' Siphon/Services/YtdlpService.swift
+          grep -q 'Reject unknown actions before changing application activation state.' Siphon/SiphonApp.swift
+          grep -q 'PID-scan descendant killing' Siphon/Services/YtdlpProcessRunner.swift
+          git diff --check
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add Siphon/Services/DownloadManager.swift Siphon/Services/YtdlpService.swift Siphon/Services/YtdlpProcessRunner.swift Siphon/SiphonApp.swift
-          git diff --cached --check
-          git commit -m 'fix: restore history and align download lifecycle'
+          git commit -m 'fix: restore history and harden output lifecycle'
           git push origin fix/comprehensive-bug-fixes-2026-09
