@@ -3621,13 +3621,13 @@ public struct DownloadResult: Sendable {
         }
 
         let parsedSources = parseBestCamSources(from: decryptedJson)
-        guard !parsedSources.isEmpty else { return nil }
+        guard let firstSource = parsedSources.first else { return nil }
 
         let chosenSource: BestCamSource
         if let reqFmt = requestedFormat, let matched = parsedSources.first(where: { $0.label.lowercased() == reqFmt.lowercased() }) {
             chosenSource = matched
         } else {
-            chosenSource = parsedSources.first!
+            chosenSource = firstSource
         }
 
         let streamURL = "\(chosenSource.url)/\(chosenSource.path)"
