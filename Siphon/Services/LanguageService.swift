@@ -133,7 +133,7 @@ class LanguageService: ObservableObject {
         "whats_new_title": "What's New in Siphon",
         "whats_new_subtitle": "Discover the latest enhancements, improvements, and fixes in this release.",
         "whats_new_title_format": "What's New in Siphon v%@",
-        "whats_new_message": "✨ Siphon v5.1.0 Highlights:\n• Complete Rebrand & Typography: Modern Siphon identity with native Geist and Geist Mono fonts.\n• Liquid Glass & Translucency: Translucent material styling across controls, sidebars, and sheets.\n• Enhanced Anti-Bot & Stream Engine: Fast multi-connection downloading and provider extraction.\n• Control Center Menu Bar: Lightweight status bar companion for 1-click downloads.\n• Security & Reliability: Hardened sandboxing, strict codesign verification, and zero cookie leaks.\n• Accessibility & Speed: Full VoiceOver support, animated feedback, and optimized decoding.",
+        "whats_new_message": "✨ Siphon v5.2.0 Highlights:\n• BoyfriendTV Stream Resolution: Full extraction and download support for restricted and banned uploaders.\n• Hardened Security: Downloader argument credential redaction and helper binary path containment.\n• Zero-Allocation Performance: Pre-compiled regexes, substring format splitting, and single-pass HTML entity decoding.\n• VoiceOver Accessibility: Full accessibility navigation across MenuBar, preferences tabs, and playlist selection.\n• Preset & Settings Integrity: CustomPreset JSON serialization and UserDefaults key validation.",
         "continue": "Continue",
         "get_started": "Get Started",
         "view_on_github": "Release Notes",
