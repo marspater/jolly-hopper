@@ -1025,7 +1025,7 @@ class DownloadManager: ObservableObject {
         let rawBaseName = download.options.customFilename ?? download.title
         let sanitizedBase = YtdlpService.sanitizeFilename(rawBaseName)
         let folder = download.options.saveFolder
-        let ext = download.options.fileType.fileExtension
+        let ext = YtdlpService.resolvedOutputFileExtension(for: download.options)
 
         let existingFiles = (try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)) ?? []
         let existingBaseNames = Set(existingFiles.compactMap { file -> String? in
@@ -1152,16 +1152,31 @@ class DownloadManager: ObservableObject {
         sanitizedBaseName: String,
         videoId: String?
     ) -> Bool {
-        let matchesPrefix = (!rawBaseName.isEmpty && fileName.hasPrefix(rawBaseName)) ||
-                            (!sanitizedBaseName.isEmpty && fileName.hasPrefix(sanitizedBaseName))
-        let matchesId: Bool
-        if let vid = videoId, !vid.isEmpty {
-            matchesId = fileName.contains(vid)
-        } else {
-            matchesId = false
+        guard isTemporaryFileName(fileName) else { return false }
+        let suffixes = [".part", ".ytdl", ".tmp", ".temp"]
+        var stableName = fileName
+        if let suffix = suffixes.first(where: { stableName.hasSuffix($0) }) {
+            stableName.removeLast(suffix.count)
         }
+        let stem = URL(fileURLWithPath: stableName).deletingPathExtension().lastPathComponent
+        guard !stem.isEmpty else { return false }
 
-        return (matchesPrefix || matchesId) && isTemporaryFileName(fileName)
+        let expected = Set([rawBaseName, sanitizedBaseName]
+            .filter { !$0.isEmpty }
+            .map { YtdlpService.sanitizeFilename($0) })
+        if expected.contains(stem) { return true }
+
+        if expected.contains(where: {
+            let marker = $0 + ".f"
+            return stem.hasPrefix(marker) && stem.dropFirst(marker.count).allSatisfy(\.isNumber)
+        }) { return true }
+
+        if let videoId, !videoId.isEmpty {
+            if stem == videoId { return true }
+            let marker = videoId + ".f"
+            if stem.hasPrefix(marker) && stem.dropFirst(marker.count).allSatisfy(\.isNumber) { return true }
+        }
+        return false
     }
 
     private func cleanupTemporaryFiles(for download: Download) {
@@ -1203,58 +1218,32 @@ class DownloadManager: ObservableObject {
 
 
     func loadHistory() {
-        if let data = userDefaults.data(forKey: UserDefaultsKeys.downloadHistory) {
-            do {
-                let decoded = try JSONDecoder().decode([HistoricDownload].self, from: data)
-                history = decoded
-                // Restore as Download objects for UI, reversing so newest is at the top
-                let restored = decoded.reversed().map { $0.toDownload() }
-                
-                // Bolt Performance Optimization: Use downloads.lazy.map to prevent intermediate array allocation before Set creation
-                var existingIds = Set(downloads.lazy.map { $0.id })
-                for download in restored {
-                    download.options.rawCookies = nil // Purge any legacy session cookies from restored history
-                    if !existingIds.contains(download.id) {
-                        switch download.status {
-                        case .downloading, .fetching, .processing, .queued:
-                            download.status = .stopped
-                        default:
-                            break
-                        }
-                        downloads.append(download)
-                        existingIds.insert(download.id)
-                    }
-                }
-            } catch {
-                LoggerService.shared.log("Failed to decode download history: \(error.localizedDescription)", level: .error)
-            }
-        }
-    }
-
-    private func saveHistory() {
+        guard let data = userDefaults.data(forKey: UserDefaultsKeys.downloadHistory) else { return }
         do {
-            let encoded = try JSONEncoder().encode(history)
-            userDefaults.set(encoded, forKey: UserDefaultsKeys.downloadHistory)
+            guard let rawItems = try JSONSerialization.jsonObject(with: data) as? [Any] else { return }
+            let decoder = JSONDecoder()
+            var decoded: [HistoricDownload] = []
+            var skippedCount = 0
+            decoded.reserveCapacity(rawItems.count)
+            for rawItem in rawItems {
+                guard JSONSerialization.isValidJSONObject(rawItem),
+                      let itemData = try? JSONSerialization.data(withJSONObject: rawItem),
+                      let item = try? decoder.decode(HistoricDownload.self, from: itemData) else {
+                    skippedCount += 1
+                    continue
+                }
+                decoded.append(item)
+            }
+            history = decoded
+            if skippedCount > 0 {
+                LoggerService.shared.log("Skipped invalid download history entries while restoring history.", level: .warning)
+                if let repairedData = try? JSONEncoder().encode(decoded) {
+                    userDefaults.set(repairedData, forKey: UserDefaultsKeys.downloadHistory)
+                }
+            }
+            for historic in decoded.reversed() { restoreDownloadFromHistory(historic) }
         } catch {
-            LoggerService.shared.log("Failed to encode download history: \(error.localizedDescription)", level: .error)
-        }
-    }
-
-    private func addToHistory(_ download: Download, skipSave: Bool = false) {
-        let historic = HistoricDownload(download: download)
-
-        // Remove existing if any (upsert)
-        if let index = history.firstIndex(where: { $0.id == download.id }) {
-            history.remove(at: index)
-        }
-        history.append(historic)
-
-        if history.count > 500 { // Increased limit for better user experience
-            history.removeFirst(history.count - 500)
-        }
-
-        if !skipSave {
-            saveHistory()
+            LoggerService.shared.log("Failed to restore download history: \(error.localizedDescription)", level: .error)
         }
     }
 
