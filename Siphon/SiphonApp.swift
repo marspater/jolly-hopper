@@ -350,7 +350,7 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
             if let (cData, _) = try? await URLSession.shared.data(from: cURL),
                let text = String(data: cData, encoding: .utf8) {
                 // Parse sha256 hex string (64 hex characters) specifically matching downloaded asset
-                let lines = text.components(separatedBy: .newlines)
+                let lines = text.split(whereSeparator: \.isNewline)
                 let targetAssetName = downloadAssetName?.lowercased() ?? ""
                 let cURLName = cURL.lastPathComponent.lowercased()
                 let isAssetSpecificChecksumFile = !targetAssetName.isEmpty && cURLName.hasPrefix(targetAssetName)

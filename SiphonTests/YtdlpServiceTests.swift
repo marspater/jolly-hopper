@@ -2886,6 +2886,37 @@ final class YtdlpServiceTests: XCTestCase {
         let legacyDecoded = try decoder.decode(DownloadOptions.self, from: legacyJSON)
         XCTAssertNil(legacyDecoded.additionalArguments)
     }
+
+    func testExtractedBinaryPermissionsAreRestricted() throws {
+        let tempDir = FileManager.default.temporaryDirectory
+        let dummyBinaryURL = tempDir.appendingPathComponent("dummy_binary_\(UUID().uuidString)")
+        try "dummy content".data(using: .utf8)?.write(to: dummyBinaryURL)
+        defer { try? FileManager.default.removeItem(at: dummyBinaryURL) }
+
+        try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: dummyBinaryURL.path)
+
+        let attrs = try FileManager.default.attributesOfItem(atPath: dummyBinaryURL.path)
+        let posix = attrs[.posixPermissions] as? NSNumber
+        XCTAssertEqual(posix?.intValue, 0o700, "Extracted binary must have restricted 0o700 POSIX permissions")
+    }
+
+    func testFilenameSanitizationStripsTrailingDotsAndHandlesReservedDSStore() {
+        XCTAssertEqual(YtdlpService.sanitizeFilename("video.mp4..."), "video.mp4")
+        XCTAssertEqual(YtdlpService.sanitizeFilename(".DS_Store"), "download_DS_Store")
+        XCTAssertEqual(YtdlpService.sanitizeFilename("DS_STORE"), "download_DS_STORE")
+        XCTAssertEqual(YtdlpService.sanitizeFilename("...."), "download")
+    }
+
+    func testParseArgumentStringWithWhitespaceTabsAndNewlines() {
+        let args = YtdlpService.parseArgumentString("--format\tbest\n--no-playlist   --retries 3")
+        XCTAssertEqual(args, ["--format", "best", "--no-playlist", "--retries", "3"])
+    }
+
+    func testPathContainmentRootDirectory() {
+        let root = URL(fileURLWithPath: "/")
+        let inside = URL(fileURLWithPath: "/Users/test/Downloads/video.mp4")
+        XCTAssertTrue(YtdlpService.isPathContained(targetURL: inside, inside: root))
+    }
 }
 
 
