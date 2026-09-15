@@ -489,7 +489,7 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
         return """
         (
             set -e
-            STATUS_FILE="${STATUS_FILE:-}"
+            STATUS_FILE="${6:-${STATUS_FILE:-}}"
             MOUNT_POINT=""
             report_failure() {
                 if [ -n "$MOUNT_POINT" ] && [ -d "$MOUNT_POINT" ]; then
@@ -508,11 +508,11 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
 
             sleep 2
             
-            PKG_PATH="${PKG_PATH:-$1}"
-            APP_PATH="${APP_PATH:-$2}"
-            WORK_DIR="${WORK_DIR:-$3}"
-            EXPECTED_BUNDLE_ID="${EXPECTED_BUNDLE_ID:-$4}"
-            EXPECTED_TEAM_ID="${EXPECTED_TEAM_ID:-$5}"
+            PKG_PATH="${1:-${PKG_PATH:-}}"
+            APP_PATH="${2:-${APP_PATH:-}}"
+            WORK_DIR="${3:-${WORK_DIR:-}}"
+            EXPECTED_BUNDLE_ID="${4:-${EXPECTED_BUNDLE_ID:-}}"
+            EXPECTED_TEAM_ID="${5:-${EXPECTED_TEAM_ID:-}}"
             
             mkdir -p "$WORK_DIR"
 
@@ -645,15 +645,16 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
         
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/bash")
-        process.arguments = ["-c", script]
-        var env = ProcessInfo.processInfo.environment
-        env["PKG_PATH"] = packagePath
-        env["APP_PATH"] = appPath
-        env["WORK_DIR"] = payloadDir.path
-        env["STATUS_FILE"] = statusFile.path
-        env["EXPECTED_BUNDLE_ID"] = bundleId
-        env["EXPECTED_TEAM_ID"] = teamId
-        process.environment = env
+        process.arguments = [
+            "-c", script,
+            "siphon-update",
+            packagePath,
+            appPath,
+            payloadDir.path,
+            bundleId,
+            teamId,
+            statusFile.path
+        ]
         
         Task { @MainActor [weak self] in
             guard let self else { return }
