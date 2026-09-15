@@ -267,6 +267,7 @@ struct PreferencesView: View {
                 ))
                 .labelsHidden()
                 .toggleStyle(.switch)
+                .accessibilityLabel(languageService.s("launch_at_login"))
             }
             
             if LoginItemHelper.shared.isEnabled {
@@ -282,6 +283,7 @@ struct PreferencesView: View {
                     Toggle("", isOn: $startInBackground)
                         .labelsHidden()
                         .toggleStyle(.switch)
+                        .accessibilityLabel(languageService.s("start_in_background"))
                 }
                 .padding(.leading, 12)
             }
@@ -304,6 +306,7 @@ struct PreferencesView: View {
                 Toggle("", isOn: $showNotifications)
                     .labelsHidden()
                     .toggleStyle(.switch)
+                    .accessibilityLabel(languageService.s("notifications"))
             }
             
             HStack {
@@ -315,6 +318,7 @@ struct PreferencesView: View {
                 Toggle("", isOn: $showMenuBarIcon)
                     .labelsHidden()
                     .toggleStyle(.switch)
+                    .accessibilityLabel(languageService.s("show_menubar_icon"))
             }
         }
         .tint(SiphonTheme.accent)
