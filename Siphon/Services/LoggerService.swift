@@ -152,7 +152,7 @@ class LoggerService: ObservableObject {
         }
     }
 
-    nonisolated private static func extractTailLines(from data: Data, maxEntries: Int) -> [String] {
+    nonisolated static func extractTailLines(from data: Data, maxEntries: Int) -> [String] {
         guard !data.isEmpty else { return [] }
         var lineStarts: [Int] = [0]
         for (i, byte) in data.enumerated() {
