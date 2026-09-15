@@ -121,11 +121,10 @@ struct PreferencesView: View {
                         lineWidth: 1
                     )
             )
-            .padding(.top, 10)
-            .padding(.bottom, 10)
+            .padding(.top, SiphonTheme.spacing10)
+            .padding(.bottom, SiphonTheme.spacing10)
 
-            Divider()
-                .opacity(0.20)
+            SiphonTheme.subtleDivider
 
             // Active Tab Content View
             ZStack {
@@ -144,8 +143,8 @@ struct PreferencesView: View {
             .clipped()
             .animation(.spring(response: 0.30, dampingFraction: 0.72), value: selectedTab)
         }
-        .padding(.horizontal, 16)
-        .padding(.bottom, 16)
+        .padding(.horizontal, SiphonTheme.spacing16)
+        .padding(.bottom, SiphonTheme.spacing16)
         .frame(minWidth: 500, idealWidth: 520, maxWidth: 600, minHeight: 460, idealHeight: 500, maxHeight: 650)
         .preferredColorScheme(theme == "light" ? .light : (theme == "dark" ? .dark : nil))
         .accentColor(SiphonTheme.accent)
@@ -235,7 +234,7 @@ struct PreferencesView: View {
             }
             .contentShape(Capsule())
         }
-        .buttonStyle(.bouncy(scale: 0.97, hover: 1.015))
+        .buttonStyle(.bouncy)
         .help(title)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(title)
@@ -688,7 +687,7 @@ struct PreferencesView: View {
                 .textFieldStyle(.roundedBorder)
                 .frame(width: 350)
             
-            Divider()
+            SiphonTheme.subtleDivider
             
             Form {
                 presetFormatSection

@@ -15,20 +15,19 @@ struct MenuBarView: View {
     @Namespace private var menuBarFormatNamespace
     
     var body: some View {
-        VStack(spacing: 12) {
-            VStack(spacing: 10) {
+        VStack(spacing: SiphonTheme.spacing12) {
+            VStack(spacing: SiphonTheme.spacing10) {
                 urlInput
                 optionsCard
             }
             
             downloadButton
             
-            Divider()
-                .opacity(0.5)
+            SiphonTheme.subtleDivider
             
             footer
         }
-        .padding(14)
+        .padding(SiphonTheme.spacing14)
         .frame(width: 360)
         .preferredColorScheme(theme == "light" ? .light : (theme == "dark" ? .dark : nil))
         .background(.ultraThinMaterial)
@@ -93,11 +92,11 @@ struct MenuBarView: View {
             .accessibilityLabel(isPasted ? languageService.s("paste") : languageService.s("paste_from_clipboard"))
         }
         .padding(.horizontal, SiphonTheme.spacing10)
-        .padding(.vertical, 8)
+        .padding(.vertical, SiphonTheme.spacing8)
         .background(
             SiphonTheme.cardBackground(cornerRadius: SiphonTheme.radiusControl)
         )
-        .cornerRadius(SiphonTheme.radiusControl)
+        .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusControl))
         .overlay(
             SiphonTheme.cardBorder(cornerRadius: SiphonTheme.radiusControl)
         )
@@ -132,7 +131,7 @@ struct MenuBarView: View {
                                 }
                             }
                     }
-                    .buttonStyle(.bouncy(scale: 0.97, hover: 1.015))
+                    .buttonStyle(.bouncy)
                     .help(languageService.s("video"))
                     .accessibilityLabel(languageService.s("video"))
                     
@@ -155,7 +154,7 @@ struct MenuBarView: View {
                                 }
                             }
                     }
-                    .buttonStyle(.bouncy(scale: 0.97, hover: 1.015))
+                    .buttonStyle(.bouncy)
                     .help(languageService.s("audio"))
                     .accessibilityLabel(languageService.s("audio"))
                 }
@@ -172,8 +171,7 @@ struct MenuBarView: View {
                 )
             }
             
-            Divider()
-                .opacity(0.4)
+            SiphonTheme.subtleDivider
             
             HStack {
                 Text(languageService.s("preset"))
@@ -206,11 +204,11 @@ struct MenuBarView: View {
                 .accessibilityLabel(languageService.s("preset"))
             }
         }
-        .padding(10)
+        .padding(SiphonTheme.spacing10)
         .background(
             SiphonTheme.cardBackground(cornerRadius: SiphonTheme.radiusCard)
         )
-        .cornerRadius(SiphonTheme.radiusCard)
+        .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusCard))
         .overlay(
             SiphonTheme.cardBorder(cornerRadius: SiphonTheme.radiusCard)
         )
@@ -240,7 +238,7 @@ struct MenuBarView: View {
                     .stroke(Color.white.opacity(url.isEmpty ? 0.05 : 0.25), lineWidth: 1)
             )
         }
-        .buttonStyle(.bouncy(scale: 0.97, hover: 1.015))
+        .buttonStyle(.bouncy)
         .disabled(url.isEmpty)
         .accessibilityLabel(languageService.s("download_btn"))
         .shadow(color: url.isEmpty ? .clear : SiphonTheme.accent.opacity(0.35), radius: 6, y: 2)
@@ -338,7 +336,7 @@ struct MenuBarView: View {
                 .lineLimit(1)
                 .fixedSize(horizontal: true, vertical: false)
                 .foregroundColor(.primary)
-                .padding(.horizontal, 10)
+                .padding(.horizontal, SiphonTheme.spacing10)
                 .frame(height: 28)
                 .background(
                     SiphonTheme.pillBackground(isSelected: false)
@@ -348,7 +346,7 @@ struct MenuBarView: View {
                     SiphonTheme.pillBorder(isSelected: false)
                 )
             }
-            .buttonStyle(.bouncy(scale: 0.97, hover: 1.015))
+            .buttonStyle(.bouncy)
             .help(languageService.s("show_main_window"))
             .accessibilityLabel(languageService.s("show_main_window"))
             
@@ -365,7 +363,7 @@ struct MenuBarView: View {
                 .lineLimit(1)
                 .fixedSize(horizontal: true, vertical: false)
                 .foregroundColor(SiphonTheme.downloading)
-                .padding(.horizontal, 10)
+                .padding(.horizontal, SiphonTheme.spacing10)
                 .frame(height: 28)
                 .background(SiphonTheme.downloading.opacity(0.14))
                 .clipShape(Capsule())
@@ -390,7 +388,7 @@ struct MenuBarView: View {
                 .lineLimit(1)
                 .fixedSize(horizontal: true, vertical: false)
                 .foregroundColor(SiphonTheme.failed)
-                .padding(.horizontal, 10)
+                .padding(.horizontal, SiphonTheme.spacing10)
                 .frame(height: 28)
                 .background(SiphonTheme.failed.opacity(0.12))
                 .clipShape(Capsule())
@@ -399,7 +397,7 @@ struct MenuBarView: View {
                         .stroke(SiphonTheme.failed.opacity(0.25), lineWidth: 1)
                 )
             }
-            .buttonStyle(.bouncy(scale: 0.97, hover: 1.015))
+            .buttonStyle(.bouncy)
             .help(languageService.s("quit"))
             .accessibilityLabel(languageService.s("quit"))
         }

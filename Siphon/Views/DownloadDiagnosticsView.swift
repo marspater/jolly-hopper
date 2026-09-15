@@ -14,19 +14,19 @@ struct DownloadDiagnosticsView: View {
         VStack(spacing: 0) {
             headerView
             
-            Divider()
+            SiphonTheme.subtleDivider
             
             Picker("", selection: $selectedTab) {
-                Text("Runtime & Process").tag(0)
-                Text("Media & Color (HDR)").tag(1)
-                Text("Command & Logs").tag(2)
+                Text(languageService.s("runtime_and_process")).tag(0)
+                Text(languageService.s("media_and_color")).tag(1)
+                Text(languageService.s("command_and_logs")).tag(2)
             }
             .pickerStyle(.segmented)
-            .padding(.horizontal, 20)
-            .padding(.vertical, 12)
+            .padding(.horizontal, SiphonTheme.spacing20)
+            .padding(.vertical, SiphonTheme.spacing12)
             
             ScrollView {
-                VStack(spacing: 16) {
+                VStack(spacing: SiphonTheme.spacing16) {
                     if selectedTab == 0 {
                         runtimeTab
                     } else if selectedTab == 1 {
@@ -35,11 +35,11 @@ struct DownloadDiagnosticsView: View {
                         commandAndLogsTab
                     }
                 }
-                .padding(.horizontal, 20)
-                .padding(.bottom, 20)
+                .padding(.horizontal, SiphonTheme.spacing20)
+                .padding(.bottom, SiphonTheme.spacing20)
             }
             
-            Divider()
+            SiphonTheme.subtleDivider
             
             footerView
         }
@@ -150,7 +150,7 @@ struct DownloadDiagnosticsView: View {
     private var mediaAndColorTab: some View {
         VStack(spacing: 12) {
             diagnosticSection(title: "Stream & Formats") {
-                diagnosticRow(label: "Selected Format ID", value: download.diagnostics.formatId ?? download.options.selectedFormatId ?? "auto/best")
+                diagnosticRow(label: "Selected Format ID", value: download.diagnostics.formatId ?? download.options.selectedFormatId ?? languageService.s("not_detected"))
                 diagnosticRow(label: "Video Codec", value: download.diagnostics.videoCodec ?? download.options.videoCodec?.title(lang: languageService) ?? "Auto")
                 diagnosticRow(label: "Audio Codec", value: download.diagnostics.audioCodec ?? download.options.audioCodec?.title(lang: languageService) ?? "Auto")
                 diagnosticRow(label: "Container", value: (download.diagnostics.container ?? download.options.fileType.rawValue).uppercased())
@@ -158,9 +158,9 @@ struct DownloadDiagnosticsView: View {
             }
             
             diagnosticSection(title: "Color Space & Dynamic Range (EDR)") {
-                diagnosticRow(label: "Dynamic Range", value: download.diagnostics.dynamicRange ?? (download.mediaInfo?.formats?.first(where: { $0.isHDR }) != nil ? "HDR" : "SDR"))
-                diagnosticRow(label: "Color Primaries / Space", value: download.diagnostics.colorSpace ?? "BT.709 (Rec. 709 Standard Gamut)")
-                diagnosticRow(label: "Bit Depth", value: download.diagnostics.bitDepth.map { "\($0)-bit per channel" } ?? "8-bit (Standard)")
+                diagnosticRow(label: "Dynamic Range", value: download.diagnostics.dynamicRange ?? (download.mediaInfo?.formats?.first(where: { $0.isHDR }) != nil ? "HDR" : languageService.s("not_detected")))
+                diagnosticRow(label: "Color Primaries / Space", value: download.diagnostics.colorSpace ?? languageService.s("not_detected"))
+                diagnosticRow(label: "Bit Depth", value: download.diagnostics.bitDepth.map { "\($0)-bit per channel" } ?? languageService.s("not_detected"))
                 diagnosticRow(label: "HDR Action Policy", value: download.options.hdrAction?.title(lang: languageService) ?? "Preserve HDR")
             }
             
@@ -182,7 +182,7 @@ struct DownloadDiagnosticsView: View {
             if let cmd = download.diagnostics.commandLine ?? (download.log.split(whereSeparator: \.isNewline).first(where: { $0.contains("yt-dlp") }).map(String.init)) {
                 VStack(alignment: .leading, spacing: 6) {
                     HStack {
-                        Text("Executed Command")
+                        Text(languageService.s("executed_command"))
                             .font(.geist(12, weight: .bold))
                             .foregroundColor(.primary)
                         
@@ -193,7 +193,7 @@ struct DownloadDiagnosticsView: View {
                         } label: {
                             HStack(spacing: 4) {
                                 Image(systemName: "doc.on.doc")
-                                Text("Copy Command")
+                                Text(languageService.s("copy_command"))
                             }
                             .font(.geist(11))
                         }
@@ -202,7 +202,7 @@ struct DownloadDiagnosticsView: View {
                     }
                     
                     Text(cmd)
-                        .font(.system(size: 11, design: .monospaced))
+                        .font(.geistMono(11))
                         .foregroundColor(.primary.opacity(0.85))
                         .padding(10)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -217,7 +217,7 @@ struct DownloadDiagnosticsView: View {
             
             VStack(alignment: .leading, spacing: 6) {
                 HStack {
-                    Text("Execution Log Output")
+                    Text(languageService.s("execution_log_output"))
                         .font(.geist(12, weight: .bold))
                         .foregroundColor(.primary)
                     
@@ -236,13 +236,17 @@ struct DownloadDiagnosticsView: View {
                     .foregroundColor(SiphonTheme.accent)
                 }
                 
-                TextField("Search logs...", text: $logSearchText)
-                    .textFieldStyle(.roundedBorder)
+                TextField(languageService.s("search_logs"), text: $logSearchText)
+                    .textFieldStyle(.plain)
                     .font(.geist(11))
+                    .padding(.horizontal, SiphonTheme.spacing8)
+                    .padding(.vertical, 6)
+                    .background(SiphonTheme.cardBackground(cornerRadius: SiphonTheme.radiusControl))
+                    .overlay(SiphonTheme.cardBorder(cornerRadius: SiphonTheme.radiusControl))
                 
                 ScrollView {
                     Text(filteredLogs)
-                        .font(.system(size: 10, design: .monospaced))
+                        .font(.geistMono(10))
                         .foregroundColor(.primary.opacity(0.85))
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(10)
@@ -305,14 +309,14 @@ struct DownloadDiagnosticsView: View {
             Button {
                 dismiss()
             } label: {
-                Text("Done")
+                Text(languageService.s("done"))
                     .font(.geist(12, weight: .semibold))
             }
             .buttonStyle(.siphonPrimary)
-            .keyboardShortcut(.cancelAction)
+            .keyboardShortcut(.defaultAction)
         }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 12)
+        .padding(.horizontal, SiphonTheme.spacing20)
+        .padding(.vertical, SiphonTheme.spacing12)
     }
     
     // MARK: - Helpers & Components
@@ -345,7 +349,7 @@ struct DownloadDiagnosticsView: View {
             Spacer()
             
             Text(value)
-                .font(isMonospace ? .system(size: 11, design: .monospaced) : .geist(12, weight: .medium))
+                .font(isMonospace ? .geistMono(11) : .geist(12, weight: .medium))
                 .foregroundColor(.primary)
                 .multilineTextAlignment(.trailing)
                 .textSelection(.enabled)
@@ -353,14 +357,14 @@ struct DownloadDiagnosticsView: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
         .overlay(
-            Divider().opacity(0.18),
+            SiphonTheme.subtleDivider,
             alignment: .bottom
         )
     }
     
     private var filteredLogs: String {
         if logSearchText.isEmpty {
-            return download.log.isEmpty ? "No log output recorded." : download.log
+            return download.log.isEmpty ? languageService.s("no_log_output") : download.log
         }
         let matches = download.log.split(whereSeparator: \.isNewline)
             .filter { $0.localizedCaseInsensitiveContains(logSearchText) }

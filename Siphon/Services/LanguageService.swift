@@ -12,6 +12,7 @@ enum Language: String, CaseIterable, Identifiable {
 
 @MainActor
 class LanguageService: ObservableObject {
+    public static let shared = LanguageService()
     @AppStorage("selectedLanguage") var selectedLanguage: Language = .english
     
     nonisolated func s(_ key: String) -> String {
@@ -315,6 +316,20 @@ class LanguageService: ObservableObject {
         "core_options": "Core Options",
         "optional_settings": "Optional Settings",
         "advanced_settings": "Advanced Settings",
-        "advanced_badge": "ADVANCED"
+        "advanced_badge": "ADVANCED",
+        "debug_logs": "Debug Logs",
+        "entries": "entries",
+        "done": "Done",
+        "not_detected": "Not detected",
+        "runtime_and_process": "Runtime & Process",
+        "media_and_color": "Media & Color (HDR)",
+        "command_and_logs": "Command & Logs",
+        "executed_command": "Executed Command",
+        "copy_command": "Copy Command",
+        "execution_log_output": "Execution Log Output",
+        "search_logs": "Search logs...",
+        "no_log_output": "No log output recorded.",
+        "reveal_in_finder": "Reveal in Finder",
+        "whats_new_badge": "WHAT'S NEW"
     ]
 }

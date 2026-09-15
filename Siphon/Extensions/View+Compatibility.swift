@@ -301,10 +301,11 @@ public enum SiphonTheme {
     }
     
     // Settings & Diagnostics Subtle Divider
+    public static let dividerOpacity: Double = 0.20
     @ViewBuilder
     public static var subtleDivider: some View {
         Divider()
-            .opacity(0.20)
+            .opacity(dividerOpacity)
     }
 }
 
@@ -450,6 +451,9 @@ public struct BouncyButtonStyle: ButtonStyle {
 
 extension ButtonStyle where Self == BouncyButtonStyle {
     public static var bouncy: BouncyButtonStyle { BouncyButtonStyle() }
+    public static var bouncySubtle: BouncyButtonStyle {
+        BouncyButtonStyle(scaleAmount: 0.985, hoverScale: 1.01)
+    }
     public static func bouncy(scale: CGFloat = 0.97, hover: CGFloat = 1.015) -> BouncyButtonStyle {
         BouncyButtonStyle(scaleAmount: scale, hoverScale: hover)
     }
