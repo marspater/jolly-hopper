@@ -51,6 +51,43 @@ final class QueueAndErrorUXTests: XCTestCase {
         XCTAssertTrue(script.contains("ditto \"$NEW_APP\" \"$APP_PATH\""))
     }
     
+
+    func testSubtitleFormatLanguageLogic() {
+        // Since we want to reliably test language formatting, we mock a LanguageService with specific translations
+        class MockLanguageService: LanguageService {
+            override func s(_ key: String) -> String {
+                if key == "subtitles_selected" {
+                    return "%d languages selected"
+                }
+                return super.s(key)
+            }
+        }
+
+        let lang = MockLanguageService()
+        lang.selectedLanguage = .english
+
+        var options = DownloadOptions.default
+        options.fileType = .mp4
+        options.videoResolution = .r1080p
+        options.downloadSubtitles = true
+        options.subtitleLanguages = ["en", "es"]
+        options.subtitleFormat = .srt
+
+        let download = Download(url: "https://www.youtube.com/watch?v=123", options: options)
+        download.duration = "03:45"
+
+        let subtitle = download.formatSubtitle(lang: lang)
+
+        // Should match "YouTube • 1080p • MP4 • 03:45 • 2 languages selected (SRT)"
+        XCTAssertEqual(subtitle, "YouTube • 1080p • MP4 • 03:45 • 2 languages selected (SRT)")
+
+        // Also test without subtitleFormat
+        options.subtitleFormat = nil
+        let downloadNoFormat = Download(url: "https://www.youtube.com/watch?v=123", options: options)
+        downloadNoFormat.duration = "03:45"
+        let subtitleNoFormat = downloadNoFormat.formatSubtitle(lang: lang)
+        XCTAssertEqual(subtitleNoFormat, "YouTube • 1080p • MP4 • 03:45 • 2 languages selected")
+    }
     func testFormatSubtitleGeneration() {
         let lang = LanguageService()
         var options = DownloadOptions.default

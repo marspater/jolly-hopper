@@ -111,6 +111,17 @@ class Download: ObservableObject, Identifiable {
             parts.append(dur)
         }
         
+
+        if options.downloadSubtitles {
+            let count = options.subtitleLanguages.count
+            let localizedCount = String(format: lang.s("subtitles_selected"), count)
+            if let format = options.subtitleFormat {
+                parts.append("\(localizedCount) (\(format.displayName))")
+            } else {
+                parts.append(localizedCount)
+            }
+        }
+
         return parts.joined(separator: " • ")
     }
     
