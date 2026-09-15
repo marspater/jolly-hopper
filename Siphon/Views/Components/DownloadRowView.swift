@@ -21,13 +21,13 @@ final class QuickLookPreviewHelper: NSObject, QLPreviewPanelDataSource, QLPrevie
         }
     }
 
-    nonisolated func numberOfPreviewItems(in panel: QLPreviewPanel!) -> Int {
+    nonisolated func numberOfPreviewItems(in panel: QLPreviewPanel?) -> Int {
         lock.lock()
         defer { lock.unlock() }
         return currentURL != nil ? 1 : 0
     }
 
-    nonisolated func previewPanel(_ panel: QLPreviewPanel!, previewItemAt index: Int) -> QLPreviewItem! {
+    nonisolated func previewPanel(_ panel: QLPreviewPanel?, previewItemAt index: Int) -> QLPreviewItem? {
         lock.lock()
         defer { lock.unlock() }
         return (currentURL as NSURL?)
