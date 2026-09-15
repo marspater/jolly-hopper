@@ -733,7 +733,9 @@ struct AddDownloadView: View {
                                     if isSelected { selectedPlaylistIds.insert(item.id) }
                                     else { selectedPlaylistIds.remove(item.id) }
                                 }
-                            )).toggleStyle(.checkbox)
+                            ))
+                            .toggleStyle(.checkbox)
+                            .accessibilityLabel(item.title)
 
                             AsyncImage(url: item.thumbnailURL) { image in image.resizable().aspectRatio(contentMode: .fill) }
                             placeholder: { Rectangle().fill(Color.gray.opacity(0.2)) }
