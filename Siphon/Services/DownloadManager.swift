@@ -319,7 +319,8 @@ class DownloadManager: ObservableObject {
 
     func parseReleaseFeatures(from text: String) -> [ReleaseFeature] {
         var features: [ReleaseFeature] = []
-        let lines = text.components(separatedBy: .newlines)
+        // Bolt Performance Optimization: Replace components(separatedBy: .newlines) with split(whereSeparator: \.isNewline) to operate lazily over Substring views, avoiding heap-allocated String array allocations per line.
+        let lines = text.split(whereSeparator: \.isNewline)
 
         for line in lines {
             let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
