@@ -5,23 +5,23 @@ import AppKit
 
 struct DependencyChecksums {
     static let ytdlpVersion = "2026.08.19"
-    static let ytdlpURL = URL(string: "https://github.com/yt-dlp/yt-dlp/releases/download/2026.08.19/yt-dlp_macos")!
+    static let ytdlpURL = URL(string: "https://github.com/yt-dlp/yt-dlp/releases/download/2026.08.19/yt-dlp_macos") ?? URL(fileURLWithPath: "/")
     static let ytdlpExecutableSHA256 = "0f192b7ec147ab6288885d6351d9ab67367640029b4377576ef46dd79cf7b202"
 
     #if arch(arm64)
-    static let ffmpegURL = URL(string: "https://github.com/eugeneware/ffmpeg-static/releases/download/b6.1.1/ffmpeg-darwin-arm64.gz")!
+    static let ffmpegURL = URL(string: "https://github.com/eugeneware/ffmpeg-static/releases/download/b6.1.1/ffmpeg-darwin-arm64.gz") ?? URL(fileURLWithPath: "/")
     static let ffmpegArchiveSHA256 = "8923876afa8db5585022d7860ec7e589af192f441c56793971276d450ed3bbfa"
     static let ffmpegExecutableSHA256 = "a90e3db6a3fd35f6074b013f948b1aa45b31c6375489d39e572bea3f18336584"
 
-    static let ffprobeURL = URL(string: "https://github.com/eugeneware/ffmpeg-static/releases/download/b6.1.1/ffprobe-darwin-arm64.gz")!
+    static let ffprobeURL = URL(string: "https://github.com/eugeneware/ffmpeg-static/releases/download/b6.1.1/ffprobe-darwin-arm64.gz") ?? URL(fileURLWithPath: "/")
     static let ffprobeArchiveSHA256 = "d986a8ec7b030899fe66a8a288ed809a3543338705a3ce178cfb85869c5d80be"
     static let ffprobeExecutableSHA256 = "bb2db6f5d8cef919da12fbf592119a987202a8c060a886f3cab091f9cab90b64"
     #else
-    static let ffmpegURL = URL(string: "https://github.com/eugeneware/ffmpeg-static/releases/download/b6.1.1/ffmpeg-darwin-x64.gz")!
+    static let ffmpegURL = URL(string: "https://github.com/eugeneware/ffmpeg-static/releases/download/b6.1.1/ffmpeg-darwin-x64.gz") ?? URL(fileURLWithPath: "/")
     static let ffmpegArchiveSHA256 = "929b375c1182d956c51f7ac25e0b2b0411fb01f6f407aa15c9758efeb4242106"
     static let ffmpegExecutableSHA256 = "ebdddc936f61e14049a2d4b549a412b8a40deeff6540e58a9f2a2da9e6b18894"
 
-    static let ffprobeURL = URL(string: "https://github.com/eugeneware/ffmpeg-static/releases/download/b6.1.1/ffprobe-darwin-x64.gz")!
+    static let ffprobeURL = URL(string: "https://github.com/eugeneware/ffmpeg-static/releases/download/b6.1.1/ffprobe-darwin-x64.gz") ?? URL(fileURLWithPath: "/")
     static let ffprobeArchiveSHA256 = "d4da574d6e2e197bd259b47d69cf262df9e312af24ad960444f6d806d3d4c186"
     static let ffprobeExecutableSHA256 = "fa3add0ce901f7241abe0dfc0155d958fc834aca3f8ce61f87cc712ae669c1e0"
     #endif
@@ -75,7 +75,7 @@ actor DependencyInstaller {
         }
 
         // 2. Set executable permissions
-        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: tempStaging.path)
+        try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: tempStaging.path)
 
         // 3. Dry-run execution test
         let process = Process()
@@ -188,8 +188,8 @@ actor DependencyInstaller {
         }
 
         // 5. Set executable permissions
-        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: extractedFfmpeg.path)
-        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: extractedFfprobe.path)
+        try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: extractedFfmpeg.path)
+        try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: extractedFfprobe.path)
 
         // 6. Test both binaries
         let testVersion: (URL) async throws -> Void = { binURL in
@@ -306,6 +306,9 @@ class YtdlpService: ObservableObject {
     nonisolated static func isPathContained(targetURL: URL, inside parentDirectoryURL: URL) -> Bool {
         let root = parentDirectoryURL.standardizedFileURL.resolvingSymlinksInPath()
         let candidate = targetURL.standardizedFileURL.resolvingSymlinksInPath()
+        if root.path == "/" {
+            return candidate.path.hasPrefix("/")
+        }
         return candidate.path == root.path || candidate.path.hasPrefix(root.path + "/")
     }
 
@@ -4404,9 +4407,13 @@ public struct DownloadResult: Sendable {
             trimmed = String(trimmed.dropFirst()).trimmingCharacters(in: .whitespacesAndNewlines)
         }
         
-        let reservedNames = Set(["CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9", "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9", ".DS_STORE"])
+        let reservedNames = Set(["CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9", "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9", ".DS_STORE", "DS_STORE"])
         if reservedNames.contains(trimmed.uppercased()) {
             trimmed = "download_\(trimmed)"
+        }
+
+        while trimmed.hasSuffix(".") {
+            trimmed = String(trimmed.dropLast()).trimmingCharacters(in: .whitespacesAndNewlines)
         }
         
         if trimmed.count > 200 {
@@ -4432,7 +4439,7 @@ public struct DownloadResult: Sendable {
                 } else {
                     current.append(char)
                 }
-            } else if char == " " && !inQuotes {
+            } else if char.isWhitespace && !inQuotes {
                 if !current.isEmpty {
                     args.append(current)
                     current = ""

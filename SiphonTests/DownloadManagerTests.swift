@@ -1098,6 +1098,77 @@ final class DownloadManagerTests: XCTestCase {
         XCTAssertEqual(result?.body, "✨ Added feature A\n🚀 Performance fix B")
         manager.shutdown()
     }
+
+    func testClearCompletedDownloadsPreservesFailedDownloads() {
+        let manager = DownloadManager()
+        let options = DownloadOptions.default
+
+        let completedDownload = Download(url: "https://example.com/done", options: options)
+        completedDownload.status = .completed
+        manager.downloads.append(completedDownload)
+
+        let failedDownload = Download(url: "https://example.com/failed", options: options)
+        failedDownload.status = .failed
+        manager.downloads.append(failedDownload)
+
+        let queuedDownload = Download(url: "https://example.com/queued", options: options)
+        queuedDownload.status = .queued
+        manager.downloads.append(queuedDownload)
+
+        XCTAssertEqual(manager.completedDownloads.count, 1)
+        XCTAssertEqual(manager.failedDownloads.count, 1)
+        XCTAssertEqual(manager.queuedDownloads.count, 1)
+
+        manager.clearCompletedDownloads()
+
+        XCTAssertEqual(manager.completedDownloads.count, 0, "Completed downloads must be cleared")
+        XCTAssertEqual(manager.failedDownloads.count, 1, "Failed downloads must be preserved when clearing completed")
+        XCTAssertEqual(manager.queuedDownloads.count, 1, "Queued downloads must be preserved when clearing completed")
+    }
+
+    func testClearFailedDownloadsPreservesCompletedDownloads() {
+        let manager = DownloadManager()
+        let options = DownloadOptions.default
+
+        let completedDownload = Download(url: "https://example.com/done", options: options)
+        completedDownload.status = .completed
+        manager.downloads.append(completedDownload)
+
+        let failedDownload = Download(url: "https://example.com/failed", options: options)
+        failedDownload.status = .failed
+        manager.downloads.append(failedDownload)
+
+        let queuedDownload = Download(url: "https://example.com/queued", options: options)
+        queuedDownload.status = .queued
+        manager.downloads.append(queuedDownload)
+
+        XCTAssertEqual(manager.completedDownloads.count, 1)
+        XCTAssertEqual(manager.failedDownloads.count, 1)
+        XCTAssertEqual(manager.queuedDownloads.count, 1)
+
+        manager.clearFailedDownloads()
+
+        XCTAssertEqual(manager.completedDownloads.count, 1, "Completed downloads must be preserved when clearing failed")
+        XCTAssertEqual(manager.failedDownloads.count, 0, "Failed downloads must be cleared")
+        XCTAssertEqual(manager.queuedDownloads.count, 1, "Queued downloads must be preserved when clearing failed")
+    }
+
+    func testQuickAndMenuDownloadDefaultLanguagesOnlyEnglish() {
+        let manager = DownloadManager()
+        manager.quickDownload(url: "https://example.com/quick")
+        guard let quickItem = manager.downloads.last else {
+            XCTFail("Quick download was not added")
+            return
+        }
+        XCTAssertEqual(quickItem.options.subtitleLanguages, ["en"], "Quick download must default to English only")
+
+        manager.menuDownload(url: "https://example.com/menu", type: "video", quality: "1080")
+        guard let menuItem = manager.downloads.last else {
+            XCTFail("Menu download was not added")
+            return
+        }
+        XCTAssertEqual(menuItem.options.subtitleLanguages, ["en"], "Menu download must default to English only")
+    }
 }
 
 final class MockURLProtocol: URLProtocol, @unchecked Sendable {

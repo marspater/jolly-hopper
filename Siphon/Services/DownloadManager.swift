@@ -504,7 +504,7 @@ class DownloadManager: ObservableObject {
             videoResolution: type == "video" ? (quality == "best" ? .best : (quality == "1080" ? .r1080p : .r720p)) : .worst,
             audioQuality: .best,
             downloadSubtitles: false,
-            subtitleLanguages: ["en", "tr"],
+            subtitleLanguages: ["en"],
             subtitleFormat: .srt,
             embedSubtitles: false,
             downloadThumbnail: false,
@@ -538,7 +538,7 @@ class DownloadManager: ObservableObject {
             saveFolder: saveFolderURL,
             fileType: preset.fileType,
             downloadSubtitles: false,
-            subtitleLanguages: ["tr", "en"],
+            subtitleLanguages: ["en"],
             subtitleFormat: .srt,
             embedSubtitles: false,
             downloadThumbnail: false,
@@ -1096,7 +1096,11 @@ class DownloadManager: ObservableObject {
 
 
     func clearCompletedDownloads() {
-        clearDownloads(completedDownloads + failedDownloads)
+        clearDownloads(completedDownloads)
+    }
+
+    func clearFailedDownloads() {
+        clearDownloads(failedDownloads)
     }
 
     func clearDownloads(_ items: [Download]) {

@@ -112,7 +112,7 @@ struct ContentView: View {
                     .accessibilityLabel(languageService.s("stop_all"))
                 } else if appState.selectedNavItem == .completed && !downloadManager.completedDownloads.isEmpty {
                     Button {
-                        downloadManager.clearDownloads(downloadManager.completedDownloads)
+                        downloadManager.clearCompletedDownloads()
                     } label: {
                         Label(languageService.s("clear_history"), systemImage: "trash")
                     }
@@ -120,7 +120,7 @@ struct ContentView: View {
                     .accessibilityLabel(languageService.s("clear_history"))
                 } else if appState.selectedNavItem == .failed && !downloadManager.failedDownloads.isEmpty {
                     Button {
-                        downloadManager.clearDownloads(downloadManager.failedDownloads)
+                        downloadManager.clearFailedDownloads()
                     } label: {
                         Label(languageService.s("clear_history"), systemImage: "trash")
                     }
