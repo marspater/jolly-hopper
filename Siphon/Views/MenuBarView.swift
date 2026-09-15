@@ -56,6 +56,7 @@ struct MenuBarView: View {
             TextField(languageService.s("url_hint"), text: $url)
                 .textFieldStyle(.plain)
                 .font(.geist(12))
+                .accessibilityLabel(languageService.s("video_url"))
                 .onSubmit {
                     initiateDownload()
                 }
@@ -202,6 +203,7 @@ struct MenuBarView: View {
                 .pickerStyle(.menu)
                 .controlSize(.small)
                 .labelsHidden()
+                .accessibilityLabel(languageService.s("preset"))
             }
         }
         .padding(10)
@@ -240,6 +242,7 @@ struct MenuBarView: View {
         }
         .buttonStyle(.bouncy(scale: 0.97, hover: 1.015))
         .disabled(url.isEmpty)
+        .accessibilityLabel(languageService.s("download_btn"))
         .shadow(color: url.isEmpty ? .clear : SiphonTheme.accent.opacity(0.35), radius: 6, y: 2)
     }
 
