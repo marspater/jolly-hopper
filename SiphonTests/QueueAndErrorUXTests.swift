@@ -764,6 +764,7 @@ final class QueueAndErrorUXTests: XCTestCase {
         X-Auth-Token: my-secret-token-123
         "access_token": "eyJhbGciOiJIUzI1Ni..."
         'sessionid': 'abcdef123456'
+        jwt=header.payload.sig&private_key=secretKey123
         https://example.com/api?jwt=header.payload.sig&private_key=secretKey123
         """
         let sanitizedComplex = LoggerService.sanitizeDiagnosticText(complexDiagnostic)
@@ -779,6 +780,7 @@ final class QueueAndErrorUXTests: XCTestCase {
         XCTAssertTrue(sanitizedComplex.contains("X-Auth-Token: <REDACTED>"))
         XCTAssertTrue(sanitizedComplex.contains("jwt=<REDACTED>"))
         XCTAssertTrue(sanitizedComplex.contains("private_key=<REDACTED>"))
+        XCTAssertTrue(sanitizedComplex.contains("https://example.com/api"))
     }
 
     func testAppUpdateScriptIncludesTeamIDVerification() {
