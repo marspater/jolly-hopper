@@ -4234,10 +4234,8 @@ public struct DownloadResult: Sendable {
             guard let htmlText = String(data: data, encoding: .utf8) else { return nil }
 
             if htmlText.contains("sucuri_cloudproxy_js") {
-                let pattern = "S\\s*=\\s*'([^']+)'"
-                let regex = try NSRegularExpression(pattern: pattern, options: [])
                 let nsRange = NSRange(htmlText.startIndex..<htmlText.endIndex, in: htmlText)
-                if let match = regex.firstMatch(in: htmlText, options: [], range: nsRange),
+                if let match = Self.sucuriScriptRegex?.firstMatch(in: htmlText, options: [], range: nsRange),
                    let range = Range(match.range(at: 1), in: htmlText) {
                     let b64Str = String(htmlText[range])
                     if let decodedData = Data(base64Encoded: b64Str),
@@ -4246,8 +4244,7 @@ public struct DownloadResult: Sendable {
                         var cookieName = ""
                         var cookieValue = ""
 
-                        let strPattern = "\"(.*?)\"|'(.*?)'"
-                        if let strRegex = try? NSRegularExpression(pattern: strPattern, options: []) {
+                        if let strRegex = Self.sucuriStringRegex {
                             let jsRange = NSRange(jsCode.startIndex..<jsCode.endIndex, in: jsCode)
                             let matches = strRegex.matches(in: jsCode, options: [], range: jsRange)
 
@@ -4279,7 +4276,9 @@ public struct DownloadResult: Sendable {
         return nil
     }
 
-    // Bolt Performance Optimization: Pre-compile static NSRegularExpression to avoid compiling pattern and heap allocations on every validation call.
+    // Bolt Performance Optimization: Pre-compile static NSRegularExpression instances to avoid regex compilation overhead during Sucuri cookie resolution and time frame validation.
+    nonisolated private static let sucuriScriptRegex = try? NSRegularExpression(pattern: "S\\s*=\\s*'([^']+)'", options: [])
+    nonisolated private static let sucuriStringRegex = try? NSRegularExpression(pattern: "\"(.*?)\"|'(.*?)'", options: [])
     nonisolated private static let timeFrameRegex = try? NSRegularExpression(pattern: #"^\d{1,2}(?::\d{2}){0,2}(?:\.\d+)?$|^\d+(?:\.\d+)?$"#, options: [])
 
     nonisolated static func isValidTimeFrame(_ time: String) -> Bool {
