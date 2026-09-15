@@ -1025,7 +1025,7 @@ class DownloadManager: ObservableObject {
         let rawBaseName = download.options.customFilename ?? download.title
         let sanitizedBase = YtdlpService.sanitizeFilename(rawBaseName)
         let folder = download.options.saveFolder
-        let ext = download.options.fileType.fileExtension
+        let ext = YtdlpService.resolvedOutputFileExtension(for: download.options)
 
         let existingFiles = (try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)) ?? []
         let existingBaseNames = Set(existingFiles.compactMap { file -> String? in
@@ -1152,16 +1152,20 @@ class DownloadManager: ObservableObject {
         sanitizedBaseName: String,
         videoId: String?
     ) -> Bool {
-        let matchesPrefix = (!rawBaseName.isEmpty && fileName.hasPrefix(rawBaseName)) ||
-                            (!sanitizedBaseName.isEmpty && fileName.hasPrefix(sanitizedBaseName))
+        guard isTemporaryFileName(fileName) else { return false }
+
+        let trimmedRaw = rawBaseName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedSanitized = sanitizedBaseName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let matchesPrefix = (!trimmedRaw.isEmpty && fileName.hasPrefix(trimmedRaw)) ||
+                            (!trimmedSanitized.isEmpty && fileName.hasPrefix(trimmedSanitized))
         let matchesId: Bool
-        if let vid = videoId, !vid.isEmpty {
+        if let vid = videoId?.trimmingCharacters(in: .whitespacesAndNewlines), !vid.isEmpty, vid.count >= 4 {
             matchesId = fileName.contains(vid)
         } else {
             matchesId = false
         }
 
-        return (matchesPrefix || matchesId) && isTemporaryFileName(fileName)
+        return matchesPrefix || matchesId
     }
 
     private func cleanupTemporaryFiles(for download: Download) {
@@ -1203,31 +1207,49 @@ class DownloadManager: ObservableObject {
 
 
     func loadHistory() {
-        if let data = userDefaults.data(forKey: UserDefaultsKeys.downloadHistory) {
-            do {
-                let decoded = try JSONDecoder().decode([HistoricDownload].self, from: data)
-                history = decoded
-                // Restore as Download objects for UI, reversing so newest is at the top
-                let restored = decoded.reversed().map { $0.toDownload() }
-                
-                // Bolt Performance Optimization: Use downloads.lazy.map to prevent intermediate array allocation before Set creation
-                var existingIds = Set(downloads.lazy.map { $0.id })
-                for download in restored {
-                    download.options.rawCookies = nil // Purge any legacy session cookies from restored history
-                    if !existingIds.contains(download.id) {
-                        switch download.status {
-                        case .downloading, .fetching, .processing, .queued:
-                            download.status = .stopped
-                        default:
-                            break
-                        }
-                        downloads.append(download)
-                        existingIds.insert(download.id)
-                    }
+        guard let data = userDefaults.data(forKey: UserDefaultsKeys.downloadHistory) else { return }
+        do {
+            guard let rawItems = try JSONSerialization.jsonObject(with: data) as? [Any] else { return }
+            let decoder = JSONDecoder()
+            var decoded: [HistoricDownload] = []
+            var skippedCount = 0
+            decoded.reserveCapacity(rawItems.count)
+            for rawItem in rawItems {
+                guard JSONSerialization.isValidJSONObject(rawItem),
+                      let itemData = try? JSONSerialization.data(withJSONObject: rawItem),
+                      let item = try? decoder.decode(HistoricDownload.self, from: itemData) else {
+                    skippedCount += 1
+                    continue
                 }
-            } catch {
-                LoggerService.shared.log("Failed to decode download history: \(error.localizedDescription)", level: .error)
+                decoded.append(item)
             }
+            history = decoded
+            if skippedCount > 0 {
+                LoggerService.shared.log("Skipped invalid download history entries while restoring history.", level: .warning)
+                if let repairedData = try? JSONEncoder().encode(decoded) {
+                    userDefaults.set(repairedData, forKey: UserDefaultsKeys.downloadHistory)
+                }
+            }
+            // Restore as Download objects for UI, reversing so newest is at the top
+            let restored = decoded.reversed().map { $0.toDownload() }
+            
+            // Bolt Performance Optimization: Use downloads.lazy.map to prevent intermediate array allocation before Set creation
+            var existingIds = Set(downloads.lazy.map { $0.id })
+            for download in restored {
+                download.options.rawCookies = nil // Purge any legacy session cookies from restored history
+                if !existingIds.contains(download.id) {
+                    switch download.status {
+                    case .downloading, .fetching, .processing, .queued:
+                        download.status = .stopped
+                    default:
+                        break
+                    }
+                    downloads.append(download)
+                    existingIds.insert(download.id)
+                }
+            }
+        } catch {
+            LoggerService.shared.log("Failed to restore download history: \(error.localizedDescription)", level: .error)
         }
     }
 

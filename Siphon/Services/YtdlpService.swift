@@ -1687,7 +1687,7 @@ public struct DownloadResult: Sendable {
             }
             args.append(contentsOf: ["-f", formatId])
             if options.fileType.isVideo {
-                if let mergeFormat = compatibleMergeOutputFormat(for: options) {
+                if let mergeFormat = Self.compatibleMergeOutputFormat(for: options) {
                     args.append(contentsOf: ["--merge-output-format", mergeFormat])
                 }
             } else {
@@ -1713,7 +1713,7 @@ public struct DownloadResult: Sendable {
                 }
                 args.append(contentsOf: ["-f", formatId])
                 if options.fileType.isVideo {
-                    if let mergeFormat = compatibleMergeOutputFormat(for: options) {
+                    if let mergeFormat = Self.compatibleMergeOutputFormat(for: options) {
                         args.append(contentsOf: ["--merge-output-format", mergeFormat])
                     }
                 } else {
@@ -1757,7 +1757,7 @@ public struct DownloadResult: Sendable {
             args.append(contentsOf: ["-S", "lang,quality,res,height,fps,hdr:12,vbr,abr,filesize"])
         }
 
-        var finalMergeFormat = compatibleMergeOutputFormat(for: options)
+        var finalMergeFormat = Self.compatibleMergeOutputFormat(for: options)
 
         if let conversionCodec = options.conversionCodec, conversionCodec != .none {
             var targetExt = options.fileType.fileExtension
@@ -1802,7 +1802,11 @@ public struct DownloadResult: Sendable {
         return args
     }
 
-    private func compatibleMergeOutputFormat(for options: DownloadOptions) -> String? {
+    static func resolvedOutputFileExtension(for options: DownloadOptions) -> String {
+        Self.compatibleMergeOutputFormat(for: options) ?? options.fileType.fileExtension
+    }
+
+    static func compatibleMergeOutputFormat(for options: DownloadOptions) -> String? {
         guard options.fileType.isVideo else { return nil }
 
         let requestedVideoCodec = options.videoCodec ?? .auto

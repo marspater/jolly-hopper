@@ -222,15 +222,45 @@ class Download: ObservableObject, Identifiable {
 
 
 enum DownloadStatus: String, Codable {
-    case fetching = "Bilgi Alınıyor"
-    case queued = "Kuyrukta"
-    case downloading = "İndiriliyor"
-    case processing = "İşleniyor"
-    case completed = "Tamamlandı"
-    case failed = "Hata"
-    case stopped = "Durduruldu"
-    case paused = "Duraklatıldı"
-    case fileExists = "Dosya Mevcut"
+    case fetching = "fetching"
+    case queued = "queued"
+    case downloading = "downloading"
+    case processing = "processing"
+    case completed = "completed"
+    case failed = "failed"
+    case stopped = "stopped"
+    case paused = "paused"
+    case fileExists = "file_exists"
+
+    init(from decoder: Decoder) throws {
+        let value = try decoder.singleValueContainer().decode(String.self)
+        if let status = Self(rawValue: value) {
+            self = status
+            return
+        }
+
+        switch value {
+        case "Bilgi Alınıyor": self = .fetching
+        case "Kuyrukta": self = .queued
+        case "İndiriliyor": self = .downloading
+        case "İşleniyor": self = .processing
+        case "Tamamlandı": self = .completed
+        case "Hata": self = .failed
+        case "Durduruldu": self = .stopped
+        case "Duraklatıldı": self = .paused
+        case "Dosya Mevcut": self = .fileExists
+        default:
+            throw DecodingError.dataCorruptedError(
+                in: try decoder.singleValueContainer(),
+                debugDescription: "Unknown DownloadStatus value: \(value)"
+            )
+        }
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode(rawValue)
+    }
     
     func title(lang: LanguageService) -> String {
         switch self {

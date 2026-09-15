@@ -261,6 +261,92 @@ final class DownloadManagerTests: XCTestCase {
         UserDefaults.standard.removeObject(forKey: userDefaultsKey)
     }
 
+    func testLoadHistoryRecoversValidEntriesWhenCorruptedItemPresent() throws {
+        let userDefaultsKey = UserDefaultsKeys.downloadHistory
+        let options = DownloadOptions.default
+        let download1 = Download(url: "https://example.com/item1", options: options)
+        download1.title = "Item 1"
+        download1.status = .completed
+        let download2 = Download(url: "https://example.com/item2", options: options)
+        download2.title = "Item 2"
+        download2.status = .completed
+
+        let historic1 = HistoricDownload(download: download1)
+        let historic2 = HistoricDownload(download: download2)
+
+        let encoder = JSONEncoder()
+        let data1 = try encoder.encode(historic1)
+        let data2 = try encoder.encode(historic2)
+
+        let json1 = try JSONSerialization.jsonObject(with: data1)
+        let json2 = try JSONSerialization.jsonObject(with: data2)
+        let corruptedJson: [String: Any] = ["id": "corrupted", "url": 12345] // Not a valid HistoricDownload
+
+        let mixedArray = [json1, corruptedJson, json2]
+        let rawData = try JSONSerialization.data(withJSONObject: mixedArray)
+        UserDefaults.standard.set(rawData, forKey: userDefaultsKey)
+        defer { UserDefaults.standard.removeObject(forKey: userDefaultsKey) }
+
+        let manager = DownloadManager()
+        manager.loadHistory()
+
+        XCTAssertEqual(manager.history.count, 2, "Valid entries should be recovered even when a corrupted item is present")
+        XCTAssertEqual(manager.downloads.count, 2)
+    }
+
+    func testDownloadStatusLegacyAndCanonicalDecoding() throws {
+        let decoder = JSONDecoder()
+
+        // Modern English canonical keys
+        let modernJSON = "\"downloading\"".data(using: .utf8)!
+        let modernStatus = try decoder.decode(DownloadStatus.self, from: modernJSON)
+        XCTAssertEqual(modernStatus, .downloading)
+
+        // Legacy Turkish serialized keys
+        let legacyMap: [String: DownloadStatus] = [
+            "\"Bilgi Alınıyor\"": .fetching,
+            "\"Kuyrukta\"": .queued,
+            "\"İndiriliyor\"": .downloading,
+            "\"İşleniyor\"": .processing,
+            "\"Tamamlandı\"": .completed,
+            "\"Hata\"": .failed,
+            "\"Durduruldu\"": .stopped,
+            "\"Duraklatıldı\"": .paused,
+            "\"Dosya Mevcut\"": .fileExists
+        ]
+
+        for (legacyJSON, expectedStatus) in legacyMap {
+            let data = legacyJSON.data(using: .utf8)!
+            let status = try decoder.decode(DownloadStatus.self, from: data)
+            XCTAssertEqual(status, expectedStatus, "Legacy Turkish string \(legacyJSON) must decode to \(expectedStatus)")
+        }
+    }
+
+    func testDownloadProcessResultPathValidation() {
+        let emptyResult = DownloadProcessResult(primaryPath: "   ", allPaths: ["  ", "\n"])
+        XCTAssertTrue(emptyResult.isEmpty)
+        XCTAssertEqual(emptyResult.count, 0)
+
+        let validResult = DownloadProcessResult(primaryPath: "/path/to/video.mp4")
+        XCTAssertFalse(validResult.isEmpty)
+        XCTAssertEqual(validResult.count, 1)
+        XCTAssertEqual(validResult.primaryPath, "/path/to/video.mp4")
+        XCTAssertEqual(validResult.allPaths, ["/path/to/video.mp4"])
+    }
+
+    func testResolvedOutputFileExtensionUnification() {
+        var options = DownloadOptions.default
+        options.fileType = .mp4
+        options.videoCodec = .vp9 // VP9 in MP4 triggers MKV merge format for compatibility
+        XCTAssertEqual(YtdlpService.resolvedOutputFileExtension(for: options), "mkv")
+
+        options.videoCodec = .h264
+        XCTAssertEqual(YtdlpService.resolvedOutputFileExtension(for: options), "mp4")
+
+        options.fileType = .mp3
+        XCTAssertEqual(YtdlpService.resolvedOutputFileExtension(for: options), "mp3")
+    }
+
     func testProcessDownloadAbortsIfCancelledDuringFetchInfo() async {
         let manager = DownloadManager()
         manager.ytdlpService.ytdlpPath = URL(fileURLWithPath: "/usr/local/bin/yt-dlp")
