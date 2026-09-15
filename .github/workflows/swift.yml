@@ -248,6 +248,11 @@ jobs:
           runner.write_text(text)
           PY
 
+          # Static sanity checks before committing.
+          grep -q 'private func saveHistory()' Siphon/Services/DownloadManager.swift
+          grep -q 'let finalMergeFormat = Self.resolvedOutputFileExtension' Siphon/Services/YtdlpService.swift
+          grep -q 'Reject unknown actions before changing application activation state.' Siphon/SiphonApp.swift
+          grep -q 'PID-scan descendant killing' Siphon/Services/YtdlpProcessRunner.swift
           git diff --check
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
@@ -281,3 +286,5 @@ jobs:
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO
+
+# Triggered from PR synchronization to validate the repair branch.
