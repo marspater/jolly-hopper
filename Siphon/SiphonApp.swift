@@ -672,7 +672,7 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
 
             let exitCode = process.terminationStatus
             var statusFound: String? = nil
-            if let data = try? Data(contentsOf: statusFile),
+            if let (data, _) = try? await URLSession.shared.data(from: statusFile),
                let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                let status = json["status"] as? String {
                 statusFound = status
