@@ -59,10 +59,10 @@ public final class DownloadProcessController: @unchecked Sendable {
                 kill(child, SIGTERM)
             }
 
-            // Also signal process group if distinct from main process group
+            // Also signal process group if distinct from main process group and verified as group leader
             let pgid = getpgid(resolvedPID)
             let appPgrp = getpgrp()
-            if pgid > 0 && pgid != appPgrp {
+            if pgid > 0 && pgid == resolvedPID && pgid != appPgrp {
                 kill(-pgid, SIGTERM)
             }
         }
@@ -101,7 +101,7 @@ public final class DownloadProcessController: @unchecked Sendable {
                 }
                 let pgid = getpgid(resolvedPID)
                 let appPgrp = getpgrp()
-                if pgid > 0 && pgid != appPgrp {
+                if pgid > 0 && pgid == resolvedPID && pgid != appPgrp {
                     kill(-pgid, SIGKILL)
                 }
             }
@@ -199,12 +199,14 @@ public struct DownloadProcessResult: Sendable {
     public let allPaths: [String]
 
     public init(primaryPath: String, allPaths: [String] = []) {
-        self.primaryPath = primaryPath
-        self.allPaths = allPaths.isEmpty ? [primaryPath] : allPaths
+        let validPaths = allPaths.filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+        let validPrimary = primaryPath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : primaryPath
+        self.allPaths = validPaths.isEmpty ? (validPrimary.map { [$0] } ?? []) : validPaths
+        self.primaryPath = validPrimary ?? self.allPaths.first ?? ""
     }
 
     public var isEmpty: Bool {
-        primaryPath.isEmpty && allPaths.isEmpty
+        primaryPath.isEmpty || allPaths.isEmpty
     }
 
     public var count: Int {
@@ -352,13 +354,16 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
         onProgress: @escaping @Sendable (Double, String?, String?) -> Void,
         onOutput: @escaping @Sendable (String) -> Void
     ) async throws -> DownloadProcessResult {
-        try await withCheckedThrowingContinuation { continuation in
-            let safeContinuation = SafeContinuation(continuation)
+        let controller = processController ?? DownloadProcessController()
 
-            if processController?.isCancelled == true {
-                safeContinuation.resume(throwing: YtdlpError.downloadFailed("Download was stopped."))
-                return
-            }
+        return try await withTaskCancellationHandler(operation: {
+            try await withCheckedThrowingContinuation { continuation in
+                let safeContinuation = SafeContinuation(continuation)
+
+                if Task.isCancelled || controller.isCancelled {
+                    safeContinuation.resume(throwing: YtdlpError.downloadFailed("Download was stopped."))
+                    return
+                }
 
             let process = Process()
             let outputPipe = Pipe()
@@ -557,7 +562,7 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
                 }
 
                 // If user requested cancellation or process was terminated via signal, resume with appropriate error
-                if processController?.isCancelled == true {
+                if Task.isCancelled || controller.isCancelled {
                     safeContinuation.resume(throwing: YtdlpError.downloadFailed("Download was stopped."))
                     return
                 }
@@ -630,13 +635,9 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
             }
 
             do {
-                if let controller = processController {
-                    try controller.start(process)
-                } else {
-                    try process.run()
-                }
+                try controller.start(process)
             } catch {
-                processController?.detach()
+                controller.detach()
                 outputPipe.fileHandleForReading.readabilityHandler = nil
                 errorPipe.fileHandleForReading.readabilityHandler = nil
                 try? outputPipe.fileHandleForReading.close()
@@ -645,5 +646,8 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
                 safeContinuation.resume(throwing: error)
             }
         }
+    }, onCancel: {
+        controller.cancel()
+    })
     }
 }

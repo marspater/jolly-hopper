@@ -8,8 +8,14 @@ int main(int argc, char *argv[]) {
         (void)write(STDERR_FILENO, usage, sizeof(usage) - 1U);
         exit_status = 1;
     } else {
-        // Isolate process group so child processes can be terminated cleanly.
-        (void)setpgid(0, 0);
+        // Isolate the launched command in its own process group. The Swift-side
+        // controller can then terminate the group without touching the caller's
+        // process group. setpgid(0, 0) makes this process the group leader.
+        if (setpgid(0, 0) != 0) {
+            const char err[] = "siphon-pgrp: failed to create isolated process group\n";
+            (void)write(STDERR_FILENO, err, sizeof(err) - 1U);
+            return 125;
+        }
 
         if (argv[1][0] == '/') {
             /* Flawfinder: ignore */

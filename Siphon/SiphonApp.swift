@@ -133,10 +133,12 @@ struct SiphonApp: App {
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
         
+        guard url.host == "download" || url.host == "fast-download" else { return }
+        
         let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
         let queryItems = components?.queryItems
         let videoUrl = queryItems?.first(where: { $0.name == "url" })?.value
-        let rawCookies = queryItems?.first(where: { $0.name == "cookies" })?.value
+        let rawCookies = url.host == "download" ? queryItems?.first(where: { $0.name == "cookies" })?.value : nil
         
         guard let rawVideoUrl = videoUrl?.trimmingCharacters(in: .whitespacesAndNewlines),
               !rawVideoUrl.isEmpty,
