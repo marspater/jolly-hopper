@@ -113,26 +113,28 @@ jobs:
             case .av1, .vp9:
                 return "mkv"
             case .h264, .h265:
-                return compatibleMergeOutputFormat(
-                    for: options,
-                    videoCodec: conversionCodec,
-                    audioCodec: options.audioCodec ?? .auto
-                ) ?? options.fileType.fileExtension
+                switch options.fileType {
+                case .mkv, .webm:
+                    return "mkv"
+                case .mp4:
+                    let audioCodec = options.audioCodec ?? .auto
+                    return (audioCodec == .opus || audioCodec == .flac) ? "mkv" : "mp4"
+                default:
+                    return options.fileType.fileExtension
+                }
             case .none:
                 break
             }
         }
+
         return compatibleMergeOutputFormat(for: options) ?? options.fileType.fileExtension
     }
 
-    static func compatibleMergeOutputFormat(
-        for options: DownloadOptions,
-        videoCodec: ConversionCodec? = nil,
-        audioCodec: AudioCodec? = nil
-    ) -> String? {
+    static func compatibleMergeOutputFormat(for options: DownloadOptions) -> String? {
         guard options.fileType.isVideo else { return nil }
-        let requestedVideoCodec = videoCodec ?? options.videoCodec ?? .auto
-        let requestedAudioCodec = audioCodec ?? options.audioCodec ?? .auto
+
+        let requestedVideoCodec = options.videoCodec ?? .auto
+        let requestedAudioCodec = options.audioCodec ?? .auto
 
         switch options.fileType {
         case .mkv:
@@ -252,7 +254,7 @@ jobs:
           git add Siphon/Services/DownloadManager.swift Siphon/Services/YtdlpService.swift Siphon/Services/YtdlpProcessRunner.swift Siphon/SiphonApp.swift
           if ! git diff --cached --quiet; then
             git commit -m 'fix: restore history and harden download lifecycle'
-            git push origin HEAD:${GITHUB_HEAD_REF}
+            git push origin HEAD:${GITHUB_REF_NAME}
           fi
 
       - name: Test (Debug)
@@ -274,8 +276,8 @@ jobs:
             -scheme Siphon \
             -destination 'platform=macOS' \
             -configuration Release \
-            MACOSX_DEPLOYMENT_TARGET=14.0 \
             ENABLE_TESTABILITY=YES \
+            MACOSX_DEPLOYMENT_TARGET=14.0 \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO
