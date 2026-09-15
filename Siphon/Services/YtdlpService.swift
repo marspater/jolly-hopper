@@ -4233,9 +4233,7 @@ public struct DownloadResult: Sendable {
             let (data, _) = try await URLSession.shared.data(for: request)
             guard let htmlText = String(data: data, encoding: .utf8) else { return nil }
 
-            if htmlText.contains("sucuri_cloudproxy_js") {
-                let pattern = "S\\s*=\\s*'([^']+)'"
-                let regex = try NSRegularExpression(pattern: pattern, options: [])
+            if htmlText.contains("sucuri_cloudproxy_js"), let regex = Self.sucuriAssignmentRegex {
                 let nsRange = NSRange(htmlText.startIndex..<htmlText.endIndex, in: htmlText)
                 if let match = regex.firstMatch(in: htmlText, options: [], range: nsRange),
                    let range = Range(match.range(at: 1), in: htmlText) {
@@ -4246,8 +4244,7 @@ public struct DownloadResult: Sendable {
                         var cookieName = ""
                         var cookieValue = ""
 
-                        let strPattern = "\"(.*?)\"|'(.*?)'"
-                        if let strRegex = try? NSRegularExpression(pattern: strPattern, options: []) {
+                        if let strRegex = Self.sucuriStringLiteralRegex {
                             let jsRange = NSRange(jsCode.startIndex..<jsCode.endIndex, in: jsCode)
                             let matches = strRegex.matches(in: jsCode, options: [], range: jsRange)
 
@@ -4278,6 +4275,10 @@ public struct DownloadResult: Sendable {
         }
         return nil
     }
+
+    // Bolt Performance Optimization: Pre-compile static NSRegularExpression patterns to eliminate repeated pattern compilation and heap allocations on every Sucuri Cloudproxy cookie resolution call.
+    nonisolated private static let sucuriAssignmentRegex = try? NSRegularExpression(pattern: "S\\s*=\\s*'([^']+)'", options: [])
+    nonisolated private static let sucuriStringLiteralRegex = try? NSRegularExpression(pattern: "\"([^\"]*)\"|'([^']*)'", options: [])
 
     // Bolt Performance Optimization: Pre-compile static NSRegularExpression to avoid compiling pattern and heap allocations on every validation call.
     nonisolated private static let timeFrameRegex = try? NSRegularExpression(pattern: #"^\d{1,2}(?::\d{2}){0,2}(?:\.\d+)?$|^\d+(?:\.\d+)?$"#, options: [])
