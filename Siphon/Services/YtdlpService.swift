@@ -2359,15 +2359,17 @@ public struct DownloadResult: Sendable {
         guard let range = streamURL.range(of: "multi=([^/]+)", options: .regularExpression) else {
             return [MediaFormat(formatId: "best", ext: "mp4", resolution: "1920x1080", formatNote: "HD")]
         }
-        let multiChunk = String(streamURL[range]).replacingOccurrences(of: "multi=", with: "")
-        let entries = multiChunk.components(separatedBy: ",")
-        var formats: [MediaFormat] = []
+        // Bolt Performance Optimization: Use Substring `split` and pre-parsed height tuple sorting to eliminate string/array allocations.
+        let multiChunk = streamURL[range].dropFirst("multi=".count)
+        let entries = multiChunk.split(separator: ",")
+        var formats: [(format: MediaFormat, height: Int)] = []
         for entry in entries {
-            let parts = entry.components(separatedBy: ":")
-            guard let res = parts.first, res.contains("x") else { continue }
-            let dims = res.components(separatedBy: "x")
+            let parts = entry.split(separator: ":")
+            guard let resSub = parts.first, resSub.contains("x") else { continue }
+            let dims = resSub.split(separator: "x")
             if dims.count == 2, let _ = Int(dims[0]), let h = Int(dims[1]) {
-                formats.append(MediaFormat(
+                let res = String(resSub)
+                let fmt = MediaFormat(
                     formatId: "\(h)",
                     ext: "mp4",
                     resolution: res,
@@ -2375,14 +2377,13 @@ public struct DownloadResult: Sendable {
                     vcodec: "h264",
                     acodec: "aac",
                     formatNote: "\(h)p"
-                ))
+                )
+                formats.append((format: fmt, height: h))
             }
         }
-        return formats.isEmpty ? nil : formats.sorted(by: {
-            let h0 = Int($0.resolution?.components(separatedBy: "x").last ?? "0") ?? 0
-            let h1 = Int($1.resolution?.components(separatedBy: "x").last ?? "0") ?? 0
-            return h0 > h1
-        })
+        if formats.isEmpty { return nil }
+        formats.sort(by: { $0.height > $1.height })
+        return formats.map(\.format)
     }
 
     func resolveBoyfriendTVStreamURLForDownload(streamURL: String, options: DownloadOptions) -> String {
@@ -2401,16 +2402,18 @@ public struct DownloadResult: Sendable {
         
         var targetTag = "1080p"
         if let range = streamURL.range(of: "multi=([^/&]+)", options: .regularExpression) {
-            let multiChunk = String(streamURL[range]).replacingOccurrences(of: "multi=", with: "")
-            let entries = multiChunk.components(separatedBy: ",")
+            // Bolt Performance Optimization: Use Substring `split` to avoid allocating intermediate String arrays.
+            let multiChunk = streamURL[range].dropFirst("multi=".count)
+            let entries = multiChunk.split(separator: ",")
             var tagMap: [(height: Int, tag: String)] = []
             for entry in entries {
-                let parts = entry.components(separatedBy: ":")
-                let res = parts.first ?? ""
-                let tag = parts.count > 1 ? parts[1] : res
+                let parts = entry.split(separator: ":")
+                let resSub = parts.first ?? ""
+                let res = String(resSub)
+                let tag = parts.count > 1 ? String(parts[1]) : res
                 let h: Int? = {
                     if res.contains("x") {
-                        let dims = res.components(separatedBy: "x")
+                        let dims = resSub.split(separator: "x")
                         if dims.count == 2 { return Int(dims[1]) }
                     }
                     return Int(res.replacingOccurrences(of: "p", with: ""))
