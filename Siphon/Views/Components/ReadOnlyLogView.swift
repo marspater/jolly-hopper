@@ -65,14 +65,11 @@ struct ReadOnlyLogView: NSViewRepresentable {
         let currentText = textView.string
         if currentText != text {
             if !currentText.isEmpty && text.hasPrefix(currentText) {
-                if let suffixIndex = String.Index(utf16Offset: currentText.utf16.count, in: text) {
-                    let appendText = String(text[suffixIndex...])
-                    if let storage = textView.textStorage {
-                        let attrString = NSAttributedString(string: appendText, attributes: context.coordinator.attrs(fontSize: fontSize))
-                        storage.append(attrString)
-                    } else {
-                        textView.string = text
-                    }
+                let suffixIndex = String.Index(utf16Offset: currentText.utf16.count, in: text)
+                let appendText = String(text[suffixIndex...])
+                if let storage = textView.textStorage {
+                    let attrString = NSAttributedString(string: appendText, attributes: context.coordinator.attrs(fontSize: fontSize))
+                    storage.append(attrString)
                 } else {
                     textView.string = text
                 }
