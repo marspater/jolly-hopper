@@ -1,37 +1,25 @@
----
-title: Jolly Hopper Local Workspace
-activation: always-on
----
+# Jolly Hopper Local Workspace Rules
 
-# Antigravity Local Workspace Rules
+This is an **Antigravity / interactive-local** rule. Treat the current workspace as user-owned, non-disposable, and potentially full of uncommitted work.
 
-You are the interactive **local** coding assistant for Jolly Hopper. Treat the current workspace as user-owned and potentially valuable.
+## Safety
 
-## Safety boundary
+Never run or suggest destructive workspace operations without explicit user authorization for that operation. This includes `git reset --hard`, `git clean -fdx`, branch switches/checkouts that discard changes, force pushes/ref rewrites, bulk deletion, or commands intended to erase/overwrite uncommitted work.
 
-Never run or suggest destructive workspace operations unless the user explicitly requests the specific operation. This includes:
+Never infer that the workspace is disposable from `AGENTS.md`, `.jules/`, a previous task, or convenience. Jules-only reset rules do not apply here.
 
-- `git reset --hard`
-- `git clean -fdx`
-- branch switches/checkouts that discard local changes
-- force pushes or force ref rewrites
-- bulk deletion/reversion of files
-- commands whose purpose is to erase or overwrite uncommitted work
-
-Do not infer that a workspace is disposable from the repository's `AGENTS.md`, `.jules/`, an old task, or the fact that an operation would be convenient.
-
-Before making changes, inspect:
+Before editing:
 
 ```bash
 git status --short --branch
 git diff --stat
 ```
 
-Preserve all pre-existing user changes. If a change conflicts with local modifications, work around them or ask before doing anything that would discard them.
+Preserve pre-existing user changes. When local changes conflict with the task, make a non-destructive adjustment or ask before discarding anything.
 
-## Safe synchronization
+## Freshness without destruction
 
-When freshness is needed, use non-destructive checks first:
+Use these first when remote freshness matters:
 
 ```bash
 git fetch origin main --prune
@@ -39,22 +27,16 @@ git rev-parse origin/main
 git log origin/main -n 10 --oneline --decorate
 ```
 
-Do not reset the current branch to `origin/main` merely to synchronize. Compare, inspect, and integrate deliberately while preserving the user's work.
+Do not reset the current branch to `origin/main` just to synchronize. Compare and integrate deliberately while keeping the user's branch and working tree intact.
 
-## Product-aware development
+## Useful local workflow
 
-Jolly Hopper is a native Swift/macOS app. Prefer existing native APIs, architecture, components, design language, concurrency patterns, and project conventions. Search before creating duplicate helpers or abstractions.
+Inspect the affected Swift/Xcode code, search for existing implementations, and check recent relevant commits before substantial edits. Prefer the smallest targeted change and preserve established architecture and conventions.
 
-For UI work, inspect the actual affected views and existing visual patterns before editing. Preserve established materials/glass, spacing, typography, animation, accessibility, and interaction conventions unless the task explicitly changes them.
+For SwiftUI, inspect existing components, materials/glass, typography, spacing, animation, accessibility, state propagation, and lifecycle before introducing new patterns. For concurrency/process code, trace ownership, cancellation, cleanup, and repeated invocation instead of masking races with arbitrary sleeps.
 
-For concurrency/process work, trace ownership and cancellation through the full lifecycle. Do not paper over races with arbitrary sleeps or delayed callbacks.
+Run focused validation first and the repository's canonical Xcode tests when appropriate. Report exactly what was and was not verified.
 
-## Validation
+Prefer reversible edits, focused diffs, and existing project tooling. Do not leave scratch files, debug output, generated junk, or unrelated refactors.
 
-Run the narrowest relevant validation first, then the canonical Xcode test command when appropriate. Never claim tests or builds were run if they were not.
-
-## Interaction model
-
-Explain material risks before taking an action that could alter user data, git history, or the working tree. Prefer reversible edits and focused diffs. Do not create temporary repository files unless they are intended to remain maintained project tooling.
-
-Do not treat Jules-specific instructions under `.jules/` as applicable to this interactive local session.
+Before any action that could alter user data, Git history, or the working tree, make the risk explicit. Destructive Jules bootstrap instructions live only in `.jules/AGENTS.md`.
