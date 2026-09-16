@@ -1,10 +1,14 @@
 # Jules Agent Instructions
 
-These instructions apply to Jules sessions only. Repository-wide engineering rules remain in the root `AGENTS.md` and must also be followed.
+These instructions apply to **Jules only**. Follow the shared repository contract in the root `AGENTS.md` as well.
 
-## Fresh repository bootstrap
+## Execution mode
 
-Jules environments are disposable. Start every session from the latest `origin/main`:
+Jules is an autonomous, headless, disposable runner. The environment is assumed disposable **only because Jules explicitly provides that execution mode**; never generalize these rules to Antigravity or a user's local workspace.
+
+## Destructive bootstrap
+
+At the start of a Jules session, synchronize and reset to the current remote baseline:
 
 ```bash
 git fetch origin main --prune
@@ -16,54 +20,30 @@ git rev-parse HEAD
 git rev-parse origin/main
 ```
 
-Do not preserve stale local changes from previous Jules sessions unless the task explicitly requires work on an existing branch and the environment is not disposable.
+These destructive commands are authorized **only inside the disposable Jules environment**. Never copy this bootstrap into Antigravity/local-workspace instructions.
 
-## Specialist role files
+Do not preserve stale work from previous Jules sessions unless the task explicitly requires an existing branch/worktree.
 
-Specialist instructions live in:
+## Task loop
 
-- `.jules/palette.md` for UI/UX/accessibility work
-- `.jules/bolt.md` for performance work
-- `.jules/sentinel.md` for security work
-- `.jules/testing.md` for testing learnings
+1. Read the root contract and this file.
+2. Read only the relevant specialist file: Palette for UI/UX/accessibility, Bolt for performance, Sentinel for security, Testing for test-specific guidance.
+3. Inspect current `origin/main`, relevant code, recent commits, and existing implementations before changing anything.
+4. Make one focused change with the smallest correct diff; do not manufacture work.
+5. Re-check `origin/main` before major implementation decisions and before finalizing.
+6. Run relevant Xcode build/tests and report results honestly.
+7. Create a focused PR only when the task is implemented and verified.
 
-Read only the specialist file relevant to the current Jules task. Do not load every specialist journal by default.
+## Specialist boundaries
 
-These files are task-specific guidance and journals, not replacements for the root repository contract.
-
-## Jules task boundaries
-
-- Perform one focused task per session.
-- Do not manufacture work merely to produce a PR.
-- Search the current `origin/main` before implementing.
-- Inspect recent commits and related merged PRs when the task could already be resolved.
-- Re-check `origin/main` before substantial implementation decisions and before finalizing.
-- Keep the diff minimal and avoid unrelated cleanup.
-- Add or update regression coverage when practical.
-- Run the relevant build/test validation before creating a PR.
-- Report validation honestly.
-- Do not leave temporary scripts, debug output, generated artifacts, or unrelated changes.
+Do not mix unrelated specialist scopes into one PR. Specialist journals are not work logs and should be updated only when a reusable, application-specific learning is discovered.
 
 ## PR expectations
 
-When a task is complete, create a focused PR only when the requested change is actually implemented and verified.
+PR titles and descriptions should be concise, factual, and limited to the implemented task. Include what changed, why, validation performed, and relevant limitations. Add screenshots for visually meaningful UI changes when practical.
 
-The PR description should briefly state:
+## Repository hygiene
 
-1. what changed
-2. why it was needed
-3. what was tested
-4. any relevant limitations
+Do not leave temporary scripts, debug output, generated artifacts, unrelated changes, merge markers, or stale worktree modifications. Follow the root validation and engineering rules.
 
-Do not exaggerate impact or include unrelated changes.
-
-## Specialist selection
-
-Use the specialist role only when it matches the task. For example:
-
-- UI polish, UX, accessibility, visual consistency -> Palette
-- performance, allocations, CPU/memory efficiency -> Bolt
-- vulnerability/security hardening -> Sentinel
-- test strategy or regression coverage -> Testing guidance
-
-A Jules session should not mix unrelated specialist scopes into one PR.
+**Jules principle:** destructive Git operations are acceptable only because the Jules environment is explicitly disposable; treat every local human workspace as protected unless separately authorized.
