@@ -59,14 +59,13 @@ struct ReadOnlyLogView: NSViewRepresentable {
     func updateNSView(_ nsView: NSScrollView, context: Context) {
         guard let textView = nsView.documentView as? NSTextView else { return }
 
-        // Bolt Performance Optimization: Read `textView.string` once into a local constant and use O(1) UTF-16 index slicing
-        // and cached font attributes in Coordinator to eliminate O(N^2) grapheme cluster scans, multiple string bridging allocations,
-        // and repeated system font table lookups during high-frequency log updates.
+        // Bolt Performance Optimization: Read `textView.string` once into a local constant and use cached font attributes in Coordinator
+        // and safe character-boundary slicing (`dropFirst`) to eliminate multiple Objective-C string bridging allocations,
+        // repeated system font table lookups, and dictionary allocations during high-frequency log updates.
         let currentText = textView.string
         if currentText != text {
             if !currentText.isEmpty && text.hasPrefix(currentText) {
-                let suffixIndex = String.Index(utf16Offset: currentText.utf16.count, in: text)
-                let appendText = String(text[suffixIndex...])
+                let appendText = String(text.dropFirst(currentText.count))
                 if let storage = textView.textStorage {
                     let attrString = NSAttributedString(string: appendText, attributes: context.coordinator.attrs(fontSize: fontSize))
                     storage.append(attrString)
