@@ -5,6 +5,29 @@ struct ReadOnlyLogView: NSViewRepresentable {
     var text: String
     var fontSize: CGFloat = 11
 
+    final class Coordinator {
+        private var cachedFontSize: CGFloat = 0
+        private var cachedAttrs: [NSAttributedString.Key: Any] = [:]
+
+        func attrs(fontSize: CGFloat) -> [NSAttributedString.Key: Any] {
+            if fontSize == cachedFontSize && !cachedAttrs.isEmpty {
+                return cachedAttrs
+            }
+            let geistFont = NSFont(name: "GeistMono-Regular", size: fontSize) ?? NSFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
+            let newAttrs: [NSAttributedString.Key: Any] = [
+                .font: geistFont,
+                .foregroundColor: NSColor.labelColor
+            ]
+            cachedFontSize = fontSize
+            cachedAttrs = newAttrs
+            return newAttrs
+        }
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator()
+    }
+
     func makeNSView(context: Context) -> NSScrollView {
         let scrollView = NSScrollView()
         scrollView.hasVerticalScroller = true
@@ -36,19 +59,20 @@ struct ReadOnlyLogView: NSViewRepresentable {
     func updateNSView(_ nsView: NSScrollView, context: Context) {
         guard let textView = nsView.documentView as? NSTextView else { return }
 
-        if textView.string != text {
-            let oldLen = textView.string.count
-            if oldLen > 0 && text.hasPrefix(textView.string) {
-                let suffixIndex = text.index(text.startIndex, offsetBy: oldLen)
-                let appendText = String(text[suffixIndex...])
-                if let storage = textView.textStorage {
-                    let geistFont = NSFont(name: "GeistMono-Regular", size: fontSize) ?? NSFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
-                    let attrs: [NSAttributedString.Key: Any] = [
-                        .font: geistFont,
-                        .foregroundColor: NSColor.labelColor
-                    ]
-                    let attrString = NSAttributedString(string: appendText, attributes: attrs)
-                    storage.append(attrString)
+        // Bolt Performance Optimization: Read `textView.string` once into a local constant and use O(1) UTF-16 index slicing
+        // and cached font attributes in Coordinator to eliminate O(N^2) grapheme cluster scans, multiple string bridging allocations,
+        // and repeated system font table lookups during high-frequency log updates.
+        let currentText = textView.string
+        if currentText != text {
+            if !currentText.isEmpty && text.hasPrefix(currentText) {
+                if let suffixIndex = String.Index(utf16Offset: currentText.utf16.count, in: text) {
+                    let appendText = String(text[suffixIndex...])
+                    if let storage = textView.textStorage {
+                        let attrString = NSAttributedString(string: appendText, attributes: context.coordinator.attrs(fontSize: fontSize))
+                        storage.append(attrString)
+                    } else {
+                        textView.string = text
+                    }
                 } else {
                     textView.string = text
                 }

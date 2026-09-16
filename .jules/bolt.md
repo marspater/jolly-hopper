@@ -46,3 +46,7 @@
 ## 2026-09-11 - Lazy Substring Slicing and Upfront Empty-Check for Log Views
 **Learning:** Calling `.components(separatedBy: "\n")` on large log strings creates thousands of intermediate String heap allocations. In SwiftUI views, doing line-splitting before checking if search text is empty wastes memory and CPU on every re-render. Checking search emptiness upfront and using `.split(whereSeparator: \.isNewline)` for non-empty search queries avoids intermediate array allocations.
 **Action:** In log output display views, check for empty search strings upfront and use `Substring` splitting (`split(whereSeparator: \.isNewline)`) to prevent unnecessary heap allocations.
+
+## 2026-09-16 - O(1) Index Slicing & Attribute Caching in Log View Streaming
+**Learning:** Streaming log text into an AppKit `NSTextView` wrapper in SwiftUI via `updateNSView` can become O(N^2) if `textView.string` is read repeatedly, or if `textView.string.count` and `text.index(text.startIndex, offsetBy:)` are used to find the suffix offset. Reading `textView.string` once into a local constant, using `String.Index(utf16Offset:in:)` based on UTF-16 code units for O(1) index slicing, and caching font attributes in a `Coordinator` eliminates grapheme cluster scans, string bridging overhead, and system font table lookups per log update.
+**Action:** In log view streaming components, read `textView.string` once, use `String.Index(utf16Offset:in:)` for O(1) suffix extraction, and cache font attributes in `Coordinator`.
