@@ -1991,3 +1991,53 @@ struct HistoricDownload: Codable, Identifiable {
         return download
     }
 }
+
+// MARK: - Download URL Validation & Parsing
+public enum DownloadURLValidationResult: Equatable, Sendable {
+    case valid(url: URL, original: String)
+    case empty
+    case invalidScheme
+    case malformed
+}
+
+public struct DownloadURLValidator: Sendable {
+    public static func validate(_ input: String) -> DownloadURLValidationResult {
+        let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return .empty }
+
+        var normalized = trimmed
+        if !normalized.lowercased().hasPrefix("http://") && !normalized.lowercased().hasPrefix("https://") {
+            if normalized.contains(".") && !normalized.contains(" ") {
+                normalized = "https://" + normalized
+            } else {
+                return .malformed
+            }
+        }
+
+        guard let url = URL(string: normalized),
+              let scheme = url.scheme?.lowercased(),
+              (scheme == "http" || scheme == "https"),
+              let host = url.host,
+              host.contains(".") else {
+            return .malformed
+        }
+
+        return .valid(url: url, original: normalized)
+    }
+
+    public static func extractURLs(from text: String) -> [String] {
+        let lines = text.components(separatedBy: .newlines)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+
+        return lines.compactMap { line in
+            switch validate(line) {
+            case .valid(_, let original):
+                return original
+            default:
+                return nil
+            }
+        }
+    }
+}
+

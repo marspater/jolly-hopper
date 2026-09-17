@@ -3,36 +3,62 @@ import SwiftUI
 struct MenuBarView: View {
     @EnvironmentObject var downloadManager: DownloadManager
     @EnvironmentObject var languageService: LanguageService
+
+    @FocusState private var isFieldFocused: Bool
     @State private var url: String = ""
     @State private var selectedType: String = "video"
     @State private var selectedPreset: String = "best_quality"
     @AppStorage(UserDefaultsKeys.theme) private var theme: String = "system"
     @AppStorage("customPresets") private var customPresetsData: Data = Data()
     
-    // Bug #11 fix: Use State to prevent heavy computation in View body
     @State private var customPresets: [CustomPreset] = []
     @State private var isPasted: Bool = false
     @Namespace private var menuBarFormatNamespace
-    
+
     var body: some View {
         VStack(spacing: SiphonTheme.spacing12) {
+            // Hidden button for reliable Escape key handling across all macOS versions
+            Button("") {
+                MenuBarManager.shared.closePopover()
+            }
+            .keyboardShortcut(.escape, modifiers: [])
+            .frame(width: 0, height: 0)
+            .opacity(0)
+
+            // Primary Download Flow Card
             VStack(spacing: SiphonTheme.spacing10) {
                 urlInput
-                optionsCard
+                formatAndPresetRow
+                downloadButton
             }
-            
-            downloadButton
-            
+            .padding(SiphonTheme.spacing12)
+            .background(
+                SiphonTheme.cardBackground(cornerRadius: SiphonTheme.radiusCard)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusCard, style: .continuous))
+            .overlay(
+                SiphonTheme.cardBorder(cornerRadius: SiphonTheme.radiusCard)
+            )
+
+            // Active Downloads Concise Rows
+            if !downloadManager.downloadingDownloads.isEmpty {
+                activeDownloadsSection
+            }
+
             SiphonTheme.subtleDivider
-            
+
+            // Footer actions
             footer
         }
-        .padding(SiphonTheme.spacing14)
-        .frame(width: 360)
+        .padding(SiphonTheme.spacing12)
+        .frame(width: 350)
         .preferredColorScheme(theme == "light" ? .light : (theme == "dark" ? .dark : nil))
         .background(.ultraThinMaterial)
         .onAppear {
             customPresets = CustomPreset.loadAll()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                isFieldFocused = true
+            }
         }
         .onChange(of: customPresetsData) { _, _ in
             customPresets = CustomPreset.loadAll()
@@ -45,21 +71,24 @@ struct MenuBarView: View {
             }
         }
     }
-    
+
+    // MARK: - URL Input
+
     private var urlInput: some View {
         HStack(spacing: SiphonTheme.spacing8) {
             Image(systemName: "link")
-                .font(.system(size: 12))
-                .foregroundColor(.secondary)
-            
+                .font(.system(size: 12, weight: .medium))
+                .foregroundColor(isFieldFocused ? SiphonTheme.accent : .secondary)
+
             TextField(languageService.s("url_hint"), text: $url)
                 .textFieldStyle(.plain)
                 .font(.geist(12))
+                .focused($isFieldFocused)
                 .accessibilityLabel(languageService.s("video_url"))
                 .onSubmit {
                     initiateDownload()
                 }
-            
+
             if !url.isEmpty {
                 Button {
                     url = ""
@@ -72,13 +101,13 @@ struct MenuBarView: View {
                 .help(languageService.s("clear"))
                 .accessibilityLabel(languageService.s("clear"))
             }
-            
+
             Button {
                 if let clipboard = NSPasteboard.general.string(forType: .string) {
-                    url = clipboard
+                    url = clipboard.trimmingCharacters(in: .whitespacesAndNewlines)
                     isPasted = true
-                    Task {
-                        try? await Task.sleep(nanoseconds: 1_500_000_000)
+                    Task { @MainActor in
+                        try? await Task.sleep(nanoseconds: 1_200_000_000)
                         isPasted = false
                     }
                 }
@@ -92,168 +121,211 @@ struct MenuBarView: View {
             .accessibilityLabel(isPasted ? languageService.s("paste") : languageService.s("paste_from_clipboard"))
         }
         .padding(.horizontal, SiphonTheme.spacing10)
-        .padding(.vertical, SiphonTheme.spacing8)
+        .padding(.vertical, 7)
         .background(
-            SiphonTheme.cardBackground(cornerRadius: SiphonTheme.radiusControl)
+            SiphonTheme.fieldBackground(cornerRadius: SiphonTheme.radiusControl, isFocused: isFieldFocused)
         )
-        .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusControl))
+        .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusControl, style: .continuous))
         .overlay(
-            SiphonTheme.cardBorder(cornerRadius: SiphonTheme.radiusControl)
+            SiphonTheme.fieldBorder(cornerRadius: SiphonTheme.radiusControl, isFocused: isFieldFocused)
         )
     }
-    
-    private var optionsCard: some View {
-        VStack(spacing: SiphonTheme.spacing8) {
-            HStack {
-                Text(languageService.s("format"))
-                    .font(.geist(12, weight: .medium))
-                    .foregroundColor(.secondary)
-                
-                Spacer()
-                
-                HStack(spacing: SiphonTheme.spacing2) {
-                    Button {
-                        withAnimation(.spring(response: 0.30, dampingFraction: 0.68, blendDuration: 0)) {
-                            selectedType = "video"
-                        }
-                    } label: {
-                        Text(languageService.s("video"))
-                            .font(.geist(11, weight: .semibold))
-                            .foregroundColor(selectedType == "video" ? .white : .secondary)
-                            .padding(.horizontal, SiphonTheme.spacing12)
-                            .padding(.vertical, 4)
-                            .background {
-                                if selectedType == "video" {
-                                    Capsule()
-                                        .fill(SiphonTheme.primaryGradient)
-                                        .shadow(color: SiphonTheme.accent.opacity(0.35), radius: 4, y: 1)
-                                        .matchedGeometryEffect(id: "activeMenuBarFormatBubble", in: menuBarFormatNamespace)
-                                }
-                            }
+
+    // MARK: - Format & Preset Unified Row
+
+    private var formatAndPresetRow: some View {
+        HStack(spacing: SiphonTheme.spacing8) {
+            // Segmented format toggle (Video / Audio)
+            HStack(spacing: 2) {
+                Button {
+                    withAnimation(SiphonAnimation.snappySpring) {
+                        selectedType = "video"
                     }
-                    .buttonStyle(.bouncy)
-                    .help(languageService.s("video"))
-                    .accessibilityLabel(languageService.s("video"))
-                    .accessibilityAddTraits(selectedType == "video" ? [.isButton, .isSelected] : [.isButton])
-                    
-                    Button {
-                        withAnimation(.spring(response: 0.30, dampingFraction: 0.68, blendDuration: 0)) {
-                            selectedType = "audio"
-                        }
-                    } label: {
-                        Text(languageService.s("audio"))
-                            .font(.geist(11, weight: .semibold))
-                            .foregroundColor(selectedType == "audio" ? .white : .secondary)
-                            .padding(.horizontal, SiphonTheme.spacing12)
-                            .padding(.vertical, 4)
-                            .background {
-                                if selectedType == "audio" {
-                                    Capsule()
-                                        .fill(SiphonTheme.primaryGradient)
-                                        .shadow(color: SiphonTheme.accent.opacity(0.35), radius: 4, y: 1)
-                                        .matchedGeometryEffect(id: "activeMenuBarFormatBubble", in: menuBarFormatNamespace)
-                                }
+                } label: {
+                    Text(languageService.s("video"))
+                        .font(.geist(11, weight: .semibold))
+                        .foregroundColor(selectedType == "video" ? .white : .secondary)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 4)
+                        .background {
+                            if selectedType == "video" {
+                                Capsule()
+                                    .fill(SiphonTheme.primaryGradient)
+                                    .shadow(color: SiphonTheme.accent.opacity(0.30), radius: 3, y: 1)
+                                    .matchedGeometryEffect(id: "activeMenuBarFormatBubble", in: menuBarFormatNamespace)
                             }
-                    }
-                    .buttonStyle(.bouncy)
-                    .help(languageService.s("audio"))
-                    .accessibilityLabel(languageService.s("audio"))
-                    .accessibilityAddTraits(selectedType == "audio" ? [.isButton, .isSelected] : [.isButton])
+                        }
                 }
-                .padding(SiphonTheme.spacing2)
-                .background(
-                    Capsule()
-                        .fill(Color.primary.opacity(0.04))
-                        .background(Capsule().fill(.ultraThinMaterial))
-                )
-                .clipShape(Capsule())
-                .overlay(
-                    Capsule()
-                        .stroke(Color.primary.opacity(0.08), lineWidth: 1)
-                )
-            }
-            
-            SiphonTheme.subtleDivider
-            
-            HStack {
-                Text(languageService.s("preset"))
-                    .font(.geist(12, weight: .medium))
-                    .foregroundColor(.secondary)
-                
-                Spacer()
-                
-                Picker("", selection: $selectedPreset) {
-                    Section(languageService.s("standard")) {
-                        ForEach(DownloadPreset.allCases) { preset in
-                            if (selectedType == "video" && preset != .audioOnly) || (selectedType == "audio" && preset == .audioOnly) {
-                                Text(preset.title(lang: languageService)).tag(preset.rawValue)
+                .buttonStyle(.plain)
+                .accessibilityLabel(languageService.s("video"))
+                .accessibilityAddTraits(selectedType == "video" ? [.isButton, .isSelected] : [.isButton])
+
+                Button {
+                    withAnimation(SiphonAnimation.snappySpring) {
+                        selectedType = "audio"
+                    }
+                } label: {
+                    Text(languageService.s("audio"))
+                        .font(.geist(11, weight: .semibold))
+                        .foregroundColor(selectedType == "audio" ? .white : .secondary)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 4)
+                        .background {
+                            if selectedType == "audio" {
+                                Capsule()
+                                    .fill(SiphonTheme.primaryGradient)
+                                    .shadow(color: SiphonTheme.accent.opacity(0.30), radius: 3, y: 1)
+                                    .matchedGeometryEffect(id: "activeMenuBarFormatBubble", in: menuBarFormatNamespace)
                             }
                         }
-                    }
-                    
-                    let filtered = customPresets.filter { (selectedType == "video" && $0.fileType.isVideo) || (selectedType == "audio" && $0.fileType.isAudio) }
-                    if !filtered.isEmpty {
-                        Section(languageService.s("custom")) {
-                            ForEach(filtered) { preset in
-                                Text(preset.name).tag("custom_" + preset.id.uuidString)
-                            }
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(languageService.s("audio"))
+                .accessibilityAddTraits(selectedType == "audio" ? [.isButton, .isSelected] : [.isButton])
+            }
+            .padding(2)
+            .background(
+                Capsule()
+                    .fill(Color.primary.opacity(0.05))
+            )
+            .clipShape(Capsule())
+            .overlay(
+                Capsule()
+                    .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+            )
+
+            Spacer()
+
+            // Compact Preset Picker
+            Picker("", selection: $selectedPreset) {
+                Section(languageService.s("standard")) {
+                    ForEach(DownloadPreset.allCases) { preset in
+                        if (selectedType == "video" && preset != .audioOnly) || (selectedType == "audio" && preset == .audioOnly) {
+                            Text(preset.title(lang: languageService)).tag(preset.rawValue)
                         }
                     }
                 }
-                .pickerStyle(.menu)
-                .controlSize(.small)
-                .labelsHidden()
-                .accessibilityLabel(languageService.s("preset"))
+
+                let filtered = customPresets.filter { (selectedType == "video" && $0.fileType.isVideo) || (selectedType == "audio" && $0.fileType.isAudio) }
+                if !filtered.isEmpty {
+                    Section(languageService.s("custom")) {
+                        ForEach(filtered) { preset in
+                            Text(preset.name).tag("custom_" + preset.id.uuidString)
+                        }
+                    }
+                }
             }
+            .pickerStyle(.menu)
+            .controlSize(.small)
+            .labelsHidden()
+            .accessibilityLabel(languageService.s("menubar_preset"))
         }
-        .padding(SiphonTheme.spacing10)
-        .background(
-            SiphonTheme.cardBackground(cornerRadius: SiphonTheme.radiusCard)
-        )
-        .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusCard))
-        .overlay(
-            SiphonTheme.cardBorder(cornerRadius: SiphonTheme.radiusCard)
-        )
     }
-    
+
+    // MARK: - Download Button
+
     private var downloadButton: some View {
         Button {
             initiateDownload()
         } label: {
             HStack(spacing: SiphonTheme.spacing6) {
                 Image(systemName: "arrow.down.circle.fill")
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(.system(size: 13, weight: .semibold))
                 Text(languageService.s("download_btn"))
-                    .font(.geist(13, weight: .bold))
+                    .font(.geist(12, weight: .bold))
+                Spacer()
+                Text("⏎")
+                    .font(.geistMono(11, weight: .medium))
+                    .opacity(url.isEmpty ? 0.4 : 0.8)
             }
-            .foregroundColor(url.isEmpty ? .secondary.opacity(0.6) : .white)
+            .foregroundColor(url.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? .secondary.opacity(0.6) : .white)
+            .padding(.horizontal, 12)
             .frame(maxWidth: .infinity)
-            .frame(height: 32)
+            .frame(height: 30)
             .background(
-                url.isEmpty ?
+                url.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?
                 LinearGradient(colors: [Color.primary.opacity(0.08), Color.primary.opacity(0.04)], startPoint: .top, endPoint: .bottom) :
                 SiphonTheme.primaryGradient
             )
-            .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusControl))
+            .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusControl, style: .continuous))
             .overlay(
-                RoundedRectangle(cornerRadius: SiphonTheme.radiusControl)
-                    .stroke(Color.white.opacity(url.isEmpty ? 0.05 : 0.25), lineWidth: 1)
+                RoundedRectangle(cornerRadius: SiphonTheme.radiusControl, style: .continuous)
+                    .stroke(Color.primary.opacity(url.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 0.05 : 0.20), lineWidth: 1)
             )
         }
-        .buttonStyle(.bouncy)
-        .disabled(url.isEmpty)
+        .buttonStyle(.bouncy(scale: 0.97, hover: 1.01))
+        .disabled(url.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         .accessibilityLabel(languageService.s("download_btn"))
-        .shadow(color: url.isEmpty ? .clear : SiphonTheme.accent.opacity(0.35), radius: 6, y: 2)
+        .shadow(color: url.isEmpty ? .clear : SiphonTheme.accent.opacity(0.25), radius: 5, y: 1.5)
     }
+
+    // MARK: - Active Downloads Concise List
+
+    private var activeDownloadsSection: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            HStack {
+                Text(languageService.s("menubar_active_downloads"))
+                    .font(.geist(10, weight: .semibold))
+                    .foregroundColor(.secondary)
+                Spacer()
+                Text("\(downloadManager.downloadingDownloads.count)")
+                    .font(.geistMono(10, weight: .bold))
+                    .foregroundColor(SiphonTheme.downloading)
+            }
+            .padding(.horizontal, 2)
+
+            ForEach(downloadManager.downloadingDownloads.prefix(3)) { download in
+                HStack(spacing: 7) {
+                    SiphonSpinner(size: 9, color: SiphonTheme.downloading, lineWidth: 1.6)
+
+                    Text(download.title.isEmpty ? download.url : download.title)
+                        .font(.geist(11, weight: .medium))
+                        .foregroundColor(.primary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+
+                    Spacer(minLength: 4)
+
+                    Text(download.displayProgress)
+                        .font(.geistMono(10, weight: .medium))
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+                }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 5)
+                .background(
+                    RoundedRectangle(cornerRadius: SiphonTheme.radiusSmall, style: .continuous)
+                        .fill(Color.primary.opacity(0.04))
+                )
+                .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusSmall, style: .continuous))
+            }
+        }
+    }
+
+    // MARK: - Actions & Submission
 
     private func initiateDownload() {
         let cleanURL = url.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !cleanURL.isEmpty else { return }
-        
+
+        switch DownloadURLValidator.validate(cleanURL) {
+        case .valid(_, let resolved):
+            submitToManager(resolvedURL: resolved)
+        default:
+            // If user typed without scheme, try prefixing https://
+            if cleanURL.contains(".") && !cleanURL.contains(" ") {
+                submitToManager(resolvedURL: "https://" + cleanURL)
+            } else {
+                return
+            }
+        }
+    }
+
+    private func submitToManager(resolvedURL: String) {
         if selectedPreset.hasPrefix("custom_") {
             let idString = String(selectedPreset.dropFirst(7))
             if let preset = customPresets.first(where: { $0.id.uuidString == idString }) {
-                downloadManager.addDownload(url: cleanURL, options: DownloadOptions(
+                downloadManager.addDownload(url: resolvedURL, options: DownloadOptions(
                     saveFolder: getSaveFolder(),
                     fileType: preset.fileType,
                     videoFormat: nil,
@@ -278,7 +350,7 @@ struct MenuBarView: View {
                 ))
             }
         } else if let preset = DownloadPreset(rawValue: selectedPreset) {
-            downloadManager.addDownload(url: cleanURL, options: DownloadOptions(
+            downloadManager.addDownload(url: resolvedURL, options: DownloadOptions(
                 saveFolder: getSaveFolder(),
                 fileType: preset.fileType,
                 videoFormat: nil,
@@ -302,18 +374,20 @@ struct MenuBarView: View {
                 forceOverwrite: false
             ))
         }
-        
+
         url = ""
         MenuBarManager.shared.closePopover()
     }
-    
+
     private func getSaveFolder() -> URL {
         let defaultPath = UserDefaults.standard.string(forKey: UserDefaultsKeys.defaultSaveFolder) ?? ""
-        return defaultPath.isEmpty ? 
+        return defaultPath.isEmpty ?
             (FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Downloads")) :
             URL(fileURLWithPath: defaultPath)
     }
-    
+
+    // MARK: - Footer
+
     private var footer: some View {
         HStack(alignment: .center, spacing: SiphonTheme.spacing8) {
             Button {
@@ -323,8 +397,8 @@ struct MenuBarView: View {
                 if let window = NSApp.windows.first(where: { $0.isVisible && $0.className != "NSStatusBarWindow" }) {
                     window.makeKeyAndOrderFront(nil)
                 } else {
-                    if let url = URL(string: "siphon://show") {
-                        NSWorkspace.shared.open(url)
+                    if let openURL = URL(string: "siphon://show") {
+                        NSWorkspace.shared.open(openURL)
                     }
                 }
             } label: {
@@ -351,32 +425,9 @@ struct MenuBarView: View {
             .buttonStyle(.bouncy)
             .help(languageService.s("show_main_window"))
             .accessibilityLabel(languageService.s("show_main_window"))
-            
-            if downloadManager.downloadingDownloads.count > 0 {
-                HStack(spacing: 5) {
-                    SiphonSpinner(size: 10, color: SiphonTheme.downloading, lineWidth: 1.8)
-                    Text("\(downloadManager.downloadingDownloads.count)")
-                        .font(.geist(11, weight: .bold))
-                        .monospacedDigit()
-                    Text(languageService.s("downloading"))
-                        .font(.geist(11, weight: .medium))
-                        .lineLimit(1)
-                }
-                .lineLimit(1)
-                .fixedSize(horizontal: true, vertical: false)
-                .foregroundColor(SiphonTheme.downloading)
-                .padding(.horizontal, SiphonTheme.spacing10)
-                .frame(height: 28)
-                .background(SiphonTheme.downloading.opacity(0.14))
-                .clipShape(Capsule())
-                .overlay(
-                    Capsule()
-                        .stroke(SiphonTheme.downloading.opacity(0.28), lineWidth: 1)
-                )
-            }
-            
+
             Spacer(minLength: 0)
-            
+
             Button {
                 NSApp.terminate(nil)
             } label: {

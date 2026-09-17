@@ -629,7 +629,7 @@ struct AddDownloadView: View {
                     .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusControl))
                     .overlay(
                         RoundedRectangle(cornerRadius: SiphonTheme.radiusControl)
-                            .stroke(Color.white.opacity(urlInput.isEmpty ? 0.05 : 0.25), lineWidth: 1)
+                            .stroke(Color.primary.opacity(urlInput.isEmpty ? 0.05 : 0.20), lineWidth: 1)
                     )
                 }
                 .buttonStyle(.bouncy(scale: 0.97, hover: 1.015))
@@ -1573,7 +1573,7 @@ struct AddDownloadView: View {
                         .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusControl))
                         .overlay(
                             RoundedRectangle(cornerRadius: SiphonTheme.radiusControl)
-                                .stroke(Color.white.opacity(isDisabled ? 0.05 : 0.25), lineWidth: 1)
+                                .stroke(Color.primary.opacity(isDisabled ? 0.05 : 0.20), lineWidth: 1)
                         )
                 }
                 .buttonStyle(.bouncy(scale: 0.97, hover: 1.015))
@@ -1606,7 +1606,7 @@ struct AddDownloadView: View {
                     .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusControl))
                     .overlay(
                         RoundedRectangle(cornerRadius: SiphonTheme.radiusControl)
-                            .stroke(Color.white.opacity(isDisabled ? 0.05 : 0.25), lineWidth: 1)
+                            .stroke(Color.primary.opacity(isDisabled ? 0.05 : 0.20), lineWidth: 1)
                     )
                 }
                 .buttonStyle(.bouncy(scale: 0.97, hover: 1.015))

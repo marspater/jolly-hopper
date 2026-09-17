@@ -462,8 +462,7 @@ struct HomeView: View {
                         )
                 )
                 .overlay(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .stroke(Color.white.opacity(0.08), lineWidth: 1)
+                    SiphonTheme.cardBorder(cornerRadius: 12)
                 )
             } else {
                 VStack(spacing: 6) {
@@ -500,7 +499,7 @@ struct StatusBarView: View {
             )
 
             Rectangle()
-                .fill(Color.white.opacity(0.12))
+                .fill(SiphonTheme.separator)
                 .frame(width: 1, height: 26)
 
             StatusSegmentButton(
@@ -513,7 +512,7 @@ struct StatusBarView: View {
             )
 
             Rectangle()
-                .fill(Color.white.opacity(0.12))
+                .fill(SiphonTheme.separator)
                 .frame(width: 1, height: 26)
 
             StatusSegmentButton(
@@ -550,8 +549,7 @@ struct StatusBarView: View {
                 .fill(.ultraThinMaterial)
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .stroke(Color.white.opacity(0.12), lineWidth: 1)
+            SiphonTheme.cardBorder(cornerRadius: 14)
         )
         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
@@ -668,21 +666,11 @@ struct SponsorView: View {
             .padding(.horizontal, SiphonTheme.spacing12)
             .padding(.vertical, SiphonTheme.spacing8)
             .background(
-                RoundedRectangle(cornerRadius: SiphonTheme.radiusControl)
-                    .fill(
-                        colorScheme == .light
-                            ? (isHovered ? Color(white: 0.91) : Color(white: 0.96))
-                            : (isHovered ? Color.white.opacity(0.12) : Color.white.opacity(0.06))
-                    )
+                SiphonTheme.controlBackground(cornerRadius: SiphonTheme.radiusControl, isHovered: isHovered)
             )
+            .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusControl))
             .overlay(
-                RoundedRectangle(cornerRadius: SiphonTheme.radiusControl)
-                    .strokeBorder(
-                        colorScheme == .light
-                            ? Color.black.opacity(isHovered ? 0.14 : 0.08)
-                            : Color.white.opacity(isHovered ? 0.20 : 0.10),
-                        lineWidth: 1
-                    )
+                SiphonTheme.controlBorder(cornerRadius: SiphonTheme.radiusControl, isHovered: isHovered)
             )
         }
         .buttonStyle(.bouncy(scale: 0.97, hover: 1.015))

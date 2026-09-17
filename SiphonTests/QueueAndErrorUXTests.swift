@@ -1508,5 +1508,80 @@ final class QueueAndErrorUXTests: XCTestCase {
         XCTAssertFalse(modifier.isSelected)
         XCTAssertNil(modifier.tintColor)
     }
+
+    func testSemanticThemeTokens() {
+        XCTAssertNotNil(SiphonTheme.surface)
+        XCTAssertNotNil(SiphonTheme.surfaceElevated)
+        XCTAssertNotNil(SiphonTheme.separator)
+        XCTAssertNotNil(SiphonTheme.focusRing)
+        XCTAssertNotNil(SiphonTheme.selection)
+        XCTAssertNotNil(SiphonTheme.destructiveSurface)
+        XCTAssertEqual(SiphonTheme.radiusSmall, 6)
+        XCTAssertEqual(SiphonTheme.radiusControl, 8)
+        XCTAssertEqual(SiphonTheme.radiusCard, 12)
+        XCTAssertEqual(SiphonTheme.radiusSheet, 16)
+    }
+
+    func testTransientFeedbackLifecycle() {
+        let feedback = TransientFeedbackState()
+        XCTAssertNil(feedback.current)
+
+        feedback.show("Testing feedback message", isSuccess: true, icon: "checkmark")
+        XCTAssertNotNil(feedback.current)
+        XCTAssertEqual(feedback.current?.message, "Testing feedback message")
+        XCTAssertTrue(feedback.current?.isSuccess == true)
+        XCTAssertEqual(feedback.current?.icon, "checkmark")
+
+        feedback.show("Second error message", isSuccess: false, icon: "xmark")
+        XCTAssertEqual(feedback.current?.message, "Second error message")
+        XCTAssertFalse(feedback.current?.isSuccess == true)
+        XCTAssertEqual(feedback.current?.icon, "xmark")
+
+        feedback.clear()
+        XCTAssertNil(feedback.current)
+    }
+
+    func testDownloadURLValidator() {
+        // Valid URLs with scheme
+        let res1 = DownloadURLValidator.validate("https://www.youtube.com/watch?v=dQw4w9WgXcQ")
+        if case .valid(let url, let original) = res1 {
+            XCTAssertEqual(url.host, "www.youtube.com")
+            XCTAssertEqual(original, "https://www.youtube.com/watch?v=dQw4w9WgXcQ")
+        } else {
+            XCTFail("Expected valid URL")
+        }
+
+        // URL without scheme (should prepend https://)
+        let res2 = DownloadURLValidator.validate("youtube.com/watch?v=12345")
+        if case .valid(let url, let original) = res2 {
+            XCTAssertEqual(url.scheme, "https")
+            XCTAssertEqual(url.host, "youtube.com")
+            XCTAssertEqual(original, "https://youtube.com/watch?v=12345")
+        } else {
+            XCTFail("Expected valid auto-schemed URL")
+        }
+
+        // Empty string
+        let resEmpty = DownloadURLValidator.validate("   ")
+        XCTAssertEqual(resEmpty, .empty)
+
+        // Malformed text
+        let resMalformed = DownloadURLValidator.validate("just random non url words")
+        XCTAssertEqual(resMalformed, .malformed)
+
+        // Multiple URLs extraction
+        let rawMulti = """
+        https://youtube.com/watch?v=1
+        invalid line here
+        vimeo.com/9999
+        http://example.com/video.mp4
+        """
+        let extracted = DownloadURLValidator.extractURLs(from: rawMulti)
+        XCTAssertEqual(extracted.count, 3)
+        XCTAssertEqual(extracted[0], "https://youtube.com/watch?v=1")
+        XCTAssertEqual(extracted[1], "https://vimeo.com/9999")
+        XCTAssertEqual(extracted[2], "http://example.com/video.mp4")
+    }
 }
+
 

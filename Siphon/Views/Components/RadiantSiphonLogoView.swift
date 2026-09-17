@@ -11,8 +11,7 @@ struct RadiantSiphonLogoView: View {
     @ObservedObject private var renderingEnvironment = AdaptiveRenderingEnvironment.shared
 
     var body: some View {
-        let reduceMotion = renderingEnvironment.reduceMotion
-        if reduceMotion {
+        if !renderingEnvironment.shouldAnimateAmbient {
             staticLogoView
         } else {
             animatedLogoView
@@ -96,8 +95,8 @@ struct RadiantSiphonLogoView: View {
                             .stroke(
                                 LinearGradient(
                                     colors: [
-                                        Color.white.opacity(isHovered ? 0.60 : 0.35),
-                                        Color.white.opacity(isHovered ? 0.20 : 0.10)
+                                        Color.primary.opacity(isHovered ? 0.40 : 0.20),
+                                        Color.primary.opacity(isHovered ? 0.15 : 0.06)
                                     ],
                                     startPoint: .topLeading,
                                     endPoint: .bottomTrailing
@@ -143,7 +142,7 @@ struct RadiantSiphonLogoView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
                 .overlay(
                     RoundedRectangle(cornerRadius: 7, style: .continuous)
-                        .stroke(Color.white.opacity(0.30), lineWidth: 0.75)
+                        .stroke(Color.primary.opacity(0.20), lineWidth: 0.75)
                 )
                 .shadow(color: Color.black.opacity(0.25), radius: 2.5, y: 1.5)
         }

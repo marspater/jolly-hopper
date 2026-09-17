@@ -127,8 +127,7 @@ struct LiquidWaterWaveView: View {
     }
 
     var body: some View {
-        let reduceMotion = renderingEnvironment.reduceMotion
-        if reduceMotion || (!isActive && !isHovered) {
+        if !renderingEnvironment.shouldAnimateAmbient || (!isActive && !isHovered) {
             LinearGradient(
                 colors: [
                     color.opacity(isHovered ? 0.20 : 0.10),
@@ -186,7 +185,7 @@ struct LiquidWaterWaveView: View {
                         LinearGradient(
                             colors: [
                                 color.opacity(isActive ? 0.16 : 0.08),
-                                Color.white.opacity(0.03),
+                                Color.primary.opacity(0.03),
                                 Color.clear
                             ],
                             startPoint: .bottomLeading,

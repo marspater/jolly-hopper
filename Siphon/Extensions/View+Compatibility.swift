@@ -97,6 +97,11 @@ public final class AdaptiveRenderingEnvironment: ObservableObject {
     public var maxRefreshRate: Int {
         capabilities.maxRefreshRate
     }
+    @Published public var isAppActive: Bool = true
+
+    public var shouldAnimateAmbient: Bool {
+        !reduceMotion && isAppActive
+    }
     
     private init() {
         self.capabilities = Self.detectCapabilities()
@@ -116,6 +121,24 @@ public final class AdaptiveRenderingEnvironment: ObservableObject {
         ) { [weak self] _ in
             MainActor.assumeIsolated {
                 self?.refresh()
+            }
+        }
+        NotificationCenter.default.addObserver(
+            forName: NSApplication.didBecomeActiveNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.isAppActive = true
+            }
+        }
+        NotificationCenter.default.addObserver(
+            forName: NSApplication.didResignActiveNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.isAppActive = false
             }
         }
     }
@@ -177,7 +200,73 @@ public enum SiphonAnimation {
         if env.isHighRefreshRate {
             return .spring(response: 0.18, dampingFraction: 0.72)
         }
-        return .spring(response: 0.24, dampingFraction: 0.78)
+        return .spring(response: 0.22, dampingFraction: 0.74)
+    }
+
+    @MainActor
+    public static var bouncySpring: Animation {
+        let env = AdaptiveRenderingEnvironment.shared
+        if env.reduceMotion {
+            return .easeInOut(duration: 0.12)
+        }
+        if env.isHighRefreshRate {
+            return .spring(response: 0.20, dampingFraction: 0.65, blendDuration: 0)
+        }
+        return .spring(response: 0.24, dampingFraction: 0.65, blendDuration: 0)
+    }
+
+    @MainActor
+    public static var snappySpring: Animation {
+        let env = AdaptiveRenderingEnvironment.shared
+        if env.reduceMotion {
+            return .easeInOut(duration: 0.10)
+        }
+        if env.isHighRefreshRate {
+            return .spring(response: 0.15, dampingFraction: 0.82)
+        }
+        return .spring(response: 0.18, dampingFraction: 0.82)
+    }
+}
+
+// MARK: - Reusable Managed Transient Feedback Pattern
+@MainActor
+public final class TransientFeedbackState: ObservableObject {
+    public struct Item: Equatable {
+        public let id = UUID()
+        public let message: String
+        public let isSuccess: Bool
+        public let icon: String?
+
+        public init(message: String, isSuccess: Bool, icon: String? = nil) {
+            self.message = message
+            self.isSuccess = isSuccess
+            self.icon = icon
+        }
+    }
+
+    @Published public private(set) var current: Item?
+    private var dismissTask: Task<Void, Never>?
+
+    public init() {}
+
+    public func show(_ message: String, isSuccess: Bool, icon: String? = nil, duration: TimeInterval = 3.5) {
+        dismissTask?.cancel()
+        current = Item(message: message, isSuccess: isSuccess, icon: icon)
+        dismissTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(duration * 1_000_000_000))
+            guard !Task.isCancelled else { return }
+            self?.current = nil
+        }
+    }
+
+    public func clear() {
+        dismissTask?.cancel()
+        dismissTask = nil
+        current = nil
+    }
+
+    deinit {
+        dismissTask?.cancel()
     }
 }
 
@@ -239,6 +328,31 @@ public enum SiphonTheme {
     public static let spacing24: CGFloat = 24
     public static let spacing32: CGFloat = 32
     
+    // MARK: - Semantic Adaptive Surfaces & Tokens
+    public static var surface: Color {
+        Color(nsColor: .controlBackgroundColor)
+    }
+
+    public static var surfaceElevated: Color {
+        Color(nsColor: .windowBackgroundColor)
+    }
+
+    public static var separator: Color {
+        Color(nsColor: .separatorColor)
+    }
+
+    public static var focusRing: Color {
+        Color(nsColor: .keyboardFocusIndicatorColor)
+    }
+
+    public static var selection: Color {
+        Color(nsColor: .selectedContentBackgroundColor)
+    }
+
+    public static var destructiveSurface: Color {
+        statusFailed.opacity(0.12)
+    }
+
     // Semantic Radii Tokens:
     // 6 = compact metadata / code blocks
     // 8 = buttons, inputs, controls
@@ -255,7 +369,6 @@ public enum SiphonTheme {
     public static let radiusSheet: CGFloat = 16
     public static let radiusModal: CGFloat = 16
     
-    // Elevated Card & Tile Backgrounds (Less transparency on cards, solid separation from window)
     // Elevated Card & Tile Backgrounds (Unified macOS Translucent Glass)
     @ViewBuilder
     public static func cardBackground(cornerRadius: CGFloat = radiusCard, isHovered: Bool = false) -> some View {
@@ -272,6 +385,44 @@ public enum SiphonTheme {
         }
     }
     
+    // MARK: - Semantic Adaptive Borders
+    @ViewBuilder
+    public static func borderSubtle(cornerRadius: CGFloat = radiusControl, isHovered: Bool = false, accentColor: Color? = nil) -> some View {
+        let isOpaque = NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency
+        if let accent = accentColor {
+            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                .strokeBorder(
+                    LinearGradient(
+                        colors: [
+                            accent.opacity(isHovered ? 0.65 : 0.40),
+                            accent.opacity(isHovered ? 0.25 : 0.12),
+                            Color.clear
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    ),
+                    lineWidth: 1
+                )
+        } else if isOpaque {
+            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                .stroke(Color(nsColor: .separatorColor), lineWidth: 1)
+        } else {
+            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                .strokeBorder(
+                    LinearGradient(
+                        colors: [
+                            Color.primary.opacity(isHovered ? 0.22 : 0.12),
+                            Color.primary.opacity(isHovered ? 0.08 : 0.04),
+                            Color.clear
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    ),
+                    lineWidth: 1
+                )
+        }
+    }
+
     @ViewBuilder
     public static func cardBorder(cornerRadius: CGFloat = radiusCard, isHovered: Bool = false, accentColor: Color? = nil) -> some View {
         let isOpaque = NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency
@@ -291,14 +442,14 @@ public enum SiphonTheme {
                 )
         } else if isOpaque {
             RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                .stroke(Color.primary.opacity(isHovered ? 0.24 : 0.14), lineWidth: 1)
+                .stroke(Color(nsColor: .separatorColor), lineWidth: 1)
         } else {
             RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                 .strokeBorder(
                     LinearGradient(
                         colors: [
-                            Color.white.opacity(isHovered ? 0.28 : 0.18),
-                            Color.white.opacity(isHovered ? 0.08 : 0.04),
+                            Color.primary.opacity(isHovered ? 0.22 : 0.14),
+                            Color.primary.opacity(isHovered ? 0.08 : 0.04),
                             Color.clear
                         ],
                         startPoint: .top,
@@ -335,7 +486,7 @@ public enum SiphonTheme {
     public static func pillBorder(isSelected: Bool = false, isHovered: Bool = false) -> some View {
         if isSelected {
             Capsule()
-                .stroke(Color.white.opacity(0.25), lineWidth: 1)
+                .stroke(Color.primary.opacity(0.25), lineWidth: 1)
         } else {
             Capsule()
                 .stroke(Color.primary.opacity(isHovered ? 0.12 : 0.06), lineWidth: 1)
@@ -361,7 +512,7 @@ public enum SiphonTheme {
                     .fill(
                         LinearGradient(
                             colors: [
-                                Color.white.opacity(isHovered ? 0.12 : 0.06),
+                                Color.primary.opacity(isHovered ? 0.08 : 0.03),
                                 Color.clear
                             ],
                             startPoint: .top,
@@ -374,19 +525,25 @@ public enum SiphonTheme {
     
     @ViewBuilder
     public static func controlBorder(cornerRadius: CGFloat = radiusControl, isHovered: Bool = false) -> some View {
-        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-            .strokeBorder(
-                LinearGradient(
-                    colors: [
-                        Color.white.opacity(isHovered ? 0.38 : 0.22),
-                        Color.white.opacity(isHovered ? 0.14 : 0.06),
-                        Color.clear
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
-                ),
-                lineWidth: 1
-            )
+        let isOpaque = NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency
+        if isOpaque {
+            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                .stroke(Color(nsColor: .separatorColor), lineWidth: 1)
+        } else {
+            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                .strokeBorder(
+                    LinearGradient(
+                        colors: [
+                            Color.primary.opacity(isHovered ? 0.28 : 0.16),
+                            Color.primary.opacity(isHovered ? 0.12 : 0.05),
+                            Color.clear
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    ),
+                    lineWidth: 1
+                )
+        }
     }
 
     // Inset Field & Search/Path Box Background (Distinct contrast inside glass cards)
@@ -408,7 +565,7 @@ public enum SiphonTheme {
                     .fill(
                         LinearGradient(
                             colors: [
-                                Color.black.opacity(0.12),
+                                Color.primary.opacity(0.04),
                                 Color.clear
                             ],
                             startPoint: .top,
@@ -426,16 +583,19 @@ public enum SiphonTheme {
 
     @ViewBuilder
     public static func fieldBorder(cornerRadius: CGFloat = radiusControl, isFocused: Bool = false) -> some View {
+        let isOpaque = NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency
         RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
             .strokeBorder(
                 LinearGradient(
                     colors: isFocused
                         ? [accent.opacity(0.85), accent.opacity(0.45)]
-                        : [
-                            Color.white.opacity(0.24),
-                            Color.white.opacity(0.08),
-                            Color.clear
-                        ],
+                        : (isOpaque
+                            ? [Color(nsColor: .separatorColor), Color(nsColor: .separatorColor)]
+                            : [
+                                Color.primary.opacity(0.18),
+                                Color.primary.opacity(0.06),
+                                Color.clear
+                            ]),
                     startPoint: .top,
                     endPoint: .bottom
                 ),
@@ -444,11 +604,10 @@ public enum SiphonTheme {
     }
     
     // Settings & Diagnostics Subtle Divider
-    public static let dividerOpacity: Double = 0.20
     @ViewBuilder
     public static var subtleDivider: some View {
         Divider()
-            .opacity(dividerOpacity)
+            .overlay(separator)
     }
 }
 
@@ -548,7 +707,7 @@ public struct SiphonInteractiveGlassBackground: View {
                     .fill(
                         isSelected
                             ? effectiveTint.opacity(0.85)
-                            : (isHovered ? effectiveTint.opacity(0.16) : Color.white.opacity(0.05))
+                            : (isHovered ? effectiveTint.opacity(0.16) : Color.primary.opacity(0.04))
                     )
             }
         }
@@ -574,19 +733,25 @@ public struct SiphonInteractiveGlassBorder: View {
     }
 
     public var body: some View {
-        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-            .strokeBorder(
-                LinearGradient(
-                    colors: isSelected
-                        ? [Color.white.opacity(0.60), Color.white.opacity(0.25)]
-                        : (isHovered
-                            ? [effectiveTint.opacity(0.70), effectiveTint.opacity(0.35)]
-                            : [Color.white.opacity(0.30), Color.white.opacity(0.10)]),
-                    startPoint: .top,
-                    endPoint: .bottom
-                ),
-                lineWidth: 1
-            )
+        let isOpaque = NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency
+        if isOpaque {
+            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                .stroke(isSelected ? effectiveTint : Color(nsColor: .separatorColor), lineWidth: 1)
+        } else {
+            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                .strokeBorder(
+                    LinearGradient(
+                        colors: isSelected
+                            ? [effectiveTint.opacity(0.85), effectiveTint.opacity(0.40)]
+                            : (isHovered
+                                ? [effectiveTint.opacity(0.65), effectiveTint.opacity(0.25)]
+                                : [Color.primary.opacity(0.18), Color.primary.opacity(0.06)]),
+                        startPoint: .top,
+                        endPoint: .bottom
+                    ),
+                    lineWidth: 1
+                )
+        }
     }
 }
 
