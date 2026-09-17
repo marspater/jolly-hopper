@@ -88,7 +88,7 @@ struct AddDownloadView: View {
     }
 
     private var availableCodecIDs: Set<String> {
-        Set(availableCodecs.map(\.id))
+        Set(availableCodecs.lazy.map(\.id))
     }
 
     private var filteredResolutions: [VideoResolution] {
@@ -717,7 +717,7 @@ struct AddDownloadView: View {
             }
 
             HStack(spacing: 12) {
-                Button(languageService.s("select_all")) { selectedPlaylistIds = Set(playlistItems.map { $0.id }) }
+                Button(languageService.s("select_all")) { selectedPlaylistIds = Set(playlistItems.lazy.map(\.id)) }
                     .buttonStyle(.plain).foregroundColor(SiphonTheme.accent)
                 Button(languageService.s("deselect_all")) { selectedPlaylistIds.removeAll() }
                     .buttonStyle(.plain).foregroundColor(SiphonTheme.accent)
@@ -1725,7 +1725,7 @@ struct AddDownloadView: View {
                 let items = try await downloadManager.ytdlpService.fetchPlaylistInfo(url: urlInput)
                 guard !Task.isCancelled else { return }
                 playlistItems = items
-                selectedPlaylistIds = Set(items.map { $0.id })
+                selectedPlaylistIds = Set(items.lazy.map(\.id))
                 showPlaylistSelector = true
                 downloadMode = .playlist
             } catch {
