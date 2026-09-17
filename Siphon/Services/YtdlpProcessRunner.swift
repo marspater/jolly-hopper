@@ -479,9 +479,9 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
                     }
                 }
 
-                DispatchQueue.main.async {
-                    onOutput(line)
+                onOutput(line)
 
+                DispatchQueue.main.async {
                     if line.contains("%") {
                         let components = line.split(whereSeparator: \.isWhitespace)
                         if let percentIndex = components.firstIndex(where: { $0.hasSuffix("%") }) {

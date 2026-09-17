@@ -134,6 +134,7 @@ struct MenuBarView: View {
                     .buttonStyle(.bouncy)
                     .help(languageService.s("video"))
                     .accessibilityLabel(languageService.s("video"))
+                    .accessibilityAddTraits(selectedType == "video" ? [.isButton, .isSelected] : [.isButton])
                     
                     Button {
                         withAnimation(.spring(response: 0.30, dampingFraction: 0.68, blendDuration: 0)) {
@@ -157,6 +158,7 @@ struct MenuBarView: View {
                     .buttonStyle(.bouncy)
                     .help(languageService.s("audio"))
                     .accessibilityLabel(languageService.s("audio"))
+                    .accessibilityAddTraits(selectedType == "audio" ? [.isButton, .isSelected] : [.isButton])
                 }
                 .padding(SiphonTheme.spacing2)
                 .background(
