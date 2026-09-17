@@ -304,6 +304,7 @@ struct DetailView: View {
 }
 
 struct HomeView: View {
+    @Environment(\.colorScheme) private var colorScheme
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var downloadManager: DownloadManager
     @EnvironmentObject var languageService: LanguageService
@@ -368,9 +369,14 @@ struct HomeView: View {
                     
                     Spacer()
                     
-                    Text("Built for a more open internet. 🤍")
-                        .font(.geist(11, weight: .regular))
-                        .foregroundColor(.secondary.opacity(0.7))
+                    HStack(spacing: 4) {
+                        Text("Built for a more open internet.")
+                            .font(.geist(11, weight: .regular))
+                            .foregroundColor(.secondary.opacity(0.7))
+                        Image(systemName: "heart.fill")
+                            .font(.system(size: 9))
+                            .foregroundColor(colorScheme == .light ? SiphonTheme.accent : Color.white.opacity(0.85))
+                    }
                 }
                 .padding(.horizontal, SiphonTheme.spacing24)
                 .padding(.bottom, SiphonTheme.spacing12)
