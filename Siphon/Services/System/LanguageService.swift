@@ -95,6 +95,7 @@ class LanguageService: ObservableObject {
         "advanced": "Advanced",
         "about": "About",
         "theme": "Theme",
+        "appearance": "Appearance",
         "system": "System",
         "light": "Light",
         "dark": "Dark",

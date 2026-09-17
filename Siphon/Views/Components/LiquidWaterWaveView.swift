@@ -141,14 +141,14 @@ struct LiquidWaterWaveView: View {
             let minInterval = AdaptiveRenderingEnvironment.shared.isHighRefreshRate ? (1.0 / 120.0) : (1.0 / 60.0)
             TimelineView(.animation(minimumInterval: minInterval)) { timeline in
                 let time = timeline.date.timeIntervalSinceReferenceDate
-                let baseSpeed = isActive ? 1.05 : (isHovered ? 0.78 : 0.48)
+                let baseSpeed = isActive ? 0.95 : (isHovered ? 0.72 : 0.46)
 
                 ZStack {
                     // Layer 1: Deep Primary Viscous Fluid Body (Clockwise Lissajous Orbit)
                     LissajousHarmonicBlobShape(
                         time: time,
                         speed: baseSpeed * 0.85,
-                        intensity: isHovered ? 1.15 : 0.90,
+                        intensity: 0.95,
                         seed: seed,
                         phaseOffset: 0.0,
                         freqX: 0.58,
@@ -158,8 +158,8 @@ struct LiquidWaterWaveView: View {
                     .fill(
                         LinearGradient(
                             colors: [
-                                color.opacity(isActive ? 0.32 : (isHovered ? 0.22 : 0.14)),
-                                color.opacity(isActive ? 0.14 : (isHovered ? 0.08 : 0.04)),
+                                color.opacity(isActive ? 0.28 : 0.16),
+                                color.opacity(isActive ? 0.12 : 0.05),
                                 Color.clear
                             ],
                             startPoint: .topLeading,
@@ -171,7 +171,7 @@ struct LiquidWaterWaveView: View {
                     LissajousHarmonicBlobShape(
                         time: time,
                         speed: baseSpeed * 1.08,
-                        intensity: isHovered ? 1.05 : 0.80,
+                        intensity: 0.85,
                         seed: seed + 3.1415,
                         phaseOffset: 2.7,
                         freqX: 0.82,
@@ -181,8 +181,8 @@ struct LiquidWaterWaveView: View {
                     .fill(
                         LinearGradient(
                             colors: [
-                                color.opacity(isActive ? 0.22 : (isHovered ? 0.15 : 0.09)),
-                                Color.white.opacity(isHovered ? 0.08 : 0.03),
+                                color.opacity(isActive ? 0.18 : 0.10),
+                                Color.white.opacity(0.04),
                                 Color.clear
                             ],
                             startPoint: .bottomLeading,
@@ -194,7 +194,7 @@ struct LiquidWaterWaveView: View {
                     LissajousHarmonicBlobShape(
                         time: time,
                         speed: baseSpeed * 0.85,
-                        intensity: isHovered ? 1.15 : 0.90,
+                        intensity: 0.95,
                         seed: seed,
                         phaseOffset: 0.0,
                         freqX: 0.58,
@@ -204,17 +204,17 @@ struct LiquidWaterWaveView: View {
                     .stroke(
                         LinearGradient(
                             colors: [
-                                Color.white.opacity(isHovered ? 0.35 : 0.18),
-                                color.opacity(isHovered ? 0.40 : 0.20),
+                                Color.white.opacity(0.20),
+                                color.opacity(0.24),
                                 Color.clear
                             ],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         ),
-                        lineWidth: 1.0
+                        lineWidth: 0.8
                     )
 
-                    // Layer 4: Luminous Inner Core Sheen
+                    // Layer 4: Soft ambient liquid backdrop
                     LissajousHarmonicBlobShape(
                         time: time,
                         speed: baseSpeed * 1.25,
@@ -228,13 +228,12 @@ struct LiquidWaterWaveView: View {
                     .fill(
                         RadialGradient(
                             colors: [
-                                Color.white.opacity(isHovered ? 0.12 : 0.05),
-                                color.opacity(isHovered ? 0.16 : 0.06),
+                                color.opacity(isActive ? 0.14 : 0.08),
                                 Color.clear
                             ],
                             center: .center,
-                            startRadius: 2,
-                            endRadius: 40
+                            startRadius: 4,
+                            endRadius: 45
                         )
                     )
                 }
