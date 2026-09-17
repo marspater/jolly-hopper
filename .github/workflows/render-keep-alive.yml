@@ -1,0 +1,16 @@
+name: Render Keep-Alive
+
+on:
+  schedule:
+    # Run every 14 minutes to prevent Render free instance from spinning down
+    - cron: '*/14 * * * *'
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Render Service
+        run: |
+          echo "Pinging Siphon companion service on Render..."
+          curl -f -s -S --max-time 60 https://jolly-hopper.onrender.com/healthz || echo "Ping failed or instance warming up"

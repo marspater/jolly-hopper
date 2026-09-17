@@ -47,6 +47,47 @@ describe('Siphon Companion Server', () => {
     assert.equal(data.status, 'ok');
   });
 
+  test('GET /mock/subtitles.vtt returns valid WebVTT content', async () => {
+    const res = await fetch(`${baseUrl}/mock/subtitles.vtt`);
+    assert.equal(res.status, 200);
+    assert.match(res.headers.get('content-type'), /text\/vtt/);
+    const text = await res.text();
+    assert.ok(text.startsWith('WEBVTT'));
+    assert.ok(text.includes('00:00:00.000 --> 00:00:02.000'));
+  });
+
+  test('GET /mock/playlist.m3u8 returns valid HLS manifest', async () => {
+    const res = await fetch(`${baseUrl}/mock/playlist.m3u8`);
+    assert.equal(res.status, 200);
+    assert.match(res.headers.get('content-type'), /mpegurl/i);
+    const text = await res.text();
+    assert.ok(text.startsWith('#EXTM3U'));
+    assert.ok(text.includes('#EXT-X-ENDLIST'));
+  });
+
+  test('GET /mock/video.mp4 returns valid MP4 binary buffer', async () => {
+    const res = await fetch(`${baseUrl}/mock/video.mp4`);
+    assert.equal(res.status, 200);
+    assert.equal(res.headers.get('content-type'), 'video/mp4');
+    const buffer = Buffer.from(await res.arrayBuffer());
+    assert.ok(buffer.length > 0);
+    assert.equal(buffer.subarray(4, 8).toString(), 'ftyp');
+  });
+
+  test('GET /api/latest returns release payload with cache status', async () => {
+    const res = await fetch(`${baseUrl}/api/latest`);
+    assert.equal(res.status, 200);
+    assert.equal(res.headers.get('content-type'), 'application/json');
+    const data = await res.json();
+    assert.ok(data.version);
+    assert.ok(data.downloadUrl);
+
+    // Verify cache hit on immediate second request
+    const res2 = await fetch(`${baseUrl}/api/latest`);
+    const data2 = await res2.json();
+    assert.equal(data2.cached, true);
+  });
+
   test('GET /unknown returns 404', async () => {
     const res = await fetch(`${baseUrl}/unknown-endpoint`);
     assert.equal(res.status, 404);
