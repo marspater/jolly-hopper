@@ -1591,29 +1591,7 @@ public struct DownloadResult: Sendable {
     }
 
     nonisolated public static func createAspectFitIcon(from image: NSImage, targetSize: CGFloat = 512) -> NSImage {
-        let sourceSize = image.size
-        guard sourceSize.width > 0 && sourceSize.height > 0 else { return image }
-        
-        let canvas = NSImage(size: NSSize(width: targetSize, height: targetSize))
-        canvas.lockFocus()
-        
-        // Calculate aspect fit rect inside square canvas to prevent stretching
-        let widthRatio = targetSize / sourceSize.width
-        let heightRatio = targetSize / sourceSize.height
-        let scale = min(widthRatio, heightRatio)
-        
-        let scaledWidth = sourceSize.width * scale
-        let scaledHeight = sourceSize.height * scale
-        let x = (targetSize - scaledWidth) / 2.0
-        let y = (targetSize - scaledHeight) / 2.0
-        
-        let destRect = NSRect(x: x, y: y, width: scaledWidth, height: scaledHeight)
-        let srcRect = NSRect(origin: .zero, size: sourceSize)
-        
-        image.draw(in: destRect, from: srcRect, operation: .copy, fraction: 1.0)
-        canvas.unlockFocus()
-        
-        return canvas
+        ImageUtilities.createAspectFitIcon(from: image, targetSize: targetSize)
     }
 
     private func hasAttachedThumbnail(mediaFile: URL, ffmpegDir: String) async -> Bool {

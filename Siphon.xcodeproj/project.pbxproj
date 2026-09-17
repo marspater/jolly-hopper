@@ -7,6 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		E0001090 /* ImageUtilities.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000090 /* ImageUtilities.swift */; };
+		E0001091 /* ImageUtilitiesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000091 /* ImageUtilitiesTests.swift */; };
 		E0001050 /* Font+Geist.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000050 /* Font+Geist.swift */; };
 		E0001051 /* Geist-Regular.otf in Resources */ = {isa = PBXBuildFile; fileRef = E0000051 /* Geist-Regular.otf */; };
 		E0001052 /* Geist-Medium.otf in Resources */ = {isa = PBXBuildFile; fileRef = E0000052 /* Geist-Medium.otf */; };
@@ -54,6 +56,8 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		E0000090 /* ImageUtilities.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageUtilities.swift; sourceTree = "<group>"; };
+		E0000091 /* ImageUtilitiesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageUtilitiesTests.swift; sourceTree = "<group>"; };
 		E0000050 /* Font+Geist.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Font+Geist.swift"; sourceTree = "<group>"; };
 		E0000051 /* Geist-Regular.otf */ = {isa = PBXFileReference; lastKnownFileType = file; name = "Geist-Regular.otf"; path = "Fonts/Geist-Regular.otf"; sourceTree = "<group>"; };
 		E0000052 /* Geist-Medium.otf */ = {isa = PBXFileReference; lastKnownFileType = file; name = "Geist-Medium.otf"; path = "Fonts/Geist-Medium.otf"; sourceTree = "<group>"; };
@@ -115,6 +119,14 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		E0003011 /* Utilities */ = {
+			isa = PBXGroup;
+			children = (
+				E0000090 /* ImageUtilities.swift */,
+			);
+			path = Utilities;
+			sourceTree = "<group>";
+		};
 		44F4CAC630137C7400207052 /* Recovered References */ = {
 			isa = PBXGroup;
 			children = (
@@ -136,6 +148,7 @@
 		E0003002 /* Siphon */ = {
 			isa = PBXGroup;
 			children = (
+				E0003011 /* Utilities */,
 				E0000001 /* SiphonApp.swift */,
 				E0003004 /* Models */,
 				E0003005 /* Services */,
@@ -152,6 +165,7 @@
 		E0003020 /* SiphonTests */ = {
 			isa = PBXGroup;
 			children = (
+				E0000091 /* ImageUtilitiesTests.swift */,
 				E0000040 /* DownloadManagerTests.swift */,
 				E0000041 /* MediaInfoTests.swift */,
 				E0000042 /* YtdlpServiceTests.swift */,
@@ -383,6 +397,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				E0001090 /* ImageUtilities.swift in Sources */,
 				E0001050 /* Font+Geist.swift in Sources */,
 				E0001003 /* Download.swift in Sources */,
 				E0001028 /* View+Compatibility.swift in Sources */,
@@ -414,6 +429,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				E0001091 /* ImageUtilitiesTests.swift in Sources */,
 				E0001040 /* DownloadManagerTests.swift in Sources */,
 				E0001041 /* MediaInfoTests.swift in Sources */,
 				E0001042 /* YtdlpServiceTests.swift in Sources */,
