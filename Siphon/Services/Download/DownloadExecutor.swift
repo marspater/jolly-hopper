@@ -327,6 +327,13 @@ final class DownloadExecutor: ObservableObject {
 
             coalescer.flushRemaining()
 
+            guard Self.shouldFinalizeSuccessfulDownload(
+                taskIsCancelled: Task.isCancelled,
+                status: download.status
+            ) else {
+                return
+            }
+
             if !downloadResult.files.isEmpty {
                 download.filePaths = downloadResult.files
             } else if let primary = downloadResult.primaryFile {
@@ -493,6 +500,14 @@ final class DownloadExecutor: ObservableObject {
     }
 
     // MARK: - Helpers
+
+    nonisolated static func shouldFinalizeSuccessfulDownload(
+        taskIsCancelled: Bool,
+        status: DownloadStatus
+    ) -> Bool {
+        guard !taskIsCancelled else { return false }
+        return status == .downloading || status == .processing
+    }
 
     static func populateDiagnostics(
         for download: Download,
