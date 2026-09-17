@@ -249,6 +249,20 @@ final class YtdlpServiceTests: XCTestCase {
         try? FileManager.default.removeItem(at: regularFile)
     }
 
+    func testExtractedBinaryPermissions() throws {
+        // 🎯 What: Verify that extracted binary staging files receive restricted 0o700 POSIX permissions.
+        let tempDir = FileManager.default.temporaryDirectory
+        let dummyBinaryURL = tempDir.appendingPathComponent("dummy_binary_\(UUID().uuidString)")
+        try "dummy content".data(using: .utf8)?.write(to: dummyBinaryURL)
+        defer { try? FileManager.default.removeItem(at: dummyBinaryURL) }
+
+        try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: dummyBinaryURL.path)
+
+        let attrs = try FileManager.default.attributesOfItem(atPath: dummyBinaryURL.path)
+        let posix = attrs[.posixPermissions] as? NSNumber
+        XCTAssertEqual(posix?.intValue, 0o700, "Extracted binary must have restricted 0o700 POSIX permissions")
+    }
+
     func testTempCookiesFileCreationPermissions() throws {
         let secureCookiesDir = YtdlpService.getSecureTempCookiesDirectory()
         XCTAssertNotNil(secureCookiesDir)
