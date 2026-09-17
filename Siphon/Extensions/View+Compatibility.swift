@@ -346,6 +346,90 @@ public struct SiphonSpinner: View {
     }
 }
 
+// MARK: - Interactive Liquid Glass Control Sub-Components
+public struct SiphonInteractiveGlassBackground: View {
+    public var cornerRadius: CGFloat
+    public var isHovered: Bool
+    public var isSelected: Bool
+    public var effectiveTint: Color
+
+    public init(
+        cornerRadius: CGFloat = SiphonTheme.radiusControl,
+        isHovered: Bool = false,
+        isSelected: Bool = false,
+        effectiveTint: Color = SiphonTheme.accent
+    ) {
+        self.cornerRadius = cornerRadius
+        self.isHovered = isHovered
+        self.isSelected = isSelected
+        self.effectiveTint = effectiveTint
+    }
+
+    public var body: some View {
+        let isOpaque = NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency
+        if isOpaque {
+            RoundedRectangle(cornerRadius: cornerRadius)
+                .fill(Color(nsColor: isHovered ? .selectedControlColor : .controlBackgroundColor))
+        } else {
+            ZStack {
+                if isHovered && !isSelected {
+                    RoundedRectangle(cornerRadius: cornerRadius)
+                        .fill(effectiveTint.opacity(0.18))
+                        .blur(radius: 6)
+                        .padding(-1)
+                        .allowedDynamicRange(AdaptiveRenderingEnvironment.shared.capabilities.supportsEDR ? .high : .standard)
+                }
+
+                RoundedRectangle(cornerRadius: cornerRadius)
+                    .fill(
+                        isSelected
+                            ? effectiveTint.opacity(0.85)
+                            : (isHovered ? Color.primary.opacity(0.08) : Color.primary.opacity(0.04))
+                    )
+                    .background(
+                        RoundedRectangle(cornerRadius: cornerRadius)
+                            .fill(.ultraThinMaterial)
+                    )
+            }
+        }
+    }
+}
+
+public struct SiphonInteractiveGlassBorder: View {
+    public var cornerRadius: CGFloat
+    public var isHovered: Bool
+    public var isSelected: Bool
+    public var effectiveTint: Color
+
+    public init(
+        cornerRadius: CGFloat = SiphonTheme.radiusControl,
+        isHovered: Bool = false,
+        isSelected: Bool = false,
+        effectiveTint: Color = SiphonTheme.accent
+    ) {
+        self.cornerRadius = cornerRadius
+        self.isHovered = isHovered
+        self.isSelected = isSelected
+        self.effectiveTint = effectiveTint
+    }
+
+    public var body: some View {
+        RoundedRectangle(cornerRadius: cornerRadius)
+            .strokeBorder(
+                LinearGradient(
+                    colors: isSelected
+                        ? [Color.white.opacity(0.35), Color.white.opacity(0.10), Color.clear]
+                        : (isHovered
+                            ? [effectiveTint.opacity(0.50), effectiveTint.opacity(0.20), Color.clear]
+                            : [Color.white.opacity(0.18), Color.white.opacity(0.04), Color.clear]),
+                    startPoint: .top,
+                    endPoint: .bottom
+                ),
+                lineWidth: 1
+            )
+    }
+}
+
 // MARK: - Interactive Liquid Glass Control Modifier & Environmental Field
 public struct SiphonInteractiveGlassModifier: ViewModifier {
     public var cornerRadius: CGFloat
@@ -368,52 +452,25 @@ public struct SiphonInteractiveGlassModifier: ViewModifier {
     }
     
     public func body(content: Content) -> some View {
-        let isOpaque = NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency
         let effectiveTint = isDestructive ? SiphonTheme.statusFailed : (tintColor ?? SiphonTheme.accent)
         
         content
             .background {
-                if isOpaque {
-                    RoundedRectangle(cornerRadius: cornerRadius)
-                        .fill(Color(nsColor: isHovered ? .selectedControlColor : .controlBackgroundColor))
-                } else {
-                    ZStack {
-                        if isHovered && !isSelected {
-                            RoundedRectangle(cornerRadius: cornerRadius)
-                                .fill(effectiveTint.opacity(0.18))
-                                .blur(radius: 6)
-                                .padding(-1)
-                                .allowedDynamicRange(AdaptiveRenderingEnvironment.shared.capabilities.supportsEDR ? .high : .standard)
-                        }
-                        
-                        RoundedRectangle(cornerRadius: cornerRadius)
-                            .fill(
-                                isSelected
-                                    ? effectiveTint.opacity(0.85)
-                                    : (isHovered ? Color.primary.opacity(0.08) : Color.primary.opacity(0.04))
-                            )
-                            .background(
-                                RoundedRectangle(cornerRadius: cornerRadius)
-                                    .fill(.ultraThinMaterial)
-                            )
-                    }
-                }
+                SiphonInteractiveGlassBackground(
+                    cornerRadius: cornerRadius,
+                    isHovered: isHovered,
+                    isSelected: isSelected,
+                    effectiveTint: effectiveTint
+                )
             }
             .clipShape(RoundedRectangle(cornerRadius: cornerRadius))
             .overlay(
-                RoundedRectangle(cornerRadius: cornerRadius)
-                    .strokeBorder(
-                        LinearGradient(
-                            colors: isSelected
-                                ? [Color.white.opacity(0.35), Color.white.opacity(0.10), Color.clear]
-                                : (isHovered
-                                    ? [effectiveTint.opacity(0.50), effectiveTint.opacity(0.20), Color.clear]
-                                    : [Color.white.opacity(0.18), Color.white.opacity(0.04), Color.clear]),
-                            startPoint: .top,
-                            endPoint: .bottom
-                        ),
-                        lineWidth: 1
-                    )
+                SiphonInteractiveGlassBorder(
+                    cornerRadius: cornerRadius,
+                    isHovered: isHovered,
+                    isSelected: isSelected,
+                    effectiveTint: effectiveTint
+                )
             )
             .scaleEffect(isHovered ? 1.02 : 1.0)
             .animation(.spring(response: 0.30, dampingFraction: 0.68, blendDuration: 0), value: isHovered)
