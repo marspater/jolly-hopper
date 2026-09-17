@@ -1,7 +1,5 @@
 import SwiftUI
-import QuickLookThumbnailing
 import QuickLookUI
-import AVFoundation
 
 final class QuickLookPreviewHelper: NSObject, QLPreviewPanelDataSource, QLPreviewPanelDelegate, @unchecked Sendable {
     static let shared = QuickLookPreviewHelper()
@@ -448,24 +446,9 @@ struct FileThumbnailView: View {
     }
 
     private func generateThumbnail() async {
-        guard FileManager.default.fileExists(atPath: fileURL.path) else { return }
-
-        let request = QLThumbnailGenerator.Request(fileAt: fileURL, size: CGSize(width: 240, height: 136), scale: 2.0, representationTypes: .thumbnail)
-        if let representation = try? await QLThumbnailGenerator.shared.generateBestRepresentation(for: request) {
+        if let image = await ImageUtilities.generateThumbnail(for: fileURL) {
             await MainActor.run {
-                self.thumbnailImage = representation.nsImage
-            }
-            return
-        }
-
-        let asset = AVURLAsset(url: fileURL)
-        let generator = AVAssetImageGenerator(asset: asset)
-        generator.appliesPreferredTrackTransform = true
-        let time = CMTime(seconds: 1, preferredTimescale: 60)
-        if let cgImage = try? generator.copyCGImage(at: time, actualTime: nil) {
-            let nsImage = NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
-            await MainActor.run {
-                self.thumbnailImage = nsImage
+                self.thumbnailImage = image
             }
         }
     }
