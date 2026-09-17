@@ -126,4 +126,28 @@ final class DownloadExecutorTests: XCTestCase {
         XCTAssertEqual(mockDelegate.updatedStatuses.first?.1, .paused)
         XCTAssertEqual(mockDelegate.broadcastCount, 1)
     }
+
+    func testSuccessfulCompletionRespectsCancellationAndUserStatus() {
+        XCTAssertTrue(DownloadExecutor.shouldFinalizeSuccessfulDownload(
+            taskIsCancelled: false,
+            status: .downloading
+        ))
+        XCTAssertTrue(DownloadExecutor.shouldFinalizeSuccessfulDownload(
+            taskIsCancelled: false,
+            status: .processing
+        ))
+
+        XCTAssertFalse(DownloadExecutor.shouldFinalizeSuccessfulDownload(
+            taskIsCancelled: true,
+            status: .downloading
+        ))
+        XCTAssertFalse(DownloadExecutor.shouldFinalizeSuccessfulDownload(
+            taskIsCancelled: false,
+            status: .paused
+        ))
+        XCTAssertFalse(DownloadExecutor.shouldFinalizeSuccessfulDownload(
+            taskIsCancelled: false,
+            status: .stopped
+        ))
+    }
 }
