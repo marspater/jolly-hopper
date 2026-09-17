@@ -3,37 +3,31 @@ import Foundation
 import CoreText
 
 extension Font {
+    private static let geistSansFontNames: [Font.Weight: String] = [
+        .black: "Geist-Black",
+        .bold: "Geist-Bold",
+        .heavy: "Geist-SemiBold",
+        .semibold: "Geist-SemiBold",
+        .medium: "Geist-Medium"
+    ]
+
+    private static let geistMonoFontNames: [Font.Weight: String] = [
+        .bold: "GeistMono-Bold",
+        .heavy: "GeistMono-Bold",
+        .black: "GeistMono-Bold",
+        .semibold: "GeistMono-SemiBold",
+        .medium: "GeistMono-Medium"
+    ]
+
     /// Custom Geist Sans font (Vercel & Basement Studio typeface)
     public static func geist(_ size: CGFloat, weight: Font.Weight = .regular, relativeTo textStyle: Font.TextStyle = .body) -> Font {
-        let fontName: String
-        switch weight {
-        case .black:
-            fontName = "Geist-Black"
-        case .bold:
-            fontName = "Geist-Bold"
-        case .heavy, .semibold:
-            fontName = "Geist-SemiBold"
-        case .medium:
-            fontName = "Geist-Medium"
-        default:
-            fontName = "Geist-Regular"
-        }
+        let fontName = geistSansFontNames[weight] ?? "Geist-Regular"
         return .custom(fontName, size: size, relativeTo: textStyle)
     }
 
     /// Custom Geist Mono font (Vercel & Basement Studio monospaced typeface)
     public static func geistMono(_ size: CGFloat, weight: Font.Weight = .regular, relativeTo textStyle: Font.TextStyle = .body) -> Font {
-        let fontName: String
-        switch weight {
-        case .bold, .heavy, .black:
-            fontName = "GeistMono-Bold"
-        case .semibold:
-            fontName = "GeistMono-SemiBold"
-        case .medium:
-            fontName = "GeistMono-Medium"
-        default:
-            fontName = "GeistMono-Regular"
-        }
+        let fontName = geistMonoFontNames[weight] ?? "GeistMono-Regular"
         return .custom(fontName, size: size, relativeTo: textStyle)
     }
 
