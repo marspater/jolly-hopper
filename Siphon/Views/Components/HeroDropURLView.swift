@@ -71,8 +71,37 @@ struct HeroDropURLView: View {
                         : Color.white.opacity(0.18)
                 )
 
-            // 5. Central Interactive Area
-            VStack(spacing: SiphonTheme.spacing14) {
+            // 5. Top-trailing: Advanced Options Button
+            VStack {
+                HStack {
+                    Spacer()
+                    Button {
+                        appState.showAddDownloadSheet = true
+                    } label: {
+                        Image(systemName: "slider.horizontal.3")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundColor(.secondary)
+                            .frame(width: 28, height: 28)
+                            .background(
+                                Circle()
+                                    .fill(Color.primary.opacity(0.05))
+                                    .background(Circle().fill(.ultraThinMaterial))
+                            )
+                            .overlay(
+                                Circle()
+                                    .stroke(Color.white.opacity(0.15), lineWidth: 0.8)
+                            )
+                    }
+                    .buttonStyle(.bouncy(scale: 0.94, hover: 1.06))
+                    .help(languageService.s("advanced_options"))
+                    .accessibilityLabel(languageService.s("advanced_options"))
+                    .padding(14)
+                }
+                Spacer()
+            }
+
+            // 6. Central Interactive Area (strictly centered along vertical axis)
+            VStack(spacing: SiphonTheme.spacing12) {
                 // Radiant + Button
                 Button {
                     handlePasteAction()
@@ -80,11 +109,11 @@ struct HeroDropURLView: View {
                     ZStack {
                         Circle()
                             .fill(SiphonTheme.primaryGradient)
-                            .frame(width: 54, height: 54)
-                            .shadow(color: SiphonTheme.accent.opacity(0.45), radius: 12, y: 4)
+                            .frame(width: 52, height: 52)
+                            .shadow(color: SiphonTheme.accent.opacity(0.40), radius: 10, y: 3)
 
                         Image(systemName: "plus")
-                            .font(.system(size: 22, weight: .semibold))
+                            .font(.system(size: 20, weight: .semibold))
                             .foregroundColor(.white)
                     }
                 }
@@ -92,61 +121,43 @@ struct HeroDropURLView: View {
                 .help(languageService.s("paste_or_add"))
 
                 // Labels
-                VStack(spacing: 4) {
+                VStack(spacing: 3) {
                     Text(languageService.s("drop_url_here"))
-                        .font(.geist(18, weight: .semibold))
+                        .font(.geist(17, weight: .semibold))
                         .foregroundColor(.primary)
 
                     Text(languageService.s("or_paste_clipboard"))
-                        .font(.geist(13, weight: .regular))
+                        .font(.geist(12, weight: .regular))
                         .foregroundColor(.secondary)
                 }
 
-                // Paste from Clipboard Button Pill
-                HStack(spacing: SiphonTheme.spacing12) {
-                    Button {
-                        handlePasteAction()
-                    } label: {
-                        HStack(spacing: 7) {
-                            Image(systemName: isPasting ? "checkmark" : "doc.on.clipboard")
-                                .font(.system(size: 12, weight: .semibold))
-                            Text(languageService.s("paste_from_clipboard"))
-                                .font(.geist(13, weight: .medium))
-                        }
-                        .foregroundColor(.primary)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 8)
-                        .background(
-                            RoundedRectangle(cornerRadius: SiphonTheme.radiusControl, style: .continuous)
-                                .fill(Color.primary.opacity(0.06))
-                                .background(
-                                    RoundedRectangle(cornerRadius: SiphonTheme.radiusControl, style: .continuous)
-                                        .fill(.ultraThinMaterial)
-                                )
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: SiphonTheme.radiusControl, style: .continuous)
-                                .stroke(Color.white.opacity(0.20), lineWidth: 1)
-                        )
+                // Paste from Clipboard Button Pill (Centered)
+                Button {
+                    handlePasteAction()
+                } label: {
+                    HStack(spacing: 7) {
+                        Image(systemName: isPasting ? "checkmark" : "doc.on.clipboard")
+                            .font(.system(size: 12, weight: .semibold))
+                        Text(languageService.s("paste_from_clipboard"))
+                            .font(.geist(13, weight: .medium))
                     }
-                    .buttonStyle(.bouncy(scale: 0.96, hover: 1.02))
-
-                    // Advanced options button
-                    Button {
-                        appState.showAddDownloadSheet = true
-                    } label: {
-                        Image(systemName: "slider.horizontal.3")
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundColor(.secondary)
-                            .padding(8)
+                    .foregroundColor(.primary)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 7)
+                    .background(
+                        RoundedRectangle(cornerRadius: SiphonTheme.radiusControl, style: .continuous)
+                            .fill(Color.primary.opacity(0.06))
                             .background(
-                                Circle()
-                                    .fill(Color.primary.opacity(0.05))
+                                RoundedRectangle(cornerRadius: SiphonTheme.radiusControl, style: .continuous)
+                                    .fill(.ultraThinMaterial)
                             )
-                    }
-                    .buttonStyle(.plain)
-                    .help(languageService.s("advanced_options"))
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: SiphonTheme.radiusControl, style: .continuous)
+                            .stroke(Color.white.opacity(0.18), lineWidth: 0.8)
+                    )
                 }
+                .buttonStyle(.bouncy(scale: 0.96, hover: 1.02))
 
                 if let message = statusFeedbackMessage {
                     Text(message)
@@ -155,7 +166,7 @@ struct HeroDropURLView: View {
                         .transition(.opacity.combined(with: .scale(scale: 0.95)))
                 }
             }
-            .padding(.vertical, 28)
+            .padding(.vertical, 24)
             .padding(.horizontal, 24)
         }
         .frame(maxWidth: .infinity)
