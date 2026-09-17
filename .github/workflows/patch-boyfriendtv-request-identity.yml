@@ -21,59 +21,64 @@ jobs:
       - name: Apply scoped source patch
         shell: python
         run: |
+          import re
           from pathlib import Path
 
           path = Path("Siphon/Services/Download/YtdlpService.swift")
           text = path.read_text()
 
-          safari_start = '        let isSafari: Bool = {\n'
-          safari_end = '        }()\n\n        if !isYouTube {'
-          if text.count(safari_start) != 1 or text.count(safari_end) != 1:
-              raise SystemExit("Safari identity block anchors were not unique")
-          start = text.index(safari_start)
-          end = text.index(safari_end, start)
-          safari_block = '''        let isSafari: Bool = {
-              if let idx = args.firstIndex(of: "--cookies-from-browser"), idx + 1 < args.count {
-                  return args[idx + 1] == "safari"
-              }
-              // Explicit cookie files may come from the browser extension and do not
-              // imply Safari merely because Safari is the configured browser source.
-              if args.contains("--cookies") {
-                  return false
-              }
-              return configuredBrowserCookieSource() == "safari"
-          }()
-
-          if !isYouTube {'''
-          text = text[:start] + safari_block + text[end + len(safari_end):]
-
-          main_headers = '''            request.setValue("https://www.boyfriend.tv/", forHTTPHeaderField: "Referer")
-              request.setValue("https://www.boyfriend.tv", forHTTPHeaderField: "Origin")'''
-          if text.count(main_headers) != 1:
-              raise SystemExit(f"Expected one BoyfriendTV main fallback header pair, found {text.count(main_headers)}")
-          text = text.replace(
-              main_headers,
-              '''            let pageBaseDomain = pageURL.host?.lowercased().contains("boyfriendtv.com") == true
-                  ? "https://www.boyfriendtv.com"
-                  : "https://www.boyfriend.tv"
-              request.setValue(pageBaseDomain + "/", forHTTPHeaderField: "Referer")
-              request.setValue(pageBaseDomain, forHTTPHeaderField: "Origin")''',
-              1,
+          safari_pattern = re.compile(
+              r'(?ms)^        let isSafari: Bool = \{\n.*?^        \}\(\)\n\n(?=        if !isYouTube \{)'
           )
+          safari_replacement = "\n".join([
+              "        let isSafari: Bool = {",
+              "            if let idx = args.firstIndex(of: \"--cookies-from-browser\"), idx + 1 < args.count {",
+              "                return args[idx + 1] == \"safari\"",
+              "            }",
+              "            // Explicit cookie files may come from the browser extension and do not",
+              "            // imply Safari merely because Safari is the configured browser source.",
+              "            if args.contains(\"--cookies\") {",
+              "                return false",
+              "            }",
+              "            return configuredBrowserCookieSource() == \"safari\"",
+              "        }()",
+              "",
+          ])
+          text, safari_count = safari_pattern.subn(safari_replacement, text, count=1)
+          if safari_count != 1:
+              raise SystemExit(f"Expected one Safari identity block, found {safari_count}")
 
-          embed_headers = '''                    embedRequest.setValue("https://www.boyfriend.tv/", forHTTPHeaderField: "Referer")
-              embedRequest.setValue("https://www.boyfriend.tv", forHTTPHeaderField: "Origin")'''
-          if text.count(embed_headers) != 1:
-              raise SystemExit(f"Expected one BoyfriendTV embed fallback header pair, found {text.count(embed_headers)}")
-          text = text.replace(
-              embed_headers,
-              '''                    let embedBaseDomain = embedPageURL.host?.lowercased().contains("boyfriendtv.com") == true
-                  ? "https://www.boyfriendtv.com"
-                  : "https://www.boyfriend.tv"
-              embedRequest.setValue(embedBaseDomain + "/", forHTTPHeaderField: "Referer")
-              embedRequest.setValue(embedBaseDomain, forHTTPHeaderField: "Origin")''',
-              1,
+          main_pattern = re.compile(
+              r'(?m)^(?P<i>\s*)request\.setValue\("https://www\.boyfriend\.tv/", forHTTPHeaderField: "Referer"\)\n(?P=i)request\.setValue\("https://www\.boyfriend\.tv", forHTTPHeaderField: "Origin"\)$'
           )
+          def main_replacement(match):
+              i = match.group("i")
+              return "\n".join([
+                  i + 'let pageBaseDomain = pageURL.host?.lowercased().contains("boyfriendtv.com") == true',
+                  i + '    ? "https://www.boyfriendtv.com"',
+                  i + '    : "https://www.boyfriend.tv"',
+                  i + 'request.setValue(pageBaseDomain + "/", forHTTPHeaderField: "Referer")',
+                  i + 'request.setValue(pageBaseDomain, forHTTPHeaderField: "Origin")',
+              ])
+          text, main_count = main_pattern.subn(main_replacement, text, count=1)
+          if main_count != 1:
+              raise SystemExit(f"Expected one BoyfriendTV main fallback header pair, found {main_count}")
+
+          embed_pattern = re.compile(
+              r'(?m)^(?P<i>\s*)embedRequest\.setValue\("https://www\.boyfriend\.tv/", forHTTPHeaderField: "Referer"\)\n(?P=i)embedRequest\.setValue\("https://www\.boyfriend\.tv", forHTTPHeaderField: "Origin"\)$'
+          )
+          def embed_replacement(match):
+              i = match.group("i")
+              return "\n".join([
+                  i + 'let embedBaseDomain = embedPageURL.host?.lowercased().contains("boyfriendtv.com") == true',
+                  i + '    ? "https://www.boyfriendtv.com"',
+                  i + '    : "https://www.boyfriend.tv"',
+                  i + 'embedRequest.setValue(embedBaseDomain + "/", forHTTPHeaderField: "Referer")',
+                  i + 'embedRequest.setValue(embedBaseDomain, forHTTPHeaderField: "Origin")',
+              ])
+          text, embed_count = embed_pattern.subn(embed_replacement, text, count=1)
+          if embed_count != 1:
+              raise SystemExit(f"Expected one BoyfriendTV embed fallback header pair, found {embed_count}")
 
           path.write_text(text)
 
