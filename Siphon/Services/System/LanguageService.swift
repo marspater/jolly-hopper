@@ -213,6 +213,7 @@ class LanguageService: ObservableObject {
         "stop": "Stop",
         "log": "Show Log",
         "remove": "Remove",
+        "remove_from_history": "Remove from history (keep downloaded file)",
         "download_log": "Download Log",
         "close": "Close",
         "no_log": "No log yet...",

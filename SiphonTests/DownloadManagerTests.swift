@@ -1122,6 +1122,29 @@ final class DownloadManagerTests: XCTestCase {
         manager.shutdown()
     }
 
+    func testRemoveIndividualHistoryEntryPreservesFileAndOtherDownloads() throws {
+        let manager = DownloadManager()
+        defer { manager.shutdown() }
+        let file = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".mp4")
+        let contents = Data("downloaded media".utf8)
+        try contents.write(to: file)
+        defer { try? FileManager.default.removeItem(at: file) }
+
+        let completed = Download(url: "https://example.com/completed", options: .default)
+        completed.status = .completed
+        completed.filePaths = [file]
+        let other = Download(url: "https://example.com/other", options: .default)
+        other.status = .failed
+        manager.downloads = [completed, other]
+        manager.history = [HistoricDownload(download: completed), HistoricDownload(download: other)]
+
+        manager.removeDownload(completed)
+
+        XCTAssertEqual(manager.downloads.map(\.id), [other.id])
+        XCTAssertEqual(manager.history.map(\.id), [other.id])
+        XCTAssertEqual(try Data(contentsOf: file), contents)
+    }
+
     func testClearCompletedDownloadsPreservesFailedDownloads() {
         let manager = DownloadManager()
         let options = DownloadOptions.default

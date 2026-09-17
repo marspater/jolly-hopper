@@ -11,12 +11,17 @@ struct HeroDropURLView: View {
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var languageService: LanguageService
 
+    @Environment(\.controlActiveState) private var controlActiveState
     @FocusState private var isFieldFocused: Bool
     @State private var inputURL: String = ""
     @State private var isTargeted: Bool = false
     @State private var isPasting: Bool = false
     @State private var isExtracting: Bool = false
     @StateObject private var feedback = TransientFeedbackState()
+
+    private var showsFieldFocus: Bool {
+        isFieldFocused && controlActiveState == .key && !appState.showAddDownloadSheet
+    }
 
     init() {}
 
@@ -138,7 +143,7 @@ struct HeroDropURLView: View {
                 HStack(spacing: SiphonTheme.spacing8) {
                     Image(systemName: "link")
                         .font(.system(size: 13, weight: .medium))
-                        .foregroundColor(isFieldFocused ? SiphonTheme.accent : .secondary)
+                        .foregroundColor(showsFieldFocus ? SiphonTheme.accent : .secondary)
 
                     TextField(languageService.s("hero_enter_url"), text: $inputURL)
                         .textFieldStyle(.plain)
@@ -208,11 +213,11 @@ struct HeroDropURLView: View {
                 .padding(.horizontal, SiphonTheme.spacing12)
                 .padding(.vertical, 8)
                 .background(
-                    SiphonTheme.fieldBackground(cornerRadius: SiphonTheme.radiusCard, isFocused: isFieldFocused)
+                    SiphonTheme.fieldBackground(cornerRadius: SiphonTheme.radiusCard, isFocused: showsFieldFocus)
                 )
                 .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusCard, style: .continuous))
                 .overlay(
-                    SiphonTheme.fieldBorder(cornerRadius: SiphonTheme.radiusCard, isFocused: isFieldFocused)
+                    SiphonTheme.fieldBorder(cornerRadius: SiphonTheme.radiusCard, isFocused: showsFieldFocus)
                 )
 
                 // Inline Real-Time Status & Validation Feedback
@@ -252,21 +257,14 @@ struct HeroDropURLView: View {
             autoFocusIfNeeded()
         }
         .onChange(of: appState.showAddDownloadSheet) { _, showing in
-            if !showing {
-                autoFocusIfNeeded()
-            }
+            isFieldFocused = !showing
         }
     }
 
     // MARK: - Actions
 
     private func autoFocusIfNeeded() {
-        guard !appState.showAddDownloadSheet else { return }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-            if !appState.showAddDownloadSheet {
-                isFieldFocused = true
-            }
-        }
+        isFieldFocused = !appState.showAddDownloadSheet
     }
 
     private func submitURL() {
