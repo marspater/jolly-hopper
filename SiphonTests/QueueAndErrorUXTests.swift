@@ -1473,5 +1473,40 @@ final class QueueAndErrorUXTests: XCTestCase {
         XCTAssertTrue(lang.s("safari_fda_not_detected_hint").contains("Full Disk Access not detected"))
         XCTAssertTrue(lang.s("safari_fda_restart_hint").contains("restart Siphon"))
     }
+
+    func testInteractiveGlassSubComponentsInitialization() {
+        let bg = SiphonInteractiveGlassBackground(
+            cornerRadius: 10,
+            isHovered: true,
+            isSelected: false,
+            effectiveTint: .blue
+        )
+        XCTAssertEqual(bg.cornerRadius, 10)
+        XCTAssertTrue(bg.isHovered)
+        XCTAssertFalse(bg.isSelected)
+        XCTAssertEqual(bg.effectiveTint, .blue)
+
+        let border = SiphonInteractiveGlassBorder(
+            cornerRadius: 12,
+            isHovered: false,
+            isSelected: true,
+            effectiveTint: .red
+        )
+        XCTAssertEqual(border.cornerRadius, 12)
+        XCTAssertFalse(border.isHovered)
+        XCTAssertTrue(border.isSelected)
+        XCTAssertEqual(border.effectiveTint, .red)
+
+        let modifier = SiphonInteractiveGlassModifier(
+            cornerRadius: 8,
+            isDestructive: true,
+            isSelected: false,
+            tintColor: nil
+        )
+        XCTAssertEqual(modifier.cornerRadius, 8)
+        XCTAssertTrue(modifier.isDestructive)
+        XCTAssertFalse(modifier.isSelected)
+        XCTAssertNil(modifier.tintColor)
+    }
 }
 
