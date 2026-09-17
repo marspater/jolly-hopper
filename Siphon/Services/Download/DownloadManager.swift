@@ -143,7 +143,7 @@ class DownloadManager: ObservableObject {
     }
 
     var appVersion: String {
-        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "5.2.0"
+        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "5.3.0"
     }
 
     static var defaultFeatures: [ReleaseFeature] {

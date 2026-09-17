@@ -134,7 +134,7 @@ class LanguageService: ObservableObject {
         "whats_new_title": "What's New in Siphon",
         "whats_new_subtitle": "Discover the latest enhancements, improvements, and fixes in this release.",
         "whats_new_title_format": "What's New in Siphon v%@",
-        "whats_new_message": "✨ Siphon v5.2.0 Highlights:\n• BoyfriendTV Stream Resolution: Full extraction and download support for restricted and banned uploaders.\n• Hardened Security: Downloader argument credential redaction and helper binary path containment.\n• Zero-Allocation Performance: Pre-compiled regexes, substring format splitting, and single-pass HTML entity decoding.\n• VoiceOver Accessibility: Full accessibility navigation across MenuBar, preferences tabs, and playlist selection.\n• Preset & Settings Integrity: CustomPreset JSON serialization and UserDefaults key validation.",
+        "whats_new_message": "✨ Siphon v5.3.0 Highlights:\n• Architecture Modularization: Dedicated DownloadQueue, DownloadExecutor, DownloadHistoryStore, and ProcessLifecycleState.\n• Sandboxed Cookie Lifecycle: SecureCookieFile with 0o600 permissions, scoped automatic cleanup, and startup orphan sweep.\n• Swift-Owned Auto-Updater: Native DMG staging, atomic backup/rollback, and dual-mode Developer ID / ad-hoc signature verification.\n• Sanitized Log Export: Async log snapshot export with automatic credential, cookie, and token redaction.\n• Swift 6 Concurrency: Actor-isolated BrowserUtils and CookieManager eliminating concurrency races.",
         "continue": "Continue",
         "get_started": "Get Started",
         "view_on_github": "Release Notes",
