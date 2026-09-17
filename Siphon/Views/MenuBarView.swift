@@ -53,7 +53,7 @@ struct MenuBarView: View {
         .padding(SiphonTheme.spacing12)
         .frame(width: 350)
         .preferredColorScheme(theme == "light" ? .light : (theme == "dark" ? .dark : nil))
-        .background(.ultraThinMaterial)
+        .siphonWindowBackground()
         .onAppear {
             customPresets = CustomPreset.loadAll()
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {

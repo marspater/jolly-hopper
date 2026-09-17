@@ -149,7 +149,7 @@ struct PreferencesView: View {
         .preferredColorScheme(theme == "light" ? .light : (theme == "dark" ? .dark : nil))
         .accentColor(SiphonTheme.accent)
         .background(PreferencesWindowConfigurator())
-        .background(.ultraThinMaterial)
+        .siphonWindowBackground()
         .siphonEnvironmentalBackdrop()
         .onChange(of: languageService.selectedLanguage) { _, newValue in
             if previousLanguage != nil && previousLanguage != newValue {
@@ -742,7 +742,7 @@ struct PreferencesView: View {
         }
         .padding()
         .frame(width: 450, height: 500)
-        .background(.ultraThinMaterial)
+        .siphonWindowBackground()
     }
 
     private var presetFormatSection: some View {

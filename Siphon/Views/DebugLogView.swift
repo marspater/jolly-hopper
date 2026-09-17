@@ -136,11 +136,7 @@ struct DebugLogView: View {
             .padding(.bottom, SiphonTheme.spacing16)
         }
         .frame(minWidth: 550, minHeight: 350)
-        .background(
-            RoundedRectangle(cornerRadius: SiphonTheme.radiusSheet)
-                .fill(.ultraThinMaterial)
-                .ignoresSafeArea()
-        )
+        .siphonWindowBackground()
         .overlay(
             RoundedRectangle(cornerRadius: SiphonTheme.radiusSheet)
                 .stroke(Color.primary.opacity(0.08), lineWidth: 1)

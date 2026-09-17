@@ -22,29 +22,25 @@ struct RecentDownloadRowView: View {
             Spacer()
             formatPillsView
             statusActionView
-            Button {
-                downloadManager.removeDownload(download)
-            } label: {
-                Image(systemName: "xmark.circle")
-                    .font(.system(size: 13))
-                    .foregroundStyle(.secondary)
-                    .frame(width: 24, height: 24)
-                    .contentShape(Rectangle())
+            if canRemoveFromHistory {
+                Button {
+                    downloadManager.removeDownload(download)
+                } label: {
+                    Image(systemName: "xmark.circle")
+                        .font(.system(size: 13))
+                        .foregroundColor(.secondary)
+                        .frame(width: 24, height: 24)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.siphonIcon(size: 24))
+                .help(languageService.s("remove_from_history"))
+                .accessibilityLabel(languageService.s("remove_from_history"))
             }
-            .buttonStyle(.plain)
-            .disabled(!canRemoveFromHistory)
-            .help(languageService.s("remove_from_history"))
-            .accessibilityLabel(languageService.s("remove_from_history"))
         }
         .padding(.horizontal, SiphonTheme.spacing14)
         .padding(.vertical, 8)
         .background(
-            RoundedRectangle(cornerRadius: SiphonTheme.radiusControl, style: .continuous)
-                .fill(isHovered ? Color.primary.opacity(0.06) : Color.primary.opacity(0.02))
-                .background(
-                    RoundedRectangle(cornerRadius: SiphonTheme.radiusControl, style: .continuous)
-                        .fill(.ultraThinMaterial)
-                )
+            SiphonTheme.cardBackground(cornerRadius: SiphonTheme.radiusControl, isHovered: isHovered)
         )
         .overlay(
             SiphonTheme.borderSubtle(cornerRadius: SiphonTheme.radiusControl, isHovered: isHovered)

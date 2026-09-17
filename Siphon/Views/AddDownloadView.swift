@@ -179,7 +179,7 @@ struct AddDownloadView: View {
         // are available.
         .frame(minWidth: 480, idealWidth: 520, maxWidth: 620, minHeight: 420, idealHeight: 440, maxHeight: .infinity)
         .preferredColorScheme(selectedTheme == "light" ? .light : (selectedTheme == "dark" ? .dark : nil))
-        .background(.ultraThinMaterial)
+        .siphonWindowBackground()
         .onAppear {
             focusedField = .url
             let loadedPresets = CustomPreset.loadAll()
@@ -500,13 +500,13 @@ struct AddDownloadView: View {
                                 } label: {
                                     HStack(spacing: 6) {
                                         Image(systemName: selectedFormatId == nil ? "checkmark.circle.fill" : "circle")
-                                            .foregroundColor(selectedFormatId == nil ? .accentColor : .secondary)
+                                            .foregroundColor(selectedFormatId == nil ? SiphonTheme.accent : .secondary)
                                         Text(languageService.s("auto_recommended"))
                                             .font(.siphonSecondaryMedium)
                                     }
                                     .padding(.horizontal, 10)
                                     .padding(.vertical, 5)
-                                    .background(selectedFormatId == nil ? Color.accentColor.opacity(0.15) : Color.gray.opacity(0.08))
+                                    .background(selectedFormatId == nil ? SiphonTheme.accent.opacity(0.15) : Color.primary.opacity(0.08))
                                     .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusSmall))
                                 }
                                 .buttonStyle(.plain)
@@ -523,7 +523,7 @@ struct AddDownloadView: View {
                                         } label: {
                                             HStack(spacing: 8) {
                                                 Image(systemName: selectedFormatId == fmt.formatId ? "checkmark.circle.fill" : "circle")
-                                                    .foregroundColor(selectedFormatId == fmt.formatId ? .accentColor : .secondary)
+                                                    .foregroundColor(selectedFormatId == fmt.formatId ? SiphonTheme.accent : .secondary)
 
                                                 Text(fmt.formatId)
                                                     .font(.geistMono(11, weight: .semibold))
@@ -545,7 +545,7 @@ struct AddDownloadView: View {
                                             }
                                             .padding(.horizontal, 10)
                                             .padding(.vertical, 6)
-                                            .background(selectedFormatId == fmt.formatId ? Color.accentColor.opacity(0.12) : Color.clear)
+                                            .background(selectedFormatId == fmt.formatId ? SiphonTheme.accent.opacity(0.12) : Color.clear)
                                             .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusSmall))
                                         }
                                         .buttonStyle(.plain)
@@ -690,8 +690,8 @@ struct AddDownloadView: View {
             AsyncImage(url: info.thumbnailURL) { image in
                 image.resizable().aspectRatio(contentMode: .fill)
             } placeholder: {
-                Rectangle().fill(Color.gray.opacity(0.2))
-                    .overlay { Image(systemName: "photo").font(.largeTitle).foregroundColor(.gray) }
+                Rectangle().fill(Color.primary.opacity(0.06))
+                    .overlay { Image(systemName: "photo").font(.largeTitle).foregroundColor(.secondary) }
             }
             .frame(width: 180, height: 100)
             .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusControl))
@@ -780,7 +780,7 @@ struct AddDownloadView: View {
                             .accessibilityLabel(item.title)
 
                             AsyncImage(url: item.thumbnailURL) { image in image.resizable().aspectRatio(contentMode: .fill) }
-                            placeholder: { Rectangle().fill(Color.gray.opacity(0.2)) }
+                            placeholder: { Rectangle().fill(Color.primary.opacity(0.06)) }
                             .frame(width: 50, height: 30)
                             .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusSmall))
 

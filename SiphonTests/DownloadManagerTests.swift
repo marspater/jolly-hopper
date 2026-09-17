@@ -45,6 +45,33 @@ final class DownloadManagerTests: XCTestCase {
         XCTAssertEqual(manager.downloads[2].url, "https://example.com/video3")
     }
 
+    func testMostRelevantNavigationItemPrioritizesActionableDownloadStates() {
+        let manager = DownloadManager()
+        let options = DownloadOptions.default
+
+        XCTAssertEqual(manager.mostRelevantNavigationItem, .completed)
+
+        let completed = Download(url: "https://example.com/completed", options: options)
+        completed.status = .completed
+        manager.downloads = [completed]
+        XCTAssertEqual(manager.mostRelevantNavigationItem, .completed)
+
+        let failed = Download(url: "https://example.com/failed", options: options)
+        failed.status = .failed
+        manager.downloads.append(failed)
+        XCTAssertEqual(manager.mostRelevantNavigationItem, .failed)
+
+        let queued = Download(url: "https://example.com/queued", options: options)
+        queued.status = .queued
+        manager.downloads.append(queued)
+        XCTAssertEqual(manager.mostRelevantNavigationItem, .queued)
+
+        let downloading = Download(url: "https://example.com/downloading", options: options)
+        downloading.status = .downloading
+        manager.downloads.append(downloading)
+        XCTAssertEqual(manager.mostRelevantNavigationItem, .downloading)
+    }
+
     func testRetryFailedDownloadsIncludesStoppedDownloads() {
         let manager = DownloadManager()
         let options = DownloadOptions.default
