@@ -650,14 +650,15 @@ final class DownloadManagerTests: XCTestCase {
             )
         )
 
-        // Matches video ID and temp extension
-        XCTAssertTrue(
+        // Unrelated file with video ID must NOT match
+        XCTAssertFalse(
             DownloadManager.isMatchingTemporaryFile(
                 fileName: "some_other_title_dQw4w9WgXcQ.temp",
                 rawBaseName: rawBaseName,
                 sanitizedBaseName: sanitizedBaseName,
                 videoId: videoId
-            )
+            ),
+            "Must not match unrelated file with videoId substring"
         )
 
         // Does not match prefix or video ID

@@ -1582,6 +1582,146 @@ final class QueueAndErrorUXTests: XCTestCase {
         XCTAssertEqual(extracted[1], "https://vimeo.com/9999")
         XCTAssertEqual(extracted[2], "http://example.com/video.mp4")
     }
+
+    func testStopDownloadAllowsStoppingPausedDownload() {
+        let manager = DownloadManager()
+        let dl = Download(url: "https://example.com/test", options: .default)
+        dl.status = .paused
+        manager.downloads = [dl]
+
+        manager.stopDownload(dl)
+        XCTAssertEqual(dl.status, .stopped, "Stopping a paused download must transition it to .stopped")
+    }
+
+    func testClearDownloadsStopsAndCleansUpPausedDownloads() {
+        let manager = DownloadManager()
+        let dl = Download(url: "https://example.com/test2", options: .default)
+        dl.status = .paused
+        manager.downloads = [dl]
+
+        manager.clearDownloads([dl])
+        XCTAssertEqual(dl.status, .stopped, "Clearing a paused download must stop it")
+        XCTAssertTrue(manager.downloads.isEmpty)
+    }
+
+    func testPauseDownloadPersistsHistory() {
+        let manager = DownloadManager()
+        let dl = Download(url: "https://example.com/test-pause", options: .default)
+        dl.status = .downloading
+        manager.downloads = [dl]
+
+        manager.pauseDownload(dl)
+        XCTAssertEqual(dl.status, .paused)
+        XCTAssertTrue(manager.history.contains(where: { $0.id == dl.id && $0.status == .paused }), "Paused download must be recorded in history")
+    }
+
+    func testTemporaryFileCleanupDoesNotMatchUnrelatedOrPrefixFiles() {
+        let rawBase = "apple"
+        let sanitizedBase = "apple"
+        let videoId = "1234"
+
+        // Exact match temporary files
+        XCTAssertTrue(DownloadExecutor.isMatchingTemporaryFile(
+            fileName: "apple.mp4.part",
+            rawBaseName: rawBase,
+            sanitizedBaseName: sanitizedBase,
+            videoId: videoId
+        ))
+        XCTAssertTrue(DownloadExecutor.isMatchingTemporaryFile(
+            fileName: "apple.mkv.ytdl",
+            rawBaseName: rawBase,
+            sanitizedBaseName: sanitizedBase,
+            videoId: videoId
+        ))
+
+        // Non-temporary files should NEVER match
+        XCTAssertFalse(DownloadExecutor.isMatchingTemporaryFile(
+            fileName: "apple.mp4",
+            rawBaseName: rawBase,
+            sanitizedBaseName: sanitizedBase,
+            videoId: videoId
+        ))
+
+        // Unrelated file with videoId substring must NOT match
+        XCTAssertFalse(DownloadExecutor.isMatchingTemporaryFile(
+            fileName: "other_movie_1234.mp4.part",
+            rawBaseName: rawBase,
+            sanitizedBaseName: sanitizedBase,
+            videoId: videoId
+        ), "Fuzzy videoId substring match must not delete another video's partial file")
+
+        // Sibling file that only has common prefix (applesauce vs apple) must NOT match
+        XCTAssertFalse(DownloadExecutor.isMatchingTemporaryFile(
+            fileName: "applesauce.mp4.part",
+            rawBaseName: rawBase,
+            sanitizedBaseName: sanitizedBase,
+            videoId: videoId
+        ), "Prefix without dot delimiter must not match sibling downloads")
+    }
+
+    func testCompatibleMergeOutputFormatAndResolvedExtensionParityForAV1AndVP9() {
+        var options = DownloadOptions.default
+        options.fileType = .mp4
+        options.conversionCodec = .av1
+
+        let ext = YtdlpService.resolvedOutputFileExtension(for: options)
+        XCTAssertEqual(ext, "mkv", "AV1 conversion must resolve to mkv output extension")
+
+        let mergeFormat = YtdlpService.compatibleMergeOutputFormat(for: options)
+        XCTAssertEqual(mergeFormat, "mkv", "AV1 conversion merge format must be mkv")
+
+        options.conversionCodec = .vp9
+        let extVp9 = YtdlpService.resolvedOutputFileExtension(for: options)
+        XCTAssertEqual(extVp9, "mkv", "VP9 conversion must resolve to mkv output extension")
+    }
+
+    func testEventCoalescerIgnoresCallbacksForTerminalDownloads() {
+        let download = Download(url: "https://example.com/stream", options: .default)
+        download.status = .completed
+        download.progress = 1.0
+
+        let handler: (Download, Double?, String?, String?, [String]) -> Void = { dl, progress, speed, eta, lines in
+            guard dl.status == .downloading || dl.status == .fetching || dl.status == .processing else {
+                return
+            }
+            if let progress {
+                dl.progress = progress
+                dl.speed = speed
+                dl.eta = eta
+            }
+        }
+
+        handler(download, 0.45, "5 MB/s", "00:30", ["downloading line"])
+        XCTAssertEqual(download.progress, 1.0, "Terminal completed status must not be overwritten by late progress event")
+        XCTAssertNil(download.speed, "Late speed event must not be set on completed download")
+    }
+
+    func testShutdownClearsQueueReservations() {
+        let manager = DownloadManager()
+        let id = UUID()
+        manager.queue.reserveSlot(for: id)
+        manager.queue.reserveOutputPath("/tmp/fake_output.mp4")
+
+        XCTAssertTrue(manager.queue.isSlotReserved(for: id))
+        XCTAssertTrue(manager.queue.isPathReserved("/tmp/fake_output.mp4"))
+
+        manager.shutdown()
+
+        XCTAssertFalse(manager.queue.isSlotReserved(for: id), "Shutdown must clear reserved slots")
+        XCTAssertFalse(manager.queue.isPathReserved("/tmp/fake_output.mp4"), "Shutdown must clear reserved output paths")
+    }
+
+    func testSecureCookieFileDoesNotCrossDomainWiden() throws {
+        let cookieFile = try SecureCookieFile.create(
+            url: "https://boyfriendtv.com/video/123",
+            rawCookies: "token=abc123xyz"
+        )
+        defer { cookieFile.cleanup() }
+
+        let content = try String(contentsOfFile: cookieFile.path, encoding: .utf8)
+        XCTAssertFalse(content.contains(".boyfriend.tv\t"), "Cookie file must not synthesize cookies for different sibling domain .boyfriend.tv")
+        XCTAssertTrue(content.contains(".boyfriendtv.com\t"), "Cookie file must contain cookies for the requested domain")
+    }
 }
 
 

@@ -36,8 +36,21 @@ public final class UpdateDownloader: NSObject, URLSessionDownloadDelegate, @unch
 
     public static func isTrustedGitHubURL(_ url: URL) -> Bool {
         guard url.scheme == "https", let host = url.host?.lowercased() else { return false }
-        return host == "github.com" || host.hasSuffix(".github.com") ||
-               host == "githubusercontent.com" || host.hasSuffix(".githubusercontent.com")
+        let path = url.path.lowercased()
+
+        if host == "github.com" {
+            return path.hasPrefix("/marspater/jolly-hopper/")
+        }
+        if host == "api.github.com" {
+            return path.hasPrefix("/repos/marspater/jolly-hopper/")
+        }
+        if host == "raw.githubusercontent.com" {
+            return path.hasPrefix("/marspater/jolly-hopper/")
+        }
+        if host == "objects.githubusercontent.com" {
+            return true
+        }
+        return false
     }
 
     /// Fetches and parses a SHA-256 checksum from a GitHub release checksum file.
@@ -88,6 +101,11 @@ public final class UpdateDownloader: NSObject, URLSessionDownloadDelegate, @unch
 
         return try await withCheckedThrowingContinuation { continuation in
             lock.lock()
+            if self.activeTask != nil || self.continuation != nil {
+                lock.unlock()
+                continuation.resume(throwing: UpdateDownloadError.downloadFailed("A download task is already in progress"))
+                return
+            }
             self.progressHandler = onProgress
             self.continuation = continuation
 

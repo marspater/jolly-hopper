@@ -66,4 +66,80 @@ final class UpdateVerifierTests: XCTestCase {
             )
         }
     }
+
+    func testAtomicSwapRollsBackWhenStagedAppCorrupt() throws {
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent("test_updater_\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        // Setup mock current app
+        let currentApp = tempDir.appendingPathComponent("Current.app")
+        try FileManager.default.createDirectory(at: currentApp, withIntermediateDirectories: true)
+        let markerURL = currentApp.appendingPathComponent("version.txt")
+        try "v1.0.0".write(to: markerURL, atomically: true, encoding: .utf8)
+
+        // Setup mock corrupt staged app (missing required Info.plist / executable)
+        let stagedApp = tempDir.appendingPathComponent("CorruptStaged.app")
+        try FileManager.default.createDirectory(at: stagedApp, withIntermediateDirectories: true)
+        try "bad".write(to: stagedApp.appendingPathComponent("bad.txt"), atomically: true, encoding: .utf8)
+
+        // Attempt replaceAppBundle
+        XCTAssertThrowsError(
+            try UpdateInstaller.replaceAppBundle(
+                currentAppURL: currentApp,
+                stagedAppURL: stagedApp,
+                fileManager: .default
+            )
+        )
+
+        // Verify that currentApp was completely restored by rollback
+        XCTAssertTrue(FileManager.default.fileExists(atPath: currentApp.path), "Current app must still exist after rollback")
+        let restoredContent = try? String(contentsOf: markerURL, encoding: .utf8)
+        XCTAssertEqual(restoredContent, "v1.0.0", "Current app content must be restored exactly")
+
+        // Verify no leftover backup bundles in the directory
+        let files = (try? FileManager.default.contentsOfDirectory(atPath: tempDir.path)) ?? []
+        let backups = files.filter { $0.contains("Backup") }
+        XCTAssertTrue(backups.isEmpty, "Temporary backup must be cleaned up after rollback")
+    }
+
+    func testIsTrustedGitHubURLStrictValidation() {
+        // Valid URLs
+        XCTAssertTrue(UpdateDownloader.isTrustedGitHubURL(URL(string: "https://github.com/marspater/jolly-hopper/releases/download/v1.0.0/Siphon.dmg")!))
+        XCTAssertTrue(UpdateDownloader.isTrustedGitHubURL(URL(string: "https://api.github.com/repos/marspater/jolly-hopper/releases/latest")!))
+        XCTAssertTrue(UpdateDownloader.isTrustedGitHubURL(URL(string: "https://raw.githubusercontent.com/marspater/jolly-hopper/main/README.md")!))
+        XCTAssertTrue(UpdateDownloader.isTrustedGitHubURL(URL(string: "https://objects.githubusercontent.com/github-production-release-asset-2e65be/12345")!))
+
+        // Untrusted / Attack URLs
+        XCTAssertFalse(UpdateDownloader.isTrustedGitHubURL(URL(string: "https://github.com/attacker/malware/releases/download/v1/bad.dmg")!), "Must reject untrusted GitHub repository")
+        XCTAssertFalse(UpdateDownloader.isTrustedGitHubURL(URL(string: "https://evil.github.com/marspater/jolly-hopper/bad.dmg")!), "Must reject untrusted subdomain")
+        XCTAssertFalse(UpdateDownloader.isTrustedGitHubURL(URL(string: "http://github.com/marspater/jolly-hopper/releases/download/v1.0/Siphon.dmg")!), "Must reject insecure http")
+    }
+
+    func testUpdateDownloaderRejectsConcurrentCalls() async throws {
+        let downloader = UpdateDownloader()
+        let url = URL(string: "https://github.com/marspater/jolly-hopper/releases/download/v1.0.0/Siphon.dmg")!
+
+        let task1 = Task {
+            try await downloader.download(from: url)
+        }
+
+        try await Task.sleep(nanoseconds: 20_000_000)
+
+        do {
+            _ = try await downloader.download(from: url)
+            XCTFail("Concurrent download call must throw error")
+        } catch let error as UpdateDownloadError {
+            if case .downloadFailed(let msg) = error {
+                XCTAssertTrue(msg.contains("already in progress") || msg.contains("already active"))
+            } else {
+                XCTFail("Expected downloadFailed for concurrent download, got: \(error)")
+            }
+        } catch {
+            XCTFail("Unexpected error type: \(error)")
+        }
+
+        downloader.cancel()
+        _ = try? await task1.value
+    }
 }
