@@ -51,6 +51,7 @@
 		E0001046 /* AdversarialAndPropertyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000046 /* AdversarialAndPropertyTests.swift */; };
 		E0001047 /* UserDefaultsKeysTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000047 /* UserDefaultsKeysTests.swift */; };
 		E0001048 /* CustomPresetTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000048 /* CustomPresetTests.swift */; };
+		E0001049 /* LanguageServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000049 /* LanguageServiceTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -102,6 +103,7 @@
 		E0000047 /* UserDefaultsKeysTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserDefaultsKeysTests.swift; sourceTree = "<group>"; };
 		E0000048 /* CustomPresetTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CustomPresetTests.swift; sourceTree = "<group>"; };
 		E0000043 /* SiphonTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SiphonTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		E0000049 /* LanguageServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LanguageServiceTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -160,6 +162,7 @@
 				E0000046 /* AdversarialAndPropertyTests.swift */,
 				E0000047 /* UserDefaultsKeysTests.swift */,
 				E0000048 /* CustomPresetTests.swift */,
+				E0000049 /* LanguageServiceTests.swift */,
 			);
 			path = SiphonTests;
 			sourceTree = "<group>";
@@ -422,6 +425,7 @@
 				E0001046 /* AdversarialAndPropertyTests.swift in Sources */,
 				E0001047 /* UserDefaultsKeysTests.swift in Sources */,
 				E0001048 /* CustomPresetTests.swift in Sources */,
+				E0001049 /* LanguageServiceTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
