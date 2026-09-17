@@ -463,7 +463,7 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
         return digest.map { String(format: "%02hhx", $0) }.joined()
     }
     
-    static func currentTeamIdentifier() -> String? {
+    nonisolated static func currentTeamIdentifier() -> String? {
         let appPath = Bundle.main.bundlePath
         let proc = Process()
         proc.executableURL = URL(fileURLWithPath: "/usr/bin/codesign")
@@ -487,7 +487,7 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
         return nil
     }
 
-    static func generateUpdateScript() -> String {
+    nonisolated static func generateUpdateScript() -> String {
         return """
         (
             set -e
@@ -638,8 +638,9 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
             do {
                 try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
             } catch {
-                LoggerService.shared.log("Failed to create temporary directory for update installation: \(error.localizedDescription)", level: .error)
+                let errDesc = error.localizedDescription
                 await MainActor.run {
+                    LoggerService.shared.log("Failed to create temporary directory for update installation: \(errDesc)", level: .error)
                     self?.isInstalling = false
                 }
                 return
@@ -669,7 +670,10 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
                 do {
                     try process.run()
                 } catch {
-                    LoggerService.shared.log("Failed to launch update process: \(error.localizedDescription)", level: .error)
+                    let errDesc = error.localizedDescription
+                    Task { @MainActor in
+                        LoggerService.shared.log("Failed to launch update process: \(errDesc)", level: .error)
+                    }
                     continuation.resume()
                 }
             }
