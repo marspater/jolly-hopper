@@ -925,13 +925,13 @@ struct CustomPreset: Codable, Identifiable, Equatable {
         guard let data = UserDefaults.standard.data(forKey: UserDefaultsKeys.customPresets) else {
             return []
         }
-        do {
-            return try JSONDecoder().decode([CustomPreset].self, from: data)
-        } catch {
-            logger.error("Failed to decode custom presets: \(error.localizedDescription)")
-            // If data is corrupted or incompatible, we return empty list to prevent crash
+
+        guard let presets = try? JSONDecoder().decode([CustomPreset].self, from: data) else {
+            logger.error("Failed to decode custom presets from UserDefaults")
             return []
         }
+
+        return presets
     }
     
     static func saveAll(_ presets: [CustomPreset]) {
