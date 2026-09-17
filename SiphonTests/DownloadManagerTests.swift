@@ -861,9 +861,31 @@ final class DownloadManagerTests: XCTestCase {
         manager.downloads = [d1, d2, d3, d4, d5, d6, d7, d8]
 
         XCTAssertEqual(manager.downloadingCount, 3, "downloadingCount should include downloading, fetching, and processing")
-        XCTAssertEqual(manager.queuedCount, 1, "queuedCount should include queued downloads")
+        XCTAssertEqual(manager.queuedCount, 2, "queuedCount should include queued and paused downloads")
         XCTAssertEqual(manager.completedCount, 1, "completedCount should include completed downloads")
         XCTAssertEqual(manager.failedCount, 2, "failedCount should include failed and stopped downloads")
+        XCTAssertEqual(manager.queuedDownloads.count, 2, "queuedDownloads should include both queued and paused downloads")
+        XCTAssertTrue(manager.queuedDownloads.contains(where: { $0.id == d4.id }))
+        XCTAssertTrue(manager.queuedDownloads.contains(where: { $0.id == d8.id }))
+
+        manager.shutdown()
+    }
+
+    func testPausedDownloadsReflectedInQueuedAndDisappearOnResume() {
+        let manager = DownloadManager()
+        let download = Download(url: "https://example.com/test_paused_queued", options: .default)
+        download.status = .paused
+        manager.downloads = [download]
+
+        XCTAssertEqual(manager.queuedCount, 1)
+        XCTAssertEqual(manager.queuedDownloads.count, 1)
+        XCTAssertEqual(manager.queuedDownloads.first?.id, download.id)
+
+        // Resuming transitions to .queued, then processQueue starts it if eligible or keeps it queued until downloading
+        download.status = .downloading
+        XCTAssertEqual(manager.queuedCount, 0)
+        XCTAssertTrue(manager.queuedDownloads.isEmpty)
+        XCTAssertEqual(manager.downloadingCount, 1)
 
         manager.shutdown()
     }

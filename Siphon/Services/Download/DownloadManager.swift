@@ -78,7 +78,7 @@ class DownloadManager: ObservableObject {
     }
 
     var queuedDownloads: [Download] {
-        downloads.filter { $0.status == .queued }
+        downloads.filter { $0.status == .queued || $0.status == .paused }
     }
 
     var completedDownloads: [Download] {
@@ -103,7 +103,7 @@ class DownloadManager: ObservableObject {
             switch download.status {
             case .downloading, .fetching, .processing:
                 downloading += 1
-            case .queued:
+            case .queued, .paused:
                 queued += 1
             case .completed:
                 completed += 1

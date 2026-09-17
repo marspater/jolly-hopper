@@ -9,9 +9,9 @@ final class PreferencesWindowManager: NSObject, NSWindowDelegate {
     
     func showPreferencesWindow(languageService: LanguageService, updateChecker: UpdateChecker, downloadManager: DownloadManager, initialTab: PreferencesView.PreferenceTab = .general) {
         if let existingController = windowController, let existingWindow = existingController.window {
-            if existingWindow.frame.height > 680 || existingWindow.frame.height < 636 {
+            if existingWindow.frame.height > 690 || existingWindow.frame.height < 646 {
                 var f = existingWindow.frame
-                f.size.height = 652
+                f.size.height = 662
                 f.size.width = max(f.size.width, 520)
                 existingWindow.setFrame(f, display: true, animate: true)
             }
@@ -28,7 +28,7 @@ final class PreferencesWindowManager: NSObject, NSWindowDelegate {
         let hostingController = NSHostingController(rootView: prefsView)
         
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 520, height: 652),
+            contentRect: NSRect(x: 0, y: 0, width: 520, height: 662),
             styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
             backing: .buffered,
             defer: false
@@ -40,7 +40,7 @@ final class PreferencesWindowManager: NSObject, NSWindowDelegate {
         window.center()
         window.isReleasedWhenClosed = false
         window.title = languageService.s("preferences")
-        window.minSize = NSSize(width: 500, height: 636)
+        window.minSize = NSSize(width: 500, height: 646)
         window.contentViewController = hostingController
         window.delegate = self
         

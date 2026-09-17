@@ -145,7 +145,7 @@ struct PreferencesView: View {
         }
         .padding(.horizontal, SiphonTheme.spacing16)
         .padding(.bottom, SiphonTheme.spacing16)
-        .frame(minWidth: 500, idealWidth: 520, maxWidth: 620, minHeight: 636, idealHeight: 652, maxHeight: 780)
+        .frame(minWidth: 500, idealWidth: 520, maxWidth: 620, minHeight: 646, idealHeight: 662, maxHeight: 780)
         .preferredColorScheme(theme == "light" ? .light : (theme == "dark" ? .dark : nil))
         .accentColor(SiphonTheme.accent)
         .background(PreferencesWindowConfigurator())
@@ -157,7 +157,11 @@ struct PreferencesView: View {
             }
             previousLanguage = newValue
         }
+        .onChange(of: theme) { _, newTheme in
+            SiphonTheme.applyTheme(newTheme)
+        }
         .onAppear {
+            SiphonTheme.applyTheme(theme)
             previousLanguage = languageService.selectedLanguage
             customPresets = CustomPreset.loadAll()
             hasFullDiskAccess = YtdlpService.hasFullDiskAccess

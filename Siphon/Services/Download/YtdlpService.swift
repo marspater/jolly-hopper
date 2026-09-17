@@ -50,6 +50,19 @@ actor DependencyInstaller {
         }
     }
 
+    static func adHocSignBinary(at url: URL) {
+        guard !NotificationService.isRunningTests else { return }
+        guard FileManager.default.isExecutableFile(atPath: url.path) else { return }
+        let binaryPath = url.path
+        DispatchQueue.global(qos: .utility).async {
+            let proc = Process()
+            proc.executableURL = URL(fileURLWithPath: "/usr/bin/codesign")
+            proc.arguments = ["--force", "--sign", "-", binaryPath]
+            try? proc.run()
+            proc.waitUntilExit()
+        }
+    }
+
     func installYtdlp(
         downloadURL: URL,
         expectedSHA256: String,
@@ -74,8 +87,9 @@ actor DependencyInstaller {
             throw InstallError.sha256Mismatch(file: "yt-dlp", expected: expectedSHA256)
         }
 
-        // 2. Set executable permissions
+        // 2. Set executable permissions and ad-hoc sign
         try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: tempStaging.path)
+        Self.adHocSignBinary(at: tempStaging)
 
         // 3. Dry-run execution test
         let process = Process()
@@ -106,6 +120,7 @@ actor DependencyInstaller {
 
         do {
             try FileManager.default.moveItem(at: tempStaging, to: destination)
+            Self.adHocSignBinary(at: destination)
             if hadOld {
                 try? FileManager.default.removeItem(at: backupDest)
             }
@@ -187,9 +202,11 @@ actor DependencyInstaller {
             throw InstallError.sha256Mismatch(file: "FFprobe executable", expected: ffprobeExecutableSHA256)
         }
 
-        // 5. Set executable permissions
+        // 5. Set executable permissions and ad-hoc sign
         try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: extractedFfmpeg.path)
         try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: extractedFfprobe.path)
+        Self.adHocSignBinary(at: extractedFfmpeg)
+        Self.adHocSignBinary(at: extractedFfprobe)
 
         // 6. Test both binaries
         let testVersion: (URL) async throws -> Void = { binURL in
@@ -230,6 +247,8 @@ actor DependencyInstaller {
 
             try FileManager.default.moveItem(at: extractedFfmpeg, to: ffmpegFinal)
             try FileManager.default.moveItem(at: extractedFfprobe, to: ffprobeFinal)
+            Self.adHocSignBinary(at: ffmpegFinal)
+            Self.adHocSignBinary(at: ffprobeFinal)
 
             if ffmpegMovedToBackup { try? FileManager.default.removeItem(at: ffmpegBackup) }
             if ffprobeMovedToBackup { try? FileManager.default.removeItem(at: ffprobeBackup) }
@@ -480,6 +499,7 @@ class YtdlpService: ObservableObject {
         if FileManager.default.fileExists(atPath: ytdlpInSupport.path) {
             if Self.verifySHA256(fileURL: ytdlpInSupport, expectedHash: DependencyChecksums.ytdlpExecutableSHA256) {
                 ytdlpPath = ytdlpInSupport
+                DependencyInstaller.adHocSignBinary(at: ytdlpInSupport)
                 isAvailable = true
                 try? FileManager.default.removeItem(at: invalidBackup)
                 return
@@ -571,6 +591,8 @@ class YtdlpService: ObservableObject {
     private func setFfmpegPaths(ffmpeg: URL, ffprobe: URL, source: String) {
         ffmpegPath = ffmpeg
         ffprobePath = ffprobe
+        DependencyInstaller.adHocSignBinary(at: ffmpeg)
+        DependencyInstaller.adHocSignBinary(at: ffprobe)
         LoggerService.shared.log("Selected \(source) FFmpeg path: \(ffmpeg.path)", level: .info)
         LoggerService.shared.log("Selected \(source) FFprobe path: \(ffprobe.path)", level: .info)
     }

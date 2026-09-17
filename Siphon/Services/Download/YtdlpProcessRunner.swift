@@ -306,7 +306,7 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
                          YtdlpService.isPathContained(targetURL: helperURL, inside: testBundleURL)
             if isSafe {
                 process.executableURL = helperURL
-                process.arguments = ["/usr/bin/env"] + args
+                process.arguments = args
                 return
             } else {
                 Task { @MainActor in

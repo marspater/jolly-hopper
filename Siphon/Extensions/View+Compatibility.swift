@@ -207,6 +207,25 @@ public enum SiphonTheme {
     public static let failed = statusFailed
     public static let hdr = statusHdr
     
+    // MARK: - AppKit Theme Synchronization
+    @MainActor
+    public static func applyTheme(_ theme: String) {
+        let appearance: NSAppearance?
+        switch theme.lowercased() {
+        case "dark":
+            appearance = NSAppearance(named: .darkAqua)
+        case "light":
+            appearance = NSAppearance(named: .aqua)
+        default:
+            appearance = nil
+        }
+        
+        NSApp.appearance = appearance
+        for window in NSApp.windows {
+            window.appearance = appearance
+        }
+    }
+    
     // Standard Spacing Scale (4pt/8pt rhythm)
     public static let spacing2: CGFloat = 2
     public static let spacing4: CGFloat = 4
@@ -440,6 +459,7 @@ public struct SiphonSpinner: View {
     public var lineWidth: CGFloat
     
     @State private var isSpinning = false
+    @ObservedObject private var renderingEnvironment = AdaptiveRenderingEnvironment.shared
     
     public init(size: CGFloat = 14, color: Color = .white, lineWidth: CGFloat = 2) {
         self.size = size
@@ -448,7 +468,9 @@ public struct SiphonSpinner: View {
     }
     
     public var body: some View {
-        Circle()
+        let reduceMotion = renderingEnvironment.reduceMotion
+
+        return Circle()
             .trim(from: 0.15, to: 0.85)
             .stroke(
                 AngularGradient(
@@ -458,13 +480,23 @@ public struct SiphonSpinner: View {
                 style: StrokeStyle(lineWidth: lineWidth, lineCap: .round)
             )
             .frame(width: size, height: size)
-            .rotationEffect(Angle(degrees: isSpinning ? 360 : 0))
+            .rotationEffect(Angle(degrees: !reduceMotion && isSpinning ? 360 : 0))
             .onAppear {
+                guard !reduceMotion else { return }
                 withAnimation(
                     .linear(duration: 0.85)
                     .repeatForever(autoreverses: false)
                 ) {
                     isSpinning = true
+                }
+            }
+            .onChange(of: reduceMotion) { _, enabled in
+                if enabled {
+                    isSpinning = false
+                } else {
+                    withAnimation(.linear(duration: 0.85).repeatForever(autoreverses: false)) {
+                        isSpinning = true
+                    }
                 }
             }
     }
@@ -566,6 +598,7 @@ public struct SiphonInteractiveGlassModifier: ViewModifier {
     public var tintColor: Color?
     
     @State private var isHovered = false
+    @ObservedObject private var renderingEnvironment = AdaptiveRenderingEnvironment.shared
     
     public init(
         cornerRadius: CGFloat = SiphonTheme.radiusControl,
@@ -601,9 +634,9 @@ public struct SiphonInteractiveGlassModifier: ViewModifier {
                 )
             )
             .shadow(color: Color.black.opacity(isHovered ? 0.16 : 0.08), radius: isHovered ? 4 : 2, y: 1)
-            .scaleEffect(isHovered ? 1.02 : 1.0)
-            .animation(.spring(response: 0.30, dampingFraction: 0.68, blendDuration: 0), value: isHovered)
-            .animation(.spring(response: 0.32, dampingFraction: 0.70, blendDuration: 0), value: isSelected)
+            .scaleEffect(renderingEnvironment.reduceMotion || !isHovered ? 1.0 : 1.01)
+            .animation(SiphonAnimation.hoverSpring, value: isHovered)
+            .animation(SiphonAnimation.fluidSpring, value: isSelected)
             .onHover { hovering in
                 isHovered = hovering
             }
