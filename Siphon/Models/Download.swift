@@ -19,6 +19,11 @@ class Download: ObservableObject, Identifiable {
     var primaryFilePath: URL? {
         filePaths.first
     }
+    var filePathStrings: [String] {
+        if filePaths.isEmpty { return [] }
+        if filePaths.count == 1 { return [filePaths[0].path] }
+        return filePaths.map { $0.path }
+    }
 
     @Published var errorMessage: String?
     @Published var log: String = ""
@@ -708,7 +713,7 @@ enum VideoCodec: String, Codable, CaseIterable, Identifiable {
     
     var id: String { rawValue }
     
-    func title(lang: LanguageService) -> String {
+    private var formattedTitleName: String {
         switch self {
         case .auto: return "Best Available"
         case .h264: return "H.264 (AVC)"
@@ -716,6 +721,10 @@ enum VideoCodec: String, Codable, CaseIterable, Identifiable {
         case .vp9: return "VP9"
         case .av1: return "AV1"
         }
+    }
+
+    func title(lang: LanguageService) -> String {
+        formattedTitleName
     }
     
     var ytdlpFilter: String? {
@@ -916,13 +925,13 @@ struct CustomPreset: Codable, Identifiable, Equatable {
         guard let data = UserDefaults.standard.data(forKey: UserDefaultsKeys.customPresets) else {
             return []
         }
-        do {
-            return try JSONDecoder().decode([CustomPreset].self, from: data)
-        } catch {
-            logger.error("Failed to decode custom presets: \(error.localizedDescription)")
-            // If data is corrupted or incompatible, we return empty list to prevent crash
+
+        guard let presets = try? JSONDecoder().decode([CustomPreset].self, from: data) else {
+            logger.error("Failed to decode custom presets from UserDefaults")
             return []
         }
+
+        return presets
     }
     
     static func saveAll(_ presets: [CustomPreset]) {
@@ -1076,6 +1085,12 @@ struct MediaInfo: Codable {
 
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
+        try encodeBasicMetadata(to: &container)
+        try encodeMediaContent(to: &container)
+        try encodeNetworkDetails(to: &container)
+    }
+
+    private func encodeBasicMetadata(to container: inout KeyedEncodingContainer<CodingKeys>) throws {
         try container.encode(id, forKey: .id)
         try container.encode(title, forKey: .title)
         try container.encodeIfPresent(description, forKey: .description)
@@ -1085,6 +1100,9 @@ struct MediaInfo: Codable {
         try container.encodeIfPresent(uploadDate, forKey: .uploadDate)
         try container.encodeIfPresent(viewCount, forKey: .viewCount)
         try container.encodeIfPresent(likeCount, forKey: .likeCount)
+    }
+
+    private func encodeMediaContent(to container: inout KeyedEncodingContainer<CodingKeys>) throws {
         try container.encodeIfPresent(formats, forKey: .formats)
         try container.encodeIfPresent(subtitles, forKey: .subtitles)
         try container.encodeIfPresent(automaticCaptions, forKey: .automaticCaptions)
@@ -1092,6 +1110,9 @@ struct MediaInfo: Codable {
         try container.encodeIfPresent(playlist, forKey: .playlist)
         try container.encodeIfPresent(playlistIndex, forKey: .playlistIndex)
         try container.encodeIfPresent(playlistCount, forKey: .playlistCount)
+    }
+
+    private func encodeNetworkDetails(to container: inout KeyedEncodingContainer<CodingKeys>) throws {
         try container.encodeIfPresent(webpageUrl, forKey: .webpageUrl)
         try container.encodeIfPresent(originalUrl, forKey: .originalUrl)
         try container.encodeIfPresent(formatProtocol, forKey: .formatProtocol)
@@ -1879,7 +1900,7 @@ struct HistoricDownload: Codable, Identifiable {
         self.id = download.id
         self.url = download.url
         self.title = download.title
-        self.filePaths = download.filePaths.map { $0.path }
+        self.filePaths = download.filePathStrings
         self.downloadDate = download.createdAt
         self.fileType = download.options.fileType
         self.status = download.status
@@ -1920,19 +1941,27 @@ struct HistoricDownload: Codable, Identifiable {
 
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
+        try encodeMetadata(to: &container)
+        try encodeStateAndProgress(to: &container)
+        try container.encode(options, forKey: .options)
+    }
+
+    private func encodeMetadata(to container: inout KeyedEncodingContainer<CodingKeys>) throws {
         try container.encode(id, forKey: .id)
         try container.encode(url, forKey: .url)
         try container.encode(title, forKey: .title)
         try container.encode(filePaths, forKey: .filePaths)
         try container.encode(downloadDate, forKey: .downloadDate)
         try container.encode(fileType, forKey: .fileType)
-        try container.encode(status, forKey: .status)
         try container.encodeIfPresent(thumbnailURL, forKey: .thumbnailURL)
         try container.encodeIfPresent(duration, forKey: .duration)
+    }
+
+    private func encodeStateAndProgress(to container: inout KeyedEncodingContainer<CodingKeys>) throws {
+        try container.encode(status, forKey: .status)
         try container.encodeIfPresent(errorMessage, forKey: .errorMessage)
         try container.encode(log, forKey: .log)
         try container.encode(progress, forKey: .progress)
-        try container.encode(options, forKey: .options)
     }
 
     // Helper to convert back to Download object for UI
@@ -1945,7 +1974,13 @@ struct HistoricDownload: Codable, Identifiable {
         download.duration = self.duration
         download.errorMessage = self.errorMessage
         download.log = self.log
-        download.filePaths = self.filePaths.map { URL(fileURLWithPath: $0) }
+        if self.filePaths.isEmpty {
+            download.filePaths = []
+        } else if self.filePaths.count == 1 {
+            download.filePaths = [URL(fileURLWithPath: self.filePaths[0])]
+        } else {
+            download.filePaths = self.filePaths.map { URL(fileURLWithPath: $0) }
+        }
         return download
     }
 }

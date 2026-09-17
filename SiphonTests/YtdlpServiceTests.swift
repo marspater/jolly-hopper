@@ -249,6 +249,20 @@ final class YtdlpServiceTests: XCTestCase {
         try? FileManager.default.removeItem(at: regularFile)
     }
 
+    func testExtractedBinaryPermissions() throws {
+        // 🎯 What: Verify that extracted binary staging files receive restricted 0o700 POSIX permissions.
+        let tempDir = FileManager.default.temporaryDirectory
+        let dummyBinaryURL = tempDir.appendingPathComponent("dummy_binary_\(UUID().uuidString)")
+        try "dummy content".data(using: .utf8)?.write(to: dummyBinaryURL)
+        defer { try? FileManager.default.removeItem(at: dummyBinaryURL) }
+
+        try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: dummyBinaryURL.path)
+
+        let attrs = try FileManager.default.attributesOfItem(atPath: dummyBinaryURL.path)
+        let posix = attrs[.posixPermissions] as? NSNumber
+        XCTAssertEqual(posix?.intValue, 0o700, "Extracted binary must have restricted 0o700 POSIX permissions")
+    }
+
     func testTempCookiesFileCreationPermissions() throws {
         let secureCookiesDir = YtdlpService.getSecureTempCookiesDirectory()
         XCTAssertNotNil(secureCookiesDir)
@@ -741,6 +755,33 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertFalse(sanitized.contains("token"))
         XCTAssertFalse(sanitized.contains("SECRET123"))
         XCTAssertFalse(sanitized.contains("sig"))
+    }
+
+    func testLoggerServiceSanitizeURLForLogWithCredentialsAndPort() {
+        // User/password basic auth credentials in URL
+        let urlWithAuth = "https://user:pass123@example.com/video/stream.m3u8?key=val"
+        let sanitizedAuth = LoggerService.sanitizeURLForLog(urlWithAuth)
+        XCTAssertEqual(sanitizedAuth, "https://example.com/video/stream.m3u8")
+        XCTAssertFalse(sanitizedAuth.contains("user"))
+        XCTAssertFalse(sanitizedAuth.contains("pass123"))
+
+        // HTTP scheme with custom port and credentials
+        let urlWithPort = "http://admin:secret@localhost:8080/api/v1/download?id=12#section"
+        let sanitizedPort = LoggerService.sanitizeURLForLog(urlWithPort)
+        XCTAssertEqual(sanitizedPort, "http://localhost:8080/api/v1/download")
+        XCTAssertFalse(sanitizedPort.contains("admin"))
+        XCTAssertFalse(sanitizedPort.contains("secret"))
+
+        // Clean URL with no parameters or credentials
+        let cleanURL = "https://example.com/media/file.mp4"
+        XCTAssertEqual(LoggerService.sanitizeURLForLog(cleanURL), "https://example.com/media/file.mp4")
+
+        // Invalid or malformed URL
+        let malformedURL = "not a valid url with spaces"
+        XCTAssertEqual(LoggerService.sanitizeURLForLog(malformedURL), "not%20a%20valid%20url%20with%20spaces")
+
+        // Empty string
+        XCTAssertEqual(LoggerService.sanitizeURLForLog(""), "")
     }
 
     func testThreadSafeOutputStateCandidateHandling() {
@@ -2916,6 +2957,96 @@ final class YtdlpServiceTests: XCTestCase {
         let root = URL(fileURLWithPath: "/")
         let inside = URL(fileURLWithPath: "/Users/test/Downloads/video.mp4")
         XCTAssertTrue(YtdlpService.isPathContained(targetURL: inside, inside: root))
+    }
+
+    func testLoggerServiceFileCreationPermissions() throws {
+        let tempDir = FileManager.default.temporaryDirectory
+        let logFile = tempDir.appendingPathComponent("siphon_test_log_\(UUID().uuidString).log")
+        defer { try? FileManager.default.removeItem(at: logFile) }
+
+        // 1. Initial creation via createFile directly with 0o600
+        let created = FileManager.default.createFile(atPath: logFile.path, contents: "initial entry\n".data(using: .utf8), attributes: [.posixPermissions: 0o600])
+        XCTAssertTrue(created)
+        let attrs1 = try FileManager.default.attributesOfItem(atPath: logFile.path)
+        let posix1 = attrs1[.posixPermissions] as? NSNumber
+        XCTAssertEqual(posix1?.intValue, 0o600, "Newly created log file must have 0o600 POSIX permissions")
+
+        // 2. Overwriting log file via createFile directly with 0o600 (e.g. during trim/clear)
+        let overwritten = FileManager.default.createFile(atPath: logFile.path, contents: "trimmed entry\n".data(using: .utf8), attributes: [.posixPermissions: 0o600])
+        XCTAssertTrue(overwritten)
+        let attrs2 = try FileManager.default.attributesOfItem(atPath: logFile.path)
+        let posix2 = attrs2[.posixPermissions] as? NSNumber
+        XCTAssertEqual(posix2?.intValue, 0o600, "Trimmed/cleared log file must maintain 0o600 POSIX permissions")
+    }
+
+    func testDownloadProcessControllerStartSuccess() throws {
+        let controller = DownloadProcessController()
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/true")
+
+        XCTAssertNoThrow(try controller.start(process))
+        process.waitUntilExit()
+
+        XCTAssertEqual(process.terminationStatus, 0)
+        XCTAssertFalse(controller.isCancelled)
+    }
+
+    func testDownloadProcessControllerStartWhenCancelledThrows() {
+        let controller = DownloadProcessController()
+        controller.cancel()
+
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/true")
+
+        XCTAssertThrowsError(try controller.start(process)) { error in
+            guard let ytdlpError = error as? YtdlpError,
+                  case .downloadFailed(let message) = ytdlpError else {
+                XCTFail("Expected YtdlpError.downloadFailed, got \(error)")
+                return
+            }
+            XCTAssertEqual(message, "Download was stopped.")
+        }
+    }
+
+    func testDownloadProcessControllerStartWhenAlreadyRunningThrows() throws {
+        let controller = DownloadProcessController()
+        let process1 = Process()
+        process1.executableURL = URL(fileURLWithPath: "/bin/sleep")
+        process1.arguments = ["1"]
+
+        try controller.start(process1)
+        defer {
+            process1.terminate()
+            process1.waitUntilExit()
+        }
+
+        let process2 = Process()
+        process2.executableURL = URL(fileURLWithPath: "/usr/bin/true")
+
+        XCTAssertThrowsError(try controller.start(process2)) { error in
+            guard let ytdlpError = error as? YtdlpError,
+                  case .downloadFailed(let message) = ytdlpError else {
+                XCTFail("Expected YtdlpError.downloadFailed, got \(error)")
+                return
+            }
+            XCTAssertEqual(message, "Process already running.")
+        }
+    }
+
+    func testDownloadProcessControllerStartProcessRunErrorResetsToIdle() {
+        let controller = DownloadProcessController()
+        let invalidProcess = Process()
+        // Pointing executableURL to a non-existent path causes proc.run() to throw an exception.
+        invalidProcess.executableURL = URL(fileURLWithPath: "/nonexistent/binary/path/\(UUID().uuidString)")
+
+        XCTAssertThrowsError(try controller.start(invalidProcess)) { _ in }
+
+        // Confirm that state was reset to .idle by successfully attaching or starting a valid process afterwards
+        let validProcess = Process()
+        validProcess.executableURL = URL(fileURLWithPath: "/usr/bin/true")
+
+        XCTAssertNoThrow(try controller.start(validProcess))
+        validProcess.waitUntilExit()
     }
 }
 

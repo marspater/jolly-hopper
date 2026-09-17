@@ -1,24 +1,22 @@
 import SwiftUI
-import QuickLookThumbnailing
 import QuickLookUI
-import AVFoundation
 
 final class QuickLookPreviewHelper: NSObject, QLPreviewPanelDataSource, QLPreviewPanelDelegate, @unchecked Sendable {
     static let shared = QuickLookPreviewHelper()
     private var currentURL: URL?
     private let lock = NSLock()
 
+    @MainActor
     func preview(url: URL) {
         lock.lock()
         currentURL = url
         lock.unlock()
-        DispatchQueue.main.async {
-            guard let panel = QLPreviewPanel.shared() else { return }
-            panel.dataSource = self
-            panel.delegate = self
-            panel.makeKeyAndOrderFront(nil)
-            panel.reloadData()
-        }
+
+        guard let panel = QLPreviewPanel.shared() else { return }
+        panel.dataSource = self
+        panel.delegate = self
+        panel.makeKeyAndOrderFront(nil)
+        panel.reloadData()
     }
 
     nonisolated func numberOfPreviewItems(in panel: QLPreviewPanel?) -> Int {
@@ -448,24 +446,9 @@ struct FileThumbnailView: View {
     }
 
     private func generateThumbnail() async {
-        guard FileManager.default.fileExists(atPath: fileURL.path) else { return }
-
-        let request = QLThumbnailGenerator.Request(fileAt: fileURL, size: CGSize(width: 240, height: 136), scale: 2.0, representationTypes: .thumbnail)
-        if let representation = try? await QLThumbnailGenerator.shared.generateBestRepresentation(for: request) {
+        if let image = await ImageUtilities.generateThumbnail(for: fileURL) {
             await MainActor.run {
-                self.thumbnailImage = representation.nsImage
-            }
-            return
-        }
-
-        let asset = AVURLAsset(url: fileURL)
-        let generator = AVAssetImageGenerator(asset: asset)
-        generator.appliesPreferredTrackTransform = true
-        let time = CMTime(seconds: 1, preferredTimescale: 60)
-        if let cgImage = try? generator.copyCGImage(at: time, actualTime: nil) {
-            let nsImage = NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
-            await MainActor.run {
-                self.thumbnailImage = nsImage
+                self.thumbnailImage = image
             }
         }
     }
@@ -563,7 +546,7 @@ struct FileThumbnailView: View {
                         
                         Button {
                             NSPasteboard.general.clearContents()
-                            let pathsString = download.filePaths.map { $0.path }.joined(separator: "\n")
+                            let pathsString = download.filePathStrings.joined(separator: "\n")
                             NSPasteboard.general.setString(pathsString, forType: .string)
                         } label: {
                             Label(download.filePaths.count > 1 ? languageService.s("copy_all_paths") : languageService.s("copy_file_path"), systemImage: "doc.on.doc")
@@ -911,7 +894,7 @@ struct FileThumbnailView: View {
 
                 Button {
                     NSPasteboard.general.clearContents()
-                    let pathsJoined = download.filePaths.map { $0.path }.joined(separator: "\n")
+                    let pathsJoined = download.filePathStrings.joined(separator: "\n")
                     NSPasteboard.general.setString(pathsJoined, forType: .string)
                 } label: {
                     Label(download.filePaths.count > 1 ? languageService.s("copy_all_paths") : languageService.s("copy_file_path"), systemImage: "doc.on.doc")

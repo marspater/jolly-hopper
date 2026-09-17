@@ -1,38 +1,33 @@
 import SwiftUI
+import Foundation
 import CoreText
 
 extension Font {
+    private static let geistSansFontNames: [Font.Weight: String] = [
+        .black: "Geist-Black",
+        .bold: "Geist-Bold",
+        .heavy: "Geist-SemiBold",
+        .semibold: "Geist-SemiBold",
+        .medium: "Geist-Medium"
+    ]
+
+    private static let geistMonoFontNames: [Font.Weight: String] = [
+        .bold: "GeistMono-Bold",
+        .heavy: "GeistMono-Bold",
+        .black: "GeistMono-Bold",
+        .semibold: "GeistMono-SemiBold",
+        .medium: "GeistMono-Medium"
+    ]
+
     /// Custom Geist Sans font (Vercel & Basement Studio typeface)
     public static func geist(_ size: CGFloat, weight: Font.Weight = .regular, relativeTo textStyle: Font.TextStyle = .body) -> Font {
-        let fontName: String
-        switch weight {
-        case .black:
-            fontName = "Geist-Black"
-        case .bold:
-            fontName = "Geist-Bold"
-        case .heavy, .semibold:
-            fontName = "Geist-SemiBold"
-        case .medium:
-            fontName = "Geist-Medium"
-        default:
-            fontName = "Geist-Regular"
-        }
+        let fontName = geistSansFontNames[weight] ?? "Geist-Regular"
         return .custom(fontName, size: size, relativeTo: textStyle)
     }
 
     /// Custom Geist Mono font (Vercel & Basement Studio monospaced typeface)
     public static func geistMono(_ size: CGFloat, weight: Font.Weight = .regular, relativeTo textStyle: Font.TextStyle = .body) -> Font {
-        let fontName: String
-        switch weight {
-        case .bold, .heavy, .black:
-            fontName = "GeistMono-Bold"
-        case .semibold:
-            fontName = "GeistMono-SemiBold"
-        case .medium:
-            fontName = "GeistMono-Medium"
-        default:
-            fontName = "GeistMono-Regular"
-        }
+        let fontName = geistMonoFontNames[weight] ?? "GeistMono-Regular"
         return .custom(fontName, size: size, relativeTo: textStyle)
     }
 
@@ -65,30 +60,43 @@ extension Font {
 public struct GeistFontRegistrar {
     @MainActor private static var isRegistered = false
 
+    /// List of font resource filenames to register.
+    public static let fontFiles = [
+        "Geist-Regular.otf",
+        "Geist-Medium.otf",
+        "Geist-SemiBold.otf",
+        "Geist-Bold.otf",
+        "Geist-Black.otf",
+        "GeistMono-Regular.otf",
+        "GeistMono-Medium.otf",
+        "GeistMono-SemiBold.otf",
+        "GeistMono-Bold.otf"
+    ]
+
     @MainActor public static func registerFonts() {
         guard !isRegistered else { return }
         isRegistered = true
 
-        let fontFiles = [
-            "Geist-Regular.otf",
-            "Geist-Medium.otf",
-            "Geist-SemiBold.otf",
-            "Geist-Bold.otf",
-            "Geist-Black.otf",
-            "GeistMono-Regular.otf",
-            "GeistMono-Medium.otf",
-            "GeistMono-SemiBold.otf",
-            "GeistMono-Bold.otf"
-        ]
+        registerFontResources(fontFiles, from: .main)
+    }
 
-        for fontFile in fontFiles {
-            let name = (fontFile as NSString).deletingPathExtension
-            let ext = (fontFile as NSString).pathExtension
+    /// Registers a list of font resource files from the specified bundle with CoreText.
+    @discardableResult
+    public static func registerFontResources(_ fontFiles: [String], from bundle: Bundle = .main) -> Bool {
+        let urls = fontFiles.compactMap { locateResource(for: $0, in: bundle) }
+        guard !urls.isEmpty else { return false }
+        CTFontManagerRegisterFontURLs(urls as CFArray, .process, true, nil)
+        return true
+    }
 
-            if let url = Bundle.main.url(forResource: name, withExtension: ext) ??
-                         Bundle.main.url(forResource: fontFile, withExtension: nil) {
-                CTFontManagerRegisterFontURLs([url] as CFArray, .process, true, nil)
-            }
-        }
+    /// Resolves the URL for a resource file name (with or without extension) in a bundle.
+    public static func locateResource(for fileName: String, in bundle: Bundle = .main) -> URL? {
+        let fileURL = URL(fileURLWithPath: fileName)
+        let name = fileURL.deletingPathExtension().lastPathComponent
+        let ext = fileURL.pathExtension
+
+        let pathExtension: String? = ext.isEmpty ? nil : ext
+        return bundle.url(forResource: name, withExtension: pathExtension) ??
+               bundle.url(forResource: fileName, withExtension: nil)
     }
 }

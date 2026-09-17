@@ -1216,10 +1216,50 @@ final class NotificationServiceTests: XCTestCase {
 
     func testNotificationServiceSafeNotificationsDuringTests() {
         NotificationService.shared.setup()
+        // Calling setup a second time validates the `isSetup` early-exit guard
+        NotificationService.shared.setup()
         NotificationService.shared.requestPermission()
+
         NotificationService.shared.sendDownloadCompleted(filename: "sample_video.mp4")
         NotificationService.shared.sendDownloadFailed(filename: "sample_video.mp4")
         NotificationService.shared.sendDownloadStopped(filename: "sample_video.mp4")
         NotificationService.shared.sendEncodingCompleted(filename: "sample_video.mp4", codec: "h264")
+    }
+
+    func testNotificationServiceUpdateAndAppNotifications() {
+        NotificationService.shared.sendYtdlpUpdateSucceeded(version: "2026.03.01")
+        NotificationService.shared.sendYtdlpUpdateFailed(reason: "Network timeout")
+        NotificationService.shared.sendAppUpdateNotification(title: "Version 5.2.1 Available", body: "A new update for Siphon is ready to install.")
+    }
+
+    func testNotificationServiceHTMLEntityDecoding() {
+        let rawFilename = "clip &amp; video &quot;hd&quot;.mp4"
+        let lang = LanguageService()
+
+        NotificationService.shared.sendDownloadCompleted(filename: rawFilename, languageService: lang)
+        NotificationService.shared.sendDownloadFailed(filename: rawFilename, languageService: lang)
+        NotificationService.shared.sendDownloadStopped(filename: rawFilename, languageService: lang)
+        NotificationService.shared.sendEncodingCompleted(filename: rawFilename, codec: "h265", languageService: lang)
+    }
+
+    func testNotificationServiceUserPreferenceGating() {
+        let defaults = UserDefaults.standard
+        let previousSetting = defaults.object(forKey: UserDefaultsKeys.showNotifications)
+        defer {
+            if let prev = previousSetting {
+                defaults.set(prev, forKey: UserDefaultsKeys.showNotifications)
+            } else {
+                defaults.removeObject(forKey: UserDefaultsKeys.showNotifications)
+            }
+        }
+
+        // Test with showNotifications explicitly disabled
+        defaults.set(false, forKey: UserDefaultsKeys.showNotifications)
+        NotificationService.shared.sendDownloadCompleted(filename: "disabled_test.mp4")
+        NotificationService.shared.sendDownloadFailed(filename: "disabled_test.mp4")
+
+        // Test with showNotifications explicitly enabled
+        defaults.set(true, forKey: UserDefaultsKeys.showNotifications)
+        NotificationService.shared.sendDownloadCompleted(filename: "enabled_test.mp4")
     }
 }

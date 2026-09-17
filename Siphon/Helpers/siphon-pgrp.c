@@ -14,20 +14,20 @@ int main(int argc, char *argv[]) {
         if (setpgid(0, 0) != 0) {
             const char err[] = "siphon-pgrp: failed to create isolated process group\n";
             (void)write(STDERR_FILENO, err, sizeof(err) - 1U);
-            return 125;
-        }
-
-        if (argv[1][0] == '/') {
-            /* Flawfinder: ignore */
-            (void)execv(argv[1], &argv[1]);
+            exit_status = 125;
         } else {
-            /* Flawfinder: ignore */
-            (void)execvp(argv[1], &argv[1]);
-        }
+            if (argv[1][0] == '/') {
+                /* Flawfinder: ignore */
+                (void)execv(argv[1], &argv[1]);
+            } else {
+                /* Flawfinder: ignore */
+                (void)execvp(argv[1], &argv[1]);
+            }
 
-        const char err[] = "siphon-pgrp: execution failed\n";
-        (void)write(STDERR_FILENO, err, sizeof(err) - 1U);
-        exit_status = 127;
+            const char err[] = "siphon-pgrp: execution failed\n";
+            (void)write(STDERR_FILENO, err, sizeof(err) - 1U);
+            exit_status = 127;
+        }
     }
 
     return exit_status;

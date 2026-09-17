@@ -7,6 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		E0001090 /* ImageUtilities.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000090 /* ImageUtilities.swift */; };
+		E0001091 /* ImageUtilitiesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000091 /* ImageUtilitiesTests.swift */; };
 		E0001050 /* Font+Geist.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000050 /* Font+Geist.swift */; };
 		E0001051 /* Geist-Regular.otf in Resources */ = {isa = PBXBuildFile; fileRef = E0000051 /* Geist-Regular.otf */; };
 		E0001052 /* Geist-Medium.otf in Resources */ = {isa = PBXBuildFile; fileRef = E0000052 /* Geist-Medium.otf */; };
@@ -35,6 +37,7 @@
 		E0001024 /* LoggerService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000024 /* LoggerService.swift */; };
 		E0001025 /* AddDownloadWindowManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000025 /* AddDownloadWindowManager.swift */; };
 		E0001026 /* LanguageService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000026 /* LanguageService.swift */; };
+		E0001090 /* BrowserUtils.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000090 /* BrowserUtils.swift */; };
 		E0001028 /* View+Compatibility.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000028 /* View+Compatibility.swift */; };
 		E0001029 /* PreferencesWindowManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000029 /* PreferencesWindowManager.swift */; };
 		E0001030 /* AppIcon.icns in Resources */ = {isa = PBXBuildFile; fileRef = E0000030 /* AppIcon.icns */; };
@@ -51,9 +54,12 @@
 		E0001046 /* AdversarialAndPropertyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000046 /* AdversarialAndPropertyTests.swift */; };
 		E0001047 /* UserDefaultsKeysTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000047 /* UserDefaultsKeysTests.swift */; };
 		E0001048 /* CustomPresetTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000048 /* CustomPresetTests.swift */; };
+		E0001049 /* DownloadTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000049 /* DownloadTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		E0000090 /* ImageUtilities.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageUtilities.swift; sourceTree = "<group>"; };
+		E0000091 /* ImageUtilitiesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageUtilitiesTests.swift; sourceTree = "<group>"; };
 		E0000050 /* Font+Geist.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Font+Geist.swift"; sourceTree = "<group>"; };
 		E0000051 /* Geist-Regular.otf */ = {isa = PBXFileReference; lastKnownFileType = file; name = "Geist-Regular.otf"; path = "Fonts/Geist-Regular.otf"; sourceTree = "<group>"; };
 		E0000052 /* Geist-Medium.otf */ = {isa = PBXFileReference; lastKnownFileType = file; name = "Geist-Medium.otf"; path = "Fonts/Geist-Medium.otf"; sourceTree = "<group>"; };
@@ -84,6 +90,7 @@
 		E0000024 /* LoggerService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoggerService.swift; sourceTree = "<group>"; };
 		E0000025 /* AddDownloadWindowManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddDownloadWindowManager.swift; sourceTree = "<group>"; };
 		E0000026 /* LanguageService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LanguageService.swift; sourceTree = "<group>"; };
+		E0000090 /* BrowserUtils.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowserUtils.swift; sourceTree = "<group>"; };
 		E0000028 /* View+Compatibility.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "View+Compatibility.swift"; sourceTree = "<group>"; };
 		E0000029 /* PreferencesWindowManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreferencesWindowManager.swift; sourceTree = "<group>"; };
 		E0000030 /* AppIcon.icns */ = {isa = PBXFileReference; lastKnownFileType = image.icns; path = AppIcon.icns; sourceTree = "<group>"; };
@@ -101,6 +108,7 @@
 		E0000046 /* AdversarialAndPropertyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdversarialAndPropertyTests.swift; sourceTree = "<group>"; };
 		E0000047 /* UserDefaultsKeysTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserDefaultsKeysTests.swift; sourceTree = "<group>"; };
 		E0000048 /* CustomPresetTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CustomPresetTests.swift; sourceTree = "<group>"; };
+		E0000049 /* DownloadTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DownloadTests.swift; sourceTree = "<group>"; };
 		E0000043 /* SiphonTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SiphonTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -115,6 +123,14 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		E0003011 /* Utilities */ = {
+			isa = PBXGroup;
+			children = (
+				E0000090 /* ImageUtilities.swift */,
+			);
+			path = Utilities;
+			sourceTree = "<group>";
+		};
 		44F4CAC630137C7400207052 /* Recovered References */ = {
 			isa = PBXGroup;
 			children = (
@@ -136,6 +152,7 @@
 		E0003002 /* Siphon */ = {
 			isa = PBXGroup;
 			children = (
+				E0003011 /* Utilities */,
 				E0000001 /* SiphonApp.swift */,
 				E0003004 /* Models */,
 				E0003005 /* Services */,
@@ -152,6 +169,7 @@
 		E0003020 /* SiphonTests */ = {
 			isa = PBXGroup;
 			children = (
+				E0000091 /* ImageUtilitiesTests.swift */,
 				E0000040 /* DownloadManagerTests.swift */,
 				E0000041 /* MediaInfoTests.swift */,
 				E0000042 /* YtdlpServiceTests.swift */,
@@ -160,6 +178,7 @@
 				E0000046 /* AdversarialAndPropertyTests.swift */,
 				E0000047 /* UserDefaultsKeysTests.swift */,
 				E0000048 /* CustomPresetTests.swift */,
+				E0000049 /* DownloadTests.swift */,
 			);
 			path = SiphonTests;
 			sourceTree = "<group>";
@@ -193,6 +212,7 @@
 				E0000024 /* LoggerService.swift */,
 				E0000025 /* AddDownloadWindowManager.swift */,
 				E0000026 /* LanguageService.swift */,
+				E0000090 /* BrowserUtils.swift */,
 				E0000029 /* PreferencesWindowManager.swift */,
 				E0000033 /* DebugLogWindowManager.swift */,
 			);
@@ -383,6 +403,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				E0001090 /* ImageUtilities.swift in Sources */,
 				E0001050 /* Font+Geist.swift in Sources */,
 				E0001003 /* Download.swift in Sources */,
 				E0001028 /* View+Compatibility.swift in Sources */,
@@ -401,6 +422,7 @@
 				E0001024 /* LoggerService.swift in Sources */,
 				E0001025 /* AddDownloadWindowManager.swift in Sources */,
 				E0001026 /* LanguageService.swift in Sources */,
+				E0001090 /* BrowserUtils.swift in Sources */,
 				E0001029 /* PreferencesWindowManager.swift in Sources */,
 				E0001031 /* UserDefaultsKeys.swift in Sources */,
 				E0001032 /* ReadOnlyLogView.swift in Sources */,
@@ -414,6 +436,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				E0001091 /* ImageUtilitiesTests.swift in Sources */,
 				E0001040 /* DownloadManagerTests.swift in Sources */,
 				E0001041 /* MediaInfoTests.swift in Sources */,
 				E0001042 /* YtdlpServiceTests.swift in Sources */,
@@ -422,6 +445,7 @@
 				E0001046 /* AdversarialAndPropertyTests.swift in Sources */,
 				E0001047 /* UserDefaultsKeysTests.swift in Sources */,
 				E0001048 /* CustomPresetTests.swift in Sources */,
+				E0001049 /* DownloadTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
