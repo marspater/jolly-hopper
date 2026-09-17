@@ -8,17 +8,17 @@ final class QuickLookPreviewHelper: NSObject, QLPreviewPanelDataSource, QLPrevie
     private var currentURL: URL?
     private let lock = NSLock()
 
+    @MainActor
     func preview(url: URL) {
         lock.lock()
         currentURL = url
         lock.unlock()
-        DispatchQueue.main.async {
-            guard let panel = QLPreviewPanel.shared() else { return }
-            panel.dataSource = self
-            panel.delegate = self
-            panel.makeKeyAndOrderFront(nil)
-            panel.reloadData()
-        }
+
+        guard let panel = QLPreviewPanel.shared() else { return }
+        panel.dataSource = self
+        panel.delegate = self
+        panel.makeKeyAndOrderFront(nil)
+        panel.reloadData()
     }
 
     nonisolated func numberOfPreviewItems(in panel: QLPreviewPanel?) -> Int {
