@@ -2978,6 +2978,76 @@ final class YtdlpServiceTests: XCTestCase {
         let posix2 = attrs2[.posixPermissions] as? NSNumber
         XCTAssertEqual(posix2?.intValue, 0o600, "Trimmed/cleared log file must maintain 0o600 POSIX permissions")
     }
+
+    func testDownloadProcessControllerStartSuccess() throws {
+        let controller = DownloadProcessController()
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/true")
+
+        XCTAssertNoThrow(try controller.start(process))
+        process.waitUntilExit()
+
+        XCTAssertEqual(process.terminationStatus, 0)
+        XCTAssertFalse(controller.isCancelled)
+    }
+
+    func testDownloadProcessControllerStartWhenCancelledThrows() {
+        let controller = DownloadProcessController()
+        controller.cancel()
+
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/true")
+
+        XCTAssertThrowsError(try controller.start(process)) { error in
+            guard let ytdlpError = error as? YtdlpError,
+                  case .downloadFailed(let message) = ytdlpError else {
+                XCTFail("Expected YtdlpError.downloadFailed, got \(error)")
+                return
+            }
+            XCTAssertEqual(message, "Download was stopped.")
+        }
+    }
+
+    func testDownloadProcessControllerStartWhenAlreadyRunningThrows() throws {
+        let controller = DownloadProcessController()
+        let process1 = Process()
+        process1.executableURL = URL(fileURLWithPath: "/bin/sleep")
+        process1.arguments = ["1"]
+
+        try controller.start(process1)
+        defer {
+            process1.terminate()
+            process1.waitUntilExit()
+        }
+
+        let process2 = Process()
+        process2.executableURL = URL(fileURLWithPath: "/usr/bin/true")
+
+        XCTAssertThrowsError(try controller.start(process2)) { error in
+            guard let ytdlpError = error as? YtdlpError,
+                  case .downloadFailed(let message) = ytdlpError else {
+                XCTFail("Expected YtdlpError.downloadFailed, got \(error)")
+                return
+            }
+            XCTAssertEqual(message, "Process already running.")
+        }
+    }
+
+    func testDownloadProcessControllerStartProcessRunErrorResetsToIdle() {
+        let controller = DownloadProcessController()
+        let invalidProcess = Process()
+        // Pointing executableURL to a non-existent path causes proc.run() to throw an exception.
+        invalidProcess.executableURL = URL(fileURLWithPath: "/nonexistent/binary/path/\(UUID().uuidString)")
+
+        XCTAssertThrowsError(try controller.start(invalidProcess)) { _ in }
+
+        // Confirm that state was reset to .idle by successfully attaching or starting a valid process afterwards
+        let validProcess = Process()
+        validProcess.executableURL = URL(fileURLWithPath: "/usr/bin/true")
+
+        XCTAssertNoThrow(try controller.start(validProcess))
+        validProcess.waitUntilExit()
+    }
 }
 
 
