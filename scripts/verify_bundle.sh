@@ -18,14 +18,14 @@ echo "$MARKETING_VERSIONS"
 echo "Discovered Current Project Versions:"
 echo "$CURRENT_VERSIONS"
 
-# Ensure primary version 5.2.0 and build 52 are set
-if ! grep -q 'MARKETING_VERSION = 5.2.0;' "$PBX_FILE"; then
-    echo "ERROR: MARKETING_VERSION 5.2.0 not found in project.pbxproj"
+# Ensure primary version 5.3.0 and build 53 are set
+if ! grep -q 'MARKETING_VERSION = 5.3.0;' "$PBX_FILE"; then
+    echo "ERROR: MARKETING_VERSION 5.3.0 not found in project.pbxproj"
     exit 1
 fi
 
-if ! grep -q 'CURRENT_PROJECT_VERSION = 52;' "$PBX_FILE"; then
-    echo "ERROR: CURRENT_PROJECT_VERSION 52 not found in project.pbxproj"
+if ! grep -q 'CURRENT_PROJECT_VERSION = 53;' "$PBX_FILE"; then
+    echo "ERROR: CURRENT_PROJECT_VERSION 53 not found in project.pbxproj"
     exit 1
 fi
 

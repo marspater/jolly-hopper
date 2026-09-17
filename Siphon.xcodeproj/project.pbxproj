@@ -281,28 +281,52 @@
 			path = Update;
 			sourceTree = "<group>";
 		};
+		E000300C /* Download */ = {
+			isa = PBXGroup;
+			children = (
+				E0000005 /* DownloadManager.swift */,
+				E000009B /* DownloadQueue.swift */,
+				E000009D /* DownloadExecutor.swift */,
+				E0000095 /* DownloadHistoryStore.swift */,
+				E0000008 /* YtdlpProcessRunner.swift */,
+				E0000004 /* YtdlpService.swift */,
+				E0000099 /* DependencyUpdateCoordinator.swift */,
+			);
+			path = Download;
+			sourceTree = "<group>";
+		};
+		E000300D /* Windows */ = {
+			isa = PBXGroup;
+			children = (
+				E0000025 /* AddDownloadWindowManager.swift */,
+				E0000033 /* DebugLogWindowManager.swift */,
+				E0000029 /* PreferencesWindowManager.swift */,
+			);
+			path = Windows;
+			sourceTree = "<group>";
+		};
+		E000300E /* System */ = {
+			isa = PBXGroup;
+			children = (
+				E0000090 /* BrowserUtils.swift */,
+				E0000026 /* LanguageService.swift */,
+				E0000024 /* LoggerService.swift */,
+				E0000021 /* LoginItemHelper.swift */,
+				E0000022 /* MenuBarManager.swift */,
+				E0000020 /* NotificationService.swift */,
+				E0000097 /* ReleaseNotesService.swift */,
+			);
+			path = System;
+			sourceTree = "<group>";
+		};
 		E0003005 /* Services */ = {
 			isa = PBXGroup;
 			children = (
-				E0000004 /* YtdlpService.swift */,
-				E0000008 /* YtdlpProcessRunner.swift */,
-				E0000005 /* DownloadManager.swift */,
-				E0000095 /* DownloadHistoryStore.swift */,
-				E0000097 /* ReleaseNotesService.swift */,
-				E0000099 /* DependencyUpdateCoordinator.swift */,
-				E000009B /* DownloadQueue.swift */,
-				E000009D /* DownloadExecutor.swift */,
 				E000300A /* Cookies */,
+				E000300C /* Download */,
+				E000300E /* System */,
 				E000300B /* Update */,
-				E0000020 /* NotificationService.swift */,
-				E0000021 /* LoginItemHelper.swift */,
-				E0000022 /* MenuBarManager.swift */,
-				E0000024 /* LoggerService.swift */,
-				E0000025 /* AddDownloadWindowManager.swift */,
-				E0000026 /* LanguageService.swift */,
-				E0000090 /* BrowserUtils.swift */,
-				E0000029 /* PreferencesWindowManager.swift */,
-				E0000033 /* DebugLogWindowManager.swift */,
+				E000300D /* Windows */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -726,7 +750,7 @@
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 52;
+				CURRENT_PROJECT_VERSION = 53;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_ASSET_PATHS = "";
 				DEVELOPMENT_TEAM = "";
@@ -743,7 +767,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = "$(RECOMMENDED_MACOSX_DEPLOYMENT_TARGET)";
-				MARKETING_VERSION = 5.2.0;
+				MARKETING_VERSION = 5.3.0;
 				OTHER_CODE_SIGN_FLAGS = "--deep";
 				PRODUCT_BUNDLE_IDENTIFIER = com.marspater.siphon;
 				PRODUCT_MODULE_NAME = Siphon;
@@ -763,7 +787,7 @@
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 52;
+				CURRENT_PROJECT_VERSION = 53;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_ASSET_PATHS = "";
 				DEVELOPMENT_TEAM = "";
@@ -780,7 +804,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = "$(RECOMMENDED_MACOSX_DEPLOYMENT_TARGET)";
-				MARKETING_VERSION = 5.2.0;
+				MARKETING_VERSION = 5.3.0;
 				ONLY_ACTIVE_ARCH = NO;
 				OTHER_CODE_SIGN_FLAGS = "--deep";
 				PRODUCT_BUNDLE_IDENTIFIER = com.marspater.siphon;
@@ -797,10 +821,10 @@
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 52;
+				CURRENT_PROJECT_VERSION = 53;
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 5.2.0;
+				MARKETING_VERSION = 5.3.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.marspater.siphon.SiphonTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
@@ -815,10 +839,10 @@
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 52;
+				CURRENT_PROJECT_VERSION = 53;
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 5.2.0;
+				MARKETING_VERSION = 5.3.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.marspater.siphon.SiphonTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
