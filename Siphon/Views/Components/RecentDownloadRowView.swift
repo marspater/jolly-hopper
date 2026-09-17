@@ -80,7 +80,7 @@ struct RecentDownloadRowView: View {
     @ViewBuilder
     private var metadataView: some View {
         VStack(alignment: .leading, spacing: 3) {
-            let displayTitle = download.title.isEmpty || download.title == "___FETCHING___" ? download.url : download.title
+            let displayTitle = download.displayTitle
             Text(displayTitle)
                 .font(.geist(12, weight: .medium))
                 .foregroundColor(.primary)

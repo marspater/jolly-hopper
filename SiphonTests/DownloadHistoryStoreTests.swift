@@ -101,4 +101,16 @@ final class DownloadHistoryStoreTests: XCTestCase {
         let loaded = store.loadHistory()
         XCTAssertTrue(loaded.isEmpty)
     }
+
+    func testRestoreDownloadsCleansesFetchingPlaceholder() {
+        let dl = Download(url: "https://www.boyfriendtv.com/videos/999/amazing-clip", options: .default, title: "Custom")
+        var historic = HistoricDownload(download: dl)
+        historic.title = "___FETCHING___" // simulate legacy corrupted history entry
+
+        let restored = DownloadHistoryStore.restoreDownloads(from: [historic], existingDownloads: [])
+        XCTAssertEqual(restored.count, 1)
+        XCTAssertNotEqual(restored.first?.title, "___FETCHING___")
+        XCTAssertEqual(restored.first?.title, "Amazing Clip")
+    }
 }
+

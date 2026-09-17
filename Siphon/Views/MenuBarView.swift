@@ -278,7 +278,7 @@ struct MenuBarView: View {
                 HStack(spacing: 7) {
                     SiphonSpinner(size: 9, color: SiphonTheme.downloading, lineWidth: 1.6)
 
-                    Text(download.title.isEmpty ? download.url : download.title)
+                    Text(download.displayTitle)
                         .font(.geist(11, weight: .medium))
                         .foregroundColor(.primary)
                         .lineLimit(1)

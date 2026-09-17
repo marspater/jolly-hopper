@@ -390,4 +390,32 @@ final class DownloadTests: XCTestCase {
             XCTAssertFalse(preset.description(lang: lang).isEmpty)
         }
     }
+
+    func testDisplayTitleFallback() {
+        let dlSlug = Download(url: "https://www.boyfriendtv.com/videos/1140993/hot-beach-workout", options: .default)
+        XCTAssertEqual(dlSlug.displayTitle, "Hot Beach Workout")
+
+        let dlNumeric = Download(url: "https://www.boyfriendtv.com/videos/1140993/", options: .default)
+        XCTAssertEqual(dlNumeric.displayTitle, "Boyfriendtv.com Video")
+
+        var customOpts = DownloadOptions.default
+        customOpts.customFilename = "My Custom Title"
+        let dlCustom = Download(url: "https://example.com/video", options: customOpts)
+        XCTAssertEqual(dlCustom.displayTitle, "My Custom Title")
+
+        let dlFetched = Download(url: "https://example.com/video", options: .default, title: "Fetched Real Title")
+        XCTAssertEqual(dlFetched.displayTitle, "Fetched Real Title")
+
+        // Crucial invariant: displayTitle must NEVER return "___FETCHING___"
+        let dlFetching = Download(url: "https://example.com/test", options: .default, title: "___FETCHING___")
+        XCTAssertNotEqual(dlFetching.displayTitle, "___FETCHING___")
+    }
+
+    func testHistoricDownloadNeverStoresPlaceholder() {
+        let dl = Download(url: "https://www.boyfriendtv.com/videos/12345/summer-fun", options: .default, title: "___FETCHING___")
+        let historic = HistoricDownload(download: dl)
+        XCTAssertNotEqual(historic.title, "___FETCHING___")
+        XCTAssertEqual(historic.title, "Summer Fun")
+    }
 }
+

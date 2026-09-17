@@ -50,9 +50,33 @@ actor DependencyInstaller {
         }
     }
 
+    static func isBinarySigned(at url: URL) -> Bool {
+        guard FileManager.default.isExecutableFile(atPath: url.path) else { return false }
+        let proc = Process()
+        proc.executableURL = URL(fileURLWithPath: "/usr/bin/codesign")
+        proc.arguments = ["--verify", "--deep", "--strict", url.path]
+        let nullPipe = Pipe()
+        proc.standardOutput = nullPipe
+        proc.standardError = nullPipe
+        do {
+            try proc.run()
+            proc.waitUntilExit()
+            return proc.terminationStatus == 0
+        } catch {
+            return false
+        }
+    }
+
     static func adHocSignBinary(at url: URL) throws {
         guard !NotificationService.isRunningTests else { return }
         guard FileManager.default.isExecutableFile(atPath: url.path) else { return }
+        
+        // If the binary already has a valid code signature, skip re-signing to avoid mutating
+        // Mach-O binaries and invalidating upstream SHA-256 hashes.
+        if isBinarySigned(at: url) {
+            return
+        }
+
         let binaryPath = url.path
         let proc = Process()
         proc.executableURL = URL(fileURLWithPath: "/usr/bin/codesign")
@@ -77,6 +101,13 @@ actor DependencyInstaller {
         try FileManager.default.createDirectory(at: appSupportDir, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
         let destination = appSupportDir.appendingPathComponent("yt-dlp")
         let tempStaging = appSupportDir.appendingPathComponent("yt-dlp.tmp_\(UUID().uuidString)")
+
+        var installedSuccessfully = false
+        defer {
+            if !installedSuccessfully {
+                try? FileManager.default.removeItem(at: tempStaging)
+            }
+        }
 
         let (downloadedTempURL, _) = try await URLSession.shared.download(from: downloadURL)
         onProgress?(0.65)
@@ -126,6 +157,7 @@ actor DependencyInstaller {
         do {
             try FileManager.default.moveItem(at: tempStaging, to: destination)
             try Self.adHocSignBinary(at: destination)
+            installedSuccessfully = true
             if hadOld {
                 try? FileManager.default.removeItem(at: backupDest)
             }
@@ -468,12 +500,24 @@ class YtdlpService: ObservableObject {
         return env
     }
 
+    private func cleanStaleArtifacts() {
+        let appSupport = Self.getAppSupportDirectory()
+        guard let files = try? FileManager.default.contentsOfDirectory(at: appSupport, includingPropertiesForKeys: nil) else { return }
+        for file in files {
+            let name = file.lastPathComponent
+            if name.hasPrefix("yt-dlp.tmp_") || name.hasPrefix("ffmpeg_") || name.hasPrefix("ffprobe_") || name.contains(".backup_") {
+                try? FileManager.default.removeItem(at: file)
+            }
+        }
+    }
+
     func setupBinaries() async {
         if let existing = activeSetupTask {
             await existing.value
             return
         }
         let task = Task { @MainActor in
+            cleanStaleArtifacts()
             await findYtdlp()
             await findFfmpeg()
             await getVersion()

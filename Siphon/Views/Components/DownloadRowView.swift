@@ -95,8 +95,7 @@ struct DownloadRowView: View {
                 
                 VStack(alignment: .leading, spacing: 4) {
                     // Line 1: Title
-                    let effectiveTitle = download.title.isEmpty ? (download.sourceDomain.isEmpty ? download.url : "\(download.sourceDomain) Video") : download.title
-                    Text(download.status == .fetching ? languageService.s("fetching") : effectiveTitle)
+                    Text(download.status == .fetching ? languageService.s("fetching") : download.displayTitle)
                         .font(.geist(14, weight: .semibold))
                         .lineLimit(2)
                         .fixedSize(horizontal: false, vertical: true)
@@ -220,7 +219,8 @@ struct DownloadRowView: View {
                                 PreferencesWindowManager.shared.showPreferencesWindow(
                                     languageService: languageService,
                                     updateChecker: updateChecker,
-                                    downloadManager: downloadManager
+                                    downloadManager: downloadManager,
+                                    initialTab: .advanced
                                 )
                             } label: {
                                 Text(languageService.s("fix_signin_error"))
@@ -397,7 +397,7 @@ struct DownloadRowView: View {
             }
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel(download.title.isEmpty ? "Media preview" : "\(download.title) thumbnail")
+        .accessibilityLabel(download.displayTitle.isEmpty ? "Media preview" : "\(download.displayTitle) thumbnail")
         .accessibilityHint(download.status == .completed && download.primaryFilePath != nil ? "Double click or press space to preview media" : "")
         .accessibilityAddTraits(download.status == .completed && download.primaryFilePath != nil ? .isButton : [])
         .frame(width: 120, height: 68)
