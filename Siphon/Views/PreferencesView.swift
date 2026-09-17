@@ -114,7 +114,7 @@ struct PreferencesView: View {
                 Capsule()
                     .strokeBorder(
                         LinearGradient(
-                            colors: [Color.white.opacity(0.18), Color.white.opacity(0.04), Color.clear],
+                            colors: [Color.primary.opacity(0.16), Color.primary.opacity(0.04), Color.clear],
                             startPoint: .top,
                             endPoint: .bottom
                         ),

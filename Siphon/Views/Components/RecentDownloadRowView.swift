@@ -34,8 +34,7 @@ struct RecentDownloadRowView: View {
                 )
         )
         .overlay(
-            RoundedRectangle(cornerRadius: SiphonTheme.radiusControl, style: .continuous)
-                .stroke(Color.white.opacity(isHovered ? 0.15 : 0.06), lineWidth: 1)
+            SiphonTheme.borderSubtle(cornerRadius: SiphonTheme.radiusControl, isHovered: isHovered)
         )
         .onHover { hovering in
             withAnimation(SiphonAnimation.hoverSpring) {
@@ -74,7 +73,7 @@ struct RecentDownloadRowView: View {
         .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 6, style: .continuous)
-                .stroke(Color.white.opacity(0.15), lineWidth: 0.5)
+                .stroke(Color.primary.opacity(0.12), lineWidth: 0.5)
         )
     }
 

@@ -345,6 +345,22 @@ class LanguageService: ObservableObject {
         "search_logs": "Search logs...",
         "no_log_output": "No log output recorded.",
         "reveal_in_finder": "Reveal in Finder",
-        "whats_new_badge": "WHAT'S NEW"
+        "whats_new_badge": "WHAT'S NEW",
+        "hero_enter_url": "Paste video or playlist link...",
+        "hero_started_download": "Started download",
+        "hero_started_downloads": "Started %d downloads",
+        "hero_no_clipboard_url": "No valid URL found on clipboard",
+        "hero_extracting_metadata": "Extracting video metadata...",
+        "hero_invalid_url": "Please enter a valid HTTP/HTTPS URL",
+        "hero_unsupported_site": "Unsupported URL or unrecognized video host",
+        "hero_network_error": "Network connection error. Check your internet connection.",
+        "hero_options": "Options",
+        "menubar_quick_download": "Quick Download",
+        "menubar_press_return": "Press ⏎ to download",
+        "menubar_active_downloads": "Active Downloads",
+        "menubar_no_active": "No active downloads",
+        "menubar_open_siphon": "Open Siphon",
+        "menubar_quit": "Quit",
+        "menubar_preset": "Preset"
     ]
 }
