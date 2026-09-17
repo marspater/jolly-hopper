@@ -340,6 +340,7 @@ struct AddDownloadView: View {
                         .scrollContentBackground(.hidden)
                         .frame(minHeight: 120, idealHeight: 150, maxHeight: 220)
                         .padding(6)
+                        .accessibilityLabel(languageService.s("paste_multiple_urls"))
                 }
                 .background(Color.primary.opacity(0.03))
                 .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusControl))
@@ -542,6 +543,7 @@ struct AddDownloadView: View {
                     TextField(languageService.s("url_hint"), text: $urlInput)
                         .font(.geistMono(12, relativeTo: .body))
                         .textFieldStyle(.plain)
+                        .accessibilityLabel(languageService.s("video_url"))
                         .onSubmit {
                             fetchInfo()
                         }
@@ -935,6 +937,7 @@ struct AddDownloadView: View {
                             .labelsHidden()
                             .pickerStyle(.menu)
                             .frame(maxWidth: .infinity, alignment: .leading)
+                            .accessibilityLabel(languageService.s("file_type"))
                         }
                         
                         VStack(alignment: .leading, spacing: 5) {
@@ -948,6 +951,7 @@ struct AddDownloadView: View {
                                 .labelsHidden()
                                 .pickerStyle(.menu)
                                 .frame(maxWidth: .infinity, alignment: .leading)
+                                .accessibilityLabel(languageService.s("quality"))
                                 .onChange(of: selectedCodec) { _, newCodec in
                                     if newCodec == "h264" && (videoResolution == .r1440p || videoResolution == .r2160p || videoResolution == .best) {
                                         videoResolution = .r1080p
@@ -960,6 +964,7 @@ struct AddDownloadView: View {
                                 .labelsHidden()
                                 .pickerStyle(.menu)
                                 .frame(maxWidth: .infinity, alignment: .leading)
+                                .accessibilityLabel(languageService.s("audio_quality"))
                             }
                         }
                     }
@@ -1328,6 +1333,7 @@ struct AddDownloadView: View {
                                         .labelsHidden()
                                         .pickerStyle(.menu)
                                         .frame(maxWidth: .infinity, alignment: .leading)
+                                        .accessibilityLabel(languageService.s("video_codec"))
                                     }
 
                                     VStack(alignment: .leading, spacing: 5) {
@@ -1342,6 +1348,7 @@ struct AddDownloadView: View {
                                         .labelsHidden()
                                         .pickerStyle(.menu)
                                         .frame(maxWidth: .infinity, alignment: .leading)
+                                        .accessibilityLabel(languageService.s("audio_codec"))
                                     }
                                 }
 
@@ -1358,6 +1365,7 @@ struct AddDownloadView: View {
                                         .labelsHidden()
                                         .pickerStyle(.menu)
                                         .frame(maxWidth: .infinity, alignment: .leading)
+                                        .accessibilityLabel("Post-Processing")
                                     }
 
                                     VStack(alignment: .leading, spacing: 5) {
@@ -1372,6 +1380,7 @@ struct AddDownloadView: View {
                                         .labelsHidden()
                                         .pickerStyle(.menu)
                                         .frame(maxWidth: .infinity, alignment: .leading)
+                                        .accessibilityLabel("HDR / Dynamic Range")
                                     }
                                 }
                             }
