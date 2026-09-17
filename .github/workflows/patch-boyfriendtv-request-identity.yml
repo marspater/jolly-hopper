@@ -26,64 +26,54 @@ jobs:
           path = Path("Siphon/Services/Download/YtdlpService.swift")
           text = path.read_text()
 
-          replacements = [
-              (
-                  '''        let isSafari: Bool = {
-                      if let idx = args.firstIndex(of: "--cookies-from-browser"), idx + 1 < args.count {
-                          return args[idx + 1] == "safari"
-                      }
-                      if args.contains("safari") {
-                          return true
-                      }
-                      return configuredBrowserCookieSource() == "safari"
-                  }()
-          ''',
-                  '''        let isSafari: Bool = {
-                      if let idx = args.firstIndex(of: "--cookies-from-browser"), idx + 1 < args.count {
-                          return args[idx + 1] == "safari"
-                      }
-                      // Explicit cookie files may come from the browser extension and do not
-                      // imply Safari merely because Safari is the configured browser source.
-                      if args.contains("--cookies") {
-                          return false
-                      }
-                      return configuredBrowserCookieSource() == "safari"
-                  }()
-          '''
-              ),
-              (
-                  '''            request.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36", forHTTPHeaderField: "User-Agent")
-                      request.setValue("https://www.boyfriend.tv/", forHTTPHeaderField: "Referer")
-                      request.setValue("https://www.boyfriend.tv", forHTTPHeaderField: "Origin")
-          ''',
-                  '''            request.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36", forHTTPHeaderField: "User-Agent")
-                      let pageBaseDomain = pageURL.host?.lowercased().contains("boyfriendtv.com") == true
-                          ? "https://www.boyfriendtv.com"
-                          : "https://www.boyfriend.tv"
-                      request.setValue(pageBaseDomain + "/", forHTTPHeaderField: "Referer")
-                      request.setValue(pageBaseDomain, forHTTPHeaderField: "Origin")
-          '''
-              ),
-              (
-                  '''                    embedRequest.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36", forHTTPHeaderField: "User-Agent")
-                      embedRequest.setValue("https://www.boyfriend.tv/", forHTTPHeaderField: "Referer")
-                      embedRequest.setValue("https://www.boyfriend.tv", forHTTPHeaderField: "Origin")
-          ''',
-                  '''                    embedRequest.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36", forHTTPHeaderField: "User-Agent")
-                      let embedBaseDomain = embedPageURL.host?.lowercased().contains("boyfriendtv.com") == true
-                          ? "https://www.boyfriendtv.com"
-                          : "https://www.boyfriend.tv"
-                      embedRequest.setValue(embedBaseDomain + "/", forHTTPHeaderField: "Referer")
-                      embedRequest.setValue(embedBaseDomain, forHTTPHeaderField: "Origin")
-          '''
-              ),
-          ]
+          safari_start = '        let isSafari: Bool = {\n'
+          safari_end = '        }()\n\n        if !isYouTube {'
+          if text.count(safari_start) != 1 or text.count(safari_end) != 1:
+              raise SystemExit("Safari identity block anchors were not unique")
+          start = text.index(safari_start)
+          end = text.index(safari_end, start)
+          safari_block = '''        let isSafari: Bool = {
+              if let idx = args.firstIndex(of: "--cookies-from-browser"), idx + 1 < args.count {
+                  return args[idx + 1] == "safari"
+              }
+              // Explicit cookie files may come from the browser extension and do not
+              // imply Safari merely because Safari is the configured browser source.
+              if args.contains("--cookies") {
+                  return false
+              }
+              return configuredBrowserCookieSource() == "safari"
+          }()
 
-          for old, new in replacements:
-              count = text.count(old)
-              if count != 1:
-                  raise SystemExit(f"Expected exactly one source match, found {count}")
-              text = text.replace(old, new, 1)
+          if !isYouTube {'''
+          text = text[:start] + safari_block + text[end + len(safari_end):]
+
+          main_headers = '''            request.setValue("https://www.boyfriend.tv/", forHTTPHeaderField: "Referer")
+              request.setValue("https://www.boyfriend.tv", forHTTPHeaderField: "Origin")'''
+          if text.count(main_headers) != 1:
+              raise SystemExit(f"Expected one BoyfriendTV main fallback header pair, found {text.count(main_headers)}")
+          text = text.replace(
+              main_headers,
+              '''            let pageBaseDomain = pageURL.host?.lowercased().contains("boyfriendtv.com") == true
+                  ? "https://www.boyfriendtv.com"
+                  : "https://www.boyfriend.tv"
+              request.setValue(pageBaseDomain + "/", forHTTPHeaderField: "Referer")
+              request.setValue(pageBaseDomain, forHTTPHeaderField: "Origin")''',
+              1,
+          )
+
+          embed_headers = '''                    embedRequest.setValue("https://www.boyfriend.tv/", forHTTPHeaderField: "Referer")
+              embedRequest.setValue("https://www.boyfriend.tv", forHTTPHeaderField: "Origin")'''
+          if text.count(embed_headers) != 1:
+              raise SystemExit(f"Expected one BoyfriendTV embed fallback header pair, found {text.count(embed_headers)}")
+          text = text.replace(
+              embed_headers,
+              '''                    let embedBaseDomain = embedPageURL.host?.lowercased().contains("boyfriendtv.com") == true
+                  ? "https://www.boyfriendtv.com"
+                  : "https://www.boyfriend.tv"
+              embedRequest.setValue(embedBaseDomain + "/", forHTTPHeaderField: "Referer")
+              embedRequest.setValue(embedBaseDomain, forHTTPHeaderField: "Origin")''',
+              1,
+          )
 
           path.write_text(text)
 
