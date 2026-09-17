@@ -55,6 +55,18 @@
 		E0001047 /* UserDefaultsKeysTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000047 /* UserDefaultsKeysTests.swift */; };
 		E0001048 /* CustomPresetTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000048 /* CustomPresetTests.swift */; };
 		E0001049 /* DownloadTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000049 /* DownloadTests.swift */; };
+		E0001093 /* ProcessLifecycleState.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000093 /* ProcessLifecycleState.swift */; };
+		E0001094 /* ProcessLifecycleTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000094 /* ProcessLifecycleTests.swift */; };
+		E0001095 /* DownloadHistoryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000095 /* DownloadHistoryStore.swift */; };
+		E0001096 /* DownloadHistoryStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000096 /* DownloadHistoryStoreTests.swift */; };
+		E0001097 /* ReleaseNotesService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000097 /* ReleaseNotesService.swift */; };
+		E0001098 /* ReleaseNotesServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000098 /* ReleaseNotesServiceTests.swift */; };
+		E0001099 /* DependencyUpdateCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000099 /* DependencyUpdateCoordinator.swift */; };
+		E000109A /* DependencyUpdateCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E000009A /* DependencyUpdateCoordinatorTests.swift */; };
+		E000109B /* DownloadQueue.swift in Sources */ = {isa = PBXBuildFile; fileRef = E000009B /* DownloadQueue.swift */; };
+		E000109C /* DownloadQueueTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E000009C /* DownloadQueueTests.swift */; };
+		E000109D /* DownloadExecutor.swift in Sources */ = {isa = PBXBuildFile; fileRef = E000009D /* DownloadExecutor.swift */; };
+		E000109E /* DownloadExecutorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E000009E /* DownloadExecutorTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -109,6 +121,18 @@
 		E0000047 /* UserDefaultsKeysTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserDefaultsKeysTests.swift; sourceTree = "<group>"; };
 		E0000048 /* CustomPresetTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CustomPresetTests.swift; sourceTree = "<group>"; };
 		E0000049 /* DownloadTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DownloadTests.swift; sourceTree = "<group>"; };
+		E0000093 /* ProcessLifecycleState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProcessLifecycleState.swift; sourceTree = "<group>"; };
+		E0000094 /* ProcessLifecycleTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProcessLifecycleTests.swift; sourceTree = "<group>"; };
+		E0000095 /* DownloadHistoryStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DownloadHistoryStore.swift; sourceTree = "<group>"; };
+		E0000096 /* DownloadHistoryStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DownloadHistoryStoreTests.swift; sourceTree = "<group>"; };
+		E0000097 /* ReleaseNotesService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReleaseNotesService.swift; sourceTree = "<group>"; };
+		E0000098 /* ReleaseNotesServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReleaseNotesServiceTests.swift; sourceTree = "<group>"; };
+		E0000099 /* DependencyUpdateCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DependencyUpdateCoordinator.swift; sourceTree = "<group>"; };
+		E000009A /* DependencyUpdateCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DependencyUpdateCoordinatorTests.swift; sourceTree = "<group>"; };
+		E000009B /* DownloadQueue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DownloadQueue.swift; sourceTree = "<group>"; };
+		E000009C /* DownloadQueueTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DownloadQueueTests.swift; sourceTree = "<group>"; };
+		E000009D /* DownloadExecutor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DownloadExecutor.swift; sourceTree = "<group>"; };
+		E000009E /* DownloadExecutorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DownloadExecutorTests.swift; sourceTree = "<group>"; };
 		E0000043 /* SiphonTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SiphonTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -179,6 +203,12 @@
 				E0000047 /* UserDefaultsKeysTests.swift */,
 				E0000048 /* CustomPresetTests.swift */,
 				E0000049 /* DownloadTests.swift */,
+				E0000094 /* ProcessLifecycleTests.swift */,
+				E0000096 /* DownloadHistoryStoreTests.swift */,
+				E0000098 /* ReleaseNotesServiceTests.swift */,
+				E000009A /* DependencyUpdateCoordinatorTests.swift */,
+				E000009C /* DownloadQueueTests.swift */,
+				E000009E /* DownloadExecutorTests.swift */,
 			);
 			path = SiphonTests;
 			sourceTree = "<group>";
@@ -196,6 +226,7 @@
 			isa = PBXGroup;
 			children = (
 				E0000003 /* Download.swift */,
+				E0000093 /* ProcessLifecycleState.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -206,6 +237,11 @@
 				E0000004 /* YtdlpService.swift */,
 				E0000008 /* YtdlpProcessRunner.swift */,
 				E0000005 /* DownloadManager.swift */,
+				E0000095 /* DownloadHistoryStore.swift */,
+				E0000097 /* ReleaseNotesService.swift */,
+				E0000099 /* DependencyUpdateCoordinator.swift */,
+				E000009B /* DownloadQueue.swift */,
+				E000009D /* DownloadExecutor.swift */,
 				E0000020 /* NotificationService.swift */,
 				E0000021 /* LoginItemHelper.swift */,
 				E0000022 /* MenuBarManager.swift */,
@@ -429,6 +465,12 @@
 				E0001033 /* DebugLogWindowManager.swift in Sources */,
 				E0001034 /* DebugLogView.swift in Sources */,
 				E0001035 /* DownloadDiagnosticsView.swift in Sources */,
+				E0001093 /* ProcessLifecycleState.swift in Sources */,
+				E0001095 /* DownloadHistoryStore.swift in Sources */,
+				E0001097 /* ReleaseNotesService.swift in Sources */,
+				E0001099 /* DependencyUpdateCoordinator.swift in Sources */,
+				E000109B /* DownloadQueue.swift in Sources */,
+				E000109D /* DownloadExecutor.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -446,6 +488,12 @@
 				E0001047 /* UserDefaultsKeysTests.swift in Sources */,
 				E0001048 /* CustomPresetTests.swift in Sources */,
 				E0001049 /* DownloadTests.swift in Sources */,
+				E0001094 /* ProcessLifecycleTests.swift in Sources */,
+				E0001096 /* DownloadHistoryStoreTests.swift in Sources */,
+				E0001098 /* ReleaseNotesServiceTests.swift in Sources */,
+				E000109A /* DependencyUpdateCoordinatorTests.swift in Sources */,
+				E000109C /* DownloadQueueTests.swift in Sources */,
+				E000109E /* DownloadExecutorTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

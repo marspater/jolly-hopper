@@ -7,17 +7,26 @@ import Foundation
 import Darwin
 
 public final class DownloadProcessController: @unchecked Sendable {
-    private enum State {
-        case idle
-        case running(Process, pid_t)
-        case cancelled
-    }
-
-    private var state: State = .idle
+    private var internalLifecycle: ProcessLifecycleState = .created
+    private var activeProcess: Process?
+    private var wasCancelled: Bool = false
     private let lock = NSLock()
 
     public init() {
         // Default initializer for ProcessController
+    }
+
+    public var lifecycleState: ProcessLifecycleState {
+        lock.lock()
+        defer { lock.unlock() }
+        return internalLifecycle
+    }
+
+    public func transitionToTerminated(exitCode: Int32, reason: Process.TerminationReason) {
+        lock.lock()
+        defer { lock.unlock() }
+        activeProcess = nil
+        internalLifecycle = .terminated(exitCode: exitCode, reason: reason)
     }
 
     private static func getDescendantPIDs(for parentPID: pid_t) -> [pid_t] {
@@ -112,24 +121,30 @@ public final class DownloadProcessController: @unchecked Sendable {
     /// If the controller has already been cancelled, throws without starting the process.
     public func start(_ proc: Process) throws {
         lock.lock()
-        switch state {
-        case .cancelled:
+        if wasCancelled {
             lock.unlock()
             throw YtdlpError.downloadFailed("Download was stopped.")
-        case .running:
+        }
+        switch internalLifecycle {
+        case .cancelling, .terminated:
+            lock.unlock()
+            throw YtdlpError.downloadFailed("Download was stopped.")
+        case .running, .starting:
             lock.unlock()
             throw YtdlpError.downloadFailed("Process already running.")
-        case .idle:
-            break
+        case .created, .failed:
+            internalLifecycle = .starting
+            activeProcess = proc
         }
 
         do {
             try proc.run()
             let pid = proc.processIdentifier
-            state = .running(proc, pid)
+            internalLifecycle = .running(pid: pid)
             lock.unlock()
         } catch {
-            state = .idle
+            internalLifecycle = .failed(error.localizedDescription)
+            activeProcess = nil
             lock.unlock()
             throw error
         }
@@ -140,17 +155,27 @@ public final class DownloadProcessController: @unchecked Sendable {
     @discardableResult
     public func attachProcess(_ proc: Process) -> Bool {
         lock.lock()
+        if wasCancelled {
+            let shouldTerminate = proc.isRunning
+            lock.unlock()
+            if shouldTerminate {
+                Self.terminateProcessTree(proc, pid: proc.processIdentifier)
+            }
+            return false
+        }
         let shouldTerminate: Bool
         let success: Bool
-        switch state {
-        case .cancelled:
+        switch internalLifecycle {
+        case .cancelling, .terminated:
             shouldTerminate = proc.isRunning
             success = false
-        case .idle:
-            state = .running(proc, proc.processIdentifier)
+        case .created, .failed:
+            let pid = proc.processIdentifier
+            internalLifecycle = .running(pid: pid)
+            activeProcess = proc
             shouldTerminate = false
             success = true
-        case .running:
+        case .running, .starting:
             shouldTerminate = false
             success = false
         }
@@ -166,31 +191,50 @@ public final class DownloadProcessController: @unchecked Sendable {
     public func detach() {
         lock.lock()
         defer { lock.unlock() }
-        switch state {
-        case .idle, .cancelled:
-            break
+        activeProcess = nil
+        wasCancelled = false
+        switch internalLifecycle {
         case .running:
-            state = .idle
+            internalLifecycle = .created
+        case .created, .cancelling, .terminated, .failed, .starting:
+            break
         }
     }
 
     /// Requests cancellation of the process and any active child process.
     public func cancel() {
         lock.lock()
-        let previousState = state
-        state = .cancelled
+        wasCancelled = true
+        let procToKill: Process?
+        let pidToKill: pid_t
+        switch internalLifecycle {
+        case .cancelling, .terminated:
+            lock.unlock()
+            return
+        case .created, .failed:
+            internalLifecycle = .cancelling(pid: 0)
+            procToKill = nil
+            pidToKill = 0
+        case .starting:
+            internalLifecycle = .cancelling(pid: 0)
+            procToKill = activeProcess
+            pidToKill = activeProcess?.processIdentifier ?? 0
+        case .running(let pid):
+            internalLifecycle = .cancelling(pid: pid)
+            procToKill = activeProcess
+            pidToKill = pid
+        }
         lock.unlock()
 
-        if case .running(let proc, let pid) = previousState {
-            Self.terminateProcessTree(proc, pid: pid)
+        if let proc = procToKill, proc.isRunning || pidToKill > 0 {
+            Self.terminateProcessTree(proc, pid: pidToKill)
         }
     }
 
     public var isCancelled: Bool {
         lock.lock()
         defer { lock.unlock() }
-        if case .cancelled = state { return true }
-        return false
+        return wasCancelled || internalLifecycle.isCancelling
     }
 }
 
@@ -316,6 +360,7 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
                     }
 
                     let output = outputBuffer.getString()
+                    controller.transitionToTerminated(exitCode: proc.terminationStatus, reason: proc.terminationReason)
 
                     if Task.isCancelled || controller.isCancelled || proc.terminationReason == .uncaughtSignal {
                         safeContinuation.resume(throwing: YtdlpError.downloadFailed("Command was cancelled."))
@@ -531,7 +576,7 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
             }
 
             process.terminationHandler = { proc in
-                processController?.detach()
+                controller.transitionToTerminated(exitCode: proc.terminationStatus, reason: proc.terminationReason)
                 outputPipe.fileHandleForReading.readabilityHandler = nil
                 errorPipe.fileHandleForReading.readabilityHandler = nil
 
