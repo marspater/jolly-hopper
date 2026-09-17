@@ -1920,19 +1920,27 @@ struct HistoricDownload: Codable, Identifiable {
 
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
+        try encodeMetadata(to: &container)
+        try encodeStateAndProgress(to: &container)
+        try container.encode(options, forKey: .options)
+    }
+
+    private func encodeMetadata(to container: inout KeyedEncodingContainer<CodingKeys>) throws {
         try container.encode(id, forKey: .id)
         try container.encode(url, forKey: .url)
         try container.encode(title, forKey: .title)
         try container.encode(filePaths, forKey: .filePaths)
         try container.encode(downloadDate, forKey: .downloadDate)
         try container.encode(fileType, forKey: .fileType)
-        try container.encode(status, forKey: .status)
         try container.encodeIfPresent(thumbnailURL, forKey: .thumbnailURL)
         try container.encodeIfPresent(duration, forKey: .duration)
+    }
+
+    private func encodeStateAndProgress(to container: inout KeyedEncodingContainer<CodingKeys>) throws {
+        try container.encode(status, forKey: .status)
         try container.encodeIfPresent(errorMessage, forKey: .errorMessage)
         try container.encode(log, forKey: .log)
         try container.encode(progress, forKey: .progress)
-        try container.encode(options, forKey: .options)
     }
 
     // Helper to convert back to Download object for UI
