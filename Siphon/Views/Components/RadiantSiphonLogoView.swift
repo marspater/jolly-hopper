@@ -8,9 +8,10 @@ import AppKit
 
 struct RadiantSiphonLogoView: View {
     @State private var isHovered: Bool = false
+    @ObservedObject private var renderingEnvironment = AdaptiveRenderingEnvironment.shared
 
     var body: some View {
-        let reduceMotion = AdaptiveRenderingEnvironment.shared.reduceMotion
+        let reduceMotion = renderingEnvironment.reduceMotion
         if reduceMotion {
             staticLogoView
         } else {
@@ -21,7 +22,9 @@ struct RadiantSiphonLogoView: View {
     // MARK: - Animated Complex Radiant Logo
 
     private var animatedLogoView: some View {
-        let minInterval = AdaptiveRenderingEnvironment.shared.isHighRefreshRate ? (1.0 / 120.0) : (1.0 / 60.0)
+        // This is ambient branding, not direct manipulation. Keep it inexpensive
+        // on ProMotion displays and leave their frame budget to app interactions.
+        let minInterval = 1.0 / 30.0
         return TimelineView(.animation(minimumInterval: minInterval)) { timeline in
             let time = timeline.date.timeIntervalSinceReferenceDate
             let spinSpeed = isHovered ? 1.8 : 0.8

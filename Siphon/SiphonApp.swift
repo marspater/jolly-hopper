@@ -51,8 +51,12 @@ struct SiphonApp: App {
                 .environmentObject(updateChecker)
                 .preferredColorScheme(theme == "light" ? .light : (theme == "dark" ? .dark : nil))
                 .onAppear {
+                    SiphonTheme.applyTheme(theme)
                     setupMenuBarIfNeeded()
                     applyBackgroundModeIfNeeded()
+                }
+                .onChange(of: theme) { _, newTheme in
+                    SiphonTheme.applyTheme(newTheme)
                 }
                 .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in
                     downloadManager.stopAllDownloads()

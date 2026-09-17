@@ -112,12 +112,38 @@ final class NotificationService: NSObject, @unchecked Sendable, UNUserNotificati
         }
     }
 
+    private func fallbackDisplayNotification(title: String, body: String) {
+        guard !Self.isRunningTests else { return }
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let escapedTitle = title
+                .replacingOccurrences(of: "\\", with: "\\\\")
+                .replacingOccurrences(of: "\"", with: "\\\"")
+            let escapedBody = body
+                .replacingOccurrences(of: "\\", with: "\\\\")
+                .replacingOccurrences(of: "\"", with: "\\\"")
+
+            let script = "display notification \"\(escapedBody)\" with title \"\(escapedTitle)\" sound name \"default\""
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
+            process.arguments = ["-e", script]
+            do {
+                try process.run()
+                self?.logMessage("Fallback notification displayed: \(title)", level: .info)
+            } catch {
+                self?.logMessage("Fallback notification failed: \(error.localizedDescription)", level: .warning)
+            }
+        }
+    }
+
     private func sendNotification(content: UNMutableNotificationContent, identifier: String = UUID().uuidString, logName: String) {
         guard UserDefaults.standard.object(forKey: UserDefaultsKeys.showNotifications) as? Bool ?? true else {
             logMessage("Notifications disabled by user setting", level: .warning)
             return
         }
-        guard let center = notificationCenter else { return }
+        guard let center = notificationCenter else {
+            fallbackDisplayNotification(title: content.title, body: content.body)
+            return
+        }
 
         center.getNotificationSettings { [weak self] settings in
             guard let self = self else { return }
@@ -129,16 +155,20 @@ final class NotificationService: NSObject, @unchecked Sendable, UNUserNotificati
                     if granted {
                         self.logMessage("Notification permission granted upon request. Posting notification...", level: .info)
                         self.postNotificationRequest(center: center, content: content, identifier: identifier, logName: logName)
-                    } else if let error = error {
-                        self.logPermissionError(error)
                     } else {
-                        self.logMessage("Notification permission denied by user upon request.", level: .warning)
+                        if let error = error {
+                            self.logPermissionError(error)
+                        } else {
+                            self.logMessage("Notification permission denied by user upon request.", level: .warning)
+                        }
+                        self.fallbackDisplayNotification(title: content.title, body: content.body)
                     }
                 }
             case .authorized, .provisional:
                 self.postNotificationRequest(center: center, content: content, identifier: identifier, logName: logName)
             case .denied:
-                self.logMessage("Notification permission is denied in macOS Settings for Siphon.", level: .warning)
+                self.logMessage("Notification permission is denied in macOS Settings for Siphon. Using fallback...", level: .warning)
+                self.fallbackDisplayNotification(title: content.title, body: content.body)
             @unknown default:
                 self.postNotificationRequest(center: center, content: content, identifier: identifier, logName: logName)
             }
@@ -150,7 +180,8 @@ final class NotificationService: NSObject, @unchecked Sendable, UNUserNotificati
         let request = UNNotificationRequest(identifier: identifier, content: content, trigger: nil)
         center.add(request) { [weak self] error in
             if let error = error {
-                self?.logMessage("Notification send error (\(logName)): \(error.localizedDescription)", level: .error)
+                self?.logMessage("Notification send error (\(logName)): \(error.localizedDescription). Attempting fallback...", level: .error)
+                self?.fallbackDisplayNotification(title: content.title, body: content.body)
             } else {
                 self?.logMessage("Notification posted: \(logName)", level: .info)
             }

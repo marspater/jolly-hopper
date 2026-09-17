@@ -40,6 +40,12 @@ struct ContentView: View {
             mainLayout
                 .preferredColorScheme(theme == "light" ? .light : (theme == "dark" ? .dark : nil))
                 .background(MainWindowConfigurator())
+                .onAppear {
+                    SiphonTheme.applyTheme(theme)
+                }
+                .onChange(of: theme) { _, newTheme in
+                    SiphonTheme.applyTheme(newTheme)
+                }
                 .onChange(of: appState.showAddDownloadSheet) { _, newValue in
                     if newValue {
                         AddDownloadWindowManager.shared.showAddDownloadWindow(downloadManager: downloadManager, appState: appState, languageService: languageService)
@@ -562,6 +568,7 @@ struct StatusSegmentButton: View {
     let isActive: Bool
 
     @State private var isHovered = false
+    @ObservedObject private var renderingEnvironment = AdaptiveRenderingEnvironment.shared
 
     private var segmentSeed: Double {
         switch item {
@@ -584,8 +591,8 @@ struct StatusSegmentButton: View {
                 // Liquid water wave animation in accent color (ambient in background)
                 LiquidWaterWaveView(color: color, isHovered: isHovered, isActive: isActive, seed: segmentSeed)
                     .opacity(isActive ? 0.70 : (isHovered ? 0.45 : 0.15))
-                    .animation(.easeInOut(duration: 0.22), value: isHovered)
-                    .animation(.easeInOut(duration: 0.22), value: isActive)
+                    .animation(renderingEnvironment.reduceMotion ? nil : SiphonAnimation.hoverSpring, value: isHovered)
+                    .animation(renderingEnvironment.reduceMotion ? nil : SiphonAnimation.fluidSpring, value: isActive)
                     .zIndex(0)
 
                 // Status text, count, and progress ring prominently in the front
@@ -623,8 +630,12 @@ struct StatusSegmentButton: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(title): \(count)")
+        .accessibilityValue(isActive ? "Active" : "")
+        .accessibilityHint("Show \(title.lowercased()) downloads")
         .onHover { hovering in
-            withAnimation(.easeInOut(duration: 0.20)) {
+            withAnimation(SiphonAnimation.hoverSpring) {
                 isHovered = hovering
             }
         }

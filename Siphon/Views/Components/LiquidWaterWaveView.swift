@@ -117,6 +117,7 @@ struct LiquidWaterWaveView: View {
     var isHovered: Bool = false
     var isActive: Bool = false
     var seed: Double = 0.0
+    @ObservedObject private var renderingEnvironment = AdaptiveRenderingEnvironment.shared
 
     init(color: Color, isHovered: Bool = false, isActive: Bool = false, seed: Double = 0.0) {
         self.color = color
@@ -126,8 +127,8 @@ struct LiquidWaterWaveView: View {
     }
 
     var body: some View {
-        let reduceMotion = AdaptiveRenderingEnvironment.shared.reduceMotion
-        if reduceMotion {
+        let reduceMotion = renderingEnvironment.reduceMotion
+        if reduceMotion || (!isActive && !isHovered) {
             LinearGradient(
                 colors: [
                     color.opacity(isHovered ? 0.20 : 0.10),
@@ -138,7 +139,10 @@ struct LiquidWaterWaveView: View {
                 endPoint: .top
             )
         } else {
-            let minInterval = AdaptiveRenderingEnvironment.shared.isHighRefreshRate ? (1.0 / 120.0) : (1.0 / 60.0)
+            // Decorative motion should never compete with download progress rendering.
+            // 30 fps is visually continuous for this slow ambient treatment while
+            // avoiding constant redraws for every visible status segment.
+            let minInterval = 1.0 / 30.0
             TimelineView(.animation(minimumInterval: minInterval)) { timeline in
                 let time = timeline.date.timeIntervalSinceReferenceDate
                 let baseSpeed = isActive ? 0.95 : (isHovered ? 0.72 : 0.46)

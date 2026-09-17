@@ -86,6 +86,7 @@ struct DownloadRowView: View {
     @State private var isCopiedLog = false
     @State private var isCopiedError = false
     @State private var showRawError = false
+    @ObservedObject private var renderingEnvironment = AdaptiveRenderingEnvironment.shared
     
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -99,12 +100,14 @@ struct DownloadRowView: View {
                         .font(.geist(14, weight: .semibold))
                         .lineLimit(2)
                         .fixedSize(horizontal: false, vertical: true)
+                        .layoutPriority(1)
                     
                     // Line 2: Subtitle (Domain • Quality • Format • Duration)
                     Text(download.formatSubtitle(lang: languageService))
                         .font(.geist(12, weight: .medium))
                         .foregroundColor(.secondary)
                         .lineLimit(1)
+                        .truncationMode(.tail)
                     
                     // Line 3: Status / Progress / Metrics
                     if download.status == .downloading || download.status == .processing || download.status == .fetching {
@@ -173,8 +176,8 @@ struct DownloadRowView: View {
             SiphonTheme.cardBorder(cornerRadius: SiphonTheme.radiusCard, isHovered: isHovering)
         )
         .shadow(color: Color.black.opacity(isHovering ? 0.08 : 0.02), radius: isHovering ? 8 : 4, y: 2)
-        .scaleEffect(isHovering ? 1.004 : 1.0)
-        .animation(.spring(response: 0.3, dampingFraction: 0.75), value: isHovering)
+        .scaleEffect(renderingEnvironment.reduceMotion || !isHovering ? 1.0 : 1.004)
+        .animation(renderingEnvironment.reduceMotion ? nil : SiphonAnimation.hoverSpring, value: isHovering)
         .onHover { hovering in
             isHovering = hovering
         }
@@ -1096,7 +1099,7 @@ struct LinearProgressBar: View {
                     .fill(SiphonTheme.primaryGradient)
                     .frame(width: max(0, geometry.size.width * CGFloat(safeValue)))
                     .shadow(color: SiphonTheme.accent.opacity(0.35), radius: 3, y: 1)
-                    .animation(.linear(duration: 0.2), value: safeValue)
+                    .animation(.easeOut(duration: 0.12), value: safeValue)
             }
         }
         .frame(height: 5)

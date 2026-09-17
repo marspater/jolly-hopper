@@ -28,5 +28,13 @@
 			</array>
 		</dict>
 	</array>
+	<key>NSDownloadsFolderUsageDescription</key>
+	<string>Siphon needs access to your Downloads folder to save downloaded videos.</string>
+	<key>NSDocumentsFolderUsageDescription</key>
+	<string>Siphon needs access to your Documents folder to save downloaded videos.</string>
+	<key>NSDesktopFolderUsageDescription</key>
+	<string>Siphon needs access to your Desktop folder to save downloaded videos.</string>
+	<key>NSSystemAdministrationUsageDescription</key>
+	<string>Siphon needs permission to run media processing tools.</string>
 </dict>
 </plist>

@@ -140,7 +140,11 @@ struct AddDownloadView: View {
             SiphonTheme.subtleDivider
             footer
         }
-        .frame(minWidth: 480, idealWidth: 520, maxWidth: 620, minHeight: 560, idealHeight: 700, maxHeight: .infinity)
+        // The pre-fetch state contains only the URL input. Starting at the same
+        // height as the fully-expanded inspector leaves a visually inert window;
+        // the scroll view keeps metadata and advanced options resilient once they
+        // are available.
+        .frame(minWidth: 480, idealWidth: 520, maxWidth: 620, minHeight: 420, idealHeight: 440, maxHeight: .infinity)
         .preferredColorScheme(selectedTheme == "light" ? .light : (selectedTheme == "dark" ? .dark : nil))
         .background(.ultraThinMaterial)
         .onAppear {
