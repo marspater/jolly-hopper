@@ -51,6 +51,10 @@
 **Learning:** Calling `.filter` followed by `.sorted` on a collection inside conditional branches or helper functions executes $O(N \log N)$ sorting and heap allocations repeatedly. Caching the computed result lazily using an optional closure inside the function scope guarantees that filtering and sorting occur at most once per format selection pass.
 **Action:** Wrap repetitive array filtering/sorting in lazy local closure getters that cache the result across multiple branch evaluations.
 
+## 2026-09-15 - Eliminating Redundant Regexes and Short-Circuiting Trimming in File Deletion Loops
+**Learning:** Checking for temporary file extensions using `hasSuffix` (.part, .ytdl, .temp, .tmp) already matches files ending in those extensions. Executing `NSRegularExpression` evaluations like `\.f\d+\.part$` after `hasSuffix` is redundant because any string matching the regex necessarily ends with `.part`. Additionally, trimming base names inside directory loops allocates strings on every file iteration.
+**Action:** Remove redundant regex evaluations when `hasSuffix` checks cover the extension patterns, and short-circuit prefix matching to avoid unnecessary string trimming in loop iterations.
+
 ## 2026-09-16 - Character-Boundary Slicing & Attribute Caching in Log View Streaming
 **Learning:** Streaming log text into an AppKit `NSTextView` wrapper in SwiftUI via `updateNSView` creates unnecessary allocations and CPU overhead if `textView.string` is read repeatedly and font attributes are recreated on every pass. Reading `textView.string` once into a local constant, using `text.dropFirst(currentText.count)` for safe character-boundary suffix extraction, and caching font attributes in a `Coordinator` eliminates string bridging overhead, repeated system font table lookups, and dictionary allocations per log update.
 **Action:** In log view streaming components, read `textView.string` once, use `dropFirst` for safe character-boundary suffix extraction, and cache font attributes in `Coordinator`.

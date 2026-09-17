@@ -1143,11 +1143,7 @@ class DownloadManager: ObservableObject {
         return lower.hasSuffix(".part") ||
                lower.hasSuffix(".ytdl") ||
                lower.hasSuffix(".temp") ||
-               lower.hasSuffix(".tmp") ||
-               (lower.range(of: #"\.f\d+\.part$"#, options: .regularExpression) != nil) ||
-               (lower.range(of: #"\.f\d+\.ytdl$"#, options: .regularExpression) != nil) ||
-               (lower.range(of: #"\.f\d+\.temp$"#, options: .regularExpression) != nil) ||
-               (lower.range(of: #"\.f\d+\.tmp$"#, options: .regularExpression) != nil)
+               lower.hasSuffix(".tmp")
     }
 
     nonisolated static func isMatchingTemporaryFile(
@@ -1159,17 +1155,20 @@ class DownloadManager: ObservableObject {
         guard isTemporaryFileName(fileName) else { return false }
 
         let trimmedRaw = rawBaseName.trimmingCharacters(in: .whitespacesAndNewlines)
-        let trimmedSanitized = sanitizedBaseName.trimmingCharacters(in: .whitespacesAndNewlines)
-        let matchesPrefix = (!trimmedRaw.isEmpty && fileName.hasPrefix(trimmedRaw)) ||
-                            (!trimmedSanitized.isEmpty && fileName.hasPrefix(trimmedSanitized))
-        let matchesId: Bool
-        if let vid = videoId?.trimmingCharacters(in: .whitespacesAndNewlines), !vid.isEmpty, vid.count >= 4 {
-            matchesId = fileName.contains(vid)
-        } else {
-            matchesId = false
+        if !trimmedRaw.isEmpty && fileName.hasPrefix(trimmedRaw) {
+            return true
         }
 
-        return matchesPrefix || matchesId
+        let trimmedSanitized = sanitizedBaseName.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmedSanitized.isEmpty && fileName.hasPrefix(trimmedSanitized) {
+            return true
+        }
+
+        if let vid = videoId?.trimmingCharacters(in: .whitespacesAndNewlines), !vid.isEmpty, vid.count >= 4 {
+            return fileName.contains(vid)
+        }
+
+        return false
     }
 
     private func cleanupTemporaryFiles(for download: Download) {
