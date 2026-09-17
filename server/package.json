@@ -1,0 +1,14 @@
+{
+  "name": "siphon-companion",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Minimal companion web service for Siphon on Render",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
