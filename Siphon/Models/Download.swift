@@ -1189,6 +1189,19 @@ struct MediaInfo: Codable {
     func resolveSelectedFormats(options: DownloadOptions) -> [MediaFormat] {
         guard let formats = formats, !formats.isEmpty else { return [] }
         
+        // Bolt Performance Optimization: Lazily filter and sort audio formats at most once across resolution branches
+        var cachedBestAudio: MediaFormat?? = nil
+        let getBestAudio: () -> MediaFormat? = {
+            if let cached = cachedBestAudio {
+                return cached
+            }
+            let audioFormats = formats.filter { $0.isAudioOnly || ($0.vcodec == "none" || $0.vcodec == nil) }
+            let sorted = audioFormats.sorted { MediaFormat.compareAudioFormats($0, $1, options: options) }
+            let best = sorted.first
+            cachedBestAudio = best
+            return best
+        }
+
         // 1. If explicit selectedFormatId is specified (can be single like "137" or combined like "137+140"):
         if let customId = options.selectedFormatId?.trimmingCharacters(in: .whitespacesAndNewlines), !customId.isEmpty {
             // Bolt Performance Optimization: Use Substring `split` to avoid allocating intermediate String arrays.
@@ -1204,9 +1217,7 @@ struct MediaInfo: Codable {
                 } else if matched.count == 1 {
                     let single = matched[0]
                     if single.isVideoOnly && options.fileType.isVideo {
-                        let audioFormats = formats.filter { $0.isAudioOnly || ($0.vcodec == "none" || $0.vcodec == nil) }
-                        let sortedAudio = audioFormats.sorted { MediaFormat.compareAudioFormats($0, $1, options: options) }
-                        if let bestAudio = sortedAudio.first {
+                        if let bestAudio = getBestAudio() {
                             return [single, bestAudio]
                         }
                     }
@@ -1217,9 +1228,7 @@ struct MediaInfo: Codable {
         
         // 2. If audio-only download:
         if options.fileType.isAudio {
-            let audioFormats = formats.filter { $0.isAudioOnly || ($0.vcodec == "none" || $0.vcodec == nil) }
-            let sorted = audioFormats.sorted { MediaFormat.compareAudioFormats($0, $1, options: options) }
-            if let best = sorted.first {
+            if let best = getBestAudio() {
                 return [best]
             }
         }
@@ -1248,9 +1257,7 @@ struct MediaInfo: Codable {
         
         if let bestVideo = sortedVideos.first {
             if bestVideo.isVideoOnly {
-                let audioFormats = formats.filter { $0.isAudioOnly || ($0.vcodec == "none" || $0.vcodec == nil) }
-                let sortedAudio = audioFormats.sorted { MediaFormat.compareAudioFormats($0, $1, options: options) }
-                if let bestAudio = sortedAudio.first {
+                if let bestAudio = getBestAudio() {
                     return [bestVideo, bestAudio]
                 }
             }
