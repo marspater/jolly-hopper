@@ -661,5 +661,64 @@ final class MediaInfoTests: XCTestCase {
         XCTAssertNil(pruned.formatProtocol, "Format protocol should be pruned")
         XCTAssertNil(pruned.manifestUrl, "Manifest URL should be pruned")
     }
+
+    // MARK: - MediaInfo Encoding & Roundtrip Tests
+
+    func testMediaInfoEncodingAndDecodingRoundtrip() throws {
+        let original = MediaInfo(
+            id: "encode_test_123",
+            title: "Test Encoding Video",
+            description: "Test description",
+            thumbnail: "https://example.com/thumb.jpg",
+            duration: 120.0,
+            uploader: "Tester",
+            uploadDate: "20230101",
+            viewCount: 500,
+            likeCount: 50,
+            formats: [
+                MediaFormat(formatId: "18", ext: "mp4", resolution: "640x360", fps: 30, vcodec: "avc1.42001E", acodec: "mp4a.40.2")
+            ],
+            subtitles: [
+                "en": [SubtitleInfo(ext: "vtt", url: "https://example.com/sub.vtt", name: "English")]
+            ],
+            automaticCaptions: nil,
+            chapters: [
+                ChapterInfo(startTime: 0.0, endTime: 60.0, title: "Intro")
+            ],
+            playlist: "Test Playlist",
+            playlistIndex: 2,
+            playlistCount: 10,
+            webpageUrl: "https://example.com/watch?v=encode_test_123",
+            originalUrl: "https://example.com/watch?v=encode_test_123",
+            formatProtocol: "https",
+            manifestUrl: nil
+        )
+
+        let encoder = JSONEncoder()
+        let data = try encoder.encode(original)
+
+        let decoder = JSONDecoder()
+        let decoded = try decoder.decode(MediaInfo.self, from: data)
+
+        XCTAssertEqual(decoded.id, original.id)
+        XCTAssertEqual(decoded.title, original.title)
+        XCTAssertEqual(decoded.description, original.description)
+        XCTAssertEqual(decoded.thumbnail, original.thumbnail)
+        XCTAssertEqual(decoded.duration, original.duration)
+        XCTAssertEqual(decoded.uploader, original.uploader)
+        XCTAssertEqual(decoded.uploadDate, original.uploadDate)
+        XCTAssertEqual(decoded.viewCount, original.viewCount)
+        XCTAssertEqual(decoded.likeCount, original.likeCount)
+        XCTAssertEqual(decoded.formats?.count, 1)
+        XCTAssertEqual(decoded.formats?.first?.formatId, "18")
+        XCTAssertEqual(decoded.subtitles?["en"]?.count, 1)
+        XCTAssertEqual(decoded.chapters?.count, 1)
+        XCTAssertEqual(decoded.playlist, original.playlist)
+        XCTAssertEqual(decoded.playlistIndex, original.playlistIndex)
+        XCTAssertEqual(decoded.playlistCount, original.playlistCount)
+        XCTAssertEqual(decoded.webpageUrl, original.webpageUrl)
+        XCTAssertEqual(decoded.originalUrl, original.originalUrl)
+        XCTAssertEqual(decoded.formatProtocol, original.formatProtocol)
+    }
 }
 
