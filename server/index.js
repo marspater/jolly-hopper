@@ -67,7 +67,7 @@ async function getLatestRelease() {
     };
 
     return { ...cleanData, cached: false };
-  } catch (err) {
+  } catch {
     if (releaseCache.data) {
       return { ...releaseCache.data, cached: true, stale: true };
     }
