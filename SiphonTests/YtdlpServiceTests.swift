@@ -2127,6 +2127,109 @@ final class YtdlpServiceTests: XCTestCase {
 
 
 
+    func testBoyfriendTVRawCookieForwardingStaysWithinOriginalDomain() {
+        XCTAssertTrue(YtdlpService.shouldForwardBoyfriendTVRawCookies(
+            from: "https://www.boyfriendtv.com/videos/12345/test/",
+            to: "https://cdn.boyfriendtv.com/embed/12345/"
+        ))
+        XCTAssertTrue(YtdlpService.shouldForwardBoyfriendTVRawCookies(
+            from: "https://www.boyfriend.tv/videos/12345/test/",
+            to: "https://cdn.boyfriend.tv/embed/12345/"
+        ))
+        XCTAssertFalse(YtdlpService.shouldForwardBoyfriendTVRawCookies(
+            from: "https://www.boyfriendtv.com/videos/12345/test/",
+            to: "https://www.boyfriend.tv/embed/12345/"
+        ))
+        XCTAssertFalse(YtdlpService.shouldForwardBoyfriendTVRawCookies(
+            from: "https://www.boyfriend.tv/videos/12345/test/",
+            to: "https://www.boyfriendtv.com/embed/12345/"
+        ))
+    }
+
+    func testBoyfriendTVThumbnailRefererMatchesThumbnailDomainOnly() {
+        XCTAssertEqual(
+            YtdlpService.boyfriendTVThumbnailReferer(for: "https://cdn77-t.boyfriendtv.com/thumb.jpg"),
+            "https://www.boyfriendtv.com/"
+        )
+        XCTAssertEqual(
+            YtdlpService.boyfriendTVThumbnailReferer(for: "https://cdn.boyfriend.tv/thumb.jpg"),
+            "https://www.boyfriend.tv/"
+        )
+        XCTAssertNil(YtdlpService.boyfriendTVThumbnailReferer(for: "https://cdn.example.com/thumb.jpg"))
+    }
+
+    func testBoyfriendTVRawCookiesAreNotRescopedToCrossDomainEmbedFallback() async throws {
+        let previousBrowser = UserDefaults.standard.object(forKey: UserDefaultsKeys.browserForCookies)
+        UserDefaults.standard.set("chrome", forKey: UserDefaultsKeys.browserForCookies)
+        defer {
+            if let previousBrowser {
+                UserDefaults.standard.set(previousBrowser, forKey: UserDefaultsKeys.browserForCookies)
+            } else {
+                UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.browserForCookies)
+            }
+        }
+
+        let mainHTML = """
+        <html><head><title>Cross-domain embed test | BoyFriendTV</title></head><body>
+        <iframe src="https://www.boyfriend.tv/embed/12345/"></iframe>
+        </body></html>
+        """
+        let embedHTML = """
+        <html><body><script>
+        var playerConfig = {sources: {"hlsAuto":"https://cdn.boyfriend.tv/key=abc,end=123/media=hls4A/multi=854x480:v480/2026-09/_TPL_.mp4"}};
+        </script></body></html>
+        """
+        let manifestJSON = """
+        {
+            "id": "_TPL_",
+            "title": "Cross-domain embed test",
+            "duration": 60,
+            "formats": [
+                {"format_id": "480", "width": 854, "height": 480, "ext": "mp4", "protocol": "m3u8_native"}
+            ]
+        }
+        """
+
+        let mainB64 = mainHTML.data(using: .utf8)!.base64EncodedString()
+        let embedB64 = embedHTML.data(using: .utf8)!.base64EncodedString()
+        let capturedArgs = TestBox<[[String]]>([])
+
+        service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
+            capturedArgs.value.append(args)
+            if args.contains("--dump-pages") {
+                if args.last?.contains("boyfriendtv.com/videos/12345/") == true {
+                    return mainB64
+                }
+                if args.last?.contains("boyfriend.tv/embed/12345/") == true {
+                    return embedB64
+                }
+            }
+            if args.contains("--dump-json") {
+                return manifestJSON
+            }
+            return "{}"
+        })
+
+        let info = try await service.fetchInfo(
+            url: "https://www.boyfriendtv.com/videos/12345/test/",
+            rawCookies: "session=extension_cookie"
+        )
+        XCTAssertEqual(info.title, "Cross-domain embed test")
+
+        let originalDomainCalls = capturedArgs.value.filter { args in
+            args.contains("--dump-pages") && args.last?.contains("boyfriendtv.com/videos/12345/") == true
+        }
+        XCTAssertTrue(originalDomainCalls.contains(where: { $0.contains("--cookies") }),
+                      "Raw extension cookies must still be used on the original .com domain")
+
+        let crossDomainEmbedCalls = capturedArgs.value.filter { args in
+            args.contains("--dump-pages") && args.last?.contains("boyfriend.tv/embed/12345/") == true
+        }
+        XCTAssertFalse(crossDomainEmbedCalls.isEmpty, "Cross-domain embed fallback should still be attempted")
+        XCTAssertTrue(crossDomainEmbedCalls.allSatisfy { !$0.contains("--cookies") },
+                     "Raw extension cookies must never be re-scoped from .com onto .tv")
+    }
+
     func testMediaFormatDecodesTBRAndNeedsTesting() throws {
         let json = """
         {
