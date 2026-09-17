@@ -279,8 +279,56 @@ class LoggerService: ObservableObject {
         log("Logs cleared", level: .info)
     }
     
-    func exportLogs() -> URL {
-        return logFileURL
+    nonisolated static func sanitizeLogContentForExport(_ content: String) -> String {
+        var sanitized = content
+        
+        // 1. Redact Bearer / Basic / Token authorization headers
+        let authRegex = try? NSRegularExpression(pattern: "(?i)(Authorization:\\s*(?:Bearer|Basic|Token)\\s+)[A-Za-z0-9._~+/=-]+", options: [])
+        if let regex = authRegex {
+            sanitized = regex.stringByReplacingMatches(in: sanitized, options: [], range: NSRange(location: 0, length: sanitized.utf16.count), withTemplate: "$1<REDACTED_AUTH>")
+        }
+        
+        // 2. Redact cookie headers or cookie parameter lines
+        let cookieHeaderRegex = try? NSRegularExpression(pattern: "(?i)(Cookie:\\s*)[^\r\n]+", options: [])
+        if let regex = cookieHeaderRegex {
+            sanitized = regex.stringByReplacingMatches(in: sanitized, options: [], range: NSRange(location: 0, length: sanitized.utf16.count), withTemplate: "$1<REDACTED_COOKIES>")
+        }
+        
+        // 3. Redact common query secrets in URLs
+        let secretQueryRegex = try? NSRegularExpression(pattern: "(?i)([?&](?:token|auth|key|api_key|password|secret|sig|signature)=)[^&\\s\\r\\n]+", options: [])
+        if let regex = secretQueryRegex {
+            sanitized = regex.stringByReplacingMatches(in: sanitized, options: [], range: NSRange(location: 0, length: sanitized.utf16.count), withTemplate: "$1<REDACTED>")
+        }
+        
+        // 4. Redact username from /Users/<username>/
+        let homeDirRegex = try? NSRegularExpression(pattern: "/Users/([a-zA-Z0-9._-]+)/", options: [])
+        if let regex = homeDirRegex {
+            sanitized = regex.stringByReplacingMatches(in: sanitized, options: [], range: NSRange(location: 0, length: sanitized.utf16.count), withTemplate: "/Users/<USER>/")
+        }
+        
+        return sanitized
+    }
+
+    func exportLogs() async throws -> URL {
+        let fileURL = logFileURL
+        return try await Task.detached(priority: .userInitiated) { [fileURL] () -> URL in
+            let fm = FileManager.default
+            let exportFilename = "Siphon_Exported_Logs_\(Int(Date().timeIntervalSince1970)).log"
+            let exportURL = fm.temporaryDirectory.appendingPathComponent(exportFilename)
+
+            let rawContent = (try? String(contentsOf: fileURL, encoding: .utf8)) ?? ""
+            let sanitized = Self.sanitizeLogContentForExport(rawContent)
+            guard let data = sanitized.data(using: .utf8) else {
+                throw NSError(domain: "LoggerService", code: 1, userInfo: [NSLocalizedDescriptionKey: "Failed to encode sanitized logs"])
+            }
+
+            if !fm.createFile(atPath: exportURL.path, contents: data, attributes: [.posixPermissions: 0o600]) {
+                try sanitized.write(to: exportURL, atomically: true, encoding: .utf8)
+                try? fm.setAttributes([.posixPermissions: 0o600], ofItemAtPath: exportURL.path)
+            }
+
+            return exportURL
+        }.value
     }
     
     enum LogLevel: String {

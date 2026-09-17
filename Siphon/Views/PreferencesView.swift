@@ -159,9 +159,12 @@ struct PreferencesView: View {
         }
         .onAppear {
             previousLanguage = languageService.selectedLanguage
-            installedBrowsers = BrowserUtils.shared.getInstalledBrowsers()
             customPresets = CustomPreset.loadAll()
             hasFullDiskAccess = YtdlpService.hasFullDiskAccess
+            Task {
+                await BrowserUtils.shared.clearCache()
+                installedBrowsers = await BrowserUtils.shared.getInstalledBrowsers()
+            }
         }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             let access = YtdlpService.hasFullDiskAccess
