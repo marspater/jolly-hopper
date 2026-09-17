@@ -54,3 +54,7 @@
 ## 2026-09-16 - Character-Boundary Slicing & Attribute Caching in Log View Streaming
 **Learning:** Streaming log text into an AppKit `NSTextView` wrapper in SwiftUI via `updateNSView` creates unnecessary allocations and CPU overhead if `textView.string` is read repeatedly and font attributes are recreated on every pass. Reading `textView.string` once into a local constant, using `text.dropFirst(currentText.count)` for safe character-boundary suffix extraction, and caching font attributes in a `Coordinator` eliminates string bridging overhead, repeated system font table lookups, and dictionary allocations per log update.
 **Action:** In log view streaming components, read `textView.string` once, use `dropFirst` for safe character-boundary suffix extraction, and cache font attributes in `Coordinator`.
+
+## 2026-09-17 - Zero-Allocation Set Initialization via `lazy.map` Key-Paths
+**Learning:** Constructing a `Set` from a collection via `Set(items.map { $0.id })` allocates an intermediate `Array` buffer on the heap before constructing the `Set`. Passing `items.lazy.map(\.id)` directly into `Set.init(_:)` streams elements into the `Set` without intermediate array allocation.
+**Action:** Use `Set(collection.lazy.map(\.property))` instead of `Set(collection.map { $0.property })` to prevent temporary array allocations.
