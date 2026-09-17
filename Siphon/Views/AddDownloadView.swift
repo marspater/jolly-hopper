@@ -5,6 +5,17 @@ struct AddDownloadView: View {
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var languageService: LanguageService
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.controlActiveState) private var controlActiveState
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @FocusState private var focusedField: InputField?
+
+    private enum InputField: Hashable {
+        case url, batch, filename, arguments
+    }
+
+    private func showsFocus(_ field: InputField) -> Bool {
+        focusedField == field && controlActiveState == .key
+    }
     @AppStorage("selectedPreset") private var selectedPreset: String = "best_quality"
     @AppStorage("selectedCustomPresetId") private var selectedCustomPresetIdString: String = ""
     @AppStorage("defaultAdditionalArguments") private var defaultAdditionalArguments: String = ""
@@ -100,41 +111,63 @@ struct AddDownloadView: View {
         return VideoResolution.allCases
     }
 
+    private var settingsAnimation: Animation? {
+        reduceMotion ? nil : .smooth(duration: 0.28)
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             header
             SiphonTheme.subtleDivider
 
-            ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
-                    if inputMode == .single {
-                        urlSection
+            ScrollViewReader { scrollProxy in
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 20) {
+                        if inputMode == .single {
+                            urlSection
 
-                        if let info = mediaInfo {
-                            if !showPlaylistSelector {
-                                mediaInfoSection(info)
+                            if let info = mediaInfo {
+                                if !showPlaylistSelector {
+                                    mediaInfoSection(info)
 
-                                if info.playlist != nil {
-                                    playlistDetectedBanner
+                                    if info.playlist != nil {
+                                        playlistDetectedBanner
+                                    }
+                                } else {
+                                    playlistSelectorSection
                                 }
-                            } else {
-                                playlistSelectorSection
+
+                                formatSection
+                                saveSection
+                                optionalSettingsSection
+                                    .id("optionalSettings")
+                                advancedSettingsSection(info)
+                                    .id("advancedSettings")
                             }
 
-                            formatSection
-                            saveSection
-                            optionalSettingsSection
-                            advancedSettingsSection(info)
+                            if let error = errorMessage {
+                                errorSection(error)
+                            }
+                        } else {
+                            batchSection
                         }
-
-                        if let error = errorMessage {
-                            errorSection(error)
+                    }
+                    .padding(20)
+                }
+                .onChange(of: showOptionalSettings) { _, expanded in
+                    if expanded {
+                        withAnimation(settingsAnimation) {
+                            scrollProxy.scrollTo("optionalSettings", anchor: .top)
                         }
-                    } else {
-                        batchSection
                     }
                 }
-                .padding(20)
+                .onChange(of: showAdvancedSettings) { _, expanded in
+                    if expanded {
+                        withAnimation(settingsAnimation) {
+                            scrollProxy.scrollTo("advancedSettings", anchor: .top)
+                        }
+                    }
+                }
             }
 
             SiphonTheme.subtleDivider
@@ -148,6 +181,7 @@ struct AddDownloadView: View {
         .preferredColorScheme(selectedTheme == "light" ? .light : (selectedTheme == "dark" ? .dark : nil))
         .background(.ultraThinMaterial)
         .onAppear {
+            focusedField = .url
             let loadedPresets = CustomPreset.loadAll()
             self.customPresets = loadedPresets
 
@@ -342,16 +376,17 @@ struct AddDownloadView: View {
                             .allowsHitTesting(false)
                     }
                     TextEditor(text: $batchUrlsText)
+                        .focused($focusedField, equals: .batch)
                         .font(.geistMono(12))
                         .scrollContentBackground(.hidden)
                         .frame(minHeight: 120, idealHeight: 150, maxHeight: 220)
                         .padding(6)
                         .accessibilityLabel(languageService.s("paste_multiple_urls"))
                 }
-                .background(SiphonTheme.fieldBackground(cornerRadius: SiphonTheme.radiusControl))
+                .background(SiphonTheme.fieldBackground(cornerRadius: SiphonTheme.radiusControl, isFocused: showsFocus(.batch)))
                 .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusControl, style: .continuous))
                 .overlay(
-                    SiphonTheme.fieldBorder(cornerRadius: SiphonTheme.radiusControl)
+                    SiphonTheme.fieldBorder(cornerRadius: SiphonTheme.radiusControl, isFocused: showsFocus(.batch))
                 )
 
                 HStack(spacing: 10) {
@@ -546,6 +581,7 @@ struct AddDownloadView: View {
             HStack(spacing: 8) {
                 HStack(spacing: 6) {
                     TextField(languageService.s("url_hint"), text: $urlInput)
+                        .focused($focusedField, equals: .url)
                         .font(.geistMono(12, relativeTo: .body))
                         .textFieldStyle(.plain)
                         .accessibilityLabel(languageService.s("video_url"))
@@ -568,10 +604,10 @@ struct AddDownloadView: View {
                 }
                 .padding(.horizontal, SiphonTheme.spacing10)
                 .padding(.vertical, 7)
-                .background(SiphonTheme.fieldBackground(cornerRadius: SiphonTheme.radiusControl, isFocused: !urlInput.isEmpty))
+                .background(SiphonTheme.fieldBackground(cornerRadius: SiphonTheme.radiusControl, isFocused: showsFocus(.url)))
                 .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusControl, style: .continuous))
                 .overlay(
-                    SiphonTheme.fieldBorder(cornerRadius: SiphonTheme.radiusControl, isFocused: !urlInput.isEmpty)
+                    SiphonTheme.fieldBorder(cornerRadius: SiphonTheme.radiusControl, isFocused: showsFocus(.url))
                 )
 
                 Button {
@@ -1115,12 +1151,13 @@ struct AddDownloadView: View {
     private var optionalSettingsSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             Button {
-                withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) {
+                withAnimation(settingsAnimation) {
                     showOptionalSettings.toggle()
                 }
             } label: {
                 HStack(spacing: 8) {
-                    Image(systemName: showOptionalSettings ? "chevron.down" : "chevron.right")
+                    Image(systemName: "chevron.right")
+                        .rotationEffect(.degrees(showOptionalSettings ? 90 : 0))
                         .font(.geist(11, weight: .bold))
                         .foregroundColor(SiphonTheme.accent)
                         .frame(width: 12)
@@ -1155,15 +1192,16 @@ struct AddDownloadView: View {
                                 .foregroundColor(.secondary)
                                 .frame(width: 14)
                             TextField(languageService.s("custom_filename_hint"), text: $customFilename)
+                                .focused($focusedField, equals: .filename)
                                 .font(.geist(12))
                                 .textFieldStyle(.plain)
                         }
                         .padding(.horizontal, 10)
                         .padding(.vertical, 6)
-                        .background(SiphonTheme.fieldBackground(cornerRadius: SiphonTheme.radiusControl, isFocused: !customFilename.isEmpty))
+                        .background(SiphonTheme.fieldBackground(cornerRadius: SiphonTheme.radiusControl, isFocused: showsFocus(.filename)))
                         .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusControl, style: .continuous))
                         .overlay(
-                            SiphonTheme.fieldBorder(cornerRadius: SiphonTheme.radiusControl, isFocused: !customFilename.isEmpty)
+                            SiphonTheme.fieldBorder(cornerRadius: SiphonTheme.radiusControl, isFocused: showsFocus(.filename))
                         )
                     }
 
@@ -1279,7 +1317,7 @@ struct AddDownloadView: View {
                 .overlay(
                     SiphonTheme.cardBorder(cornerRadius: SiphonTheme.radiusCard)
                 )
-                .transition(.opacity.combined(with: .move(edge: .top)))
+                .transition(.opacity)
             }
         }
     }
@@ -1287,12 +1325,13 @@ struct AddDownloadView: View {
     private func advancedSettingsSection(_ info: MediaInfo?) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             Button {
-                withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) {
+                withAnimation(settingsAnimation) {
                     showAdvancedSettings.toggle()
                 }
             } label: {
                 HStack(spacing: 8) {
-                    Image(systemName: showAdvancedSettings ? "chevron.down" : "chevron.right")
+                    Image(systemName: "chevron.right")
+                        .rotationEffect(.degrees(showAdvancedSettings ? 90 : 0))
                         .font(.geist(11, weight: .bold))
                         .foregroundColor(SiphonTheme.accent)
                         .frame(width: 12)
@@ -1412,15 +1451,16 @@ struct AddDownloadView: View {
                                 .foregroundColor(.secondary)
                                 .frame(width: 14)
                             TextField(languageService.s("additional_arguments_hint"), text: $additionalArguments)
+                                .focused($focusedField, equals: .arguments)
                                 .font(.geistMono(11))
                                 .textFieldStyle(.plain)
                         }
                         .padding(.horizontal, 10)
                         .padding(.vertical, 6)
-                        .background(SiphonTheme.fieldBackground(cornerRadius: SiphonTheme.radiusControl, isFocused: !additionalArguments.isEmpty))
+                        .background(SiphonTheme.fieldBackground(cornerRadius: SiphonTheme.radiusControl, isFocused: showsFocus(.arguments)))
                         .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusControl, style: .continuous))
                         .overlay(
-                            SiphonTheme.fieldBorder(cornerRadius: SiphonTheme.radiusControl, isFocused: !additionalArguments.isEmpty)
+                            SiphonTheme.fieldBorder(cornerRadius: SiphonTheme.radiusControl, isFocused: showsFocus(.arguments))
                         )
                     }
 
@@ -1445,7 +1485,7 @@ struct AddDownloadView: View {
                 .overlay(
                     SiphonTheme.cardBorder(cornerRadius: SiphonTheme.radiusCard)
                 )
-                .transition(.opacity.combined(with: .move(edge: .top)))
+                .transition(.opacity)
             }
         }
     }
