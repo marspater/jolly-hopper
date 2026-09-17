@@ -39,6 +39,14 @@ describe('Siphon Companion Server', () => {
     assert.equal(data.status, 'ok');
   });
 
+  test('GET /healthz returns 200 with status ok', async () => {
+    const res = await fetch(`${baseUrl}/healthz`);
+    assert.equal(res.status, 200);
+    assert.equal(res.headers.get('content-type'), 'application/json');
+    const data = await res.json();
+    assert.equal(data.status, 'ok');
+  });
+
   test('GET /unknown returns 404', async () => {
     const res = await fetch(`${baseUrl}/unknown-endpoint`);
     assert.equal(res.status, 404);

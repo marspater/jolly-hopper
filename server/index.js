@@ -5,7 +5,7 @@ function createServer() {
     const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
     const pathname = url.pathname;
 
-    if (req.method === 'GET' && (pathname === '/' || pathname === '/health')) {
+    if (req.method === 'GET' && (pathname === '/' || pathname === '/health' || pathname === '/healthz')) {
       const payload = JSON.stringify({
         status: 'ok',
         service: 'siphon-companion',
