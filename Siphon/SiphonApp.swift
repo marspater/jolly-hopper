@@ -674,12 +674,14 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
             }
 
             let exitCode = process.terminationStatus
-            var statusFound: String? = nil
-            if let data = try? Data(contentsOf: statusFile),
-               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-               let status = json["status"] as? String {
-                statusFound = status
-            }
+            let statusFound: String? = await Task.detached(priority: .utility) { () -> String? in
+                guard let data = try? Data(contentsOf: statusFile),
+                      let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                      let status = json["status"] as? String else {
+                    return nil
+                }
+                return status
+            }.value
 
             self.isInstalling = false
             if exitCode == 0 && statusFound == "SUCCESS" {
