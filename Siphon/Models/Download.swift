@@ -19,6 +19,11 @@ class Download: ObservableObject, Identifiable {
     var primaryFilePath: URL? {
         filePaths.first
     }
+    var filePathStrings: [String] {
+        if filePaths.isEmpty { return [] }
+        if filePaths.count == 1 { return [filePaths[0].path] }
+        return filePaths.map { $0.path }
+    }
 
     @Published var errorMessage: String?
     @Published var log: String = ""
@@ -1879,7 +1884,7 @@ struct HistoricDownload: Codable, Identifiable {
         self.id = download.id
         self.url = download.url
         self.title = download.title
-        self.filePaths = download.filePaths.map { $0.path }
+        self.filePaths = download.filePathStrings
         self.downloadDate = download.createdAt
         self.fileType = download.options.fileType
         self.status = download.status
@@ -1945,7 +1950,13 @@ struct HistoricDownload: Codable, Identifiable {
         download.duration = self.duration
         download.errorMessage = self.errorMessage
         download.log = self.log
-        download.filePaths = self.filePaths.map { URL(fileURLWithPath: $0) }
+        if self.filePaths.isEmpty {
+            download.filePaths = []
+        } else if self.filePaths.count == 1 {
+            download.filePaths = [URL(fileURLWithPath: self.filePaths[0])]
+        } else {
+            download.filePaths = self.filePaths.map { URL(fileURLWithPath: $0) }
+        }
         return download
     }
 }

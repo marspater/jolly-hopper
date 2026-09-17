@@ -410,7 +410,7 @@ struct DownloadDiagnosticsView: View {
         - **yt-dlp**: \(download.diagnostics.ytdlpVersion ?? "N/A")
         - **FFmpeg**: \(download.diagnostics.ffmpegVersion ?? "N/A")
         - **Exit Status**: \(download.diagnostics.exitStatus ?? "N/A")
-        - **Path(s)**: \(download.filePaths.isEmpty ? (download.primaryFilePath?.path ?? "N/A") : download.filePaths.map { $0.path }.joined(separator: ", "))
+        - **Path(s)**: \(download.filePathStrings.isEmpty ? "N/A" : download.filePathStrings.joined(separator: ", "))
         """
         copyToClipboard(report, label: "Markdown report copied!")
     }

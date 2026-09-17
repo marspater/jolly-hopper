@@ -563,7 +563,7 @@ struct FileThumbnailView: View {
                         
                         Button {
                             NSPasteboard.general.clearContents()
-                            let pathsString = download.filePaths.map { $0.path }.joined(separator: "\n")
+                            let pathsString = download.filePathStrings.joined(separator: "\n")
                             NSPasteboard.general.setString(pathsString, forType: .string)
                         } label: {
                             Label(download.filePaths.count > 1 ? languageService.s("copy_all_paths") : languageService.s("copy_file_path"), systemImage: "doc.on.doc")
@@ -911,7 +911,7 @@ struct FileThumbnailView: View {
 
                 Button {
                     NSPasteboard.general.clearContents()
-                    let pathsJoined = download.filePaths.map { $0.path }.joined(separator: "\n")
+                    let pathsJoined = download.filePathStrings.joined(separator: "\n")
                     NSPasteboard.general.setString(pathsJoined, forType: .string)
                 } label: {
                     Label(download.filePaths.count > 1 ? languageService.s("copy_all_paths") : languageService.s("copy_file_path"), systemImage: "doc.on.doc")
