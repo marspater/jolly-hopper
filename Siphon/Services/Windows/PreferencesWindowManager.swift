@@ -9,6 +9,12 @@ final class PreferencesWindowManager: NSObject, NSWindowDelegate {
     
     func showPreferencesWindow(languageService: LanguageService, updateChecker: UpdateChecker, downloadManager: DownloadManager, initialTab: PreferencesView.PreferenceTab = .general) {
         if let existingController = windowController, let existingWindow = existingController.window {
+            if existingWindow.frame.height < 680 {
+                var f = existingWindow.frame
+                f.size.height = 700
+                f.size.width = max(f.size.width, 520)
+                existingWindow.setFrame(f, display: true, animate: true)
+            }
             existingWindow.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
             return
@@ -22,7 +28,7 @@ final class PreferencesWindowManager: NSObject, NSWindowDelegate {
         let hostingController = NSHostingController(rootView: prefsView)
         
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 520, height: 500),
+            contentRect: NSRect(x: 0, y: 0, width: 520, height: 700),
             styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
             backing: .buffered,
             defer: false
@@ -34,7 +40,7 @@ final class PreferencesWindowManager: NSObject, NSWindowDelegate {
         window.center()
         window.isReleasedWhenClosed = false
         window.title = languageService.s("preferences")
-        window.minSize = NSSize(width: 500, height: 460)
+        window.minSize = NSSize(width: 500, height: 680)
         window.contentViewController = hostingController
         window.delegate = self
         
