@@ -627,6 +627,37 @@ public struct SiphonWindowBackgroundModifier: ViewModifier {
     }
 }
 
+// MARK: - Native Liquid Glass Surface
+
+public struct SiphonGlassSurfaceModifier: ViewModifier {
+    public var cornerRadius: CGFloat
+
+    @ObservedObject private var renderingEnvironment = AdaptiveRenderingEnvironment.shared
+
+    public init(cornerRadius: CGFloat = SiphonTheme.radiusCard) {
+        self.cornerRadius = cornerRadius
+    }
+
+    @ViewBuilder
+    public func body(content: Content) -> some View {
+        let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+
+        if renderingEnvironment.materialMode == .opaque {
+            content
+                .background(shape.fill(Color(nsColor: .controlBackgroundColor)))
+                .overlay(shape.stroke(Color(nsColor: .separatorColor), lineWidth: 1))
+                .clipShape(shape)
+        } else if #available(macOS 26.0, *) {
+            content.glassEffect(.regular.interactive(), in: shape)
+        } else {
+            content
+                .background(shape.fill(.ultraThinMaterial))
+                .overlay(SiphonTheme.cardBorder(cornerRadius: cornerRadius))
+                .clipShape(shape)
+        }
+    }
+}
+
 // MARK: - Modern Smooth Spinner
 public struct SiphonSpinner: View {
     public var size: CGFloat
@@ -1184,6 +1215,12 @@ extension View {
     /// Uses the app's glass surface while respecting Reduce Transparency.
     public func siphonWindowBackground() -> some View {
         modifier(SiphonWindowBackgroundModifier())
+    }
+
+    /// Uses native interactive Liquid Glass on macOS 26+ with the existing
+    /// adaptive material treatment as a fallback.
+    public func siphonGlassSurface(cornerRadius: CGFloat = SiphonTheme.radiusCard) -> some View {
+        modifier(SiphonGlassSurfaceModifier(cornerRadius: cornerRadius))
     }
 
     @ViewBuilder
