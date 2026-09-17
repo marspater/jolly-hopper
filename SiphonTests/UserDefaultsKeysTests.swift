@@ -28,3 +28,28 @@ final class UserDefaultsKeysTests: XCTestCase {
         XCTAssertEqual(UserDefaultsKeys.resolutionFallbackPolicy, "resolutionFallbackPolicy")
     }
 }
+
+final class GeistFontRegistrarTests: XCTestCase {
+    func testFontFilesList() {
+        XCTAssertEqual(GeistFontRegistrar.fontFiles.count, 9)
+        XCTAssertTrue(GeistFontRegistrar.fontFiles.contains("Geist-Regular.otf"))
+        XCTAssertTrue(GeistFontRegistrar.fontFiles.contains("GeistMono-Regular.otf"))
+    }
+
+    func testLocateResourceNonExistent() {
+        let url = GeistFontRegistrar.locateResource(for: "NonExistentFont_\(UUID().uuidString).otf", in: .main)
+        XCTAssertNil(url)
+    }
+
+    func testRegisterFontResourcesEmptyList() {
+        let result = GeistFontRegistrar.registerFontResources([], from: .main)
+        XCTAssertFalse(result)
+    }
+
+    @MainActor
+    func testRegisterFontsIdempotency() {
+        // Repeated calls to registerFonts should complete safely without throwing or crashing
+        GeistFontRegistrar.registerFonts()
+        GeistFontRegistrar.registerFonts()
+    }
+}
