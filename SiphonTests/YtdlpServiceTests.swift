@@ -743,6 +743,33 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertFalse(sanitized.contains("sig"))
     }
 
+    func testLoggerServiceSanitizeURLForLogWithCredentialsAndPort() {
+        // User/password basic auth credentials in URL
+        let urlWithAuth = "https://user:pass123@example.com/video/stream.m3u8?key=val"
+        let sanitizedAuth = LoggerService.sanitizeURLForLog(urlWithAuth)
+        XCTAssertEqual(sanitizedAuth, "https://example.com/video/stream.m3u8")
+        XCTAssertFalse(sanitizedAuth.contains("user"))
+        XCTAssertFalse(sanitizedAuth.contains("pass123"))
+
+        // HTTP scheme with custom port and credentials
+        let urlWithPort = "http://admin:secret@localhost:8080/api/v1/download?id=12#section"
+        let sanitizedPort = LoggerService.sanitizeURLForLog(urlWithPort)
+        XCTAssertEqual(sanitizedPort, "http://localhost:8080/api/v1/download")
+        XCTAssertFalse(sanitizedPort.contains("admin"))
+        XCTAssertFalse(sanitizedPort.contains("secret"))
+
+        // Clean URL with no parameters or credentials
+        let cleanURL = "https://example.com/media/file.mp4"
+        XCTAssertEqual(LoggerService.sanitizeURLForLog(cleanURL), "https://example.com/media/file.mp4")
+
+        // Invalid or malformed URL
+        let malformedURL = "not a valid url with spaces"
+        XCTAssertEqual(LoggerService.sanitizeURLForLog(malformedURL), "not a valid url with spaces")
+
+        // Empty string
+        XCTAssertEqual(LoggerService.sanitizeURLForLog(""), "")
+    }
+
     func testThreadSafeOutputStateCandidateHandling() {
         let state = ThreadSafeOutputState()
         state.addCandidatePath("   \"/tmp/downloaded_video.mp4\"   ")
