@@ -764,7 +764,7 @@ final class YtdlpServiceTests: XCTestCase {
 
         // Invalid or malformed URL
         let malformedURL = "not a valid url with spaces"
-        XCTAssertEqual(LoggerService.sanitizeURLForLog(malformedURL), "not a valid url with spaces")
+        XCTAssertEqual(LoggerService.sanitizeURLForLog(malformedURL), "not%20a%20valid%20url%20with%20spaces")
 
         // Empty string
         XCTAssertEqual(LoggerService.sanitizeURLForLog(""), "")
