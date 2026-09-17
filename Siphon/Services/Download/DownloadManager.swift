@@ -129,6 +129,16 @@ class DownloadManager: ObservableObject {
         statusCounts.failed
     }
 
+    /// The most useful destination for the Home screen's "See All" actions.
+    /// Active work takes precedence, followed by queued work and then failures.
+    var mostRelevantNavigationItem: NavigationItem {
+        let counts = statusCounts
+        if counts.downloading > 0 { return .downloading }
+        if counts.queued > 0 { return .queued }
+        if counts.failed > 0 { return .failed }
+        return .completed
+    }
+
 
 
     func initialize(languageService: LanguageService, skipBinarySetup: Bool = false) async {

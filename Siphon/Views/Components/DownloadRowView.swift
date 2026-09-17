@@ -57,7 +57,7 @@ struct DownloadListView: View {
                 }
             }
         }
-        .background(.ultraThinMaterial)
+        .siphonWindowBackground()
     }
     
     private var emptyState: some View {
@@ -340,6 +340,43 @@ struct DownloadRowView: View {
     }
     
     private var thumbnailView: some View {
+        Group {
+            if canPreviewMedia {
+                Button(action: previewMedia) {
+                    thumbnailContent
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(thumbnailAccessibilityLabel)
+                .accessibilityHint("Press Space to preview media")
+            } else {
+                thumbnailContent
+                    .accessibilityElement(children: .combine)
+                    .accessibilityLabel(thumbnailAccessibilityLabel)
+            }
+        }
+        .frame(width: 120, height: 68)
+        .overlay(
+            RoundedRectangle(cornerRadius: SiphonTheme.radiusControl)
+                .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+        )
+        .help(canPreviewMedia ? languageService.s("click_to_quick_look") : "")
+    }
+
+    private var canPreviewMedia: Bool {
+        guard download.status == .completed, let path = download.primaryFilePath else { return false }
+        return FileManager.default.fileExists(atPath: path.path)
+    }
+
+    private var thumbnailAccessibilityLabel: String {
+        download.displayTitle.isEmpty ? "Media preview" : "\(download.displayTitle) thumbnail"
+    }
+
+    private func previewMedia() {
+        guard canPreviewMedia, let path = download.primaryFilePath else { return }
+        QuickLookPreviewHelper.shared.preview(url: path)
+    }
+
+    private var thumbnailContent: some View {
         ZStack(alignment: .bottomTrailing) {
             Group {
                 if let url = download.thumbnailURL, let scheme = url.scheme?.lowercased(), (scheme == "http" || scheme == "https") {
@@ -369,21 +406,19 @@ struct DownloadRowView: View {
             .contentShape(Rectangle())
             .clipped()
             .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusControl))
-            
+
             // Hover play/quicklook overlay for completed files
-            if download.status == .completed, let path = download.primaryFilePath, FileManager.default.fileExists(atPath: path.path) {
-                if isHovering {
-                    ZStack {
-                        Color.black.opacity(0.35)
-                        Image(systemName: "eye.fill")
-                            .font(.system(size: 18, weight: .bold))
-                            .foregroundColor(.white)
-                            .shadow(radius: 3)
-                    }
-                    .transition(.opacity)
+            if canPreviewMedia, isHovering {
+                ZStack {
+                    Color.black.opacity(0.35)
+                    Image(systemName: "eye.fill")
+                        .font(.system(size: 18, weight: .bold))
+                        .foregroundColor(.white)
+                        .shadow(radius: 3)
                 }
+                .transition(.opacity)
             }
-            
+
             // HDR Badge tag on thumbnail if HDR detected
             if let hdr = download.diagnostics.hdrSummary ?? download.mediaInfo?.firstHDRSummary {
                 VStack {
@@ -396,21 +431,6 @@ struct DownloadRowView: View {
                 }
             }
         }
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel(download.displayTitle.isEmpty ? "Media preview" : "\(download.displayTitle) thumbnail")
-        .accessibilityHint(download.status == .completed && download.primaryFilePath != nil ? "Double click or press space to preview media" : "")
-        .accessibilityAddTraits(download.status == .completed && download.primaryFilePath != nil ? .isButton : [])
-        .frame(width: 120, height: 68)
-        .overlay(
-            RoundedRectangle(cornerRadius: SiphonTheme.radiusControl)
-                .stroke(Color.primary.opacity(0.08), lineWidth: 1)
-        )
-        .onTapGesture {
-            if download.status == .completed, let path = download.primaryFilePath, FileManager.default.fileExists(atPath: path.path) {
-                QuickLookPreviewHelper.shared.preview(url: path)
-            }
-        }
-        .help(download.status == .completed ? languageService.s("click_to_quick_look") : "")
     }
     
     private var thumbnailPlaceholder: some View {
@@ -492,7 +512,7 @@ struct FileThumbnailView: View {
                     .accessibilityLabel(languageService.s("quick_look"))
                 }
                 
-                if let path = download.primaryFilePath {
+                if let path = download.primaryFilePath, FileManager.default.fileExists(atPath: path.path) {
                     Button {
                         downloadManager.openFile(path)
                     } label: {
@@ -1055,7 +1075,7 @@ struct FileThumbnailView: View {
                 .keyboardShortcut(.cancelAction)
             }
             .padding(SiphonTheme.spacing14)
-            .background(.ultraThinMaterial)
+            .siphonWindowBackground()
             
             SiphonTheme.subtleDivider
             

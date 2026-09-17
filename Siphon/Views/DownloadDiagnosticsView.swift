@@ -44,7 +44,7 @@ struct DownloadDiagnosticsView: View {
             footerView
         }
         .frame(minWidth: 580, idealWidth: 620, minHeight: 480, idealHeight: 540)
-        .background(.ultraThinMaterial)
+        .siphonWindowBackground()
     }
     
     // MARK: - Header

@@ -103,7 +103,7 @@ struct ContentView: View {
             DetailView()
         }
         .navigationSplitViewStyle(.balanced)
-        .background(.ultraThinMaterial)
+        .siphonWindowBackground()
         .siphonEnvironmentalBackdrop()
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
@@ -160,9 +160,7 @@ struct SidebarView: View {
                 .padding(.bottom, 10)
 
             List {
-                Section {
-                    sidebarButton(item: .home)
-                }
+                sidebarButton(item: .home)
                 
                 Section(languageService.s("downloading")) {
                     sidebarButton(item: .downloading, badgeCount: downloadManager.downloadingCount, badgeColor: SiphonTheme.statusDownloading)
@@ -305,7 +303,7 @@ struct DetailView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .animation(.spring(response: 0.30, dampingFraction: 0.72), value: appState.selectedNavItem)
+        .animation(SiphonAnimation.fluidSpring, value: appState.selectedNavItem)
     }
 }
 
@@ -405,7 +403,7 @@ struct HomeView: View {
                 .allowsHitTesting(false)
             }
         )
-        .background(.ultraThinMaterial)
+        .siphonWindowBackground()
     }
     
     // MARK: - Recent Downloads Section
@@ -421,11 +419,7 @@ struct HomeView: View {
                 Spacer()
                 
                 Button {
-                    if downloadManager.downloadingCount > 0 {
-                        appState.selectedNavItem = .downloading
-                    } else {
-                        appState.selectedNavItem = .completed
-                    }
+                    appState.selectedNavItem = downloadManager.mostRelevantNavigationItem
                 } label: {
                     HStack(spacing: 4) {
                         Text(languageService.s("see_all"))
@@ -527,11 +521,7 @@ struct StatusBarView: View {
             Spacer(minLength: 0)
 
             Button {
-                if downloadManager.downloadingCount > 0 {
-                    appState.selectedNavItem = .downloading
-                } else {
-                    appState.selectedNavItem = .completed
-                }
+                appState.selectedNavItem = downloadManager.mostRelevantNavigationItem
             } label: {
                 Image(systemName: "chevron.right")
                     .font(.system(size: 11, weight: .semibold))
@@ -628,10 +618,13 @@ struct StatusSegmentButton: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(title): \(count)")
-        .accessibilityValue(isActive ? "Active" : "")
-        .accessibilityHint("Show \(title.lowercased()) downloads")
+        .accessibilityRepresentation {
+            Button("\(title): \(count)") {
+                appState.selectedNavItem = item
+            }
+            .accessibilityValue(isActive ? "Active" : "")
+            .accessibilityHint("Show \(title.lowercased()) downloads")
+        }
         .onHover { hovering in
             withAnimation(SiphonAnimation.hoverSpring) {
                 isHovered = hovering
@@ -679,7 +672,7 @@ struct SponsorView: View {
         .accessibilityElement(children: .combine)
         .accessibilityLabel(languageService.s("star_github"))
         .onHover { hovering in
-            withAnimation(.spring(response: 0.25, dampingFraction: 0.8)) {
+            withAnimation(SiphonAnimation.hoverSpring) {
                 isHovered = hovering
             }
         }
@@ -836,7 +829,7 @@ private struct FeatureCardRow: View {
                 .stroke(Color.primary.opacity(isHovered ? 0.10 : 0.06), lineWidth: 1)
         )
         .onHover { hovering in
-            withAnimation(.spring(response: 0.25, dampingFraction: 0.8)) {
+            withAnimation(SiphonAnimation.hoverSpring) {
                 isHovered = hovering
             }
         }

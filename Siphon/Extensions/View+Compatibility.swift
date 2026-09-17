@@ -611,6 +611,22 @@ public enum SiphonTheme {
     }
 }
 
+// MARK: - Adaptive Window Surface
+
+public struct SiphonWindowBackgroundModifier: ViewModifier {
+    @ObservedObject private var renderingEnvironment = AdaptiveRenderingEnvironment.shared
+
+    public init() {}
+
+    public func body(content: Content) -> some View {
+        if renderingEnvironment.materialMode == .opaque {
+            content.background(Color(nsColor: .windowBackgroundColor))
+        } else {
+            content.background(.ultraThinMaterial)
+        }
+    }
+}
+
 // MARK: - Modern Smooth Spinner
 public struct SiphonSpinner: View {
     public var size: CGFloat
@@ -1165,6 +1181,11 @@ public struct SiphonEmptyStateView: View {
 
 // MARK: - Standardized Input View Modifier
 extension View {
+    /// Uses the app's glass surface while respecting Reduce Transparency.
+    public func siphonWindowBackground() -> some View {
+        modifier(SiphonWindowBackgroundModifier())
+    }
+
     @ViewBuilder
     public func siphonInputStyle(cornerRadius: CGFloat = SiphonTheme.radiusControl) -> some View {
         self.padding(.horizontal, SiphonTheme.spacing10)
