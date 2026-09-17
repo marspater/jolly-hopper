@@ -41,17 +41,24 @@ public struct RenderingCapabilities: Sendable, Equatable {
     public let supportsP3: Bool
     public let reduceTransparency: Bool
     public let reduceMotion: Bool
+    public let maxRefreshRate: Int
+
+    public var isHighRefreshRate: Bool {
+        maxRefreshRate >= 120
+    }
     
     public init(
         supportsEDR: Bool,
         supportsP3: Bool,
         reduceTransparency: Bool,
-        reduceMotion: Bool = false
+        reduceMotion: Bool = false,
+        maxRefreshRate: Int = 60
     ) {
         self.supportsEDR = supportsEDR
         self.supportsP3 = supportsP3
         self.reduceTransparency = reduceTransparency
         self.reduceMotion = reduceMotion
+        self.maxRefreshRate = maxRefreshRate
     }
 }
 
@@ -81,6 +88,14 @@ public final class AdaptiveRenderingEnvironment: ObservableObject {
 
     public var reduceMotion: Bool {
         capabilities.reduceMotion
+    }
+
+    public var isHighRefreshRate: Bool {
+        capabilities.isHighRefreshRate
+    }
+
+    public var maxRefreshRate: Int {
+        capabilities.maxRefreshRate
     }
     
     private init() {
@@ -127,13 +142,42 @@ public final class AdaptiveRenderingEnvironment: ObservableObject {
         if NSScreen.main?.canRepresent(.p3) == true {
             supportsP3 = true
         }
+
+        let maxRate = NSScreen.screens.map { $0.maximumFramesPerSecond }.max() ?? 60
         
         return RenderingCapabilities(
             supportsEDR: supportsEDR,
             supportsP3: supportsP3,
             reduceTransparency: reduceTransparency,
-            reduceMotion: reduceMotion
+            reduceMotion: reduceMotion,
+            maxRefreshRate: maxRate
         )
+    }
+}
+
+public enum SiphonAnimation {
+    @MainActor
+    public static var fluidSpring: Animation {
+        let env = AdaptiveRenderingEnvironment.shared
+        if env.reduceMotion {
+            return .easeInOut(duration: 0.12)
+        }
+        if env.isHighRefreshRate {
+            return .spring(response: 0.22, dampingFraction: 0.74, blendDuration: 0)
+        }
+        return .spring(response: 0.28, dampingFraction: 0.80, blendDuration: 0)
+    }
+
+    @MainActor
+    public static var hoverSpring: Animation {
+        let env = AdaptiveRenderingEnvironment.shared
+        if env.reduceMotion {
+            return .easeInOut(duration: 0.10)
+        }
+        if env.isHighRefreshRate {
+            return .spring(response: 0.18, dampingFraction: 0.72)
+        }
+        return .spring(response: 0.24, dampingFraction: 0.78)
     }
 }
 

@@ -79,6 +79,9 @@
 		E00010A9 /* SecureCookieFileTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E00000A9 /* SecureCookieFileTests.swift */; };
 		E00010AA /* LogSanitizationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E00000AA /* LogSanitizationTests.swift */; };
 		E00010AB /* UpdateVerifierTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E00000AB /* UpdateVerifierTests.swift */; };
+		E00010AC /* LiquidWaterWaveView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E00000AC /* LiquidWaterWaveView.swift */; };
+		E00010AD /* HeroDropURLView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E00000AD /* HeroDropURLView.swift */; };
+		E00010AE /* RecentDownloadRowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E00000AE /* RecentDownloadRowView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -157,6 +160,9 @@
 		E00000A9 /* SecureCookieFileTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecureCookieFileTests.swift; sourceTree = "<group>"; };
 		E00000AA /* LogSanitizationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogSanitizationTests.swift; sourceTree = "<group>"; };
 		E00000AB /* UpdateVerifierTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateVerifierTests.swift; sourceTree = "<group>"; };
+		E00000AC /* LiquidWaterWaveView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiquidWaterWaveView.swift; sourceTree = "<group>"; };
+		E00000AD /* HeroDropURLView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeroDropURLView.swift; sourceTree = "<group>"; };
+		E00000AE /* RecentDownloadRowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecentDownloadRowView.swift; sourceTree = "<group>"; };
 		E0000043 /* SiphonTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SiphonTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -368,6 +374,9 @@
 			children = (
 				E0000007 /* DownloadRowView.swift */,
 				E0000032 /* ReadOnlyLogView.swift */,
+				E00000AC /* LiquidWaterWaveView.swift */,
+				E00000AD /* HeroDropURLView.swift */,
+				E00000AE /* RecentDownloadRowView.swift */,
 			);
 			path = Components;
 			sourceTree = "<group>";
@@ -555,6 +564,9 @@
 				E00010A5 /* UpdateDownloader.swift in Sources */,
 				E00010A6 /* UpdateInstaller.swift in Sources */,
 				E00010A7 /* UpdateChecker.swift in Sources */,
+				E00010AC /* LiquidWaterWaveView.swift in Sources */,
+				E00010AD /* HeroDropURLView.swift in Sources */,
+				E00010AE /* RecentDownloadRowView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

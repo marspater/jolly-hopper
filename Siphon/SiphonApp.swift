@@ -63,6 +63,7 @@ struct SiphonApp: App {
                 }
                 .handlesExternalEvents(preferring: ["*"], allowing: ["*"])
         }
+        .defaultSize(width: 980, height: 620)
         .handlesExternalEvents(matching: ["*"])
         .commands {
             CommandGroup(replacing: .appInfo) {
