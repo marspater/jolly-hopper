@@ -708,7 +708,7 @@ enum VideoCodec: String, Codable, CaseIterable, Identifiable {
     
     var id: String { rawValue }
     
-    func title(lang: LanguageService) -> String {
+    private var formattedTitleName: String {
         switch self {
         case .auto: return "Best Available"
         case .h264: return "H.264 (AVC)"
@@ -716,6 +716,10 @@ enum VideoCodec: String, Codable, CaseIterable, Identifiable {
         case .vp9: return "VP9"
         case .av1: return "AV1"
         }
+    }
+
+    func title(lang: LanguageService) -> String {
+        formattedTitleName
     }
     
     var ytdlpFilter: String? {
