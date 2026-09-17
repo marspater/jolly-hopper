@@ -1,4 +1,5 @@
 import SwiftUI
+import Foundation
 import CoreText
 
 extension Font {
@@ -96,11 +97,12 @@ public struct GeistFontRegistrar {
 
     /// Resolves the URL for a resource file name (with or without extension) in a bundle.
     public static func locateResource(for fileName: String, in bundle: Bundle = .main) -> URL? {
-        let nsName = fileName as NSString
-        let name = nsName.deletingPathExtension
-        let ext = nsName.pathExtension
+        let fileURL = URL(fileURLWithPath: fileName)
+        let name = fileURL.deletingPathExtension().lastPathComponent
+        let ext = fileURL.pathExtension
 
-        return bundle.url(forResource: name, withExtension: ext) ??
+        let pathExtension: String? = ext.isEmpty ? nil : ext
+        return bundle.url(forResource: name, withExtension: pathExtension) ??
                bundle.url(forResource: fileName, withExtension: nil)
     }
 }
