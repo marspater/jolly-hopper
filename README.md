@@ -77,6 +77,11 @@ Integrate Siphon directly into your favorite web browser for 1-click video downl
 - **Logging & Diagnostics**: Centralized structured `LoggerService` & os_log tracing
 - **Target OS**: macOS 14.0 (Sonoma) through macOS 27+
 
+## 🎨 Design language
+
+The UI system, motion rules, accessibility expectations, and Liquid Glass policy
+are documented in [DESIGN_LANGUAGE.md](DESIGN_LANGUAGE.md).
+
 ---
 
 ## ⚖️ License

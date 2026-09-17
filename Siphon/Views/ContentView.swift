@@ -534,14 +534,7 @@ struct StatusBarView: View {
         }
         .frame(maxWidth: .infinity)
         .frame(height: 48)
-        .background(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(.ultraThinMaterial)
-        )
-        .overlay(
-            SiphonTheme.cardBorder(cornerRadius: 14)
-        )
-        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .siphonGlassSurface(cornerRadius: 14)
     }
 }
 
