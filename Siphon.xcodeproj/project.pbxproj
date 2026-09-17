@@ -7,7 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		E0001090 /* ImageUtilities.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000090 /* ImageUtilities.swift */; };
+		E0001092 /* ImageUtilities.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000092 /* ImageUtilities.swift */; };
 		E0001091 /* ImageUtilitiesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000091 /* ImageUtilitiesTests.swift */; };
 		E0001050 /* Font+Geist.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000050 /* Font+Geist.swift */; };
 		E0001051 /* Geist-Regular.otf in Resources */ = {isa = PBXBuildFile; fileRef = E0000051 /* Geist-Regular.otf */; };
@@ -58,7 +58,7 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		E0000090 /* ImageUtilities.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageUtilities.swift; sourceTree = "<group>"; };
+		E0000092 /* ImageUtilities.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageUtilities.swift; sourceTree = "<group>"; };
 		E0000091 /* ImageUtilitiesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageUtilitiesTests.swift; sourceTree = "<group>"; };
 		E0000050 /* Font+Geist.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Font+Geist.swift"; sourceTree = "<group>"; };
 		E0000051 /* Geist-Regular.otf */ = {isa = PBXFileReference; lastKnownFileType = file; name = "Geist-Regular.otf"; path = "Fonts/Geist-Regular.otf"; sourceTree = "<group>"; };
@@ -126,7 +126,7 @@
 		E0003011 /* Utilities */ = {
 			isa = PBXGroup;
 			children = (
-				E0000090 /* ImageUtilities.swift */,
+				E0000092 /* ImageUtilities.swift */,
 			);
 			path = Utilities;
 			sourceTree = "<group>";
@@ -403,7 +403,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				E0001090 /* ImageUtilities.swift in Sources */,
+				E0001092 /* ImageUtilities.swift in Sources */,
 				E0001050 /* Font+Geist.swift in Sources */,
 				E0001003 /* Download.swift in Sources */,
 				E0001028 /* View+Compatibility.swift in Sources */,
