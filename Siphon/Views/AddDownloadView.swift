@@ -344,11 +344,10 @@ struct AddDownloadView: View {
                         .padding(6)
                         .accessibilityLabel(languageService.s("paste_multiple_urls"))
                 }
-                .background(Color.primary.opacity(0.03))
-                .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusControl))
+                .background(SiphonTheme.fieldBackground(cornerRadius: SiphonTheme.radiusControl))
+                .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusControl, style: .continuous))
                 .overlay(
-                    RoundedRectangle(cornerRadius: SiphonTheme.radiusControl)
-                        .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+                    SiphonTheme.fieldBorder(cornerRadius: SiphonTheme.radiusControl)
                 )
 
                 HStack(spacing: 10) {
@@ -565,11 +564,10 @@ struct AddDownloadView: View {
                 }
                 .padding(.horizontal, SiphonTheme.spacing10)
                 .padding(.vertical, 7)
-                .background(Color.primary.opacity(0.04))
-                .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusControl))
+                .background(SiphonTheme.fieldBackground(cornerRadius: SiphonTheme.radiusControl, isFocused: !urlInput.isEmpty))
+                .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusControl, style: .continuous))
                 .overlay(
-                    RoundedRectangle(cornerRadius: SiphonTheme.radiusControl)
-                        .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+                    SiphonTheme.fieldBorder(cornerRadius: SiphonTheme.radiusControl, isFocused: !urlInput.isEmpty)
                 )
 
                 Button {
@@ -1078,11 +1076,10 @@ struct AddDownloadView: View {
                 .padding(.horizontal, 10)
                 .padding(.vertical, 6)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color.primary.opacity(0.04))
-                .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusControl))
+                .background(SiphonTheme.fieldBackground(cornerRadius: SiphonTheme.radiusControl))
+                .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusControl, style: .continuous))
                 .overlay(
-                    RoundedRectangle(cornerRadius: SiphonTheme.radiusControl)
-                        .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+                    SiphonTheme.fieldBorder(cornerRadius: SiphonTheme.radiusControl)
                 )
 
                 Button {
@@ -1159,11 +1156,10 @@ struct AddDownloadView: View {
                         }
                         .padding(.horizontal, 10)
                         .padding(.vertical, 6)
-                        .background(Color.primary.opacity(0.04))
-                        .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusControl))
+                        .background(SiphonTheme.fieldBackground(cornerRadius: SiphonTheme.radiusControl, isFocused: !customFilename.isEmpty))
+                        .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusControl, style: .continuous))
                         .overlay(
-                            RoundedRectangle(cornerRadius: SiphonTheme.radiusControl)
-                                .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+                            SiphonTheme.fieldBorder(cornerRadius: SiphonTheme.radiusControl, isFocused: !customFilename.isEmpty)
                         )
                     }
 
@@ -1417,11 +1413,10 @@ struct AddDownloadView: View {
                         }
                         .padding(.horizontal, 10)
                         .padding(.vertical, 6)
-                        .background(Color.primary.opacity(0.04))
-                        .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusControl))
+                        .background(SiphonTheme.fieldBackground(cornerRadius: SiphonTheme.radiusControl, isFocused: !additionalArguments.isEmpty))
+                        .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusControl, style: .continuous))
                         .overlay(
-                            RoundedRectangle(cornerRadius: SiphonTheme.radiusControl)
-                                .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+                            SiphonTheme.fieldBorder(cornerRadius: SiphonTheme.radiusControl, isFocused: !additionalArguments.isEmpty)
                         )
                     }
 

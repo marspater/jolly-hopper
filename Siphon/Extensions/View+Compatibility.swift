@@ -332,9 +332,23 @@ public enum SiphonTheme {
         } else {
             ZStack {
                 RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    .fill(.ultraThinMaterial)
+                    .fill(Color(nsColor: .controlColor).opacity(isHovered ? 0.65 : 0.45))
+                    .background(
+                        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                            .fill(.thinMaterial)
+                    )
+
                 RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    .fill(Color.primary.opacity(isHovered ? 0.08 : 0.04))
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                Color.white.opacity(isHovered ? 0.12 : 0.06),
+                                Color.clear
+                            ],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    )
             }
         }
     }
@@ -342,7 +356,72 @@ public enum SiphonTheme {
     @ViewBuilder
     public static func controlBorder(cornerRadius: CGFloat = radiusControl, isHovered: Bool = false) -> some View {
         RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-            .stroke(Color.primary.opacity(isHovered ? 0.16 : 0.08), lineWidth: 1)
+            .strokeBorder(
+                LinearGradient(
+                    colors: [
+                        Color.white.opacity(isHovered ? 0.38 : 0.22),
+                        Color.white.opacity(isHovered ? 0.14 : 0.06),
+                        Color.clear
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                ),
+                lineWidth: 1
+            )
+    }
+
+    // Inset Field & Search/Path Box Background (Distinct contrast inside glass cards)
+    @ViewBuilder
+    public static func fieldBackground(cornerRadius: CGFloat = radiusControl, isFocused: Bool = false) -> some View {
+        if NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency {
+            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                .fill(Color(nsColor: .textBackgroundColor))
+        } else {
+            ZStack {
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .fill(Color(nsColor: .controlBackgroundColor).opacity(0.60))
+                    .background(
+                        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                            .fill(.thinMaterial)
+                    )
+
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                Color.black.opacity(0.12),
+                                Color.clear
+                            ],
+                            startPoint: .top,
+                            endPoint: .center
+                        )
+                    )
+
+                if isFocused {
+                    RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                        .fill(accent.opacity(0.08))
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    public static func fieldBorder(cornerRadius: CGFloat = radiusControl, isFocused: Bool = false) -> some View {
+        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+            .strokeBorder(
+                LinearGradient(
+                    colors: isFocused
+                        ? [accent.opacity(0.85), accent.opacity(0.45)]
+                        : [
+                            Color.white.opacity(0.24),
+                            Color.white.opacity(0.08),
+                            Color.clear
+                        ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                ),
+                lineWidth: isFocused ? 1.5 : 1
+            )
     }
     
     // Settings & Diagnostics Subtle Divider
@@ -413,27 +492,31 @@ public struct SiphonInteractiveGlassBackground: View {
     public var body: some View {
         let isOpaque = NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency
         if isOpaque {
-            RoundedRectangle(cornerRadius: cornerRadius)
+            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                 .fill(Color(nsColor: isHovered ? .selectedControlColor : .controlBackgroundColor))
         } else {
             ZStack {
                 if isHovered && !isSelected {
-                    RoundedRectangle(cornerRadius: cornerRadius)
+                    RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                         .fill(effectiveTint.opacity(0.18))
                         .blur(radius: 6)
                         .padding(-1)
                         .allowedDynamicRange(AdaptiveRenderingEnvironment.shared.capabilities.supportsEDR ? .high : .standard)
                 }
 
-                RoundedRectangle(cornerRadius: cornerRadius)
+                // Elevated tactile glass base (clearly separated from outer glass container)
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .fill(Color(nsColor: .controlColor).opacity(isHovered ? 0.60 : 0.40))
+                    .background(
+                        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                            .fill(.thinMaterial)
+                    )
+
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                     .fill(
                         isSelected
                             ? effectiveTint.opacity(0.85)
-                            : (isHovered ? Color.primary.opacity(0.08) : Color.primary.opacity(0.04))
-                    )
-                    .background(
-                        RoundedRectangle(cornerRadius: cornerRadius)
-                            .fill(.ultraThinMaterial)
+                            : (isHovered ? effectiveTint.opacity(0.16) : Color.white.opacity(0.05))
                     )
             }
         }
@@ -459,14 +542,14 @@ public struct SiphonInteractiveGlassBorder: View {
     }
 
     public var body: some View {
-        RoundedRectangle(cornerRadius: cornerRadius)
+        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
             .strokeBorder(
                 LinearGradient(
                     colors: isSelected
-                        ? [Color.white.opacity(0.35), Color.white.opacity(0.10), Color.clear]
+                        ? [Color.white.opacity(0.60), Color.white.opacity(0.25)]
                         : (isHovered
-                            ? [effectiveTint.opacity(0.50), effectiveTint.opacity(0.20), Color.clear]
-                            : [Color.white.opacity(0.18), Color.white.opacity(0.04), Color.clear]),
+                            ? [effectiveTint.opacity(0.70), effectiveTint.opacity(0.35)]
+                            : [Color.white.opacity(0.30), Color.white.opacity(0.10)]),
                     startPoint: .top,
                     endPoint: .bottom
                 ),
@@ -508,7 +591,7 @@ public struct SiphonInteractiveGlassModifier: ViewModifier {
                     effectiveTint: effectiveTint
                 )
             }
-            .clipShape(RoundedRectangle(cornerRadius: cornerRadius))
+            .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
             .overlay(
                 SiphonInteractiveGlassBorder(
                     cornerRadius: cornerRadius,
@@ -517,6 +600,7 @@ public struct SiphonInteractiveGlassModifier: ViewModifier {
                     effectiveTint: effectiveTint
                 )
             )
+            .shadow(color: Color.black.opacity(isHovered ? 0.16 : 0.08), radius: isHovered ? 4 : 2, y: 1)
             .scaleEffect(isHovered ? 1.02 : 1.0)
             .animation(.spring(response: 0.30, dampingFraction: 0.68, blendDuration: 0), value: isHovered)
             .animation(.spring(response: 0.32, dampingFraction: 0.70, blendDuration: 0), value: isSelected)

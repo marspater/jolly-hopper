@@ -370,11 +370,11 @@ struct PreferencesView: View {
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
                 .background(
-                    SiphonTheme.cardBackground(cornerRadius: SiphonTheme.radiusControl)
+                    SiphonTheme.fieldBackground(cornerRadius: SiphonTheme.radiusControl)
                 )
-                .cornerRadius(SiphonTheme.radiusControl)
+                .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusControl, style: .continuous))
                 .overlay(
-                    SiphonTheme.cardBorder(cornerRadius: SiphonTheme.radiusControl)
+                    SiphonTheme.fieldBorder(cornerRadius: SiphonTheme.radiusControl)
                 )
 
                 Button {
