@@ -107,4 +107,34 @@ final class CustomPresetTests: XCTestCase {
         XCTAssertNil(decodedPreset.sponsorBlock)
         XCTAssertNil(decodedPreset.splitChapters)
     }
+
+    func testCustomPresetLoadAllAndSaveAll() throws {
+        // Save current user defaults state to restore after test
+        let originalData = UserDefaults.standard.data(forKey: UserDefaultsKeys.customPresets)
+        defer {
+            if let originalData = originalData {
+                UserDefaults.standard.set(originalData, forKey: UserDefaultsKeys.customPresets)
+            } else {
+                UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.customPresets)
+            }
+        }
+
+        // Test loadAll when no presets exist
+        UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.customPresets)
+        XCTAssertTrue(CustomPreset.loadAll().isEmpty)
+
+        // Test saveAll and loadAll round-trip
+        let preset1 = CustomPreset(name: "Preset 1", videoCodec: .h264, audioCodec: .aac, videoResolution: .r1080p, fileType: .mp4)
+        let preset2 = CustomPreset(name: "Preset 2", videoCodec: .h265, audioCodec: .opus, videoResolution: .r2160p, fileType: .mkv)
+        let presets = [preset1, preset2]
+
+        CustomPreset.saveAll(presets)
+        let loaded = CustomPreset.loadAll()
+        XCTAssertEqual(loaded, presets)
+
+        // Test loadAll when invalid/corrupted data exists
+        let corruptedData = "invalid json data".data(using: .utf8)!
+        UserDefaults.standard.set(corruptedData, forKey: UserDefaultsKeys.customPresets)
+        XCTAssertTrue(CustomPreset.loadAll().isEmpty)
+    }
 }
