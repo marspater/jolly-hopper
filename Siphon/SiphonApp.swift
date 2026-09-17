@@ -463,7 +463,7 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
         return digest.map { String(format: "%02hhx", $0) }.joined()
     }
     
-    static func currentTeamIdentifier() -> String? {
+    nonisolated static func currentTeamIdentifier() -> String? {
         let appPath = Bundle.main.bundlePath
         let proc = Process()
         proc.executableURL = URL(fileURLWithPath: "/usr/bin/codesign")
@@ -488,7 +488,7 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
         return nil
     }
 
-    static func generateUpdateScript() -> String {
+    nonisolated static func generateUpdateScript() -> String {
         return """
         (
             set -e
@@ -633,34 +633,36 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
         let appPath = Bundle.main.bundlePath
         let bundleId = Bundle.main.bundleIdentifier ?? "com.siphon.Siphon"
         let teamId = Self.currentTeamIdentifier() ?? ""
-        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent("Siphon_Staging_\(UUID().uuidString)")
-        do {
-            try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
-        } catch {
-            LoggerService.shared.log("Failed to create temporary directory for update installation: \(error.localizedDescription)", level: .error)
-            isInstalling = false
-            return
-        }
         
-        let statusFile = tempDir.appendingPathComponent("status.json")
-        let payloadDir = tempDir.appendingPathComponent("payload")
-        let script = Self.generateUpdateScript()
-        
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/bin/bash")
-        process.arguments = [
-            "-c", script,
-            "siphon-update",
-            packagePath,
-            appPath,
-            payloadDir.path,
-            bundleId,
-            teamId,
-            statusFile.path
-        ]
-        
-        Task { @MainActor [weak self] in
-            guard let self else { return }
+        Task.detached(priority: .utility) { [weak self] in
+            let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent("Siphon_Staging_\(UUID().uuidString)")
+            do {
+                try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+            } catch {
+                let errDesc = error.localizedDescription
+                await MainActor.run {
+                    LoggerService.shared.log("Failed to create temporary directory for update installation: \(errDesc)", level: .error)
+                    self?.isInstalling = false
+                }
+                return
+            }
+
+            let statusFile = tempDir.appendingPathComponent("status.json")
+            let payloadDir = tempDir.appendingPathComponent("payload")
+            let script = Self.generateUpdateScript()
+
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/bin/bash")
+            process.arguments = [
+                "-c", script,
+                "siphon-update",
+                packagePath,
+                appPath,
+                payloadDir.path,
+                bundleId,
+                teamId,
+                statusFile.path
+            ]
 
             await withCheckedContinuation { continuation in
                 process.terminationHandler = { _ in
@@ -669,7 +671,10 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
                 do {
                     try process.run()
                 } catch {
-                    LoggerService.shared.log("Failed to launch update process: \(error.localizedDescription)", level: .error)
+                    let errDesc = error.localizedDescription
+                    Task { @MainActor in
+                        LoggerService.shared.log("Failed to launch update process: \(errDesc)", level: .error)
+                    }
                     continuation.resume()
                 }
             }
@@ -682,23 +687,27 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
                 statusFound = status
             }
 
-            self.isInstalling = false
-            if exitCode == 0 && statusFound == "SUCCESS" {
-                self.needsRestart = true
-                LoggerService.shared.log("Update installation completed successfully.", level: .info)
-            } else if statusFound == "FAILED" {
-                self.needsRestart = false
-                self.updateError = "Update installation failed or rolled back."
-                LoggerService.shared.log("Update installer reported failure status.", level: .error)
-            } else if exitCode != 0 {
-                self.needsRestart = false
-                self.updateError = "Update installer exited unexpectedly with code \(exitCode)."
-                LoggerService.shared.log("Update installer exited abnormally with code \(exitCode). Status: \(statusFound ?? "none")", level: .error)
-            } else {
-                self.needsRestart = false
-                self.updateError = "Update installation completed without reporting a valid status."
-                LoggerService.shared.log("Update installer completed with exit code 0 but status file was missing or corrupt.", level: .error)
+            await MainActor.run { [weak self] in
+                guard let self else { return }
+                self.isInstalling = false
+                if exitCode == 0 && statusFound == "SUCCESS" {
+                    self.needsRestart = true
+                    LoggerService.shared.log("Update installation completed successfully.", level: .info)
+                } else if statusFound == "FAILED" {
+                    self.needsRestart = false
+                    self.updateError = "Update installation failed or rolled back."
+                    LoggerService.shared.log("Update installer reported failure status.", level: .error)
+                } else if exitCode != 0 {
+                    self.needsRestart = false
+                    self.updateError = "Update installer exited unexpectedly with code \(exitCode)."
+                    LoggerService.shared.log("Update installer exited abnormally with code \(exitCode). Status: \(statusFound ?? "none")", level: .error)
+                } else {
+                    self.needsRestart = false
+                    self.updateError = "Update installation completed without reporting a valid status."
+                    LoggerService.shared.log("Update installer completed with exit code 0 but status file was missing or corrupt.", level: .error)
+                }
             }
+
             try? FileManager.default.removeItem(at: tempDir)
             try? FileManager.default.removeItem(atPath: packagePath)
         }
