@@ -163,10 +163,6 @@ public final class SecureCookieFile: @unchecked Sendable {
         if lowerHost.hasPrefix("www.") {
             domains.append(".\(lowerHost.dropFirst(4))")
         }
-        if lowerHost.contains("boyfriendtv.com") || lowerHost.contains("boyfriend.tv") {
-            domains.append(".boyfriend.tv")
-            domains.append(".boyfriendtv.com")
-        }
         var seenDomains = Set<String>()
         let uniqueDomains = domains.filter { seenDomains.insert($0).inserted }
 

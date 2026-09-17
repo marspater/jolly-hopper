@@ -50,16 +50,21 @@ actor DependencyInstaller {
         }
     }
 
-    static func adHocSignBinary(at url: URL) {
+    static func adHocSignBinary(at url: URL) throws {
         guard !NotificationService.isRunningTests else { return }
         guard FileManager.default.isExecutableFile(atPath: url.path) else { return }
         let binaryPath = url.path
-        DispatchQueue.global(qos: .utility).async {
-            let proc = Process()
-            proc.executableURL = URL(fileURLWithPath: "/usr/bin/codesign")
-            proc.arguments = ["--force", "--sign", "-", binaryPath]
-            try? proc.run()
-            proc.waitUntilExit()
+        let proc = Process()
+        proc.executableURL = URL(fileURLWithPath: "/usr/bin/codesign")
+        proc.arguments = ["--force", "--sign", "-", binaryPath]
+        let errPipe = Pipe()
+        proc.standardError = errPipe
+        try proc.run()
+        proc.waitUntilExit()
+        guard proc.terminationStatus == 0 else {
+            let errData = errPipe.fileHandleForReading.readDataToEndOfFile()
+            let errMsg = String(data: errData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            throw InstallError.executionFailed(binary: url.lastPathComponent, message: "Ad-hoc codesign failed with exit code \(proc.terminationStatus): \(errMsg)")
         }
     }
 
@@ -89,7 +94,7 @@ actor DependencyInstaller {
 
         // 2. Set executable permissions and ad-hoc sign
         try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: tempStaging.path)
-        Self.adHocSignBinary(at: tempStaging)
+        try Self.adHocSignBinary(at: tempStaging)
 
         // 3. Dry-run execution test
         let process = Process()
@@ -120,7 +125,7 @@ actor DependencyInstaller {
 
         do {
             try FileManager.default.moveItem(at: tempStaging, to: destination)
-            Self.adHocSignBinary(at: destination)
+            try Self.adHocSignBinary(at: destination)
             if hadOld {
                 try? FileManager.default.removeItem(at: backupDest)
             }
@@ -205,8 +210,8 @@ actor DependencyInstaller {
         // 5. Set executable permissions and ad-hoc sign
         try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: extractedFfmpeg.path)
         try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: extractedFfprobe.path)
-        Self.adHocSignBinary(at: extractedFfmpeg)
-        Self.adHocSignBinary(at: extractedFfprobe)
+        try Self.adHocSignBinary(at: extractedFfmpeg)
+        try Self.adHocSignBinary(at: extractedFfprobe)
 
         // 6. Test both binaries
         let testVersion: (URL) async throws -> Void = { binURL in
@@ -247,8 +252,8 @@ actor DependencyInstaller {
 
             try FileManager.default.moveItem(at: extractedFfmpeg, to: ffmpegFinal)
             try FileManager.default.moveItem(at: extractedFfprobe, to: ffprobeFinal)
-            Self.adHocSignBinary(at: ffmpegFinal)
-            Self.adHocSignBinary(at: ffprobeFinal)
+            try Self.adHocSignBinary(at: ffmpegFinal)
+            try Self.adHocSignBinary(at: ffprobeFinal)
 
             if ffmpegMovedToBackup { try? FileManager.default.removeItem(at: ffmpegBackup) }
             if ffprobeMovedToBackup { try? FileManager.default.removeItem(at: ffprobeBackup) }
@@ -499,7 +504,7 @@ class YtdlpService: ObservableObject {
         if FileManager.default.fileExists(atPath: ytdlpInSupport.path) {
             if Self.verifySHA256(fileURL: ytdlpInSupport, expectedHash: DependencyChecksums.ytdlpExecutableSHA256) {
                 ytdlpPath = ytdlpInSupport
-                DependencyInstaller.adHocSignBinary(at: ytdlpInSupport)
+                try? DependencyInstaller.adHocSignBinary(at: ytdlpInSupport)
                 isAvailable = true
                 try? FileManager.default.removeItem(at: invalidBackup)
                 return
@@ -591,8 +596,8 @@ class YtdlpService: ObservableObject {
     private func setFfmpegPaths(ffmpeg: URL, ffprobe: URL, source: String) {
         ffmpegPath = ffmpeg
         ffprobePath = ffprobe
-        DependencyInstaller.adHocSignBinary(at: ffmpeg)
-        DependencyInstaller.adHocSignBinary(at: ffprobe)
+        try? DependencyInstaller.adHocSignBinary(at: ffmpeg)
+        try? DependencyInstaller.adHocSignBinary(at: ffprobe)
         LoggerService.shared.log("Selected \(source) FFmpeg path: \(ffmpeg.path)", level: .info)
         LoggerService.shared.log("Selected \(source) FFprobe path: \(ffprobe.path)", level: .info)
     }
@@ -1805,6 +1810,13 @@ public struct DownloadResult: Sendable {
 
     static func compatibleMergeOutputFormat(for options: DownloadOptions) -> String? {
         guard options.fileType.isVideo else { return nil }
+
+        if let conversionCodec = options.conversionCodec, conversionCodec != .none {
+            if conversionCodec == .av1 || conversionCodec == .vp9 {
+                return "mkv"
+            }
+            return options.fileType.fileExtension
+        }
 
         let requestedVideoCodec = options.videoCodec ?? .auto
         let requestedAudioCodec = options.audioCodec ?? .auto
@@ -4501,10 +4513,6 @@ public struct DownloadResult: Sendable {
         let lowerHost = host.lowercased()
         if lowerHost.hasPrefix("www.") {
             domains.append(".\(lowerHost.dropFirst(4))")
-        }
-        if lowerHost.contains("boyfriendtv.com") || lowerHost.contains("boyfriend.tv") {
-            domains.append(".boyfriend.tv")
-            domains.append(".boyfriendtv.com")
         }
         var seenDomains = Set<String>()
         let uniqueDomains = domains.filter { seenDomains.insert($0).inserted }

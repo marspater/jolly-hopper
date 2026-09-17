@@ -122,23 +122,47 @@ public final class UpdateInstaller: Sendable {
             throw UpdateInstallError.verificationFailed(error.localizedDescription)
         }
 
-        // 5. Backup current app and perform atomic replacement
+        // 5. Backup current app and perform atomic replacement with verification and rollback
         let currentAppURL = Bundle.main.bundleURL
-        let backupURL = stagingDir.appendingPathComponent("Siphon_Current_Backup.app")
+        try Self.replaceAppBundle(
+            currentAppURL: currentAppURL,
+            stagedAppURL: stagedAppURL,
+            expectedTeamID: expectedTeamID,
+            allowAdHoc: allowAdHoc,
+            fileManager: fm
+        )
+    }
 
+    /// Performs an atomic backup, replacement, post-copy bundle verification, and rollback if failed.
+    public static func replaceAppBundle(
+        currentAppURL: URL,
+        stagedAppURL: URL,
+        expectedTeamID: String? = nil,
+        allowAdHoc: Bool = false,
+        fileManager fm: FileManager = .default
+    ) throws {
+        let backupURL = currentAppURL.deletingLastPathComponent().appendingPathComponent(".Siphon_Backup_\(UUID().uuidString).app")
         var didMoveCurrentToBackup = false
+
         do {
-            // Backup current bundle
-            try fm.copyItem(at: currentAppURL, to: backupURL)
+            try fm.moveItem(at: currentAppURL, to: backupURL)
             didMoveCurrentToBackup = true
 
-            // Replace current app
-            try fm.removeItem(at: currentAppURL)
             try fm.copyItem(at: stagedAppURL, to: currentAppURL)
+
+            try UpdateVerifier.verifyAppBundle(
+                bundleURL: currentAppURL,
+                expectedTeamID: expectedTeamID,
+                allowAdHoc: allowAdHoc
+            )
+
+            try? fm.removeItem(at: backupURL)
         } catch {
-            // Rollback on failure
-            if didMoveCurrentToBackup && !fm.fileExists(atPath: currentAppURL.path) {
-                try? fm.copyItem(at: backupURL, to: currentAppURL)
+            if fm.fileExists(atPath: currentAppURL.path) {
+                try? fm.removeItem(at: currentAppURL)
+            }
+            if didMoveCurrentToBackup {
+                try? fm.moveItem(at: backupURL, to: currentAppURL)
             }
             throw UpdateInstallError.replacementFailed("Failed to replace application: \(error.localizedDescription)")
         }

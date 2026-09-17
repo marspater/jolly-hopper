@@ -114,6 +114,25 @@ final class DownloadQueueTests: XCTestCase {
         XCTAssertFalse(queue.isPathReserved(path1))
     }
 
+    func testForceOverwritePreservesExactFilenameWithoutIncrementing() throws {
+        let queue = DownloadQueue(userDefaults: testDefaults)
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let existingFilePath = tempDir.appendingPathComponent("Sample Video.mp4")
+        try "existing file".write(to: existingFilePath, atomically: true, encoding: .utf8)
+
+        let dl = Download(url: "https://example.com/video", options: .default)
+        dl.title = "Sample Video"
+        dl.options.saveFolder = tempDir
+        dl.options.forceOverwrite = true
+
+        let (name, path) = queue.planUniqueOutputPath(for: dl)
+        XCTAssertEqual(name, "Sample Video", "forceOverwrite must preserve the original filename")
+        XCTAssertEqual(path, existingFilePath.path, "forceOverwrite must target the existing file path")
+    }
+
     func testReorderingHelpers() {
         let queue = DownloadQueue(userDefaults: testDefaults)
         let dl1 = Download(url: "https://example.com/1", options: .default)

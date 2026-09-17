@@ -327,6 +327,7 @@ class DownloadManager: ObservableObject {
 
     func pauseDownload(_ download: Download) {
         executor.pauseDownload(download, queue: queue)
+        saveHistory()
     }
 
     func resumeDownload(_ download: Download) {
@@ -384,6 +385,8 @@ class DownloadManager: ObservableObject {
 
     func shutdown() {
         executor.shutdown()
+        queue.clearReservedSlots()
+        queue.clearReservedOutputPaths()
     }
 
     func planUniqueOutputPath(for download: Download, forceIncrement: Bool = false) -> (resolvedBaseName: String, candidatePath: String) {
@@ -445,7 +448,7 @@ class DownloadManager: ObservableObject {
 
         // Bolt Performance Optimization: Batch array mutations and broadcast once
         for item in items {
-            if item.status == .downloading || item.status == .fetching || item.status == .processing || item.status == .queued {
+            if item.status == .downloading || item.status == .fetching || item.status == .processing || item.status == .queued || item.status == .paused {
                 stopDownload(item, suppressNotification: true, skipSaveAndBroadcast: true)
             }
         }

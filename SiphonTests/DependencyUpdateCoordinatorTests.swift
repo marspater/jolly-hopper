@@ -53,4 +53,13 @@ final class DependencyUpdateCoordinatorTests: XCTestCase {
         await coordinator.initialize(service: service, skipBinarySetup: true)
         XCTAssertEqual(coordinator.version, "2026.09.17")
     }
+
+    func testAdHocSignBinaryHandlesNonExecutableGracefully() throws {
+        let tempFile = FileManager.default.temporaryDirectory.appendingPathComponent("non_exec_\(UUID().uuidString)")
+        try "text".write(to: tempFile, atomically: true, encoding: .utf8)
+        defer { try? FileManager.default.removeItem(at: tempFile) }
+
+        // Should return cleanly without throwing because it's not executable
+        XCTAssertNoThrow(try DependencyInstaller.adHocSignBinary(at: tempFile))
+    }
 }

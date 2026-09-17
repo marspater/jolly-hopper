@@ -80,6 +80,18 @@ final class DownloadQueue: ObservableObject {
             return file.deletingPathExtension().lastPathComponent
         })
 
+        if download.options.forceOverwrite == true && !forceIncrement {
+            var candidateName = sanitizedBase
+            var candidatePath = folder.appendingPathComponent("\(candidateName).\(ext)").path
+            var counter = 1
+            while reservedOutputPaths.contains(candidatePath) {
+                candidateName = "\(sanitizedBase) (\(counter))"
+                candidatePath = folder.appendingPathComponent("\(candidateName).\(ext)").path
+                counter += 1
+            }
+            return (candidateName, candidatePath)
+        }
+
         var counter = 1
         var candidateName = sanitizedBase
         if forceIncrement {

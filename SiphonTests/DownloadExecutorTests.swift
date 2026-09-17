@@ -44,12 +44,12 @@ final class DownloadExecutorTests: XCTestCase {
             videoId: "12345"
         ))
 
-        XCTAssertTrue(DownloadExecutor.isMatchingTemporaryFile(
+        XCTAssertFalse(DownloadExecutor.isMatchingTemporaryFile(
             fileName: "SomeOther_12345.mp4.part",
             rawBaseName: "MyVideo",
             sanitizedBaseName: "MyVideo",
             videoId: "12345"
-        ))
+        ), "Must not match unrelated file with videoId substring")
 
         XCTAssertFalse(DownloadExecutor.isMatchingTemporaryFile(
             fileName: "Unrelated.mp4.part",
