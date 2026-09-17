@@ -468,6 +468,7 @@ class UpdateChecker: NSObject, ObservableObject, URLSessionDownloadDelegate {
         let proc = Process()
         proc.executableURL = URL(fileURLWithPath: "/usr/bin/codesign")
         proc.arguments = ["-d", "--verbose=2", "--", appPath]
+        proc.environment = YtdlpService.createSanitizedEnvironment()
         let pipe = Pipe()
         proc.standardError = pipe
         do {
