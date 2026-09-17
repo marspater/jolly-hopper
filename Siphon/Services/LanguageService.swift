@@ -223,6 +223,8 @@ class LanguageService: ObservableObject {
         "safari_fda_not_detected_hint": "Full Disk Access not detected. macOS requires Siphon to restart for permissions to apply. If you already restarted, toggle Siphon OFF and ON in System Settings.",
         "video_codec": "Video Codec",
         "audio_codec": "Audio Codec",
+        "post_processing": "Post-Processing",
+        "hdr_dynamic_range": "HDR / Dynamic Range",
         "codec_auto": "Auto (Best Available)",
         "codec_settings": "Codec Settings",
         "reset_to_defaults": "Reset to Defaults",
