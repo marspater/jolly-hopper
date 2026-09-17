@@ -65,30 +65,41 @@ extension Font {
 public struct GeistFontRegistrar {
     @MainActor private static var isRegistered = false
 
+    /// List of font resource filenames to register.
+    public static let fontFiles = [
+        "Geist-Regular.otf",
+        "Geist-Medium.otf",
+        "Geist-SemiBold.otf",
+        "Geist-Bold.otf",
+        "Geist-Black.otf",
+        "GeistMono-Regular.otf",
+        "GeistMono-Medium.otf",
+        "GeistMono-SemiBold.otf",
+        "GeistMono-Bold.otf"
+    ]
+
     @MainActor public static func registerFonts() {
         guard !isRegistered else { return }
         isRegistered = true
 
-        let fontFiles = [
-            "Geist-Regular.otf",
-            "Geist-Medium.otf",
-            "Geist-SemiBold.otf",
-            "Geist-Bold.otf",
-            "Geist-Black.otf",
-            "GeistMono-Regular.otf",
-            "GeistMono-Medium.otf",
-            "GeistMono-SemiBold.otf",
-            "GeistMono-Bold.otf"
-        ]
+        registerFontResources(fontFiles, from: .main)
+    }
 
-        for fontFile in fontFiles {
-            let name = (fontFile as NSString).deletingPathExtension
-            let ext = (fontFile as NSString).pathExtension
+    /// Registers a list of font resource files from the specified bundle with CoreText.
+    @discardableResult
+    public static func registerFontResources(_ fontFiles: [String], from bundle: Bundle = .main) -> Bool {
+        let urls = fontFiles.compactMap { locateResource(for: $0, in: bundle) }
+        guard !urls.isEmpty else { return false }
+        return CTFontManagerRegisterFontURLs(urls as CFArray, .process, true, nil)
+    }
 
-            if let url = Bundle.main.url(forResource: name, withExtension: ext) ??
-                         Bundle.main.url(forResource: fontFile, withExtension: nil) {
-                CTFontManagerRegisterFontURLs([url] as CFArray, .process, true, nil)
-            }
-        }
+    /// Resolves the URL for a resource file name (with or without extension) in a bundle.
+    public static func locateResource(for fileName: String, in bundle: Bundle = .main) -> URL? {
+        let nsName = fileName as NSString
+        let name = nsName.deletingPathExtension
+        let ext = nsName.pathExtension
+
+        return bundle.url(forResource: name, withExtension: ext) ??
+               bundle.url(forResource: fileName, withExtension: nil)
     }
 }
