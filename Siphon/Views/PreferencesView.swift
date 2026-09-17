@@ -145,7 +145,7 @@ struct PreferencesView: View {
         }
         .padding(.horizontal, SiphonTheme.spacing16)
         .padding(.bottom, SiphonTheme.spacing16)
-        .frame(minWidth: 500, idealWidth: 520, maxWidth: 620, minHeight: 630, idealHeight: 648, maxHeight: 780)
+        .frame(minWidth: 500, idealWidth: 520, maxWidth: 620, minHeight: 636, idealHeight: 652, maxHeight: 780)
         .preferredColorScheme(theme == "light" ? .light : (theme == "dark" ? .dark : nil))
         .accentColor(SiphonTheme.accent)
         .background(PreferencesWindowConfigurator())
@@ -328,14 +328,23 @@ struct PreferencesView: View {
 
     private var themeSection: some View {
         Section(languageService.s("appearance")) {
-            Picker(languageService.s("theme"), selection: $theme) {
-                Text(languageService.s("system")).tag("system")
-                Text(languageService.s("light")).tag("light")
-                Text(languageService.s("dark")).tag("dark")
+            HStack {
+                Text(languageService.s("theme"))
+                    .font(.geist(13, weight: .medium))
+                    .foregroundColor(.primary)
+
+                Spacer()
+
+                Picker(languageService.s("theme"), selection: $theme) {
+                    Text(languageService.s("system")).tag("system")
+                    Text(languageService.s("light")).tag("light")
+                    Text(languageService.s("dark")).tag("dark")
+                }
+                .labelsHidden()
+                .pickerStyle(.segmented)
+                .frame(width: 220)
+                .tint(SiphonTheme.accent)
             }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .tint(SiphonTheme.accent)
         }
     }
 
@@ -1254,7 +1263,7 @@ struct PreferencesView: View {
                     .frame(maxWidth: .infinity, alignment: .center)
             }
             .frame(maxWidth: .infinity, alignment: .center)
-            .padding(.top, 4)
+            .padding(.top, 8)
             .padding(.bottom, 12)
         }
     }

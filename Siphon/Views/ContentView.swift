@@ -581,17 +581,11 @@ struct StatusSegmentButton: View {
             appState.selectedNavItem = item
         } label: {
             ZStack {
-                // Seamless tactile hover backing
-                RoundedRectangle(cornerRadius: 11, style: .continuous)
-                    .fill(Color.white.opacity(isHovered ? 0.09 : 0.0))
-                    .padding(3)
-                    .animation(.easeInOut(duration: 0.22), value: isHovered)
-
-                // Liquid water wave animation in accent color
+                // Liquid water wave animation in accent color (ambient in background)
                 LiquidWaterWaveView(color: color, isHovered: isHovered, isActive: isActive, seed: segmentSeed)
-                    .opacity(isActive ? 0.85 : (isHovered ? 0.65 : 0.22))
-                    .animation(.easeInOut(duration: 0.26), value: isHovered)
-                    .animation(.easeInOut(duration: 0.26), value: isActive)
+                    .opacity(isActive ? 0.70 : (isHovered ? 0.45 : 0.15))
+                    .animation(.easeInOut(duration: 0.22), value: isHovered)
+                    .animation(.easeInOut(duration: 0.22), value: isActive)
                     .zIndex(0)
 
                 // Status text, count, and progress ring prominently in the front
@@ -599,7 +593,7 @@ struct StatusSegmentButton: View {
                     // Circular Progress Ring
                     ZStack {
                         Circle()
-                            .stroke(color.opacity(0.32), lineWidth: 2)
+                            .stroke(color.opacity(0.35), lineWidth: 2)
                             .frame(width: 16, height: 16)
 
                         Circle()
@@ -616,14 +610,13 @@ struct StatusSegmentButton: View {
 
                     Text("\(count)")
                         .font(.geistMono(13, weight: .bold))
-                        .foregroundColor(count > 0 ? .primary : (isHovered ? .primary.opacity(0.9) : .primary.opacity(0.65)))
+                        .foregroundColor(count > 0 ? .primary : (isHovered ? .primary : .secondary))
 
                     Text(title)
                         .font(.geist(13, weight: .semibold))
-                        .foregroundColor(isActive ? .primary : (isHovered ? .primary : .primary.opacity(0.85)))
+                        .foregroundColor(count > 0 || isActive ? .primary : (isHovered ? .primary : .secondary))
                 }
                 .padding(.horizontal, 16)
-                .shadow(color: colorScheme == .dark ? Color.black.opacity(0.6) : Color.white.opacity(0.7), radius: 2, x: 0, y: 1)
                 .zIndex(1)
             }
             .frame(maxHeight: .infinity)
@@ -631,7 +624,7 @@ struct StatusSegmentButton: View {
         }
         .buttonStyle(.plain)
         .onHover { hovering in
-            withAnimation(.easeInOut(duration: 0.22)) {
+            withAnimation(.easeInOut(duration: 0.20)) {
                 isHovered = hovering
             }
         }
