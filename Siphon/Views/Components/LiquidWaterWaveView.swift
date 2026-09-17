@@ -35,11 +35,11 @@ struct LissajousHarmonicBlobShape: Shape {
         let t = (time + (seed * 19.37) + phaseOffset) * speed
         let scale = CGFloat(intensity)
 
-        // 2D Lissajous orbit for the fluid body center
-        let maxDriftX = w * 0.22 * scale
-        let maxDriftY = h * 0.18 * scale
+        // 2D Lissajous orbit for the fluid body center (soft undercurrent below text)
+        let maxDriftX = w * 0.20 * scale
+        let maxDriftY = h * 0.14 * scale
         let centerX = (w * 0.50) + maxDriftX * CGFloat(sin(t * fx))
-        let centerY = (h * 0.50) + maxDriftY * CGFloat(cos(t * fy + seed * 0.5))
+        let centerY = (h * 0.58) + maxDriftY * CGFloat(cos(t * fy + seed * 0.5))
 
         // Instantaneous Lissajous velocity vector (dC/dt) for hydrodynamic elongation
         let vx = Double(maxDriftX) * fx * cos(t * fx)
@@ -54,7 +54,7 @@ struct LissajousHarmonicBlobShape: Shape {
 
         // Base radii adapted to container dimensions
         let baseRadiusX = max(w * 0.45, 20)
-        let baseRadiusY = max(h * 0.48, 16)
+        let baseRadiusY = max(h * 0.42, 14)
 
         // Sample 20 nodes along the closed 2D harmonic perimeter
         let nodeCount = 20
@@ -158,8 +158,8 @@ struct LiquidWaterWaveView: View {
                     .fill(
                         LinearGradient(
                             colors: [
-                                color.opacity(isActive ? 0.28 : 0.16),
-                                color.opacity(isActive ? 0.12 : 0.05),
+                                color.opacity(isActive ? 0.26 : 0.14),
+                                color.opacity(isActive ? 0.10 : 0.04),
                                 Color.clear
                             ],
                             startPoint: .topLeading,
@@ -181,8 +181,8 @@ struct LiquidWaterWaveView: View {
                     .fill(
                         LinearGradient(
                             colors: [
-                                color.opacity(isActive ? 0.18 : 0.10),
-                                Color.white.opacity(0.04),
+                                color.opacity(isActive ? 0.16 : 0.08),
+                                Color.white.opacity(0.03),
                                 Color.clear
                             ],
                             startPoint: .bottomLeading,
@@ -190,7 +190,7 @@ struct LiquidWaterWaveView: View {
                         )
                     )
 
-                    // Layer 3: Specular Fluid Sheen Edge (Crisp Mathematical Vector Contour)
+                    // Layer 3: Soft ambient liquid rim
                     LissajousHarmonicBlobShape(
                         time: time,
                         speed: baseSpeed * 0.85,
@@ -202,19 +202,11 @@ struct LiquidWaterWaveView: View {
                         harmonicRatio: 1.4
                     )
                     .stroke(
-                        LinearGradient(
-                            colors: [
-                                Color.white.opacity(0.20),
-                                color.opacity(0.24),
-                                Color.clear
-                            ],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        ),
-                        lineWidth: 0.8
+                        color.opacity(0.14),
+                        lineWidth: 0.5
                     )
 
-                    // Layer 4: Soft ambient liquid backdrop
+                    // Layer 4: Soft ambient liquid glow
                     LissajousHarmonicBlobShape(
                         time: time,
                         speed: baseSpeed * 1.25,
@@ -228,7 +220,7 @@ struct LiquidWaterWaveView: View {
                     .fill(
                         RadialGradient(
                             colors: [
-                                color.opacity(isActive ? 0.14 : 0.08),
+                                color.opacity(isActive ? 0.10 : 0.05),
                                 Color.clear
                             ],
                             center: .center,
