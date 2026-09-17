@@ -1,7 +1,7 @@
 import Foundation
 import AppKit
 
-enum SupportedBrowser: String, CaseIterable, Identifiable {
+public enum SupportedBrowser: String, CaseIterable, Identifiable, Sendable {
     case chrome = "chrome"
     case firefox = "firefox"
     case opera = "opera"
@@ -11,9 +11,9 @@ enum SupportedBrowser: String, CaseIterable, Identifiable {
     case safari = "safari"
     case chromium = "chromium"
 
-    var id: String { rawValue }
+    public var id: String { rawValue }
 
-    var displayName: String {
+    public var displayName: String {
         switch self {
         case .chrome: return "Google Chrome"
         case .firefox: return "Mozilla Firefox"
@@ -26,7 +26,7 @@ enum SupportedBrowser: String, CaseIterable, Identifiable {
         }
     }
 
-    var bundleIdentifier: String {
+    public var bundleIdentifier: String {
         switch self {
         case .chrome: return "com.google.Chrome"
         case .firefox: return "org.mozilla.firefox"
@@ -40,22 +40,18 @@ enum SupportedBrowser: String, CaseIterable, Identifiable {
     }
 }
 
-final class BrowserUtils: Sendable {
-    static let shared = BrowserUtils()
+public actor BrowserUtils {
+    public static let shared = BrowserUtils()
 
-    private let lock = NSLock()
-    private nonisolated(unsafe) var cachedBrowsers: [SupportedBrowser]?
+    private var cachedBrowsers: [SupportedBrowser]?
 
-    func getInstalledBrowsers() -> [SupportedBrowser] {
-        lock.lock()
+    public init() {}
+
+    public func getInstalledBrowsers() -> [SupportedBrowser] {
         if let cached = cachedBrowsers {
-            lock.unlock()
             return cached
         }
-        lock.unlock()
 
-        // Bolt Performance Optimization: Querying NSWorkspace for installed applications
-        // is expensive I/O. Cache the result in memory thread-safely to avoid redundant disk/workspace lookups.
         let workspace = NSWorkspace.shared
         var installed: [SupportedBrowser] = []
 
@@ -65,16 +61,11 @@ final class BrowserUtils: Sendable {
             }
         }
 
-        lock.lock()
         cachedBrowsers = installed
-        lock.unlock()
-
         return installed
     }
 
-    func clearCache() {
-        lock.lock()
+    public func clearCache() {
         cachedBrowsers = nil
-        lock.unlock()
     }
 }

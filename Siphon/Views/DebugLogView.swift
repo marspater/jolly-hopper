@@ -114,7 +114,11 @@ struct DebugLogView: View {
                 Spacer()
 
                 Button {
-                    NSWorkspace.shared.activateFileViewerSelecting([logger.exportLogs()])
+                    Task {
+                        if let url = try? await logger.exportLogs() {
+                            NSWorkspace.shared.activateFileViewerSelecting([url])
+                        }
+                    }
                 } label: {
                     HStack(spacing: 6) {
                         Image(systemName: "folder")

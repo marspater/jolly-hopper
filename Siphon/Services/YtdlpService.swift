@@ -851,7 +851,11 @@ class YtdlpService: ObservableObject {
         ]
         appendJsRuntimeArgs(to: &args)
         
-        var tempCookieFile: URL? = nil
+        var secureCookieFile: SecureCookieFile? = nil
+        defer {
+            secureCookieFile?.cleanup()
+        }
+
         let sucuriCookie = await resolveSucuriCookie(for: url)
         var additionalCookies: [(name: String, value: String)] = []
         if let sc = sucuriCookie {
@@ -859,9 +863,9 @@ class YtdlpService: ObservableObject {
         }
 
         if (rawCookies?.isEmpty == false) || !additionalCookies.isEmpty {
-            if let tempFile = createConsolidatedCookiesFile(url: url, rawCookies: rawCookies, additionalCookies: additionalCookies) {
-                tempCookieFile = tempFile
-                args.append(contentsOf: ["--cookies", tempFile.path])
+            if let cookieFile = try? SecureCookieFile.create(url: url, rawCookies: rawCookies, additionalCookies: additionalCookies) {
+                secureCookieFile = cookieFile
+                args.append(contentsOf: ["--cookies", cookieFile.path])
                 if sucuriCookie != nil {
                     LoggerService.shared.log("Using temporary Sucuri cookie in consolidated file for \(hostForLog(url)) (cookie values not logged)", level: .info)
                     args.append(contentsOf: ["--user-agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"])
@@ -878,12 +882,6 @@ class YtdlpService: ObservableObject {
         appendSiteSpecificArgs(for: url, to: &args)
         args.append("--")
         args.append(url)
-
-        defer {
-            if let fileURL = tempCookieFile {
-                try? FileManager.default.removeItem(at: fileURL)
-            }
-        }
         
         do {
             let output = try await runCommand(args)
@@ -914,7 +912,11 @@ class YtdlpService: ObservableObject {
         ]
         appendJsRuntimeArgs(to: &args)
         
-        var tempCookieFile: URL? = nil
+        var secureCookieFile: SecureCookieFile? = nil
+        defer {
+            secureCookieFile?.cleanup()
+        }
+
         let sucuriCookie = await resolveSucuriCookie(for: url)
         var additionalCookies: [(name: String, value: String)] = []
         if let sc = sucuriCookie {
@@ -922,9 +924,9 @@ class YtdlpService: ObservableObject {
         }
 
         if (rawCookies?.isEmpty == false) || !additionalCookies.isEmpty {
-            if let tempFile = createConsolidatedCookiesFile(url: url, rawCookies: rawCookies, additionalCookies: additionalCookies) {
-                tempCookieFile = tempFile
-                args.append(contentsOf: ["--cookies", tempFile.path])
+            if let cookieFile = try? SecureCookieFile.create(url: url, rawCookies: rawCookies, additionalCookies: additionalCookies) {
+                secureCookieFile = cookieFile
+                args.append(contentsOf: ["--cookies", cookieFile.path])
                 if sucuriCookie != nil {
                     LoggerService.shared.log("Using temporary Sucuri cookie in consolidated file for \(hostForLog(url)) (cookie values not logged)", level: .info)
                     args.append(contentsOf: ["--user-agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"])
@@ -941,12 +943,6 @@ class YtdlpService: ObservableObject {
         args.append(contentsOf: ["--extractor-args", "generic:impersonate"])
         args.append("--")
         args.append(url)
-
-        defer {
-            if let fileURL = tempCookieFile {
-                try? FileManager.default.removeItem(at: fileURL)
-            }
-        }
 
         let output = try await runCommand(args)
         guard let data = output.data(using: .utf8) else { throw YtdlpError.parseError }
@@ -990,7 +986,11 @@ class YtdlpService: ObservableObject {
         ]
         appendJsRuntimeArgs(to: &args)
         
-        var tempCookieFile: URL? = nil
+        var secureCookieFile: SecureCookieFile? = nil
+        defer {
+            secureCookieFile?.cleanup()
+        }
+
         let sucuriCookie = await resolveSucuriCookie(for: url)
         var additionalCookies: [(name: String, value: String)] = []
         if let sc = sucuriCookie {
@@ -998,9 +998,9 @@ class YtdlpService: ObservableObject {
         }
 
         if (rawCookies?.isEmpty == false) || !additionalCookies.isEmpty {
-            if let tempFile = createConsolidatedCookiesFile(url: url, rawCookies: rawCookies, additionalCookies: additionalCookies) {
-                tempCookieFile = tempFile
-                args.append(contentsOf: ["--cookies", tempFile.path])
+            if let cookieFile = try? SecureCookieFile.create(url: url, rawCookies: rawCookies, additionalCookies: additionalCookies) {
+                secureCookieFile = cookieFile
+                args.append(contentsOf: ["--cookies", cookieFile.path])
                 if sucuriCookie != nil {
                     LoggerService.shared.log("Using temporary Sucuri cookie in consolidated file for \(hostForLog(url)) (cookie values not logged)", level: .info)
                     args.append(contentsOf: ["--user-agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"])
@@ -1021,12 +1021,6 @@ class YtdlpService: ObservableObject {
         }
         args.append("--")
         args.append(url)
-
-        defer {
-            if let fileURL = tempCookieFile {
-                try? FileManager.default.removeItem(at: fileURL)
-            }
-        }
 
         let output = try await runCommand(args)
 
@@ -1238,7 +1232,14 @@ public struct DownloadResult: Sendable {
             args.append(contentsOf: extraArgs)
         }
 
-        var tempCookieFiles: [URL] = []
+        var secureCookieFiles: [SecureCookieFile] = []
+        defer {
+            for file in secureCookieFiles {
+                file.cleanup()
+            }
+            try? FileManager.default.removeItem(at: scratchDirectory)
+        }
+
         let sucuriCookie = await resolveSucuriCookie(for: normalizedURL)
         var additionalCookies: [(name: String, value: String)] = []
         if let sc = sucuriCookie {
@@ -1246,9 +1247,9 @@ public struct DownloadResult: Sendable {
         }
 
         if (options.rawCookies?.isEmpty == false) || !additionalCookies.isEmpty {
-            if let tempFile = createConsolidatedCookiesFile(url: targetURL, rawCookies: options.rawCookies, additionalCookies: additionalCookies) {
-                tempCookieFiles.append(tempFile)
-                args.append(contentsOf: ["--cookies", tempFile.path])
+            if let cookieFile = try? SecureCookieFile.create(url: targetURL, rawCookies: options.rawCookies, additionalCookies: additionalCookies) {
+                secureCookieFiles.append(cookieFile)
+                args.append(contentsOf: ["--cookies", cookieFile.path])
                 if sucuriCookie != nil {
                     LoggerService.shared.log("Using temporary Sucuri cookie in consolidated file for \(hostForLog(normalizedURL)) (cookie values not logged)", level: .info)
                     args.append(contentsOf: ["--user-agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"])
@@ -1283,13 +1284,6 @@ public struct DownloadResult: Sendable {
         }
         onOutput("[COMMAND] \(sanitizedCommand)\n")
         LoggerService.shared.log(sanitizedCommand, level: .command)
-
-        defer {
-            for fileURL in tempCookieFiles {
-                try? FileManager.default.removeItem(at: fileURL)
-            }
-            try? FileManager.default.removeItem(at: scratchDirectory)
-        }
         
         // Structured bounded recovery state machine
         enum DownloadRecoveryStrategy: Hashable {
@@ -1328,7 +1322,7 @@ public struct DownloadResult: Sendable {
                 if !errText.isEmpty, isCookieFailureError(errText), currentArgs.contains("--cookies-from-browser"), !triedStrategies.contains(.stripCookies) {
                     if let idx = currentArgs.firstIndex(of: "--cookies-from-browser"), idx + 1 < currentArgs.count {
                         let failedBrowser = currentArgs[idx + 1]
-                        let installed = BrowserUtils.shared.getInstalledBrowsers().map { $0.id.lowercased() }
+                        let installed = await BrowserUtils.shared.getInstalledBrowsers().map { $0.id.lowercased() }
                         let pool = installed.isEmpty ? ["chrome", "brave", "firefox", "edge", "safari"] : ["chrome", "brave", "firefox", "edge", "safari"].filter { installed.contains($0) }
                         if let altBrowser = pool.first(where: { $0 != failedBrowser && ($0 != "safari" || Self.hasFullDiskAccess) && !triedAltBrowsers.contains($0) }) {
                             triedAltBrowsers.insert(altBrowser)
@@ -4191,7 +4185,7 @@ public struct DownloadResult: Sendable {
                     recordCookieDenial(browser: browser, url: urlArg)
                 }
                 
-                let installed = BrowserUtils.shared.getInstalledBrowsers().map { $0.id.lowercased() }
+                let installed = await BrowserUtils.shared.getInstalledBrowsers().map { $0.id.lowercased() }
                 let pool = installed.isEmpty ? ["chrome", "brave", "firefox", "edge", "safari"] : ["chrome", "brave", "firefox", "edge", "safari"].filter { installed.contains($0) }
                 let altBrowsers = pool.filter { $0 != browser && ($0 != "safari" || Self.hasFullDiskAccess) }
                 for alt in altBrowsers {
@@ -4449,6 +4443,13 @@ public struct DownloadResult: Sendable {
         return cookiesDir
     }
 
+    private func sanitizeCookieToken(_ token: String) -> String {
+        return token.replacingOccurrences(of: "\t", with: "")
+                    .replacingOccurrences(of: "\n", with: "")
+                    .replacingOccurrences(of: "\r", with: "")
+                    .replacingOccurrences(of: "\0", with: "")
+    }
+
     func createTempCookiesFile(url: String, cookieName: String, cookieValue: String) -> URL? {
         guard let cookiesDir = YtdlpService.getSecureTempCookiesDirectory() else { return nil }
         let tempCookiesURL = cookiesDir.appendingPathComponent("siphon_cookies_\(UUID().uuidString).txt")
@@ -4515,156 +4516,19 @@ public struct DownloadResult: Sendable {
         }
     }
 
-    private struct ConsolidatedCookieEntry: Hashable {
-        let domain: String
-        let includeSubdomains: Bool
-        let path: String
-        let isSecure: Bool
-        var expiry: Int
-        let name: String
-        var value: String
-
-        var netscapeLine: String {
-            "\(domain)\t\(includeSubdomains ? "TRUE" : "FALSE")\t\(path)\t\(isSecure ? "TRUE" : "FALSE")\t\(expiry)\t\(name)\t\(value)"
-        }
-    }
-
-    private struct CookieKey: Hashable {
-        let domain: String
-        let path: String
-        let name: String
-    }
-
     func createConsolidatedCookiesFile(
         url: String,
         rawCookies: String? = nil,
         additionalCookies: [(name: String, value: String)] = [],
         additionalNetscapeLines: [String] = []
     ) -> URL? {
-        guard let urlObj = URL(string: url), let host = urlObj.host, !host.isEmpty else { return nil }
-        guard let cookiesDir = YtdlpService.getSecureTempCookiesDirectory() else { return nil }
-        let defaultDomain = host.hasPrefix(".") ? host : ".\(host)"
-        let tempCookiesURL = cookiesDir.appendingPathComponent("siphon_consolidated_cookies_\(UUID().uuidString).txt")
-        let defaultExpiry = Int(Date().addingTimeInterval(86400 * 30).timeIntervalSince1970)
-
-        var domains: [String] = [defaultDomain]
-        let lowerHost = host.lowercased()
-        if lowerHost.hasPrefix("www.") {
-            domains.append(".\(lowerHost.dropFirst(4))")
-        }
-        if lowerHost.contains("boyfriendtv.com") || lowerHost.contains("boyfriend.tv") {
-            domains.append(".boyfriend.tv")
-            domains.append(".boyfriendtv.com")
-        }
-        var seenDomains = Set<String>()
-        let uniqueDomains = domains.filter { seenDomains.insert($0).inserted }
-
-        var cookieMap: [CookieKey: ConsolidatedCookieEntry] = [:]
-
-        // 1. Process raw cookie header pairs (default path: "/", default domain: defaultDomain)
-        if let raw = rawCookies, !raw.isEmpty {
-            let pairs = raw.split(separator: ";")
-            for pair in pairs {
-                let trimmed = pair.trimmingCharacters(in: .whitespacesAndNewlines)
-                guard !trimmed.isEmpty else { continue }
-                let parts = trimmed.split(separator: "=", maxSplits: 1)
-                if parts.count == 2 {
-                    let key = sanitizeCookieToken(parts[0].trimmingCharacters(in: .whitespacesAndNewlines))
-                    let value = sanitizeCookieToken(parts[1].trimmingCharacters(in: .whitespacesAndNewlines))
-                    if !key.isEmpty && !value.isEmpty {
-                        for d in uniqueDomains {
-                            let mapKey = CookieKey(domain: d.lowercased(), path: "/", name: key)
-                            cookieMap[mapKey] = ConsolidatedCookieEntry(
-                                domain: d,
-                                includeSubdomains: true,
-                                path: "/",
-                                isSecure: false,
-                                expiry: defaultExpiry,
-                                name: key,
-                                value: value
-                            )
-                        }
-                    }
-                }
-            }
-        }
-
-        // 2. Process additional Netscape lines if provided
-        for line in additionalNetscapeLines {
-            let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !trimmed.isEmpty && !trimmed.hasPrefix("#") else { continue }
-            let columns = trimmed.components(separatedBy: "\t")
-            if columns.count >= 7 {
-                let domain = sanitizeCookieToken(columns[0])
-                let includeSub = columns[1].uppercased() == "TRUE"
-                let path = sanitizeCookieToken(columns[2])
-                let isSec = columns[3].uppercased() == "TRUE"
-                let exp = Int(columns[4]) ?? defaultExpiry
-                let name = sanitizeCookieToken(columns[5])
-                let val = sanitizeCookieToken(columns[6])
-                if !name.isEmpty && !val.isEmpty {
-                    let mapKey = CookieKey(domain: domain.lowercased(), path: path.isEmpty ? "/" : path, name: name)
-                    cookieMap[mapKey] = ConsolidatedCookieEntry(
-                        domain: domain,
-                        includeSubdomains: includeSub,
-                        path: path.isEmpty ? "/" : path,
-                        isSecure: isSec,
-                        expiry: exp,
-                        name: name,
-                        value: val
-                    )
-                }
-            }
-        }
-
-        // 3. Process additionalCookies (e.g. Sucuri or dynamically extracted tokens)
-        // These deterministically overwrite any existing entry for (defaultDomain, "/", name)
-        for cookie in additionalCookies {
-            let key = sanitizeCookieToken(cookie.name.trimmingCharacters(in: .whitespacesAndNewlines))
-            let value = sanitizeCookieToken(cookie.value.trimmingCharacters(in: .whitespacesAndNewlines))
-            if !key.isEmpty && !value.isEmpty {
-                let mapKey = CookieKey(domain: defaultDomain.lowercased(), path: "/", name: key)
-                cookieMap[mapKey] = ConsolidatedCookieEntry(
-                    domain: defaultDomain,
-                    includeSubdomains: true,
-                    path: "/",
-                    isSecure: false,
-                    expiry: defaultExpiry,
-                    name: key,
-                    value: value
-                )
-            }
-        }
-
-        guard !cookieMap.isEmpty else { return nil }
-
-        // Deterministic sorting by domain, path, name
-        let sortedEntries = cookieMap.values.sorted {
-            if $0.domain != $1.domain { return $0.domain < $1.domain }
-            if $0.path != $1.path { return $0.path < $1.path }
-            return $0.name < $1.name
-        }
-
-        var lines = ["# Netscape HTTP Cookie File"]
-        for entry in sortedEntries {
-            lines.append(entry.netscapeLine)
-        }
-
-        let content = lines.joined(separator: "\n") + "\n"
-        guard let data = content.data(using: .utf8) else { return nil }
-
-        if FileManager.default.createFile(atPath: tempCookiesURL.path, contents: data, attributes: [.posixPermissions: 0o600]) {
-            return tempCookiesURL
-        } else {
-            return nil
-        }
-    }
-
-    private func sanitizeCookieToken(_ token: String) -> String {
-        return token.replacingOccurrences(of: "\t", with: "")
-                    .replacingOccurrences(of: "\n", with: "")
-                    .replacingOccurrences(of: "\r", with: "")
-                    .replacingOccurrences(of: "\0", with: "")
+        guard let secureFile = try? SecureCookieFile.create(
+            url: url,
+            rawCookies: rawCookies,
+            additionalCookies: additionalCookies,
+            additionalNetscapeLines: additionalNetscapeLines
+        ) else { return nil }
+        return secureFile.detach()
     }
 
     static func purgeOrphanedTempCookieFiles() {

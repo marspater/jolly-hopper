@@ -2,33 +2,33 @@ import XCTest
 @testable import Siphon
 
 final class BrowserUtilsTests: XCTestCase {
-    override func setUp() {
-        super.setUp()
-        BrowserUtils.shared.clearCache()
+    override func setUp() async throws {
+        try await super.setUp()
+        await BrowserUtils.shared.clearCache()
     }
 
-    override func tearDown() {
-        BrowserUtils.shared.clearCache()
-        super.tearDown()
+    override func tearDown() async throws {
+        await BrowserUtils.shared.clearCache()
+        try await super.tearDown()
     }
 
-    func testGetInstalledBrowsersReturnsNonNil() {
-        let installed = BrowserUtils.shared.getInstalledBrowsers()
+    func testGetInstalledBrowsersReturnsNonNil() async {
+        let installed = await BrowserUtils.shared.getInstalledBrowsers()
         XCTAssertFalse(installed.isEmpty, "At least Safari should be installed on macOS environment")
         XCTAssertTrue(installed.contains(.safari))
     }
 
-    func testGetInstalledBrowsersUsesCacheOnSecondCall() {
-        let firstResult = BrowserUtils.shared.getInstalledBrowsers()
-        let secondResult = BrowserUtils.shared.getInstalledBrowsers()
+    func testGetInstalledBrowsersUsesCacheOnSecondCall() async {
+        let firstResult = await BrowserUtils.shared.getInstalledBrowsers()
+        let secondResult = await BrowserUtils.shared.getInstalledBrowsers()
 
         XCTAssertEqual(firstResult, secondResult)
     }
 
-    func testClearCacheResetsCache() {
-        let firstResult = BrowserUtils.shared.getInstalledBrowsers()
-        BrowserUtils.shared.clearCache()
-        let secondResult = BrowserUtils.shared.getInstalledBrowsers()
+    func testClearCacheResetsCache() async {
+        let firstResult = await BrowserUtils.shared.getInstalledBrowsers()
+        await BrowserUtils.shared.clearCache()
+        let secondResult = await BrowserUtils.shared.getInstalledBrowsers()
 
         XCTAssertEqual(firstResult, secondResult)
     }
