@@ -126,13 +126,16 @@ public final class DownloadProcessController: @unchecked Sendable {
             throw YtdlpError.downloadFailed("Download was stopped.")
         }
         switch internalLifecycle {
-        case .cancelling, .terminated:
+        case .cancelling:
             lock.unlock()
             throw YtdlpError.downloadFailed("Download was stopped.")
         case .running, .starting:
             lock.unlock()
             throw YtdlpError.downloadFailed("Process already running.")
-        case .created, .failed:
+        case .created, .failed, .terminated:
+            // A completed process may be followed by a bounded recovery attempt using
+            // the same per-download controller. Explicit cancellation is still blocked
+            // above by wasCancelled / .cancelling.
             internalLifecycle = .starting
             activeProcess = proc
         }
@@ -166,10 +169,10 @@ public final class DownloadProcessController: @unchecked Sendable {
         let shouldTerminate: Bool
         let success: Bool
         switch internalLifecycle {
-        case .cancelling, .terminated:
+        case .cancelling:
             shouldTerminate = proc.isRunning
             success = false
-        case .created, .failed:
+        case .created, .failed, .terminated:
             let pid = proc.processIdentifier
             internalLifecycle = .running(pid: pid)
             activeProcess = proc
