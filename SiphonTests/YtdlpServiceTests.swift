@@ -422,6 +422,9 @@ final class YtdlpServiceTests: XCTestCase {
     }
 
     func testGuywhURLNormalizationAndHeaders() async throws {
+        let previousBrowser = UserDefaults.standard.object(forKey: UserDefaultsKeys.browserForCookies)
+        UserDefaults.standard.set("chrome", forKey: UserDefaultsKeys.browserForCookies)
+        defer { UserDefaults.standard.set(previousBrowser, forKey: UserDefaultsKeys.browserForCookies) }
         let capturedArgsBox = TestBox<[String]>([])
         service.processRunner = MockYtdlpProcessRunner(mockDownload: { args in
             capturedArgsBox.value = args
@@ -448,6 +451,9 @@ final class YtdlpServiceTests: XCTestCase {
     }
 
     func testGFFURLNormalizationAndHeaders() async throws {
+        let previousBrowser = UserDefaults.standard.object(forKey: UserDefaultsKeys.browserForCookies)
+        UserDefaults.standard.set("chrome", forKey: UserDefaultsKeys.browserForCookies)
+        defer { UserDefaults.standard.set(previousBrowser, forKey: UserDefaultsKeys.browserForCookies) }
         let capturedArgsBox = TestBox<[String]>([])
         service.processRunner = MockYtdlpProcessRunner(mockDownload: { args in
             capturedArgsBox.value = args
@@ -1439,6 +1445,109 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertTrue(lastArg.contains("boyfriend"), "BoyfriendTV download must target the resolved stream or canonical BoyfriendTV domain")
         XCTAssertTrue(capturedArgsBox.value.contains(where: { $0.hasPrefix("Origin:https://www.boyfriend") }))
         XCTAssertTrue(capturedArgsBox.value.contains(where: { $0.contains("Referer:https://www.boyfriend") }))
+    }
+
+    func testBoyfriendTVWithSafariCookiesPreservesSafariUserAgentAndDoesNotClobberWithChrome() async throws {
+        service.ytdlpPath = URL(fileURLWithPath: "/usr/local/bin/yt-dlp")
+        UserDefaults.standard.set("safari", forKey: UserDefaultsKeys.browserForCookies)
+        YtdlpService.hasFullDiskAccessOverride = true
+        defer {
+            UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.browserForCookies)
+            YtdlpService.hasFullDiskAccessOverride = nil
+        }
+
+        let capturedArgsBox = TestBox<[String]>([])
+        service.processRunner = MockYtdlpProcessRunner(
+            mockCommand: { args in
+                if args.contains("--dump-pages") {
+                    let html = """
+                    <!DOCTYPE html><html><head><title>Test Video | BoyFriendTV</title></head>
+                    <body>
+                    <script>
+                    var playerConfig = {
+                        sources: {"hlsAuto":"https://cdn.boyfriendtv.com/key=123,end=456/media=hls4A/multi=854x480:v480/2026-05/_TPL_.mp4"}
+                    };
+                    </script>
+                    </body></html>
+                    """
+                    return html.data(using: .utf8)!.base64EncodedString()
+                }
+                return "{}"
+            },
+            mockDownload: { args in
+                capturedArgsBox.value = args
+                return "[download] Destination: /tmp/test.mp4\n"
+            }
+        )
+
+        let options = DownloadOptions.default
+
+        _ = try await service.download(
+            url: "https://www.boyfriendtv.com/videos/1639435/test-slug/",
+            options: options,
+            onProgress: { _, _, _ in },
+            onOutput: { _ in }
+        )
+
+        guard let uaIdx = capturedArgsBox.value.firstIndex(of: "--user-agent"), uaIdx + 1 < capturedArgsBox.value.count else {
+            XCTFail("Missing --user-agent argument")
+            return
+        }
+        let ua = capturedArgsBox.value[uaIdx + 1]
+        XCTAssertTrue(ua.contains("Safari/605.1.15"), "Expected Safari user agent but got \(ua)")
+        XCTAssertFalse(ua.contains("Chrome/"), "Safari user agent was clobbered by Chrome user agent: \(ua)")
+    }
+
+    func testBoyfriendTVFullStreamSurvivesLoginUIInPageDump() async throws {
+        let stream = "https://cdn.boyfriendtv.com/key=test/media=hls4A/multi=854x480:v480/2026-05/_TPL_.mp4"
+        let html = """
+        <html><head><title>Playable video</title></head><body>
+        <nav class="loginLinks">Login</nav>
+        <script>const messages = {loginProtected: "To watch this video please Login"};
+        var playerConfig = {sources: {"hlsAuto":"\(stream)"}};</script>
+        </body></html>
+        """
+        for useRawCookies in [false, true] {
+            service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
+                if args.contains("--dump-pages") {
+                    // yt-dlp can return useful dumps even when native extraction fails.
+                    throw YtdlpError.commandFailed(html.data(using: .utf8)!.base64EncodedString() + "\nERROR: Unsupported URL")
+                }
+                XCTAssertEqual(args.last, stream)
+                return "{}"
+            })
+            let info = try await service.fetchInfo(
+                url: "https://www.boyfriendtv.com/videos/12345/",
+                rawCookies: useRawCookies ? "session=test" : nil
+            )
+            XCTAssertEqual(info.manifestUrl, stream)
+            XCTAssertEqual(info.title, "Playable video")
+        }
+    }
+
+    func testBoyfriendTVPreservesActualSafariPermissionFailureAfterFallbacks() async throws {
+        let previousBrowser = UserDefaults.standard.object(forKey: UserDefaultsKeys.browserForCookies)
+        UserDefaults.standard.set("safari", forKey: UserDefaultsKeys.browserForCookies)
+        // Preflight can succeed while the child process is denied cookie access.
+        YtdlpService.hasFullDiskAccessOverride = true
+        defer {
+            UserDefaults.standard.set(previousBrowser, forKey: UserDefaultsKeys.browserForCookies)
+            YtdlpService.hasFullDiskAccessOverride = nil
+        }
+        service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
+            if args.contains("safari") {
+                throw YtdlpError.commandFailed("ERROR: [Errno 1] Operation not permitted: Safari/Cookies.binarycookies")
+            }
+            throw YtdlpError.commandFailed("ERROR: Unsupported URL")
+        })
+        do {
+            _ = try await service.fetchInfo(url: "https://www.boyfriendtv.com/videos/12345/")
+            XCTFail("Expected Safari cookie permission error")
+        } catch let error as YtdlpError {
+            guard case .safariCookiesFullDiskAccessRequired = error else {
+                return XCTFail("Lost Safari permission error: \(error)")
+            }
+        }
     }
 
     func testBoyfriendTVMultiFormatManifestExtraction() async throws {
