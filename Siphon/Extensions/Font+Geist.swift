@@ -90,7 +90,8 @@ public struct GeistFontRegistrar {
     public static func registerFontResources(_ fontFiles: [String], from bundle: Bundle = .main) -> Bool {
         let urls = fontFiles.compactMap { locateResource(for: $0, in: bundle) }
         guard !urls.isEmpty else { return false }
-        return CTFontManagerRegisterFontURLs(urls as CFArray, .process, true, nil)
+        CTFontManagerRegisterFontURLs(urls as CFArray, .process, true, nil)
+        return true
     }
 
     /// Resolves the URL for a resource file name (with or without extension) in a bundle.
