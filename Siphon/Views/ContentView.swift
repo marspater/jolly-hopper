@@ -86,7 +86,7 @@ struct ContentView: View {
         } message: {
             Text(String(format: languageService.s("update_available_message"), updateChecker.latestVersion ?? ""))
         }
-        .frame(minWidth: 900, minHeight: 600)
+        .frame(minWidth: 860, idealWidth: 980, minHeight: 580, idealHeight: 620)
     }
     
     @ViewBuilder
@@ -140,34 +140,53 @@ struct ContentView: View {
     }
 }
 
-
-
 struct SidebarView: View {
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var downloadManager: DownloadManager
     @EnvironmentObject var languageService: LanguageService
     @EnvironmentObject var updateChecker: UpdateChecker
+    @State private var isLogoHovered = false
     
     var body: some View {
-        List {
-            Section {
-                sidebarButton(item: .home)
+        VStack(spacing: 0) {
+            // Sidebar Header with Radiant Siphon Halo Logo
+            sidebarHeader
+                .padding(.top, 28)
+                .padding(.horizontal, 16)
+                .padding(.bottom, 10)
+
+            List {
+                Section {
+                    sidebarButton(item: .home)
+                }
+                
+                Section(languageService.s("downloading")) {
+                    sidebarButton(item: .downloading, badgeCount: downloadManager.downloadingCount, badgeColor: SiphonTheme.statusDownloading)
+                    sidebarButton(item: .queued, badgeCount: downloadManager.queuedCount, badgeColor: SiphonTheme.statusQueued)
+                }
+                
+                Section(languageService.s("history")) {
+                    sidebarButton(item: .completed, badgeCount: downloadManager.completedCount, badgeColor: SiphonTheme.statusCompleted)
+                    sidebarButton(item: .failed, badgeCount: downloadManager.failedCount, badgeColor: SiphonTheme.statusFailed)
+                }
             }
-            
-            Section(languageService.s("downloading")) {
-                sidebarButton(item: .downloading, badgeCount: downloadManager.downloadingCount, badgeColor: SiphonTheme.statusDownloading)
-                sidebarButton(item: .queued, badgeCount: downloadManager.queuedCount, badgeColor: SiphonTheme.statusQueued)
-            }
-            
-            Section(languageService.s("history")) {
-                sidebarButton(item: .completed, badgeCount: downloadManager.completedCount, badgeColor: SiphonTheme.statusCompleted)
-                sidebarButton(item: .failed, badgeCount: downloadManager.failedCount, badgeColor: SiphonTheme.statusFailed)
-            }
+            .listStyle(.sidebar)
         }
-        .listStyle(.sidebar)
         .siphonSidebarWidth()
         .safeAreaInset(edge: .bottom) {
-            VStack(spacing: SiphonTheme.spacing8) {
+            VStack(spacing: SiphonTheme.spacing10) {
+                // Catchy Slogan
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Play videos.")
+                        .font(.geist(13, weight: .medium))
+                        .foregroundColor(.secondary)
+                    Text("Your way.")
+                        .font(.geist(13, weight: .medium))
+                        .foregroundColor(.secondary.opacity(0.8))
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 14)
+
                 SponsorView()
                 
                 Button {
@@ -196,7 +215,59 @@ struct SidebarView: View {
                 .buttonStyle(.plain)
                 .padding(.horizontal, SiphonTheme.spacing8)
             }
-            .padding(.bottom, SiphonTheme.spacing8)
+            .padding(.bottom, SiphonTheme.spacing10)
+        }
+    }
+
+    private var sidebarHeader: some View {
+        HStack(spacing: 10) {
+            ZStack {
+                // Dynamic radiant siphon halo effect
+                Circle()
+                    .fill(
+                        RadialGradient(
+                            colors: [
+                                SiphonTheme.accent.opacity(isLogoHovered ? 0.75 : 0.45),
+                                Color.cyan.opacity(isLogoHovered ? 0.40 : 0.20),
+                                Color.clear
+                            ],
+                            center: .center,
+                            startRadius: 2,
+                            endRadius: 24
+                        )
+                    )
+                    .frame(width: 46, height: 46)
+                    .blur(radius: isLogoHovered ? 8 : 4)
+                    .scaleEffect(isLogoHovered ? 1.15 : 1.0)
+                    .animation(SiphonAnimation.hoverSpring, value: isLogoHovered)
+
+                Image(nsImage: NSApp.applicationIconImage)
+                    .resizable()
+                    .frame(width: 32, height: 32)
+                    .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 7, style: .continuous)
+                            .stroke(Color.white.opacity(0.25), lineWidth: 0.75)
+                    )
+                    .shadow(color: Color.black.opacity(0.22), radius: 3, y: 1.5)
+            }
+
+            VStack(alignment: .leading, spacing: 1) {
+                Text("Siphon")
+                    .font(.geist(15, weight: .bold))
+                    .foregroundColor(.primary)
+                Text(languageService.s("video_downloader"))
+                    .font(.geist(11, weight: .regular))
+                    .foregroundColor(.secondary)
+            }
+
+            Spacer()
+        }
+        .contentShape(Rectangle())
+        .onHover { hovering in
+            withAnimation(SiphonAnimation.hoverSpring) {
+                isLogoHovered = hovering
+            }
         }
     }
     
@@ -273,113 +344,86 @@ struct HomeView: View {
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var downloadManager: DownloadManager
     @EnvironmentObject var languageService: LanguageService
-    @State private var isLogoHovered = false
     
     var body: some View {
         ScrollView {
-            VStack(spacing: SiphonTheme.spacing32) {
-                Spacer(minLength: SiphonTheme.spacing20)
-                
-                // Logo & Title Section
-                VStack(spacing: SiphonTheme.spacing16) {
-                    let reduceMotion = AdaptiveRenderingEnvironment.shared.capabilities.reduceMotion
-                    Image(nsImage: NSApp.applicationIconImage)
-                        .resizable()
-                        .frame(width: 92, height: 92)
-                        .shadow(
-                            color: SiphonTheme.accent.opacity(isLogoHovered ? 0.35 : 0.20),
-                            radius: isLogoHovered ? 18 : 12,
-                            x: 0,
-                            y: isLogoHovered ? 8 : 4
-                        )
-                        .scaleEffect(reduceMotion ? 1.0 : (isLogoHovered ? 1.025 : 1.0))
-                        .animation(reduceMotion ? nil : .spring(response: 0.32, dampingFraction: 0.65), value: isLogoHovered)
-                        .onHover { hovering in
-                            isLogoHovered = hovering
-                        }
-                    
-                    VStack(spacing: SiphonTheme.spacing6) {
-                        Text("Siphon")
-                            .font(.siphonHomeTitle)
+            VStack(spacing: SiphonTheme.spacing20) {
+                // Top Header: Ready to download + More videos. A calmer internet.
+                HStack(alignment: .top) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(languageService.s("ready_to_download"))
+                            .font(.geist(26, weight: .bold))
+                            .foregroundColor(.primary)
                         
-                        Text(languageService.s("url_placeholder"))
-                            .font(.siphonStandard)
+                        Text(languageService.s("ready_to_download_subtitle"))
+                            .font(.geist(13, weight: .regular))
                             .foregroundColor(.secondary)
-                            .multilineTextAlignment(.center)
-                            .padding(.horizontal, SiphonTheme.spacing24)
+                    }
+                    
+                    Spacer(minLength: 20)
+                    
+                    VStack(alignment: .trailing, spacing: 5) {
+                        Rectangle()
+                            .fill(Color.secondary.opacity(0.35))
+                            .frame(width: 28, height: 1.5)
+                        
+                        Text(languageService.s("more_videos_calmer_internet"))
+                            .font(.geist(11, weight: .medium))
+                            .foregroundColor(.secondary)
+                            .multilineTextAlignment(.trailing)
+                            .lineSpacing(2)
                     }
                 }
+                .padding(.horizontal, SiphonTheme.spacing24)
+                .padding(.top, SiphonTheme.spacing16)
                 
-                // Action Button
-                Button {
-                    appState.showAddDownloadSheet = true
-                } label: {
-                    HStack(spacing: SiphonTheme.spacing8) {
-                        Image(systemName: "plus.circle.fill")
-                            .font(.system(size: 15, weight: .semibold))
-                        Text(languageService.s("new_download"))
-                            .font(.geist(14, weight: .semibold))
-                    }
-                    .foregroundColor(.white)
+                // Hero Drop URL Zone
+                HeroDropURLView()
                     .padding(.horizontal, SiphonTheme.spacing24)
-                    .padding(.vertical, SiphonTheme.spacing10)
-                    .background(
-                        SiphonTheme.primaryGradient
-                    )
-                    .clipShape(Capsule())
-                    .overlay(
-                        Capsule()
-                            .stroke(Color.white.opacity(0.25), lineWidth: 1)
-                    )
-                    .shadow(color: SiphonTheme.accent.opacity(0.35), radius: 8, y: 3)
-                }
-                .buttonStyle(.bouncy(scale: 0.96, hover: 1.015))
-                .keyboardShortcut("n", modifiers: .command)
                 
-                // Stats Grid
-                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: SiphonTheme.spacing14), count: 4), spacing: SiphonTheme.spacing14) {
-                    StatCard(item: .downloading, title: languageService.s("stat_downloading"), count: downloadManager.downloadingCount, color: SiphonTheme.downloading) {
-                        appState.selectedNavItem = .downloading
-                    }
-                    StatCard(item: .queued, title: languageService.s("stat_queued"), count: downloadManager.queuedCount, color: SiphonTheme.queued) {
-                        appState.selectedNavItem = .queued
-                    }
-                    StatCard(item: .completed, title: languageService.s("stat_completed"), count: downloadManager.completedCount, color: SiphonTheme.completed) {
-                        appState.selectedNavItem = .completed
-                    }
-                    StatCard(item: .failed, title: languageService.s("stat_failed"), count: downloadManager.failedCount, color: SiphonTheme.failed) {
-                        appState.selectedNavItem = .failed
-                    }
-                }
-                .padding(.horizontal, SiphonTheme.spacing32)
-                .frame(maxWidth: 820)
+                // Status Bar with Liquid Water & Circular Progress Rings
+                StatusBarView()
+                    .padding(.horizontal, SiphonTheme.spacing24)
                 
-                Spacer(minLength: SiphonTheme.spacing20)
+                // Recent Downloads Section
+                recentDownloadsSection
+                    .padding(.horizontal, SiphonTheme.spacing24)
                 
-                // Version info footer
-                if let version = downloadManager.ytdlpVersion {
-                    HStack(spacing: SiphonTheme.spacing6) {
-                        Image(systemName: "terminal.fill")
-                            .font(.system(size: 10, weight: .medium))
-                        Text("yt-dlp \(version)")
-                            .font(.geistMono(11, weight: .medium))
+                Spacer(minLength: SiphonTheme.spacing12)
+                
+                // Footer
+                HStack {
+                    if let version = downloadManager.ytdlpVersion {
+                        HStack(spacing: 5) {
+                            Image(systemName: "terminal.fill")
+                                .font(.system(size: 10, weight: .medium))
+                            Text("yt-dlp \(version)")
+                                .font(.geistMono(11, weight: .medium))
+                        }
+                        .foregroundColor(.secondary.opacity(0.8))
                     }
-                    .foregroundColor(.secondary.opacity(0.8))
-                    .padding(.bottom, SiphonTheme.spacing16)
+                    
+                    Spacer()
+                    
+                    Text("Built for a more open internet. 🤍")
+                        .font(.geist(11, weight: .regular))
+                        .foregroundColor(.secondary.opacity(0.7))
                 }
+                .padding(.horizontal, SiphonTheme.spacing24)
+                .padding(.bottom, SiphonTheme.spacing12)
             }
-            .frame(maxWidth: .infinity, minHeight: 500)
-            .padding(.vertical, SiphonTheme.spacing20)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, SiphonTheme.spacing12)
         }
         .background(
             GeometryReader { proxy in
                 RadialGradient(
                     gradient: Gradient(colors: [
-                        SiphonTheme.accent.opacity(0.14),
-                        SiphonTheme.accent.opacity(0.04),
+                        SiphonTheme.accent.opacity(0.12),
+                        SiphonTheme.accent.opacity(0.03),
                         Color.clear
                     ]),
-                    center: UnitPoint(x: 0.5, y: 0.22),
+                    center: UnitPoint(x: 0.5, y: 0.20),
                     startRadius: 20,
                     endRadius: max(proxy.size.width * 0.45, 380)
                 )
@@ -388,102 +432,214 @@ struct HomeView: View {
         )
         .background(.ultraThinMaterial)
     }
+    
+    // MARK: - Recent Downloads Section
+    
+    @ViewBuilder
+    private var recentDownloadsSection: some View {
+        VStack(spacing: SiphonTheme.spacing10) {
+            HStack {
+                Text(languageService.s("recent_downloads"))
+                    .font(.geist(14, weight: .semibold))
+                    .foregroundColor(.primary)
+                
+                Spacer()
+                
+                Button {
+                    if downloadManager.downloadingCount > 0 {
+                        appState.selectedNavItem = .downloading
+                    } else {
+                        appState.selectedNavItem = .completed
+                    }
+                } label: {
+                    HStack(spacing: 4) {
+                        Text(languageService.s("see_all"))
+                            .font(.geist(12, weight: .medium))
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 10, weight: .semibold))
+                    }
+                    .foregroundColor(.secondary)
+                }
+                .buttonStyle(.plain)
+                .help(languageService.s("see_all"))
+            }
+            
+            if downloadManager.downloads.isEmpty {
+                VStack(spacing: 8) {
+                    Image(systemName: "arrow.down.circle")
+                        .font(.system(size: 24, weight: .light))
+                        .foregroundColor(.secondary.opacity(0.7))
+                    Text(languageService.s("no_recent_downloads"))
+                        .font(.geist(13, weight: .medium))
+                        .foregroundColor(.primary.opacity(0.8))
+                    Text(languageService.s("no_recent_downloads_sub"))
+                        .font(.geist(11))
+                        .foregroundColor(.secondary)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 26)
+                .background(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(Color.primary.opacity(0.02))
+                        .background(
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .fill(.ultraThinMaterial)
+                        )
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .stroke(Color.white.opacity(0.08), lineWidth: 1)
+                )
+            } else {
+                VStack(spacing: 6) {
+                    ForEach(downloadManager.downloads.prefix(3)) { download in
+                        RecentDownloadRowView(download: download)
+                    }
+                }
+            }
+        }
+    }
 }
 
-struct StatCard: View {
+struct StatusBarView: View {
+    @EnvironmentObject var appState: AppState
+    @EnvironmentObject var downloadManager: DownloadManager
     @EnvironmentObject var languageService: LanguageService
+
+    var body: some View {
+        let downloadingProgress: Double = {
+            let active = downloadManager.downloadingDownloads
+            guard !active.isEmpty else { return 0.0 }
+            let sum = active.reduce(0.0) { $0 + ($1.progress.isNaN ? 0.0 : max(0.0, min(1.0, $1.progress))) }
+            return sum / Double(active.count)
+        }()
+
+        HStack(spacing: 0) {
+            StatusSegmentButton(
+                item: .downloading,
+                title: languageService.s("stat_downloading"),
+                count: downloadManager.downloadingCount,
+                color: SiphonTheme.statusDownloading,
+                ringProgress: downloadManager.downloadingCount > 0 ? max(0.08, downloadingProgress) : 0.0,
+                isActive: downloadManager.downloadingCount > 0
+            )
+
+            Rectangle()
+                .fill(Color.white.opacity(0.12))
+                .frame(width: 1, height: 26)
+
+            StatusSegmentButton(
+                item: .queued,
+                title: languageService.s("stat_queued"),
+                count: downloadManager.queuedCount,
+                color: SiphonTheme.statusQueued,
+                ringProgress: downloadManager.queuedCount > 0 ? 0.5 : 0.0,
+                isActive: downloadManager.queuedCount > 0
+            )
+
+            Rectangle()
+                .fill(Color.white.opacity(0.12))
+                .frame(width: 1, height: 26)
+
+            StatusSegmentButton(
+                item: .completed,
+                title: languageService.s("stat_completed"),
+                count: downloadManager.completedCount,
+                color: SiphonTheme.statusCompleted,
+                ringProgress: 1.0,
+                isActive: downloadManager.completedCount > 0
+            )
+
+            Spacer(minLength: 0)
+
+            Button {
+                if downloadManager.downloadingCount > 0 {
+                    appState.selectedNavItem = .downloading
+                } else {
+                    appState.selectedNavItem = .completed
+                }
+            } label: {
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundColor(.secondary)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
+            }
+            .buttonStyle(.plain)
+            .help(languageService.s("see_all"))
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: 48)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(.ultraThinMaterial)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(Color.white.opacity(0.12), lineWidth: 1)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+    }
+}
+
+struct StatusSegmentButton: View {
     @EnvironmentObject var appState: AppState
     let item: NavigationItem
     let title: String
     let count: Int
     let color: Color
-    let action: () -> Void
+    let ringProgress: Double
+    let isActive: Bool
+
     @State private var isHovered = false
 
-    private var isSelected: Bool {
-        appState.selectedNavItem == item
-    }
-
     var body: some View {
-        Button(action: action) {
-            VStack(alignment: .leading, spacing: SiphonTheme.spacing6) {
-                HStack(alignment: .center) {
+        Button {
+            appState.selectedNavItem = item
+        } label: {
+            ZStack {
+                // Liquid water wave animation in accent color
+                LiquidWaterWaveView(color: color, isHovered: isHovered, isActive: isActive)
+                    .opacity(isActive || isHovered ? 1.0 : 0.35)
+
+                HStack(spacing: 8) {
+                    // Circular Progress Ring
                     ZStack {
-                        RoundedRectangle(cornerRadius: 6, style: .continuous)
-                            .fill(color.opacity(isSelected ? 0.24 : (isHovered ? 0.18 : 0.12)))
-                            .frame(width: 26, height: 26)
-                        Image(systemName: item.icon)
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundColor(color)
-                    }
+                        Circle()
+                            .stroke(color.opacity(0.25), lineWidth: 2)
+                            .frame(width: 16, height: 16)
 
-                    Spacer()
+                        Circle()
+                            .trim(from: 0, to: CGFloat(ringProgress))
+                            .stroke(color, style: StrokeStyle(lineWidth: 2, lineCap: .round))
+                            .rotationEffect(.degrees(-90))
+                            .frame(width: 16, height: 16)
 
-                    if isSelected {
                         Circle()
                             .fill(color)
-                            .frame(width: 6, height: 6)
-                    } else if isHovered {
-                        Image(systemName: "arrow.right")
-                            .font(.system(size: 9, weight: .semibold))
-                            .foregroundColor(color.opacity(0.85))
-                            .transition(.opacity)
+                            .frame(width: 5, height: 5)
+                            .opacity(isActive ? 1.0 : 0.4)
                     }
+
+                    Text("\(count)")
+                        .font(.geistMono(13, weight: .semibold))
+                        .foregroundColor(count > 0 ? .primary : .secondary)
+
+                    Text(title)
+                        .font(.geist(13, weight: .medium))
+                        .foregroundColor(.secondary)
                 }
-
-                Spacer(minLength: 0)
-
-                Text("\(count)")
-                    .font(.siphonKPI)
-                    .monospacedDigit()
-                    .foregroundColor(isSelected ? .primary : (count > 0 ? color : .primary.opacity(0.90)))
-
-                Text(title)
-                    .font(.siphonSecondaryMedium)
-                    .foregroundColor(isSelected ? .primary : .secondary)
-                    .lineLimit(1)
+                .padding(.horizontal, 16)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .frame(height: 104)
-            .padding(.vertical, SiphonTheme.spacing12)
-            .padding(.horizontal, SiphonTheme.spacing14)
-            .background(
-                RoundedRectangle(cornerRadius: SiphonTheme.radiusCard, style: .continuous)
-                    .fill(
-                        isSelected ?
-                        color.opacity(0.18) :
-                        (isHovered ? Color(nsColor: .controlBackgroundColor).opacity(0.96) : Color(nsColor: .controlBackgroundColor).opacity(0.88))
-                    )
-            )
-            .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusCard, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: SiphonTheme.radiusCard, style: .continuous)
-                    .stroke(
-                        isSelected ? color.opacity(0.70) : (isHovered ? color.opacity(0.40) : Color.primary.opacity(0.14)),
-                        lineWidth: isSelected ? 1.5 : 1
-                    )
-            )
-            .overlay(alignment: .top) {
-                RoundedRectangle(cornerRadius: 1)
-                    .fill(color.opacity(isSelected ? 0.95 : (isHovered ? 0.85 : 0.65)))
-                    .frame(height: 2.5)
-                    .padding(.horizontal, 4)
-            }
-            .shadow(
-                color: isSelected ? color.opacity(0.20) : (isHovered ? color.opacity(0.12) : Color.black.opacity(0.04)),
-                radius: isHovered ? 8 : 4,
-                y: isHovered ? 3 : 1
-            )
+            .frame(maxHeight: .infinity)
+            .contentShape(Rectangle())
         }
-        .buttonStyle(.bouncy(scale: 0.97, hover: 1.015))
+        .buttonStyle(.plain)
         .onHover { hovering in
-            withAnimation(.easeInOut(duration: 0.15)) {
+            withAnimation(SiphonAnimation.hoverSpring) {
                 isHovered = hovering
             }
         }
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(title): \(count)")
-        .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : [.isButton])
     }
 }
 
