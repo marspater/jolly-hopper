@@ -1557,7 +1557,9 @@ public struct DownloadResult: Sendable {
         guard let url = URL(string: urlString) else { return false }
         var request = URLRequest(url: url)
         request.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36", forHTTPHeaderField: "User-Agent")
-        request.setValue("https://www.boyfriend.tv/", forHTTPHeaderField: "Referer")
+        if let referer = Self.boyfriendTVThumbnailReferer(for: urlString) {
+            request.setValue(referer, forHTTPHeaderField: "Referer")
+        }
         
         do {
             let (tempLocal, response) = try await URLSession.shared.download(for: request)
@@ -1978,6 +1980,39 @@ public struct DownloadResult: Sendable {
                host == "boyfriendtv.com" || host.hasSuffix(".boyfriendtv.com")
     }
 
+    nonisolated static func boyfriendTVCookieScope(for urlString: String) -> String? {
+        let host = (URL(string: urlString)?.host ?? urlString).lowercased()
+        if host == "boyfriend.tv" || host.hasSuffix(".boyfriend.tv") {
+            return "boyfriend.tv"
+        }
+        if host == "boyfriendtv.com" || host.hasSuffix(".boyfriendtv.com") {
+            return "boyfriendtv.com"
+        }
+        return nil
+    }
+
+    nonisolated static func shouldForwardBoyfriendTVRawCookies(
+        from sourceURL: String,
+        to destinationURL: String
+    ) -> Bool {
+        guard let sourceScope = boyfriendTVCookieScope(for: sourceURL),
+              let destinationScope = boyfriendTVCookieScope(for: destinationURL) else {
+            return false
+        }
+        return sourceScope == destinationScope
+    }
+
+    nonisolated static func boyfriendTVThumbnailReferer(for urlString: String) -> String? {
+        switch boyfriendTVCookieScope(for: urlString) {
+        case "boyfriend.tv":
+            return "https://www.boyfriend.tv/"
+        case "boyfriendtv.com":
+            return "https://www.boyfriendtv.com/"
+        default:
+            return nil
+        }
+    }
+
     struct BoyfriendTVExtractedMedia {
         let streamURL: String
         let embedURL: String
@@ -2211,6 +2246,7 @@ public struct DownloadResult: Sendable {
                 if streamUrl != nil { break }
                 if let ytdlp = ytdlpBinary {
                     if let raw = rawCookies, !raw.isEmpty,
+                       Self.shouldForwardBoyfriendTVRawCookies(from: targetUrl, to: embed),
                        let tempFile = createTempCookiesFileFromHeader(url: embed, cookieHeader: raw) {
                         defer { try? FileManager.default.removeItem(at: tempFile) }
                         var rawEmbedArgs = [ytdlp.path, "--ignore-config", "--dump-pages", "--cookies", tempFile.path]
@@ -2308,7 +2344,8 @@ public struct DownloadResult: Sendable {
                         : "https://www.boyfriend.tv"
                     embedRequest.setValue(embedBaseDomain + "/", forHTTPHeaderField: "Referer")
                     embedRequest.setValue(embedBaseDomain, forHTTPHeaderField: "Origin")
-                    if let raw = rawCookies, !raw.isEmpty {
+                    if let raw = rawCookies, !raw.isEmpty,
+                       Self.shouldForwardBoyfriendTVRawCookies(from: targetUrl, to: embed) {
                         embedRequest.setValue(raw, forHTTPHeaderField: "Cookie")
                     }
 
