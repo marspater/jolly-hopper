@@ -2917,6 +2917,26 @@ final class YtdlpServiceTests: XCTestCase {
         let inside = URL(fileURLWithPath: "/Users/test/Downloads/video.mp4")
         XCTAssertTrue(YtdlpService.isPathContained(targetURL: inside, inside: root))
     }
+
+    func testLoggerServiceFileCreationPermissions() throws {
+        let tempDir = FileManager.default.temporaryDirectory
+        let logFile = tempDir.appendingPathComponent("siphon_test_log_\(UUID().uuidString).log")
+        defer { try? FileManager.default.removeItem(at: logFile) }
+
+        // 1. Initial creation via createFile directly with 0o600
+        let created = FileManager.default.createFile(atPath: logFile.path, contents: "initial entry\n".data(using: .utf8), attributes: [.posixPermissions: 0o600])
+        XCTAssertTrue(created)
+        let attrs1 = try FileManager.default.attributesOfItem(atPath: logFile.path)
+        let posix1 = attrs1[.posixPermissions] as? NSNumber
+        XCTAssertEqual(posix1?.intValue, 0o600, "Newly created log file must have 0o600 POSIX permissions")
+
+        // 2. Overwriting log file via createFile directly with 0o600 (e.g. during trim/clear)
+        let overwritten = FileManager.default.createFile(atPath: logFile.path, contents: "trimmed entry\n".data(using: .utf8), attributes: [.posixPermissions: 0o600])
+        XCTAssertTrue(overwritten)
+        let attrs2 = try FileManager.default.attributesOfItem(atPath: logFile.path)
+        let posix2 = attrs2[.posixPermissions] as? NSNumber
+        XCTAssertEqual(posix2?.intValue, 0o600, "Trimmed/cleared log file must maintain 0o600 POSIX permissions")
+    }
 }
 
 
