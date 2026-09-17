@@ -2112,8 +2112,11 @@ public struct DownloadResult: Sendable {
             var request = URLRequest(url: pageURL)
             request.timeoutInterval = 3.0
             request.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36", forHTTPHeaderField: "User-Agent")
-            request.setValue("https://www.boyfriend.tv/", forHTTPHeaderField: "Referer")
-            request.setValue("https://www.boyfriend.tv", forHTTPHeaderField: "Origin")
+            let pageBaseDomain = pageURL.host?.lowercased().contains("boyfriendtv.com") == true
+                ? "https://www.boyfriendtv.com"
+                : "https://www.boyfriend.tv"
+            request.setValue(pageBaseDomain + "/", forHTTPHeaderField: "Referer")
+            request.setValue(pageBaseDomain, forHTTPHeaderField: "Origin")
             if let raw = rawCookies, !raw.isEmpty {
                 request.setValue(raw, forHTTPHeaderField: "Cookie")
             }
@@ -2300,8 +2303,11 @@ public struct DownloadResult: Sendable {
                     var embedRequest = URLRequest(url: embedPageURL)
                     embedRequest.timeoutInterval = 3.0
                     embedRequest.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36", forHTTPHeaderField: "User-Agent")
-                    embedRequest.setValue("https://www.boyfriend.tv/", forHTTPHeaderField: "Referer")
-                    embedRequest.setValue("https://www.boyfriend.tv", forHTTPHeaderField: "Origin")
+                    let embedBaseDomain = embedPageURL.host?.lowercased().contains("boyfriendtv.com") == true
+                        ? "https://www.boyfriendtv.com"
+                        : "https://www.boyfriend.tv"
+                    embedRequest.setValue(embedBaseDomain + "/", forHTTPHeaderField: "Referer")
+                    embedRequest.setValue(embedBaseDomain, forHTTPHeaderField: "Origin")
                     if let raw = rawCookies, !raw.isEmpty {
                         embedRequest.setValue(raw, forHTTPHeaderField: "Cookie")
                     }
@@ -4034,12 +4040,13 @@ public struct DownloadResult: Sendable {
             if let idx = args.firstIndex(of: "--cookies-from-browser"), idx + 1 < args.count {
                 return args[idx + 1] == "safari"
             }
-            if args.contains("safari") {
-                return true
+            // Explicit cookie files may come from the browser extension and do not
+            // imply Safari merely because Safari is the configured browser source.
+            if args.contains("--cookies") {
+                return false
             }
             return configuredBrowserCookieSource() == "safari"
         }()
-
         if !isYouTube {
             if isSafari {
                 let safariUA = Self.safariUserAgent
