@@ -1354,7 +1354,7 @@ struct AddDownloadView: View {
 
                                 GridRow {
                                     VStack(alignment: .leading, spacing: 5) {
-                                        Text("Post-Processing")
+                                        Text(languageService.s("post_processing"))
                                             .font(.geist(11, weight: .medium))
                                             .foregroundColor(.secondary)
                                         Picker("", selection: $selectedConversionCodec) {
@@ -1365,11 +1365,11 @@ struct AddDownloadView: View {
                                         .labelsHidden()
                                         .pickerStyle(.menu)
                                         .frame(maxWidth: .infinity, alignment: .leading)
-                                        .accessibilityLabel("Post-Processing")
+                                        .accessibilityLabel(languageService.s("post_processing"))
                                     }
 
                                     VStack(alignment: .leading, spacing: 5) {
-                                        Text("HDR / Dynamic Range")
+                                        Text(languageService.s("hdr_dynamic_range"))
                                             .font(.geist(11, weight: .medium))
                                             .foregroundColor(.secondary)
                                         Picker("", selection: $selectedHDRAction) {
@@ -1380,7 +1380,7 @@ struct AddDownloadView: View {
                                         .labelsHidden()
                                         .pickerStyle(.menu)
                                         .frame(maxWidth: .infinity, alignment: .leading)
-                                        .accessibilityLabel("HDR / Dynamic Range")
+                                        .accessibilityLabel(languageService.s("hdr_dynamic_range"))
                                     }
                                 }
                             }
