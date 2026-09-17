@@ -145,8 +145,6 @@ struct SidebarView: View {
     @EnvironmentObject var downloadManager: DownloadManager
     @EnvironmentObject var languageService: LanguageService
     @EnvironmentObject var updateChecker: UpdateChecker
-    @State private var isLogoHovered = false
-    
     var body: some View {
         VStack(spacing: 0) {
             // Sidebar Header with Radiant Siphon Halo Logo
@@ -221,36 +219,7 @@ struct SidebarView: View {
 
     private var sidebarHeader: some View {
         HStack(spacing: 10) {
-            ZStack {
-                // Dynamic radiant siphon halo effect
-                Circle()
-                    .fill(
-                        RadialGradient(
-                            colors: [
-                                SiphonTheme.accent.opacity(isLogoHovered ? 0.75 : 0.45),
-                                Color.cyan.opacity(isLogoHovered ? 0.40 : 0.20),
-                                Color.clear
-                            ],
-                            center: .center,
-                            startRadius: 2,
-                            endRadius: 24
-                        )
-                    )
-                    .frame(width: 46, height: 46)
-                    .blur(radius: isLogoHovered ? 8 : 4)
-                    .scaleEffect(isLogoHovered ? 1.15 : 1.0)
-                    .animation(SiphonAnimation.hoverSpring, value: isLogoHovered)
-
-                Image(nsImage: NSApp.applicationIconImage)
-                    .resizable()
-                    .frame(width: 32, height: 32)
-                    .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 7, style: .continuous)
-                            .stroke(Color.white.opacity(0.25), lineWidth: 0.75)
-                    )
-                    .shadow(color: Color.black.opacity(0.22), radius: 3, y: 1.5)
-            }
+            RadiantSiphonLogoView()
 
             VStack(alignment: .leading, spacing: 1) {
                 Text("Siphon")
@@ -262,12 +231,6 @@ struct SidebarView: View {
             }
 
             Spacer()
-        }
-        .contentShape(Rectangle())
-        .onHover { hovering in
-            withAnimation(SiphonAnimation.hoverSpring) {
-                isLogoHovered = hovering
-            }
         }
     }
     

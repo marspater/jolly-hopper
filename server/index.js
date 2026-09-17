@@ -54,7 +54,7 @@ async function getLatestRelease() {
       : payload.html_url || 'https://github.com/marspater/jolly-hopper/releases/latest';
 
     const cleanData = {
-      version: payload.tag_name || 'v5.0.0',
+      version: payload.tag_name || 'v5.3.0',
       name: payload.name || 'Siphon',
       publishedAt: payload.published_at || new Date().toISOString(),
       downloadUrl,
@@ -73,7 +73,7 @@ async function getLatestRelease() {
     }
 
     return {
-      version: 'v5.0.0',
+      version: 'v5.3.0',
       name: 'Siphon',
       publishedAt: new Date().toISOString(),
       downloadUrl: 'https://github.com/marspater/jolly-hopper/releases/latest',

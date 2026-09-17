@@ -237,18 +237,19 @@ public enum SiphonTheme {
     public static let radiusModal: CGFloat = 16
     
     // Elevated Card & Tile Backgrounds (Less transparency on cards, solid separation from window)
+    // Elevated Card & Tile Backgrounds (Unified macOS Translucent Glass)
     @ViewBuilder
     public static func cardBackground(cornerRadius: CGFloat = radiusCard, isHovered: Bool = false) -> some View {
         if NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency {
-            RoundedRectangle(cornerRadius: cornerRadius)
+            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                 .fill(Color(nsColor: .controlBackgroundColor))
         } else {
-            RoundedRectangle(cornerRadius: cornerRadius)
-                .fill(Color(nsColor: .controlBackgroundColor).opacity(isHovered ? 0.92 : 0.84))
-                .background(
-                    RoundedRectangle(cornerRadius: cornerRadius)
-                        .fill(.regularMaterial)
-                )
+            ZStack {
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .fill(.ultraThinMaterial)
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .fill(Color.primary.opacity(isHovered ? 0.05 : 0.025))
+            }
         }
     }
     
@@ -256,7 +257,7 @@ public enum SiphonTheme {
     public static func cardBorder(cornerRadius: CGFloat = radiusCard, isHovered: Bool = false, accentColor: Color? = nil) -> some View {
         let isOpaque = NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency
         if let accent = accentColor {
-            RoundedRectangle(cornerRadius: cornerRadius)
+            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                 .strokeBorder(
                     LinearGradient(
                         colors: [
@@ -270,10 +271,10 @@ public enum SiphonTheme {
                     lineWidth: 1
                 )
         } else if isOpaque {
-            RoundedRectangle(cornerRadius: cornerRadius)
+            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                 .stroke(Color.primary.opacity(isHovered ? 0.24 : 0.14), lineWidth: 1)
         } else {
-            RoundedRectangle(cornerRadius: cornerRadius)
+            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                 .strokeBorder(
                     LinearGradient(
                         colors: [
@@ -322,25 +323,25 @@ public enum SiphonTheme {
         }
     }
     
-    // Control / Button Backgrounds (Solid, tactile surfaces)
+    // Control / Button Backgrounds (Tactile glass surfaces)
     @ViewBuilder
     public static func controlBackground(cornerRadius: CGFloat = radiusControl, isHovered: Bool = false) -> some View {
         if NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency {
-            RoundedRectangle(cornerRadius: cornerRadius)
+            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                 .fill(Color(nsColor: .controlColor))
         } else {
-            RoundedRectangle(cornerRadius: cornerRadius)
-                .fill(Color(nsColor: .controlColor).opacity(isHovered ? 0.95 : 0.88))
-                .background(
-                    RoundedRectangle(cornerRadius: cornerRadius)
-                        .fill(.regularMaterial)
-                )
+            ZStack {
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .fill(.ultraThinMaterial)
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .fill(Color.primary.opacity(isHovered ? 0.08 : 0.04))
+            }
         }
     }
     
     @ViewBuilder
     public static func controlBorder(cornerRadius: CGFloat = radiusControl, isHovered: Bool = false) -> some View {
-        RoundedRectangle(cornerRadius: cornerRadius)
+        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
             .stroke(Color.primary.opacity(isHovered ? 0.16 : 0.08), lineWidth: 1)
     }
     

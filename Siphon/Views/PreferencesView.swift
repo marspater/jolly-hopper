@@ -407,14 +407,24 @@ struct PreferencesView: View {
     private var appUpdatesSection: some View {
         Section(languageService.s("updates")) {
             HStack {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(languageService.s("app_updates"))
-                        .font(.geist(13, weight: .medium))
-                        .foregroundColor(.primary)
-                    if let latestVersion = updateChecker.latestVersion {
-                        Text("\(languageService.s("latest")): \(latestVersion)")
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 8) {
+                        Text(languageService.s("app_updates"))
+                            .font(.geist(13, weight: .medium))
+                            .foregroundColor(.primary)
+
+                        Text("v\(updateChecker.currentVersion)")
                             .font(.geistMono(11, weight: .semibold))
-                            .foregroundColor(updateChecker.hasUpdate ? .orange : .green)
+                            .foregroundColor(.secondary)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Capsule().fill(Color.primary.opacity(0.06)))
+                    }
+
+                    if let latestVersion = updateChecker.latestVersion, updateChecker.hasUpdate {
+                        Text("\(languageService.s("latest")): v\(latestVersion)")
+                            .font(.geistMono(11, weight: .semibold))
+                            .foregroundColor(.orange)
                     }
                 }
                 Spacer()
