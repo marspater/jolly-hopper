@@ -42,6 +42,23 @@ Do not mix unrelated specialist scopes into one PR. Specialist journals are not 
 
 PR titles and descriptions should be concise, factual, and limited to the implemented task. Include what changed, why, validation performed, and relevant limitations. Add screenshots for visually meaningful UI changes when practical.
 
+## Issue tracker & Linear context
+
+Project tasks and issues are tracked on **Linear**.
+- Reference the Linear issue identifier (e.g., `fixes ENG-123` or reference the ticket) in PR descriptions when applicable.
+- Keep PR descriptions factual and aligned with the Linear ticket scope.
+
+## Render integration & companion service
+
+The project runs an isolated companion web service on **Render** (`https://jolly-hopper.onrender.com`) sourced from `server/`.
+- **Preview Deployments & Self-Healing:** Render automatically runs preview deployments for PRs and is connected to Jules. If a preview build fails, Render sends build logs to Jules to diagnose and commit fixes to the PR branch.
+- **Strict Isolation:** Keep `server/` self-contained. Never move `package.json` or web dependencies to the repository root; the root must remain a pure native Swift macOS project.
+- **Deterministic Test Fixtures:** For tests requiring network/media streaming without hitting live rate-limited video platforms:
+  - WebVTT subtitles: `https://jolly-hopper.onrender.com/mock/subtitles.vtt`
+  - HLS playlist: `https://jolly-hopper.onrender.com/mock/playlist.m3u8`
+  - MP4 video: `https://jolly-hopper.onrender.com/mock/video.mp4`
+  - App release metadata: `https://jolly-hopper.onrender.com/api/latest`
+
 ## Repository hygiene
 
 Do not leave temporary scripts, debug output, generated artifacts, unrelated changes, merge markers, or stale worktree modifications. Follow the root validation and engineering rules.
