@@ -1076,6 +1076,12 @@ struct MediaInfo: Codable {
 
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
+        try encodeBasicMetadata(to: &container)
+        try encodeMediaContent(to: &container)
+        try encodeNetworkDetails(to: &container)
+    }
+
+    private func encodeBasicMetadata(to container: inout KeyedEncodingContainer<CodingKeys>) throws {
         try container.encode(id, forKey: .id)
         try container.encode(title, forKey: .title)
         try container.encodeIfPresent(description, forKey: .description)
@@ -1085,6 +1091,9 @@ struct MediaInfo: Codable {
         try container.encodeIfPresent(uploadDate, forKey: .uploadDate)
         try container.encodeIfPresent(viewCount, forKey: .viewCount)
         try container.encodeIfPresent(likeCount, forKey: .likeCount)
+    }
+
+    private func encodeMediaContent(to container: inout KeyedEncodingContainer<CodingKeys>) throws {
         try container.encodeIfPresent(formats, forKey: .formats)
         try container.encodeIfPresent(subtitles, forKey: .subtitles)
         try container.encodeIfPresent(automaticCaptions, forKey: .automaticCaptions)
@@ -1092,6 +1101,9 @@ struct MediaInfo: Codable {
         try container.encodeIfPresent(playlist, forKey: .playlist)
         try container.encodeIfPresent(playlistIndex, forKey: .playlistIndex)
         try container.encodeIfPresent(playlistCount, forKey: .playlistCount)
+    }
+
+    private func encodeNetworkDetails(to container: inout KeyedEncodingContainer<CodingKeys>) throws {
         try container.encodeIfPresent(webpageUrl, forKey: .webpageUrl)
         try container.encodeIfPresent(originalUrl, forKey: .originalUrl)
         try container.encodeIfPresent(formatProtocol, forKey: .formatProtocol)
