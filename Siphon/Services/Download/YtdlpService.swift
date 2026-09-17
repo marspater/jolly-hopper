@@ -780,7 +780,7 @@ class YtdlpService: ObservableObject {
 
     private func fetchSingleVideoInfo(path: String, url: String, forceBrowserCookies: Bool = false, rawCookies: String? = nil) async throws -> MediaInfo {
         if isBoyfriendTVURL(url) {
-            if let btvMedia = await resolveBoyfriendTVMediaInfo(url: url, rawCookies: rawCookies) {
+            if let btvMedia = try await resolveBoyfriendTVMediaInfo(url: url, rawCookies: rawCookies) {
                 var btvArgs = [
                     path,
                     "--ignore-config",
@@ -1157,7 +1157,7 @@ public struct DownloadResult: Sendable {
                 customResolvedTitle = mediaInfo?.title
                 customEmbedURL = mediaInfo?.webpageUrl
                 customThumbnailURL = mediaInfo?.thumbnail
-            } else if let btvMedia = await resolveBoyfriendTVMediaInfo(url: url, rawCookies: options.rawCookies) {
+            } else if let btvMedia = try await resolveBoyfriendTVMediaInfo(url: url, rawCookies: options.rawCookies) {
                 targetURL = resolveBoyfriendTVStreamURLForDownload(streamURL: btvMedia.streamURL, options: options)
                 customResolvedTitle = btvMedia.title
                 customEmbedURL = btvMedia.embedURL
@@ -1985,11 +1985,12 @@ public struct DownloadResult: Sendable {
         let thumbnailURL: String?
     }
 
-    private func resolveBoyfriendTVMediaInfo(url: String, rawCookies: String? = nil) async -> BoyfriendTVExtractedMedia? {
+    private func resolveBoyfriendTVMediaInfo(url: String, rawCookies: String? = nil) async throws -> BoyfriendTVExtractedMedia? {
         let targetUrl = normalizeURLForYtdlp(url)
         guard let pageURL = URL(string: targetUrl) else { return nil }
         
         var html = ""
+        var safariCookieAccessDenied = false
         
         let appSupportYtdlp = Self.getAppSupportDirectory().appendingPathComponent("yt-dlp")
         let ytdlpBinary = ytdlpPath ?? Bundle.main.url(forResource: "yt-dlp", withExtension: nil) ?? (FileManager.default.fileExists(atPath: appSupportYtdlp.path) ? appSupportYtdlp : nil)
@@ -2029,19 +2030,7 @@ public struct DownloadResult: Sendable {
                 }
                 if !rawChunks.isEmpty {
                     let rawHtml = rawChunks.joined()
-                    let isLoginProtected = rawHtml.contains("loginProtected") ||
-                                           rawHtml.contains("loginLinks") ||
-                                           rawHtml.contains("To watch this video please") ||
-                                           rawHtml.contains("User has been banned")
-                    let hasMediaData = !isLoginProtected && (
-                        rawHtml.contains("hlsAuto") ||
-                        rawHtml.contains("videoPlayerData") ||
-                        rawHtml.contains("sources") ||
-                        rawHtml.contains("playerConfig") ||
-                        rawHtml.contains("embedUrl") ||
-                        rawHtml.contains("/embed/") ||
-                        extractStreamURLFromHTML(rawHtml) != nil
-                    )
+                    let hasMediaData = hasBoyfriendTVMediaData(rawHtml)
                     if hasMediaData {
                         html = rawHtml
                         LoggerService.shared.log("Successfully extracted BoyfriendTV page dump using session cookies", level: .info)
@@ -2082,6 +2071,10 @@ public struct DownloadResult: Sendable {
                 } catch let error as YtdlpError {
                     if case .commandFailed(let output) = error {
                         dumpOutput = output
+                        if browser == "safari", isSafariPermissionError(output) {
+                            safariCookieAccessDenied = true
+                            LoggerService.shared.log("BoyfriendTV extraction could not read Safari cookies; trying remaining sources.", level: .warning)
+                        }
                     }
                 } catch {
                     // Ignore general process errors
@@ -2102,19 +2095,7 @@ public struct DownloadResult: Sendable {
                     }
                     if !browserChunks.isEmpty {
                         let browserHtml = browserChunks.joined()
-                        let isLoginProtected = browserHtml.contains("loginProtected") ||
-                                               browserHtml.contains("loginLinks") ||
-                                               browserHtml.contains("To watch this video please") ||
-                                               browserHtml.contains("User has been banned")
-                        let hasMediaData = !isLoginProtected && (
-                            browserHtml.contains("hlsAuto") ||
-                            browserHtml.contains("videoPlayerData") ||
-                            browserHtml.contains("sources") ||
-                            browserHtml.contains("playerConfig") ||
-                            browserHtml.contains("embedUrl") ||
-                            browserHtml.contains("/embed/") ||
-                            extractStreamURLFromHTML(browserHtml) != nil
-                        )
+                        let hasMediaData = hasBoyfriendTVMediaData(browserHtml)
                         if hasMediaData {
                             html = browserHtml
                             let sourceLog = browser.map { "browser cookies from '\($0)'" } ?? "impersonated HTTP request"
@@ -2141,17 +2122,11 @@ public struct DownloadResult: Sendable {
                let httpResponse = response as? HTTPURLResponse,
                httpResponse.statusCode == 200,
                let fetched = String(data: data, encoding: .utf8) {
-                let isLoginProtected = fetched.contains("loginProtected") ||
-                                       fetched.contains("loginLinks") ||
-                                       fetched.contains("To watch this video please") ||
-                                       fetched.contains("User has been banned")
-                if !isLoginProtected {
+                if hasBoyfriendTVMediaData(fetched) {
                     html = fetched
                 }
             }
-            if html.isEmpty {
-                return nil
-            }
+
         }
         
         // Extract Title
@@ -2349,7 +2324,24 @@ public struct DownloadResult: Sendable {
             return BoyfriendTVExtractedMedia(streamURL: validStreamUrl, embedURL: embedUrl ?? targetUrl, title: title, thumbnailURL: thumbnailUrl)
         }
         
+        if safariCookieAccessDenied {
+            throw YtdlpError.safariCookiesFullDiskAccessRequired
+        }
         return nil
+    }
+
+    private func hasBoyfriendTVMediaData(_ html: String) -> Bool {
+        // Shared login navigation/scripts can coexist with a playable full stream.
+        // The stream parser excludes previews and thumbnails before accepting media.
+        if extractStreamURLFromHTML(html) != nil { return true }
+        let isLoginProtected = html.contains("loginProtected") ||
+                               html.contains("To watch this video please") ||
+                               html.contains("User has been banned")
+        return !isLoginProtected && (
+            html.contains("hlsAuto") || html.contains("videoPlayerData") ||
+            html.contains("sources") || html.contains("playerConfig") ||
+            html.contains("embedUrl") || html.contains("/embed/")
+        )
     }
 
     // Bolt Performance Optimization: Pre-compile static NSRegularExpression patterns as `nonisolated private static let` constants to eliminate compilation and allocation overhead during high-frequency parsing.
@@ -4038,17 +4030,26 @@ public struct DownloadResult: Sendable {
         args.append(contentsOf: ["--socket-timeout", "15"])
         args.append("--no-mtime")
 
+        let isSafari: Bool = {
+            if let idx = args.firstIndex(of: "--cookies-from-browser"), idx + 1 < args.count {
+                return args[idx + 1] == "safari"
+            }
+            if args.contains("safari") {
+                return true
+            }
+            return configuredBrowserCookieSource() == "safari"
+        }()
+
         if !isYouTube {
-            let isSafari = args.contains("safari")
             if isSafari {
-                let safariUA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.6 Safari/605.1.15"
+                let safariUA = Self.safariUserAgent
                 args.append(contentsOf: ["--user-agent", safariUA])
                 args.append(contentsOf: ["--add-header", "Accept-Language:en-US,en;q=0.9"])
                 args.append(contentsOf: ["--extractor-args", "generic:impersonate"])
             } else {
                 // Common modern browser headers & Cloudflare extraction options
-                let defaultUA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
-                let secChUa = "\"Chromium\";v=\"124\", \"Google Chrome\";v=\"124\", \"Not-A.Brand\";v=\"99\""
+                let defaultUA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+                let secChUa = "\"Chromium\";v=\"126\", \"Google Chrome\";v=\"126\", \"Not-A.Brand\";v=\"99\""
 
                 // Anti-bot flags for Cloudflare & rate limits
                 args.append(contentsOf: ["--user-agent", defaultUA])
@@ -4094,10 +4095,12 @@ public struct DownloadResult: Sendable {
         }
 
         if isBoyfriendTV {
-            if let uaIdx = args.firstIndex(of: "--user-agent") {
-                args[uaIdx + 1] = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
-            } else {
-                args.append(contentsOf: ["--user-agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"])
+            if !isSafari {
+                if let uaIdx = args.firstIndex(of: "--user-agent") {
+                    args[uaIdx + 1] = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+                } else {
+                    args.append(contentsOf: ["--user-agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"])
+                }
             }
             let baseDomain = (parsedHost.contains("boyfriendtv.com") || lowerUrl.contains("boyfriendtv.com")) ? "https://www.boyfriendtv.com" : "https://www.boyfriend.tv"
             args.append(contentsOf: ["--add-header", "Origin:\(baseDomain)"])
@@ -4134,28 +4137,34 @@ public struct DownloadResult: Sendable {
                 ])
             }
         } else if isGuywhURL(parsedHost) || isGuywhURL(url) || parsedHost.contains("guywh") {
-            if let uaIdx = args.firstIndex(of: "--user-agent") {
-                args[uaIdx + 1] = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
-            } else {
-                args.append(contentsOf: ["--user-agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"])
+            if !isSafari {
+                if let uaIdx = args.firstIndex(of: "--user-agent") {
+                    args[uaIdx + 1] = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+                } else {
+                    args.append(contentsOf: ["--user-agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"])
+                }
             }
             args.append(contentsOf: ["--add-header", "Referer: https://guywh.com/"])
             args.append(contentsOf: ["--add-header", "Origin: https://guywh.com"])
             args.append(contentsOf: ["--add-header", "Accept: */*"])
         } else if isGFFURL(parsedHost) || isGFFURL(url) || parsedHost.contains("gayforfans") {
-            if let uaIdx = args.firstIndex(of: "--user-agent") {
-                args[uaIdx + 1] = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
-            } else {
-                args.append(contentsOf: ["--user-agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"])
+            if !isSafari {
+                if let uaIdx = args.firstIndex(of: "--user-agent") {
+                    args[uaIdx + 1] = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+                } else {
+                    args.append(contentsOf: ["--user-agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"])
+                }
             }
             args.append(contentsOf: ["--add-header", "Referer: https://gayforfans.com/"])
             args.append(contentsOf: ["--add-header", "Origin: https://gayforfans.com"])
             args.append(contentsOf: ["--add-header", "Accept: */*"])
         } else if isBestCamURL(parsedHost) || isBestCamURL(url) || parsedHost.contains("sssrr.org") || parsedHost.contains("abyssplayer") || parsedHost.contains("abyss.to") {
-            if let uaIdx = args.firstIndex(of: "--user-agent") {
-                args[uaIdx + 1] = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
-            } else {
-                args.append(contentsOf: ["--user-agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"])
+            if !isSafari {
+                if let uaIdx = args.firstIndex(of: "--user-agent") {
+                    args[uaIdx + 1] = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+                } else {
+                    args.append(contentsOf: ["--user-agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"])
+                }
             }
             args.append(contentsOf: ["--add-header", "Referer: https://abyssplayer.com/"])
             args.append(contentsOf: ["--add-header", "Origin: https://abyssplayer.com"])
@@ -4177,6 +4186,17 @@ public struct DownloadResult: Sendable {
             }
         }
     }
+
+    static let safariUserAgent: String = {
+        let safariPlist = URL(fileURLWithPath: "/Applications/Safari.app/Contents/Info.plist")
+        if let data = try? Data(contentsOf: safariPlist),
+           let plist = try? PropertyListSerialization.propertyList(from: data, options: [], format: nil) as? [String: Any],
+           let version = plist["CFBundleShortVersionString"] as? String,
+           !version.isEmpty {
+            return "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/\(version) Safari/605.1.15"
+        }
+        return "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15"
+    }()
 
     static var hasFullDiskAccessOverride: Bool? = nil
 
