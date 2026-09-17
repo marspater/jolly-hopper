@@ -234,8 +234,10 @@ class LoggerService: ObservableObject {
                 try? fileHandle.close()
             }
         } else {
-            try? data.write(to: logFileURL, options: .atomic)
-            try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: logFileURL.path)
+            if !FileManager.default.createFile(atPath: logFileURL.path, contents: data, attributes: [.posixPermissions: 0o600]) {
+                try? data.write(to: logFileURL, options: .atomic)
+                try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: logFileURL.path)
+            }
         }
     }
     
@@ -256,7 +258,12 @@ class LoggerService: ObservableObject {
             let lines = extractTailLines(from: data, maxEntries: maxEntries)
             guard !lines.isEmpty else { return }
             let trimmed = lines.joined(separator: "\n") + "\n"
-            try? trimmed.write(to: logFileURL, atomically: true, encoding: .utf8)
+            if let trimmedData = trimmed.data(using: .utf8) {
+                if !FileManager.default.createFile(atPath: logFileURL.path, contents: trimmedData, attributes: [.posixPermissions: 0o600]) {
+                    try? trimmed.write(to: logFileURL, atomically: true, encoding: .utf8)
+                    try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: logFileURL.path)
+                }
+            }
         }
     }
     
@@ -264,7 +271,10 @@ class LoggerService: ObservableObject {
         logs.removeAll()
         let fileURL = logFileURL
         fileQueue.async {
-            try? "".write(to: fileURL, atomically: true, encoding: .utf8)
+            if !FileManager.default.createFile(atPath: fileURL.path, contents: Data(), attributes: [.posixPermissions: 0o600]) {
+                try? "".write(to: fileURL, atomically: true, encoding: .utf8)
+                try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: fileURL.path)
+            }
         }
         log("Logs cleared", level: .info)
     }
