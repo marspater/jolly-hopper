@@ -1,0 +1,98 @@
+name: Apply BoyfriendTV request identity fix
+
+on:
+  push:
+    branches:
+      - fix/boyfriendtv-request-identity
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: fix/boyfriendtv-request-identity
+          fetch-depth: 0
+
+      - name: Apply scoped source patch
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path("Siphon/Services/Download/YtdlpService.swift")
+          text = path.read_text()
+
+          replacements = [
+              (
+                  '''        let isSafari: Bool = {
+                      if let idx = args.firstIndex(of: "--cookies-from-browser"), idx + 1 < args.count {
+                          return args[idx + 1] == "safari"
+                      }
+                      if args.contains("safari") {
+                          return true
+                      }
+                      return configuredBrowserCookieSource() == "safari"
+                  }()
+          ''',
+                  '''        let isSafari: Bool = {
+                      if let idx = args.firstIndex(of: "--cookies-from-browser"), idx + 1 < args.count {
+                          return args[idx + 1] == "safari"
+                      }
+                      // Explicit cookie files may come from the browser extension and do not
+                      // imply Safari merely because Safari is the configured browser source.
+                      if args.contains("--cookies") {
+                          return false
+                      }
+                      return configuredBrowserCookieSource() == "safari"
+                  }()
+          '''
+              ),
+              (
+                  '''            request.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36", forHTTPHeaderField: "User-Agent")
+                      request.setValue("https://www.boyfriend.tv/", forHTTPHeaderField: "Referer")
+                      request.setValue("https://www.boyfriend.tv", forHTTPHeaderField: "Origin")
+          ''',
+                  '''            request.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36", forHTTPHeaderField: "User-Agent")
+                      let pageBaseDomain = pageURL.host?.lowercased().contains("boyfriendtv.com") == true
+                          ? "https://www.boyfriendtv.com"
+                          : "https://www.boyfriend.tv"
+                      request.setValue(pageBaseDomain + "/", forHTTPHeaderField: "Referer")
+                      request.setValue(pageBaseDomain, forHTTPHeaderField: "Origin")
+          '''
+              ),
+              (
+                  '''                    embedRequest.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36", forHTTPHeaderField: "User-Agent")
+                      embedRequest.setValue("https://www.boyfriend.tv/", forHTTPHeaderField: "Referer")
+                      embedRequest.setValue("https://www.boyfriend.tv", forHTTPHeaderField: "Origin")
+          ''',
+                  '''                    embedRequest.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36", forHTTPHeaderField: "User-Agent")
+                      let embedBaseDomain = embedPageURL.host?.lowercased().contains("boyfriendtv.com") == true
+                          ? "https://www.boyfriendtv.com"
+                          : "https://www.boyfriend.tv"
+                      embedRequest.setValue(embedBaseDomain + "/", forHTTPHeaderField: "Referer")
+                      embedRequest.setValue(embedBaseDomain, forHTTPHeaderField: "Origin")
+          '''
+              ),
+          ]
+
+          for old, new in replacements:
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"Expected exactly one source match, found {count}")
+              text = text.replace(old, new, 1)
+
+          path.write_text(text)
+
+      - name: Commit source fix and remove patch workflow
+        shell: bash
+        run: |
+          rm .github/workflows/patch-boyfriendtv-request-identity.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Siphon/Services/Download/YtdlpService.swift .github/workflows/patch-boyfriendtv-request-identity.yml
+          git commit -m "fix(boyfriendtv): preserve request identity and origin"
+          git push origin HEAD:fix/boyfriendtv-request-identity
