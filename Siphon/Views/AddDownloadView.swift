@@ -1180,12 +1180,19 @@ struct AddDownloadView: View {
                             } else if downloadSubtitles {
                                 HStack(spacing: 12) {
                                     Menu {
-                                        let manualSubs = availableSubtitles.filter { !$0.isAuto }.sorted(by: { $0.name < $1.name })
-                                        let autoSubs = availableSubtitles.filter { $0.isAuto }.sorted(by: { $0.name < $1.name })
+                                        let (manualSubs, autoSubs): ([SubtitleOption], [SubtitleOption]) = availableSubtitles.reduce(into: ([], [])) { result, sub in
+                                            if sub.isAuto {
+                                                result.1.append(sub)
+                                            } else {
+                                                result.0.append(sub)
+                                            }
+                                        }
+                                        let sortedManualSubs = manualSubs.sorted(by: { $0.name < $1.name })
+                                        let sortedAutoSubs = autoSubs.sorted(by: { $0.name < $1.name })
 
-                                        if !manualSubs.isEmpty {
+                                        if !sortedManualSubs.isEmpty {
                                             Section(header: Text(languageService.s("internal"))) {
-                                                ForEach(manualSubs) { sub in
+                                                ForEach(sortedManualSubs) { sub in
                                                     Button {
                                                         toggleSubtitle(sub.id)
                                                     } label: {
@@ -1200,9 +1207,9 @@ struct AddDownloadView: View {
                                             }
                                         }
 
-                                        if !autoSubs.isEmpty {
+                                        if !sortedAutoSubs.isEmpty {
                                             Section(header: Text(languageService.s("auto_subs"))) {
-                                                ForEach(autoSubs) { sub in
+                                                ForEach(sortedAutoSubs) { sub in
                                                     Button {
                                                         toggleSubtitle(sub.id)
                                                     } label: {
