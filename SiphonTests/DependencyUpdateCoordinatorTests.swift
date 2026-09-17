@@ -62,4 +62,16 @@ final class DependencyUpdateCoordinatorTests: XCTestCase {
         // Should return cleanly without throwing because it's not executable
         XCTAssertNoThrow(try DependencyInstaller.adHocSignBinary(at: tempFile))
     }
+
+    func testIsBinarySignedDetection() throws {
+        let codesignURL = URL(fileURLWithPath: "/usr/bin/codesign")
+        XCTAssertTrue(DependencyInstaller.isBinarySigned(at: codesignURL), "System binary /usr/bin/codesign must be recognized as validly signed")
+
+        let unsignedScript = FileManager.default.temporaryDirectory.appendingPathComponent("script_\(UUID().uuidString).sh")
+        try "#!/bin/sh\necho hi\n".write(to: unsignedScript, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: unsignedScript.path)
+        defer { try? FileManager.default.removeItem(at: unsignedScript) }
+
+        XCTAssertFalse(DependencyInstaller.isBinarySigned(at: unsignedScript), "Unsigned script should not report as signed")
+    }
 }

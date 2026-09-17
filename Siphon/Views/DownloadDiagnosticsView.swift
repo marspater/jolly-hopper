@@ -76,7 +76,7 @@ struct DownloadDiagnosticsView: View {
             
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 8) {
-                    Text(download.title.isEmpty ? download.url : download.title)
+                    Text(download.displayTitle)
                         .font(.geist(14, weight: .bold))
                         .lineLimit(1)
                     
@@ -400,7 +400,7 @@ struct DownloadDiagnosticsView: View {
     private func exportDiagnosticsMarkdown() {
         let report = """
         # Siphon Download Diagnostics Report
-        - **Title**: \(download.title)
+        - **Title**: \(download.displayTitle)
         - **URL**: \(download.url)
         - **Status**: \(download.status.rawValue)
         - **PID**: \(download.diagnostics.pid.map(String.init) ?? "N/A")

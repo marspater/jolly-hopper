@@ -350,13 +350,13 @@ final class DownloadExecutor: ObservableObject {
             }
             delegate?.executorDidRequestBroadcast()
 
-            LoggerService.shared.log("Download completed successfully: \(download.title.isEmpty ? LoggerService.sanitizeURLForLog(download.url) : download.title)", level: .info)
+            LoggerService.shared.log("Download completed successfully: \(download.displayTitle.isEmpty ? LoggerService.sanitizeURLForLog(download.url) : download.displayTitle)", level: .info)
 
             delegate?.executorDidRequestAddToHistory(download, skipSave: false)
 
             let lang = languageService ?? LanguageService()
             notificationService.sendDownloadCompleted(
-                filename: download.title.isEmpty ? LoggerService.sanitizeURLForLog(download.url) : download.title,
+                filename: download.displayTitle.isEmpty ? LoggerService.sanitizeURLForLog(download.url) : download.displayTitle,
                 languageService: lang
             )
 
@@ -365,9 +365,15 @@ final class DownloadExecutor: ObservableObject {
                 LoggerService.shared.log("Download stopped or paused by user (\(LoggerService.sanitizeURLForLog(download.url)))", level: .info)
                 download.diagnostics.exitStatus = "Stopped by user"
                 if download.status == .stopped {
+                    if download.title.isEmpty || download.title == Download.fetchingPlaceholder {
+                        download.title = download.displayTitle
+                    }
                     delegate?.executorDidRequestAddToHistory(download, skipSave: false)
                 }
                 return
+            }
+            if download.title.isEmpty || download.title == Download.fetchingPlaceholder {
+                download.title = download.displayTitle
             }
             download.diagnostics.exitStatus = "Failed: \(error.localizedDescription)"
             delegate?.executorDidUpdateStatus(for: download, to: .failed)
@@ -376,15 +382,21 @@ final class DownloadExecutor: ObservableObject {
             download.errorMessage = Self.errorMessage(for: error, languageService: languageService)
             LoggerService.shared.log("Download failed (\(LoggerService.sanitizeURLForLog(download.url))): \(download.errorMessage ?? error.localizedDescription)", level: .error)
             let lang = languageService ?? LanguageService()
-            notificationService.sendDownloadFailed(filename: download.title.isEmpty ? LoggerService.sanitizeURLForLog(download.url) : download.title, languageService: lang)
+            notificationService.sendDownloadFailed(filename: download.displayTitle.isEmpty ? LoggerService.sanitizeURLForLog(download.url) : download.displayTitle, languageService: lang)
             delegate?.executorDidRequestAddToHistory(download, skipSave: false)
         } catch {
             if download.status == .stopped || download.status == .paused || Task.isCancelled {
                 LoggerService.shared.log("Download stopped or paused by user (\(LoggerService.sanitizeURLForLog(download.url)))", level: .info)
                 if download.status == .stopped {
+                    if download.title.isEmpty || download.title == Download.fetchingPlaceholder {
+                        download.title = download.displayTitle
+                    }
                     delegate?.executorDidRequestAddToHistory(download, skipSave: false)
                 }
                 return
+            }
+            if download.title.isEmpty || download.title == Download.fetchingPlaceholder {
+                download.title = download.displayTitle
             }
             download.diagnostics.exitStatus = "Failed: \(error.localizedDescription)"
             delegate?.executorDidUpdateStatus(for: download, to: .failed)
@@ -393,7 +405,7 @@ final class DownloadExecutor: ObservableObject {
             download.errorMessage = Self.errorMessage(for: error, languageService: languageService)
             LoggerService.shared.log("Download failed with error (\(LoggerService.sanitizeURLForLog(download.url))): \(error.localizedDescription)", level: .error)
             let lang = languageService ?? LanguageService()
-            notificationService.sendDownloadFailed(filename: download.title.isEmpty ? LoggerService.sanitizeURLForLog(download.url) : download.title, languageService: lang)
+            notificationService.sendDownloadFailed(filename: download.displayTitle.isEmpty ? LoggerService.sanitizeURLForLog(download.url) : download.displayTitle, languageService: lang)
             delegate?.executorDidRequestAddToHistory(download, skipSave: false)
         }
     }

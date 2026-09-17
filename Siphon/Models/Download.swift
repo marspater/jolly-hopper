@@ -44,6 +44,42 @@ class Download: ObservableObject, Identifiable {
         }
         return "\(percentage)%"
     }
+
+    static let fetchingPlaceholder = "___FETCHING___"
+
+    static func deriveFallbackTitle(from urlString: String, sourceDomain: String) -> String {
+        if let url = URL(string: urlString) {
+            let pathComponents = url.pathComponents.filter { $0 != "/" && !$0.isEmpty }
+            if let last = pathComponents.last, last.count > 1 {
+                let isOnlyDigits = last.allSatisfy { $0.isNumber }
+                let isUUID = last.range(of: "^[a-f0-9\\-]{36}$", options: [.regularExpression, .caseInsensitive]) != nil
+                if !isOnlyDigits && !isUUID {
+                    let stripped = (last as NSString).deletingPathExtension
+                        .replacingOccurrences(of: "-", with: " ")
+                        .replacingOccurrences(of: "_", with: " ")
+                        .replacingOccurrences(of: "+", with: " ")
+                        .trimmingCharacters(in: .whitespaces)
+                    if stripped.count >= 2 {
+                        return stripped.capitalized
+                    }
+                }
+            }
+        }
+        if !sourceDomain.isEmpty && sourceDomain.lowercased() != "web" {
+            return "\(sourceDomain) Video"
+        }
+        return urlString
+    }
+
+    var displayTitle: String {
+        if title.isEmpty || title == Self.fetchingPlaceholder {
+            if let custom = options.customFilename, !custom.isEmpty {
+                return custom
+            }
+            return Self.deriveFallbackTitle(from: url, sourceDomain: sourceDomain)
+        }
+        return title
+    }
     
     // Bolt Performance Optimization: Extract source domain once during initialization to avoid repeated URL parsing and regex evaluations during SwiftUI render passes
     static func extractSourceDomain(from url: String) -> String {
@@ -1885,7 +1921,7 @@ struct ChapterInfo: Codable {
 struct HistoricDownload: Codable, Identifiable {
     let id: UUID
     let url: String
-    let title: String
+    var title: String
     var filePaths: [String]
     let downloadDate: Date
     let fileType: MediaFileType
@@ -1906,7 +1942,7 @@ struct HistoricDownload: Codable, Identifiable {
     init(download: Download) {
         self.id = download.id
         self.url = download.url
-        self.title = download.title
+        self.title = download.displayTitle
         self.filePaths = download.filePathStrings
         self.downloadDate = download.createdAt
         self.fileType = download.options.fileType

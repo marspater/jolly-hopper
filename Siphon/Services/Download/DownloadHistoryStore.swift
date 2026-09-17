@@ -90,6 +90,9 @@ final class DownloadHistoryStore {
 
         for download in restored {
             download.options.rawCookies = nil // Purge any legacy session cookies from restored history
+            if download.title.isEmpty || download.title == Download.fetchingPlaceholder {
+                download.title = download.displayTitle
+            }
             if !existingIds.contains(download.id) {
                 switch download.status {
                 case .downloading, .fetching, .processing, .queued:
