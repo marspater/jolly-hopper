@@ -7,11 +7,12 @@ import SwiftUI
 
 // MARK: - 2D Lissajous Harmonic Fluid Shape
 // Closed organic fluid boundary parameterized by multi-harmonic Lissajous orbits.
-// Generates continuous, smooth C^1 cubic Bézier splines moving in multi-directional fluid currents.
+// Incorporates velocity-aligned squash-and-stretch hydrodynamics and Catmull-Rom C^1 splines.
 struct LissajousHarmonicBlobShape: Shape {
     var time: Double
-    var speed: Double = 0.8
+    var speed: Double = 0.6
     var intensity: Double = 1.0
+    var seed: Double = 0.0
     var phaseOffset: Double = 0.0
     var freqX: Double = 0.73
     var freqY: Double = 1.09
@@ -28,35 +29,56 @@ struct LissajousHarmonicBlobShape: Shape {
         let h = rect.height
         guard w > 2 && h > 2 else { return path }
 
-        let t = (time + phaseOffset) * speed
+        // Incorporate seed to mathematically guarantee incommensurate frequencies per card
+        let fx = freqX + sin(seed * 2.37) * 0.07
+        let fy = freqY + cos(seed * 3.19) * 0.07
+        let t = (time + (seed * 19.37) + phaseOffset) * speed
         let scale = CGFloat(intensity)
 
-        // 2D Lissajous orbit for the fluid body center (smooth randomized multi-directional drift)
-        let maxDriftX = w * 0.20 * scale
-        let maxDriftY = h * 0.16 * scale
-        let centerX = (w * 0.50) + maxDriftX * CGFloat(sin(t * freqX))
-        let centerY = (h * 0.50) + maxDriftY * CGFloat(cos(t * freqY))
+        // 2D Lissajous orbit for the fluid body center
+        let maxDriftX = w * 0.22 * scale
+        let maxDriftY = h * 0.18 * scale
+        let centerX = (w * 0.50) + maxDriftX * CGFloat(sin(t * fx))
+        let centerY = (h * 0.50) + maxDriftY * CGFloat(cos(t * fy + seed * 0.5))
+
+        // Instantaneous Lissajous velocity vector (dC/dt) for hydrodynamic elongation
+        let vx = Double(maxDriftX) * fx * cos(t * fx)
+        let vy = -Double(maxDriftY) * fy * sin(t * fy + seed * 0.5)
+        let speedMag = sqrt(vx * vx + vy * vy)
+        let flowAngle = atan2(vy, vx)
+
+        // Squash-and-stretch along velocity vector preserving fluid area
+        let normalizedSpeed = min(speedMag / (Double(max(w, h)) * 0.18 + 0.001), 1.0)
+        let stretchParallel = CGFloat(1.0 + 0.16 * normalizedSpeed * intensity)
+        let stretchPerp = CGFloat(1.0 / sqrt(stretchParallel))
 
         // Base radii adapted to container dimensions
-        let baseRadiusX = max(w * 0.46, 20)
+        let baseRadiusX = max(w * 0.45, 20)
         let baseRadiusY = max(h * 0.48, 16)
 
-        // Sample N nodes along the closed 2D Lissajous harmonic perimeter
-        let nodeCount = 16
+        // Sample 20 nodes along the closed 2D harmonic perimeter
+        let nodeCount = 20
         var points: [CGPoint] = []
         points.reserveCapacity(nodeCount)
 
         for i in 0..<nodeCount {
             let theta = (Double(i) / Double(nodeCount)) * 2.0 * Double.pi
+            let relAngle = theta - flowAngle
 
-            // Multi-frequency Lissajous harmonic radial modulation
-            let h1 = 0.16 * sin(2.0 * theta + t * 1.2)
-            let h2 = 0.12 * cos(3.0 * theta - t * 0.9 * harmonicRatio + 1.2)
-            let h3 = 0.06 * sin(5.0 * theta + t * 1.4)
+            // Multi-frequency Lissajous harmonic radial modulation (capillary & surface waves)
+            let h1 = 0.14 * sin(2.0 * theta - t * 1.3 + seed)
+            let h2 = 0.09 * cos(3.0 * theta + t * 1.0 * harmonicRatio + 1.1 + seed * 0.7)
+            let h3 = 0.05 * sin(4.0 * theta - t * 1.6 + seed * 1.4)
             let radiusMod = CGFloat(1.0 + (h1 + h2 + h3) * intensity)
 
-            let px = centerX + (baseRadiusX * radiusMod) * CGFloat(cos(theta))
-            let py = centerY + (baseRadiusY * radiusMod) * CGFloat(sin(theta))
+            // Velocity-aligned directional deformation
+            let cosRel = CGFloat(cos(relAngle))
+            let sinRel = CGFloat(sin(relAngle))
+            let dirStretch = sqrt((stretchParallel * cosRel) * (stretchParallel * cosRel) +
+                                  (stretchPerp * sinRel) * (stretchPerp * sinRel))
+
+            let px = centerX + (baseRadiusX * radiusMod * dirStretch) * CGFloat(cos(theta))
+            let py = centerY + (baseRadiusY * radiusMod * dirStretch) * CGFloat(sin(theta))
             points.append(CGPoint(x: px, y: py))
         }
 
@@ -94,11 +116,13 @@ struct LiquidWaterWaveView: View {
     let color: Color
     var isHovered: Bool = false
     var isActive: Bool = false
+    var seed: Double = 0.0
 
-    init(color: Color, isHovered: Bool = false, isActive: Bool = false) {
+    init(color: Color, isHovered: Bool = false, isActive: Bool = false, seed: Double = 0.0) {
         self.color = color
         self.isHovered = isHovered
         self.isActive = isActive
+        self.seed = seed
     }
 
     var body: some View {
@@ -117,18 +141,19 @@ struct LiquidWaterWaveView: View {
             let minInterval = AdaptiveRenderingEnvironment.shared.isHighRefreshRate ? (1.0 / 120.0) : (1.0 / 60.0)
             TimelineView(.animation(minimumInterval: minInterval)) { timeline in
                 let time = timeline.date.timeIntervalSinceReferenceDate
-                let baseSpeed = isActive ? 1.3 : (isHovered ? 0.95 : 0.65)
+                let baseSpeed = isActive ? 1.05 : (isHovered ? 0.78 : 0.48)
 
                 ZStack {
                     // Layer 1: Deep Primary Viscous Fluid Body (Clockwise Lissajous Orbit)
                     LissajousHarmonicBlobShape(
                         time: time,
                         speed: baseSpeed * 0.85,
-                        intensity: isHovered ? 1.2 : 0.95,
+                        intensity: isHovered ? 1.15 : 0.90,
+                        seed: seed,
                         phaseOffset: 0.0,
-                        freqX: 0.62,
-                        freqY: 0.94,
-                        harmonicRatio: 1.5
+                        freqX: 0.58,
+                        freqY: 0.86,
+                        harmonicRatio: 1.4
                     )
                     .fill(
                         LinearGradient(
@@ -145,12 +170,13 @@ struct LiquidWaterWaveView: View {
                     // Layer 2: Complementary Counter-Drifting Fluid Body (Counter Lissajous Current)
                     LissajousHarmonicBlobShape(
                         time: time,
-                        speed: baseSpeed * 1.12,
-                        intensity: isHovered ? 1.1 : 0.85,
-                        phaseOffset: 3.8,
-                        freqX: 0.88,
-                        freqY: 0.58,
-                        harmonicRatio: 2.2
+                        speed: baseSpeed * 1.08,
+                        intensity: isHovered ? 1.05 : 0.80,
+                        seed: seed + 3.1415,
+                        phaseOffset: 2.7,
+                        freqX: 0.82,
+                        freqY: 0.54,
+                        harmonicRatio: 2.1
                     )
                     .fill(
                         LinearGradient(
@@ -168,11 +194,12 @@ struct LiquidWaterWaveView: View {
                     LissajousHarmonicBlobShape(
                         time: time,
                         speed: baseSpeed * 0.85,
-                        intensity: isHovered ? 1.2 : 0.95,
+                        intensity: isHovered ? 1.15 : 0.90,
+                        seed: seed,
                         phaseOffset: 0.0,
-                        freqX: 0.62,
-                        freqY: 0.94,
-                        harmonicRatio: 1.5
+                        freqX: 0.58,
+                        freqY: 0.86,
+                        harmonicRatio: 1.4
                     )
                     .stroke(
                         LinearGradient(
@@ -190,12 +217,13 @@ struct LiquidWaterWaveView: View {
                     // Layer 4: Luminous Inner Core Sheen
                     LissajousHarmonicBlobShape(
                         time: time,
-                        speed: baseSpeed * 1.35,
-                        intensity: 0.70,
-                        phaseOffset: 1.5,
-                        freqX: 1.15,
-                        freqY: 0.78,
-                        harmonicRatio: 1.8
+                        speed: baseSpeed * 1.25,
+                        intensity: 0.65,
+                        seed: seed + 1.5707,
+                        phaseOffset: 1.2,
+                        freqX: 1.05,
+                        freqY: 0.72,
+                        harmonicRatio: 1.7
                     )
                     .fill(
                         RadialGradient(

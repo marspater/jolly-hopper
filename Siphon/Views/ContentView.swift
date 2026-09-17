@@ -562,13 +562,26 @@ struct StatusSegmentButton: View {
 
     @State private var isHovered = false
 
+    private var segmentSeed: Double {
+        switch item {
+        case .downloading:
+            return 1.414
+        case .queued:
+            return 4.718
+        case .completed:
+            return 8.291
+        default:
+            return 0.0
+        }
+    }
+
     var body: some View {
         Button {
             appState.selectedNavItem = item
         } label: {
             ZStack {
                 // Liquid water wave animation in accent color
-                LiquidWaterWaveView(color: color, isHovered: isHovered, isActive: isActive)
+                LiquidWaterWaveView(color: color, isHovered: isHovered, isActive: isActive, seed: segmentSeed)
                     .opacity(isActive || isHovered ? 1.0 : 0.35)
 
                 HStack(spacing: 8) {

@@ -145,7 +145,7 @@ struct PreferencesView: View {
         }
         .padding(.horizontal, SiphonTheme.spacing16)
         .padding(.bottom, SiphonTheme.spacing16)
-        .frame(minWidth: 500, idealWidth: 520, maxWidth: 600, minHeight: 460, idealHeight: 500, maxHeight: 650)
+        .frame(minWidth: 500, idealWidth: 520, maxWidth: 620, minHeight: 680, idealHeight: 700, maxHeight: 820)
         .preferredColorScheme(theme == "light" ? .light : (theme == "dark" ? .dark : nil))
         .accentColor(SiphonTheme.accent)
         .background(PreferencesWindowConfigurator())
@@ -1213,7 +1213,7 @@ struct PreferencesView: View {
             .siphonFormStyle()
             .padding(.horizontal)
 
-            VStack(spacing: SiphonTheme.spacing8) {
+            VStack(spacing: 12) {
                 HStack(spacing: SiphonTheme.spacing10) {
                     Link(destination: URL(string: "https://github.com/marspater/jolly-hopper") ?? URL(fileURLWithPath: "/")) {
                         Label("GitHub", systemImage: "link")
@@ -1245,15 +1245,16 @@ struct PreferencesView: View {
                     }
                     .buttonStyle(.plain)
                 }
-                .padding(.top, SiphonTheme.spacing4)
+                .frame(maxWidth: .infinity, alignment: .center)
 
-                Text("© 2026 marspater • All rights reserved")
-                    .font(.geist(10))
-                    .foregroundColor(.secondary.opacity(0.7))
-                    .padding(.bottom, 6)
+                Text("© 2026 marspater • Licensed under GNU GPL v3.0")
+                    .font(.geist(11, weight: .regular))
+                    .foregroundColor(.secondary.opacity(0.75))
+                    .frame(maxWidth: .infinity, alignment: .center)
             }
-            .frame(maxWidth: .infinity)
-            .padding(.bottom, 8)
+            .frame(maxWidth: .infinity, alignment: .center)
+            .padding(.top, 4)
+            .padding(.bottom, 12)
         }
     }
     
