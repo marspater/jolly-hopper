@@ -36,6 +36,19 @@ public final class UpdateChecker: ObservableObject {
 
     public init() {}
 
+    nonisolated static func parseGitHubAssetSHA256(_ digest: String?) -> String? {
+        guard let digest = digest?.trimmingCharacters(in: .whitespacesAndNewlines),
+              digest.lowercased().hasPrefix("sha256:") else {
+            return nil
+        }
+        let hash = String(digest.dropFirst("sha256:".count)).lowercased()
+        guard hash.count == 64,
+              hash.range(of: "^[0-9a-f]{64}$", options: .regularExpression) != nil else {
+            return nil
+        }
+        return hash
+    }
+
     public func cancelUpdate() {
         updateOperationID = nil
         downloader.cancel()
@@ -133,6 +146,7 @@ public final class UpdateChecker: ObservableObject {
                         downloadURL = URL(string: downloadUrlStr)
                         let assetName = (dlpAsset["name"] as? String) ?? ""
                         downloadAssetName = assetName
+                        expectedChecksum = Self.parseGitHubAssetSHA256(dlpAsset["digest"] as? String)
 
                         let lowerAssetName = assetName.lowercased()
                         if let sumAsset = assets.first(where: {
@@ -216,10 +230,17 @@ public final class UpdateChecker: ObservableObject {
                 return
             }
             do {
-                expectedChecksum = try await UpdateDownloader.fetchExpectedChecksum(
+                let manifestChecksum = try await UpdateDownloader.fetchExpectedChecksum(
                     from: cURL,
                     targetAssetName: downloadAssetName ?? ""
                 )
+                if let apiChecksum = expectedChecksum, apiChecksum != manifestChecksum {
+                    let message = "GitHub asset digest does not match the published checksum manifest."
+                    updateError = UpdateDownloadError.checksumUnavailable(message).localizedDescription
+                    LoggerService.shared.log(message, level: .error)
+                    return
+                }
+                expectedChecksum = manifestChecksum
             } catch is CancellationError {
                 return
             } catch {
@@ -227,6 +248,13 @@ public final class UpdateChecker: ObservableObject {
                 LoggerService.shared.log("Update checksum verification could not be prepared: \(error.localizedDescription)", level: .error)
                 return
             }
+        }
+
+        guard let expectedChecksum, !expectedChecksum.isEmpty else {
+            let message = "The selected GitHub release asset has no verifiable SHA-256 digest."
+            updateError = UpdateDownloadError.checksumUnavailable(message).localizedDescription
+            LoggerService.shared.log("Refusing app update without a pinned SHA-256 digest.", level: .error)
+            return
         }
 
         guard updateOperationID == operationID else {
