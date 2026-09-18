@@ -12,8 +12,33 @@ chrome.runtime.onInstalled.addListener(() => {
     });
 });
 
-chrome.contextMenus.onClicked.addListener((info) => {
-    const url = info.linkUrl || info.srcUrl || info.pageUrl;
+async function triggerDownload(url, host) {
+    if (!url || typeof url !== "string") return;
+    if (!url.startsWith("http://") && !url.startsWith("https://")) return;
+
+    let deepLink = "siphon://" + host + "?url=" + encodeURIComponent(url) + "&browser=safari";
+    const userAgent = typeof navigator !== "undefined" ? navigator.userAgent : "";
+    if (userAgent) {
+        deepLink += "&ua=" + encodeURIComponent(userAgent);
+    }
+
+    chrome.tabs.create({ url: deepLink, active: false }, (createdTab) => {
+        if (chrome.runtime.lastError) {
+            console.warn("Failed to open Siphon deep link:", chrome.runtime.lastError.message);
+            return;
+        }
+        if (createdTab && createdTab.id) {
+            setTimeout(() => {
+                chrome.tabs.remove(createdTab.id).catch((error) => {
+                    console.debug("Failed to close temporary Siphon deep-link tab:", error);
+                });
+            }, 3500);
+        }
+    });
+}
+
+chrome.contextMenus.onClicked.addListener(async (info, tab) => {
+    const url = info.linkUrl || info.srcUrl || info.pageUrl || tab?.url;
     if (!url) return;
 
     let host = "";
@@ -24,19 +49,6 @@ chrome.contextMenus.onClicked.addListener((info) => {
     }
 
     if (host) {
-        const deepLink = "siphon://" + host + "?url=" + encodeURIComponent(url);
-        chrome.tabs.create({ url: deepLink, active: false }, (createdTab) => {
-            if (chrome.runtime.lastError) {
-                console.warn("Failed to open Siphon deep link:", chrome.runtime.lastError.message);
-                return;
-            }
-            if (createdTab && createdTab.id) {
-                setTimeout(() => {
-                    chrome.tabs.remove(createdTab.id).catch((error) => {
-                        console.debug("Failed to close temporary Siphon deep-link tab:", error);
-                    });
-                }, 3500);
-            }
-        });
+        await triggerDownload(url, host);
     }
 });
