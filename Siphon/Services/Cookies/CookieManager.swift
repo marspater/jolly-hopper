@@ -12,21 +12,49 @@ public actor CookieManager {
 
     public init() {}
 
+    private nonisolated static func log(_ message: String, level: LoggerService.LogLevel) {
+        Task { @MainActor in
+            LoggerService.shared.log(message, level: level)
+        }
+    }
+
     /// Directory used for temporary cookie files with strict 0o700 folder permissions.
     public nonisolated static func getSecureTempCookiesDirectory() -> URL? {
         let cookiesDir = FileManager.default.temporaryDirectory.appendingPathComponent("siphon_cookies")
         let path = cookiesDir.path
         let fileManager = FileManager.default
-        if !fileManager.fileExists(atPath: path) {
-            do {
-                try fileManager.createDirectory(at: cookiesDir, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
-            } catch {
+
+        do {
+            if fileManager.fileExists(atPath: path) {
+                let values = try cookiesDir.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey])
+                guard values.isDirectory == true, values.isSymbolicLink != true else {
+                    log("Refusing insecure cookie temp path because it is not a real directory.", level: .error)
+                    return nil
+                }
+                try fileManager.setAttributes([.posixPermissions: 0o700], ofItemAtPath: path)
+            } else {
+                try fileManager.createDirectory(
+                    at: cookiesDir,
+                    withIntermediateDirectories: true,
+                    attributes: [.posixPermissions: 0o700]
+                )
+            }
+
+            let attrs = try fileManager.attributesOfItem(atPath: path)
+            guard (attrs[.type] as? FileAttributeType) == .typeDirectory else {
+                log("Refusing cookie temp path because filesystem attributes do not identify a directory.", level: .error)
                 return nil
             }
-        } else {
-            try? fileManager.setAttributes([.posixPermissions: 0o700], ofItemAtPath: path)
+            if let permissions = (attrs[.posixPermissions] as? NSNumber)?.intValue,
+               (permissions & 0o077) != 0 {
+                log("Refusing cookie temp directory with permissions broader than the current user.", level: .error)
+                return nil
+            }
+            return cookiesDir
+        } catch {
+            log("Could not prepare secure cookie temp directory: \(error.localizedDescription)", level: .error)
+            return nil
         }
-        return cookiesDir
     }
 
     /// Creates and returns an isolated SecureCookieFile.
@@ -57,7 +85,11 @@ public actor CookieManager {
             for file in files {
                 let name = file.lastPathComponent
                 if name.hasPrefix("siphon_consolidated_cookies_") || name.hasPrefix("siphon_cookies_") {
-                    try? fileManager.removeItem(at: file)
+                    do {
+                        try fileManager.removeItem(at: file)
+                    } catch {
+                        log("Failed to remove orphaned temporary cookie file: \(error.localizedDescription)", level: .warning)
+                    }
                 }
             }
         }
