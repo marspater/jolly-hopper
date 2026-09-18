@@ -8,11 +8,15 @@ on:
   schedule:
     - cron: '16 18 * * 1'
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   analyze:
     name: Analyze (${{ matrix.language }})
     runs-on: ${{ matrix.language == 'swift' && 'macos-latest' || 'ubuntu-latest' }}
-    timeout-minutes: ${{ matrix.language == 'swift' && 120 || 360 }}
+    timeout-minutes: ${{ matrix.language == 'swift' && 120 || 30 }}
     permissions:
       actions: read
       contents: read
@@ -41,14 +45,46 @@ jobs:
         # Default CodeQL queries
         queries: security-extended,security-and-quality
 
-    - if: matrix.build-mode == 'manual'
-      name: Build Siphon with Xcode
+    - if: matrix.language == 'swift'
+      name: Build Siphon for CodeQL extraction
       run: |
-        xcodebuild -project Siphon.xcodeproj \
+        xcodebuild build \
+          -project Siphon.xcodeproj \
           -scheme Siphon \
-          -destination "generic/platform=macOS" \
-          build \
-          MACOSX_DEPLOYMENT_TARGET=14.0 \
+          -destination 'generic/platform=macOS' \
+          -configuration Debug \
+          MACOSX_DEPLOYMENT_TARGET=15.0 \
+          CODE_SIGN_IDENTITY="" \
+          CODE_SIGNING_REQUIRED=NO \
+          CODE_SIGNING_ALLOWED=NO
+
+    - if: matrix.language == 'swift'
+      id: test_debug
+      name: Test Siphon (Debug)
+      continue-on-error: true
+      run: |
+        xcodebuild test \
+          -project Siphon.xcodeproj \
+          -scheme Siphon \
+          -destination 'platform=macOS' \
+          -configuration Debug \
+          MACOSX_DEPLOYMENT_TARGET=15.0 \
+          CODE_SIGN_IDENTITY="" \
+          CODE_SIGNING_REQUIRED=NO \
+          CODE_SIGNING_ALLOWED=NO
+
+    - if: matrix.language == 'swift'
+      id: test_release
+      name: Test Siphon (Release)
+      continue-on-error: true
+      run: |
+        xcodebuild test \
+          -project Siphon.xcodeproj \
+          -scheme Siphon \
+          -destination 'platform=macOS' \
+          -configuration Release \
+          MACOSX_DEPLOYMENT_TARGET=15.0 \
+          ENABLE_TESTABILITY=YES \
           CODE_SIGN_IDENTITY="" \
           CODE_SIGNING_REQUIRED=NO \
           CODE_SIGNING_ALLOWED=NO
@@ -57,3 +93,16 @@ jobs:
       uses: github/codeql-action/analyze@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0
       with:
         category: "/language:${{ matrix.language }}"
+
+    - if: always() && matrix.language == 'swift'
+      name: Enforce Swift test results
+      env:
+        DEBUG_OUTCOME: ${{ steps.test_debug.outcome }}
+        RELEASE_OUTCOME: ${{ steps.test_release.outcome }}
+      run: |
+        if [[ "$DEBUG_OUTCOME" != "success" || "$RELEASE_OUTCOME" != "success" ]]; then
+          echo "One or more Swift test configurations failed." >&2
+          echo "Debug: $DEBUG_OUTCOME" >&2
+          echo "Release: $RELEASE_OUTCOME" >&2
+          exit 1
+        fi

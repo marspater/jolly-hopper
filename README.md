@@ -75,7 +75,7 @@ Integrate Siphon directly into your favorite web browser for 1-click video downl
 - **Extraction Engine**: Custom `yt-dlp` process coordinator
 - **Media Transcoder**: Native `FFmpeg` & `FFprobe` 6.0 (`arm64` / `x86_64`)
 - **Logging & Diagnostics**: Centralized structured `LoggerService` & os_log tracing
-- **Target OS**: macOS 14.0 (Sonoma) through macOS 27+
+- **Target OS**: macOS 15.0 (Sequoia) through macOS 27+
 
 ## 🎨 Design language
 
