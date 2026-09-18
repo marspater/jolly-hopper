@@ -51,6 +51,43 @@ final class UpdateVerifierTests: XCTestCase {
         }
     }
 
+    func testDefaultBundleIdentifierMatchesProductionProduct() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("bundle_id_\(UUID().uuidString)", isDirectory: true)
+        let app = root.appendingPathComponent("Fixture.app", isDirectory: true)
+        let contents = app.appendingPathComponent("Contents", isDirectory: true)
+        try FileManager.default.createDirectory(at: contents, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let info: [String: Any] = [
+            "CFBundleIdentifier": "com.marspater.siphon",
+            "CFBundleName": "Fixture",
+            "CFBundlePackageType": "APPL",
+            "CFBundleVersion": "1",
+            "CFBundleShortVersionString": "1.0"
+        ]
+        let data = try PropertyListSerialization.data(
+            fromPropertyList: info,
+            format: .xml,
+            options: 0
+        )
+        try data.write(to: contents.appendingPathComponent("Info.plist"))
+
+        XCTAssertNoThrow(
+            try UpdateVerifier.verifyAppBundle(
+                bundleURL: app,
+                expectedTeamID: nil,
+                allowAdHoc: true
+            )
+        )
+    }
+
+    func testTeamIdentifierReturnsNilForMissingBundle() {
+        let missing = FileManager.default.temporaryDirectory
+            .appendingPathComponent("missing_\(UUID().uuidString).app")
+        XCTAssertNil(UpdateVerifier.teamIdentifier(for: missing))
+    }
+
     func testVerifyCurrentAppBundleSucceeds() throws {
         let currentBundle = Bundle.main.bundleURL
         // The current test host or app bundle exists
