@@ -45,6 +45,7 @@ struct PreferencesView: View {
     @EnvironmentObject var languageService: LanguageService
     @EnvironmentObject var updateChecker: UpdateChecker
     @EnvironmentObject var downloadManager: DownloadManager
+    @Environment(\.colorScheme) private var colorScheme
     @State private var selectedReleaseId: Int? = nil
     @State private var showLanguageChangeAlert = false
     @State private var previousLanguage: Language? = nil
@@ -152,7 +153,6 @@ struct PreferencesView: View {
         .padding(.bottom, SiphonTheme.spacing16)
         .frame(minWidth: 500, idealWidth: 520, maxWidth: 620, minHeight: 646, idealHeight: 662, maxHeight: 780)
         .siphonAdaptiveRendering()
-        .preferredColorScheme(theme == "light" ? .light : (theme == "dark" ? .dark : nil))
         .accentColor(SiphonTheme.accent)
         .background(PreferencesWindowConfigurator())
         .siphonWindowBackground()
@@ -370,8 +370,10 @@ struct PreferencesView: View {
                         .foregroundColor(.primary)
                         .lineLimit(1)
                         .truncationMode(.middle)
+                        .help(defaultSaveFolder.isEmpty ? "~/Downloads" : defaultSaveFolder)
+                        .layoutPriority(1)
                     
-                    Spacer(minLength: 4)
+                    Spacer(minLength: SiphonTheme.spacing4)
 
                     if !defaultSaveFolder.isEmpty {
                         Button {
@@ -386,8 +388,10 @@ struct PreferencesView: View {
                         .accessibilityLabel(languageService.s("reset_save_folder"))
                     }
                 }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .layoutPriority(1)
+                .padding(.horizontal, SiphonTheme.spacing12)
+                .padding(.vertical, SiphonTheme.spacing8)
                 .background(
                     SiphonTheme.fieldBackground(cornerRadius: SiphonTheme.radiusControl)
                 )
@@ -417,6 +421,7 @@ struct PreferencesView: View {
                     )
                 }
                 .buttonStyle(.bouncy(scale: 0.95, hover: 1.025))
+                .fixedSize(horizontal: true, vertical: false)
                 .shadow(color: SiphonTheme.accent.opacity(0.25), radius: 6, y: 2)
             }
             .padding(.vertical, 2)
@@ -532,9 +537,13 @@ struct PreferencesView: View {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(preset.title(lang: languageService))
                                 .fontWeight(.medium)
+                                .lineLimit(1)
+                                .truncationMode(.tail)
                             Text(preset.description(lang: languageService))
                                 .font(.geist(11))
                                 .foregroundColor(.secondary)
+                                .lineLimit(2)
+                                .truncationMode(.tail)
                         }
                         Spacer()
                     }
@@ -587,10 +596,17 @@ struct PreferencesView: View {
                         Text(preset.name)
                             .fontWeight(.medium)
                             .foregroundColor(.primary)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                            .help(preset.name)
                         Text("\(preset.videoCodec.title(lang: languageService)) + \(preset.audioCodec.title(lang: languageService)) • \(preset.videoResolution.title(lang: languageService))\(preset.downloadSubtitles == true ? " • CC: \(preset.subtitleLanguage ?? "")" : "")\(preset.splitChapters == true ? " • 📑" : "")\(preset.sponsorBlock == true ? " • 🚫" : "")")
                             .font(.geist(11))
                             .foregroundColor(.secondary)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .layoutPriority(1)
                 }
             }
             .buttonStyle(.plain)
@@ -1144,10 +1160,8 @@ struct PreferencesView: View {
     private var aboutTab: some View {
         VStack(spacing: 0) {
             VStack(spacing: SiphonTheme.spacing8) {
-                Image(nsImage: NSApp.applicationIconImage)
-                    .resizable()
-                    .frame(width: 56, height: 56)
-                    .shadow(color: SiphonTheme.accent.opacity(0.25), radius: 12, x: 0, y: 4)
+                RadiantSiphonLogoView()
+                    .accessibilityHidden(true)
 
                 VStack(spacing: SiphonTheme.spacing4) {
                     Text("Siphon")
@@ -1187,7 +1201,7 @@ struct PreferencesView: View {
                         Spacer()
                         Link("yt-dlp", destination: URL(string: "https://github.com/yt-dlp/yt-dlp") ?? URL(fileURLWithPath: "/"))
                             .font(.geist(12, weight: .semibold))
-                            .foregroundColor(SiphonTheme.accent)
+                            .foregroundColor(SiphonTheme.accentForeground(for: colorScheme))
                     }
                 }
 

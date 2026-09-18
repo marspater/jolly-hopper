@@ -35,6 +35,7 @@ final class QuickLookPreviewHelper: NSObject, QLPreviewPanelDataSource, QLPrevie
 struct DownloadListView: View {
     let downloads: [Download]
     let emptyMessage: String
+    let emptyDetail: String
     var emptyIcon: String = "tray.fill"
     let showStop: Bool
     
@@ -64,7 +65,7 @@ struct DownloadListView: View {
         SiphonEmptyStateView(
             icon: emptyIcon,
             title: emptyMessage,
-            message: languageService.s("url_placeholder"),
+            message: emptyDetail,
             actionTitle: languageService.s("new_download")
         ) {
             appState.showAddDownloadSheet = true
@@ -78,6 +79,7 @@ struct DownloadRowView: View {
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var languageService: LanguageService
     @EnvironmentObject var updateChecker: UpdateChecker
+    @Environment(\.colorScheme) private var colorScheme
     let showStop: Bool
     
     @State private var isHovering = false
@@ -86,7 +88,6 @@ struct DownloadRowView: View {
     @State private var isCopiedLog = false
     @State private var isCopiedError = false
     @State private var showRawError = false
-    @ObservedObject private var renderingEnvironment = AdaptiveRenderingEnvironment.shared
     
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -98,8 +99,10 @@ struct DownloadRowView: View {
                     Text(download.status == .fetching ? languageService.s("fetching") : download.displayTitle)
                         .font(.geist(14, weight: .semibold))
                         .lineLimit(2)
+                        .truncationMode(.tail)
                         .fixedSize(horizontal: false, vertical: true)
                         .layoutPriority(1)
+                        .help(download.displayTitle)
                     
                     // Line 2: Subtitle (Domain • Quality • Format • Duration)
                     Text(download.formatSubtitle(lang: languageService))
@@ -107,6 +110,7 @@ struct DownloadRowView: View {
                         .foregroundColor(.secondary)
                         .lineLimit(1)
                         .truncationMode(.tail)
+                        .help(download.formatSubtitle(lang: languageService))
                     
                     // Line 3: Status / Progress / Metrics
                     if download.status == .downloading || download.status == .processing || download.status == .fetching {
@@ -150,20 +154,22 @@ struct DownloadRowView: View {
                             
                             if download.status == .paused && download.progress > 0 {
                                 Text("\(Int(download.progress * 100))%")
-                                        .font(.geistMono(11, weight: .semibold))
-                                    .foregroundColor(SiphonTheme.statusQueued)
+                                    .font(.geistMono(11, weight: .semibold))
+                                    .foregroundColor(SiphonTheme.statusForeground(for: .paused, colorScheme: colorScheme))
                             }
                         }
                     }
                 }
+                .frame(minHeight: 68, alignment: .topLeading)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .layoutPriority(1)
                 
-                Spacer(minLength: 8)
+                Spacer(minLength: SiphonTheme.spacing8)
                 
                 actionButtons
-            }
-            
-            if download.status == .downloading || download.status == .processing {
-                LinearProgressBar(value: max(0, min(1, download.progress)))
+                    .frame(minWidth: download.status == .fileExists ? 0 : 62, alignment: .trailing)
+                    .padding(.top, 1)
+                    .animation(SiphonAnimation.snappySpring, value: download.status)
             }
         }
         .padding(SiphonTheme.spacing14)
@@ -174,9 +180,15 @@ struct DownloadRowView: View {
         .overlay(
             SiphonTheme.cardBorder(cornerRadius: SiphonTheme.radiusCard, isHovered: isHovering)
         )
-        .shadow(color: Color.black.opacity(isHovering ? 0.08 : 0.02), radius: isHovering ? 8 : 4, y: 2)
-        .scaleEffect(renderingEnvironment.reduceMotion || !isHovering ? 1.0 : 1.004)
-        .animation(renderingEnvironment.reduceMotion ? nil : SiphonAnimation.hoverSpring, value: isHovering)
+        .overlay(alignment: .bottom) {
+            if download.status == .downloading || download.status == .processing {
+                LinearProgressBar(value: max(0, min(1, download.progress)))
+                    .padding(.horizontal, SiphonTheme.spacing14)
+                    .padding(.bottom, SiphonTheme.spacing6)
+                    .transition(.opacity)
+            }
+        }
+        .siphonCardHover(isHovered: isHovering, tint: statusTint)
         .onHover { hovering in
             isHovering = hovering
         }
@@ -196,20 +208,24 @@ struct DownloadRowView: View {
         Group {
             if let info = download.errorUXInfo(lang: languageService) {
                 VStack(alignment: .leading, spacing: 6) {
-                    HStack(spacing: 6) {
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
                         Image(systemName: "exclamationmark.triangle.fill")
                             .font(.geist(12))
-                            .foregroundColor(SiphonTheme.statusFailed)
+                            .foregroundColor(SiphonTheme.statusForeground(for: .failed, colorScheme: colorScheme))
                         Text(info.headline)
                             .font(.geist(13, weight: .bold))
-                            .foregroundColor(SiphonTheme.statusFailed)
+                            .foregroundColor(SiphonTheme.statusForeground(for: .failed, colorScheme: colorScheme))
+                            .lineLimit(1)
                         
                         Text("—")
-                            .foregroundColor(SiphonTheme.statusFailed.opacity(0.5))
+                            .foregroundColor(SiphonTheme.statusForeground(for: .failed, colorScheme: colorScheme).opacity(0.55))
                         
                         Text(info.description)
                             .font(.geist(12))
                             .foregroundColor(.secondary)
+                            .lineLimit(2)
+                            .truncationMode(.tail)
+                            .layoutPriority(1)
                     }
                     
                     HStack(spacing: 8) {
@@ -502,33 +518,23 @@ struct FileThumbnailView: View {
         )
     }
 
-    private var badgeForegroundColor: Color {
+    private var statusTint: Color {
         switch download.status {
         case .downloading, .fetching, .processing: return SiphonTheme.statusDownloading
         case .completed: return SiphonTheme.statusCompleted
-        case .failed: return SiphonTheme.statusFailed
+        case .failed, .stopped: return SiphonTheme.statusFailed
         case .queued, .paused, .fileExists: return SiphonTheme.statusQueued
-        default: return .secondary
         }
+    }
+
+    private var badgeForegroundColor: Color {
+        SiphonTheme.statusForeground(for: download.status, colorScheme: colorScheme)
     }
     
     private var actionButtons: some View {
         HStack(spacing: SiphonTheme.spacing6) {
-            // Completed state: Primary Play button + Single More Menu
+            // Completed state: one visible contextual action + exhaustive More menu
             if download.status == .completed {
-                if let path = download.primaryFilePath, FileManager.default.fileExists(atPath: path.path) {
-                    Button {
-                        QuickLookPreviewHelper.shared.preview(url: path)
-                    } label: {
-                        Image(systemName: "eye.circle.fill")
-                            .font(.system(size: 18, weight: .semibold))
-                    }
-                    .buttonStyle(.siphonIcon(size: 28))
-                    .foregroundColor(SiphonTheme.accent)
-                    .help(languageService.s("quick_look"))
-                    .accessibilityLabel(languageService.s("quick_look"))
-                }
-                
                 if let path = download.primaryFilePath, FileManager.default.fileExists(atPath: path.path) {
                     Button {
                         downloadManager.openFile(path)
@@ -630,13 +636,15 @@ struct FileThumbnailView: View {
                     Image(systemName: "ellipsis.circle")
                         .font(.system(size: 17, weight: .regular))
                         .foregroundColor(.secondary)
+                        .frame(width: 28, height: 28)
+                        .contentShape(Rectangle())
                 }
                 .menuStyle(.borderlessButton)
                 .help(languageService.s("more_actions"))
                 .accessibilityLabel(languageService.s("more_actions"))
             }
             
-            // Downloading / Fetching / Processing state: Pause + Stop (revealed on hover) + More Menu
+            // Downloading / Fetching / Processing: one visible Pause action + More menu
             if download.status == .downloading || download.status == .fetching || download.status == .processing {
                 Button {
                     downloadManager.pauseDownload(download)
@@ -645,23 +653,9 @@ struct FileThumbnailView: View {
                         .font(.system(size: 18, weight: .semibold))
                 }
                 .buttonStyle(.siphonIcon(size: 28))
-                .foregroundColor(SiphonTheme.statusQueued)
+                .foregroundColor(SiphonTheme.statusForeground(for: .queued, colorScheme: colorScheme))
                 .help(languageService.s("pause"))
                 .accessibilityLabel(languageService.s("pause"))
-                
-                if isHovering {
-                    Button {
-                        downloadManager.stopDownload(download)
-                    } label: {
-                        Image(systemName: "stop.circle.fill")
-                            .font(.system(size: 18, weight: .semibold))
-                    }
-                    .buttonStyle(.siphonIcon(size: 28))
-                    .foregroundColor(SiphonTheme.statusFailed)
-                    .help(languageService.s("stop"))
-                    .accessibilityLabel(languageService.s("stop"))
-                    .transition(.opacity)
-                }
                 
                 Menu {
                     Button {
@@ -692,6 +686,8 @@ struct FileThumbnailView: View {
                     Image(systemName: "ellipsis.circle")
                         .font(.system(size: 17, weight: .regular))
                         .foregroundColor(.secondary)
+                        .frame(width: 28, height: 28)
+                        .contentShape(Rectangle())
                 }
                 .menuStyle(.borderlessButton)
                 .help(languageService.s("more_actions"))
@@ -707,7 +703,7 @@ struct FileThumbnailView: View {
                         .font(.system(size: 18, weight: .semibold))
                 }
                 .buttonStyle(.siphonIcon(size: 28))
-                .foregroundColor(SiphonTheme.statusQueued)
+                .foregroundColor(SiphonTheme.statusForeground(for: .queued, colorScheme: colorScheme))
                 .help(languageService.s("pause"))
                 .accessibilityLabel(languageService.s("pause"))
                 
@@ -747,6 +743,8 @@ struct FileThumbnailView: View {
                     Image(systemName: "ellipsis.circle")
                         .font(.system(size: 17, weight: .regular))
                         .foregroundColor(.secondary)
+                        .frame(width: 28, height: 28)
+                        .contentShape(Rectangle())
                 }
                 .menuStyle(.borderlessButton)
                 .help(languageService.s("more_actions"))
@@ -790,6 +788,8 @@ struct FileThumbnailView: View {
                     Image(systemName: "ellipsis.circle")
                         .font(.system(size: 17, weight: .regular))
                         .foregroundColor(.secondary)
+                        .frame(width: 28, height: 28)
+                        .contentShape(Rectangle())
                 }
                 .menuStyle(.borderlessButton)
                 .help(languageService.s("more_actions"))
@@ -805,7 +805,7 @@ struct FileThumbnailView: View {
                         .font(.system(size: 18, weight: .semibold))
                 }
                 .buttonStyle(.siphonIcon(size: 28))
-                .foregroundColor(SiphonTheme.statusQueued)
+                .foregroundColor(SiphonTheme.statusForeground(for: .queued, colorScheme: colorScheme))
                 .help(languageService.s("retry"))
                 .accessibilityLabel(languageService.s("retry"))
                 
@@ -847,6 +847,8 @@ struct FileThumbnailView: View {
                     Image(systemName: "ellipsis.circle")
                         .font(.system(size: 17, weight: .regular))
                         .foregroundColor(.secondary)
+                        .frame(width: 28, height: 28)
+                        .contentShape(Rectangle())
                 }
                 .menuStyle(.borderlessButton)
                 .help(languageService.s("more_actions"))
@@ -864,7 +866,7 @@ struct FileThumbnailView: View {
                         Text(languageService.s("overwrite"))
                             .font(.geist(11, weight: .medium))
                     }
-                    .foregroundColor(SiphonTheme.statusQueued)
+                    .foregroundColor(SiphonTheme.statusForeground(for: .queued, colorScheme: colorScheme))
                 }
                 .buttonStyle(.siphonGhost)
                 .help(languageService.s("overwrite"))
@@ -1138,7 +1140,7 @@ struct LinearProgressBar: View {
                     .fill(SiphonTheme.primaryGradient)
                     .frame(width: max(0, geometry.size.width * CGFloat(safeValue)))
                     .shadow(color: SiphonTheme.accent.opacity(0.35), radius: 3, y: 1)
-                    .animation(renderingEnvironment.reduceMotion ? nil : SiphonAnimation.snappySpring, value: safeValue)
+                    .animation(SiphonAnimation.snappySpring, value: safeValue)
             }
         }
         .frame(height: 5)

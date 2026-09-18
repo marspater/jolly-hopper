@@ -9,34 +9,43 @@ struct RecentDownloadRowView: View {
     @ObservedObject var download: Download
     @EnvironmentObject var downloadManager: DownloadManager
     @EnvironmentObject var languageService: LanguageService
+    @Environment(\.colorScheme) private var colorScheme
     @State private var isHovered: Bool = false
-    @ObservedObject private var renderingEnvironment = AdaptiveRenderingEnvironment.shared
 
     init(download: Download) {
         self.download = download
     }
 
     var body: some View {
-        HStack(spacing: SiphonTheme.spacing12) {
+        HStack(alignment: .center, spacing: SiphonTheme.spacing12) {
             thumbnailView
             metadataView
-            Spacer()
             formatPillsView
+                .fixedSize(horizontal: true, vertical: false)
             statusActionView
-            if canRemoveFromHistory {
-                Button {
-                    downloadManager.removeDownload(download)
-                } label: {
-                    Image(systemName: "xmark.circle")
-                        .font(.system(size: 13))
-                        .foregroundColor(.secondary)
+                .frame(width: 168, alignment: .trailing)
+
+            Group {
+                if canRemoveFromHistory {
+                    Button {
+                        downloadManager.removeDownload(download)
+                    } label: {
+                        Image(systemName: "xmark.circle")
+                            .font(.system(size: 13))
+                            .foregroundColor(.secondary)
+                            .frame(width: 24, height: 24)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.siphonIcon(size: 24))
+                    .help(languageService.s("remove_from_history"))
+                    .accessibilityLabel(languageService.s("remove_from_history"))
+                } else {
+                    Color.clear
                         .frame(width: 24, height: 24)
-                        .contentShape(Rectangle())
+                        .accessibilityHidden(true)
                 }
-                .buttonStyle(.siphonIcon(size: 24))
-                .help(languageService.s("remove_from_history"))
-                .accessibilityLabel(languageService.s("remove_from_history"))
             }
+            .frame(width: 24, height: 24)
         }
         .padding(.horizontal, SiphonTheme.spacing14)
         .padding(.vertical, 8)
@@ -44,12 +53,26 @@ struct RecentDownloadRowView: View {
             SiphonTheme.cardBackground(cornerRadius: SiphonTheme.radiusControl, isHovered: isHovered)
         )
         .overlay(
-            SiphonTheme.borderSubtle(cornerRadius: SiphonTheme.radiusControl, isHovered: isHovered)
+            SiphonTheme.borderSubtle(
+                cornerRadius: SiphonTheme.radiusControl,
+                isHovered: isHovered,
+                accentColor: statusTint
+            )
         )
+        .siphonCardHover(isHovered: isHovered, tint: statusTint)
         .onHover { hovering in
             withAnimation(SiphonAnimation.hoverSpring) {
                 isHovered = hovering
             }
+        }
+    }
+
+    private var statusTint: Color {
+        switch download.status {
+        case .downloading, .fetching, .processing: return SiphonTheme.statusDownloading
+        case .queued, .paused, .fileExists: return SiphonTheme.statusQueued
+        case .completed: return SiphonTheme.statusCompleted
+        case .failed, .stopped: return SiphonTheme.statusFailed
         }
     }
 
@@ -99,9 +122,11 @@ struct RecentDownloadRowView: View {
         VStack(alignment: .leading, spacing: 3) {
             let displayTitle = download.displayTitle
             Text(displayTitle)
-                .font(.geist(12, weight: .medium))
+                .font(.siphonSecondaryMedium)
                 .foregroundColor(.primary)
                 .lineLimit(1)
+                .truncationMode(.tail)
+                .help(displayTitle)
 
             HStack(spacing: 6) {
                 if download.sourceDomain == "YouTube" {
@@ -110,12 +135,15 @@ struct RecentDownloadRowView: View {
                         .frame(width: 6, height: 6)
                 }
                 Text(download.sourceDomain)
-                    .font(.geist(11, weight: .regular))
+                    .font(.siphonMetadata)
                     .foregroundColor(.secondary)
                     .lineLimit(1)
+                    .truncationMode(.tail)
+                    .help(download.sourceDomain)
             }
         }
-        .frame(minWidth: 160, alignment: .leading)
+        .frame(minWidth: 160, maxWidth: .infinity, alignment: .leading)
+        .layoutPriority(1)
     }
 
     @ViewBuilder
@@ -165,7 +193,7 @@ struct RecentDownloadRowView: View {
                     HStack(spacing: 4) {
                         Text(languageService.s("downloading"))
                             .font(.geist(11, weight: .medium))
-                            .foregroundColor(SiphonTheme.statusDownloading)
+                            .foregroundColor(SiphonTheme.statusForeground(for: .downloading, colorScheme: colorScheme))
                         Text(percentText)
                             .font(.geistMono(11, weight: .semibold))
                             .foregroundColor(.primary)
@@ -175,10 +203,7 @@ struct RecentDownloadRowView: View {
                         .progressViewStyle(.linear)
                         .frame(width: 80)
                         .tint(SiphonTheme.statusDownloading)
-                        .animation(
-                            renderingEnvironment.reduceMotion ? nil : SiphonAnimation.snappySpring,
-                            value: safeProgress
-                        )
+                        .animation(SiphonAnimation.snappySpring, value: safeProgress)
                 }
 
                 Button {
@@ -194,16 +219,16 @@ struct RecentDownloadRowView: View {
             case .queued:
                 Text(languageService.s("queued"))
                     .font(.geist(11, weight: .medium))
-                    .foregroundColor(SiphonTheme.statusQueued)
+                    .foregroundColor(SiphonTheme.statusForeground(for: .queued, colorScheme: colorScheme))
                 Image(systemName: "clock.fill")
                     .font(.system(size: 13))
-                    .foregroundColor(SiphonTheme.statusQueued)
+                    .foregroundColor(SiphonTheme.statusForeground(for: .queued, colorScheme: colorScheme))
 
             case .completed:
                 HStack(spacing: 6) {
                     Text(languageService.s("completed"))
                         .font(.geist(11, weight: .medium))
-                        .foregroundColor(SiphonTheme.statusCompleted)
+                        .foregroundColor(SiphonTheme.statusForeground(for: .completed, colorScheme: colorScheme))
                     Image(systemName: "checkmark.circle.fill")
                         .font(.system(size: 14))
                         .foregroundColor(SiphonTheme.statusCompleted)
@@ -224,7 +249,7 @@ struct RecentDownloadRowView: View {
             case .failed:
                 Text(languageService.s("failed"))
                     .font(.geist(11, weight: .medium))
-                    .foregroundColor(SiphonTheme.statusFailed)
+                    .foregroundColor(SiphonTheme.statusForeground(for: .failed, colorScheme: colorScheme))
                 Image(systemName: "exclamationmark.circle.fill")
                     .font(.system(size: 14))
                     .foregroundColor(SiphonTheme.statusFailed)
@@ -235,6 +260,6 @@ struct RecentDownloadRowView: View {
                     .foregroundColor(.secondary)
             }
         }
-        .frame(minWidth: 120, idealWidth: 160, maxWidth: 190, alignment: .trailing)
+        .frame(maxWidth: .infinity, alignment: .trailing)
     }
 }
