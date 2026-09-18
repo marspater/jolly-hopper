@@ -58,6 +58,14 @@ jobs:
           CODE_SIGNING_REQUIRED=NO \
           CODE_SIGNING_ALLOWED=NO
 
+    # Upload the Swift CodeQL result immediately after extraction. Keeping this
+    # ahead of the longer Debug/Release test passes minimizes the temporary
+    # "configuration not found" PR status while preserving test enforcement.
+    - name: Perform CodeQL Analysis
+      uses: github/codeql-action/analyze@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0
+      with:
+        category: "/language:${{ matrix.language }}"
+
     - if: matrix.language == 'swift'
       id: test_debug
       name: Test Siphon (Debug)
@@ -88,11 +96,6 @@ jobs:
           CODE_SIGN_IDENTITY="" \
           CODE_SIGNING_REQUIRED=NO \
           CODE_SIGNING_ALLOWED=NO
-
-    - name: Perform CodeQL Analysis
-      uses: github/codeql-action/analyze@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0
-      with:
-        category: "/language:${{ matrix.language }}"
 
     - if: always() && matrix.language == 'swift'
       name: Enforce Swift test results
