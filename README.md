@@ -54,10 +54,7 @@ brew upgrade --cask siphon
 
 1. Download the latest `.dmg` release from the [Releases](https://github.com/marspater/jolly-hopper/releases) page.
 2. Drag **Siphon** into your `/Applications` directory.
-3. If macOS Gatekeeper alerts on first open:
-```bash
-xattr -cr /Applications/"Siphon.app"
-```
+3. Official release artifacts are Developer ID signed and notarized. They should open normally through Gatekeeper. If macOS reports that an official release cannot be verified, do **not** bypass Gatekeeper with `xattr`; re-download the asset from this repository's Releases page and verify its published SHA-256.
 
 ---
 
