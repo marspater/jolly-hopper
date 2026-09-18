@@ -74,6 +74,32 @@ public struct UpdateVerifier: Sendable {
         }
     }
 
+    /// Returns the Developer Team identifier for a valid signed bundle.
+    /// Ad-hoc/unsigned bundles intentionally return nil so legacy installations can
+    /// migrate once through the checksum-pinned update path.
+    public static func teamIdentifier(for bundleURL: URL) -> String? {
+        var staticCode: SecStaticCode?
+        guard SecStaticCodeCreateWithPath(bundleURL as CFURL, [], &staticCode) == errSecSuccess,
+              let code = staticCode,
+              SecStaticCodeCheckValidity(code, SecCSFlags(), nil) == errSecSuccess else {
+            return nil
+        }
+
+        var infoCF: CFDictionary?
+        guard SecCodeCopySigningInformation(
+            code,
+            SecCSFlags(rawValue: kSecCSSigningInformation),
+            &infoCF
+        ) == errSecSuccess,
+        let info = infoCF as? [String: Any] else {
+            return nil
+        }
+
+        let teamID = (info[kSecCodeInfoTeamIdentifier as String] as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return teamID?.isEmpty == false ? teamID : nil
+    }
+
     /// Validates an extracted .app bundle.
     /// Supports two modes:
     /// 1. Developer ID signed release (`expectedTeamID` != nil):
@@ -88,7 +114,7 @@ public struct UpdateVerifier: Sendable {
     ///    - Code signature checked if present, but ad-hoc or unsigned builds are permitted if `allowAdHoc` is true.
     public static func verifyAppBundle(
         bundleURL: URL,
-        expectedBundleID: String = "com.marspater.Siphon",
+        expectedBundleID: String = "com.marspater.siphon",
         expectedTeamID: String? = nil,
         allowAdHoc: Bool = true
     ) throws {
