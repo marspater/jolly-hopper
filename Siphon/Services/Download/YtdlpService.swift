@@ -766,14 +766,14 @@ class YtdlpService: ObservableObject {
         return false
     }
 
-    func fetchInfo(url: String, rawCookies: String? = nil) async throws -> MediaInfo {
+    func fetchInfo(url: String, rawCookies: String? = nil, rawUserAgent: String? = nil) async throws -> MediaInfo {
         guard let path = ytdlpPath else {
             throw YtdlpError.notFound
         }
         
         let normalizedURL = normalizeURLForYtdlp(url)
         do {
-             return try await fetchSingleVideoInfo(path: path.path, url: normalizedURL, rawCookies: rawCookies)
+             return try await fetchSingleVideoInfo(path: path.path, url: normalizedURL, rawCookies: rawCookies, rawUserAgent: rawUserAgent)
         } catch {
             if isPlaylistURL(normalizedURL) {
                 do {
@@ -786,7 +786,73 @@ class YtdlpService: ObservableObject {
         }
     }
 
-    private func fetchSingleVideoInfo(path: String, url: String, forceBrowserCookies: Bool = false, rawCookies: String? = nil) async throws -> MediaInfo {
+    private func fetchSingleVideoInfo(path: String, url: String, forceBrowserCookies: Bool = false, rawCookies: String? = nil, rawUserAgent: String? = nil) async throws -> MediaInfo {
+        if isRecuURL(url) {
+            let recuMedia = try await resolveRecuMediaInfo(
+                url: url,
+                rawCookies: rawCookies,
+                rawUserAgent: rawUserAgent
+            )
+            var parsedInfo: MediaInfo?
+            var probeArgs = [
+                path,
+                "--ignore-config",
+                "--dump-json",
+                "--no-playlist",
+                "--no-warnings"
+            ]
+            if let userAgent = recuMedia.userAgent, !userAgent.isEmpty {
+                probeArgs.append(contentsOf: ["--user-agent", userAgent])
+            }
+            probeArgs.append(contentsOf: ["--add-header", "Origin:https://recu.me"])
+            probeArgs.append(contentsOf: ["--add-header", "Referer:\(recuMedia.pageURL)"])
+            probeArgs.append("--")
+            probeArgs.append(recuMedia.playlistURL)
+
+            do {
+                let output = try await runCommand(probeArgs)
+                if let data = output.data(using: .utf8) {
+                    parsedInfo = try? JSONDecoder().decode(MediaInfo.self, from: data)
+                }
+            } catch {
+                if error is CancellationError { throw error }
+                try Task.checkCancellation()
+                LoggerService.shared.log("[Recu] playlist metadata probe failed; using synthesized HLS metadata", level: .debug)
+            }
+
+            let fallbackFormat = MediaFormat(
+                formatId: "hls",
+                ext: "mp4",
+                resolution: nil,
+                fps: nil,
+                vcodec: nil,
+                acodec: nil,
+                tbr: nil
+            )
+            return MediaInfo(
+                id: recuMedia.videoID,
+                title: parsedInfo?.title?.isEmpty == false ? parsedInfo!.title : recuMedia.title,
+                description: parsedInfo?.description,
+                thumbnail: parsedInfo?.thumbnail ?? recuMedia.thumbnailURL,
+                duration: parsedInfo?.duration,
+                uploader: parsedInfo?.uploader ?? recuMedia.model,
+                uploadDate: parsedInfo?.uploadDate,
+                viewCount: parsedInfo?.viewCount,
+                likeCount: parsedInfo?.likeCount,
+                formats: parsedInfo?.formats?.isEmpty == false ? parsedInfo?.formats : [fallbackFormat],
+                subtitles: parsedInfo?.subtitles,
+                automaticCaptions: parsedInfo?.automaticCaptions,
+                chapters: parsedInfo?.chapters,
+                playlist: nil,
+                playlistIndex: nil,
+                playlistCount: nil,
+                webpageUrl: recuMedia.pageURL,
+                originalUrl: recuMedia.playlistURL,
+                formatProtocol: "m3u8_native",
+                manifestUrl: recuMedia.playlistURL
+            )
+        }
+
         if isBoyfriendTVURL(url) {
             if let btvMedia = try await resolveBoyfriendTVMediaInfo(url: url, rawCookies: rawCookies) {
                 var btvArgs = [
@@ -978,7 +1044,7 @@ class YtdlpService: ObservableObject {
             let usingBrowserCookies = args.contains("--cookies-from-browser")
             if shouldRetryWithBrowserCookies(error: error, url: url, usingBrowserCookies: usingBrowserCookies, forceBrowserCookies: forceBrowserCookies) {
                 LoggerService.shared.log("Retrying metadata extraction with configured browser cookies", level: .info)
-                return try await fetchSingleVideoInfo(path: path, url: url, forceBrowserCookies: true, rawCookies: rawCookies)
+                return try await fetchSingleVideoInfo(path: path, url: url, forceBrowserCookies: true, rawCookies: rawCookies, rawUserAgent: rawUserAgent)
             }
             throw mapSiteSpecificError(error, url: url)
         }
@@ -1162,7 +1228,26 @@ public struct DownloadResult: Sendable {
         var customThumbnailURL: String? = nil
         var bestCamDecryptionKey: String? = nil
 
-        if isBoyfriendTVURL(url) {
+        if isRecuURL(url) {
+            if let streamURL = mediaInfo?.manifestUrl ?? mediaInfo?.originalUrl,
+               !streamURL.isEmpty,
+               streamURL.lowercased().contains(".m3u8") {
+                targetURL = streamURL
+                customResolvedTitle = mediaInfo?.title
+                customEmbedURL = mediaInfo?.webpageUrl ?? normalizedURL
+                customThumbnailURL = mediaInfo?.thumbnail
+            } else {
+                let recuMedia = try await resolveRecuMediaInfo(
+                    url: normalizedURL,
+                    rawCookies: options.rawCookies,
+                    rawUserAgent: options.rawUserAgent
+                )
+                targetURL = recuMedia.playlistURL
+                customResolvedTitle = recuMedia.title
+                customEmbedURL = recuMedia.pageURL
+                customThumbnailURL = recuMedia.thumbnailURL
+            }
+        } else if isBoyfriendTVURL(url) {
             if let streamURL = mediaInfo?.manifestUrl ?? mediaInfo?.originalUrl, !streamURL.isEmpty, streamURL.contains("boyfriend") {
                 targetURL = resolveBoyfriendTVStreamURLForDownload(streamURL: streamURL, options: options)
                 customResolvedTitle = mediaInfo?.title
@@ -1328,8 +1413,13 @@ public struct DownloadResult: Sendable {
             additionalCookies.append((name: sc.name, value: sc.value))
         }
 
-        if (options.rawCookies?.isEmpty == false) || !additionalCookies.isEmpty {
-            if let cookieFile = try? SecureCookieFile.create(url: targetURL, rawCookies: options.rawCookies, additionalCookies: additionalCookies) {
+        let shouldForwardRawCookiesToTarget = !isRecuURL(normalizedURL)
+        if (shouldForwardRawCookiesToTarget && options.rawCookies?.isEmpty == false) || !additionalCookies.isEmpty {
+            if let cookieFile = try? SecureCookieFile.create(
+                url: targetURL,
+                rawCookies: shouldForwardRawCookiesToTarget ? options.rawCookies : nil,
+                additionalCookies: additionalCookies
+            ) {
                 secureCookieFiles.append(cookieFile)
                 args.append(contentsOf: ["--cookies", cookieFile.path])
                 if sucuriCookie != nil {
@@ -1999,13 +2089,333 @@ public struct DownloadResult: Sendable {
         }
     }
     
+    private func isRecuURL(_ urlOrHost: String) -> Bool {
+        let host = (URL(string: urlOrHost)?.host ?? urlOrHost).lowercased()
+        return host == "recu.me" || host.hasSuffix(".recu.me")
+    }
+
+    private struct RecuExtractedMedia {
+        let videoID: String
+        let model: String
+        let playlistURL: String
+        let pageURL: String
+        let title: String
+        let thumbnailURL: String?
+        let userAgent: String?
+    }
+
+    nonisolated static func recuVideoIdentity(from urlString: String) -> (model: String, videoID: String)? {
+        guard let url = URL(string: urlString),
+              let host = url.host?.lowercased(),
+              host == "recu.me" || host.hasSuffix(".recu.me") else {
+            return nil
+        }
+        let parts = url.path.split(separator: "/").map(String.init)
+        guard parts.count >= 4,
+              parts[1].lowercased() == "video",
+              parts[3].lowercased() == "play",
+              !parts[0].isEmpty,
+              !parts[2].isEmpty,
+              parts[2].allSatisfy(\.isNumber) else {
+            return nil
+        }
+        return (model: parts[0], videoID: parts[2])
+    }
+
+    nonisolated static func recuToken(from html: String, videoID: String) -> String? {
+        let escapedID = NSRegularExpression.escapedPattern(for: videoID)
+        let patterns = [
+            #"(?:id|data-id)\s*=\s*["']?"# + escapedID + #"["']?[^>]{0,800}?data-token\s*=\s*["']([^"']+)["']"#,
+            escapedID + #"["']\s*[^>\n]{0,300}?data-token\s*=\s*["']([^"']+)["']"#,
+            #"data-token\s*=\s*["']([^"']+)["'][^>]{0,800}?(?:id|data-id)\s*=\s*["']?"# + escapedID + #"["']?"#
+        ]
+        for pattern in patterns {
+            guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive, .dotMatchesLineSeparators]),
+                  let match = regex.firstMatch(in: html, range: NSRange(html.startIndex..., in: html)),
+                  match.numberOfRanges > 1,
+                  let range = Range(match.range(at: 1), in: html) else {
+                continue
+            }
+            let token = String(html[range]).decodingHTMLEntities()
+            if !token.isEmpty { return token }
+        }
+        return nil
+    }
+
+    nonisolated static func recuPlaylistURL(from apiResponse: String) -> String? {
+        let decoded = apiResponse.decodingHTMLEntities()
+            .replacingOccurrences(of: "\\/", with: "/")
+        let patterns = [
+            #"<source[^>]+src\s*=\s*["']([^"']+\.m3u8[^"']*)["']"#,
+            #"(https?://[^\s"'<>]+\.m3u8[^\s"'<>]*)"#
+        ]
+        for pattern in patterns {
+            guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]),
+                  let match = regex.firstMatch(in: decoded, range: NSRange(decoded.startIndex..., in: decoded)),
+                  match.numberOfRanges > 1,
+                  let range = Range(match.range(at: 1), in: decoded) else {
+                continue
+            }
+            let value = String(decoded[range]).replacingOccurrences(of: "amp;", with: "")
+            guard let url = URL(string: value),
+                  ["http", "https"].contains(url.scheme?.lowercased() ?? ""),
+                  url.user == nil,
+                  url.password == nil else {
+                continue
+            }
+            return url.absoluteString
+        }
+        return nil
+    }
+
+    private func recuImpersonationTarget(rawUserAgent: String?) -> String {
+        let ua = rawUserAgent?.lowercased() ?? ""
+        if ua.contains("firefox/") { return "firefox:macos" }
+        if ua.contains("safari/") && !ua.contains("chrome/") && !ua.contains("chromium/") {
+            return "safari:macos"
+        }
+        switch configuredBrowserCookieSource() {
+        case "firefox": return "firefox:macos"
+        case "safari": return "safari:macos"
+        default: return "chrome:macos"
+        }
+    }
+
+    private func decodedDumpPagesBody(_ output: String) -> String {
+        output.split(whereSeparator: \.isNewline).compactMap { line -> String? in
+            let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty,
+                  !trimmed.hasPrefix("ERROR:"),
+                  !trimmed.hasPrefix("WARNING:"),
+                  let data = Data(base64Encoded: trimmed, options: .ignoreUnknownCharacters),
+                  let decoded = String(data: data, encoding: .utf8),
+                  !decoded.isEmpty else {
+                return nil
+            }
+            return decoded
+        }.joined(separator: "\n")
+    }
+
+    private func recuDumpPage(
+        _ targetURL: String,
+        referer: String?,
+        rawCookies: String?,
+        rawUserAgent: String?,
+        stage: String
+    ) async throws -> String {
+        guard let ytdlp = ytdlpPath else { throw YtdlpError.notFound }
+
+        var cookieFile: URL?
+        defer {
+            if let cookieFile {
+                try? FileManager.default.removeItem(at: cookieFile)
+            }
+        }
+
+        var args = [
+            ytdlp.path,
+            "--ignore-config",
+            "--dump-pages",
+            "--skip-download",
+            "--no-playlist",
+            "--socket-timeout", "20",
+            "--retries", "2"
+        ]
+
+        if let rawCookies, !rawCookies.isEmpty {
+            cookieFile = createConsolidatedCookiesFile(url: targetURL, rawCookies: rawCookies)
+            if let cookieFile {
+                args.append(contentsOf: ["--cookies", cookieFile.path])
+            }
+        } else {
+            _ = appendCookieArgs(for: targetURL, to: &args)
+        }
+
+        let userAgent = rawUserAgent?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let userAgent, !userAgent.isEmpty {
+            args.append(contentsOf: ["--user-agent", userAgent])
+        }
+        args.append(contentsOf: ["--extractor-args", "generic:impersonate=\(recuImpersonationTarget(rawUserAgent: userAgent))"])
+        args.append(contentsOf: ["--add-header", "Accept-Language:en-US,en;q=0.9"])
+        args.append(contentsOf: ["--add-header", "Origin:https://recu.me"])
+        if let referer, !referer.isEmpty {
+            args.append(contentsOf: ["--add-header", "Referer:\(referer)"])
+            args.append(contentsOf: ["--add-header", "X-Requested-With:XMLHttpRequest"])
+        } else {
+            args.append(contentsOf: ["--add-header", "Referer:https://recu.me/"])
+        }
+        args.append("--")
+        args.append(targetURL)
+
+        let output: String
+        do {
+            output = try await processRunner.runCommand(args)
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch let error as YtdlpError {
+            guard case .commandFailed(let failure) = error else { throw error }
+            output = failure
+        }
+
+        try Task.checkCancellation()
+        let body = decodedDumpPagesBody(output)
+        let lower = (body + "\n" + output).lowercased()
+        if lower.contains("cf-chl-") ||
+            lower.contains("/cdn-cgi/challenge-platform/") ||
+            lower.contains("<title>just a moment") ||
+            lower.contains("cloudflare") && lower.contains("403") {
+            LoggerService.shared.log("[Recu] stage=\(stage) result=cloudflare-challenge", level: .debug)
+            throw YtdlpError.cloudflareBlocked
+        }
+        guard !body.isEmpty else {
+            let classification = lower.contains("403") ? "http-403" : "no-body"
+            LoggerService.shared.log("[Recu] stage=\(stage) result=\(classification)", level: .debug)
+            if lower.contains("403") {
+                throw YtdlpError.cloudflareBlocked
+            }
+            throw YtdlpError.downloadFailed("Recu.me returned no usable page content.")
+        }
+        LoggerService.shared.log("[Recu] stage=\(stage) result=ok", level: .debug)
+        return body
+    }
+
+    private func resolveRecuMediaInfo(
+        url: String,
+        rawCookies: String?,
+        rawUserAgent: String?
+    ) async throws -> RecuExtractedMedia {
+        guard let identity = Self.recuVideoIdentity(from: url) else {
+            throw YtdlpError.downloadFailed("Unsupported Recu.me URL. Expected /<model>/video/<id>/play.")
+        }
+
+        var lastPageHTML = ""
+        var lastToken = ""
+        var apiResponse = ""
+
+        // Recu tokens can be invalidated when the browser verification/session rotates.
+        // Refresh the page and token once before surfacing a hard failure.
+        for attempt in 0..<2 {
+            lastPageHTML = try await recuDumpPage(
+                url,
+                referer: nil,
+                rawCookies: rawCookies,
+                rawUserAgent: rawUserAgent,
+                stage: attempt == 0 ? "page" : "page-refresh"
+            )
+            guard let token = Self.recuToken(from: lastPageHTML, videoID: identity.videoID) else {
+                throw YtdlpError.downloadFailed(
+                    "Recu.me loaded, but Siphon could not find the video token. The page format may have changed."
+                )
+            }
+            lastToken = token
+
+            guard var components = URLComponents(string: "https://recu.me/api/video/\(identity.videoID)") else {
+                throw YtdlpError.parseError
+            }
+            components.queryItems = [URLQueryItem(name: "token", value: token)]
+            guard let apiURL = components.url?.absoluteString else {
+                throw YtdlpError.parseError
+            }
+
+            apiResponse = try await recuDumpPage(
+                apiURL,
+                referer: url,
+                rawCookies: rawCookies,
+                rawUserAgent: rawUserAgent,
+                stage: attempt == 0 ? "api" : "api-refresh"
+            )
+
+            let state = apiResponse.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            if state == "wrong_token" && attempt == 0 {
+                LoggerService.shared.log("[Recu] API rejected a stale token; refreshing once", level: .info)
+                continue
+            }
+            if state == "shall_signin" {
+                throw YtdlpError.downloadFailed(
+                    "Recu.me requires a signed-in browser session. Open the video in your browser, sign in, then use the Siphon extension or configure Browser Cookies."
+                )
+            }
+            if state == "shall_subscribe" {
+                throw YtdlpError.downloadFailed(
+                    "Recu.me did not grant access to this recording for the current account/session."
+                )
+            }
+            if state == "wrong_token" {
+                throw YtdlpError.downloadFailed(
+                    "Recu.me rejected the refreshed video token. Re-open the video in your browser and retry so Siphon can use a fresh session."
+                )
+            }
+            break
+        }
+
+        guard !lastToken.isEmpty,
+              let playlistURL = Self.recuPlaylistURL(from: apiResponse) else {
+            throw YtdlpError.downloadFailed(
+                "Recu.me did not return a playable HLS stream for this recording."
+            )
+        }
+
+        let title: String = {
+            let patterns = [
+                #"<meta[^>]+property\s*=\s*["']og:title["'][^>]+content\s*=\s*["']([^"']+)["']"#,
+                #"<meta[^>]+content\s*=\s*["']([^"']+)["'][^>]+property\s*=\s*["']og:title["']"#,
+                #"<title[^>]*>(.*?)</title>"#
+            ]
+            for pattern in patterns {
+                guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive, .dotMatchesLineSeparators]),
+                      let match = regex.firstMatch(in: lastPageHTML, range: NSRange(lastPageHTML.startIndex..., in: lastPageHTML)),
+                      match.numberOfRanges > 1,
+                      let range = Range(match.range(at: 1), in: lastPageHTML) else {
+                    continue
+                }
+                let value = String(lastPageHTML[range])
+                    .replacingOccurrences(of: #"<[^>]+>"#, with: "", options: .regularExpression)
+                    .decodingHTMLEntities()
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                if !value.isEmpty { return value }
+            }
+            return "\(identity.model) - \(identity.videoID)"
+        }()
+
+        let thumbnail: String? = {
+            let patterns = [
+                #"<meta[^>]+property\s*=\s*["']og:image["'][^>]+content\s*=\s*["']([^"']+)["']"#,
+                #"<meta[^>]+content\s*=\s*["']([^"']+)["'][^>]+property\s*=\s*["']og:image["']"#
+            ]
+            for pattern in patterns {
+                guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]),
+                      let match = regex.firstMatch(in: lastPageHTML, range: NSRange(lastPageHTML.startIndex..., in: lastPageHTML)),
+                      match.numberOfRanges > 1,
+                      let range = Range(match.range(at: 1), in: lastPageHTML) else {
+                    continue
+                }
+                let value = String(lastPageHTML[range]).decodingHTMLEntities()
+                if let candidate = URL(string: value),
+                   ["http", "https"].contains(candidate.scheme?.lowercased() ?? "") {
+                    return candidate.absoluteString
+                }
+            }
+            return nil
+        }()
+
+        return RecuExtractedMedia(
+            videoID: identity.videoID,
+            model: identity.model,
+            playlistURL: playlistURL,
+            pageURL: url,
+            title: title,
+            thumbnailURL: thumbnail,
+            userAgent: rawUserAgent
+        )
+    }
+
     private func isGayPornTubeURL(_ urlOrHost: String) -> Bool {
         let host = (URL(string: urlOrHost)?.host ?? urlOrHost).lowercased()
         return host == "gayporntube.com" || host.hasSuffix(".gayporntube.com")
     }
 
     private func usesBrowserTransport(_ url: String) -> Bool {
-        isBoyfriendTVURL(url) || isGayPornTubeURL(url)
+        isBoyfriendTVURL(url) || isGayPornTubeURL(url) || isRecuURL(url)
     }
 
     // Let curl-impersonate supply a consistent TLS fingerprint and HTTP headers.
@@ -4489,6 +4899,24 @@ public struct DownloadResult: Sendable {
             return error
         }
 
+        if isRecuURL(url) {
+            if let siteError = error as? YtdlpError {
+                switch siteError {
+                case .cloudflareBlocked, .safariCookiesFullDiskAccessRequired, .downloadFailed:
+                    return siteError
+                default: break
+                }
+            }
+            if lowerErr.contains("cloudflare") || lowerErr.contains("captcha") ||
+                lowerErr.contains("challenge") || lowerErr.contains("turnstile") ||
+                lowerErr.contains("403") || lowerErr.contains("forbidden") {
+                return YtdlpError.cloudflareBlocked
+            }
+            if lowerErr.contains("unsupported url") {
+                return YtdlpError.downloadFailed("Could not resolve this Recu.me recording. Use a /<model>/video/<id>/play URL.")
+            }
+        }
+
         if isGayPornTubeURL(url) {
             if lowerErr.contains("cloudflare") || lowerErr.contains("captcha") || lowerErr.contains("challenge") || lowerErr.contains("turnstile") {
                 return YtdlpError.cloudflareBlocked
@@ -4573,6 +5001,7 @@ public struct DownloadResult: Sendable {
         let isBoyfriendTV = isBoyfriendTVURL(parsedHost) ||
                             parsedHost == "cdn.boyfriend.tv" || parsedHost.hasSuffix(".boyfriend.tv") ||
                             parsedHost == "cdn.boyfriendtv.com" || parsedHost.hasSuffix(".boyfriendtv.com")
+        let isRecu = isRecuURL(parsedHost)
         let isEporner = isEpornerURL(parsedHost) || lowerUrl.contains("eporner.com")
 
         // Retries, socket timeouts & performance optimization flags
@@ -4591,7 +5020,11 @@ public struct DownloadResult: Sendable {
             return configuredBrowserCookieSource() == "safari"
         }()
         if !isYouTube {
-            if isSafari {
+            if isRecu, let exactUA = options?.rawUserAgent?.trimmingCharacters(in: .whitespacesAndNewlines), !exactUA.isEmpty {
+                args.append(contentsOf: ["--user-agent", exactUA])
+                args.append(contentsOf: ["--add-header", "Accept-Language:en-US,en;q=0.9"])
+                args.append(contentsOf: ["--extractor-args", "generic:impersonate=\(recuImpersonationTarget(rawUserAgent: exactUA))"])
+            } else if isSafari {
                 let safariUA = Self.safariUserAgent
                 args.append(contentsOf: ["--user-agent", safariUA])
                 args.append(contentsOf: ["--add-header", "Accept-Language:en-US,en;q=0.9"])
@@ -4620,6 +5053,7 @@ public struct DownloadResult: Sendable {
             isFragmented = lowerUrl.contains(".m3u8") ||
                 lowerUrl.contains(".mpd") ||
                 isBoyfriendTV ||
+                isRecu ||
                 isXHamster
         }
 
@@ -4659,6 +5093,13 @@ public struct DownloadResult: Sendable {
             args.append(contentsOf: ["--add-header", "Referer:\(referer)"])
             args.append(contentsOf: ["--downloader", "ffmpeg"])
             args.append(contentsOf: ["--hls-use-mpegts"])
+        } else if isRecu {
+            args.append(contentsOf: ["--add-header", "Origin:https://recu.me"])
+            args.append(contentsOf: ["--add-header", "Referer:\(url)"])
+            args.append(contentsOf: ["--add-header", "Accept:*/*"])
+            if let index = args.firstIndex(of: "--concurrent-fragments"), index + 1 < args.count {
+                args[index + 1] = "4"
+            }
         } else if isGayPornTubeURL(url) {
             args.append(contentsOf: ["--add-header", "Referer:\(url)"])
             args.append(contentsOf: ["--add-header", "Origin:https://www.gayporntube.com"])
