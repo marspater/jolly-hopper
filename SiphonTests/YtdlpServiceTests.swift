@@ -1,4 +1,5 @@
 import XCTest
+import SQLite3
 @testable import Siphon
 
 final class TestBox<T>: @unchecked Sendable {
@@ -296,16 +297,99 @@ final class YtdlpServiceTests: XCTestCase {
         }
     }
 
-    func testCookiesFromBrowserArgumentForHeliumTranslatesToChromiumProfile() {
+    func testCookiesFromBrowserArgumentForHeliumUsesNativeReader() {
         let heliumArg = YtdlpService.cookiesFromBrowserArgument(for: "helium")
-        XCTAssertTrue(heliumArg.hasPrefix("chromium:"), "Helium must be mapped to chromium profile argument for yt-dlp compatibility")
-        XCTAssertTrue(heliumArg.contains("net.imput.helium/Default"), "Helium argument must point to net.imput.helium Default profile")
+        XCTAssertEqual(heliumArg, "helium", "The process runner must use Helium’s own Keychain entry")
         
         let safariArg = YtdlpService.cookiesFromBrowserArgument(for: "safari")
         XCTAssertEqual(safariArg, "safari")
 
         let chromeArg = YtdlpService.cookiesFromBrowserArgument(for: "chrome")
         XCTAssertEqual(chromeArg, "chrome")
+    }
+
+    func testHeliumExportUsesActiveProfileAndPreservesCookieScope() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let profile = root.appendingPathComponent("Profile 2")
+        try FileManager.default.createDirectory(at: profile, withIntermediateDirectories: true)
+        try Data(#"{"profile":{"last_used":"Profile 2"}}"#.utf8).write(to: root.appendingPathComponent("Local State"))
+        var db: OpaquePointer?
+        XCTAssertEqual(sqlite3_open(profile.appendingPathComponent("Cookies").path, &db), SQLITE_OK)
+        defer { sqlite3_close(db) }
+        let sql = """
+        CREATE TABLE meta(key TEXT, value TEXT);
+        INSERT INTO meta VALUES ('version','24');
+        CREATE TABLE cookies(host_key TEXT, name TEXT, value TEXT, encrypted_value BLOB, path TEXT, expires_utc INTEGER, is_secure INTEGER, is_httponly INTEGER, has_expires INTEGER);
+        INSERT INTO cookies VALUES('.example.com','session','fixture',X'','/account',0,1,1,0);
+        INSERT INTO cookies VALUES('example.com','empty','',X'','/',0,0,0,0);
+        INSERT INTO cookies VALUES('other.test','secret','excluded',X'','/',0,1,1,0);
+        INSERT INTO cookies VALUES('.example.com','expired','excluded',X'','/',11644473601000000,1,1,1);
+        """
+        XCTAssertEqual(sqlite3_exec(db, sql, nil, nil, nil), SQLITE_OK)
+        let file = try HeliumCookieReader.export(for: URL(string: "https://example.com/account/video")!, root: root, password: {
+            XCTFail("Plaintext cookies must not access Keychain")
+            return Data()
+        })
+        defer { file.cleanup() }
+        let contents = try String(contentsOf: file.fileURL, encoding: .utf8)
+        XCTAssertTrue(contents.contains("#HttpOnly_.example.com\tTRUE\t/account\tTRUE\t0\tsession\tfixture"))
+        XCTAssertTrue(contents.contains("example.com\tFALSE\t/\tFALSE\t0\tempty\t\n"))
+        XCTAssertFalse(contents.contains("excluded"))
+        try file.validate()
+        file.cleanup()
+        XCTAssertFalse(FileManager.default.fileExists(atPath: file.path))
+        XCTAssertFalse(HeliumCookieReader.matches(host: "evil-example.com", domain: ".example.com"))
+        XCTAssertFalse(HeliumCookieReader.matches(host: "sub.example.com", domain: "example.com"))
+        XCTAssertTrue(HeliumCookieReader.matches(host: "sub.example.com", domain: ".example.com"))
+    }
+
+    func testHeliumDecryptKnownChromiumCookieAndRejectWrongDomain() throws {
+        // Independent AES-CBC/PBKDF2 fixture: password=fixture, domain=.example.com, value=session-value.
+        let encrypted = Data(base64Encoded: "djEwl0EKULQ4rr5F8E9Nz4uDN1OehYLX5wjFTdUkTSwHkt/wtYh0HJF26qMCeN9zWSql")!
+        let key = try HeliumCookieReader.deriveKey(password: Data("fixture".utf8))
+        XCTAssertEqual(try HeliumCookieReader.decrypt(encrypted, key: key, domain: ".example.com", version: 24), "session-value")
+        XCTAssertThrowsError(try HeliumCookieReader.decrypt(encrypted, key: key, domain: "other.test", version: 24))
+        XCTAssertThrowsError(try HeliumCookieReader.decrypt(Data("v20unsupported".utf8), key: key, domain: ".example.com", version: 24))
+    }
+
+    func testSafariPreflightDoesNotBlockRecuAndActualDenialIsReported() async throws {
+        let originalBrowser = UserDefaults.standard.string(forKey: UserDefaultsKeys.browserForCookies)
+        let originalAccess = YtdlpService.hasFullDiskAccessOverride
+        defer {
+            UserDefaults.standard.set(originalBrowser, forKey: UserDefaultsKeys.browserForCookies)
+            YtdlpService.hasFullDiskAccessOverride = originalAccess
+        }
+        UserDefaults.standard.set("safari", forKey: UserDefaultsKeys.browserForCookies)
+        YtdlpService.hasFullDiskAccessOverride = false
+        let calls = TestBox(0)
+        service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
+            calls.value += 1
+            XCTAssertTrue(args.contains("--cookies-from-browser"))
+            XCTAssertTrue(args.contains("safari"))
+            throw YtdlpError.commandFailed("Safari Cookies.binarycookies: Operation not permitted")
+        })
+        do {
+            _ = try await service.fetchInfo(url: "https://recu.me/model/video/123/play")
+            XCTFail("Expected actual cookie read failure")
+        } catch YtdlpError.safariCookiesFullDiskAccessRequired {
+            XCTAssertEqual(calls.value, 1, "Permission probes must not prevent the real request")
+        }
+    }
+
+    func testGenericMetadataPreservesHeliumExtensionIdentityWithSafariConfigured() async throws {
+        let originalBrowser = UserDefaults.standard.string(forKey: UserDefaultsKeys.browserForCookies)
+        defer { UserDefaults.standard.set(originalBrowser, forKey: UserDefaultsKeys.browserForCookies) }
+        UserDefaults.standard.set("safari", forKey: UserDefaultsKeys.browserForCookies)
+        let exactUA = "Mozilla/5.0 Chrome/140.0.0.0 Safari/537.36"
+        service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
+            XCTAssertTrue(args.contains("--cookies"))
+            XCTAssertFalse(args.contains("--cookies-from-browser"))
+            let index = try XCTUnwrap(args.firstIndex(of: "--user-agent"))
+            XCTAssertEqual(args[index + 1], exactUA)
+            return #"{"id":"fixture","title":"Fixture"}"#
+        })
+        _ = try await service.fetchInfo(url: "https://example.com/video", rawCookies: "session=fixture", rawUserAgent: exactUA)
     }
 
     func testCreateAspectFitIconPreservesAspectRatioOnSquareCanvas() {
@@ -2661,7 +2745,7 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertTrue(succeededWithoutCookiesBox.value)
     }
 
-    func testSafariLacksFDAAndVideoRequiresLoginMapsToSafariFDARequired() async throws {
+    func testSafariInconclusiveProbeDoesNotMislabelWebsiteLoginFailure() async throws {
         service.ytdlpPath = URL(fileURLWithPath: "/usr/local/bin/yt-dlp")
         UserDefaults.standard.set("safari", forKey: UserDefaultsKeys.browserForCookies)
         YtdlpService.hasFullDiskAccessOverride = false
@@ -2678,10 +2762,10 @@ final class YtdlpServiceTests: XCTestCase {
             _ = try await service.fetchInfo(url: "https://www.youtube.com/watch?v=private123")
             XCTFail("Expected error to be thrown")
         } catch let err as YtdlpError {
-            if case .safariCookiesFullDiskAccessRequired = err {
-                // Expected
+            if case .commandFailed(let message) = err {
+                XCTAssertTrue(message.contains("Sign in"))
             } else {
-                XCTFail("Expected .safariCookiesFullDiskAccessRequired but got \(err)")
+                XCTFail("Expected the actual website login failure, but got \(err)")
             }
         }
     }
@@ -3783,7 +3867,7 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertNil(jsonDict?["filePath"], "filePath must be omitted from new encodings; it is legacy-only deserialization")
     }
 
-    func testFetchSingleVideoInfoRetriesWithBrowserCookiesOnSiteError() async throws {
+    func testFetchSingleVideoInfoAttemptsSelectedSafariDespiteInconclusiveProbe() async throws {
         let savedBrowser = UserDefaults.standard.string(forKey: UserDefaultsKeys.browserForCookies)
         UserDefaults.standard.set("safari", forKey: UserDefaultsKeys.browserForCookies)
         YtdlpService.hasFullDiskAccessOverride = false
@@ -3820,8 +3904,8 @@ final class YtdlpServiceTests: XCTestCase {
         })
 
         let info = try await service.fetchInfo(url: "https://www.boyfriendtv.com/videos/12345/test-video")
-        XCTAssertEqual(dumpJsonCallCountBox.value, 2, "Expected initial fetch to fail and retry with browser cookies")
-        XCTAssertTrue(usedBrowserCookiesBox.value, "Expected retry call to pass --cookies-from-browser")
+        XCTAssertEqual(dumpJsonCallCountBox.value, 1, "Selected Safari must be tried on the first request despite an inconclusive probe")
+        XCTAssertTrue(usedBrowserCookiesBox.value, "Expected the first request to pass --cookies-from-browser")
         XCTAssertEqual(info.id, "bf_123")
     }
 
