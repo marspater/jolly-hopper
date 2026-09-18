@@ -14,7 +14,14 @@ chrome.runtime.onInstalled.addListener(() => {
 
 chrome.contextMenus.onClicked.addListener((info) => {
     const url = info.linkUrl || info.srcUrl || info.pageUrl;
-    if (!url) return;
+    if (typeof url !== "string") return;
+    let parsedURL;
+    try {
+        parsedURL = new URL(url);
+    } catch {
+        return;
+    }
+    if (parsedURL.protocol !== "http:" && parsedURL.protocol !== "https:") return;
 
     let host = "";
     if (info.menuItemId === "download-siphon") {
