@@ -49,8 +49,14 @@ public final class UpdateChecker: ObservableObject {
     public func checkForUpdates(manual: Bool = false) async {
         guard !isChecking else { return }
         isChecking = true
+        defer { isChecking = false }
+
         guard let url = URL(string: "https://api.github.com/repos/\(repoOwner)/\(repoName)/releases/latest") else {
-            isChecking = false
+            let message = "Could not construct the GitHub releases URL."
+            LoggerService.shared.log(message, level: .error)
+            if manual {
+                NotificationService.shared.sendAppUpdateNotification(title: "Update Check Failed", body: message)
+            }
             return
         }
 
@@ -63,11 +69,21 @@ public final class UpdateChecker: ObservableObject {
             if let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode != 200 {
                 throw NSError(domain: "UpdateChecker", code: httpResponse.statusCode, userInfo: [NSLocalizedDescriptionKey: "GitHub returned HTTP \(httpResponse.statusCode)"])
             }
-            if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-               let tagName = json["tag_name"] as? String {
+            guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let tagName = json["tag_name"] as? String,
+                  !tagName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                throw NSError(
+                    domain: "UpdateChecker",
+                    code: -2,
+                    userInfo: [NSLocalizedDescriptionKey: "GitHub returned a malformed release response."]
+                )
+            }
 
-                let cleanTag = tagName.replacingOccurrences(of: "v", with: "")
-                latestVersion = cleanTag
+            let trimmedTag = tagName.trimmingCharacters(in: .whitespacesAndNewlines)
+            let cleanTag = (trimmedTag.hasPrefix("v") || trimmedTag.hasPrefix("V"))
+                ? String(trimmedTag.dropFirst())
+                : trimmedTag
+            latestVersion = cleanTag
                 hasUpdate = cleanTag.compare(currentVersion, options: .numeric) == .orderedDescending
 
                 if let htmlUrlStr = json["html_url"] as? String, let htmlUrl = URL(string: htmlUrlStr) {
@@ -144,13 +160,14 @@ public final class UpdateChecker: ObservableObject {
                         try? await Task.sleep(nanoseconds: 3 * 1_000_000_000)
                         self?.showUpToDateMessage = false
                     }
-                } else if manual {
-                    NotificationService.shared.sendAppUpdateNotification(
-                        title: "Update Available",
-                        body: "Siphon v\(cleanTag) is now available."
-                    )
-                }
+            } else if manual {
+                NotificationService.shared.sendAppUpdateNotification(
+                    title: "Update Available",
+                    body: "Siphon v\(cleanTag) is now available."
+                )
             }
+        } catch is CancellationError {
+            LoggerService.shared.log("App update check was cancelled.", level: .debug)
         } catch {
             LoggerService.shared.log("Failed to check for app updates: \(error.localizedDescription)", level: .warning)
             if latestVersion == nil {
@@ -164,7 +181,6 @@ public final class UpdateChecker: ObservableObject {
                 )
             }
         }
-        isChecking = false
     }
 
     public func downloadAndInstallUpdate() async {
@@ -176,11 +192,24 @@ public final class UpdateChecker: ObservableObject {
         }
 
         // 1. Fetch checksum in background if available
-        if let cURL = checksumURL, UpdateDownloader.isTrustedGitHubURL(cURL) {
-            expectedChecksum = await UpdateDownloader.fetchExpectedChecksum(
-                from: cURL,
-                targetAssetName: downloadAssetName ?? ""
-            )
+        if let cURL = checksumURL {
+            guard UpdateDownloader.isTrustedGitHubURL(cURL) else {
+                updateError = UpdateDownloadError.invalidURL.localizedDescription
+                LoggerService.shared.log("Refusing untrusted checksum URL for app update.", level: .error)
+                return
+            }
+            do {
+                expectedChecksum = try await UpdateDownloader.fetchExpectedChecksum(
+                    from: cURL,
+                    targetAssetName: downloadAssetName ?? ""
+                )
+            } catch is CancellationError {
+                return
+            } catch {
+                updateError = error.localizedDescription
+                LoggerService.shared.log("Update checksum verification could not be prepared: \(error.localizedDescription)", level: .error)
+                return
+            }
         }
 
         isDownloading = true
@@ -207,6 +236,19 @@ public final class UpdateChecker: ObservableObject {
             isInstalling = false
             needsRestart = true
             LoggerService.shared.log("Update installed successfully.", level: .info)
+        } catch UpdateDownloadError.downloadCancelled {
+            isDownloading = false
+            isInstalling = false
+            updateProgress = 0
+            updateError = nil
+            LoggerService.shared.log("App update download was cancelled.", level: .info)
+        } catch is CancellationError {
+            downloader.cancel()
+            isDownloading = false
+            isInstalling = false
+            updateProgress = 0
+            updateError = nil
+            LoggerService.shared.log("App update task was cancelled.", level: .info)
         } catch {
             isDownloading = false
             isInstalling = false
