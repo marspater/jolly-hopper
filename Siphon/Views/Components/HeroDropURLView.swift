@@ -11,7 +11,8 @@ struct HeroDropURLView: View {
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var languageService: LanguageService
 
-    @Environment(\.controlActiveState) private var controlActiveState
+    @Environment(\.appearsActive) private var appearsActive
+    @Environment(\.siphonRenderingCapabilities) private var renderingCapabilities
     @FocusState private var isFieldFocused: Bool
     @State private var inputURL: String = ""
     @State private var isTargeted: Bool = false
@@ -20,24 +21,27 @@ struct HeroDropURLView: View {
     @StateObject private var feedback = TransientFeedbackState()
 
     private var showsFieldFocus: Bool {
-        isFieldFocused && controlActiveState == .key && !appState.showAddDownloadSheet
+        isFieldFocused && appearsActive && !appState.showAddDownloadSheet
+    }
+
+    private var showBorders: Bool {
+        renderingCapabilities.increaseContrast
     }
 
     init() {}
 
     var body: some View {
         ZStack {
-            // 1. Base Glass Material
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(.ultraThinMaterial)
+            // 1. Adaptive hero surface
+            SiphonTheme.cardBackground(cornerRadius: SiphonTheme.radiusHero)
 
             // 2. Translucent accent wash with subtle depth
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
+            RoundedRectangle(cornerRadius: SiphonTheme.radiusHero, style: .continuous)
                 .fill(
                     LinearGradient(
                         colors: [
                             SiphonTheme.accent.opacity(isTargeted ? 0.22 : 0.08),
-                            Color.cyan.opacity(isTargeted ? 0.12 : 0.03),
+                            SiphonTheme.accentSecondary.opacity(isTargeted ? 0.12 : 0.03),
                             Color.clear
                         ],
                         startPoint: .topLeading,
@@ -51,7 +55,7 @@ struct HeroDropURLView: View {
                 RadialGradient(
                     colors: [
                         SiphonTheme.accent.opacity(isTargeted ? 0.35 : 0.20),
-                        Color.cyan.opacity(isTargeted ? 0.18 : 0.08),
+                        SiphonTheme.accentSecondary.opacity(isTargeted ? 0.18 : 0.08),
                         Color.clear
                     ],
                     center: .center,
@@ -62,20 +66,20 @@ struct HeroDropURLView: View {
                 .blur(radius: 20)
                 .allowsHitTesting(false)
             }
-            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusHero, style: .continuous))
 
             // 4. Dashed Glass Border (Adaptive Semantic Stroke)
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
+            RoundedRectangle(cornerRadius: SiphonTheme.radiusHero, style: .continuous)
                 .strokeBorder(
                     style: StrokeStyle(
-                        lineWidth: isTargeted ? 2.0 : 1.2,
+                        lineWidth: showBorders ? 2.0 : (isTargeted ? 2.0 : 1.2),
                         dash: [8, 6]
                     )
                 )
                 .foregroundColor(
                     isTargeted
                         ? SiphonTheme.accent
-                        : Color.primary.opacity(0.14)
+                        : (showBorders ? Color.secondary.opacity(0.65) : Color.primary.opacity(0.14))
                 )
 
             // 5. Main Card Content
@@ -122,16 +126,10 @@ struct HeroDropURLView: View {
                         .padding(.horizontal, 10)
                         .padding(.vertical, 5)
                         .background(
-                            RoundedRectangle(cornerRadius: SiphonTheme.radiusControl, style: .continuous)
-                                .fill(Color.primary.opacity(0.05))
-                                .background(
-                                    RoundedRectangle(cornerRadius: SiphonTheme.radiusControl, style: .continuous)
-                                        .fill(.ultraThinMaterial)
-                                )
+                            SiphonTheme.controlBackground(cornerRadius: SiphonTheme.radiusControl)
                         )
                         .overlay(
-                            RoundedRectangle(cornerRadius: SiphonTheme.radiusControl, style: .continuous)
-                                .stroke(Color.primary.opacity(0.12), lineWidth: 1)
+                            SiphonTheme.controlBorder(cornerRadius: SiphonTheme.radiusControl)
                         )
                     }
                     .buttonStyle(.bouncy(scale: 0.96, hover: 1.04))

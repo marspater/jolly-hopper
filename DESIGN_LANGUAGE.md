@@ -52,6 +52,19 @@ truth only when the value is genuinely reused or has semantic meaning.
 - Preserve readable contrast in both Light and Dark appearances and when Reduce
   Transparency is enabled.
 
+### Color gamut and dynamic range
+
+- Author Siphon-owned accent, gradient, status, and source-brand colors in
+  Display P3. Native/system semantic colors remain system-managed.
+- Treat wide color gamut and HDR as separate concerns. P3 is the normal authored
+  color space; ordinary app chrome remains SDR even on EDR/HDR displays.
+- Use elevated dynamic range only for genuine HDR media. HDR thumbnails shown
+  beside SDR UI use constrained high dynamic range rather than boosting the
+  surrounding interface.
+- Never use HDR/EDR luminance as a decorative glow or hover treatment.
+- Let ColorSync map P3 colors to narrower-gamut displays rather than maintaining
+  a parallel hand-tuned sRGB palette.
+
 ### Typography
 
 - Geist is the default UI face; Geist Mono is reserved for counts, URLs, paths,
@@ -99,6 +112,14 @@ truth only when the value is genuinely reused or has semantic meaning.
   the status blob remains subtle behind the progress ring and count.
 - Avoid animating layout at the root of a large screen or combining several
   competing spring timings for one interaction.
+- Custom frame-scheduled animation uses a 60 Hz baseline and may step up to
+  120 Hz when the window is on a display that supports at least 120 Hz.
+- Refresh rate changes rendering cadence, not animation physics. Do not shorten
+  spring response/damping or otherwise make interactions run faster on
+  high-refresh displays.
+- Active interaction animation must not be intentionally capped at 30 fps.
+  Ambient branding should remain static when idle rather than consuming a
+  continuous timeline merely to appear alive.
 
 ## Interaction and accessibility
 
@@ -110,6 +131,10 @@ truth only when the value is genuinely reused or has semantic meaning.
 - Keep accessibility labels action-oriented and do not expose decorative liquid
   effects as elements.
 - Preserve keyboard focus, menu/toolbar paths, and sensible disabled states.
+- Custom chrome follows the key window's active/inactive appearance through
+  `appearsActive`; inactive emphasis should become quieter, not disappear.
+- Honor macOS Show Borders for custom interactive surfaces and Reduce
+  Transparency for custom material backgrounds.
 - Do not show an affordance for an action that cannot currently succeed.
 
 ## Liquid Glass policy
@@ -133,7 +158,12 @@ Before merging a UI change, verify:
 - [ ] Light, Dark, inactive-window, and Reduce Transparency states remain
       legible.
 - [ ] The interaction works with pointer, keyboard, and VoiceOver.
-- [ ] Motion is scoped, purposeful, and Reduce Motion-aware.
+- [ ] Motion is scoped, purposeful, Reduce Motion-aware, and follows the
+      60/120 Hz cadence policy without refresh-dependent physics.
+- [ ] Ordinary UI remains SDR; elevated dynamic range is reserved for genuine
+      HDR media.
+- [ ] P3-owned colors, inactive-window state, Show Borders, and Reduce
+      Transparency behavior were preserved.
 - [ ] No new hardcoded palette, spacing, radius, blur, or spring values were
       added without a documented reason.
 - [ ] Native macOS structure was preferred before custom glass or AppKit code.

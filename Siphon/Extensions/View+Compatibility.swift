@@ -41,10 +41,22 @@ public struct RenderingCapabilities: Sendable, Equatable {
     public let supportsP3: Bool
     public let reduceTransparency: Bool
     public let reduceMotion: Bool
+    public let increaseContrast: Bool
     public let maxRefreshRate: Int
 
     public var isHighRefreshRate: Bool {
         maxRefreshRate >= 120
+    }
+
+    /// Siphon renders custom frame-scheduled animation at a 60 Hz baseline,
+    /// stepping up to 120 Hz on displays that can actually present it.
+    /// Physics timings remain identical across refresh rates.
+    public var preferredAnimationFrameRate: Int {
+        maxRefreshRate >= 120 ? 120 : 60
+    }
+
+    public var animationMinimumInterval: TimeInterval {
+        1.0 / Double(preferredAnimationFrameRate)
     }
     
     public init(
@@ -52,12 +64,14 @@ public struct RenderingCapabilities: Sendable, Equatable {
         supportsP3: Bool,
         reduceTransparency: Bool,
         reduceMotion: Bool = false,
+        increaseContrast: Bool = false,
         maxRefreshRate: Int = 60
     ) {
         self.supportsEDR = supportsEDR
         self.supportsP3 = supportsP3
         self.reduceTransparency = reduceTransparency
         self.reduceMotion = reduceMotion
+        self.increaseContrast = increaseContrast
         self.maxRefreshRate = maxRefreshRate
     }
 }
@@ -148,31 +162,35 @@ public final class AdaptiveRenderingEnvironment: ObservableObject {
     }
     
     public static func detectCapabilities() -> RenderingCapabilities {
+        detectCapabilities(for: NSScreen.main)
+    }
+
+    public static func detectCapabilities(for screen: NSScreen?) -> RenderingCapabilities {
         let reduceTransparency = NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency
         let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
-        var supportsEDR = false
-        var supportsP3 = false
-        
-        for screen in NSScreen.screens {
-            if screen.maximumExtendedDynamicRangeColorComponentValue > 1.0 || screen.maximumPotentialExtendedDynamicRangeColorComponentValue > 1.0 {
-                supportsEDR = true
-            }
-            if screen.canRepresent(.p3) || screen.colorSpace == .displayP3 {
-                supportsP3 = true
-            }
-        }
-        
-        if NSScreen.main?.canRepresent(.p3) == true {
-            supportsP3 = true
+        let increaseContrast = NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast
+        let supportsEDR: Bool
+        let supportsP3: Bool
+        let maxRate: Int
+
+        if let screen {
+            supportsEDR =
+                screen.maximumExtendedDynamicRangeColorComponentValue > 1.0 ||
+                screen.maximumPotentialExtendedDynamicRangeColorComponentValue > 1.0
+            supportsP3 = screen.canRepresent(.p3) || screen.colorSpace == .displayP3
+            maxRate = max(60, screen.maximumFramesPerSecond)
+        } else {
+            supportsEDR = false
+            supportsP3 = false
+            maxRate = 60
         }
 
-        let maxRate = NSScreen.screens.map { $0.maximumFramesPerSecond }.max() ?? 60
-        
         return RenderingCapabilities(
             supportsEDR: supportsEDR,
             supportsP3: supportsP3,
             reduceTransparency: reduceTransparency,
             reduceMotion: reduceMotion,
+            increaseContrast: increaseContrast,
             maxRefreshRate: maxRate
         )
     }
@@ -185,9 +203,6 @@ public enum SiphonAnimation {
         if env.reduceMotion {
             return .easeInOut(duration: 0.12)
         }
-        if env.isHighRefreshRate {
-            return .spring(response: 0.22, dampingFraction: 0.74, blendDuration: 0)
-        }
         return .spring(response: 0.28, dampingFraction: 0.80, blendDuration: 0)
     }
 
@@ -196,9 +211,6 @@ public enum SiphonAnimation {
         let env = AdaptiveRenderingEnvironment.shared
         if env.reduceMotion {
             return .easeInOut(duration: 0.10)
-        }
-        if env.isHighRefreshRate {
-            return .spring(response: 0.18, dampingFraction: 0.72)
         }
         return .spring(response: 0.22, dampingFraction: 0.74)
     }
@@ -209,9 +221,6 @@ public enum SiphonAnimation {
         if env.reduceMotion {
             return .easeInOut(duration: 0.12)
         }
-        if env.isHighRefreshRate {
-            return .spring(response: 0.20, dampingFraction: 0.65, blendDuration: 0)
-        }
         return .spring(response: 0.24, dampingFraction: 0.65, blendDuration: 0)
     }
 
@@ -221,10 +230,123 @@ public enum SiphonAnimation {
         if env.reduceMotion {
             return .easeInOut(duration: 0.10)
         }
-        if env.isHighRefreshRate {
-            return .spring(response: 0.15, dampingFraction: 0.82)
-        }
         return .spring(response: 0.18, dampingFraction: 0.82)
+    }
+
+    /// Shared tactile motion used by all custom button styles. These values are
+    /// independent of refresh rate; 120 Hz displays simply sample them more often.
+    public static let buttonPressSpring = Animation.spring(
+        response: 0.24,
+        dampingFraction: 0.68,
+        blendDuration: 0
+    )
+    public static let buttonHoverSpring = Animation.spring(
+        response: 0.28,
+        dampingFraction: 0.72,
+        blendDuration: 0
+    )
+}
+
+// MARK: - Per-window Rendering Capabilities
+
+private struct SiphonRenderingCapabilitiesKey: EnvironmentKey {
+    static let defaultValue = RenderingCapabilities(
+        supportsEDR: false,
+        supportsP3: false,
+        reduceTransparency: false,
+        reduceMotion: false,
+        maxRefreshRate: 60
+    )
+}
+
+extension EnvironmentValues {
+    var siphonRenderingCapabilities: RenderingCapabilities {
+        get { self[SiphonRenderingCapabilitiesKey.self] }
+        set { self[SiphonRenderingCapabilitiesKey.self] = newValue }
+    }
+}
+
+@MainActor
+private final class SiphonScreenObserverView: NSView {
+    var onScreenChange: ((NSScreen?) -> Void)?
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        NotificationCenter.default.removeObserver(self)
+
+        if let window {
+            NotificationCenter.default.addObserver(
+                self,
+                selector: #selector(screenDidChange),
+                name: NSWindow.didChangeScreenNotification,
+                object: window
+            )
+            NotificationCenter.default.addObserver(
+                self,
+                selector: #selector(screenDidChange),
+                name: NSWindow.didChangeScreenProfileNotification,
+                object: window
+            )
+        }
+
+        onScreenChange?(window?.screen)
+    }
+
+    @objc private func screenDidChange() {
+        onScreenChange?(window?.screen)
+    }
+
+    deinit {
+        NotificationCenter.default.removeObserver(self)
+    }
+}
+
+private struct SiphonScreenObserver: NSViewRepresentable {
+    let onScreenChange: (NSScreen?) -> Void
+
+    func makeNSView(context: Context) -> SiphonScreenObserverView {
+        let view = SiphonScreenObserverView()
+        view.onScreenChange = onScreenChange
+        return view
+    }
+
+    func updateNSView(_ nsView: SiphonScreenObserverView, context: Context) {
+        nsView.onScreenChange = onScreenChange
+    }
+}
+
+@MainActor
+private struct SiphonAdaptiveRenderingModifier: ViewModifier {
+    @State private var activeScreen: NSScreen?
+    @State private var capabilities = RenderingCapabilities(
+        supportsEDR: false,
+        supportsP3: false,
+        reduceTransparency: false,
+        reduceMotion: false,
+        maxRefreshRate: 60
+    )
+
+    func body(content: Content) -> some View {
+        content
+            .environment(\.siphonRenderingCapabilities, capabilities)
+            .background(
+                SiphonScreenObserver { screen in
+                    activeScreen = screen
+                    refresh(for: screen)
+                }
+                .frame(width: 0, height: 0)
+            )
+            .onReceive(
+                NSWorkspace.shared.notificationCenter.publisher(
+                    for: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification
+                )
+            ) { _ in
+                refresh(for: activeScreen)
+            }
+    }
+
+    private func refresh(for screen: NSScreen?) {
+        capabilities = AdaptiveRenderingEnvironment.detectCapabilities(for: screen)
     }
 }
 
@@ -274,6 +396,9 @@ public final class TransientFeedbackState: ObservableObject {
 public enum SiphonTheme {
     // Primary Accent & Gradients with Display P3 wide color gamut support
     public static let accent = Color(.displayP3, red: 0.10, green: 0.48, blue: 1.0, opacity: 1.0)
+    public static let accentSecondary = Color(.displayP3, red: 0.10, green: 0.76, blue: 0.98, opacity: 1.0)
+    public static let accentViolet = Color(.displayP3, red: 0.38, green: 0.24, blue: 0.82, opacity: 1.0)
+    public static let sourceYouTube = Color(.displayP3, red: 0.96, green: 0.08, blue: 0.08, opacity: 1.0)
     public static let primaryGradient = LinearGradient(
         colors: [
             Color(.displayP3, red: 0.18, green: 0.52, blue: 1.0, opacity: 1.0),
@@ -289,6 +414,7 @@ public enum SiphonTheme {
     public static let statusCompleted = Color(.displayP3, red: 0.18, green: 0.72, blue: 0.38, opacity: 1.0)
     public static let statusFailed = Color(.displayP3, red: 0.94, green: 0.26, blue: 0.30, opacity: 1.0)
     public static let statusHdr = Color(.displayP3, red: 0.98, green: 0.65, blue: 0.15, opacity: 1.0)
+    public static let statusHdrSecondary = Color(.displayP3, red: 1.0, green: 0.46, blue: 0.08, opacity: 1.0)
     
     public static let downloading = statusDownloading
     public static let queued = statusQueued
@@ -366,7 +492,9 @@ public enum SiphonTheme {
     public static let radiusInput: CGFloat = 8
     public static let radiusCard: CGFloat = 12
     public static let radiusRow: CGFloat = 12
+    public static let radiusStatusGroup: CGFloat = 14
     public static let radiusSheet: CGFloat = 16
+    public static let radiusHero: CGFloat = 18
     public static let radiusModal: CGFloat = 16
     
     // Elevated Card & Tile Backgrounds (Unified macOS Translucent Glass)
@@ -483,13 +611,45 @@ public enum SiphonTheme {
     }
     
     @ViewBuilder
-    public static func pillBorder(isSelected: Bool = false, isHovered: Bool = false) -> some View {
-        if isSelected {
-            Capsule()
-                .stroke(Color.primary.opacity(0.25), lineWidth: 1)
+    public static func tintedPillBackground(
+        tint: Color,
+        opacity: Double = 0.12
+    ) -> some View {
+        if NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency {
+            ZStack {
+                Capsule()
+                    .fill(Color(nsColor: .controlBackgroundColor))
+                Capsule()
+                    .fill(tint.opacity(opacity))
+            }
         } else {
             Capsule()
-                .stroke(Color.primary.opacity(isHovered ? 0.12 : 0.06), lineWidth: 1)
+                .fill(tint.opacity(opacity))
+                .background(
+                    Capsule()
+                        .fill(.thinMaterial)
+                )
+        }
+    }
+
+    @ViewBuilder
+    public static func pillBorder(
+        isSelected: Bool = false,
+        isHovered: Bool = false,
+        showBorders: Bool = false
+    ) -> some View {
+        if isSelected {
+            Capsule()
+                .stroke(
+                    Color.primary.opacity(showBorders ? 0.50 : 0.25),
+                    lineWidth: showBorders ? 1.5 : 1
+                )
+        } else {
+            Capsule()
+                .stroke(
+                    Color.primary.opacity(showBorders ? 0.42 : (isHovered ? 0.12 : 0.06)),
+                    lineWidth: showBorders ? 1.5 : 1
+                )
         }
     }
     
@@ -715,6 +875,8 @@ public struct SiphonInteractiveGlassBackground: View {
     public var isSelected: Bool
     public var effectiveTint: Color
 
+    @Environment(\.siphonRenderingCapabilities) private var renderingCapabilities
+
     public init(
         cornerRadius: CGFloat = SiphonTheme.radiusControl,
         isHovered: Bool = false,
@@ -728,7 +890,7 @@ public struct SiphonInteractiveGlassBackground: View {
     }
 
     public var body: some View {
-        let isOpaque = NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency
+        let isOpaque = renderingCapabilities.reduceTransparency
         if isOpaque {
             RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                 .fill(Color(nsColor: isHovered ? .selectedControlColor : .controlBackgroundColor))
@@ -739,7 +901,6 @@ public struct SiphonInteractiveGlassBackground: View {
                         .fill(effectiveTint.opacity(0.18))
                         .blur(radius: 6)
                         .padding(-1)
-                        .allowedDynamicRange(AdaptiveRenderingEnvironment.shared.capabilities.supportsEDR ? .high : .standard)
                 }
 
                 // Elevated tactile glass base (clearly separated from outer glass container)
@@ -767,6 +928,8 @@ public struct SiphonInteractiveGlassBorder: View {
     public var isSelected: Bool
     public var effectiveTint: Color
 
+    @Environment(\.siphonRenderingCapabilities) private var renderingCapabilities
+
     public init(
         cornerRadius: CGFloat = SiphonTheme.radiusControl,
         isHovered: Bool = false,
@@ -780,10 +943,11 @@ public struct SiphonInteractiveGlassBorder: View {
     }
 
     public var body: some View {
-        let isOpaque = NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency
+        let showBorders = renderingCapabilities.increaseContrast
+        let isOpaque = renderingCapabilities.reduceTransparency
         if isOpaque {
             RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                .stroke(isSelected ? effectiveTint : Color(nsColor: .separatorColor), lineWidth: 1)
+                .stroke(isSelected ? effectiveTint : Color(nsColor: .separatorColor), lineWidth: showBorders ? 2 : 1)
         } else {
             RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                 .strokeBorder(
@@ -791,12 +955,12 @@ public struct SiphonInteractiveGlassBorder: View {
                         colors: isSelected
                             ? [effectiveTint.opacity(0.85), effectiveTint.opacity(0.40)]
                             : (isHovered
-                                ? [effectiveTint.opacity(0.65), effectiveTint.opacity(0.25)]
-                                : [Color.primary.opacity(0.18), Color.primary.opacity(0.06)]),
+                                ? [effectiveTint.opacity(showBorders ? 0.82 : 0.65), effectiveTint.opacity(showBorders ? 0.42 : 0.25)]
+                                : [Color.primary.opacity(showBorders ? 0.38 : 0.18), Color.primary.opacity(showBorders ? 0.18 : 0.06)]),
                         startPoint: .top,
                         endPoint: .bottom
                     ),
-                    lineWidth: 1
+                    lineWidth: showBorders ? 1.5 : 1
                 )
         }
     }
@@ -874,8 +1038,8 @@ public struct BouncyButtonStyle: ButtonStyle {
         
         configuration.label
             .scaleEffect(configuration.isPressed ? effectivePressScale : (isHovered ? effectiveHoverScale : 1.0))
-            .animation(reduceMotion ? nil : .spring(response: 0.28, dampingFraction: 0.65, blendDuration: 0), value: configuration.isPressed)
-            .animation(reduceMotion ? nil : .spring(response: 0.32, dampingFraction: 0.70, blendDuration: 0), value: isHovered)
+            .animation(reduceMotion ? nil : SiphonAnimation.buttonPressSpring, value: configuration.isPressed)
+            .animation(reduceMotion ? nil : SiphonAnimation.buttonHoverSpring, value: isHovered)
             .onHover { isHovered = $0 }
     }
 }
@@ -914,8 +1078,8 @@ public struct SiphonPrimaryButtonStyle: ButtonStyle {
             )
             .shadow(color: SiphonTheme.accent.opacity(isHovered ? 0.35 : 0.20), radius: isHovered ? 8 : 4, y: 2)
             .scaleEffect(reduceMotion ? 1.0 : (configuration.isPressed ? 0.97 : (isHovered ? 1.015 : 1.0)))
-            .animation(reduceMotion ? nil : .spring(response: 0.28, dampingFraction: 0.65), value: configuration.isPressed)
-            .animation(reduceMotion ? nil : .spring(response: 0.30, dampingFraction: 0.70), value: isHovered)
+            .animation(reduceMotion ? nil : SiphonAnimation.buttonPressSpring, value: configuration.isPressed)
+            .animation(reduceMotion ? nil : SiphonAnimation.buttonHoverSpring, value: isHovered)
             .onHover { isHovered = $0 }
     }
 }
@@ -941,8 +1105,8 @@ public struct SiphonSecondaryButtonStyle: ButtonStyle {
                 SiphonTheme.controlBorder(cornerRadius: cornerRadius, isHovered: isHovered)
             )
             .scaleEffect(reduceMotion ? 1.0 : (configuration.isPressed ? 0.97 : (isHovered ? 1.015 : 1.0)))
-            .animation(reduceMotion ? nil : .spring(response: 0.28, dampingFraction: 0.65), value: configuration.isPressed)
-            .animation(reduceMotion ? nil : .spring(response: 0.30, dampingFraction: 0.70), value: isHovered)
+            .animation(reduceMotion ? nil : SiphonAnimation.buttonPressSpring, value: configuration.isPressed)
+            .animation(reduceMotion ? nil : SiphonAnimation.buttonHoverSpring, value: isHovered)
             .onHover { isHovered = $0 }
     }
 }
@@ -950,6 +1114,7 @@ public struct SiphonSecondaryButtonStyle: ButtonStyle {
 public struct SiphonGhostButtonStyle: ButtonStyle {
     public var cornerRadius: CGFloat = SiphonTheme.radiusControl
     @State private var isHovered = false
+    @Environment(\.siphonRenderingCapabilities) private var renderingCapabilities
     
     public init(cornerRadius: CGFloat = SiphonTheme.radiusControl) {
         self.cornerRadius = cornerRadius
@@ -957,6 +1122,7 @@ public struct SiphonGhostButtonStyle: ButtonStyle {
     
     public func makeBody(configuration: Configuration) -> some View {
         let reduceMotion = AdaptiveRenderingEnvironment.shared.capabilities.reduceMotion
+        let showBorders = renderingCapabilities.increaseContrast
         configuration.label
             .font(.geist(12, weight: .medium))
             .foregroundColor(isHovered ? .primary : .secondary)
@@ -966,9 +1132,13 @@ public struct SiphonGhostButtonStyle: ButtonStyle {
                 RoundedRectangle(cornerRadius: cornerRadius)
                     .fill(Color.primary.opacity(isHovered ? 0.08 : 0.0))
             )
+            .overlay(
+                RoundedRectangle(cornerRadius: cornerRadius)
+                    .stroke(Color.secondary.opacity(showBorders ? 0.65 : 0.0), lineWidth: 1)
+            )
             .scaleEffect(reduceMotion ? 1.0 : (configuration.isPressed ? 0.97 : 1.0))
-            .animation(reduceMotion ? nil : .spring(response: 0.28, dampingFraction: 0.65), value: configuration.isPressed)
-            .animation(reduceMotion ? nil : .spring(response: 0.30, dampingFraction: 0.70), value: isHovered)
+            .animation(reduceMotion ? nil : SiphonAnimation.buttonPressSpring, value: configuration.isPressed)
+            .animation(reduceMotion ? nil : SiphonAnimation.buttonHoverSpring, value: isHovered)
             .onHover { isHovered = $0 }
     }
 }
@@ -976,6 +1146,7 @@ public struct SiphonGhostButtonStyle: ButtonStyle {
 public struct SiphonIconButtonStyle: ButtonStyle {
     public var size: CGFloat = 26
     @State private var isHovered = false
+    @Environment(\.siphonRenderingCapabilities) private var renderingCapabilities
     
     public init(size: CGFloat = 26) {
         self.size = size
@@ -983,15 +1154,20 @@ public struct SiphonIconButtonStyle: ButtonStyle {
     
     public func makeBody(configuration: Configuration) -> some View {
         let reduceMotion = AdaptiveRenderingEnvironment.shared.capabilities.reduceMotion
+        let showBorders = renderingCapabilities.increaseContrast
         configuration.label
             .frame(width: size, height: size)
             .background(
                 Circle()
                     .fill(Color.primary.opacity(isHovered ? 0.08 : 0.0))
             )
+            .overlay(
+                Circle()
+                    .stroke(Color.secondary.opacity(showBorders ? 0.65 : 0.0), lineWidth: 1)
+            )
             .scaleEffect(reduceMotion ? 1.0 : (configuration.isPressed ? 0.92 : (isHovered ? 1.05 : 1.0)))
-            .animation(reduceMotion ? nil : .spring(response: 0.25, dampingFraction: 0.65), value: configuration.isPressed)
-            .animation(reduceMotion ? nil : .spring(response: 0.28, dampingFraction: 0.70), value: isHovered)
+            .animation(reduceMotion ? nil : SiphonAnimation.buttonPressSpring, value: configuration.isPressed)
+            .animation(reduceMotion ? nil : SiphonAnimation.buttonHoverSpring, value: isHovered)
             .onHover { isHovered = $0 }
     }
 }
@@ -1068,9 +1244,10 @@ struct SiphonStatusBadge: View {
         .padding(.vertical, 3.5)
         .foregroundColor(foregroundColor)
         .background(
-            Capsule()
-                .fill(foregroundColor.opacity(0.12))
-                .background(Capsule().fill(.ultraThinMaterial))
+            SiphonTheme.tintedPillBackground(
+                tint: foregroundColor,
+                opacity: 0.12
+            )
         )
         .clipShape(Capsule())
         .overlay(
@@ -1128,11 +1305,10 @@ public struct SiphonTagBadge: View {
         .background {
             if isHdr {
                 LinearGradient(
-                    colors: [SiphonTheme.statusHdr, Color.orange],
+                    colors: [SiphonTheme.statusHdr, SiphonTheme.statusHdrSecondary],
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
                 )
-                .allowedDynamicRange(AdaptiveRenderingEnvironment.shared.capabilities.supportsEDR ? .high : .standard)
             } else {
                 tintColor.opacity(0.12)
             }
@@ -1233,6 +1409,15 @@ extension View {
                 RoundedRectangle(cornerRadius: cornerRadius)
                     .stroke(Color.primary.opacity(0.08), lineWidth: 1)
             )
+    }
+}
+
+extension View {
+    /// Injects display capabilities for the screen that currently contains this
+    /// window. Custom frame-scheduled animation uses 60 Hz by default and 120 Hz
+    /// only on displays that support it.
+    public func siphonAdaptiveRendering() -> some View {
+        modifier(SiphonAdaptiveRenderingModifier())
     }
 }
 

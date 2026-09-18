@@ -259,7 +259,7 @@ struct DownloadRowView: View {
                         }
                         
                         Button {
-                            withAnimation(.easeInOut(duration: 0.2)) {
+                            withAnimation(SiphonAnimation.snappySpring) {
                                 showRawError.toggle()
                             }
                         } label: {
@@ -371,6 +371,10 @@ struct DownloadRowView: View {
         download.displayTitle.isEmpty ? "Media preview" : "\(download.displayTitle) thumbnail"
     }
 
+    private var isHDRMedia: Bool {
+        download.diagnostics.hdrSummary != nil || download.mediaInfo?.firstHDRSummary != nil
+    }
+
     private func previewMedia() {
         guard canPreviewMedia, let path = download.primaryFilePath else { return }
         QuickLookPreviewHelper.shared.preview(url: path)
@@ -388,7 +392,7 @@ struct DownloadRowView: View {
                                 .aspectRatio(contentMode: .fill)
                         case .failure, .empty:
                             if let filePath = download.primaryFilePath {
-                                FileThumbnailView(fileURL: filePath)
+                                FileThumbnailView(fileURL: filePath, isHDR: isHDRMedia)
                             } else {
                                 thumbnailPlaceholder
                             }
@@ -397,7 +401,7 @@ struct DownloadRowView: View {
                         }
                     }
                 } else if let filePath = download.primaryFilePath {
-                    FileThumbnailView(fileURL: filePath)
+                    FileThumbnailView(fileURL: filePath, isHDR: isHDRMedia)
                 } else {
                     thumbnailPlaceholder
                 }
@@ -445,14 +449,13 @@ struct DownloadRowView: View {
 
 struct FileThumbnailView: View {
     let fileURL: URL
+    let isHDR: Bool
     @State private var thumbnailImage: NSImage? = nil
 
     var body: some View {
         Group {
             if let image = thumbnailImage {
-                Image(nsImage: image)
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
+                thumbnail(image)
             } else {
                 Rectangle()
                     .fill(Color.primary.opacity(0.06))
@@ -465,6 +468,20 @@ struct FileThumbnailView: View {
         }
         .task {
             await generateThumbnail()
+        }
+    }
+
+    @ViewBuilder
+    private func thumbnail(_ image: NSImage) -> some View {
+        if #available(macOS 14.0, *), isHDR {
+            Image(nsImage: image)
+                .resizable()
+                .allowedDynamicRange(.constrainedHigh)
+                .aspectRatio(contentMode: .fill)
+        } else {
+            Image(nsImage: image)
+                .resizable()
+                .aspectRatio(contentMode: .fill)
         }
     }
 
@@ -1089,6 +1106,7 @@ struct FileThumbnailView: View {
 
 struct LinearProgressBar: View {
     let value: Double
+    @ObservedObject private var renderingEnvironment = AdaptiveRenderingEnvironment.shared
 
     // Bug #3 fix: Guard against NaN to prevent SwiftUI layout crash
     var safeValue: Double {
@@ -1099,9 +1117,10 @@ struct LinearProgressBar: View {
         GeometryReader { geometry in
             ZStack(alignment: .leading) {
                 // Liquid glass track
-                Capsule()
-                    .fill(Color.primary.opacity(0.08))
-                    .background(Capsule().fill(.ultraThinMaterial))
+                SiphonTheme.tintedPillBackground(
+                    tint: .primary,
+                    opacity: 0.08
+                )
                     .overlay(
                         Capsule()
                             .strokeBorder(
@@ -1119,7 +1138,7 @@ struct LinearProgressBar: View {
                     .fill(SiphonTheme.primaryGradient)
                     .frame(width: max(0, geometry.size.width * CGFloat(safeValue)))
                     .shadow(color: SiphonTheme.accent.opacity(0.35), radius: 3, y: 1)
-                    .animation(.easeOut(duration: 0.12), value: safeValue)
+                    .animation(renderingEnvironment.reduceMotion ? nil : SiphonAnimation.snappySpring, value: safeValue)
             }
         }
         .frame(height: 5)

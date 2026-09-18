@@ -29,13 +29,24 @@ public enum ImageUtilities {
 
         let asset = AVURLAsset(url: url)
         let generator = AVAssetImageGenerator(asset: asset)
-        generator.appliesPreferredTrackTransform = true
+        configureImageGenerator(generator)
+
         let time = CMTime(seconds: 1, preferredTimescale: 60)
-        if let cgImage = try? generator.copyCGImage(at: time, actualTime: nil) {
+        if let cgImage = try? await generator.image(at: time).image {
             return NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
         }
 
         return nil
+    }
+
+    /// Configures video-frame thumbnail generation to preserve source color
+    /// parameters. macOS 15+ can retain HDR metadata instead of silently
+    /// tone-mapping every generated frame to SDR.
+    static func configureImageGenerator(_ generator: AVAssetImageGenerator) {
+        generator.appliesPreferredTrackTransform = true
+        if #available(macOS 15.0, *) {
+            generator.dynamicRangePolicy = .matchSource
+        }
     }
 
     /// Resizes an `NSImage` into a square aspect-fit icon canvas.
