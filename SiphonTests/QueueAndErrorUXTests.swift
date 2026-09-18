@@ -200,6 +200,21 @@ final class QueueAndErrorUXTests: XCTestCase {
         XCTAssertEqual(info?.actionType, .retry)
     }
     
+    func testBoyfriendTVAntiBotFailureDoesNotPretendItIsALoginError() {
+        let lang = LanguageService()
+        let download = Download(
+            url: "https://www.boyfriendtv.com/videos/1710869/test/",
+            options: .default
+        )
+        download.errorMessage = "Blocked by anti-bot protection. Siphon could not complete the browser challenge automatically."
+
+        let info = download.errorUXInfo(lang: lang)
+
+        XCTAssertEqual(info?.headline, "Couldn't download")
+        XCTAssertEqual(info?.description, "Website anti-bot challenge blocked the request")
+        XCTAssertEqual(info?.actionType, .retry)
+    }
+
     func testQueuePauseAndResume() {
         let manager = DownloadManager()
         let options = DownloadOptions.default
