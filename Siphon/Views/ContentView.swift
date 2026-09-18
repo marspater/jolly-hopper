@@ -564,13 +564,13 @@ struct StatusSegmentButton: View {
         case .downloading:
             ZStack {
                 Circle()
-                    .stroke(color.opacity(0.34), lineWidth: 2)
+                    .stroke(readableColor.opacity(0.34), lineWidth: 2)
                 Circle()
                     .trim(from: 0, to: CGFloat(ringProgress))
-                    .stroke(color, style: StrokeStyle(lineWidth: 2, lineCap: .round))
+                    .stroke(readableColor, style: StrokeStyle(lineWidth: 2, lineCap: .round))
                     .rotationEffect(.degrees(-90))
                 Circle()
-                    .fill(color)
+                    .fill(readableColor)
                     .frame(width: 4.5, height: 4.5)
             }
             .frame(width: 16, height: 16)
@@ -578,13 +578,13 @@ struct StatusSegmentButton: View {
         case .queued:
             Image(systemName: "clock.fill")
                 .font(.system(size: 13, weight: .semibold))
-                .foregroundColor(color)
+                .foregroundColor(readableColor)
                 .frame(width: 16, height: 16)
 
         case .completed:
             Image(systemName: "checkmark.circle.fill")
                 .font(.system(size: 14, weight: .semibold))
-                .foregroundColor(color)
+                .foregroundColor(readableColor)
                 .frame(width: 16, height: 16)
 
         default:
@@ -595,6 +595,19 @@ struct StatusSegmentButton: View {
         }
     }
 
+    private var readableColor: Color {
+        switch item {
+        case .downloading:
+            return SiphonTheme.statusForeground(for: .downloading, colorScheme: colorScheme)
+        case .queued:
+            return SiphonTheme.statusForeground(for: .queued, colorScheme: colorScheme)
+        case .completed:
+            return SiphonTheme.statusForeground(for: .completed, colorScheme: colorScheme)
+        default:
+            return color
+        }
+    }
+
     var body: some View {
         Button {
             appState.selectedNavItem = item
@@ -602,7 +615,6 @@ struct StatusSegmentButton: View {
             ZStack {
                 // Liquid water wave animation in accent color (ambient in background)
                 LiquidWaterWaveView(color: color, isHovered: isHovered, isActive: isActive, seed: segmentSeed)
-                    .opacity(isActive ? 0.86 : (isHovered ? 0.64 : 0.24))
                     .animation(SiphonAnimation.hoverSpring, value: isHovered)
                     .animation(SiphonAnimation.fluidSpring, value: isActive)
                     .zIndex(0)
@@ -614,10 +626,13 @@ struct StatusSegmentButton: View {
                         .font(.siphonStandardSemibold)
                         .monospacedDigit()
                         .foregroundColor(count > 0 ? .primary : (isHovered ? .primary : .secondary))
+                        .frame(minWidth: 20, alignment: .trailing)
 
                     Text(title)
                         .font(.siphonStandardSemibold)
                         .foregroundColor(count > 0 || isActive ? .primary : (isHovered ? .primary : .secondary))
+                        .lineLimit(1)
+                        .truncationMode(.tail)
                 }
                 .padding(.horizontal, 16)
                 .zIndex(1)
