@@ -12,6 +12,8 @@ engines:
     enabled: false
   rubocop:
     enabled: false
+  jshint:
+    enabled: false
 
 exclude_paths:
   - "**.md"
