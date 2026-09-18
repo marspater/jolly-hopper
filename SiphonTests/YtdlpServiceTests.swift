@@ -1639,6 +1639,35 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertTrue(renderedLoads.value.contains(where: { $0.path.contains("/embed/1710869/") }))
     }
 
+    func testBoyfriendTVWebKitClearanceThenLoginReportsLoginNotCloudflare() async throws {
+        UserDefaults.standard.set("none", forKey: UserDefaultsKeys.browserForCookies)
+        defer { UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.browserForCookies) }
+
+        let challenge = "<html><head><title>Just a moment...</title></head><body><script src='/cdn-cgi/challenge-platform/test'></script></body></html>"
+        let challengeOutput = Data(challenge.utf8).base64EncodedString() + "\nERROR: HTTP Error 403: Forbidden"
+
+        service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
+            if args.contains("--dump-pages") {
+                throw YtdlpError.commandFailed(challengeOutput)
+            }
+            return "{}"
+        })
+        service.boyfriendTVRenderedPageLoader = { _ in
+            "<html><head><title>Members only</title></head><body>To watch this video please Login</body></html>"
+        }
+
+        do {
+            _ = try await service.fetchInfo(
+                url: "https://www.boyfriendtv.com/videos/1710869/test/"
+            )
+            XCTFail("Expected browser-cookie requirement after WebKit cleared the challenge")
+        } catch let error as YtdlpError {
+            guard case .boyfriendTVNeedsBrowserCookies = error else {
+                return XCTFail("Expected login/cookie error after clearance, got \(error)")
+            }
+        }
+    }
+
     func testGayPornTubeMetadataUsesNativeHTML5AndSiteHeaders() async throws {
         let url = "https://www.gayporntube.com/video/1507912/test-video"
         UserDefaults.standard.set("none", forKey: UserDefaultsKeys.browserForCookies)
