@@ -44,6 +44,18 @@ jobs:
           ref: ${{ steps.tag.outputs.tag }}
           fetch-depth: 0
 
+      - name: Require release tag on main history
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin main
+          if ! git merge-base --is-ancestor "$RELEASE_TAG" origin/main; then
+            echo "Refusing to sign a tag that is not on main history." >&2
+            exit 1
+          fi
+
       - name: Validate signing secrets
         shell: bash
         env:
@@ -145,7 +157,9 @@ jobs:
           done
 
           if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" "$DMG" "$ZIP" "$SUMS" --clobber
+            # Published release assets are immutable by policy. Upload succeeds
+            # only when these asset names do not already exist.
+            gh release upload "$TAG" "$DMG" "$ZIP" "$SUMS"
           else
             gh release create "$TAG" \
               "$DMG" "$ZIP" "$SUMS" \
