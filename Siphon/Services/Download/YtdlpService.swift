@@ -2941,9 +2941,15 @@ public struct DownloadResult: Sendable {
         return lastHTML
     }
 
-    private func resolveBoyfriendTVMediaInfo(url: String, rawCookies: String? = nil) async throws -> BoyfriendTVExtractedMedia? {
+    private func resolveBoyfriendTVMediaInfo(
+        url: String,
+        rawCookies: String? = nil,
+        browserCookieSource: String? = nil
+    ) async throws -> BoyfriendTVExtractedMedia? {
         let targetUrl = normalizeURLForYtdlp(url)
         guard let pageURL = URL(string: targetUrl) else { return nil }
+        let effectiveBrowserSource =
+            Self.validatedBrowserCookieSource(browserCookieSource) ?? configuredBrowserCookieSource()
 
         var pageCandidates: [URL] = [pageURL]
         if let alternateString = Self.boyfriendTVAlternateURL(for: targetUrl),
@@ -3070,7 +3076,7 @@ public struct DownloadResult: Sendable {
             installedBrowsers = await BrowserUtils.shared.getInstalledBrowsers().map(\.id)
         }
         let browsersToTry = Self.boyfriendTVBrowserCandidates(
-            configured: configuredBrowserCookieSource(),
+            configured: effectiveBrowserSource,
             installed: installedBrowsers,
             hasFullDiskAccess: Self.hasFullDiskAccess
         )
@@ -3111,7 +3117,7 @@ public struct DownloadResult: Sendable {
             for candidatePage in pageCandidates {
                 var request = URLRequest(url: candidatePage)
                 request.timeoutInterval = 3.0
-                let effectiveUA = (configuredBrowserCookieSource() == "safari") ? Self.safariUserAgent : "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+                let effectiveUA = (effectiveBrowserSource == "safari") ? Self.safariUserAgent : "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
                 request.setValue(effectiveUA, forHTTPHeaderField: "User-Agent")
                 let pageBaseDomain = candidatePage.host?.lowercased().contains("boyfriendtv.com") == true
                     ? "https://www.boyfriendtv.com"
@@ -3293,7 +3299,7 @@ public struct DownloadResult: Sendable {
                 if streamUrl == nil, let embedPageURL = URL(string: embed), (processRunner is DefaultYtdlpProcessRunner) {
                     var embedRequest = URLRequest(url: embedPageURL)
                     embedRequest.timeoutInterval = 3.0
-                    let effectiveUA = (configuredBrowserCookieSource() == "safari") ? Self.safariUserAgent : "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+                    let effectiveUA = (effectiveBrowserSource == "safari") ? Self.safariUserAgent : "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
                     embedRequest.setValue(effectiveUA, forHTTPHeaderField: "User-Agent")
                     let embedBaseDomain = embedPageURL.host?.lowercased().contains("boyfriendtv.com") == true
                         ? "https://www.boyfriendtv.com"
@@ -3346,7 +3352,7 @@ public struct DownloadResult: Sendable {
             return BoyfriendTVExtractedMedia(streamURL: validStreamUrl, embedURL: embedUrl ?? targetUrl, title: title, thumbnailURL: thumbnailUrl)
         }
         
-        if safariCookieAccessDenied && (configuredBrowserCookieSource() == "safari" || browserLabels.allSatisfy { $0 == "safari" }) {
+        if safariCookieAccessDenied && (effectiveBrowserSource == "safari" || browserLabels.allSatisfy { $0 == "safari" }) {
             throw YtdlpError.safariCookiesFullDiskAccessRequired
         }
         try Task.checkCancellation()
