@@ -1799,6 +1799,10 @@ final class QueueAndErrorUXTests: XCTestCase {
 
         let blocked = [
             "http://127.0.0.1:8080/video",
+            "http://127.0.0.1./video",
+            "http://127.1/video",
+            "http://0x7f.0.0.1/video",
+            "http://0177.0.0.1/video",
             "http://10.0.0.8/video",
             "http://172.16.4.2/video",
             "http://192.168.1.10/video",
