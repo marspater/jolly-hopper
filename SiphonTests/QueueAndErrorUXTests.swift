@@ -1739,6 +1739,20 @@ final class QueueAndErrorUXTests: XCTestCase {
         XCTAssertTrue(content.contains(".boyfriendtv.com\t"), "Cookie file must contain cookies for the requested domain")
     }
 
+    func testRawCookiesFromHTTPSAreWrittenAsSecure() throws {
+        let cookieFile = try SecureCookieFile.create(
+            url: "https://secure.example.com/video",
+            rawCookies: "session=secret"
+        )
+        defer { cookieFile.cleanup() }
+
+        let content = try String(contentsOfFile: cookieFile.path, encoding: .utf8)
+        XCTAssertTrue(
+            content.contains("\t/\tTRUE\t"),
+            "Cookies captured from an HTTPS browser session must not be eligible for cleartext HTTP"
+        )
+    }
+
     @MainActor
     func testAppDelegateApplicationShouldHandleReopen() {
         let delegate = AppDelegate()
