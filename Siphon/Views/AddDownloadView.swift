@@ -428,7 +428,6 @@ struct AddDownloadView: View {
             formatSection
             saveSection
             optionalSettingsSection
-            advancedSettingsSection(nil)
         }
     }
 
@@ -1174,7 +1173,7 @@ struct AddDownloadView: View {
                 )
             }
             .buttonStyle(.plain)
-            .accessibilityAddTraits(showOptionalSettings ? [.isButton, .isExpanded] : [.isButton])
+            .accessibilityAddTraits(.isButton)
 
             if showOptionalSettings {
                 VStack(alignment: .leading, spacing: SiphonTheme.spacing14) {
