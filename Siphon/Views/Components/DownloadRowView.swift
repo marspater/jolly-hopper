@@ -473,7 +473,7 @@ struct FileThumbnailView: View {
 
     @ViewBuilder
     private func thumbnail(_ image: NSImage) -> some View {
-        if #available(macOS 14.0, *), isHDR {
+        if isHDR {
             Image(nsImage: image)
                 .resizable()
                 .allowedDynamicRange(.constrainedHigh)

@@ -26,12 +26,8 @@ struct VisualEffectView: NSViewRepresentable {
 extension View {
     @ViewBuilder
     func siphonFormStyle() -> some View {
-        if #available(macOS 13.0, *) {
-            self.formStyle(.grouped)
-                .scrollContentBackground(.hidden)
-        } else {
-            self
-        }
+        self.formStyle(.grouped)
+            .scrollContentBackground(.hidden)
     }
 }
 

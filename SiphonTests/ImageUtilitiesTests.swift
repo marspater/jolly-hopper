@@ -46,7 +46,6 @@ final class ImageUtilitiesTests: XCTestCase {
     }
 
     func testImageGeneratorPreservesSourceDynamicRangeWhenAvailable() {
-        guard #available(macOS 15.0, *) else { return }
         let generator = AVAssetImageGenerator(asset: AVMutableComposition())
         ImageUtilities.configureImageGenerator(generator)
         XCTAssertEqual(generator.dynamicRangePolicy, .matchSource)

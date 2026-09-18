@@ -44,9 +44,7 @@ public enum ImageUtilities {
     /// tone-mapping every generated frame to SDR.
     static func configureImageGenerator(_ generator: AVAssetImageGenerator) {
         generator.appliesPreferredTrackTransform = true
-        if #available(macOS 15.0, *) {
-            generator.dynamicRangePolicy = .matchSource
-        }
+        generator.dynamicRangePolicy = .matchSource
     }
 
     /// Resizes an `NSImage` into a square aspect-fit icon canvas.
