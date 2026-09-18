@@ -12,6 +12,7 @@ struct HeroDropURLView: View {
     @EnvironmentObject var languageService: LanguageService
 
     @Environment(\.appearsActive) private var appearsActive
+    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.siphonRenderingCapabilities) private var renderingCapabilities
     @FocusState private var isFieldFocused: Bool
     @State private var inputURL: String = ""
@@ -184,13 +185,14 @@ struct HeroDropURLView: View {
                             Text(languageService.s("paste"))
                                 .font(.geist(11, weight: .medium))
                         }
-                        .foregroundColor(isPasting ? SiphonTheme.statusCompleted : .primary)
+                        .foregroundColor(isPasting ? SiphonTheme.statusForeground(for: .completed, colorScheme: colorScheme) : .primary)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 4)
                         .background(SiphonTheme.controlBackground(cornerRadius: SiphonTheme.radiusSmall))
                         .overlay(SiphonTheme.controlBorder(cornerRadius: SiphonTheme.radiusSmall))
                     }
                     .buttonStyle(.bouncy(scale: 0.96, hover: 1.02))
+                    .fixedSize(horizontal: true, vertical: false)
                     .help(languageService.s("paste_from_clipboard"))
                     .accessibilityLabel(languageService.s("paste_from_clipboard"))
 
@@ -212,6 +214,7 @@ struct HeroDropURLView: View {
                         .shadow(color: SiphonTheme.accent.opacity(0.30), radius: 4, y: 1)
                     }
                     .buttonStyle(.bouncy(scale: 0.96, hover: 1.02))
+                    .fixedSize(horizontal: true, vertical: false)
                     .disabled(isExtracting || inputURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     .opacity(inputURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 0.58 : 1.0)
                     .accessibilityLabel(languageService.s("download_btn"))
@@ -232,13 +235,17 @@ struct HeroDropURLView: View {
                         SiphonSpinner(size: 11, color: SiphonTheme.accent, lineWidth: 1.8)
                         Text(languageService.s("hero_extracting_metadata"))
                             .font(.geist(11, weight: .medium))
-                            .foregroundColor(SiphonTheme.accent)
+                            .foregroundColor(SiphonTheme.accentForeground(for: colorScheme))
+                            .lineLimit(1)
+                            .truncationMode(.tail)
                     } else if let current = feedback.current {
                         Image(systemName: current.icon ?? (current.isSuccess ? "checkmark.circle.fill" : "exclamationmark.circle.fill"))
                             .font(.system(size: 11, weight: .semibold))
                         Text(current.message)
                             .font(.geist(11, weight: .medium))
                             .lineLimit(1)
+                            .truncationMode(.tail)
+                            .help(current.message)
                     } else {
                         Text(isTargeted ? languageService.s("drop_url_here") : languageService.s("or_paste_clipboard"))
                             .font(.geist(11, weight: .regular))
@@ -247,7 +254,13 @@ struct HeroDropURLView: View {
                     }
                     Spacer()
                 }
-                .foregroundColor(feedback.current?.isSuccess == true ? SiphonTheme.statusCompleted : (feedback.current != nil ? SiphonTheme.statusFailed : .secondary))
+                .foregroundColor(
+                    feedback.current?.isSuccess == true
+                        ? SiphonTheme.statusForeground(for: .completed, colorScheme: colorScheme)
+                        : (feedback.current != nil
+                            ? SiphonTheme.statusForeground(for: .failed, colorScheme: colorScheme)
+                            : .secondary)
+                )
                 .frame(height: 16)
                 .padding(.horizontal, 4)
             }
