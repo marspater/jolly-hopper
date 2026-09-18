@@ -222,7 +222,7 @@ struct RecentDownloadRowView: View {
                     .foregroundColor(SiphonTheme.statusForeground(for: .queued, colorScheme: colorScheme))
                 Image(systemName: "clock.fill")
                     .font(.system(size: 13))
-                    .foregroundColor(SiphonTheme.statusQueued)
+                    .foregroundColor(SiphonTheme.statusForeground(for: .queued, colorScheme: colorScheme))
 
             case .completed:
                 HStack(spacing: 6) {
