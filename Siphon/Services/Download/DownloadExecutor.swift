@@ -251,7 +251,8 @@ final class DownloadExecutor: ObservableObject {
                 info = try await ytdlpService.fetchInfo(
                     url: download.url,
                     rawCookies: download.options.rawCookies,
-                    rawUserAgent: download.options.rawUserAgent
+                    rawUserAgent: download.options.rawUserAgent,
+                    browserCookieSource: download.options.browserCookieSource
                 )
             }
 
