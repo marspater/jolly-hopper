@@ -40,6 +40,8 @@ public enum UpdateVerificationError: LocalizedError, Sendable {
 }
 
 public struct UpdateVerifier: Sendable {
+    public static let productionBundleIdentifier = "com.marspater.siphon"
+
     public init() {}
 
     /// Computes the SHA-256 hexadecimal hash of a file using streaming chunks to bound memory.
@@ -114,7 +116,7 @@ public struct UpdateVerifier: Sendable {
     ///    - Code signature checked if present, but ad-hoc or unsigned builds are permitted if `allowAdHoc` is true.
     public static func verifyAppBundle(
         bundleURL: URL,
-        expectedBundleID: String = "com.marspater.siphon",
+        expectedBundleID: String = UpdateVerifier.productionBundleIdentifier,
         expectedTeamID: String? = nil,
         allowAdHoc: Bool = true
     ) throws {
