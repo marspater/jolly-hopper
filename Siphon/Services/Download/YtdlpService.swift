@@ -2136,6 +2136,9 @@ public struct DownloadResult: Sendable {
         configuration.defaultWebpagePreferences.allowsContentJavaScript = true
 
         let webView = WKWebView(frame: .zero, configuration: configuration)
+        // Match the installed WebKit/Safari stack rather than inventing a stale
+        // Chromium identity for a WebKit TLS/JavaScript engine.
+        webView.customUserAgent = Self.safariUserAgent
         var request = URLRequest(
             url: url,
             cachePolicy: .reloadIgnoringLocalCacheData,
