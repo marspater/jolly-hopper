@@ -1203,8 +1203,12 @@ final class YtdlpServiceTests: XCTestCase {
 
         let hlsArgs = capturedArgsBox.value
         XCTAssertTrue(hlsArgs.contains("--concurrent-fragments"))
+        XCTAssertTrue(hlsArgs.contains("fragment:exp=1:8"))
+        if let idx = hlsArgs.firstIndex(of: "--fragment-retries") {
+            XCTAssertEqual(hlsArgs[idx + 1], "3")
+        }
         if let idx = hlsArgs.firstIndex(of: "--concurrent-fragments") {
-            XCTAssertEqual(hlsArgs[idx + 1], "8")
+            XCTAssertEqual(hlsArgs[idx + 1], "2", "BoyfriendTV must use a smaller request burst")
         }
     }
 
@@ -1447,7 +1451,7 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertTrue(capturedArgsBox.value.contains(where: { $0.contains("Referer:https://www.boyfriend") }))
     }
 
-    func testBoyfriendTVWithSafariCookiesPreservesSafariUserAgentAndDoesNotClobberWithChrome() async throws {
+    func testBoyfriendTVWithSafariCookiesUsesCoherentSafariTransport() async throws {
         service.ytdlpPath = URL(fileURLWithPath: "/usr/local/bin/yt-dlp")
         UserDefaults.standard.set("safari", forKey: UserDefaultsKeys.browserForCookies)
         YtdlpService.hasFullDiskAccessOverride = true
@@ -1489,14 +1493,113 @@ final class YtdlpServiceTests: XCTestCase {
             onOutput: { _ in }
         )
 
-        guard let uaIdx = capturedArgsBox.value.firstIndex(of: "--user-agent"), uaIdx + 1 < capturedArgsBox.value.count else {
-            XCTFail("Missing --user-agent argument")
-            return
+        XCTAssertFalse(capturedArgsBox.value.contains("--user-agent"), "The impersonation profile must own the user agent")
+        XCTAssertFalse(capturedArgsBox.value.contains(where: { $0.hasPrefix("Sec-Ch-Ua:") }))
+        XCTAssertTrue(capturedArgsBox.value.contains("generic:impersonate=safari:macos"))
+    }
+
+    func testGayPornTubeMetadataUsesNativeHTML5AndSiteHeaders() async throws {
+        let url = "https://www.gayporntube.com/video/1507912/test-video"
+        UserDefaults.standard.set("none", forKey: UserDefaultsKeys.browserForCookies)
+        defer { UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.browserForCookies) }
+        service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
+            XCTAssertEqual(args.last, url, "Preserve the site's singular /video/ path")
+            XCTAssertTrue(args.contains("Referer:\(url)"))
+            XCTAssertTrue(args.contains("Origin:https://www.gayporntube.com"))
+            XCTAssertTrue(args.contains("generic:impersonate=chrome:macos"))
+            XCTAssertTrue(args.contains("http:exp=1:8"))
+            XCTAssertFalse(args.contains("--user-agent"))
+            return """
+            {"id":"test-video-1","title":"Test video","extractor":"html5","formats":[{"format_id":"0","url":"https://www.gayporntube.com/get_file/3/signed/1507000/1507912/1507912.mp4/?br=862","ext":"mp4"}]}
+            """
+        })
+        let info = try await service.fetchInfo(url: url)
+        XCTAssertEqual(info.formats?.count, 1)
+        XCTAssertEqual(info.formats?.first?.ext, "mp4")
+    }
+
+    func testGayPornTubeDownloadPreservesBrowserProfileAndReferer() async throws {
+        let url = "https://www.gayporntube.com/video/1507912/test-video"
+        UserDefaults.standard.set("firefox", forKey: UserDefaultsKeys.browserForCookies)
+        defer { UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.browserForCookies) }
+        service.processRunner = MockYtdlpProcessRunner(mockDownload: { args in
+            XCTAssertEqual(args.last, url)
+            XCTAssertTrue(args.contains("Referer:\(url)"))
+            XCTAssertTrue(args.contains("generic:impersonate=firefox:macos"))
+            XCTAssertFalse(args.contains(where: { $0.hasPrefix("Sec-Ch-Ua:") }))
+            XCTAssertFalse(args.contains("--user-agent"))
+            return "/tmp/test.mp4"
+        })
+        _ = try await service.download(url: url, options: .default, onProgress: { _, _, _ in }, onOutput: { _ in })
+    }
+
+    func testGayPornTubeTransientMetadataRetryIsBoundedAndKeepsIdentity() async throws {
+        let calls = TestBox<[[String]]>([])
+        UserDefaults.standard.set("none", forKey: UserDefaultsKeys.browserForCookies)
+        defer { UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.browserForCookies) }
+        service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
+            calls.value.append(args)
+            throw YtdlpError.commandFailed("ERROR: HTTP Error 503: Service Unavailable")
+        })
+        do {
+            _ = try await service.fetchInfo(url: "https://www.gayporntube.com/video/1507912/test-video")
+            XCTFail("Expected failure after bounded retry")
+        } catch {
+            XCTAssertEqual(calls.value.count, 2)
+            XCTAssertEqual(calls.value.first, calls.value.last)
         }
-        let ua = capturedArgsBox.value[uaIdx + 1]
-        XCTAssertTrue(ua.contains("Safari/605.1.15"), "Expected Safari user agent but got \(ua)")
-        XCTAssertFalse(ua.contains("Chrome/"), "Safari user agent was clobbered by Chrome user agent: \(ua)")
-        XCTAssertTrue(capturedArgsBox.value.contains("generic:impersonate=safari"))
+    }
+
+    func testGayPornTubeUnsupportedURLDoesNotRetryCookies() async throws {
+        let count = TestBox(0)
+        UserDefaults.standard.set("safari", forKey: UserDefaultsKeys.browserForCookies)
+        YtdlpService.hasFullDiskAccessOverride = false
+        defer {
+            UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.browserForCookies)
+            YtdlpService.hasFullDiskAccessOverride = nil
+        }
+        service.processRunner = MockYtdlpProcessRunner(mockCommand: { _ in
+            count.value += 1
+            throw YtdlpError.commandFailed("ERROR: Unsupported URL")
+        })
+        do {
+            _ = try await service.fetchInfo(url: "https://www.gayporntube.com/video/1507912/test-video")
+            XCTFail("Expected extraction error")
+        } catch {
+            XCTAssertEqual(count.value, 1)
+        }
+    }
+
+    func testGayPornTubeLookalikeHostDoesNotReceiveSitePolicy() async throws {
+        UserDefaults.standard.set("none", forKey: UserDefaultsKeys.browserForCookies)
+        defer { UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.browserForCookies) }
+        service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
+            XCTAssertFalse(args.contains("Origin:https://www.gayporntube.com"))
+            XCTAssertFalse(args.contains("http:exp=1:8"))
+            return "{\"id\":\"test\",\"title\":\"Test\"}"
+        })
+        _ = try await service.fetchInfo(url: "https://gayporntube.com.example/video/123/test")
+    }
+
+    func testGayPornTubeCookieFallbackRefreshesTransportIdentity() async throws {
+        UserDefaults.standard.set("safari", forKey: UserDefaultsKeys.browserForCookies)
+        YtdlpService.hasFullDiskAccessOverride = true
+        defer {
+            UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.browserForCookies)
+            YtdlpService.hasFullDiskAccessOverride = nil
+        }
+        service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
+            if let index = args.firstIndex(of: "--cookies-from-browser") {
+                let browser = args[index + 1]
+                let target = browser == "safari" ? "safari" : browser == "firefox" ? "firefox" : "chrome"
+                XCTAssertTrue(args.contains("generic:impersonate=\(target):macos"))
+                throw YtdlpError.commandFailed("ERROR: Unable to extract cookies")
+            }
+            XCTAssertTrue(args.contains("generic:impersonate=chrome:macos"))
+            XCTAssertFalse(args.contains("--user-agent"))
+            return "{\"id\":\"test\",\"title\":\"Test\"}"
+        })
+        _ = try await service.fetchInfo(url: "https://www.gayporntube.com/video/123/test")
     }
 
     func testBoyfriendTVFullStreamSurvivesLoginUIInPageDump() async throws {

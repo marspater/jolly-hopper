@@ -1375,6 +1375,8 @@ public struct DownloadResult: Sendable {
         var processResult: DownloadProcessResult? = nil
 
         while processResult == nil {
+            try Task.checkCancellation()
+            if processController?.isCancelled == true { throw CancellationError() }
             do {
                 processResult = try await runDownloadProcess(
                     args: currentArgs,
@@ -1403,6 +1405,7 @@ public struct DownloadResult: Sendable {
                             LoggerService.shared.log("Browser cookie access failed for '\(failedBrowser)'. Retrying download with alternative browser cookies from '\(altBrowser)'...", level: .info)
                             onOutput("[Siphon Info] Retrying with cookies from \(altBrowser.capitalized)...\n")
                             currentArgs[idx + 1] = altBrowser
+                            refreshBrowserTransportIdentity(for: normalizedURL, args: &currentArgs)
                             continue
                         }
                     }
@@ -1413,6 +1416,7 @@ public struct DownloadResult: Sendable {
                     }
                     onOutput("[Siphon Info] Browser cookies unavailable. Retrying download directly without browser cookies...\n")
                     currentArgs = stripCookieArgs(from: currentArgs)
+                    refreshBrowserTransportIdentity(for: normalizedURL, args: &currentArgs)
                     continue
                 }
 
@@ -1470,7 +1474,7 @@ public struct DownloadResult: Sendable {
                     LoggerService.shared.log("Transient server or network error encountered (\(errText.trimmingCharacters(in: .whitespacesAndNewlines))). Retrying download with fresh connection...", level: .warning)
                     onOutput("[Siphon Info] Server or network error encountered. Retrying stream download...\n")
                     if processRunner is DefaultYtdlpProcessRunner {
-                        try? await Task.sleep(nanoseconds: 1_000_000_000)
+                        try await Task.sleep(nanoseconds: 1_000_000_000)
                     }
                     continue
                 }
@@ -1977,6 +1981,54 @@ public struct DownloadResult: Sendable {
         }
     }
     
+    private func isGayPornTubeURL(_ urlOrHost: String) -> Bool {
+        let host = (URL(string: urlOrHost)?.host ?? urlOrHost).lowercased()
+        return host == "gayporntube.com" || host.hasSuffix(".gayporntube.com")
+    }
+
+    private func usesBrowserTransport(_ url: String) -> Bool {
+        isBoyfriendTVURL(url) || isGayPornTubeURL(url)
+    }
+
+    // Let curl-impersonate supply a consistent TLS fingerprint and HTTP headers.
+    // Hard-coded Chrome headers mixed with Safari/Firefox cookies are contradictory.
+    private func refreshBrowserTransportIdentity(for url: String, args: inout [String]) {
+        guard usesBrowserTransport(url) else { return }
+        let optionEnd = args.firstIndex(of: "--") ?? args.count
+        let options = Array(args[..<optionEnd])
+        let suffix = Array(args[optionEnd...])
+        let browser = options.firstIndex(of: "--cookies-from-browser").flatMap {
+            $0 + 1 < options.count ? options[$0 + 1] : nil
+        }
+        let target: String
+        switch browser {
+        case "safari": target = "safari:macos"
+        case "firefox": target = "firefox:macos"
+        default: target = "chrome:macos"
+        }
+        var clean: [String] = []
+        var index = 0
+        while index < options.count {
+            let arg = options[index]
+            if index + 1 < options.count {
+                let value = options[index + 1]
+                if arg == "--user-agent" ||
+                    (arg == "--add-header" && (value.lowercased().hasPrefix("sec-ch-ua") || value.lowercased().hasPrefix("user-agent:"))) {
+                    index += 2
+                    continue
+                }
+                if arg == "--extractor-args" && value.hasPrefix("generic:impersonate") {
+                    index += 2
+                    continue
+                }
+            }
+            clean.append(arg)
+            index += 1
+        }
+        clean.append(contentsOf: ["--extractor-args", "generic:impersonate=\(target)"])
+        args = clean + suffix
+    }
+
     private func isBoyfriendTVURL(_ urlOrHost: String) -> Bool {
         let host = (URL(string: urlOrHost)?.host ?? urlOrHost).lowercased()
         return host == "boyfriend.tv" || host.hasSuffix(".boyfriend.tv") ||
@@ -2143,14 +2195,8 @@ public struct DownloadResult: Sendable {
                 browsersToTry.append(configured)
             }
         }
-        for candidate in SupportedBrowser.allCases.map(\.rawValue) {
-            if candidate == "safari" && !Self.hasFullDiskAccess {
-                continue
-            }
-            if !browsersToTry.contains(where: { $0 == candidate }) {
-                browsersToTry.append(candidate)
-            }
-        }
+        // Honour the selected browser; probing every installed profile multiplies
+        // requests and can mix unrelated sessions during a site challenge.
         browsersToTry.append(nil)
 
         if html.isEmpty, let ytdlp = ytdlpBinary {
@@ -3945,13 +3991,19 @@ public struct DownloadResult: Sendable {
         return host == "thisvid.com" || host.hasSuffix(".thisvid.com")
     }
 
-    private func shouldRetryWithBrowserCookies(error _: Error, url: String, usingBrowserCookies: Bool, forceBrowserCookies: Bool) -> Bool {
-        (isBoyfriendTVURL(url) || isGFFURL(url)) && !usingBrowserCookies && !forceBrowserCookies && configuredBrowserCookieSource() != nil
+    private func shouldRetryWithBrowserCookies(error: Error, url: String, usingBrowserCookies: Bool, forceBrowserCookies: Bool) -> Bool {
+        guard !(error is CancellationError), !Task.isCancelled,
+              usesBrowserTransport(url) || isGFFURL(url),
+              !usingBrowserCookies, !forceBrowserCookies, configuredBrowserCookieSource() != nil else { return false }
+        let message = String(describing: error)
+            .replacingOccurrences(of: #"https?://[^\s\"]+"#, with: "[URL]", options: .regularExpression).lowercased()
+        return message.contains("403") || message.contains("401") || message.contains("sign in") ||
+            message.contains("login") || message.contains("cloudflare") || message.contains("challenge")
     }
 
     private func mapSiteSpecificError(_ error: Error, url: String) -> Error {
         let errString = "\(error)"
-        let lowerErr = (isBoyfriendTVURL(url)
+        let lowerErr = (usesBrowserTransport(url)
             ? errString.replacingOccurrences(of: #"https?://[^\s\"]+"#, with: "[URL]", options: .regularExpression)
             : errString).lowercased()
         let configuredBrowser = configuredBrowserCookieSource()
@@ -3991,6 +4043,18 @@ public struct DownloadResult: Sendable {
                 return YtdlpError.downloadFailed("Could not extract video stream from this BoyfriendTV URL. Please verify the video link and try again.")
             }
             return error
+        }
+
+        if isGayPornTubeURL(url) {
+            if lowerErr.contains("cloudflare") || lowerErr.contains("captcha") || lowerErr.contains("challenge") || lowerErr.contains("turnstile") {
+                return YtdlpError.cloudflareBlocked
+            }
+            if lowerErr.contains("unsupported url") {
+                return YtdlpError.downloadFailed("Could not resolve the GayPornTube player. Verify the video link and retry.")
+            }
+            if lowerErr.contains("403") || lowerErr.contains("forbidden") {
+                return YtdlpError.downloadFailed("GayPornTube denied access (HTTP 403). The page may require browser verification or have an access restriction.")
+            }
         }
 
         if isGFFURL(url) {
@@ -4153,6 +4217,9 @@ public struct DownloadResult: Sendable {
             args.append(contentsOf: ["--add-header", "Referer:\(referer)"])
             args.append(contentsOf: ["--downloader", "ffmpeg"])
             args.append(contentsOf: ["--hls-use-mpegts"])
+        } else if isGayPornTubeURL(url) {
+            args.append(contentsOf: ["--add-header", "Referer:\(url)"])
+            args.append(contentsOf: ["--add-header", "Origin:https://www.gayporntube.com"])
         } else if isXHamster {
             args.append(contentsOf: ["--add-header", "Referer:https://xhamster.com/"])
             args.append(contentsOf: ["--add-header", "Origin:https://xhamster.com"])
@@ -4228,6 +4295,19 @@ public struct DownloadResult: Sendable {
             if !args.contains("Origin:\(origin)") && !args.contains(where: { $0.hasPrefix("Origin:") }) {
                 args.append(contentsOf: ["--add-header", "Origin:\(origin)"])
             }
+        }
+        if usesBrowserTransport(url) {
+            refreshBrowserTransportIdentity(for: url, args: &args)
+            // Smaller request bursts and bounded exponential backoff for sensitive hosts.
+            for flag in ["--retries", "--fragment-retries", "--concurrent-fragments"] {
+                if let index = args.firstIndex(of: flag), index + 1 < args.count {
+                    args[index + 1] = flag == "--concurrent-fragments" ? "2" : "3"
+                }
+            }
+            args.append(contentsOf: ["--extractor-retries", "2",
+                                     "--retry-sleep", "http:exp=1:8",
+                                     "--retry-sleep", "fragment:exp=1:8",
+                                     "--retry-sleep", "extractor:exp=1:8"])
         }
     }
 
@@ -4316,9 +4396,27 @@ public struct DownloadResult: Sendable {
         return cleanArgs
     }
 
-    private func runCommand(_ args: [String]) async throws -> String {
+    private func runTransportCommand(_ args: [String]) async throws -> String {
         do {
             return try await processRunner.runCommand(args)
+        } catch {
+            try Task.checkCancellation()
+            guard usesBrowserTransport(args.last ?? ""),
+                  case YtdlpError.commandFailed(let output) = error,
+                  isTransientServerError(output) else { throw error }
+            LoggerService.shared.log("Retrying transient metadata transport failure once", level: .info)
+            if processRunner is DefaultYtdlpProcessRunner {
+                try await Task.sleep(nanoseconds: 1_000_000_000)
+            }
+            try Task.checkCancellation()
+            return try await processRunner.runCommand(args)
+        }
+    }
+
+    private func runCommand(_ args: [String]) async throws -> String {
+        try Task.checkCancellation()
+        do {
+            return try await runTransportCommand(args)
         } catch let error as YtdlpError {
             if case .commandFailed(let output) = error, isCookieFailureError(output), let idx = args.firstIndex(of: "--cookies-from-browser"), idx + 1 < args.count {
                 let browser = args[idx + 1]
@@ -4332,23 +4430,26 @@ public struct DownloadResult: Sendable {
                 let altBrowsers = pool.filter { $0 != browser && ($0 != "safari" || Self.hasFullDiskAccess) }
                 for alt in altBrowsers {
                     var altArgs = args
+                    try Task.checkCancellation()
                     altArgs[idx + 1] = alt
+                    refreshBrowserTransportIdentity(for: args.last ?? "", args: &altArgs)
                     LoggerService.shared.log("Retrying command with alternative browser cookies from '\(alt)'...", level: .info)
                     do {
-                        return try await processRunner.runCommand(altArgs)
+                        return try await runTransportCommand(altArgs)
                     } catch let altErr as YtdlpError {
                         if case .commandFailed(let altOut) = altErr, isCookieFailureError(altOut) {
                             continue
                         }
                         throw altErr
                     } catch {
-                        continue
+                        throw error
                     }
                 }
                 
                 LoggerService.shared.log("All browser cookie attempts failed. Retrying command without browser cookies...", level: .info)
-                let cleanArgs = stripCookieArgs(from: args)
-                return try await processRunner.runCommand(cleanArgs)
+                var cleanArgs = stripCookieArgs(from: args)
+                refreshBrowserTransportIdentity(for: args.last ?? "", args: &cleanArgs)
+                return try await runTransportCommand(cleanArgs)
             }
             throw error
         }
