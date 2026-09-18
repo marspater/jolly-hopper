@@ -29,6 +29,7 @@ public final class UpdateChecker: ObservableObject {
     private var downloadAssetName: String?
     private var expectedChecksum: String?
     private var checksumURL: URL?
+    private var updateOperationID: UUID?
 
     private let downloader = UpdateDownloader()
     private let installer = UpdateInstaller()
@@ -36,6 +37,7 @@ public final class UpdateChecker: ObservableObject {
     public init() {}
 
     public func cancelUpdate() {
+        updateOperationID = nil
         downloader.cancel()
         downloadURL = nil
         downloadAssetName = nil
@@ -84,18 +86,18 @@ public final class UpdateChecker: ObservableObject {
                 ? String(trimmedTag.dropFirst())
                 : trimmedTag
             latestVersion = cleanTag
-                hasUpdate = cleanTag.compare(currentVersion, options: .numeric) == .orderedDescending
+            hasUpdate = cleanTag.compare(currentVersion, options: .numeric) == .orderedDescending
 
-                if let htmlUrlStr = json["html_url"] as? String, let htmlUrl = URL(string: htmlUrlStr) {
-                    releasePageURL = htmlUrl
-                }
+            if let htmlUrlStr = json["html_url"] as? String, let htmlUrl = URL(string: htmlUrlStr) {
+                releasePageURL = htmlUrl
+            }
 
-                downloadURL = nil
-                downloadAssetName = nil
-                expectedChecksum = nil
-                checksumURL = nil
+            downloadURL = nil
+            downloadAssetName = nil
+            expectedChecksum = nil
+            checksumURL = nil
 
-                if let assets = json["assets"] as? [[String: Any]] {
+            if let assets = json["assets"] as? [[String: Any]] {
                     #if arch(arm64)
                     let targetArch = "arm64"
                     let altArch = "aarch64"
@@ -148,7 +150,7 @@ public final class UpdateChecker: ObservableObject {
                     }
                 }
 
-                if !hasUpdate {
+            if !hasUpdate {
                     showUpToDateMessage = true
                     if manual {
                         NotificationService.shared.sendAppUpdateNotification(
@@ -157,7 +159,14 @@ public final class UpdateChecker: ObservableObject {
                         )
                     }
                     Task { @MainActor [weak self] in
-                        try? await Task.sleep(nanoseconds: 3 * 1_000_000_000)
+                        do {
+                            try await Task.sleep(nanoseconds: 3 * 1_000_000_000)
+                        } catch is CancellationError {
+                            return
+                        } catch {
+                            LoggerService.shared.log("Unexpected update-message timer failure: \(error.localizedDescription)", level: .warning)
+                            return
+                        }
                         self?.showUpToDateMessage = false
                     }
             } else if manual {
@@ -184,6 +193,14 @@ public final class UpdateChecker: ObservableObject {
     }
 
     public func downloadAndInstallUpdate() async {
+        let operationID = UUID()
+        updateOperationID = operationID
+        defer {
+            if updateOperationID == operationID {
+                updateOperationID = nil
+            }
+        }
+
         guard let url = downloadURL, UpdateDownloader.isTrustedGitHubURL(url) else {
             if let pageURL = releasePageURL {
                 NSWorkspace.shared.open(pageURL)
@@ -212,6 +229,10 @@ public final class UpdateChecker: ObservableObject {
             }
         }
 
+        guard updateOperationID == operationID else {
+            return
+        }
+
         isDownloading = true
         updateProgress = 0
         updateError = nil
@@ -221,6 +242,15 @@ public final class UpdateChecker: ObservableObject {
                 Task { @MainActor in
                     self?.updateProgress = progress
                 }
+            }
+
+            guard updateOperationID == operationID else {
+                do {
+                    try FileManager.default.removeItem(at: downloadedPkgURL)
+                } catch {
+                    LoggerService.shared.log("Failed to remove cancelled update package: \(error.localizedDescription)", level: .warning)
+                }
+                return
             }
 
             isDownloading = false
