@@ -1150,11 +1150,7 @@ class YtdlpService: ObservableObject {
                 }
             }
         } else {
-            let usingBrowserCookies = appendCookieArgs(
-                for: url,
-                to: &args,
-                browserOverride: browserCookieSource
-            )
+            let usingBrowserCookies = appendCookieArgs(for: url, to: &args, browserOverride: browserCookieSource)
             logCookieUsage(for: url, usingBrowserCookies: usingBrowserCookies)
         }
 
@@ -1238,11 +1234,7 @@ class YtdlpService: ObservableObject {
                 }
             }
         } else {
-            let usingBrowserCookies = appendCookieArgs(
-                for: url,
-                to: &args,
-                browserOverride: browserCookieSource
-            )
+            let usingBrowserCookies = appendCookieArgs(for: url, to: &args, browserOverride: browserCookieSource)
             logCookieUsage(for: url, usingBrowserCookies: usingBrowserCookies)
         }
 
