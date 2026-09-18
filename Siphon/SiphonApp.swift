@@ -138,6 +138,7 @@ struct SiphonApp: App {
         let queryItems = components?.queryItems
         let videoUrl = queryItems?.first(where: { $0.name == "url" })?.value
         let rawCookies = (url.host == "download" || url.host == "fast-download") ? queryItems?.first(where: { $0.name == "cookies" })?.value : nil
+        let rawUserAgent = (url.host == "download" || url.host == "fast-download") ? queryItems?.first(where: { $0.name == "ua" })?.value : nil
         
         guard let rawVideoUrl = videoUrl?.trimmingCharacters(in: .whitespacesAndNewlines),
               !rawVideoUrl.isEmpty,
@@ -150,10 +151,20 @@ struct SiphonApp: App {
             guard let cookies = rawCookies, !cookies.isEmpty, cookies.count <= 64 * 1024 else { return nil }
             return cookies.components(separatedBy: CharacterSet.controlCharacters.subtracting(CharacterSet(charactersIn: "\t"))).joined()
         }()
+        let sanitizedUserAgent: String? = {
+            guard let userAgent = rawUserAgent?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !userAgent.isEmpty,
+                  userAgent.count <= 1024,
+                  !userAgent.contains("\r"),
+                  !userAgent.contains("\n"),
+                  !userAgent.contains("\0") else { return nil }
+            return userAgent
+        }()
 
         if url.host == "download" || url.host == "fast-download" {
             appState.urlToDownload = rawVideoUrl
             appState.rawCookiesToDownload = sanitizedCookies
+            appState.rawUserAgentToDownload = sanitizedUserAgent
             appState.showAddDownloadSheet = true
         }
         
