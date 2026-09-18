@@ -371,6 +371,10 @@ struct DownloadRowView: View {
         download.displayTitle.isEmpty ? "Media preview" : "\(download.displayTitle) thumbnail"
     }
 
+    private var isHDRMedia: Bool {
+        download.diagnostics.hdrSummary != nil || download.mediaInfo?.firstHDRSummary != nil
+    }
+
     private func previewMedia() {
         guard canPreviewMedia, let path = download.primaryFilePath else { return }
         QuickLookPreviewHelper.shared.preview(url: path)
@@ -388,7 +392,7 @@ struct DownloadRowView: View {
                                 .aspectRatio(contentMode: .fill)
                         case .failure, .empty:
                             if let filePath = download.primaryFilePath {
-                                FileThumbnailView(fileURL: filePath)
+                                FileThumbnailView(fileURL: filePath, isHDR: isHDRMedia)
                             } else {
                                 thumbnailPlaceholder
                             }
@@ -397,7 +401,7 @@ struct DownloadRowView: View {
                         }
                     }
                 } else if let filePath = download.primaryFilePath {
-                    FileThumbnailView(fileURL: filePath)
+                    FileThumbnailView(fileURL: filePath, isHDR: isHDRMedia)
                 } else {
                     thumbnailPlaceholder
                 }
@@ -445,14 +449,13 @@ struct DownloadRowView: View {
 
 struct FileThumbnailView: View {
     let fileURL: URL
+    let isHDR: Bool
     @State private var thumbnailImage: NSImage? = nil
 
     var body: some View {
         Group {
             if let image = thumbnailImage {
-                Image(nsImage: image)
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
+                thumbnail(image)
             } else {
                 Rectangle()
                     .fill(Color.primary.opacity(0.06))
@@ -465,6 +468,20 @@ struct FileThumbnailView: View {
         }
         .task {
             await generateThumbnail()
+        }
+    }
+
+    @ViewBuilder
+    private func thumbnail(_ image: NSImage) -> some View {
+        if #available(macOS 14.0, *), isHDR {
+            Image(nsImage: image)
+                .resizable()
+                .allowedDynamicRange(.constrainedHigh)
+                .aspectRatio(contentMode: .fill)
+        } else {
+            Image(nsImage: image)
+                .resizable()
+                .aspectRatio(contentMode: .fill)
         }
     }
 

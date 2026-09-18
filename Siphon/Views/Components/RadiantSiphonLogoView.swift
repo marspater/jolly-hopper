@@ -38,9 +38,9 @@ struct RadiantSiphonLogoView: View {
                         AngularGradient(
                             gradient: Gradient(colors: [
                                 SiphonTheme.accent.opacity(isHovered ? 0.50 : 0.30),
-                                Color.cyan.opacity(isHovered ? 0.35 : 0.18),
-                                Color.indigo.opacity(isHovered ? 0.25 : 0.12),
-                                Color.cyan.opacity(isHovered ? 0.40 : 0.22),
+                                SiphonTheme.accentSecondary.opacity(isHovered ? 0.35 : 0.18),
+                                SiphonTheme.accentViolet.opacity(isHovered ? 0.25 : 0.12),
+                                SiphonTheme.accentSecondary.opacity(isHovered ? 0.40 : 0.22),
                                 SiphonTheme.accent.opacity(isHovered ? 0.50 : 0.30)
                             ]),
                             center: .center
@@ -58,7 +58,7 @@ struct RadiantSiphonLogoView: View {
                             gradient: Gradient(colors: [
                                 SiphonTheme.accent.opacity(isHovered ? 0.85 : 0.60),
                                 Color.white.opacity(isHovered ? 0.55 : 0.25),
-                                Color.cyan.opacity(isHovered ? 0.75 : 0.50),
+                                SiphonTheme.accentSecondary.opacity(isHovered ? 0.75 : 0.50),
                                 SiphonTheme.accent.opacity(isHovered ? 0.85 : 0.60)
                             ]),
                             center: .center
@@ -74,7 +74,7 @@ struct RadiantSiphonLogoView: View {
                         RadialGradient(
                             colors: [
                                 Color.white.opacity(isHovered ? 0.45 : 0.25),
-                                Color.cyan.opacity(isHovered ? 0.50 : 0.30),
+                                SiphonTheme.accentSecondary.opacity(isHovered ? 0.50 : 0.30),
                                 Color.clear
                             ],
                             center: .center,
@@ -125,7 +125,7 @@ struct RadiantSiphonLogoView: View {
                     RadialGradient(
                         colors: [
                             SiphonTheme.accent.opacity(isHovered ? 0.65 : 0.40),
-                            Color.cyan.opacity(isHovered ? 0.35 : 0.18),
+                            SiphonTheme.accentSecondary.opacity(isHovered ? 0.35 : 0.18),
                             Color.clear
                         ],
                         center: .center,

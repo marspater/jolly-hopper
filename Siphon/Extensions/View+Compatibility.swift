@@ -381,6 +381,9 @@ public final class TransientFeedbackState: ObservableObject {
 public enum SiphonTheme {
     // Primary Accent & Gradients with Display P3 wide color gamut support
     public static let accent = Color(.displayP3, red: 0.10, green: 0.48, blue: 1.0, opacity: 1.0)
+    public static let accentSecondary = Color(.displayP3, red: 0.10, green: 0.76, blue: 0.98, opacity: 1.0)
+    public static let accentViolet = Color(.displayP3, red: 0.38, green: 0.24, blue: 0.82, opacity: 1.0)
+    public static let sourceYouTube = Color(.displayP3, red: 0.96, green: 0.08, blue: 0.08, opacity: 1.0)
     public static let primaryGradient = LinearGradient(
         colors: [
             Color(.displayP3, red: 0.18, green: 0.52, blue: 1.0, opacity: 1.0),
@@ -396,6 +399,7 @@ public enum SiphonTheme {
     public static let statusCompleted = Color(.displayP3, red: 0.18, green: 0.72, blue: 0.38, opacity: 1.0)
     public static let statusFailed = Color(.displayP3, red: 0.94, green: 0.26, blue: 0.30, opacity: 1.0)
     public static let statusHdr = Color(.displayP3, red: 0.98, green: 0.65, blue: 0.15, opacity: 1.0)
+    public static let statusHdrSecondary = Color(.displayP3, red: 1.0, green: 0.46, blue: 0.08, opacity: 1.0)
     
     public static let downloading = statusDownloading
     public static let queued = statusQueued
@@ -846,7 +850,6 @@ public struct SiphonInteractiveGlassBackground: View {
                         .fill(effectiveTint.opacity(0.18))
                         .blur(radius: 6)
                         .padding(-1)
-                        .allowedDynamicRange(AdaptiveRenderingEnvironment.shared.capabilities.supportsEDR ? .high : .standard)
                 }
 
                 // Elevated tactile glass base (clearly separated from outer glass container)
@@ -1235,11 +1238,10 @@ public struct SiphonTagBadge: View {
         .background {
             if isHdr {
                 LinearGradient(
-                    colors: [SiphonTheme.statusHdr, Color.orange],
+                    colors: [SiphonTheme.statusHdr, SiphonTheme.statusHdrSecondary],
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
                 )
-                .allowedDynamicRange(AdaptiveRenderingEnvironment.shared.capabilities.supportsEDR ? .high : .standard)
             } else {
                 tintColor.opacity(0.12)
             }

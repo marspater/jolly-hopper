@@ -228,7 +228,6 @@ struct PreferencesView: View {
                             .fill(SiphonTheme.accent.opacity(0.35))
                             .blur(radius: 6)
                             .padding(-1)
-                            .allowedDynamicRange(AdaptiveRenderingEnvironment.shared.capabilities.supportsEDR ? .high : .standard)
 
                         Capsule()
                             .fill(SiphonTheme.primaryGradient)
