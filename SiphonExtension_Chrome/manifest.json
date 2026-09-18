@@ -6,11 +6,7 @@
     "description": "__MSG_extension_description__",
     "permissions": [
         "contextMenus",
-        "tabs",
-        "cookies"
-    ],
-    "host_permissions": [
-        "*://*/*"
+        "tabs"
     ],
     "action": {
         "default_title": "__MSG_context_download__",
