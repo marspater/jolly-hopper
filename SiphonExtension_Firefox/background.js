@@ -24,7 +24,11 @@ chrome.contextMenus.onClicked.addListener((info) => {
     }
 
     if (host) {
-        const deepLink = "siphon://" + host + "?url=" + encodeURIComponent(url);
+        let deepLink = "siphon://" + host + "?url=" + encodeURIComponent(url);
+        const userAgent = typeof navigator !== "undefined" ? navigator.userAgent : "";
+        if (userAgent) {
+            deepLink += "&ua=" + encodeURIComponent(userAgent);
+        }
         chrome.tabs.create({ url: deepLink, active: false }, (createdTab) => {
             if (chrome.runtime.lastError) {
                 console.warn("Failed to open Siphon deep link:", chrome.runtime.lastError.message);
