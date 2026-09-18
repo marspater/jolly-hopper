@@ -5,6 +5,7 @@
 
 import Foundation
 import Combine
+import Darwin
 
 public enum ExternalDownloadTargetPolicy {
     public static func isAllowed(_ url: URL) -> Bool {
@@ -112,20 +113,39 @@ public enum ExternalDownloadTargetPolicy {
     }
 
     private static func isGloballyRoutableIPv6(_ host: String) -> Bool {
-        let value = host
+        var value = host
             .trimmingCharacters(in: CharacterSet(charactersIn: "[]"))
             .lowercased()
+        if let zoneIndex = value.firstIndex(of: "%") {
+            value = String(value[..<zoneIndex])
+        }
 
-        if value == "::" || value == "::1" { return false }
-        if value.hasPrefix("fc") || value.hasPrefix("fd") { return false }
-        if value.hasPrefix("fe8") || value.hasPrefix("fe9") ||
-            value.hasPrefix("fea") || value.hasPrefix("feb") { return false }
-        if value.hasPrefix("ff") { return false }
-        if value.hasPrefix("2001:db8:") { return false }
+        var bytes = [UInt8](repeating: 0, count: 16)
+        let parsed = value.withCString { cString in
+            bytes.withUnsafeMutableBytes { buffer in
+                inet_pton(AF_INET6, cString, buffer.baseAddress)
+            }
+        }
+        guard parsed == 1 else { return false }
 
-        if value.hasPrefix("::ffff:"),
-           let mapped = parseIPv4(String(value.dropFirst("::ffff:".count))) {
-            return isGloballyRoutableIPv4(mapped)
+        // IPv4-mapped (::ffff:a.b.c.d / ::ffff:7f00:1) and legacy
+        // IPv4-compatible (::a.b.c.d) forms must inherit IPv4 routing rules.
+        let firstTenZero = bytes[0..<10].allSatisfy { $0 == 0 }
+        if firstTenZero, bytes[10] == 0xff, bytes[11] == 0xff {
+            return isGloballyRoutableIPv4(Array(bytes[12..<16]))
+        }
+        if bytes[0..<12].allSatisfy({ $0 == 0 }) {
+            return isGloballyRoutableIPv4(Array(bytes[12..<16]))
+        }
+
+        // Unique-local, link-local, deprecated site-local, multicast, and the
+        // documentation prefix are never valid external deep-link targets.
+        if (bytes[0] & 0xfe) == 0xfc { return false } // fc00::/7
+        if bytes[0] == 0xfe, (bytes[1] & 0xc0) == 0x80 { return false } // fe80::/10
+        if bytes[0] == 0xfe, (bytes[1] & 0xc0) == 0xc0 { return false } // fec0::/10
+        if bytes[0] == 0xff { return false } // ff00::/8
+        if bytes[0] == 0x20, bytes[1] == 0x01, bytes[2] == 0x0d, bytes[3] == 0xb8 {
+            return false // 2001:db8::/32
         }
 
         return true
