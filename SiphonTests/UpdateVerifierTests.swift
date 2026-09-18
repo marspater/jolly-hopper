@@ -116,6 +116,72 @@ final class UpdateVerifierTests: XCTestCase {
         XCTAssertFalse(UpdateDownloader.isTrustedGitHubURL(URL(string: "http://github.com/marspater/jolly-hopper/releases/download/v1.0/Siphon.dmg")!), "Must reject insecure http")
     }
 
+    func testUpdateStagingPreservesPackageExtension() {
+        let tempDir = FileManager.default.temporaryDirectory
+
+        let dmg = UpdateDownloader.stagedFileURL(
+            for: URL(string: "https://github.com/marspater/jolly-hopper/releases/download/v1/Siphon-arm64.dmg")!,
+            temporaryDirectory: tempDir
+        )
+        let zip = UpdateDownloader.stagedFileURL(
+            for: URL(string: "https://github.com/marspater/jolly-hopper/releases/download/v1/Siphon.app.zip")!,
+            temporaryDirectory: tempDir
+        )
+
+        XCTAssertEqual(dmg.pathExtension.lowercased(), "dmg")
+        XCTAssertEqual(zip.pathExtension.lowercased(), "zip")
+    }
+
+    func testChecksumParserRequiresMatchingAssetAndValidSHA256() {
+        let hash = String(repeating: "a", count: 64)
+        let manifest = """
+        \(hash)  Siphon-arm64.dmg
+        \(String(repeating: "b", count: 64))  Siphon-x86_64.dmg
+        """
+
+        XCTAssertEqual(
+            UpdateDownloader.parseExpectedChecksum(
+                from: manifest,
+                targetAssetName: "Siphon-arm64.dmg",
+                checksumFileName: "SHA256SUMS.txt"
+            ),
+            hash
+        )
+
+        XCTAssertNil(
+            UpdateDownloader.parseExpectedChecksum(
+                from: manifest,
+                targetAssetName: "Missing.dmg",
+                checksumFileName: "SHA256SUMS.txt"
+            )
+        )
+
+        XCTAssertNil(
+            UpdateDownloader.parseExpectedChecksum(
+                from: "not-a-hash  Siphon-arm64.dmg",
+                targetAssetName: "Siphon-arm64.dmg",
+                checksumFileName: "SHA256SUMS.txt"
+            )
+        )
+    }
+
+    func testLocateAppBundleIgnoresSymlinkedApp() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("update_locate_\(UUID().uuidString)")
+        let external = FileManager.default.temporaryDirectory.appendingPathComponent("external_app_\(UUID().uuidString).app")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: external, withIntermediateDirectories: true)
+        defer {
+            try? FileManager.default.removeItem(at: root)
+            try? FileManager.default.removeItem(at: external)
+        }
+
+        let symlink = root.appendingPathComponent("Siphon.app")
+        try FileManager.default.createSymbolicLink(at: symlink, withDestinationURL: external)
+
+        let installer = UpdateInstaller()
+        XCTAssertNil(installer.locateAppBundle(in: root), "Updater must not follow symlinked app bundles out of staging")
+    }
+
     func testUpdateDownloaderRejectsConcurrentCalls() async throws {
         let downloader = UpdateDownloader()
         let url = URL(string: "https://github.com/marspater/jolly-hopper/releases/download/v1.0.0/Siphon.dmg")!
