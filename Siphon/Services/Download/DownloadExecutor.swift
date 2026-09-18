@@ -204,10 +204,11 @@ final class DownloadExecutor: ObservableObject {
     }
 
     private static func appendToLog(for download: Download, text: String) {
-        if download.log.count + text.count > 50_000 {
+        let sanitized = LoggerService.sanitizeDiagnosticText(text)
+        if download.log.count + sanitized.count > 50_000 {
             download.log = String(download.log.suffix(25_000))
         }
-        download.log.append(text)
+        download.log.append(sanitized)
     }
 
     // MARK: - Download Execution
@@ -320,10 +321,7 @@ final class DownloadExecutor: ObservableObject {
                     }
                     if !lines.isEmpty {
                         let combined = lines.joined(separator: "\n") + "\n"
-                        if download.log.count + combined.count > 50_000 {
-                            download.log = String(download.log.suffix(25_000))
-                        }
-                        download.log.append(combined)
+                        Self.appendToLog(for: download, text: combined)
                         if download.status == .downloading {
                             for line in lines {
                                 if line.contains("[EmbedThumbnail]") || line.contains("[Metadata]") || line.contains("[Merger]") || line.contains("[VideoConvertor]") || line.contains("[ThumbnailsConvertor]") || line.contains("[EmbedSubtitle]") {
@@ -629,7 +627,10 @@ final class DownloadExecutor: ObservableObject {
                 } else if lower.contains("timed out") || lower.contains("timeout") {
                     return lang.s("network_timeout")
                 } else {
-                    return String(format: lang.s("download_failed_error"), reason)
+                    return String(
+                        format: lang.s("download_failed_error"),
+                        LoggerService.sanitizeDiagnosticText(reason)
+                    )
                 }
             }
         }
@@ -643,7 +644,10 @@ final class DownloadExecutor: ObservableObject {
         } else if lower.contains("timed out") || lower.contains("timeout") {
             return lang.s("network_timeout")
         } else {
-            return String(format: lang.s("download_failed_error"), errorText)
+            return String(
+                format: lang.s("download_failed_error"),
+                LoggerService.sanitizeDiagnosticText(errorText)
+            )
         }
     }
 
@@ -697,36 +701,9 @@ final class DownloadExecutor: ObservableObject {
     static func cleanupTemporaryFiles(for download: Download) {
         guard shouldCleanupTemporaryFiles(for: download.status) else { return }
 
-        let folder = download.options.saveFolder
-        let title = download.title
-        let rawBaseName = download.options.customFilename ?? title
-        let urlString = download.url
-
-        Task.detached {
-            let fileManager = FileManager.default
-            let videoId = extractVideoId(from: urlString)
-            let sanitizedBaseName = YtdlpService.sanitizeFilename(rawBaseName)
-
-            do {
-                let contents = try fileManager.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)
-
-                for file in contents {
-                    let fileName = file.lastPathComponent
-
-                    if isMatchingTemporaryFile(
-                        fileName: fileName,
-                        rawBaseName: rawBaseName,
-                        sanitizedBaseName: sanitizedBaseName,
-                        videoId: videoId
-                    ) {
-                        try? fileManager.removeItem(at: file)
-                    }
-                }
-            } catch {
-                await MainActor.run {
-                    LoggerService.shared.log("Error during temporary files cleanup: \(error.localizedDescription)", level: .error)
-                }
-            }
-        }
+        // yt-dlp temporary data is routed to a per-download siphon_scratch_* directory
+        // and removed by YtdlpService's scoped defer. Do not scan the user's save
+        // folder for .part/.tmp names: those files may pre-date this download or
+        // belong to another process, and filename similarity is not ownership.
     }
 }
