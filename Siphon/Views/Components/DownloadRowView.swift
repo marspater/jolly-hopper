@@ -169,6 +169,7 @@ struct DownloadRowView: View {
                 actionButtons
                     .frame(minWidth: download.status == .fileExists ? 0 : 62, alignment: .trailing)
                     .padding(.top, 1)
+                    .animation(SiphonAnimation.snappySpring, value: download.status)
             }
         }
         .padding(SiphonTheme.spacing14)
@@ -652,7 +653,7 @@ struct FileThumbnailView: View {
                         .font(.system(size: 18, weight: .semibold))
                 }
                 .buttonStyle(.siphonIcon(size: 28))
-                .foregroundColor(SiphonTheme.statusQueued)
+                .foregroundColor(SiphonTheme.statusForeground(for: .queued, colorScheme: colorScheme))
                 .help(languageService.s("pause"))
                 .accessibilityLabel(languageService.s("pause"))
                 
@@ -702,7 +703,7 @@ struct FileThumbnailView: View {
                         .font(.system(size: 18, weight: .semibold))
                 }
                 .buttonStyle(.siphonIcon(size: 28))
-                .foregroundColor(SiphonTheme.statusQueued)
+                .foregroundColor(SiphonTheme.statusForeground(for: .queued, colorScheme: colorScheme))
                 .help(languageService.s("pause"))
                 .accessibilityLabel(languageService.s("pause"))
                 
@@ -804,7 +805,7 @@ struct FileThumbnailView: View {
                         .font(.system(size: 18, weight: .semibold))
                 }
                 .buttonStyle(.siphonIcon(size: 28))
-                .foregroundColor(SiphonTheme.statusQueued)
+                .foregroundColor(SiphonTheme.statusForeground(for: .queued, colorScheme: colorScheme))
                 .help(languageService.s("retry"))
                 .accessibilityLabel(languageService.s("retry"))
                 
@@ -865,7 +866,7 @@ struct FileThumbnailView: View {
                         Text(languageService.s("overwrite"))
                             .font(.geist(11, weight: .medium))
                     }
-                    .foregroundColor(SiphonTheme.statusQueued)
+                    .foregroundColor(SiphonTheme.statusForeground(for: .queued, colorScheme: colorScheme))
                 }
                 .buttonStyle(.siphonGhost)
                 .help(languageService.s("overwrite"))
