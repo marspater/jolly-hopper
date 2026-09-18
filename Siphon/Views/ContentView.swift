@@ -38,7 +38,6 @@ struct ContentView: View {
     var body: some View {
         ZStack {
             mainLayout
-                .preferredColorScheme(theme == "light" ? .light : (theme == "dark" ? .dark : nil))
                 .background(MainWindowConfigurator())
                 .onAppear {
                     SiphonTheme.applyTheme(theme)
@@ -570,8 +569,8 @@ struct StatusSegmentButton: View {
                 // Liquid water wave animation in accent color (ambient in background)
                 LiquidWaterWaveView(color: color, isHovered: isHovered, isActive: isActive, seed: segmentSeed)
                     .opacity(isActive ? 0.70 : (isHovered ? 0.45 : 0.15))
-                    .animation(renderingEnvironment.reduceMotion ? nil : SiphonAnimation.hoverSpring, value: isHovered)
-                    .animation(renderingEnvironment.reduceMotion ? nil : SiphonAnimation.fluidSpring, value: isActive)
+                    .animation(SiphonAnimation.hoverSpring, value: isHovered)
+                    .animation(SiphonAnimation.fluidSpring, value: isActive)
                     .zIndex(0)
 
                 // Status text, count, and progress ring prominently in the front
