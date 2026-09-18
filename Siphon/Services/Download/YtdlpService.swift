@@ -1120,7 +1120,7 @@ class YtdlpService: ObservableObject {
     }
 
 
-    func fetchPlaylistInfo(url: String, rawCookies: String? = nil) async throws -> [MediaInfo] {
+    func fetchPlaylistInfo(url: String, rawCookies: String? = nil, rawUserAgent: String? = nil) async throws -> [MediaInfo] {
         guard let path = ytdlpPath else {
             throw YtdlpError.notFound
         }
@@ -1164,7 +1164,13 @@ class YtdlpService: ObservableObject {
 
         let parsedHost = (URL(string: url)?.host ?? url).lowercased()
         let isYouTube = parsedHost == "youtube.com" || parsedHost.hasSuffix(".youtube.com") || parsedHost == "youtu.be" || parsedHost.hasSuffix(".youtu.be")
-        if !isYouTube {
+        if let exactUA = rawUserAgent?.trimmingCharacters(in: .whitespacesAndNewlines), !exactUA.isEmpty {
+            args.append(contentsOf: ["--user-agent", exactUA])
+            args.append(contentsOf: ["--add-header", "Accept-Language:en-US,en;q=0.9"])
+            if !isYouTube {
+                args.append(contentsOf: ["--extractor-args", "generic:impersonate=\(recuImpersonationTarget(rawUserAgent: exactUA))"])
+            }
+        } else if !isYouTube {
             args.append(contentsOf: ["--extractor-args", "generic:impersonate"])
         }
         args.append("--")
@@ -2155,7 +2161,7 @@ public struct DownloadResult: Sendable {
             }
             let value = String(decoded[range]).replacingOccurrences(of: "&amp;", with: "&")
             guard let url = URL(string: value),
-                  ["http", "https"].contains(url.scheme?.lowercased() ?? ""),
+                  url.scheme?.lowercased() == "https",
                   url.user == nil,
                   url.password == nil else {
                 continue
