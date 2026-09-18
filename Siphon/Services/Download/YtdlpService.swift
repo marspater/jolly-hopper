@@ -2032,8 +2032,19 @@ public struct DownloadResult: Sendable {
         return browser
     }
 
-    private func appendCookieArgs(for url: String, to args: inout [String], force: Bool = false) -> Bool {
-        guard let browser = configuredBrowserCookieSource() else { return false }
+    private func appendCookieArgs(
+        for url: String,
+        to args: inout [String],
+        force: Bool = false,
+        browserOverride: String? = nil
+    ) -> Bool {
+        let browser: String?
+        if browserOverride != nil {
+            browser = Self.validatedBrowserCookieSource(browserOverride)
+        } else {
+            browser = configuredBrowserCookieSource()
+        }
+        guard let browser else { return false }
         if isCookieDenied(browser: browser, url: url) { return false }
         if force || !args.contains("--cookies-from-browser") {
             let cookieArg = Self.cookiesFromBrowserArgument(for: browser)
@@ -2042,16 +2053,23 @@ public struct DownloadResult: Sendable {
         return true
     }
 
+    nonisolated static func validatedBrowserCookieSource(_ raw: String?) -> String? {
+        guard let raw else { return nil }
+        let browser = raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if browser == "none" || browser.isEmpty { return nil }
+        let allowed = Set(SupportedBrowser.allCases.map(\.rawValue))
+        return allowed.contains(browser) ? browser : nil
+    }
+
     private func configuredBrowserCookieSource() -> String? {
         let raw = UserDefaults.standard.string(forKey: UserDefaultsKeys.browserForCookies) ?? "safari"
-        let browser = raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        if browser == "none" { return nil }
-        let allowed = Set(SupportedBrowser.allCases.map(\.rawValue))
-        if allowed.contains(browser) {
-            return browser
+        guard let browser = Self.validatedBrowserCookieSource(raw) else {
+            if raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() != "none" {
+                LoggerService.shared.log("Invalid or unrecognized browserForCookies setting '\(raw)', falling back to none", level: .warning)
+            }
+            return nil
         }
-        LoggerService.shared.log("Invalid or unrecognized browserForCookies setting '\(raw)', falling back to none", level: .warning)
-        return nil
+        return browser
     }
 
     private func logCookieUsage(for url: String, usingBrowserCookies: Bool) {
