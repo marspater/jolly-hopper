@@ -1647,7 +1647,8 @@ struct AddDownloadView: View {
                 let info = try await downloadManager.ytdlpService.fetchInfo(
                     url: cleanURL,
                     rawCookies: session?.rawCookies,
-                    rawUserAgent: session?.rawUserAgent
+                    rawUserAgent: session?.rawUserAgent,
+                    browserCookieSource: session?.browserCookieSource
                 )
                 guard !Task.isCancelled else { return }
                 mediaInfo = info
@@ -1745,7 +1746,8 @@ struct AddDownloadView: View {
                 let items = try await downloadManager.ytdlpService.fetchPlaylistInfo(
                     url: urlInput,
                     rawCookies: session?.rawCookies,
-                    rawUserAgent: session?.rawUserAgent
+                    rawUserAgent: session?.rawUserAgent,
+                    browserCookieSource: session?.browserCookieSource
                 )
                 guard !Task.isCancelled else { return }
                 playlistItems = items
@@ -1841,6 +1843,7 @@ struct AddDownloadView: View {
             forceOverwrite: false,
             rawCookies: nil,
             rawUserAgent: nil,
+            browserCookieSource: nil,
             selectedFormatId: inputMode == .single ? selectedFormatId : nil,
             hdrAction: isVideoTab ? (HDRAction(rawValue: selectedHDRAction) ?? .preserveHDR) : nil,
             resolutionFallbackPolicy: isVideoTab ? (ResolutionFallbackPolicy(rawValue: resolutionFallbackPolicyRaw) ?? .strictCeiling) : nil,
@@ -1933,6 +1936,7 @@ struct AddDownloadView: View {
         if let session = appState.consumeBrowserSession(for: urls) {
             finalOptions.rawCookies = session.rawCookies
             finalOptions.rawUserAgent = session.rawUserAgent
+            finalOptions.browserCookieSource = session.browserCookieSource
         }
         finalOptions.customFilename = nil
         downloadManager.addDownloads(urls: urls, options: finalOptions)
