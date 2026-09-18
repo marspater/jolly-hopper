@@ -79,6 +79,7 @@ struct ContentView: View {
                     )
                 }
         }
+        .siphonAdaptiveRendering()
         .alert(languageService.s("update_available_title"), isPresented: $showUpdateAlert) {
             Button(languageService.s("update_now")) {
                 PreferencesWindowManager.shared.showPreferencesWindow(

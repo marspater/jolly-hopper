@@ -105,7 +105,7 @@ struct RecentDownloadRowView: View {
             HStack(spacing: 6) {
                 if download.sourceDomain == "YouTube" {
                     Circle()
-                        .fill(Color.red)
+                        .fill(SiphonTheme.sourceYouTube)
                         .frame(width: 6, height: 6)
                 }
                 Text(download.sourceDomain)

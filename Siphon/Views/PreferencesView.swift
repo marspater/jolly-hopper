@@ -146,6 +146,7 @@ struct PreferencesView: View {
         .padding(.horizontal, SiphonTheme.spacing16)
         .padding(.bottom, SiphonTheme.spacing16)
         .frame(minWidth: 500, idealWidth: 520, maxWidth: 620, minHeight: 646, idealHeight: 662, maxHeight: 780)
+        .siphonAdaptiveRendering()
         .preferredColorScheme(theme == "light" ? .light : (theme == "dark" ? .dark : nil))
         .accentColor(SiphonTheme.accent)
         .background(PreferencesWindowConfigurator())
@@ -227,7 +228,6 @@ struct PreferencesView: View {
                             .fill(SiphonTheme.accent.opacity(0.35))
                             .blur(radius: 6)
                             .padding(-1)
-                            .allowedDynamicRange(AdaptiveRenderingEnvironment.shared.capabilities.supportsEDR ? .high : .standard)
 
                         Capsule()
                             .fill(SiphonTheme.primaryGradient)

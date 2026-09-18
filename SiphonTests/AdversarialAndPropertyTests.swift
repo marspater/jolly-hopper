@@ -231,4 +231,49 @@ final class AdversarialAndPropertyTests: XCTestCase {
         XCTAssertEqual(resolved[0].formatId, "137", "Should fall back gracefully to valid 1080p stream")
         XCTAssertEqual(resolved[1].formatId, "140")
     }
+
+    // MARK: - Display cadence policy
+
+    func testRenderingCapabilitiesUse60HzBaseline() {
+        let capabilities = RenderingCapabilities(
+            supportsEDR: false,
+            supportsP3: true,
+            reduceTransparency: false,
+            maxRefreshRate: 60
+        )
+
+        XCTAssertEqual(capabilities.preferredAnimationFrameRate, 60)
+        XCTAssertEqual(capabilities.animationMinimumInterval, 1.0 / 60.0, accuracy: 0.000_001)
+    }
+
+    func testRenderingCapabilitiesUse120HzOnSupportedPanels() {
+        let capabilities = RenderingCapabilities(
+            supportsEDR: true,
+            supportsP3: true,
+            reduceTransparency: false,
+            maxRefreshRate: 120
+        )
+        let fasterPanel = RenderingCapabilities(
+            supportsEDR: true,
+            supportsP3: true,
+            reduceTransparency: false,
+            maxRefreshRate: 144
+        )
+
+        XCTAssertEqual(capabilities.preferredAnimationFrameRate, 120)
+        XCTAssertEqual(fasterPanel.preferredAnimationFrameRate, 120)
+        XCTAssertEqual(capabilities.animationMinimumInterval, 1.0 / 120.0, accuracy: 0.000_001)
+    }
+
+    func testRenderingCapabilitiesDoNotPromoteIntermediateRefreshRates() {
+        let capabilities = RenderingCapabilities(
+            supportsEDR: false,
+            supportsP3: true,
+            reduceTransparency: false,
+            maxRefreshRate: 90
+        )
+
+        XCTAssertEqual(capabilities.preferredAnimationFrameRate, 60)
+    }
+
 }
