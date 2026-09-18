@@ -2329,7 +2329,7 @@ public struct DownloadResult: Sendable {
 
         // curl/yt-dlp impersonation cannot execute a JavaScript challenge. Escalate
         // to a real WebKit engine before falling back to a plain HTTP request.
-        if html.isEmpty,
+        if html.isEmpty, (sawChallenge || sawForbidden),
            let rendered = try await loadBoyfriendTVRenderedPage(pageURL, stage: "main-webkit"),
            hasBoyfriendTVMediaData(rendered) {
             html = rendered
@@ -2475,7 +2475,7 @@ public struct DownloadResult: Sendable {
                     }
                 }
 
-                if streamUrl == nil,
+                if streamUrl == nil, (sawChallenge || sawForbidden),
                    let embedPageURL = URL(string: embed),
                    let rendered = try await loadBoyfriendTVRenderedPage(embedPageURL, stage: "embed-webkit"),
                    let extracted = extractStreamURLFromHTML(rendered) {
@@ -4969,7 +4969,7 @@ enum YtdlpError: LocalizedError {
         case .subtitleError(let output):
             return "Subtitle error: \(output)"
         case .cloudflareBlocked:
-            return "Blocked by Cloudflare anti-bot protection. Please select your browser as cookie source in Settings > Advanced and try again."
+            return "Blocked by Cloudflare anti-bot protection. Siphon could not complete the browser challenge automatically."
         case .ffmpegInstallationFailed(let path):
             return "FFmpeg installation failed. Please try updating dependencies again. Attempted path: \(path)"
         case .boyfriendTVNeedsBrowserCookies:
