@@ -46,7 +46,7 @@ public enum ExternalDownloadTargetPolicy {
         for part in parts {
             guard !part.isEmpty,
                   part.allSatisfy(\.isNumber),
-                  let value = UInt8(part) else {
+                  let value = UInt8(String(part)) else {
                 return nil
             }
             bytes.append(value)
