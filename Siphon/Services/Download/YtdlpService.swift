@@ -1097,7 +1097,13 @@ class YtdlpService: ObservableObject {
         }
     }
 
-    private func fetchPlaylistSummaryInfo(path: String, url: String, rawCookies: String? = nil) async throws -> MediaInfo {
+    private func fetchPlaylistSummaryInfo(
+        path: String,
+        url: String,
+        rawCookies: String? = nil,
+        rawUserAgent: String? = nil,
+        browserCookieSource: String? = nil
+    ) async throws -> MediaInfo {
         var args = [
             path,
             "--ignore-config",
@@ -1131,11 +1137,20 @@ class YtdlpService: ObservableObject {
                 }
             }
         } else {
-            let usingBrowserCookies = appendCookieArgs(for: url, to: &args)
+            let usingBrowserCookies = appendCookieArgs(
+                for: url,
+                to: &args,
+                browserOverride: browserCookieSource
+            )
             logCookieUsage(for: url, usingBrowserCookies: usingBrowserCookies)
         }
 
-        args.append(contentsOf: ["--extractor-args", "generic:impersonate"])
+        if let exactUA = rawUserAgent?.trimmingCharacters(in: .whitespacesAndNewlines), !exactUA.isEmpty {
+            args.append(contentsOf: ["--user-agent", exactUA])
+            args.append(contentsOf: ["--extractor-args", "generic:impersonate=\(recuImpersonationTarget(rawUserAgent: exactUA))"])
+        } else {
+            args.append(contentsOf: ["--extractor-args", "generic:impersonate"])
+        }
         args.append("--")
         args.append(url)
 
@@ -1167,7 +1182,12 @@ class YtdlpService: ObservableObject {
     }
 
 
-    func fetchPlaylistInfo(url: String, rawCookies: String? = nil, rawUserAgent: String? = nil) async throws -> [MediaInfo] {
+    func fetchPlaylistInfo(
+        url: String,
+        rawCookies: String? = nil,
+        rawUserAgent: String? = nil,
+        browserCookieSource: String? = nil
+    ) async throws -> [MediaInfo] {
         guard let path = ytdlpPath else {
             throw YtdlpError.notFound
         }
@@ -1205,7 +1225,11 @@ class YtdlpService: ObservableObject {
                 }
             }
         } else {
-            let usingBrowserCookies = appendCookieArgs(for: url, to: &args)
+            let usingBrowserCookies = appendCookieArgs(
+                for: url,
+                to: &args,
+                browserOverride: browserCookieSource
+            )
             logCookieUsage(for: url, usingBrowserCookies: usingBrowserCookies)
         }
 
