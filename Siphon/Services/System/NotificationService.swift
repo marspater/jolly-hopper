@@ -120,11 +120,24 @@ final class NotificationService: NSObject, @unchecked Sendable, UNUserNotificati
 
             let script = "display notification \"\(escapedBody)\" with title \"\(escapedTitle)\" sound name \"default\""
             let process = Process()
+            let errorPipe = Pipe()
             process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
             process.arguments = ["-e", script]
+            process.standardOutput = FileHandle.nullDevice
+            process.standardError = errorPipe
             do {
                 try process.run()
-                self?.logMessage("Fallback notification displayed: \(title)", level: .info)
+                process.waitUntilExit()
+                if process.terminationStatus == 0 {
+                    self?.logMessage("Fallback notification displayed: \(title)", level: .info)
+                } else {
+                    let data = errorPipe.fileHandleForReading.readDataToEndOfFile()
+                    let details = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines)
+                    let reason = details?.isEmpty == false
+                        ? details!
+                        : "osascript exited with status \(process.terminationStatus)"
+                    self?.logMessage("Fallback notification failed: \(reason)", level: .warning)
+                }
             } catch {
                 self?.logMessage("Fallback notification failed: \(error.localizedDescription)", level: .warning)
             }
