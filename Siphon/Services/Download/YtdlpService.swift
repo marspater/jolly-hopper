@@ -796,10 +796,18 @@ class YtdlpService: ObservableObject {
                         browserCookieSource: browserCookieSource
                     )
                 } catch {
-                    throw mapSiteSpecificError(error, url: normalizedURL)
+                    throw mapSiteSpecificError(
+                        error,
+                        url: normalizedURL,
+                        browserCookieSource: browserCookieSource
+                    )
                 }
             }
-            throw mapSiteSpecificError(error, url: normalizedURL)
+            throw mapSiteSpecificError(
+                error,
+                url: normalizedURL,
+                browserCookieSource: browserCookieSource
+            )
         }
     }
 
@@ -1093,7 +1101,11 @@ class YtdlpService: ObservableObject {
                     browserCookieSource: browserCookieSource
                 )
             }
-            throw mapSiteSpecificError(error, url: url)
+            throw mapSiteSpecificError(
+                error,
+                url: url,
+                browserCookieSource: browserCookieSource
+            )
         }
     }
 
@@ -1317,7 +1329,8 @@ public struct DownloadResult: Sendable {
                 let recuMedia = try await resolveRecuMediaInfo(
                     url: normalizedURL,
                     rawCookies: options.rawCookies,
-                    rawUserAgent: options.rawUserAgent
+                    rawUserAgent: options.rawUserAgent,
+                    browserCookieSource: options.browserCookieSource
                 )
                 targetURL = recuMedia.playlistURL
                 customResolvedTitle = recuMedia.title
@@ -1330,7 +1343,11 @@ public struct DownloadResult: Sendable {
                 customResolvedTitle = mediaInfo?.title
                 customEmbedURL = mediaInfo?.webpageUrl
                 customThumbnailURL = mediaInfo?.thumbnail
-            } else if let btvMedia = try await resolveBoyfriendTVMediaInfo(url: url, rawCookies: options.rawCookies) {
+            } else if let btvMedia = try await resolveBoyfriendTVMediaInfo(
+                url: url,
+                rawCookies: options.rawCookies,
+                browserCookieSource: options.browserCookieSource
+            ) {
                 targetURL = resolveBoyfriendTVStreamURLForDownload(streamURL: btvMedia.streamURL, options: options)
                 customResolvedTitle = btvMedia.title
                 customEmbedURL = btvMedia.embedURL
@@ -1511,7 +1528,11 @@ public struct DownloadResult: Sendable {
                 }
             }
         } else {
-            let usingBrowserCookies = appendCookieArgs(for: normalizedURL, to: &args)
+            let usingBrowserCookies = appendCookieArgs(
+                for: normalizedURL,
+                to: &args,
+                browserOverride: options.browserCookieSource
+            )
             logCookieUsage(for: normalizedURL, usingBrowserCookies: usingBrowserCookies)
         }
         
@@ -1675,7 +1696,11 @@ public struct DownloadResult: Sendable {
                     continue
                 }
 
-                throw mapSiteSpecificError(error, url: normalizedURL)
+                throw mapSiteSpecificError(
+                    error,
+                    url: normalizedURL,
+                    browserCookieSource: options.browserCookieSource
+                )
             }
         }
 
@@ -4949,22 +4974,33 @@ public struct DownloadResult: Sendable {
         return host == "thisvid.com" || host.hasSuffix(".thisvid.com")
     }
 
-    private func shouldRetryWithBrowserCookies(error: Error, url: String, usingBrowserCookies: Bool, forceBrowserCookies: Bool) -> Bool {
+    private func shouldRetryWithBrowserCookies(
+        error: Error,
+        url: String,
+        usingBrowserCookies: Bool,
+        forceBrowserCookies: Bool,
+        browserCookieSource: String? = nil
+    ) -> Bool {
+        let selectedBrowser = Self.validatedBrowserCookieSource(browserCookieSource) ?? configuredBrowserCookieSource()
         guard !(error is CancellationError), !Task.isCancelled,
               usesBrowserTransport(url) || isGFFURL(url),
-              !usingBrowserCookies, !forceBrowserCookies, configuredBrowserCookieSource() != nil else { return false }
+              !usingBrowserCookies, !forceBrowserCookies, selectedBrowser != nil else { return false }
         let message = String(describing: error)
             .replacingOccurrences(of: #"https?://[^\s\"]+"#, with: "[URL]", options: .regularExpression).lowercased()
         return message.contains("403") || message.contains("401") || message.contains("sign in") ||
             message.contains("login") || message.contains("cloudflare") || message.contains("challenge")
     }
 
-    private func mapSiteSpecificError(_ error: Error, url: String) -> Error {
+    private func mapSiteSpecificError(
+        _ error: Error,
+        url: String,
+        browserCookieSource: String? = nil
+    ) -> Error {
         let errString = "\(error)"
         let lowerErr = (usesBrowserTransport(url)
             ? errString.replacingOccurrences(of: #"https?://[^\s\"]+"#, with: "[URL]", options: .regularExpression)
             : errString).lowercased()
-        let configuredBrowser = configuredBrowserCookieSource()
+        let configuredBrowser = Self.validatedBrowserCookieSource(browserCookieSource) ?? configuredBrowserCookieSource()
 
         if (configuredBrowser == "safari" || configuredBrowser == nil) && isSafariPermissionError(errString) {
             return YtdlpError.safariCookiesFullDiskAccessRequired
