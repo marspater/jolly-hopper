@@ -26,7 +26,7 @@ async function getCookiesForUrl(url) {
     return null;
 }
 
-async function triggerDownload(url, host = "download", tabId = null) {
+async function triggerDownload(url, host = "download") {
     if (!url || typeof url !== "string") return;
     if (!url.startsWith("http://") && !url.startsWith("https://")) return;
 
@@ -40,38 +40,9 @@ async function triggerDownload(url, host = "download", tabId = null) {
         deepLink += `&ua=${encodeURIComponent(userAgent)}`;
     }
 
-    // First preference: trigger deep link within the current tab using a user-gestured anchor click
-    if (tabId && chrome.scripting && typeof chrome.scripting.executeScript === "function") {
-        try {
-            await chrome.scripting.executeScript({
-                target: { tabId: tabId },
-                func: (link) => {
-                    try {
-                        const a = document.createElement("a");
-                        a.href = link;
-                        a.style.display = "none";
-                        (document.body || document.documentElement).appendChild(a);
-                        a.click();
-                        setTimeout(() => a.remove(), 1000);
-                    } catch {
-                        window.location.href = link;
-                    }
-                },
-                args: [deepLink]
-            });
-            if (chrome.action && chrome.action.setBadgeText) {
-                chrome.action.setBadgeText({ text: "✓", tabId: tabId }).catch(() => {});
-                setTimeout(() => {
-                    chrome.action.setBadgeText({ text: "", tabId: tabId }).catch(() => {});
-                }, 1200);
-            }
-            return;
-        } catch (error) {
-            console.debug("In-page script injection failed, falling back to tab creation:", error);
-        }
-    }
-
-    // Fallback: create temporary active tab for macOS LaunchServices handoff
+    // Never inject a credential-bearing deep link into the source page DOM.
+    // A page can observe DOM mutations and would otherwise be able to read
+    // cookies, including HttpOnly values retrieved by the extension.
     chrome.tabs.create({ url: deepLink, active: true }, (createdTab) => {
         if (chrome.runtime.lastError) {
             console.warn("Failed to open Siphon deep link:", chrome.runtime.lastError.message);
@@ -90,7 +61,7 @@ async function triggerDownload(url, host = "download", tabId = null) {
 if (chrome.action && chrome.action.onClicked) {
     chrome.action.onClicked.addListener(async (tab) => {
         if (!tab || !tab.url) return;
-        await triggerDownload(tab.url, "download", tab.id);
+        await triggerDownload(tab.url, "download");
     });
 }
 
@@ -106,6 +77,6 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     }
 
     if (host) {
-        await triggerDownload(url, host, tab?.id);
+        await triggerDownload(url, host);
     }
 });
