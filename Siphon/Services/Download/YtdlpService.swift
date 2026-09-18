@@ -1027,7 +1027,7 @@ class YtdlpService: ObservableObject {
             logCookieUsage(for: url, usingBrowserCookies: usingBrowserCookies)
         }
 
-        appendSiteSpecificArgs(for: url, to: &args)
+        appendSiteSpecificArgs(for: url, rawUserAgent: rawUserAgent, to: &args)
         args.append("--")
         args.append(url)
         
@@ -2023,20 +2023,12 @@ public struct DownloadResult: Sendable {
     }
 
     nonisolated static func cookiesFromBrowserArgument(for browser: String) -> String {
-        if browser == "helium" {
-            let profileDir = FileManager.default.homeDirectoryForCurrentUser
-                .appendingPathComponent("Library/Application Support/net.imput.helium/Default").path
-            return "chromium:\(profileDir)"
-        }
         return browser
     }
 
     private func appendCookieArgs(for url: String, to args: inout [String], force: Bool = false) -> Bool {
         guard let browser = configuredBrowserCookieSource() else { return false }
         if isCookieDenied(browser: browser, url: url) { return false }
-        if browser == "safari" && !Self.hasFullDiskAccess && !force {
-            return false
-        }
         if force || !args.contains("--cookies-from-browser") {
             let cookieArg = Self.cookiesFromBrowserArgument(for: browser)
             args.append(contentsOf: ["--cookies-from-browser", cookieArg])
@@ -2265,6 +2257,9 @@ public struct DownloadResult: Sendable {
         }
 
         try Task.checkCancellation()
+        if isSafariPermissionError(output) {
+            throw YtdlpError.safariCookiesFullDiskAccessRequired
+        }
         let body = decodedDumpPagesBody(output)
         let lower = (body + "\n" + output).lowercased()
         if lower.contains("cf-chl-") ||
@@ -2293,11 +2288,6 @@ public struct DownloadResult: Sendable {
     ) async throws -> RecuExtractedMedia {
         guard let identity = Self.recuVideoIdentity(from: url) else {
             throw YtdlpError.downloadFailed("Unsupported Recu.me URL. Expected /<model>/video/<id>/play.")
-        }
-        if rawCookies?.isEmpty != false,
-           configuredBrowserCookieSource() == "safari",
-           !Self.hasFullDiskAccess {
-            throw YtdlpError.safariCookiesFullDiskAccessRequired
         }
 
         let pageURL = "https://recu.me/\(identity.model)/video/\(identity.videoID)/play"
@@ -2505,7 +2495,7 @@ public struct DownloadResult: Sendable {
             let normalized = browser.lowercased()
             guard normalized != "none",
                   !normalized.isEmpty,
-                  normalized != "safari" || hasFullDiskAccess,
+                  normalized != "safari" || hasFullDiskAccess || configured?.lowercased() == "safari",
                   seen.insert(normalized).inserted else {
                 return
             }
@@ -3824,9 +3814,7 @@ public struct DownloadResult: Sendable {
 
         var browsersToTry: [String?] = []
         if let configured = configuredBrowserCookieSource() {
-            if configured != "safari" || Self.hasFullDiskAccess {
-                browsersToTry.append(configured)
-            }
+            browsersToTry.append(configured)
         }
         for candidate in ["safari", "chrome", "brave", "firefox", "edge", "helium"] {
             if candidate == "safari" && !Self.hasFullDiskAccess {
@@ -4894,9 +4882,6 @@ public struct DownloadResult: Sendable {
                 return YtdlpError.downloadFailed("This video is unavailable, private, or has been removed.")
             }
             if lowerErr.contains("sign in") || lowerErr.contains("private video") || lowerErr.contains("login") || lowerErr.contains("members-only") || lowerErr.contains("http error 401") {
-                if configuredBrowser == "safari" && !Self.hasFullDiskAccess {
-                    return YtdlpError.safariCookiesFullDiskAccessRequired
-                }
                 if configuredBrowser == nil {
                     return YtdlpError.boyfriendTVNeedsBrowserCookies
                 } else {
@@ -4956,9 +4941,6 @@ public struct DownloadResult: Sendable {
         let isYouTube = parsedHost == "youtube.com" || parsedHost.hasSuffix(".youtube.com") || parsedHost == "youtu.be" || parsedHost.hasSuffix(".youtu.be")
         if isYouTube {
             if lowerErr.contains("403") || lowerErr.contains("sign in") || lowerErr.contains("bot") || lowerErr.contains("login_required") {
-                if configuredBrowser == "safari" && !Self.hasFullDiskAccess {
-                    return YtdlpError.safariCookiesFullDiskAccessRequired
-                }
                 if configuredBrowser == nil {
                     return YtdlpError.downloadFailed("YouTube requires authentication or browser cookies. Go to Settings > Advanced > Browser Cookies to select your browser.")
                 }
@@ -5005,7 +4987,7 @@ public struct DownloadResult: Sendable {
                lower.contains("connection reset")
     }
 
-    private func appendSiteSpecificArgs(for url: String, options: DownloadOptions? = nil, mediaInfo: MediaInfo? = nil, to args: inout [String]) {
+    private func appendSiteSpecificArgs(for url: String, options: DownloadOptions? = nil, mediaInfo: MediaInfo? = nil, rawUserAgent: String? = nil, to args: inout [String]) {
         let lowerUrl = url.lowercased()
         let parsedHost = (URL(string: url)?.host ?? url).lowercased()
         let isYouTube = parsedHost == "youtube.com" || parsedHost.hasSuffix(".youtube.com") || parsedHost == "youtu.be" || parsedHost.hasSuffix(".youtu.be")
@@ -5033,7 +5015,7 @@ public struct DownloadResult: Sendable {
             return configuredBrowserCookieSource() == "safari"
         }()
         if !isYouTube {
-            if isRecu, let exactUA = options?.rawUserAgent?.trimmingCharacters(in: .whitespacesAndNewlines), !exactUA.isEmpty {
+            if let exactUA = (rawUserAgent ?? options?.rawUserAgent)?.trimmingCharacters(in: .whitespacesAndNewlines), !exactUA.isEmpty {
                 args.append(contentsOf: ["--user-agent", exactUA])
                 args.append(contentsOf: ["--add-header", "Accept-Language:en-US,en;q=0.9"])
                 args.append(contentsOf: ["--extractor-args", "generic:impersonate=\(recuImpersonationTarget(rawUserAgent: exactUA))"])
@@ -5229,35 +5211,17 @@ public struct DownloadResult: Sendable {
         if let override = hasFullDiskAccessOverride {
             return override
         }
+        // This is an advisory cookie-read probe, not a query of macOS's FDA toggle.
+        // Missing files and a different running app identity can both make it inconclusive.
         let homeDir = FileManager.default.homeDirectoryForCurrentUser.path
         let candidatePaths = [
             "\(homeDir)/Library/Containers/com.apple.Safari/Data/Library/Cookies/Cookies.binarycookies",
-            "\(homeDir)/Library/Safari/Bookmarks.plist",
-            "\(homeDir)/Library/Safari/History.db",
-            "\(homeDir)/Library/Safari/CloudTabs.db",
-            "\(homeDir)/Library/Cookies/Cookies.binarycookies",
-            "\(NSHomeDirectory())/Library/Containers/com.apple.Safari/Data/Library/Cookies/Cookies.binarycookies",
-            "\(NSHomeDirectory())/Library/Safari/Bookmarks.plist"
+            "\(homeDir)/Library/Cookies/Cookies.binarycookies"
         ]
         for path in candidatePaths {
-            if let fileHandle = FileHandle(forReadingAtPath: path) {
-                try? fileHandle.close()
-                return true
-            }
             let fd = Darwin.open(path, O_RDONLY)
             if fd >= 0 {
                 Darwin.close(fd)
-                return true
-            }
-        }
-
-        let candidateDirs = [
-            "\(homeDir)/Library/Safari",
-            "\(homeDir)/Library/Containers/com.apple.Safari/Data/Library/Cookies",
-            "\(homeDir)/Library/Cookies"
-        ]
-        for dir in candidateDirs {
-            if let contents = try? FileManager.default.contentsOfDirectory(atPath: dir), !contents.isEmpty {
                 return true
             }
         }

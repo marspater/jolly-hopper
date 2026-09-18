@@ -1485,8 +1485,8 @@ final class QueueAndErrorUXTests: XCTestCase {
         let lang = LanguageService()
         XCTAssertEqual(lang.s("check_permission"), "Check Permission")
         XCTAssertEqual(lang.s("restart_siphon"), "Restart Siphon")
-        XCTAssertTrue(lang.s("safari_fda_granted_feedback").contains("Full Disk Access detected"))
-        XCTAssertTrue(lang.s("safari_fda_not_detected_hint").contains("Full Disk Access not detected"))
+        XCTAssertTrue(lang.s("safari_fda_granted_feedback").contains("Safari cookie file is readable"))
+        XCTAssertTrue(lang.s("safari_fda_not_detected_hint").contains("could not be confirmed"))
         XCTAssertTrue(lang.s("safari_fda_restart_hint").contains("restart Siphon"))
     }
 

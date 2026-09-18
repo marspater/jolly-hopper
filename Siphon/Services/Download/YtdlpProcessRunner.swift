@@ -325,6 +325,10 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
     }
 
     public func runCommand(_ args: [String]) async throws -> String {
+        try Task.checkCancellation()
+        let prepared = try HeliumCookieReader.prepare(args)
+        defer { prepared.cookieFile?.cleanup() }
+        let args = prepared.args
         let process = Process()
         let pipe = Pipe()
         let controller = DownloadProcessController()
@@ -402,6 +406,10 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
         onProgress: @escaping @Sendable (Double, String?, String?) -> Void,
         onOutput: @escaping @Sendable (String) -> Void
     ) async throws -> DownloadProcessResult {
+        try Task.checkCancellation()
+        let prepared = try HeliumCookieReader.prepare(args)
+        defer { prepared.cookieFile?.cleanup() }
+        let args = prepared.args
         let controller = processController ?? DownloadProcessController()
 
         return try await withTaskCancellationHandler(operation: {
