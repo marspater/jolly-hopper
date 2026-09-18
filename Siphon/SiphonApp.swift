@@ -168,7 +168,7 @@ struct SiphonApp: App {
               targetURL.scheme == "http" || targetURL.scheme == "https",
               ExternalDownloadTargetPolicy.isAllowed(targetURL) else {
             LoggerService.shared.log(
-                "Rejected external download target outside the public network boundary: \(LoggerService.sanitizeURLForLog(rawVideoUrl))",
+                "Rejected external download target outside the public network boundary: \(LoggerService.sanitizeURLForLog(videoUrl ?? "<missing>"))",
                 level: .warning
             )
             return
