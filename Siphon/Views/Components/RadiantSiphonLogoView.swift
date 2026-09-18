@@ -12,9 +12,8 @@ struct RadiantSiphonLogoView: View {
     @Environment(\.siphonRenderingCapabilities) private var renderingCapabilities
 
     var body: some View {
-        // Ambient branding stays static at rest. The timeline wakes only for
-        // direct pointer interaction, reducing idle rendering work.
-        if renderingEnvironment.shouldAnimateAmbient && isHovered {
+        // Keep the signature glow alive while Siphon is active; hover adds energy.
+        if renderingEnvironment.shouldAnimateAmbient {
             animatedLogoView
         } else {
             staticLogoView
@@ -39,8 +38,8 @@ struct RadiantSiphonLogoView: View {
                     .fill(
                         AngularGradient(
                             gradient: Gradient(colors: [
-                                SiphonTheme.accent.opacity(isHovered ? 0.50 : 0.30),
-                                SiphonTheme.accentSecondary.opacity(isHovered ? 0.35 : 0.18),
+                                SiphonTheme.accent.opacity(isHovered ? 0.58 : 0.38),
+                                SiphonTheme.accentSecondary.opacity(isHovered ? 0.42 : 0.24),
                                 SiphonTheme.accentViolet.opacity(isHovered ? 0.25 : 0.12),
                                 SiphonTheme.accentSecondary.opacity(isHovered ? 0.40 : 0.22),
                                 SiphonTheme.accent.opacity(isHovered ? 0.50 : 0.30)
