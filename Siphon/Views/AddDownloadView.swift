@@ -1641,7 +1641,11 @@ struct AddDownloadView: View {
                 guard !Task.isCancelled else { return }
             }
             do {
-                let info = try await downloadManager.ytdlpService.fetchInfo(url: cleanURL, rawCookies: appState.rawCookiesToDownload)
+                let info = try await downloadManager.ytdlpService.fetchInfo(
+                    url: cleanURL,
+                    rawCookies: appState.rawCookiesToDownload,
+                    rawUserAgent: appState.rawUserAgentToDownload
+                )
                 guard !Task.isCancelled else { return }
                 mediaInfo = info
                 customFilename = info.title
@@ -1828,6 +1832,7 @@ struct AddDownloadView: View {
             conversionCodec: conversionCodecEnum,
             forceOverwrite: false,
             rawCookies: nil,
+            rawUserAgent: nil,
             selectedFormatId: inputMode == .single ? selectedFormatId : nil,
             hdrAction: isVideoTab ? (HDRAction(rawValue: selectedHDRAction) ?? .preserveHDR) : nil,
             resolutionFallbackPolicy: isVideoTab ? (ResolutionFallbackPolicy(rawValue: resolutionFallbackPolicyRaw) ?? .strictCeiling) : nil,
@@ -1921,6 +1926,10 @@ struct AddDownloadView: View {
             finalOptions.rawCookies = rawCookies
             appState.rawCookiesToDownload = nil
         }
+        if let rawUserAgent = appState.rawUserAgentToDownload, !rawUserAgent.isEmpty {
+            finalOptions.rawUserAgent = rawUserAgent
+            appState.rawUserAgentToDownload = nil
+        }
         finalOptions.customFilename = nil
         downloadManager.addDownloads(urls: urls, options: finalOptions)
         appState.selectedNavItem = .downloading
@@ -1934,6 +1943,10 @@ struct AddDownloadView: View {
         if let rawCookies = appState.rawCookiesToDownload, !rawCookies.isEmpty {
             finalOptions.rawCookies = rawCookies
             appState.rawCookiesToDownload = nil
+        }
+        if let rawUserAgent = appState.rawUserAgentToDownload, !rawUserAgent.isEmpty {
+            finalOptions.rawUserAgent = rawUserAgent
+            appState.rawUserAgentToDownload = nil
         }
 
         let cleanURL = urlInput.trimmingCharacters(in: .whitespacesAndNewlines)
