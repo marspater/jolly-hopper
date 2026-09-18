@@ -831,7 +831,7 @@ class YtdlpService: ObservableObject {
             )
             return MediaInfo(
                 id: recuMedia.videoID,
-                title: parsedInfo?.title?.isEmpty == false ? parsedInfo!.title : recuMedia.title,
+                title: recuMedia.title,
                 description: parsedInfo?.description,
                 thumbnail: parsedInfo?.thumbnail ?? recuMedia.thumbnailURL,
                 duration: parsedInfo?.duration,
@@ -1413,11 +1413,14 @@ public struct DownloadResult: Sendable {
             additionalCookies.append((name: sc.name, value: sc.value))
         }
 
-        let shouldForwardRawCookiesToTarget = !isRecuURL(normalizedURL)
-        if (shouldForwardRawCookiesToTarget && options.rawCookies?.isEmpty == false) || !additionalCookies.isEmpty {
+        if isRecuURL(normalizedURL) {
+            // Recu session cookies are only for resolving the signed playlist URL.
+            // The CDN playlist/segments are intentionally fetched without account cookies.
+            LoggerService.shared.log("Recu stream download uses the resolved CDN URL without forwarding account cookies", level: .debug)
+        } else if (options.rawCookies?.isEmpty == false) || !additionalCookies.isEmpty {
             if let cookieFile = try? SecureCookieFile.create(
                 url: targetURL,
-                rawCookies: shouldForwardRawCookiesToTarget ? options.rawCookies : nil,
+                rawCookies: options.rawCookies,
                 additionalCookies: additionalCookies
             ) {
                 secureCookieFiles.append(cookieFile)
@@ -2182,18 +2185,20 @@ public struct DownloadResult: Sendable {
     }
 
     private func decodedDumpPagesBody(_ output: String) -> String {
-        output.split(whereSeparator: \.isNewline).compactMap { line -> String? in
+        var decodedPages: [String] = []
+        for line in output.split(whereSeparator: \.isNewline) {
             let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !trimmed.isEmpty,
-                  !trimmed.hasPrefix("ERROR:"),
-                  !trimmed.hasPrefix("WARNING:"),
-                  let data = Data(base64Encoded: trimmed, options: .ignoreUnknownCharacters),
+                  let data = Data(base64Encoded: trimmed),
                   let decoded = String(data: data, encoding: .utf8),
                   !decoded.isEmpty else {
-                return nil
+                continue
             }
-            return decoded
-        }.joined(separator: "\n")
+            decodedPages.append(decoded)
+        }
+        // yt-dlp can dump redirect/challenge pages before the final response.
+        // Recu's API states are exact strings, so the final decoded body is authoritative.
+        return decodedPages.last ?? ""
     }
 
     private func recuDumpPage(
@@ -2286,6 +2291,11 @@ public struct DownloadResult: Sendable {
     ) async throws -> RecuExtractedMedia {
         guard let identity = Self.recuVideoIdentity(from: url) else {
             throw YtdlpError.downloadFailed("Unsupported Recu.me URL. Expected /<model>/video/<id>/play.")
+        }
+        if rawCookies?.isEmpty != false,
+           configuredBrowserCookieSource() == "safari",
+           !Self.hasFullDiskAccess {
+            throw YtdlpError.safariCookiesFullDiskAccessRequired
         }
 
         var lastPageHTML = ""
