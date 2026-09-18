@@ -41,6 +41,12 @@ public enum UpdateInstallError: LocalizedError, Sendable {
 public final class UpdateInstaller: Sendable {
     public init() {}
 
+    private static func log(_ message: String, level: LoggerService.LogLevel) {
+        Task { @MainActor in
+            LoggerService.shared.log(message, level: level)
+        }
+    }
+
     /// Installs a downloaded package file (.dmg, .zip, or .app) into the running application bundle location.
     /// Swift owns all lifecycle phases: stage -> mount -> locate -> verify -> backup -> replace -> rollback -> relaunch.
     public func install(
@@ -67,15 +73,24 @@ public final class UpdateInstaller: Sendable {
         let stagingDir = fm.temporaryDirectory.appendingPathComponent("Siphon_Install_\(UUID().uuidString)")
         try fm.createDirectory(at: stagingDir, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
         defer {
-            try? fm.removeItem(at: stagingDir)
-            try? fm.removeItem(at: packageURL)
+            for cleanupURL in [stagingDir, packageURL] where fm.fileExists(atPath: cleanupURL.path) {
+                do {
+                    try fm.removeItem(at: cleanupURL)
+                } catch {
+                    Self.log("Updater cleanup failed for \(cleanupURL.lastPathComponent): \(error.localizedDescription)", level: .warning)
+                }
+            }
         }
 
         // 3. Extract or mount package to locate .app
         var mountedMountPoint: String? = nil
         defer {
             if let mp = mountedMountPoint {
-                _ = try? unmountDMG(mountPoint: mp)
+                do {
+                    try unmountDMG(mountPoint: mp)
+                } catch {
+                    Self.log("Failed to unmount update disk image during cleanup: \(error.localizedDescription)", level: .warning)
+                }
             }
         }
 
@@ -94,9 +109,14 @@ public final class UpdateInstaller: Sendable {
             try fm.copyItem(at: appInMount, to: targetStagedApp)
             stagedAppURL = targetStagedApp
 
-            // Unmount DMG now that it's copied to staging
-            _ = try? unmountDMG(mountPoint: mountPoint)
-            mountedMountPoint = nil
+            // Unmount DMG now that it's copied to staging. If it fails, keep the
+            // mount point registered so the defer above retries cleanup.
+            do {
+                try unmountDMG(mountPoint: mountPoint)
+                mountedMountPoint = nil
+            } catch {
+                Self.log("Could not unmount update disk image after staging: \(error.localizedDescription)", level: .warning)
+            }
         } else if ext == "zip" {
             try extractZip(zipURL: packageURL, destinationDir: stagingDir)
             guard let appInStaging = locateAppBundle(in: stagingDir) else {
@@ -156,15 +176,44 @@ public final class UpdateInstaller: Sendable {
                 allowAdHoc: allowAdHoc
             )
 
-            try? fm.removeItem(at: backupURL)
+            if fm.fileExists(atPath: backupURL.path) {
+                do {
+                    try fm.removeItem(at: backupURL)
+                } catch {
+                    Self.log("Update installed, but the temporary backup could not be removed: \(error.localizedDescription)", level: .warning)
+                }
+            }
         } catch {
-            if fm.fileExists(atPath: currentAppURL.path) {
-                try? fm.removeItem(at: currentAppURL)
-            }
+            let replacementError = error
+            var rollbackFailures: [String] = []
+
             if didMoveCurrentToBackup {
-                try? fm.moveItem(at: backupURL, to: currentAppURL)
+                if fm.fileExists(atPath: currentAppURL.path) {
+                    do {
+                        try fm.removeItem(at: currentAppURL)
+                    } catch {
+                        rollbackFailures.append("could not remove failed replacement: \(error.localizedDescription)")
+                    }
+                }
+
+                if fm.fileExists(atPath: backupURL.path) {
+                    do {
+                        try fm.moveItem(at: backupURL, to: currentAppURL)
+                    } catch {
+                        rollbackFailures.append("could not restore backup: \(error.localizedDescription)")
+                    }
+                } else {
+                    rollbackFailures.append("backup bundle was missing")
+                }
             }
-            throw UpdateInstallError.replacementFailed("Failed to replace application: \(error.localizedDescription)")
+
+            if !rollbackFailures.isEmpty {
+                throw UpdateInstallError.rollbackFailed(
+                    "Replacement failed: \(replacementError.localizedDescription). Rollback errors: \(rollbackFailures.joined(separator: "; "))."
+                )
+            }
+
+            throw UpdateInstallError.replacementFailed("Failed to replace application: \(replacementError.localizedDescription)")
         }
     }
 
@@ -214,10 +263,20 @@ public final class UpdateInstaller: Sendable {
         process.executableURL = URL(fileURLWithPath: "/usr/bin/hdiutil")
         process.arguments = ["detach", mountPoint, "-force"]
         process.standardOutput = Pipe()
-        process.standardError = Pipe()
+        let errorPipe = Pipe()
+        process.standardError = errorPipe
 
         try process.run()
         process.waitUntilExit()
+
+        guard process.terminationStatus == 0 else {
+            let data = errorPipe.fileHandleForReading.readDataToEndOfFile()
+            let details = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines)
+            if let details, !details.isEmpty {
+                throw UpdateInstallError.unmountFailed(details)
+            }
+            throw UpdateInstallError.unmountFailed("hdiutil detach exited with status \(process.terminationStatus)")
+        }
     }
 
     private func extractZip(zipURL: URL, destinationDir: URL) throws {
@@ -236,21 +295,49 @@ public final class UpdateInstaller: Sendable {
     }
 
     public func locateAppBundle(in directory: URL) -> URL? {
-        if directory.pathExtension.lowercased() == "app" {
-            return directory
-        }
-        guard let contents = try? FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil) else {
+        var visited = Set<String>()
+        return locateAppBundle(in: directory, depth: 0, visited: &visited)
+    }
+
+    private func locateAppBundle(in directory: URL, depth: Int, visited: inout Set<String>) -> URL? {
+        guard depth <= 8 else { return nil }
+
+        let candidate = directory.standardizedFileURL
+        guard visited.insert(candidate.path).inserted,
+              let values = try? candidate.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey]),
+              values.isDirectory == true,
+              values.isSymbolicLink != true else {
             return nil
         }
-        if let direct = contents.first(where: { $0.pathExtension.lowercased() == "app" }) {
-            return direct
+
+        if candidate.pathExtension.lowercased() == "app" {
+            return candidate
         }
+
+        guard let contents = try? FileManager.default.contentsOfDirectory(
+            at: candidate,
+            includingPropertiesForKeys: [.isDirectoryKey, .isSymbolicLinkKey],
+            options: [.skipsHiddenFiles]
+        ) else {
+            return nil
+        }
+
+        for item in contents where item.pathExtension.lowercased() == "app" {
+            if let itemValues = try? item.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey]),
+               itemValues.isDirectory == true,
+               itemValues.isSymbolicLink != true {
+                return item.standardizedFileURL
+            }
+        }
+
         for item in contents {
-            var isDir: ObjCBool = false
-            if FileManager.default.fileExists(atPath: item.path, isDirectory: &isDir), isDir.boolValue {
-                if let nested = locateAppBundle(in: item) {
-                    return nested
-                }
+            guard let itemValues = try? item.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey]),
+                  itemValues.isDirectory == true,
+                  itemValues.isSymbolicLink != true else {
+                continue
+            }
+            if let nested = locateAppBundle(in: item, depth: depth + 1, visited: &visited) {
+                return nested
             }
         }
         return nil

@@ -295,12 +295,22 @@ class DownloadManager: ObservableObject {
         }
         processQueue()
 
-        while download.status == .queued || download.status == .fetching || download.status == .downloading || download.status == .processing {
-            if let task = activeTasks[download.id] {
-                await task.value
-                break
+        while download.status == .queued ||
+              download.status == .fetching ||
+              download.status == .downloading ||
+              download.status == .processing ||
+              activeTasks[download.id] != nil {
+            if Task.isCancelled {
+                return
             }
-            try? await Task.sleep(nanoseconds: 50_000_000)
+            do {
+                try await Task.sleep(nanoseconds: 50_000_000)
+            } catch is CancellationError {
+                return
+            } catch {
+                LoggerService.shared.log("Unexpected wait failure while observing download lifecycle: \(error.localizedDescription)", level: .error)
+                return
+            }
         }
     }
 

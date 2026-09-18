@@ -1,5 +1,6 @@
 const { test, describe, before, after } = require('node:test');
 const assert = require('node:assert/strict');
+const http = require('node:http');
 const { createServer } = require('../index.js');
 
 describe('Siphon Companion Server', () => {
@@ -86,6 +87,32 @@ describe('Siphon Companion Server', () => {
     const res2 = await fetch(`${baseUrl}/api/latest`);
     const data2 = await res2.json();
     assert.equal(data2.cached, true);
+  });
+
+  test('malformed Host header returns 400 without crashing the server', async () => {
+    const addr = server.address();
+    const result = await new Promise((resolve, reject) => {
+      const req = http.request({
+        hostname: '127.0.0.1',
+        port: addr.port,
+        path: '/',
+        method: 'GET',
+        headers: { Host: '%' }
+      }, (res) => {
+        let body = '';
+        res.setEncoding('utf8');
+        res.on('data', (chunk) => { body += chunk; });
+        res.on('end', () => resolve({ statusCode: res.statusCode, body }));
+      });
+      req.on('error', reject);
+      req.end();
+    });
+
+    assert.equal(result.statusCode, 400);
+    assert.deepEqual(JSON.parse(result.body), { error: 'Bad Request' });
+
+    const health = await fetch(`${baseUrl}/health`);
+    assert.equal(health.status, 200, 'server must remain healthy after malformed input');
   });
 
   test('GET /unknown returns 404', async () => {

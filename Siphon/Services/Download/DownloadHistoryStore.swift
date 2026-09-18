@@ -35,8 +35,11 @@ final class DownloadHistoryStore {
             }
             if skippedCount > 0 {
                 LoggerService.shared.log("Skipped invalid download history entries while restoring history.", level: .warning)
-                if let repairedData = try? JSONEncoder().encode(decoded) {
+                do {
+                    let repairedData = try JSONEncoder().encode(decoded)
                     userDefaults.set(repairedData, forKey: historyKey)
+                } catch {
+                    LoggerService.shared.log("Failed to persist repaired download history: \(error.localizedDescription)", level: .error)
                 }
             }
             return decoded

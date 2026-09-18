@@ -20,10 +20,10 @@ class LoginItemHelper {
             } else {
                 try SMAppService.mainApp.unregister()
             }
+            UserDefaults.standard.set(enabled, forKey: UserDefaultsKeys.launchAtLogin)
         } catch {
             LoggerService.shared.log("Failed to update login item status: \(error.localizedDescription)", level: .error)
+            UserDefaults.standard.set(isEnabled, forKey: UserDefaultsKeys.launchAtLogin)
         }
-        
-        UserDefaults.standard.set(enabled, forKey: UserDefaultsKeys.launchAtLogin)
     }
 }
