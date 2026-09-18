@@ -292,13 +292,13 @@ struct DetailView: View {
             case .home:
                 HomeView()
             case .downloading:
-                DownloadListView(downloads: downloadManager.downloadingDownloads, emptyMessage: languageService.s("empty_downloading"), emptyIcon: "arrow.down.circle", showStop: true)
+                DownloadListView(downloads: downloadManager.downloadingDownloads, emptyMessage: languageService.s("empty_downloading"), emptyDetail: languageService.s("empty_downloading_detail"), emptyIcon: "arrow.down.circle", showStop: true)
             case .queued:
-                DownloadListView(downloads: downloadManager.queuedDownloads, emptyMessage: languageService.s("empty_queued"), emptyIcon: "clock", showStop: true)
+                DownloadListView(downloads: downloadManager.queuedDownloads, emptyMessage: languageService.s("empty_queued"), emptyDetail: languageService.s("empty_queued_detail"), emptyIcon: "clock", showStop: true)
             case .completed:
-                DownloadListView(downloads: downloadManager.completedDownloads, emptyMessage: languageService.s("empty_completed"), emptyIcon: "checkmark.circle", showStop: false)
+                DownloadListView(downloads: downloadManager.completedDownloads, emptyMessage: languageService.s("empty_completed"), emptyDetail: languageService.s("empty_completed_detail"), emptyIcon: "checkmark.circle", showStop: false)
             case .failed:
-                DownloadListView(downloads: downloadManager.failedDownloads, emptyMessage: languageService.s("empty_failed"), emptyIcon: "exclamationmark.triangle", showStop: false)
+                DownloadListView(downloads: downloadManager.failedDownloads, emptyMessage: languageService.s("empty_failed"), emptyDetail: languageService.s("empty_failed_detail"), emptyIcon: "exclamationmark.triangle", showStop: false)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
