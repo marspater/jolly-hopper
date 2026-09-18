@@ -79,7 +79,7 @@ truth only when the value is genuinely reused or has semantic meaning.
 - Content cards use `SiphonTheme.cardBackground` and matching border helpers.
 - Interactive status/navigation surfaces may use `siphonGlassSurface()`, which
   opts into native `Glass.regular.interactive()` on macOS 26+ and preserves the
-  adaptive Siphon material fallback on macOS 14–25.
+  adaptive Siphon material fallback on macOS 15–25.
 - Inset fields use `SiphonTheme.fieldBackground` and `fieldBorder`.
 - Controls use the shared Siphon button styles or the native macOS bordered
   styles when they better express platform behavior.
