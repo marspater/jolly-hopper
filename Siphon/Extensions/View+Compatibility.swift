@@ -400,6 +400,37 @@ public enum SiphonTheme {
     public static let statusFailed = Color(.displayP3, red: 0.94, green: 0.26, blue: 0.30, opacity: 1.0)
     public static let statusHdr = Color(.displayP3, red: 0.98, green: 0.65, blue: 0.15, opacity: 1.0)
     public static let statusHdrSecondary = Color(.displayP3, red: 1.0, green: 0.46, blue: 0.08, opacity: 1.0)
+
+    // Small status text/icons need more luminance contrast on Aqua than the
+    // saturated accent colors used for glow, fills, and motion.
+    private static let statusDownloadingLight = Color(.displayP3, red: 0.02, green: 0.34, blue: 0.76, opacity: 1.0)
+    private static let statusQueuedLight = Color(.displayP3, red: 0.66, green: 0.32, blue: 0.02, opacity: 1.0)
+    private static let statusCompletedLight = Color(.displayP3, red: 0.06, green: 0.43, blue: 0.19, opacity: 1.0)
+    private static let statusFailedLight = Color(.displayP3, red: 0.76, green: 0.10, blue: 0.16, opacity: 1.0)
+
+    public static func statusForeground(for status: DownloadStatus, colorScheme: ColorScheme) -> Color {
+        if colorScheme == .dark {
+            switch status {
+            case .downloading, .fetching, .processing: return statusDownloading
+            case .queued, .paused, .fileExists: return statusQueued
+            case .completed: return statusCompleted
+            case .failed, .stopped: return statusFailed
+            }
+        }
+
+        switch status {
+        case .downloading, .fetching, .processing: return statusDownloadingLight
+        case .queued, .paused, .fileExists: return statusQueuedLight
+        case .completed: return statusCompletedLight
+        case .failed, .stopped: return statusFailedLight
+        }
+    }
+
+    public static func accentForeground(for colorScheme: ColorScheme) -> Color {
+        colorScheme == .dark
+            ? accentHighlight
+            : Color(.displayP3, red: 0.02, green: 0.34, blue: 0.76, opacity: 1.0)
+    }
     
     public static let downloading = statusDownloading
     public static let queued = statusQueued
@@ -700,8 +731,9 @@ public enum SiphonTheme {
                     startPoint: .top,
                     endPoint: .bottom
                 ),
-                lineWidth: isFocused ? 1.5 : 1
+                lineWidth: isFocused ? 2.0 : 1
             )
+            .shadow(color: isFocused ? accent.opacity(0.18) : .clear, radius: isFocused ? 4 : 0)
     }
     
     // Settings & Diagnostics Subtle Divider
@@ -969,6 +1001,7 @@ public struct SiphonPrimaryButtonStyle: ButtonStyle {
         configuration.label
             .font(.geist(13, weight: .semibold))
             .foregroundColor(.white)
+            .frame(minHeight: 18, alignment: .center)
             .padding(.horizontal, SiphonTheme.spacing16)
             .padding(.vertical, 6)
             .background(SiphonTheme.primaryGradient)
@@ -978,7 +1011,7 @@ public struct SiphonPrimaryButtonStyle: ButtonStyle {
                     .stroke(Color.white.opacity(0.25), lineWidth: 1)
             )
             .shadow(color: SiphonTheme.accent.opacity(isHovered ? 0.35 : 0.20), radius: isHovered ? 8 : 4, y: 2)
-            .scaleEffect(configuration.isPressed ? 0.97 : (isHovered ? 1.018 : 1.0))
+            .scaleEffect(configuration.isPressed ? 0.965 : (isHovered ? 1.02 : 1.0))
             .animation(SiphonAnimation.buttonPressSpring, value: configuration.isPressed)
             .animation(SiphonAnimation.buttonHoverSpring, value: isHovered)
             .onHover { isHovered = $0 }
@@ -997,6 +1030,7 @@ public struct SiphonSecondaryButtonStyle: ButtonStyle {
         configuration.label
             .font(.geist(13, weight: .medium))
             .foregroundColor(.primary)
+            .frame(minHeight: 18, alignment: .center)
             .padding(.horizontal, SiphonTheme.spacing14)
             .padding(.vertical, 6)
             .background(SiphonTheme.controlBackground(cornerRadius: cornerRadius, isHovered: isHovered))
@@ -1025,6 +1059,7 @@ public struct SiphonGhostButtonStyle: ButtonStyle {
         configuration.label
             .font(.geist(12, weight: .medium))
             .foregroundColor(isHovered ? .primary : .secondary)
+            .frame(minHeight: 16, alignment: .center)
             .padding(.horizontal, SiphonTheme.spacing10)
             .padding(.vertical, 5)
             .background(
@@ -1105,12 +1140,12 @@ public struct SiphonCardHoverModifier: ViewModifier {
 
     public func body(content: Content) -> some View {
         content
-            .scaleEffect(isHovered ? 1.008 : 1.0)
-            .offset(y: isHovered ? -1 : 0)
+            .scaleEffect(isHovered ? 1.012 : 1.0)
+            .offset(y: isHovered ? -2 : 0)
             .shadow(
-                color: tint.opacity(isHovered ? 0.16 : 0.035),
-                radius: isHovered ? 12 : 4,
-                y: isHovered ? 4 : 2
+                color: tint.opacity(isHovered ? 0.20 : 0.035),
+                radius: isHovered ? 14 : 4,
+                y: isHovered ? 5 : 2
             )
             .animation(SiphonAnimation.bouncySpring, value: isHovered)
     }
