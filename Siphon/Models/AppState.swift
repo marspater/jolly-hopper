@@ -12,10 +12,16 @@ public enum ExternalDownloadTargetPolicy {
               ["http", "https"].contains(scheme),
               url.user == nil,
               url.password == nil,
-              let host = url.host?.lowercased(),
-              !host.isEmpty else {
+              let rawHost = url.host?.lowercased(),
+              !rawHost.isEmpty else {
             return false
         }
+
+        var host = rawHost
+        while host.hasSuffix(".") {
+            host.removeLast()
+        }
+        guard !host.isEmpty else { return false }
 
         if host == "localhost" ||
             host.hasSuffix(".localhost") ||
@@ -24,6 +30,13 @@ public enum ExternalDownloadTargetPolicy {
             host.hasSuffix(".internal") ||
             host.hasSuffix(".lan") ||
             !host.contains(".") {
+            return false
+        }
+
+        // inet_aton-style IPv4 shorthand, octal and hexadecimal forms can resolve
+        // even when a strict dotted-quad parser rejects them. Refuse those forms
+        // before allowing a hostname through to yt-dlp.
+        if looksLikeLegacyIPv4Literal(host) {
             return false
         }
 
@@ -36,6 +49,36 @@ public enum ExternalDownloadTargetPolicy {
         }
 
         return true
+    }
+
+    private static func looksLikeLegacyIPv4Literal(_ host: String) -> Bool {
+        let parts = host.split(separator: ".", omittingEmptySubsequences: false).map(String.init)
+        guard (1...4).contains(parts.count), parts.allSatisfy({ !$0.isEmpty }) else {
+            return false
+        }
+
+        var sawNonCanonicalComponent = parts.count != 4
+        for part in parts {
+            let lower = part.lowercased()
+            if lower.hasPrefix("0x") {
+                let suffix = lower.dropFirst(2)
+                guard !suffix.isEmpty, suffix.allSatisfy(\.isHexDigit) else { return false }
+                sawNonCanonicalComponent = true
+                continue
+            }
+
+            if part.count > 1, part.first == "0" {
+                guard part.allSatisfy({ ("0"..."7").contains(String($0)) }) else {
+                    return false
+                }
+                sawNonCanonicalComponent = true
+                continue
+            }
+
+            guard part.allSatisfy(\.isNumber) else { return false }
+        }
+
+        return sawNonCanonicalComponent
     }
 
     private static func parseIPv4(_ host: String) -> [UInt8]? {
