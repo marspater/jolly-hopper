@@ -1793,6 +1793,31 @@ final class QueueAndErrorUXTests: XCTestCase {
         XCTAssertTrue(delegate.applicationShouldHandleReopen(NSApplication.shared, hasVisibleWindows: true))
     }
 
+    func testExternalDownloadTargetsRejectPrivateAndLocalNetworks() throws {
+        let allowed = try XCTUnwrap(URL(string: "https://example.com/video"))
+        XCTAssertTrue(ExternalDownloadTargetPolicy.isAllowed(allowed))
+
+        let blocked = [
+            "http://127.0.0.1:8080/video",
+            "http://10.0.0.8/video",
+            "http://172.16.4.2/video",
+            "http://192.168.1.10/video",
+            "http://169.254.169.254/latest/meta-data",
+            "http://[::1]/video",
+            "http://[fd00::1]/video",
+            "http://printer.local/video",
+            "http://intranet/video"
+        ]
+
+        for value in blocked {
+            let url = try XCTUnwrap(URL(string: value))
+            XCTAssertFalse(
+                ExternalDownloadTargetPolicy.isAllowed(url),
+                "External deep links must not cause requests to local/private target \(value)"
+            )
+        }
+    }
+
     func testBrowserSessionCredentialsAreBoundToOriginalHost() throws {
         let state = AppState()
         let sourceURL = try XCTUnwrap(URL(string: "https://secure.example.com/video/1"))
