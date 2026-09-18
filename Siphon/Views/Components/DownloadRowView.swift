@@ -1066,43 +1066,98 @@ struct FileThumbnailView: View {
     
     private var logSheet: some View {
         VStack(spacing: 0) {
-            HStack {
+            // Header
+            HStack(spacing: SiphonTheme.spacing12) {
+                Image(systemName: "terminal.fill")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundColor(SiphonTheme.accent)
+
                 Text(languageService.s("download_log"))
-                    .font(.headline)
+                    .font(.geist(15, weight: .bold))
+
+                if !download.log.isEmpty {
+                    SiphonTagBadge(
+                        text: "\(download.log.split(whereSeparator: \.isNewline).count) \(languageService.s("entries"))",
+                        tintColor: .secondary,
+                        isMonospaced: true
+                    )
+                }
+
                 Spacer()
-                
+
                 Button {
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(download.log, forType: .string)
-                    isCopiedLog = true
+                    showLog = false
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundColor(.secondary)
+                }
+                .buttonStyle(.siphonIcon(size: 24))
+                .help(languageService.s("close"))
+                .accessibilityLabel(languageService.s("close"))
+                .keyboardShortcut(.cancelAction)
+            }
+            .padding(.horizontal, SiphonTheme.spacing16)
+            .padding(.top, SiphonTheme.spacing16)
+            .padding(.bottom, SiphonTheme.spacing12)
+
+            // Log Console Container
+            ZStack {
+                SiphonTheme.cardBackground(cornerRadius: SiphonTheme.radiusControl)
+                    .overlay(SiphonTheme.cardBorder(cornerRadius: SiphonTheme.radiusControl))
+
+                ReadOnlyLogView(
+                    text: download.log.isEmpty ? languageService.s("no_log") : download.log,
+                    fontSize: 11
+                )
+                .padding(SiphonTheme.spacing8)
+            }
+            .padding(.horizontal, SiphonTheme.spacing16)
+            .padding(.bottom, SiphonTheme.spacing14)
+
+            // Bottom Action Bar
+            HStack(spacing: SiphonTheme.spacing10) {
+                Button {
+                    let pasteboard = NSPasteboard.general
+                    pasteboard.clearContents()
+                    pasteboard.setString(download.log, forType: .string)
+                    withAnimation(SiphonAnimation.snappySpring) {
+                        isCopiedLog = true
+                    }
                     Task {
-                        try? await Task.sleep(nanoseconds: 2 * 1_000_000_000)
-                        isCopiedLog = false
+                        try? await Task.sleep(nanoseconds: 1_500_000_000)
+                        withAnimation(SiphonAnimation.snappySpring) {
+                            isCopiedLog = false
+                        }
                     }
                 } label: {
-                    Label(isCopiedLog ? languageService.s("copied") : languageService.s("copy_log"), systemImage: isCopiedLog ? "checkmark" : "doc.on.doc")
-                        .font(.caption)
+                    HStack(spacing: 6) {
+                        Image(systemName: isCopiedLog ? "checkmark" : "doc.on.doc")
+                            .font(.system(size: 11, weight: .semibold))
+                        Text(isCopiedLog ? languageService.s("copied") : languageService.s("copy_log"))
+                            .font(.geist(12, weight: .medium))
+                    }
+                    .foregroundColor(isCopiedLog ? SiphonTheme.statusCompleted : .primary)
+                    .opacity(download.log.isEmpty ? 0.5 : 1.0)
                 }
-                .buttonStyle(.bordered)
-                .help(isCopiedLog ? languageService.s("completed") : languageService.s("download_log"))
-                .accessibilityLabel(isCopiedLog ? languageService.s("completed") : languageService.s("download_log"))
-                
-                Button(languageService.s("close")) {
+                .buttonStyle(.siphonSecondary)
+                .disabled(download.log.isEmpty)
+                .help(languageService.s("copy_log"))
+                .accessibilityLabel(languageService.s("copy_log"))
+
+                Spacer()
+
+                Button(languageService.s("done")) {
                     showLog = false
                 }
                 .buttonStyle(.siphonPrimary)
-                .keyboardShortcut(.cancelAction)
+                .keyboardShortcut(.defaultAction)
             }
-            .padding(SiphonTheme.spacing14)
-            .siphonWindowBackground()
-            
-            SiphonTheme.subtleDivider
-            
-            ReadOnlyLogView(text: download.log.isEmpty ? languageService.s("no_log") : download.log)
-                .padding(8)
-                .background(Color.black.opacity(0.2))
+            .padding(.horizontal, SiphonTheme.spacing16)
+            .padding(.bottom, SiphonTheme.spacing16)
         }
-        .frame(width: 620, height: 420)
+        .frame(width: 640, height: 440)
+        .siphonWindowBackground()
     }
 }
 

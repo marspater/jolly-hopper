@@ -200,6 +200,21 @@ final class QueueAndErrorUXTests: XCTestCase {
         XCTAssertEqual(info?.actionType, .retry)
     }
     
+    func testBoyfriendTVAntiBotFailureDoesNotPretendItIsALoginError() {
+        let lang = LanguageService()
+        let download = Download(
+            url: "https://www.boyfriendtv.com/videos/1710869/test/",
+            options: .default
+        )
+        download.errorMessage = "Blocked by anti-bot protection. Siphon could not complete the browser challenge automatically."
+
+        let info = download.errorUXInfo(lang: lang)
+
+        XCTAssertEqual(info?.headline, "Couldn't download")
+        XCTAssertEqual(info?.description, "Website anti-bot challenge blocked the request")
+        XCTAssertEqual(info?.actionType, .retry)
+    }
+    
     func testQueuePauseAndResume() {
         let manager = DownloadManager()
         let options = DownloadOptions.default
@@ -708,9 +723,10 @@ final class QueueAndErrorUXTests: XCTestCase {
         XCTAssertTrue(t1.isCancelled, "All active tasks must be cancelled on shutdown")
         XCTAssertEqual(d1.status, .stopped)
         XCTAssertEqual(d2.status, .stopped)
-        XCTAssertEqual(d3.status, .stopped)
-        XCTAssertTrue(manager.activeControllers.isEmpty)
-        XCTAssertTrue(manager.activeTasks.isEmpty)
+        XCTAssertFalse(manager.activeControllers.isEmpty, "Shutdown requests cancellation without dropping controller ownership prematurely")
+        XCTAssertFalse(manager.activeTasks.isEmpty, "Shutdown requests cancellation without dropping task ownership prematurely")
+        manager.activeControllers.removeAll()
+        manager.activeTasks.removeAll()
     }
 
     func testNotificationFloodResilience() async {

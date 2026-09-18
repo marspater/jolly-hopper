@@ -32,4 +32,12 @@ final class BrowserUtilsTests: XCTestCase {
 
         XCTAssertEqual(firstResult, secondResult)
     }
+
+    func testSupportedBrowserHeliumProperties() {
+        let helium = SupportedBrowser.helium
+        XCTAssertEqual(helium.rawValue, "helium")
+        XCTAssertEqual(helium.displayName, "Helium")
+        XCTAssertEqual(helium.bundleIdentifier, "net.imput.helium")
+        XCTAssertTrue(SupportedBrowser.allCases.contains(.helium))
+    }
 }

@@ -10,6 +10,7 @@ public enum SupportedBrowser: String, CaseIterable, Identifiable, Sendable {
     case vivaldi = "vivaldi"
     case safari = "safari"
     case chromium = "chromium"
+    case helium = "helium"
 
     public var id: String { rawValue }
 
@@ -23,6 +24,7 @@ public enum SupportedBrowser: String, CaseIterable, Identifiable, Sendable {
         case .vivaldi: return "Vivaldi"
         case .safari: return "Safari"
         case .chromium: return "Chromium"
+        case .helium: return "Helium"
         }
     }
 
@@ -36,6 +38,7 @@ public enum SupportedBrowser: String, CaseIterable, Identifiable, Sendable {
         case .vivaldi: return "com.vivaldi.Vivaldi"
         case .safari: return "com.apple.Safari"
         case .chromium: return "org.chromium.Chromium"
+        case .helium: return "net.imput.helium"
         }
     }
 }

@@ -137,7 +137,7 @@ struct SiphonApp: App {
         let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
         let queryItems = components?.queryItems
         let videoUrl = queryItems?.first(where: { $0.name == "url" })?.value
-        let rawCookies = url.host == "download" ? queryItems?.first(where: { $0.name == "cookies" })?.value : nil
+        let rawCookies = (url.host == "download" || url.host == "fast-download") ? queryItems?.first(where: { $0.name == "cookies" })?.value : nil
         
         guard let rawVideoUrl = videoUrl?.trimmingCharacters(in: .whitespacesAndNewlines),
               !rawVideoUrl.isEmpty,

@@ -35,7 +35,7 @@ chrome.contextMenus.onClicked.addListener((info) => {
                     chrome.tabs.remove(createdTab.id).catch((error) => {
                         console.debug("Failed to close temporary Siphon deep-link tab:", error);
                     });
-                }, 500);
+                }, 3500);
             }
         });
     }
