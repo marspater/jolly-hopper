@@ -762,13 +762,11 @@ struct WhatsNewSheetView: View {
         }
         .frame(width: 540, height: 520)
         .background(
-            RoundedRectangle(cornerRadius: SiphonTheme.radiusCard)
-                .fill(.ultraThinMaterial)
+            SiphonTheme.cardBackground(cornerRadius: SiphonTheme.radiusCard)
                 .ignoresSafeArea()
         )
         .overlay(
-            RoundedRectangle(cornerRadius: SiphonTheme.radiusCard)
-                .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+            SiphonTheme.cardBorder(cornerRadius: SiphonTheme.radiusCard)
                 .ignoresSafeArea()
         )
     }

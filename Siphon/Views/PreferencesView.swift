@@ -109,11 +109,7 @@ struct PreferencesView: View {
             }
             .padding(3)
             .frame(height: 38)
-            .background(
-                Capsule()
-                    .fill(Color.primary.opacity(0.04))
-                    .background(Capsule().fill(.ultraThinMaterial))
-            )
+            .background(SiphonTheme.pillBackground(isSelected: false))
             .clipShape(Capsule())
             .overlay(
                 Capsule()
@@ -225,7 +221,7 @@ struct PreferencesView: View {
                 Text(title)
                     .font(.geist(12, weight: .semibold))
                     .lineLimit(1)
-                    .fixedSize(horizontal: true, vertical: false)
+                    .minimumScaleFactor(0.82)
             }
             .foregroundColor(selectedTab == tab ? .white : .secondary)
             .padding(.horizontal, 8)
@@ -1105,7 +1101,7 @@ struct PreferencesView: View {
         let granted = YtdlpService.hasFullDiskAccess
         hasFullDiskAccess = granted
         isCheckingPermission = false
-        withAnimation(.easeInOut(duration: 0.2)) {
+        withAnimation(SiphonAnimation.snappySpring) {
             if granted {
                 permissionCheckMessage = languageService.s("safari_fda_granted_feedback")
             } else {

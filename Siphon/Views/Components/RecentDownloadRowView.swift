@@ -112,6 +112,7 @@ struct RecentDownloadRowView: View {
                 Text(download.sourceDomain)
                     .font(.geist(11, weight: .regular))
                     .foregroundColor(.secondary)
+                    .lineLimit(1)
             }
         }
         .frame(minWidth: 160, alignment: .leading)
@@ -234,6 +235,6 @@ struct RecentDownloadRowView: View {
                     .foregroundColor(.secondary)
             }
         }
-        .frame(width: 160, alignment: .trailing)
+        .frame(minWidth: 120, idealWidth: 160, maxWidth: 190, alignment: .trailing)
     }
 }

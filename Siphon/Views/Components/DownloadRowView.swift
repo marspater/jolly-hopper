@@ -1117,9 +1117,10 @@ struct LinearProgressBar: View {
         GeometryReader { geometry in
             ZStack(alignment: .leading) {
                 // Liquid glass track
-                Capsule()
-                    .fill(Color.primary.opacity(0.08))
-                    .background(Capsule().fill(.ultraThinMaterial))
+                SiphonTheme.tintedPillBackground(
+                    tint: .primary,
+                    opacity: 0.08
+                )
                     .overlay(
                         Capsule()
                             .strokeBorder(
