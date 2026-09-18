@@ -2295,6 +2295,7 @@ public struct DownloadResult: Sendable {
         referer: String?,
         rawCookies: String?,
         rawUserAgent: String?,
+        browserCookieSource: String?,
         stage: String
     ) async throws -> String {
         guard let ytdlp = ytdlpPath else { throw YtdlpError.notFound }
@@ -2322,7 +2323,11 @@ public struct DownloadResult: Sendable {
                 args.append(contentsOf: ["--cookies", cookieFile.path])
             }
         } else {
-            _ = appendCookieArgs(for: targetURL, to: &args)
+            _ = appendCookieArgs(
+                for: targetURL,
+                to: &args,
+                browserOverride: browserCookieSource
+            )
         }
 
         let userAgent = rawUserAgent?.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -2379,7 +2384,8 @@ public struct DownloadResult: Sendable {
     private func resolveRecuMediaInfo(
         url: String,
         rawCookies: String?,
-        rawUserAgent: String?
+        rawUserAgent: String?,
+        browserCookieSource: String?
     ) async throws -> RecuExtractedMedia {
         guard let identity = Self.recuVideoIdentity(from: url) else {
             throw YtdlpError.downloadFailed("Unsupported Recu.me URL. Expected /<model>/video/<id>/play.")
@@ -2398,6 +2404,7 @@ public struct DownloadResult: Sendable {
                 referer: nil,
                 rawCookies: rawCookies,
                 rawUserAgent: rawUserAgent,
+                browserCookieSource: browserCookieSource,
                 stage: attempt == 0 ? "page" : "page-refresh"
             )
             guard let token = Self.recuToken(from: lastPageHTML, videoID: identity.videoID) else {
@@ -2420,6 +2427,7 @@ public struct DownloadResult: Sendable {
                 referer: pageURL,
                 rawCookies: rawCookies,
                 rawUserAgent: rawUserAgent,
+                browserCookieSource: browserCookieSource,
                 stage: attempt == 0 ? "api" : "api-refresh"
             )
 
