@@ -311,6 +311,16 @@ class LoggerService: ObservableObject {
 
     func exportLogs() async throws -> URL {
         let fileURL = logFileURL
+
+        // Serialize the export behind pending file writes. log() updates the
+        // in-memory array immediately but persists on fileQueue, so reading the
+        // file without draining that queue can export a stale snapshot.
+        await withCheckedContinuation { continuation in
+            fileQueue.async {
+                continuation.resume()
+            }
+        }
+
         return try await Task.detached(priority: .userInitiated) { [fileURL] () -> URL in
             let fm = FileManager.default
             let exportFilename = "Siphon_Exported_Logs_\(Int(Date().timeIntervalSince1970)).log"
