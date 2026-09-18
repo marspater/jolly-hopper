@@ -408,7 +408,7 @@ public enum SiphonTheme {
     private static let statusCompletedLight = Color(.displayP3, red: 0.06, green: 0.43, blue: 0.19, opacity: 1.0)
     private static let statusFailedLight = Color(.displayP3, red: 0.76, green: 0.10, blue: 0.16, opacity: 1.0)
 
-    public static func statusForeground(for status: DownloadStatus, colorScheme: ColorScheme) -> Color {
+    static func statusForeground(for status: DownloadStatus, colorScheme: ColorScheme) -> Color {
         if colorScheme == .dark {
             switch status {
             case .downloading, .fetching, .processing: return statusDownloading
