@@ -4499,41 +4499,61 @@ public struct DownloadResult: Sendable {
         return regex.firstMatch(in: time, options: [], range: nsRange) != nil
     }
 
+    nonisolated private static let safeFormatIdCharacters =
+        CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "+/[]<>=,:_-."))
+
+    nonisolated private static let safeSubtitleLanguageCharacters =
+        CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-_"))
+
+    nonisolated private static let invalidFilenameCharacters =
+        CharacterSet(charactersIn: "/\\?%*|\"<>:").union(.controlCharacters)
+
+    nonisolated private static let reservedFilenameNames: Set<String> = [
+        "CON", "PRN", "AUX", "NUL",
+        "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
+        "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
+        ".DS_STORE", "DS_STORE"
+    ]
+
     nonisolated static func isSafeFormatId(_ formatId: String) -> Bool {
         guard !formatId.isEmpty, !formatId.hasPrefix("-"), formatId.count <= 128 else { return false }
-        let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "+/[]<>=,:_-."))
-        return formatId.unicodeScalars.allSatisfy { allowed.contains($0) }
+        return formatId.unicodeScalars.allSatisfy { safeFormatIdCharacters.contains($0) }
     }
 
     nonisolated static func isSafeSubtitleLanguage(_ lang: String) -> Bool {
         guard !lang.isEmpty, !lang.hasPrefix("-"), lang.count <= 32 else { return false }
-        let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-_"))
-        return lang.unicodeScalars.allSatisfy { allowed.contains($0) }
+        return lang.unicodeScalars.allSatisfy { safeSubtitleLanguageCharacters.contains($0) }
     }
 
     nonisolated static func sanitizeFilename(_ filename: String) -> String {
-        let invalidCharacters = CharacterSet(charactersIn: "/\\?%*|\"<>:").union(.controlCharacters)
-        let components = filename.components(separatedBy: invalidCharacters)
-        let cleaned = components.joined(separator: "_")
+        var cleanedScalars: [UnicodeScalar] = []
+        cleanedScalars.reserveCapacity(filename.unicodeScalars.count)
+
+        for scalar in filename.unicodeScalars {
+            cleanedScalars.append(
+                invalidFilenameCharacters.contains(scalar) ? "_" : scalar
+            )
+        }
+
+        let cleaned = String(String.UnicodeScalarView(cleanedScalars))
         var trimmed = cleaned.replacingOccurrences(of: "..", with: "").trimmingCharacters(in: .whitespacesAndNewlines)
-        
+
         while trimmed.hasPrefix(".") || trimmed.hasPrefix("-") {
             trimmed = String(trimmed.dropFirst()).trimmingCharacters(in: .whitespacesAndNewlines)
         }
-        
-        let reservedNames = Set(["CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9", "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9", ".DS_STORE", "DS_STORE"])
-        if reservedNames.contains(trimmed.uppercased()) {
+
+        if reservedFilenameNames.contains(trimmed.uppercased()) {
             trimmed = "download_\(trimmed)"
         }
 
         while trimmed.hasSuffix(".") {
             trimmed = String(trimmed.dropLast()).trimmingCharacters(in: .whitespacesAndNewlines)
         }
-        
+
         if trimmed.count > 200 {
             trimmed = String(trimmed.prefix(200))
         }
-        
+
         return trimmed.isEmpty ? "download" : trimmed
     }
 
