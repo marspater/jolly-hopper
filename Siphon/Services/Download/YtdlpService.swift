@@ -1120,7 +1120,7 @@ class YtdlpService: ObservableObject {
     }
 
 
-    func fetchPlaylistInfo(url: String, rawCookies: String? = nil) async throws -> [MediaInfo] {
+    func fetchPlaylistInfo(url: String, rawCookies: String? = nil, rawUserAgent: String? = nil) async throws -> [MediaInfo] {
         guard let path = ytdlpPath else {
             throw YtdlpError.notFound
         }
@@ -1164,7 +1164,13 @@ class YtdlpService: ObservableObject {
 
         let parsedHost = (URL(string: url)?.host ?? url).lowercased()
         let isYouTube = parsedHost == "youtube.com" || parsedHost.hasSuffix(".youtube.com") || parsedHost == "youtu.be" || parsedHost.hasSuffix(".youtu.be")
-        if !isYouTube {
+        if let exactUA = rawUserAgent?.trimmingCharacters(in: .whitespacesAndNewlines), !exactUA.isEmpty {
+            args.append(contentsOf: ["--user-agent", exactUA])
+            args.append(contentsOf: ["--add-header", "Accept-Language:en-US,en;q=0.9"])
+            if !isYouTube {
+                args.append(contentsOf: ["--extractor-args", "generic:impersonate=\(recuImpersonationTarget(rawUserAgent: exactUA))"])
+            }
+        } else if !isYouTube {
             args.append(contentsOf: ["--extractor-args", "generic:impersonate"])
         }
         args.append("--")
@@ -2155,7 +2161,7 @@ public struct DownloadResult: Sendable {
             }
             let value = String(decoded[range]).replacingOccurrences(of: "&amp;", with: "&")
             guard let url = URL(string: value),
-                  ["http", "https"].contains(url.scheme?.lowercased() ?? ""),
+                  url.scheme?.lowercased() == "https",
                   url.user == nil,
                   url.password == nil else {
                 continue
@@ -5602,6 +5608,7 @@ public struct DownloadResult: Sendable {
         guard let urlObj = URL(string: url), let host = urlObj.host, !host.isEmpty else { return nil }
         guard let cookiesDir = YtdlpService.getSecureTempCookiesDirectory() else { return nil }
         let domain = host.hasPrefix(".") ? host : ".\(host)"
+        let requireSecureTransport = urlObj.scheme?.lowercased() == "https"
         let tempCookiesURL = cookiesDir.appendingPathComponent("siphon_header_cookies_\(UUID().uuidString).txt")
 
         var domains: [String] = [domain]
@@ -5624,7 +5631,7 @@ public struct DownloadResult: Sendable {
                 let value = sanitizeCookieToken(parts[1].trimmingCharacters(in: .whitespacesAndNewlines))
                 if !key.isEmpty && !value.isEmpty {
                     for d in uniqueDomains {
-                        lines.append("\(d)\tTRUE\t/\tFALSE\t\(expiry)\t\(key)\t\(value)")
+                        lines.append("\(d)\tTRUE\t/\t\(requireSecureTransport ? "TRUE" : "FALSE")\t\(expiry)\t\(key)\t\(value)")
                     }
                 }
             }

@@ -1239,12 +1239,18 @@ final class DownloadManagerTests: XCTestCase {
 
     func testQuickAndMenuDownloadDefaultLanguagesOnlyEnglish() {
         let manager = DownloadManager()
-        manager.quickDownload(url: "https://example.com/quick")
+        manager.quickDownload(
+            url: "https://example.com/quick",
+            rawCookies: "session=fixture",
+            rawUserAgent: "FixtureBrowser/1.0"
+        )
         guard let quickItem = manager.downloads.last else {
             XCTFail("Quick download was not added")
             return
         }
         XCTAssertEqual(quickItem.options.subtitleLanguages, ["en"], "Quick download must default to English only")
+        XCTAssertEqual(quickItem.options.rawCookies, "session=fixture")
+        XCTAssertEqual(quickItem.options.rawUserAgent, "FixtureBrowser/1.0")
 
         manager.menuDownload(url: "https://example.com/menu", type: "video", quality: "1080")
         guard let menuItem = manager.downloads.last else {

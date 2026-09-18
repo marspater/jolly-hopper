@@ -1739,11 +1739,69 @@ final class QueueAndErrorUXTests: XCTestCase {
         XCTAssertTrue(content.contains(".boyfriendtv.com\t"), "Cookie file must contain cookies for the requested domain")
     }
 
+    func testRawCookiesFromHTTPSAreWrittenAsSecure() throws {
+        let cookieFile = try SecureCookieFile.create(
+            url: "https://secure.example.com/video",
+            rawCookies: "session=secret"
+        )
+        defer { cookieFile.cleanup() }
+
+        let content = try String(contentsOfFile: cookieFile.path, encoding: .utf8)
+        XCTAssertTrue(
+            content.contains("\t/\tTRUE\t"),
+            "Cookies captured from an HTTPS browser session must not be eligible for cleartext HTTP"
+        )
+    }
+
     @MainActor
     func testAppDelegateApplicationShouldHandleReopen() {
         let delegate = AppDelegate()
         XCTAssertTrue(delegate.applicationShouldHandleReopen(NSApplication.shared, hasVisibleWindows: false))
         XCTAssertTrue(delegate.applicationShouldHandleReopen(NSApplication.shared, hasVisibleWindows: true))
+    }
+
+    func testBrowserSessionCredentialsAreBoundToOriginalHost() throws {
+        let state = AppState()
+        let sourceURL = try XCTUnwrap(URL(string: "https://secure.example.com/video/1"))
+        state.setBrowserSession(
+            for: sourceURL,
+            rawCookies: "session=secret",
+            rawUserAgent: "FixtureBrowser/1.0"
+        )
+
+        let sameHost = try XCTUnwrap(state.browserSession(for: "https://secure.example.com/video/2"))
+        XCTAssertEqual(sameHost.originScheme, "https")
+        XCTAssertEqual(sameHost.originHost, "secure.example.com")
+        XCTAssertEqual(sameHost.rawCookies, "session=secret")
+        XCTAssertEqual(sameHost.rawUserAgent, "FixtureBrowser/1.0")
+        XCTAssertNil(state.browserSession(for: "https://other.example.com/video/2"))
+        XCTAssertNil(state.browserSession(for: "http://secure.example.com/video/2"), "HTTPS browser credentials must not cross to cleartext HTTP")
+
+        state.clearBrowserSessionIfOriginChanged(to: "https://other.example.com/video/2")
+        XCTAssertNil(state.browserSessionOriginScheme)
+        XCTAssertNil(state.browserSessionOriginHost)
+        XCTAssertNil(state.rawCookiesToDownload)
+        XCTAssertNil(state.rawUserAgentToDownload)
+    }
+
+    func testBrowserSessionBatchRejectsMixedHostsAndClearsCredentials() throws {
+        let state = AppState()
+        let sourceURL = try XCTUnwrap(URL(string: "https://secure.example.com/video/1"))
+        state.setBrowserSession(
+            for: sourceURL,
+            rawCookies: "session=secret",
+            rawUserAgent: "FixtureBrowser/1.0"
+        )
+
+        let credentials = state.consumeBrowserSession(for: [
+            "https://secure.example.com/video/2",
+            "https://other.example.com/video/3"
+        ])
+
+        XCTAssertNil(credentials, "A browser session must never be copied into a mixed-host batch")
+        XCTAssertNil(state.browserSessionOriginHost)
+        XCTAssertNil(state.rawCookiesToDownload)
+        XCTAssertNil(state.rawUserAgentToDownload)
     }
 }
 
