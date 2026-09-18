@@ -2093,13 +2093,19 @@ public struct DownloadResult: Sendable {
             appendBrowser(configured)
         }
 
-        let installedSet = Set(installed.map { $0.lowercased() })
-        for browser in ["chrome", "brave", "edge", "vivaldi", "chromium", "firefox", "opera", "safari", "helium"]
-            where installedSet.contains(browser) {
-            appendBrowser(browser)
+        // A selected browser is an explicit session choice. Do not spray a protected
+        // endpoint with unrelated browser profiles after a 403; Cloudflare can treat
+        // that as a new client on every request. Automatic discovery is only used
+        // when no usable browser was selected.
+        if result.isEmpty {
+            let installedSet = Set(installed.map { $0.lowercased() })
+            for browser in ["chrome", "brave", "edge", "vivaldi", "chromium", "firefox", "opera", "safari", "helium"]
+                where installedSet.contains(browser) {
+                appendBrowser(browser)
+            }
         }
 
-        // Last resort keeps the existing anonymous request behavior.
+        // Keep one anonymous attempt as the final transport fallback.
         result.append(nil)
         return result
     }
@@ -2156,6 +2162,58 @@ public struct DownloadResult: Sendable {
         let lower = html.lowercased()
         return (lower.contains("to watch this video please") && lower.contains("login")) ||
                lower.contains("user has been banned")
+    }
+
+    nonisolated static func boyfriendTVCookies(from cookieHeader: String, for url: URL) -> [HTTPCookie] {
+        guard let host = url.host?.lowercased(),
+              boyfriendTVCookieScope(for: url.absoluteString) != nil else {
+            return []
+        }
+
+        return cookieHeader.split(separator: ";", omittingEmptySubsequences: true).compactMap { pair in
+            let parts = pair.split(separator: "=", maxSplits: 1, omittingEmptySubsequences: false)
+            guard parts.count == 2 else { return nil }
+
+            let name = String(parts[0]).trimmingCharacters(in: .whitespacesAndNewlines)
+            let value = String(parts[1]).trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !name.isEmpty,
+                  !name.contains("\r"),
+                  !name.contains("\n"),
+                  !value.contains("\r"),
+                  !value.contains("\n") else {
+                return nil
+            }
+
+            var properties: [HTTPCookiePropertyKey: Any] = [
+                .name: name,
+                .value: value,
+                .domain: host,
+                .path: "/"
+            ]
+            if url.scheme?.lowercased() == "https" {
+                properties[.secure] = "TRUE"
+            }
+            return HTTPCookie(properties: properties)
+        }
+    }
+
+    private func seedBoyfriendTVWebKitCookies(_ rawCookies: String?, for url: URL) async {
+        guard let rawCookies, !rawCookies.isEmpty else { return }
+        let cookies = Self.boyfriendTVCookies(from: rawCookies, for: url)
+        guard !cookies.isEmpty else { return }
+
+        let store = boyfriendTVWebDataStore.httpCookieStore
+        for cookie in cookies {
+            await withCheckedContinuation { continuation in
+                store.setCookie(cookie) {
+                    continuation.resume()
+                }
+            }
+        }
+        LoggerService.shared.log(
+            "[BoyfriendTV] stage=webkit-session cookies-seeded=\(cookies.count)",
+            level: .debug
+        )
     }
 
     private func boyfriendTVWebViewDocumentHTML(_ webView: WKWebView) async -> String? {
@@ -2249,7 +2307,7 @@ public struct DownloadResult: Sendable {
     /// Executes BoyfriendTV's JavaScript challenge in a real browser engine.
     /// The website data store is non-persistent but shared across main/embed loads so
     /// short-lived Cloudflare clearance cookies can be reused during one app session.
-    private func loadBoyfriendTVRenderedPage(_ url: URL, stage: String) async throws -> String? {
+    private func loadBoyfriendTVRenderedPage(_ url: URL, stage: String, rawCookies: String? = nil) async throws -> String? {
         guard (url.scheme == "https" || url.scheme == "http"),
               url.user == nil,
               url.password == nil,
@@ -2277,10 +2335,12 @@ public struct DownloadResult: Sendable {
         configuration.websiteDataStore = boyfriendTVWebDataStore
         configuration.defaultWebpagePreferences.allowsContentJavaScript = true
 
+        await seedBoyfriendTVWebKitCookies(rawCookies, for: url)
+
         let webView = WKWebView(frame: .zero, configuration: configuration)
-        // Match the installed WebKit/Safari stack rather than inventing a stale
-        // Chromium identity for a WebKit TLS/JavaScript engine.
-        webView.customUserAgent = Self.safariUserAgent
+        // Keep WKWebView's native user-agent. Pretending to be Safari while running
+        // inside WKWebView creates a contradictory JS/browser fingerprint and can
+        // cause managed Cloudflare challenges to loop forever.
         var request = URLRequest(
             url: url,
             cachePolicy: .reloadIgnoringLocalCacheData,
@@ -2294,9 +2354,9 @@ public struct DownloadResult: Sendable {
         var lastHTML: String?
         var settledPolls = 0
 
-        // Up to 12 seconds gives Cloudflare's managed JS challenge time to redirect
-        // and issue clearance without allowing an unbounded hidden browser task.
-        for _ in 0..<24 {
+        // Give one hidden browser session enough time to complete a managed
+        // JavaScript challenge, but keep the fallback strictly bounded.
+        for _ in 0..<40 {
             try Task.checkCancellation()
             try await Task.sleep(nanoseconds: 500_000_000)
             try Task.checkCancellation()
@@ -2357,6 +2417,7 @@ public struct DownloadResult: Sendable {
         var sawLoginPage = false
         var sawForbidden = false
         var sawUnauthorized = false
+        var webKitChallengeTimedOut = false
 
         // Keep diagnostics categorical: page dumps and signed URLs contain secrets.
         func inspectPage(_ output: String, stage: String) -> String {
@@ -2533,19 +2594,37 @@ public struct DownloadResult: Sendable {
 
         // curl/yt-dlp/plain HTTP cannot execute a JavaScript challenge. WebKit is
         // the final network fallback so its post-challenge state is authoritative.
+        // If the primary WebKit session itself times out on the challenge, do not
+        // repeat the same fingerprint against mirror hosts and embeds.
         if html.isEmpty, (sawChallenge || sawForbidden) {
             for candidatePage in pageCandidates {
                 let stage = candidatePage == pageURL ? "main-webkit" : "main-webkit-alt"
-                if let rendered = try await loadBoyfriendTVRenderedPage(candidatePage, stage: stage),
-                   !isBoyfriendTVChallengeHTML(rendered) {
-                    sawChallenge = false
-                    sawForbidden = false
-                    sawUnauthorized = false
-                    sawLoginPage = sawLoginPage || isBoyfriendTVLoginHTML(rendered)
-                    html = rendered
-                    resolvedPageURL = candidatePage
+                let scopedCookies = rawCookies.flatMap { raw in
+                    Self.shouldForwardBoyfriendTVRawCookies(
+                        from: targetUrl,
+                        to: candidatePage.absoluteString
+                    ) ? raw : nil
+                }
+                guard let rendered = try await loadBoyfriendTVRenderedPage(
+                    candidatePage,
+                    stage: stage,
+                    rawCookies: scopedCookies
+                ) else {
+                    continue
+                }
+
+                if isBoyfriendTVChallengeHTML(rendered) {
+                    webKitChallengeTimedOut = true
                     break
                 }
+
+                sawChallenge = false
+                sawForbidden = false
+                sawUnauthorized = false
+                sawLoginPage = sawLoginPage || isBoyfriendTVLoginHTML(rendered)
+                html = rendered
+                resolvedPageURL = candidatePage
+                break
             }
         }
         
@@ -2693,18 +2772,30 @@ public struct DownloadResult: Sendable {
                     }
                 }
 
-                if streamUrl == nil, (sawChallenge || sawForbidden),
-                   let embedPageURL = URL(string: embed),
-                   let rendered = try await loadBoyfriendTVRenderedPage(embedPageURL, stage: "embed-webkit"),
-                   !isBoyfriendTVChallengeHTML(rendered) {
-                    sawChallenge = false
-                    sawForbidden = false
-                    sawUnauthorized = false
-                    sawLoginPage = sawLoginPage || isBoyfriendTVLoginHTML(rendered)
-                    if let extracted = extractStreamURLFromHTML(rendered) {
-                        streamUrl = extracted
-                        embedUrl = embed
-                        break
+                if streamUrl == nil, !webKitChallengeTimedOut, (sawChallenge || sawForbidden),
+                   let embedPageURL = URL(string: embed) {
+                    let scopedCookies = rawCookies.flatMap { raw in
+                        Self.shouldForwardBoyfriendTVRawCookies(from: targetUrl, to: embed) ? raw : nil
+                    }
+                    if let rendered = try await loadBoyfriendTVRenderedPage(
+                        embedPageURL,
+                        stage: "embed-webkit",
+                        rawCookies: scopedCookies
+                    ) {
+                        if isBoyfriendTVChallengeHTML(rendered) {
+                            webKitChallengeTimedOut = true
+                            break
+                        }
+
+                        sawChallenge = false
+                        sawForbidden = false
+                        sawUnauthorized = false
+                        sawLoginPage = sawLoginPage || isBoyfriendTVLoginHTML(rendered)
+                        if let extracted = extractStreamURLFromHTML(rendered) {
+                            streamUrl = extracted
+                            embedUrl = embed
+                            break
+                        }
                     }
                 }
             }
