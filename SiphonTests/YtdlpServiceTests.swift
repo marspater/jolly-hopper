@@ -3160,6 +3160,24 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertEqual(YtdlpService.sanitizeFilename("...."), "download")
     }
 
+    func testFilenameSanitizationPreservesUnicodeAndReplacesEachInvalidScalar() {
+        XCTAssertEqual(
+            YtdlpService.sanitizeFilename("café_日本語/video??clip.mp4"),
+            "café_日本語_video__clip.mp4"
+        )
+        XCTAssertEqual(
+            YtdlpService.sanitizeFilename("line\nbreak\tname"),
+            "line_break_name"
+        )
+    }
+
+    func testCachedValidationCharacterSetsPreserveAcceptedSyntax() {
+        XCTAssertTrue(YtdlpService.isSafeFormatId("137+140/best[height<=1080]"))
+        XCTAssertFalse(YtdlpService.isSafeFormatId("-137"))
+        XCTAssertTrue(YtdlpService.isSafeSubtitleLanguage("pt-BR"))
+        XCTAssertFalse(YtdlpService.isSafeSubtitleLanguage("../en"))
+    }
+
     func testParseArgumentStringWithWhitespaceTabsAndNewlines() {
         let args = YtdlpService.parseArgumentString("--format\tbest\n--no-playlist   --retries 3")
         XCTAssertEqual(args, ["--format", "best", "--no-playlist", "--retries", "3"])
