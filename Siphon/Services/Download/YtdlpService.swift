@@ -341,6 +341,8 @@ class YtdlpService: ObservableObject {
     private lazy var boyfriendTVWebDataStore = WKWebsiteDataStore.nonPersistent()
     // Test seam for the browser-engine fallback. Production uses WKWebView.
     var boyfriendTVRenderedPageLoader: ((URL) async throws -> String?)?
+    // Test seam for media URLs that only exist in the live browser runtime.
+    var boyfriendTVRenderedStreamLoader: ((URL) async throws -> String?)?
     // Test seam for installed browser candidate discovery.
     var installedBrowsersProvider: (() async -> [String])?
 
@@ -2168,6 +2170,82 @@ public struct DownloadResult: Sendable {
         }
     }
 
+    private func boyfriendTVWebViewRuntimeMediaURL(_ webView: WKWebView) async -> String? {
+        let script = """
+        (() => {
+            const values = [];
+            const seenValues = new Set();
+            const push = (value) => {
+                if (typeof value !== 'string' || value.length === 0 || seenValues.has(value)) return;
+                seenValues.add(value);
+                values.push(value);
+            };
+
+            document.querySelectorAll('video').forEach((video) => {
+                push(video.currentSrc);
+                push(video.src);
+            });
+            document.querySelectorAll('source').forEach((source) => {
+                push(source.src);
+                push(source.getAttribute('src'));
+            });
+
+            try {
+                performance.getEntriesByType('resource').forEach((entry) => push(entry.name));
+            } catch (_) {}
+
+            const walk = (value, depth, visited) => {
+                if (depth > 4 || value == null) return;
+                if (typeof value === 'string') {
+                    push(value);
+                    return;
+                }
+                if (typeof value !== 'object' || visited.has(value)) return;
+                visited.add(value);
+                let keys = [];
+                try { keys = Object.keys(value).slice(0, 128); } catch (_) { return; }
+                for (const key of keys) {
+                    try { walk(value[key], depth + 1, visited); } catch (_) {}
+                    if (values.length >= 512) return;
+                }
+            };
+
+            for (const key of ['playerConfig', 'videoPlayerData', 'sources', 'hlsAuto', 'hls']) {
+                try { walk(window[key], 0, new Set()); } catch (_) {}
+            }
+
+            return values.slice(0, 512);
+        })();
+        """
+
+        let values: [String]? = await withCheckedContinuation { continuation in
+            webView.evaluateJavaScript(script) { value, error in
+                guard error == nil, let values = value as? [String] else {
+                    continuation.resume(returning: nil)
+                    return
+                }
+                continuation.resume(returning: values)
+            }
+        }
+
+        for value in values ?? [] {
+            if let validated = validatedBoyfriendTVStreamURL(value) {
+                return validated
+            }
+        }
+        return nil
+    }
+
+    private func boyfriendTVHTML(_ html: String, appendingRuntimeStream streamURL: String?) -> String {
+        guard let streamURL,
+              let validated = validatedBoyfriendTVStreamURL(streamURL),
+              let data = try? JSONSerialization.data(withJSONObject: ["hlsAuto": validated]),
+              let json = String(data: data, encoding: .utf8) else {
+            return html
+        }
+        return html + "\n<script type=\"application/json\" data-siphon-runtime-media>\(json)</script>"
+    }
+
     /// Executes BoyfriendTV's JavaScript challenge in a real browser engine.
     /// The website data store is non-persistent but shared across main/embed loads so
     /// short-lived Cloudflare clearance cookies can be reused during one app session.
@@ -2180,14 +2258,15 @@ public struct DownloadResult: Sendable {
         }
 
         if let loader = boyfriendTVRenderedPageLoader {
-            let rendered = try await loader(url)
-            if let rendered {
-                let result = hasBoyfriendTVMediaData(rendered)
-                    ? "stream-or-player-found"
-                    : isBoyfriendTVChallengeHTML(rendered) ? "challenge-page" : "page-ready"
-                LoggerService.shared.log("[BoyfriendTV] stage=\(stage) result=\(result)", level: .debug)
-            }
-            return rendered
+            guard let rendered = try await loader(url) else { return nil }
+            let runtimeStream = try await boyfriendTVRenderedStreamLoader?(url)
+            let resolved = boyfriendTVHTML(rendered, appendingRuntimeStream: runtimeStream)
+            let result = extractStreamURLFromHTML(resolved) != nil
+                ? "stream-found"
+                : isBoyfriendTVChallengeHTML(resolved) ? "challenge-page"
+                : hasBoyfriendTVMediaData(resolved) ? "player-found" : "page-ready"
+            LoggerService.shared.log("[BoyfriendTV] stage=\(stage) result=\(result)", level: .debug)
+            return resolved
         }
 
         guard processRunner is DefaultYtdlpProcessRunner else {
@@ -2227,13 +2306,16 @@ public struct DownloadResult: Sendable {
                 continue
             }
 
-            lastHTML = rendered
-            if hasBoyfriendTVMediaData(rendered) {
-                LoggerService.shared.log("[BoyfriendTV] stage=\(stage) result=stream-or-player-found", level: .debug)
-                return rendered
+            let runtimeStream = await boyfriendTVWebViewRuntimeMediaURL(webView)
+            let resolved = boyfriendTVHTML(rendered, appendingRuntimeStream: runtimeStream)
+            lastHTML = resolved
+
+            if extractStreamURLFromHTML(resolved) != nil {
+                LoggerService.shared.log("[BoyfriendTV] stage=\(stage) result=stream-found", level: .debug)
+                return resolved
             }
 
-            if isBoyfriendTVChallengeHTML(rendered) {
+            if isBoyfriendTVChallengeHTML(resolved) {
                 settledPolls = 0
                 continue
             }
@@ -2241,8 +2323,9 @@ public struct DownloadResult: Sendable {
             if !webView.isLoading {
                 settledPolls += 1
                 if settledPolls >= 3 {
-                    LoggerService.shared.log("[BoyfriendTV] stage=\(stage) result=page-ready", level: .debug)
-                    return rendered
+                    let result = hasBoyfriendTVMediaData(resolved) ? "player-ready" : "page-ready"
+                    LoggerService.shared.log("[BoyfriendTV] stage=\(stage) result=\(result)", level: .debug)
+                    return resolved
                 }
             }
         }
@@ -2771,6 +2854,52 @@ public struct DownloadResult: Sendable {
         "/embed/(\\d+)"
     ].compactMap { try? NSRegularExpression(pattern: $0, options: [.caseInsensitive]) }
 
+    private func validatedBoyfriendTVStreamURL(_ rawValue: String) -> String? {
+        var rawValue = rawValue
+            .replacingOccurrences(of: "\\/", with: "/")
+            .replacingOccurrences(of: "\\u0026", with: "&")
+            .decodingHTMLEntities()
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if rawValue.hasPrefix("//") {
+            rawValue = "https:" + rawValue
+        }
+
+        guard let candidate = URL(string: rawValue),
+              candidate.scheme == "https" || candidate.scheme == "http",
+              isBoyfriendTVURL(rawValue),
+              candidate.user == nil,
+              candidate.password == nil,
+              ["mp4", "m3u8"].contains(candidate.pathExtension.lowercased()) else {
+            return nil
+        }
+
+        let pathParts = candidate.path.lowercased().split(separator: "/")
+        if pathParts.contains(where: { ["ads", "ad", "advert", "preroll", "vast"].contains(String($0)) }) {
+            return nil
+        }
+
+        let lowerValue = rawValue.lowercased()
+        if lowerValue.contains("/pv/") ||
+           lowerValue.contains("pv_") ||
+           lowerValue.contains("/preview/") ||
+           lowerValue.contains("preview_") ||
+           lowerValue.contains("trailer") ||
+           lowerValue.contains("teaser") ||
+           lowerValue.contains("/thumbs/") ||
+           lowerValue.contains("/thumb/") ||
+           lowerValue.contains("cdn77-t.") ||
+           lowerValue.contains("-t.boyfriend") ||
+           lowerValue.hasSuffix(".jpg") ||
+           lowerValue.hasSuffix(".jpeg") ||
+           lowerValue.hasSuffix(".png") ||
+           lowerValue.hasSuffix(".webp") {
+            return nil
+        }
+
+        return rawValue
+    }
+
     private func extractStreamURLFromHTML(_ html: String) -> String? {
         let html = html.replacingOccurrences(of: "\\/", with: "/")
             .replacingOccurrences(of: "\\u0026", with: "&")
@@ -2778,34 +2907,9 @@ public struct DownloadResult: Sendable {
         for regex in Self.boyfriendStreamRegexes {
             let matches = regex.matches(in: html, options: [], range: NSRange(location: 0, length: (html as NSString).length))
             for match in matches where match.numberOfRanges > 1 {
-                var rawVal = (html as NSString).substring(with: match.range(at: 1))
-                if rawVal.hasPrefix("//") { rawVal = "https:" + rawVal }
-                guard let candidate = URL(string: rawVal),
-                      candidate.scheme == "https" || candidate.scheme == "http",
-                      isBoyfriendTVURL(rawVal), candidate.user == nil, candidate.password == nil,
-                      ["mp4", "m3u8"].contains(candidate.pathExtension.lowercased()) else { continue }
-                let pathParts = candidate.path.lowercased().split(separator: "/")
-                if pathParts.contains(where: { ["ads", "ad", "advert", "preroll", "vast"].contains(String($0)) }) { continue }
-                if rawVal.hasPrefix("http") {
-                    let lowerVal = rawVal.lowercased()
-                    // Ignore teaser / preview / rollover / thumbnail clips or image assets
-                    if lowerVal.contains("/pv/") ||
-                       lowerVal.contains("pv_") ||
-                       lowerVal.contains("/preview/") ||
-                       lowerVal.contains("preview_") ||
-                       lowerVal.contains("trailer") ||
-                       lowerVal.contains("teaser") ||
-                       lowerVal.contains("/thumbs/") ||
-                       lowerVal.contains("/thumb/") ||
-                       lowerVal.contains("cdn77-t.") ||
-                       lowerVal.contains("-t.boyfriend") ||
-                       lowerVal.hasSuffix(".jpg") ||
-                       lowerVal.hasSuffix(".jpeg") ||
-                       lowerVal.hasSuffix(".png") ||
-                       lowerVal.hasSuffix(".webp") {
-                        continue
-                    }
-                    return rawVal
+                let rawValue = (html as NSString).substring(with: match.range(at: 1))
+                if let validated = validatedBoyfriendTVStreamURL(rawValue) {
+                    return validated
                 }
             }
         }
