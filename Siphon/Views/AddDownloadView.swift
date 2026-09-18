@@ -1954,6 +1954,7 @@ struct AddDownloadView: View {
             if let session = appState.consumeBrowserSession(for: cleanURL) {
                 finalOptions.rawCookies = session.rawCookies
                 finalOptions.rawUserAgent = session.rawUserAgent
+                finalOptions.browserCookieSource = session.browserCookieSource
             }
             downloadManager.addDownload(url: cleanURL, options: finalOptions, mediaInfo: mediaInfo)
         } else {
@@ -1962,6 +1963,7 @@ struct AddDownloadView: View {
             if let session = appState.consumeBrowserSession(for: urls) {
                 finalOptions.rawCookies = session.rawCookies
                 finalOptions.rawUserAgent = session.rawUserAgent
+                finalOptions.browserCookieSource = session.browserCookieSource
             }
             var itemOptions = finalOptions
             itemOptions.customFilename = nil
