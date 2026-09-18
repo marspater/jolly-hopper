@@ -248,7 +248,11 @@ final class DownloadExecutor: ObservableObject {
             if let existing = download.mediaInfo {
                 info = existing
             } else {
-                info = try await ytdlpService.fetchInfo(url: download.url, rawCookies: download.options.rawCookies)
+                info = try await ytdlpService.fetchInfo(
+                    url: download.url,
+                    rawCookies: download.options.rawCookies,
+                    rawUserAgent: download.options.rawUserAgent
+                )
             }
 
             guard !Task.isCancelled else { return }
