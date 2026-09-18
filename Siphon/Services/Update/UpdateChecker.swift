@@ -36,6 +36,11 @@ public final class UpdateChecker: ObservableObject {
 
     public init() {}
 
+    nonisolated static func signingPolicy(for currentAppURL: URL) -> (expectedTeamID: String?, allowAdHoc: Bool) {
+        let teamID = UpdateVerifier.teamIdentifier(for: currentAppURL)
+        return (expectedTeamID: teamID, allowAdHoc: teamID == nil)
+    }
+
     nonisolated static func parseGitHubAssetSHA256(_ digest: String?) -> String? {
         guard let digest = digest?.trimmingCharacters(in: .whitespacesAndNewlines),
               digest.lowercased().hasPrefix("sha256:") else {
@@ -284,11 +289,12 @@ public final class UpdateChecker: ObservableObject {
             isDownloading = false
             isInstalling = true
 
+            let signingPolicy = Self.signingPolicy(for: Bundle.main.bundleURL)
             try await installer.install(
                 packageURL: downloadedPkgURL,
                 expectedChecksum: expectedChecksum,
-                expectedTeamID: nil,
-                allowAdHoc: true
+                expectedTeamID: signingPolicy.expectedTeamID,
+                allowAdHoc: signingPolicy.allowAdHoc
             )
 
             isInstalling = false
