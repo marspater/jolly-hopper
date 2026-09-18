@@ -1738,6 +1738,13 @@ final class QueueAndErrorUXTests: XCTestCase {
         XCTAssertFalse(content.contains(".boyfriend.tv\t"), "Cookie file must not synthesize cookies for different sibling domain .boyfriend.tv")
         XCTAssertTrue(content.contains(".boyfriendtv.com\t"), "Cookie file must contain cookies for the requested domain")
     }
+
+    @MainActor
+    func testAppDelegateApplicationShouldHandleReopen() {
+        let delegate = AppDelegate()
+        XCTAssertTrue(delegate.applicationShouldHandleReopen(NSApplication.shared, hasVisibleWindows: false))
+        XCTAssertTrue(delegate.applicationShouldHandleReopen(NSApplication.shared, hasVisibleWindows: true))
+    }
 }
 
 

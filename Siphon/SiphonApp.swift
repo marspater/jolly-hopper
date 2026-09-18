@@ -8,6 +8,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         NotificationService.shared.setup()
     }
 
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        if !flag {
+            for window in sender.windows where window.canBecomeMain {
+                if window.isMiniaturized {
+                    window.deminiaturize(nil)
+                }
+                window.makeKeyAndOrderFront(nil)
+            }
+        }
+        return true
+    }
+
     func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         willPresent notification: UNNotification,
@@ -132,7 +144,15 @@ struct SiphonApp: App {
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
         
-        guard url.host == "download" || url.host == "fast-download" else { return }
+        guard url.host == "download" || url.host == "fast-download" else {
+            for window in NSApp.windows where window.canBecomeMain {
+                if window.isMiniaturized {
+                    window.deminiaturize(nil)
+                }
+                window.makeKeyAndOrderFront(nil)
+            }
+            return
+        }
         
         let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
         let queryItems = components?.queryItems
@@ -168,10 +188,11 @@ struct SiphonApp: App {
             appState.showAddDownloadSheet = true
         }
         
-        for window in NSApp.windows {
-            if window.canBecomeMain {
-                window.makeKeyAndOrderFront(nil)
+        for window in NSApp.windows where window.canBecomeMain {
+            if window.isMiniaturized {
+                window.deminiaturize(nil)
             }
+            window.makeKeyAndOrderFront(nil)
         }
     }
 }
