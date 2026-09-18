@@ -17,7 +17,8 @@ A high-performance, native macOS media extractor & downloader powered by `yt-dlp
 ## ✨ Highlights & Features
 
 - 💧 **Translucent macOS Glassmorphism**: Engineered using native Apple SwiftUI materials and AppKit window translucency for a sleek macOS experience.
-- ⚡ **Advanced Anti-Bot Bypasses**: Native header impersonation, Chrome 124 Client Hints emulation, and cookie session synchronization for Cloudflare and protected sites.
+- ⚡ **Browser-aware extraction**: Browser-matched transport profiles, scoped cookies, bounded retries and exponential backoff for BoyfriendTV and GayPornTube. Challenge responses are distinguished from missing authentication.
+- 🎞️ **GayPornTube**: Native HTML5 extraction with site-specific Referer/Origin headers; singular `/video/` links and signed media URLs are preserved.
 - 🎯 **Deep Provider Resolvers**: Built-in specialized stream extraction for YouTube, Playlists, TikTok, X (Twitter), Instagram, Twitch, and 1,000+ video platforms.
 - 🚀 **Atomic Dependency Engine**: Safe, self-testing background updates for `yt-dlp` and native Apple Silicon (`arm64`) + Intel (`x86_64`) `FFmpeg` / `FFprobe` 6.0 binaries.
 - 🛠 **Custom Quality Presets & Codec Control**: Full control over H.264, VP9, AV1, AAC, Opus, MP3, FLAC extraction, resolution scaling (up to 8K), and SponsorBlock segment skipping.
