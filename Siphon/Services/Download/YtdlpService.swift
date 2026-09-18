@@ -1569,7 +1569,6 @@ public struct DownloadResult: Sendable {
         }
 
         var triedStrategies = Set<DownloadRecoveryStrategy>()
-        var triedAltBrowsers = Set<String>()
         var currentArgs = args
         var processResult: DownloadProcessResult? = nil
 
@@ -1597,20 +1596,10 @@ public struct DownloadResult: Sendable {
                 if !errText.isEmpty, isCookieFailureError(errText), currentArgs.contains("--cookies-from-browser"), !triedStrategies.contains(.stripCookies) {
                     if let idx = currentArgs.firstIndex(of: "--cookies-from-browser"), idx + 1 < currentArgs.count {
                         let failedBrowser = currentArgs[idx + 1]
-                        let installed = await BrowserUtils.shared.getInstalledBrowsers().map { $0.id.lowercased() }
-                        let pool = options.browserCookieSource == nil
-                            ? (installed.isEmpty
-                                ? ["chrome", "brave", "firefox", "edge", "safari", "helium"]
-                                : ["chrome", "brave", "firefox", "edge", "safari", "helium"].filter { installed.contains($0) })
-                            : []
-                        if let altBrowser = pool.first(where: { $0 != failedBrowser && ($0 != "safari" || Self.hasFullDiskAccess) && !triedAltBrowsers.contains($0) }) {
-                            triedAltBrowsers.insert(altBrowser)
-                            LoggerService.shared.log("Browser cookie access failed for '\(failedBrowser)'. Retrying download with alternative browser cookies from '\(altBrowser)'...", level: .info)
-                            onOutput("[Siphon Info] Retrying with cookies from \(altBrowser.capitalized)...\n")
-                            currentArgs[idx + 1] = Self.cookiesFromBrowserArgument(for: altBrowser)
-                            refreshBrowserTransportIdentity(for: normalizedURL, args: &currentArgs)
-                            continue
-                        }
+                        LoggerService.shared.log(
+                            "Browser cookie access failed for '\(failedBrowser)'. Unrelated browser profiles will not be probed.",
+                            level: .info
+                        )
                     }
                     triedStrategies.insert(.stripCookies)
                     LoggerService.shared.log("Browser cookie access failed or database missing (\(errText.trimmingCharacters(in: .whitespacesAndNewlines))). Retrying download without browser cookies...", level: .warning)
@@ -5444,28 +5433,10 @@ public struct DownloadResult: Sendable {
                     recordCookieDenial(browser: browser, url: urlArg)
                 }
                 
-                let installed = await BrowserUtils.shared.getInstalledBrowsers().map { $0.id.lowercased() }
-                let pool = installed.isEmpty ? ["chrome", "brave", "firefox", "edge", "safari", "helium"] : ["chrome", "brave", "firefox", "edge", "safari", "helium"].filter { installed.contains($0) }
-                let altBrowsers = pool.filter { $0 != browser && ($0 != "safari" || Self.hasFullDiskAccess) }
-                for alt in altBrowsers {
-                    var altArgs = args
-                    try Task.checkCancellation()
-                    altArgs[idx + 1] = Self.cookiesFromBrowserArgument(for: alt)
-                    refreshBrowserTransportIdentity(for: args.last ?? "", args: &altArgs)
-                    LoggerService.shared.log("Retrying command with alternative browser cookies from '\(alt)'...", level: .info)
-                    do {
-                        return try await runTransportCommand(altArgs)
-                    } catch let altErr as YtdlpError {
-                        if case .commandFailed(let altOut) = altErr, isCookieFailureError(altOut) {
-                            continue
-                        }
-                        throw altErr
-                    } catch {
-                        throw error
-                    }
-                }
-                
-                LoggerService.shared.log("All browser cookie attempts failed. Retrying command without browser cookies...", level: .info)
+                LoggerService.shared.log(
+                    "Selected browser cookie source '\(browser)' is unavailable. Retrying without browser cookies; unrelated browser profiles will not be probed.",
+                    level: .info
+                )
                 var cleanArgs = stripCookieArgs(from: args)
                 refreshBrowserTransportIdentity(for: args.last ?? "", args: &cleanArgs)
                 return try await runTransportCommand(cleanArgs)
