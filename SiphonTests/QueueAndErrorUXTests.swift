@@ -1799,7 +1799,8 @@ final class QueueAndErrorUXTests: XCTestCase {
         state.setBrowserSession(
             for: sourceURL,
             rawCookies: "session=secret",
-            rawUserAgent: "FixtureBrowser/1.0"
+            rawUserAgent: "FixtureBrowser/1.0",
+            browserCookieSource: "chrome"
         )
 
         let sameHost = try XCTUnwrap(state.browserSession(for: "https://secure.example.com/video/2"))
@@ -1807,6 +1808,7 @@ final class QueueAndErrorUXTests: XCTestCase {
         XCTAssertEqual(sameHost.originHost, "secure.example.com")
         XCTAssertEqual(sameHost.rawCookies, "session=secret")
         XCTAssertEqual(sameHost.rawUserAgent, "FixtureBrowser/1.0")
+        XCTAssertEqual(sameHost.browserCookieSource, "chrome")
         XCTAssertNil(state.browserSession(for: "https://other.example.com/video/2"))
         XCTAssertNil(state.browserSession(for: "http://secure.example.com/video/2"), "HTTPS browser credentials must not cross to cleartext HTTP")
 
@@ -1815,6 +1817,15 @@ final class QueueAndErrorUXTests: XCTestCase {
         XCTAssertNil(state.browserSessionOriginHost)
         XCTAssertNil(state.rawCookiesToDownload)
         XCTAssertNil(state.rawUserAgentToDownload)
+        XCTAssertNil(state.browserCookieSourceToDownload)
+    }
+
+    func testBrowserSourceValidationRejectsUnrecognizedValues() {
+        XCTAssertEqual(AppState.normalizedBrowserCookieSource(" Chrome "), "chrome")
+        XCTAssertEqual(AppState.normalizedBrowserCookieSource("firefox"), "firefox")
+        XCTAssertEqual(AppState.normalizedBrowserCookieSource("safari"), "safari")
+        XCTAssertNil(AppState.normalizedBrowserCookieSource("totally-not-a-browser"))
+        XCTAssertNil(AppState.normalizedBrowserCookieSource(nil))
     }
 
     func testBrowserSessionBatchRejectsMixedHostsAndClearsCredentials() throws {
@@ -1835,6 +1846,7 @@ final class QueueAndErrorUXTests: XCTestCase {
         XCTAssertNil(state.browserSessionOriginHost)
         XCTAssertNil(state.rawCookiesToDownload)
         XCTAssertNil(state.rawUserAgentToDownload)
+        XCTAssertNil(state.browserCookieSourceToDownload)
     }
 }
 
