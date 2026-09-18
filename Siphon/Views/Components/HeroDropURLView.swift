@@ -35,13 +35,13 @@ struct HeroDropURLView: View {
             // 1. Adaptive hero surface
             SiphonTheme.cardBackground(cornerRadius: SiphonTheme.radiusHero)
 
-            // 2. Translucent accent wash with subtle depth
+            // 2. Calm idle wash; drag targeting becomes deliberately brighter.
             RoundedRectangle(cornerRadius: SiphonTheme.radiusHero, style: .continuous)
                 .fill(
                     LinearGradient(
                         colors: [
-                            SiphonTheme.accent.opacity(isTargeted ? 0.22 : 0.08),
-                            SiphonTheme.accentSecondary.opacity(isTargeted ? 0.12 : 0.03),
+                            SiphonTheme.accent.opacity(isTargeted ? 0.26 : 0.055),
+                            SiphonTheme.accentSecondary.opacity(isTargeted ? 0.15 : 0.018),
                             Color.clear
                         ],
                         startPoint: .topLeading,
@@ -54,8 +54,8 @@ struct HeroDropURLView: View {
                 Spacer()
                 RadialGradient(
                     colors: [
-                        SiphonTheme.accent.opacity(isTargeted ? 0.35 : 0.20),
-                        SiphonTheme.accentSecondary.opacity(isTargeted ? 0.18 : 0.08),
+                        SiphonTheme.accent.opacity(isTargeted ? 0.42 : 0.13),
+                        SiphonTheme.accentSecondary.opacity(isTargeted ? 0.24 : 0.05),
                         Color.clear
                     ],
                     center: .center,
@@ -68,19 +68,24 @@ struct HeroDropURLView: View {
             }
             .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusHero, style: .continuous))
 
-            // 4. Dashed Glass Border (Adaptive Semantic Stroke)
-            RoundedRectangle(cornerRadius: SiphonTheme.radiusHero, style: .continuous)
-                .strokeBorder(
-                    style: StrokeStyle(
-                        lineWidth: showBorders ? 2.0 : (isTargeted ? 2.0 : 1.2),
-                        dash: [8, 6]
+            // 4. The dashed accent outline is reserved for an actual drag target.
+            if isTargeted {
+                RoundedRectangle(cornerRadius: SiphonTheme.radiusHero, style: .continuous)
+                    .strokeBorder(
+                        SiphonTheme.accent,
+                        style: StrokeStyle(
+                            lineWidth: showBorders ? 2.2 : 2.0,
+                            dash: [9, 6],
+                            dashPhase: 1
+                        )
                     )
+                    .shadow(color: SiphonTheme.accent.opacity(0.34), radius: 10)
+            } else {
+                SiphonTheme.cardBorder(
+                    cornerRadius: SiphonTheme.radiusHero,
+                    accentColor: showsFieldFocus ? SiphonTheme.accent : nil
                 )
-                .foregroundColor(
-                    isTargeted
-                        ? SiphonTheme.accent
-                        : (showBorders ? Color.secondary.opacity(0.65) : Color.primary.opacity(0.14))
-                )
+            }
 
             // 5. Main Card Content
             VStack(spacing: SiphonTheme.spacing14) {
@@ -138,15 +143,19 @@ struct HeroDropURLView: View {
                 }
 
                 // Interactive URL Input Bar
-                HStack(spacing: SiphonTheme.spacing8) {
+                HStack(alignment: .center, spacing: SiphonTheme.spacing10) {
                     Image(systemName: "link")
                         .font(.system(size: 13, weight: .medium))
                         .foregroundColor(showsFieldFocus ? SiphonTheme.accent : .secondary)
+                        .frame(width: 16, alignment: .center)
 
                     TextField(languageService.s("hero_enter_url"), text: $inputURL)
                         .textFieldStyle(.plain)
-                        .font(.geist(13))
+                        .font(.siphonStandard)
                         .focused($isFieldFocused)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .layoutPriority(1)
+                        .padding(.leading, SiphonTheme.spacing2)
                         .onSubmit {
                             submitURL()
                         }
@@ -178,10 +187,8 @@ struct HeroDropURLView: View {
                         .foregroundColor(isPasting ? SiphonTheme.statusCompleted : .primary)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 4)
-                        .background(
-                            RoundedRectangle(cornerRadius: SiphonTheme.radiusSmall, style: .continuous)
-                                .fill(Color.primary.opacity(0.06))
-                        )
+                        .background(SiphonTheme.controlBackground(cornerRadius: SiphonTheme.radiusSmall))
+                        .overlay(SiphonTheme.controlBorder(cornerRadius: SiphonTheme.radiusSmall))
                     }
                     .buttonStyle(.bouncy(scale: 0.96, hover: 1.02))
                     .help(languageService.s("paste_from_clipboard"))
@@ -205,11 +212,12 @@ struct HeroDropURLView: View {
                         .shadow(color: SiphonTheme.accent.opacity(0.30), radius: 4, y: 1)
                     }
                     .buttonStyle(.bouncy(scale: 0.96, hover: 1.02))
-                    .disabled(isExtracting)
+                    .disabled(isExtracting || inputURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .opacity(inputURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 0.58 : 1.0)
                     .accessibilityLabel(languageService.s("download_btn"))
                 }
                 .padding(.horizontal, SiphonTheme.spacing12)
-                .padding(.vertical, 8)
+                .frame(minHeight: 44)
                 .background(
                     SiphonTheme.fieldBackground(cornerRadius: SiphonTheme.radiusCard, isFocused: showsFieldFocus)
                 )
@@ -248,6 +256,13 @@ struct HeroDropURLView: View {
         }
         .frame(maxWidth: .infinity)
         .frame(height: 168)
+        .scaleEffect(isTargeted ? 1.012 : 1.0)
+        .shadow(
+            color: SiphonTheme.accent.opacity(isTargeted ? 0.24 : 0.04),
+            radius: isTargeted ? 18 : 5,
+            y: isTargeted ? 5 : 2
+        )
+        .animation(SiphonAnimation.bouncySpring, value: isTargeted)
         .onDrop(of: [UTType.url, UTType.utf8PlainText, UTType.fileURL], isTargeted: $isTargeted) { providers in
             handleDrop(providers: providers)
         }
