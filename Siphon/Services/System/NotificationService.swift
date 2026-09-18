@@ -51,11 +51,7 @@ final class NotificationService: NSObject, @unchecked Sendable, UNUserNotificati
         willPresent notification: UNNotification,
         withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
     ) {
-        if #available(macOS 11.0, *) {
-            completionHandler([.banner, .sound, .list, .badge])
-        } else {
-            completionHandler([.alert, .sound, .badge])
-        }
+        completionHandler([.banner, .sound, .list, .badge])
     }
 
     @objc func userNotificationCenter(
