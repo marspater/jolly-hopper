@@ -35,6 +35,10 @@ async function triggerDownload(url, host = "download", tabId = null) {
     if (cookies) {
         deepLink += `&cookies=${encodeURIComponent(cookies)}`;
     }
+    const userAgent = typeof navigator !== "undefined" ? navigator.userAgent : "";
+    if (userAgent) {
+        deepLink += `&ua=${encodeURIComponent(userAgent)}`;
+    }
 
     // First preference: trigger deep link within the current tab using a user-gestured anchor click
     if (tabId && chrome.scripting && typeof chrome.scripting.executeScript === "function") {
