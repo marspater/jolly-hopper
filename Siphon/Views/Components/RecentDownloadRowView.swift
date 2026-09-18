@@ -10,7 +10,6 @@ struct RecentDownloadRowView: View {
     @EnvironmentObject var downloadManager: DownloadManager
     @EnvironmentObject var languageService: LanguageService
     @State private var isHovered: Bool = false
-    @ObservedObject private var renderingEnvironment = AdaptiveRenderingEnvironment.shared
 
     init(download: Download) {
         self.download = download
@@ -44,12 +43,26 @@ struct RecentDownloadRowView: View {
             SiphonTheme.cardBackground(cornerRadius: SiphonTheme.radiusControl, isHovered: isHovered)
         )
         .overlay(
-            SiphonTheme.borderSubtle(cornerRadius: SiphonTheme.radiusControl, isHovered: isHovered)
+            SiphonTheme.borderSubtle(
+                cornerRadius: SiphonTheme.radiusControl,
+                isHovered: isHovered,
+                accentColor: statusTint
+            )
         )
+        .siphonCardHover(isHovered: isHovered, tint: statusTint)
         .onHover { hovering in
             withAnimation(SiphonAnimation.hoverSpring) {
                 isHovered = hovering
             }
+        }
+    }
+
+    private var statusTint: Color {
+        switch download.status {
+        case .downloading, .fetching, .processing: return SiphonTheme.statusDownloading
+        case .queued, .paused, .fileExists: return SiphonTheme.statusQueued
+        case .completed: return SiphonTheme.statusCompleted
+        case .failed, .stopped: return SiphonTheme.statusFailed
         }
     }
 
@@ -99,7 +112,7 @@ struct RecentDownloadRowView: View {
         VStack(alignment: .leading, spacing: 3) {
             let displayTitle = download.displayTitle
             Text(displayTitle)
-                .font(.geist(12, weight: .medium))
+                .font(.siphonSecondaryMedium)
                 .foregroundColor(.primary)
                 .lineLimit(1)
 
@@ -110,7 +123,7 @@ struct RecentDownloadRowView: View {
                         .frame(width: 6, height: 6)
                 }
                 Text(download.sourceDomain)
-                    .font(.geist(11, weight: .regular))
+                    .font(.siphonMetadata)
                     .foregroundColor(.secondary)
                     .lineLimit(1)
             }
@@ -175,10 +188,7 @@ struct RecentDownloadRowView: View {
                         .progressViewStyle(.linear)
                         .frame(width: 80)
                         .tint(SiphonTheme.statusDownloading)
-                        .animation(
-                            renderingEnvironment.reduceMotion ? nil : SiphonAnimation.snappySpring,
-                            value: safeProgress
-                        )
+                        .animation(SiphonAnimation.snappySpring, value: safeProgress)
                 }
 
                 Button {
