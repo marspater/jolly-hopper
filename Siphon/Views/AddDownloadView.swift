@@ -280,7 +280,7 @@ struct AddDownloadView: View {
 
             HStack(spacing: SiphonTheme.spacing2) {
                 Button {
-                    withAnimation(.spring(response: 0.30, dampingFraction: 0.68, blendDuration: 0)) {
+                    withAnimation(SiphonAnimation.fluidSpring) {
                         inputMode = .single
                     }
                 } label: {
@@ -304,7 +304,7 @@ struct AddDownloadView: View {
                 .accessibilityAddTraits(inputMode == .single ? [.isButton, .isSelected] : [.isButton])
 
                 Button {
-                    withAnimation(.spring(response: 0.30, dampingFraction: 0.68, blendDuration: 0)) {
+                    withAnimation(SiphonAnimation.fluidSpring) {
                         inputMode = .batch
                     }
                 } label: {
@@ -447,7 +447,7 @@ struct AddDownloadView: View {
             if let formats = info.formats, !formats.isEmpty {
                 VStack(alignment: .leading, spacing: 8) {
                     Button {
-                        withAnimation(.easeInOut(duration: 0.2)) {
+                        withAnimation(SiphonAnimation.snappySpring) {
                             showStreamInspector.toggle()
                         }
                     } label: {
@@ -902,7 +902,7 @@ struct AddDownloadView: View {
                 // Video / Audio Capsule Switcher
                 HStack(spacing: 2) {
                     Button {
-                        withAnimation(.spring(response: 0.30, dampingFraction: 0.68, blendDuration: 0)) {
+                        withAnimation(SiphonAnimation.fluidSpring) {
                             isVideoTab = true
                             fileType = .mp4
                         }
@@ -927,7 +927,7 @@ struct AddDownloadView: View {
                     .accessibilityAddTraits(isVideoTab ? [.isButton, .isSelected] : [.isButton])
 
                     Button {
-                        withAnimation(.spring(response: 0.30, dampingFraction: 0.68, blendDuration: 0)) {
+                        withAnimation(SiphonAnimation.fluidSpring) {
                             isVideoTab = false
                             fileType = .mp3
                         }

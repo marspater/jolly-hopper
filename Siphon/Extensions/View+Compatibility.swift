@@ -41,6 +41,7 @@ public struct RenderingCapabilities: Sendable, Equatable {
     public let supportsP3: Bool
     public let reduceTransparency: Bool
     public let reduceMotion: Bool
+    public let increaseContrast: Bool
     public let maxRefreshRate: Int
 
     public var isHighRefreshRate: Bool {
@@ -63,12 +64,14 @@ public struct RenderingCapabilities: Sendable, Equatable {
         supportsP3: Bool,
         reduceTransparency: Bool,
         reduceMotion: Bool = false,
+        increaseContrast: Bool = false,
         maxRefreshRate: Int = 60
     ) {
         self.supportsEDR = supportsEDR
         self.supportsP3 = supportsP3
         self.reduceTransparency = reduceTransparency
         self.reduceMotion = reduceMotion
+        self.increaseContrast = increaseContrast
         self.maxRefreshRate = maxRefreshRate
     }
 }
@@ -165,6 +168,7 @@ public final class AdaptiveRenderingEnvironment: ObservableObject {
     public static func detectCapabilities(for screen: NSScreen?) -> RenderingCapabilities {
         let reduceTransparency = NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency
         let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        let increaseContrast = NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast
         let supportsEDR: Bool
         let supportsP3: Bool
         let maxRate: Int
@@ -186,6 +190,7 @@ public final class AdaptiveRenderingEnvironment: ObservableObject {
             supportsP3: supportsP3,
             reduceTransparency: reduceTransparency,
             reduceMotion: reduceMotion,
+            increaseContrast: increaseContrast,
             maxRefreshRate: maxRate
         )
     }
@@ -474,7 +479,9 @@ public enum SiphonTheme {
     public static let radiusInput: CGFloat = 8
     public static let radiusCard: CGFloat = 12
     public static let radiusRow: CGFloat = 12
+    public static let radiusStatusGroup: CGFloat = 14
     public static let radiusSheet: CGFloat = 16
+    public static let radiusHero: CGFloat = 18
     public static let radiusModal: CGFloat = 16
     
     // Elevated Card & Tile Backgrounds (Unified macOS Translucent Glass)
@@ -823,6 +830,8 @@ public struct SiphonInteractiveGlassBackground: View {
     public var isSelected: Bool
     public var effectiveTint: Color
 
+    @Environment(\.siphonRenderingCapabilities) private var renderingCapabilities
+
     public init(
         cornerRadius: CGFloat = SiphonTheme.radiusControl,
         isHovered: Bool = false,
@@ -836,7 +845,7 @@ public struct SiphonInteractiveGlassBackground: View {
     }
 
     public var body: some View {
-        let isOpaque = NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency
+        let isOpaque = renderingCapabilities.reduceTransparency
         if isOpaque {
             RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                 .fill(Color(nsColor: isHovered ? .selectedControlColor : .controlBackgroundColor))
@@ -874,6 +883,8 @@ public struct SiphonInteractiveGlassBorder: View {
     public var isSelected: Bool
     public var effectiveTint: Color
 
+    @Environment(\.siphonRenderingCapabilities) private var renderingCapabilities
+
     public init(
         cornerRadius: CGFloat = SiphonTheme.radiusControl,
         isHovered: Bool = false,
@@ -887,10 +898,11 @@ public struct SiphonInteractiveGlassBorder: View {
     }
 
     public var body: some View {
-        let isOpaque = NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency
+        let showBorders = renderingCapabilities.increaseContrast
+        let isOpaque = renderingCapabilities.reduceTransparency
         if isOpaque {
             RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                .stroke(isSelected ? effectiveTint : Color(nsColor: .separatorColor), lineWidth: 1)
+                .stroke(isSelected ? effectiveTint : Color(nsColor: .separatorColor), lineWidth: showBorders ? 2 : 1)
         } else {
             RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                 .strokeBorder(
@@ -898,12 +910,12 @@ public struct SiphonInteractiveGlassBorder: View {
                         colors: isSelected
                             ? [effectiveTint.opacity(0.85), effectiveTint.opacity(0.40)]
                             : (isHovered
-                                ? [effectiveTint.opacity(0.65), effectiveTint.opacity(0.25)]
-                                : [Color.primary.opacity(0.18), Color.primary.opacity(0.06)]),
+                                ? [effectiveTint.opacity(showBorders ? 0.82 : 0.65), effectiveTint.opacity(showBorders ? 0.42 : 0.25)]
+                                : [Color.primary.opacity(showBorders ? 0.38 : 0.18), Color.primary.opacity(showBorders ? 0.18 : 0.06)]),
                         startPoint: .top,
                         endPoint: .bottom
                     ),
-                    lineWidth: 1
+                    lineWidth: showBorders ? 1.5 : 1
                 )
         }
     }
@@ -1057,6 +1069,7 @@ public struct SiphonSecondaryButtonStyle: ButtonStyle {
 public struct SiphonGhostButtonStyle: ButtonStyle {
     public var cornerRadius: CGFloat = SiphonTheme.radiusControl
     @State private var isHovered = false
+    @Environment(\.siphonRenderingCapabilities) private var renderingCapabilities
     
     public init(cornerRadius: CGFloat = SiphonTheme.radiusControl) {
         self.cornerRadius = cornerRadius
@@ -1064,6 +1077,7 @@ public struct SiphonGhostButtonStyle: ButtonStyle {
     
     public func makeBody(configuration: Configuration) -> some View {
         let reduceMotion = AdaptiveRenderingEnvironment.shared.capabilities.reduceMotion
+        let showBorders = renderingCapabilities.increaseContrast
         configuration.label
             .font(.geist(12, weight: .medium))
             .foregroundColor(isHovered ? .primary : .secondary)
@@ -1072,6 +1086,10 @@ public struct SiphonGhostButtonStyle: ButtonStyle {
             .background(
                 RoundedRectangle(cornerRadius: cornerRadius)
                     .fill(Color.primary.opacity(isHovered ? 0.08 : 0.0))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: cornerRadius)
+                    .stroke(Color.secondary.opacity(showBorders ? 0.65 : 0.0), lineWidth: 1)
             )
             .scaleEffect(reduceMotion ? 1.0 : (configuration.isPressed ? 0.97 : 1.0))
             .animation(reduceMotion ? nil : .spring(response: 0.28, dampingFraction: 0.65), value: configuration.isPressed)
@@ -1083,6 +1101,7 @@ public struct SiphonGhostButtonStyle: ButtonStyle {
 public struct SiphonIconButtonStyle: ButtonStyle {
     public var size: CGFloat = 26
     @State private var isHovered = false
+    @Environment(\.siphonRenderingCapabilities) private var renderingCapabilities
     
     public init(size: CGFloat = 26) {
         self.size = size
@@ -1090,11 +1109,16 @@ public struct SiphonIconButtonStyle: ButtonStyle {
     
     public func makeBody(configuration: Configuration) -> some View {
         let reduceMotion = AdaptiveRenderingEnvironment.shared.capabilities.reduceMotion
+        let showBorders = renderingCapabilities.increaseContrast
         configuration.label
             .frame(width: size, height: size)
             .background(
                 Circle()
                     .fill(Color.primary.opacity(isHovered ? 0.08 : 0.0))
+            )
+            .overlay(
+                Circle()
+                    .stroke(Color.secondary.opacity(showBorders ? 0.65 : 0.0), lineWidth: 1)
             )
             .scaleEffect(reduceMotion ? 1.0 : (configuration.isPressed ? 0.92 : (isHovered ? 1.05 : 1.0)))
             .animation(reduceMotion ? nil : .spring(response: 0.25, dampingFraction: 0.65), value: configuration.isPressed)

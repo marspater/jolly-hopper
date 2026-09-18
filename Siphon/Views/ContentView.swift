@@ -148,6 +148,7 @@ struct ContentView: View {
 }
 
 struct SidebarView: View {
+    @Environment(\.appearsActive) private var appearsActive
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var downloadManager: DownloadManager
     @EnvironmentObject var languageService: LanguageService
@@ -156,6 +157,7 @@ struct SidebarView: View {
         VStack(spacing: 0) {
             // Sidebar Header with Radiant Siphon Halo Logo
             sidebarHeader
+                .opacity(appearsActive ? 1.0 : 0.62)
                 .padding(.top, 28)
                 .padding(.horizontal, 16)
                 .padding(.bottom, 10)
@@ -219,6 +221,7 @@ struct SidebarView: View {
                 .padding(.horizontal, SiphonTheme.spacing8)
             }
             .padding(.bottom, SiphonTheme.spacing10)
+            .opacity(appearsActive ? 1.0 : 0.62)
         }
     }
 
@@ -404,7 +407,6 @@ struct HomeView: View {
                 .allowsHitTesting(false)
             }
         )
-        .siphonWindowBackground()
     }
     
     // MARK: - Recent Downloads Section
@@ -449,15 +451,10 @@ struct HomeView: View {
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 26)
                 .background(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(Color.primary.opacity(0.02))
-                        .background(
-                            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                .fill(.ultraThinMaterial)
-                        )
+                    SiphonTheme.cardBackground(cornerRadius: SiphonTheme.radiusCard)
                 )
                 .overlay(
-                    SiphonTheme.cardBorder(cornerRadius: 12)
+                    SiphonTheme.cardBorder(cornerRadius: SiphonTheme.radiusCard)
                 )
             } else {
                 VStack(spacing: 6) {
@@ -535,7 +532,7 @@ struct StatusBarView: View {
         }
         .frame(maxWidth: .infinity)
         .frame(height: 48)
-        .siphonGlassSurface(cornerRadius: 14)
+        .siphonGlassSurface(cornerRadius: SiphonTheme.radiusStatusGroup)
     }
 }
 
