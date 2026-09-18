@@ -61,7 +61,16 @@ public final class SecureCookieFile: @unchecked Sendable {
         isCleanedUp = true
         lock.unlock()
 
-        try? FileManager.default.removeItem(at: fileURL)
+        do {
+            if FileManager.default.fileExists(atPath: fileURL.path) {
+                try FileManager.default.removeItem(at: fileURL)
+            }
+        } catch {
+            let message = "Failed to remove temporary cookie file: \(error.localizedDescription)"
+            Task { @MainActor in
+                LoggerService.shared.log(message, level: .error)
+            }
+        }
     }
 
     /// Relinquishes ownership so that `deinit` will not delete the file.
