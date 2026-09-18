@@ -1572,6 +1572,73 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertFalse(captured.value.contains(where: { $0.hasPrefix("Sec-Ch-Ua:") }))
     }
 
+    func testBoyfriendTVWebKitFallbackResolvesMainPageChallenge() async throws {
+        UserDefaults.standard.set("none", forKey: UserDefaultsKeys.browserForCookies)
+        defer { UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.browserForCookies) }
+
+        let stream = "https://cdn.boyfriendtv.com/key=clearance/media=hls4A/multi=854x480:v480/2026-09/_TPL_.mp4"
+        let challenge = "<html><head><title>Just a moment...</title></head><body><script src='/cdn-cgi/challenge-platform/test'></script></body></html>"
+        let challengeOutput = Data(challenge.utf8).base64EncodedString() + "\nERROR: HTTP Error 403: Forbidden"
+        let renderedLoads = TestBox<[URL]>([])
+
+        service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
+            if args.contains("--dump-pages") {
+                throw YtdlpError.commandFailed(challengeOutput)
+            }
+            if args.contains("--dump-json") {
+                return "{\"id\":\"1710869\",\"title\":\"Rendered challenge test\"}"
+            }
+            return "{}"
+        })
+        service.boyfriendTVRenderedPageLoader = { url in
+            renderedLoads.value.append(url)
+            return "<html><head><title>Rendered challenge test | BoyFriendTV</title></head><body><script>var playerConfig={sources:{hlsAuto:\"\(stream)\"}};</script></body></html>"
+        }
+
+        let info = try await service.fetchInfo(
+            url: "https://www.boyfriendtv.com/videos/1710869/test/"
+        )
+
+        XCTAssertEqual(info.manifestUrl, stream)
+        XCTAssertEqual(renderedLoads.value.count, 1)
+        XCTAssertTrue(renderedLoads.value[0].path.contains("/videos/1710869/"))
+    }
+
+    func testBoyfriendTVWebKitFallbackResolvesEmbedChallenge() async throws {
+        UserDefaults.standard.set("none", forKey: UserDefaultsKeys.browserForCookies)
+        defer { UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.browserForCookies) }
+
+        let stream = "https://cdn.boyfriendtv.com/key=clearance/media=hls4A/multi=1280x720:v720/2026-09/_TPL_.mp4"
+        let challenge = "<html><head><title>Just a moment...</title></head><body><script src='/cdn-cgi/challenge-platform/test'></script></body></html>"
+        let challengeOutput = Data(challenge.utf8).base64EncodedString() + "\nERROR: HTTP Error 403: Forbidden"
+        let renderedLoads = TestBox<[URL]>([])
+
+        service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
+            if args.contains("--dump-pages") {
+                throw YtdlpError.commandFailed(challengeOutput)
+            }
+            if args.contains("--dump-json") {
+                return "{\"id\":\"1710869\",\"title\":\"Rendered embed test\"}"
+            }
+            return "{}"
+        })
+        service.boyfriendTVRenderedPageLoader = { url in
+            renderedLoads.value.append(url)
+            if url.path.contains("/embed/") {
+                return "<html><body><script>var playerConfig={sources:{hlsAuto:\"\(stream)\"}};</script></body></html>"
+            }
+            return "<html><head><title>Rendered embed test | BoyFriendTV</title></head><body><iframe data-src='/embed/1710869/'></iframe></body></html>"
+        }
+
+        let info = try await service.fetchInfo(
+            url: "https://www.boyfriendtv.com/videos/1710869/test/"
+        )
+
+        XCTAssertEqual(info.manifestUrl, stream)
+        XCTAssertTrue(renderedLoads.value.contains(where: { $0.path.contains("/videos/1710869/") }))
+        XCTAssertTrue(renderedLoads.value.contains(where: { $0.path.contains("/embed/1710869/") }))
+    }
+
     func testGayPornTubeMetadataUsesNativeHTML5AndSiteHeaders() async throws {
         let url = "https://www.gayporntube.com/video/1507912/test-video"
         UserDefaults.standard.set("none", forKey: UserDefaultsKeys.browserForCookies)
