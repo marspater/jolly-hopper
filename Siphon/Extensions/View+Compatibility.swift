@@ -46,6 +46,17 @@ public struct RenderingCapabilities: Sendable, Equatable {
     public var isHighRefreshRate: Bool {
         maxRefreshRate >= 120
     }
+
+    /// Siphon renders custom frame-scheduled animation at a 60 Hz baseline,
+    /// stepping up to 120 Hz on displays that can actually present it.
+    /// Physics timings remain identical across refresh rates.
+    public var preferredAnimationFrameRate: Int {
+        maxRefreshRate >= 120 ? 120 : 60
+    }
+
+    public var animationMinimumInterval: TimeInterval {
+        1.0 / Double(preferredAnimationFrameRate)
+    }
     
     public init(
         supportsEDR: Bool,
@@ -148,26 +159,28 @@ public final class AdaptiveRenderingEnvironment: ObservableObject {
     }
     
     public static func detectCapabilities() -> RenderingCapabilities {
+        detectCapabilities(for: NSScreen.main)
+    }
+
+    public static func detectCapabilities(for screen: NSScreen?) -> RenderingCapabilities {
         let reduceTransparency = NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency
         let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
-        var supportsEDR = false
-        var supportsP3 = false
-        
-        for screen in NSScreen.screens {
-            if screen.maximumExtendedDynamicRangeColorComponentValue > 1.0 || screen.maximumPotentialExtendedDynamicRangeColorComponentValue > 1.0 {
-                supportsEDR = true
-            }
-            if screen.canRepresent(.p3) || screen.colorSpace == .displayP3 {
-                supportsP3 = true
-            }
-        }
-        
-        if NSScreen.main?.canRepresent(.p3) == true {
-            supportsP3 = true
+        let supportsEDR: Bool
+        let supportsP3: Bool
+        let maxRate: Int
+
+        if let screen {
+            supportsEDR =
+                screen.maximumExtendedDynamicRangeColorComponentValue > 1.0 ||
+                screen.maximumPotentialExtendedDynamicRangeColorComponentValue > 1.0
+            supportsP3 = screen.canRepresent(.p3) || screen.colorSpace == .displayP3
+            maxRate = max(60, screen.maximumFramesPerSecond)
+        } else {
+            supportsEDR = false
+            supportsP3 = false
+            maxRate = 60
         }
 
-        let maxRate = NSScreen.screens.map { $0.maximumFramesPerSecond }.max() ?? 60
-        
         return RenderingCapabilities(
             supportsEDR: supportsEDR,
             supportsP3: supportsP3,
@@ -185,9 +198,6 @@ public enum SiphonAnimation {
         if env.reduceMotion {
             return .easeInOut(duration: 0.12)
         }
-        if env.isHighRefreshRate {
-            return .spring(response: 0.22, dampingFraction: 0.74, blendDuration: 0)
-        }
         return .spring(response: 0.28, dampingFraction: 0.80, blendDuration: 0)
     }
 
@@ -196,9 +206,6 @@ public enum SiphonAnimation {
         let env = AdaptiveRenderingEnvironment.shared
         if env.reduceMotion {
             return .easeInOut(duration: 0.10)
-        }
-        if env.isHighRefreshRate {
-            return .spring(response: 0.18, dampingFraction: 0.72)
         }
         return .spring(response: 0.22, dampingFraction: 0.74)
     }
@@ -209,9 +216,6 @@ public enum SiphonAnimation {
         if env.reduceMotion {
             return .easeInOut(duration: 0.12)
         }
-        if env.isHighRefreshRate {
-            return .spring(response: 0.20, dampingFraction: 0.65, blendDuration: 0)
-        }
         return .spring(response: 0.24, dampingFraction: 0.65, blendDuration: 0)
     }
 
@@ -221,10 +225,113 @@ public enum SiphonAnimation {
         if env.reduceMotion {
             return .easeInOut(duration: 0.10)
         }
-        if env.isHighRefreshRate {
-            return .spring(response: 0.15, dampingFraction: 0.82)
-        }
         return .spring(response: 0.18, dampingFraction: 0.82)
+    }
+}
+
+// MARK: - Per-window Rendering Capabilities
+
+private struct SiphonRenderingCapabilitiesKey: EnvironmentKey {
+    static let defaultValue = RenderingCapabilities(
+        supportsEDR: false,
+        supportsP3: false,
+        reduceTransparency: false,
+        reduceMotion: false,
+        maxRefreshRate: 60
+    )
+}
+
+extension EnvironmentValues {
+    var siphonRenderingCapabilities: RenderingCapabilities {
+        get { self[SiphonRenderingCapabilitiesKey.self] }
+        set { self[SiphonRenderingCapabilitiesKey.self] = newValue }
+    }
+}
+
+@MainActor
+private final class SiphonScreenObserverView: NSView {
+    var onScreenChange: ((NSScreen?) -> Void)?
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        NotificationCenter.default.removeObserver(self)
+
+        if let window {
+            NotificationCenter.default.addObserver(
+                self,
+                selector: #selector(screenDidChange),
+                name: NSWindow.didChangeScreenNotification,
+                object: window
+            )
+            NotificationCenter.default.addObserver(
+                self,
+                selector: #selector(screenDidChange),
+                name: NSWindow.didChangeScreenProfileNotification,
+                object: window
+            )
+        }
+
+        onScreenChange?(window?.screen)
+    }
+
+    @objc private func screenDidChange() {
+        onScreenChange?(window?.screen)
+    }
+
+    deinit {
+        NotificationCenter.default.removeObserver(self)
+    }
+}
+
+private struct SiphonScreenObserver: NSViewRepresentable {
+    let onScreenChange: (NSScreen?) -> Void
+
+    func makeNSView(context: Context) -> SiphonScreenObserverView {
+        let view = SiphonScreenObserverView()
+        view.onScreenChange = onScreenChange
+        return view
+    }
+
+    func updateNSView(_ nsView: SiphonScreenObserverView, context: Context) {
+        nsView.onScreenChange = onScreenChange
+        DispatchQueue.main.async {
+            nsView.onScreenChange?(nsView.window?.screen)
+        }
+    }
+}
+
+@MainActor
+private struct SiphonAdaptiveRenderingModifier: ViewModifier {
+    @State private var activeScreen: NSScreen?
+    @State private var capabilities = RenderingCapabilities(
+        supportsEDR: false,
+        supportsP3: false,
+        reduceTransparency: false,
+        reduceMotion: false,
+        maxRefreshRate: 60
+    )
+
+    func body(content: Content) -> some View {
+        content
+            .environment(\.siphonRenderingCapabilities, capabilities)
+            .background(
+                SiphonScreenObserver { screen in
+                    activeScreen = screen
+                    refresh(for: screen)
+                }
+                .frame(width: 0, height: 0)
+            )
+            .onReceive(
+                NSWorkspace.shared.notificationCenter.publisher(
+                    for: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification
+                )
+            ) { _ in
+                refresh(for: activeScreen)
+            }
+    }
+
+    private func refresh(for screen: NSScreen?) {
+        capabilities = AdaptiveRenderingEnvironment.detectCapabilities(for: screen)
     }
 }
 
@@ -1233,6 +1340,15 @@ extension View {
                 RoundedRectangle(cornerRadius: cornerRadius)
                     .stroke(Color.primary.opacity(0.08), lineWidth: 1)
             )
+    }
+}
+
+extension View {
+    /// Injects display capabilities for the screen that currently contains this
+    /// window. Custom frame-scheduled animation uses 60 Hz by default and 120 Hz
+    /// only on displays that support it.
+    public func siphonAdaptiveRendering() -> some View {
+        modifier(SiphonAdaptiveRenderingModifier())
     }
 }
 
