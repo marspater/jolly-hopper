@@ -23,8 +23,7 @@ decoration for its own sake.
     styles.
   - `SiphonAnimation`: shared motion timing for fluid, hover, bouncy, and snappy
     interactions.
-  - `siphonWindowBackground()`: adaptive root surface with a Reduce Transparency
-    fallback.
+  - `siphonWindowBackground()`: translucent root surface shared by all app windows.
 - `Siphon/Extensions/Font+Geist.swift`: Geist and Geist Mono registrations plus
   semantic typography roles.
 - `Siphon/Views/Components/LiquidWaterWaveView.swift`: the restrained organic
@@ -49,8 +48,8 @@ truth only when the value is genuinely reused or has semantic meaning.
   - failed/stopped: red
 - Accent color is not a general-purpose decoration. If every icon is tinted,
   nothing communicates priority.
-- Preserve readable contrast in both Light and Dark appearances and when Reduce
-  Transparency is enabled.
+- Preserve readable contrast in Light and Dark appearances. Increase Contrast
+  strengthens borders and interactive separation without replacing glass.
 
 ### Color gamut and dynamic range
 
@@ -101,15 +100,15 @@ truth only when the value is genuinely reused or has semantic meaning.
 
 ## Motion
 
-- Motion explains state or gives tactile feedback; it does not run continuously
-  just to make an empty screen feel busy.
+- Motion explains state and gives tactile feedback. Ambient liquid motion may run
+  while Siphon is active when it reinforces the product identity or live state.
 - Use `SiphonAnimation.hoverSpring` for pointer feedback,
   `SiphonAnimation.bouncySpring` for press feedback, and
   `SiphonAnimation.fluidSpring` for content/state changes.
 - Use `.animation(_:value:)` with a narrow, explicit value and keep animation
   close to the view that changes.
-- Respect Reduce Motion. Ambient animation pauses when the app is inactive, and
-  the status blob remains subtle behind the progress ring and count.
+- Siphon's fluid and bouncy motion remains enabled while the app is active; pause
+  frame-scheduled ambient work when the app is inactive.
 - Avoid animating layout at the root of a large screen or combining several
   competing spring timings for one interaction.
 - Custom frame-scheduled animation uses a 60 Hz baseline and may step up to
@@ -133,8 +132,8 @@ truth only when the value is genuinely reused or has semantic meaning.
 - Preserve keyboard focus, menu/toolbar paths, and sensible disabled states.
 - Custom chrome follows the key window's active/inactive appearance through
   `appearsActive`; inactive emphasis should become quieter, not disappear.
-- Honor macOS Show Borders for custom interactive surfaces and Reduce
-  Transparency for custom material backgrounds.
+- Honor Increase Contrast / Show Borders by strengthening custom interactive
+  outlines while preserving the translucent material treatment.
 - Do not show an affordance for an action that cannot currently succeed.
 
 ## Liquid Glass policy
@@ -145,7 +144,7 @@ truth only when the value is genuinely reused or has semantic meaning.
 3. Keep related custom glass elements in one visual group so their depth and
    refraction feel coherent.
 4. Use tint only for semantic emphasis or a primary action.
-5. Every custom glass surface needs a legible Reduce Transparency fallback.
+5. Increase Contrast should strengthen edges and hierarchy without disabling glass.
 6. Never let blur, refraction, glow, or motion reduce text contrast or obscure
    progress/error state.
 
@@ -155,15 +154,14 @@ Before merging a UI change, verify:
 
 - [ ] Existing `SiphonTheme`, `SiphonAnimation`, and semantic font roles were
       reused.
-- [ ] Light, Dark, inactive-window, and Reduce Transparency states remain
-      legible.
+- [ ] Light, Dark, inactive-window, and increased-contrast states remain legible.
 - [ ] The interaction works with pointer, keyboard, and VoiceOver.
-- [ ] Motion is scoped, purposeful, Reduce Motion-aware, and follows the
-      60/120 Hz cadence policy without refresh-dependent physics.
+- [ ] Motion is scoped, fluid, purposeful, and follows the 60/120 Hz cadence
+      policy without refresh-dependent physics.
 - [ ] Ordinary UI remains SDR; elevated dynamic range is reserved for genuine
       HDR media.
-- [ ] P3-owned colors, inactive-window state, Show Borders, and Reduce
-      Transparency behavior were preserved.
+- [ ] P3-owned colors, inactive-window state, and increased-contrast borders were
+      preserved.
 - [ ] No new hardcoded palette, spacing, radius, blur, or spring values were
       added without a documented reason.
 - [ ] Native macOS structure was preferred before custom glass or AppKit code.
