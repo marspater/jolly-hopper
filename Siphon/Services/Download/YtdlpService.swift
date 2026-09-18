@@ -890,6 +890,7 @@ class YtdlpService: ObservableObject {
             if let btvMedia = try await resolveBoyfriendTVMediaInfo(
                 url: url,
                 rawCookies: rawCookies,
+                rawUserAgent: rawUserAgent,
                 browserCookieSource: browserCookieSource
             ) {
                 var btvArgs = [
@@ -1346,6 +1347,7 @@ public struct DownloadResult: Sendable {
             } else if let btvMedia = try await resolveBoyfriendTVMediaInfo(
                 url: url,
                 rawCookies: options.rawCookies,
+                rawUserAgent: options.rawUserAgent,
                 browserCookieSource: options.browserCookieSource
             ) {
                 targetURL = resolveBoyfriendTVStreamURLForDownload(streamURL: btvMedia.streamURL, options: options)
@@ -2942,6 +2944,7 @@ public struct DownloadResult: Sendable {
     private func resolveBoyfriendTVMediaInfo(
         url: String,
         rawCookies: String? = nil,
+        rawUserAgent: String? = nil,
         browserCookieSource: String? = nil
     ) async throws -> BoyfriendTVExtractedMedia? {
         let targetUrl = normalizeURLForYtdlp(url)
@@ -3093,7 +3096,14 @@ public struct DownloadResult: Sendable {
                     if let browserName = browser {
                         args.append(contentsOf: ["--cookies-from-browser", Self.cookiesFromBrowserArgument(for: browserName)])
                     }
-                    appendSiteSpecificArgs(for: candidateURL, to: &args)
+                    appendSiteSpecificArgs(
+                        for: candidateURL,
+                        rawUserAgent: rawUserAgent,
+                        to: &args
+                    )
+                    if rawUserAgent?.isEmpty != false, browser != nil {
+                        refreshBrowserTransportIdentity(for: candidateURL, args: &args)
+                    }
                     args.append("--")
                     args.append(candidateURL)
 
@@ -3115,7 +3125,10 @@ public struct DownloadResult: Sendable {
             for candidatePage in pageCandidates {
                 var request = URLRequest(url: candidatePage)
                 request.timeoutInterval = 3.0
-                let effectiveUA = (effectiveBrowserSource == "safari") ? Self.safariUserAgent : "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+                let effectiveUA = rawUserAgent?.trimmingCharacters(in: .whitespacesAndNewlines).nonEmpty
+                    ?? ((effectiveBrowserSource == "safari")
+                        ? Self.safariUserAgent
+                        : "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36")
                 request.setValue(effectiveUA, forHTTPHeaderField: "User-Agent")
                 let pageBaseDomain = candidatePage.host?.lowercased().contains("boyfriendtv.com") == true
                     ? "https://www.boyfriendtv.com"
@@ -3297,7 +3310,10 @@ public struct DownloadResult: Sendable {
                 if streamUrl == nil, let embedPageURL = URL(string: embed), (processRunner is DefaultYtdlpProcessRunner) {
                     var embedRequest = URLRequest(url: embedPageURL)
                     embedRequest.timeoutInterval = 3.0
-                    let effectiveUA = (effectiveBrowserSource == "safari") ? Self.safariUserAgent : "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+                    let effectiveUA = rawUserAgent?.trimmingCharacters(in: .whitespacesAndNewlines).nonEmpty
+                        ?? ((effectiveBrowserSource == "safari")
+                            ? Self.safariUserAgent
+                            : "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36")
                     embedRequest.setValue(effectiveUA, forHTTPHeaderField: "User-Agent")
                     let embedBaseDomain = embedPageURL.host?.lowercased().contains("boyfriendtv.com") == true
                         ? "https://www.boyfriendtv.com"
