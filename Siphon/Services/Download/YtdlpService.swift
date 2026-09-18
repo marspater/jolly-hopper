@@ -2206,6 +2206,11 @@ public struct DownloadResult: Sendable {
                     args.append(contentsOf: ["--cookies-from-browser", browserName])
                 }
                 appendSiteSpecificArgs(for: targetUrl, to: &args)
+                // Cloudflare binds challenge cookies to the browser fingerprint that
+                // obtained them. Keep the page-resolution transport coherent with the
+                // selected cookie source instead of mixing Firefox/Brave/Edge cookies
+                // with a hard-coded Chrome user agent and client hints.
+                refreshBrowserTransportIdentity(for: targetUrl, args: &args)
                 args.append("--")
                 args.append(targetUrl)
                 
@@ -2345,6 +2350,9 @@ public struct DownloadResult: Sendable {
                             embedArgs.append(contentsOf: ["--cookies-from-browser", browserName])
                         }
                         appendSiteSpecificArgs(for: embed, to: &embedArgs)
+                        // Match the impersonated browser fingerprint to the cookie
+                        // source for Cloudflare-protected embed pages as well.
+                        refreshBrowserTransportIdentity(for: embed, args: &embedArgs)
                         embedArgs.append("--")
                         embedArgs.append(embed)
                         
