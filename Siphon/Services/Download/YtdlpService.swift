@@ -3125,10 +3125,13 @@ public struct DownloadResult: Sendable {
             for candidatePage in pageCandidates {
                 var request = URLRequest(url: candidatePage)
                 request.timeoutInterval = 3.0
-                let effectiveUA = rawUserAgent?.trimmingCharacters(in: .whitespacesAndNewlines).nonEmpty
-                    ?? ((effectiveBrowserSource == "safari")
+                let effectiveUA: String = {
+                    let trimmed = rawUserAgent?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                    if !trimmed.isEmpty { return trimmed }
+                    return effectiveBrowserSource == "safari"
                         ? Self.safariUserAgent
-                        : "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36")
+                        : "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+                }()
                 request.setValue(effectiveUA, forHTTPHeaderField: "User-Agent")
                 let pageBaseDomain = candidatePage.host?.lowercased().contains("boyfriendtv.com") == true
                     ? "https://www.boyfriendtv.com"
@@ -3310,10 +3313,13 @@ public struct DownloadResult: Sendable {
                 if streamUrl == nil, let embedPageURL = URL(string: embed), (processRunner is DefaultYtdlpProcessRunner) {
                     var embedRequest = URLRequest(url: embedPageURL)
                     embedRequest.timeoutInterval = 3.0
-                    let effectiveUA = rawUserAgent?.trimmingCharacters(in: .whitespacesAndNewlines).nonEmpty
-                        ?? ((effectiveBrowserSource == "safari")
+                    let effectiveUA: String = {
+                        let trimmed = rawUserAgent?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                        if !trimmed.isEmpty { return trimmed }
+                        return effectiveBrowserSource == "safari"
                             ? Self.safariUserAgent
-                            : "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36")
+                            : "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+                    }()
                     embedRequest.setValue(effectiveUA, forHTTPHeaderField: "User-Agent")
                     let embedBaseDomain = embedPageURL.host?.lowercased().contains("boyfriendtv.com") == true
                         ? "https://www.boyfriendtv.com"
