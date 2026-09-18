@@ -219,6 +219,7 @@ struct AddDownloadView: View {
             isLoading = false
 
             let clean = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            appState.clearBrowserSessionIfHostChanged(to: clean)
             if clean.hasPrefix("http://") || clean.hasPrefix("https://") {
                 fetchInfo(debounce: true)
             }
@@ -264,6 +265,7 @@ struct AddDownloadView: View {
             fetchTask = nil
             playlistTask?.cancel()
             playlistTask = nil
+            appState.clearBrowserSession()
         }
     }
 
@@ -1641,10 +1643,11 @@ struct AddDownloadView: View {
                 guard !Task.isCancelled else { return }
             }
             do {
+                let session = appState.browserSession(for: cleanURL)
                 let info = try await downloadManager.ytdlpService.fetchInfo(
                     url: cleanURL,
-                    rawCookies: appState.rawCookiesToDownload,
-                    rawUserAgent: appState.rawUserAgentToDownload
+                    rawCookies: session?.rawCookies,
+                    rawUserAgent: session?.rawUserAgent
                 )
                 guard !Task.isCancelled else { return }
                 mediaInfo = info
@@ -1738,7 +1741,12 @@ struct AddDownloadView: View {
         errorMessage = nil
         playlistTask = Task {
             do {
-                let items = try await downloadManager.ytdlpService.fetchPlaylistInfo(url: urlInput)
+                let session = appState.browserSession(for: urlInput)
+                let items = try await downloadManager.ytdlpService.fetchPlaylistInfo(
+                    url: urlInput,
+                    rawCookies: session?.rawCookies,
+                    rawUserAgent: session?.rawUserAgent
+                )
                 guard !Task.isCancelled else { return }
                 playlistItems = items
                 selectedPlaylistIds = Set(items.lazy.map(\.id))
@@ -1922,13 +1930,9 @@ struct AddDownloadView: View {
 
     private func proceedWithBatchDownload(urls: [String], options: DownloadOptions) {
         var finalOptions = options
-        if let rawCookies = appState.rawCookiesToDownload, !rawCookies.isEmpty {
-            finalOptions.rawCookies = rawCookies
-            appState.rawCookiesToDownload = nil
-        }
-        if let rawUserAgent = appState.rawUserAgentToDownload, !rawUserAgent.isEmpty {
-            finalOptions.rawUserAgent = rawUserAgent
-            appState.rawUserAgentToDownload = nil
+        if let session = appState.consumeBrowserSession(for: urls) {
+            finalOptions.rawCookies = session.rawCookies
+            finalOptions.rawUserAgent = session.rawUserAgent
         }
         finalOptions.customFilename = nil
         downloadManager.addDownloads(urls: urls, options: finalOptions)
@@ -1940,16 +1944,12 @@ struct AddDownloadView: View {
     private func proceedWithDownload(options: DownloadOptions, forceOverwrite: Bool) {
         var finalOptions = options
         finalOptions.forceOverwrite = forceOverwrite
-        if let rawCookies = appState.rawCookiesToDownload, !rawCookies.isEmpty {
-            finalOptions.rawCookies = rawCookies
-            appState.rawCookiesToDownload = nil
-        }
-        if let rawUserAgent = appState.rawUserAgentToDownload, !rawUserAgent.isEmpty {
-            finalOptions.rawUserAgent = rawUserAgent
-            appState.rawUserAgentToDownload = nil
-        }
 
         let cleanURL = urlInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let session = appState.consumeBrowserSession(for: cleanURL) {
+            finalOptions.rawCookies = session.rawCookies
+            finalOptions.rawUserAgent = session.rawUserAgent
+        }
         if downloadMode == .single {
             downloadManager.addDownload(url: cleanURL, options: finalOptions, mediaInfo: mediaInfo)
         } else {
