@@ -38,6 +38,21 @@ jobs:
           bash -n script/build_and_run.sh
           bash -n script/build_release.sh
 
+      - name: Verify release trust boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -F 'CODE_SIGN_IDENTITY = "Developer ID Application";' Siphon.xcodeproj/project.pbxproj
+          grep -F 'DEVELOPMENT_TEAM = "$(SIPHON_DEVELOPMENT_TEAM)";' Siphon.xcodeproj/project.pbxproj
+          grep -F -- '--options runtime --timestamp' Siphon.xcodeproj/project.pbxproj
+          grep -F 'xcrun notarytool submit' script/build_release.sh
+          grep -F 'xcrun stapler staple' script/build_release.sh
+          grep -F 'spctl --assess' script/build_release.sh
+          if grep -Fq 'xattr -cr /Applications/"Siphon.app"' README.md; then
+            echo "README must not recommend bypassing Gatekeeper for official releases." >&2
+            exit 1
+          fi
+
       - name: Check JavaScript syntax
         shell: bash
         run: |
