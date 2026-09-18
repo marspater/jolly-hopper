@@ -766,18 +766,35 @@ class YtdlpService: ObservableObject {
         return false
     }
 
-    func fetchInfo(url: String, rawCookies: String? = nil, rawUserAgent: String? = nil) async throws -> MediaInfo {
+    func fetchInfo(
+        url: String,
+        rawCookies: String? = nil,
+        rawUserAgent: String? = nil,
+        browserCookieSource: String? = nil
+    ) async throws -> MediaInfo {
         guard let path = ytdlpPath else {
             throw YtdlpError.notFound
         }
         
         let normalizedURL = normalizeURLForYtdlp(url)
         do {
-             return try await fetchSingleVideoInfo(path: path.path, url: normalizedURL, rawCookies: rawCookies, rawUserAgent: rawUserAgent)
+             return try await fetchSingleVideoInfo(
+                path: path.path,
+                url: normalizedURL,
+                rawCookies: rawCookies,
+                rawUserAgent: rawUserAgent,
+                browserCookieSource: browserCookieSource
+             )
         } catch {
             if isPlaylistURL(normalizedURL) {
                 do {
-                    return try await fetchPlaylistSummaryInfo(path: path.path, url: normalizedURL, rawCookies: rawCookies)
+                    return try await fetchPlaylistSummaryInfo(
+                        path: path.path,
+                        url: normalizedURL,
+                        rawCookies: rawCookies,
+                        rawUserAgent: rawUserAgent,
+                        browserCookieSource: browserCookieSource
+                    )
                 } catch {
                     throw mapSiteSpecificError(error, url: normalizedURL)
                 }
@@ -786,12 +803,20 @@ class YtdlpService: ObservableObject {
         }
     }
 
-    private func fetchSingleVideoInfo(path: String, url: String, forceBrowserCookies: Bool = false, rawCookies: String? = nil, rawUserAgent: String? = nil) async throws -> MediaInfo {
+    private func fetchSingleVideoInfo(
+        path: String,
+        url: String,
+        forceBrowserCookies: Bool = false,
+        rawCookies: String? = nil,
+        rawUserAgent: String? = nil,
+        browserCookieSource: String? = nil
+    ) async throws -> MediaInfo {
         if isRecuURL(url) {
             let recuMedia = try await resolveRecuMediaInfo(
                 url: url,
                 rawCookies: rawCookies,
-                rawUserAgent: rawUserAgent
+                rawUserAgent: rawUserAgent,
+                browserCookieSource: browserCookieSource
             )
             var parsedInfo: MediaInfo?
             var probeArgs = [
@@ -854,7 +879,11 @@ class YtdlpService: ObservableObject {
         }
 
         if isBoyfriendTVURL(url) {
-            if let btvMedia = try await resolveBoyfriendTVMediaInfo(url: url, rawCookies: rawCookies) {
+            if let btvMedia = try await resolveBoyfriendTVMediaInfo(
+                url: url,
+                rawCookies: rawCookies,
+                browserCookieSource: browserCookieSource
+            ) {
                 var btvArgs = [
                     path,
                     "--ignore-config",
@@ -1023,7 +1052,12 @@ class YtdlpService: ObservableObject {
                 }
             }
         } else {
-            let usingBrowserCookies = appendCookieArgs(for: url, to: &args, force: forceBrowserCookies)
+            let usingBrowserCookies = appendCookieArgs(
+                for: url,
+                to: &args,
+                force: forceBrowserCookies,
+                browserOverride: browserCookieSource
+            )
             logCookieUsage(for: url, usingBrowserCookies: usingBrowserCookies)
         }
 
@@ -1042,9 +1076,22 @@ class YtdlpService: ObservableObject {
             }
         } catch {
             let usingBrowserCookies = args.contains("--cookies-from-browser")
-            if shouldRetryWithBrowserCookies(error: error, url: url, usingBrowserCookies: usingBrowserCookies, forceBrowserCookies: forceBrowserCookies) {
+            if shouldRetryWithBrowserCookies(
+                error: error,
+                url: url,
+                usingBrowserCookies: usingBrowserCookies,
+                forceBrowserCookies: forceBrowserCookies,
+                browserCookieSource: browserCookieSource
+            ) {
                 LoggerService.shared.log("Retrying metadata extraction with configured browser cookies", level: .info)
-                return try await fetchSingleVideoInfo(path: path, url: url, forceBrowserCookies: true, rawCookies: rawCookies, rawUserAgent: rawUserAgent)
+                return try await fetchSingleVideoInfo(
+                    path: path,
+                    url: url,
+                    forceBrowserCookies: true,
+                    rawCookies: rawCookies,
+                    rawUserAgent: rawUserAgent,
+                    browserCookieSource: browserCookieSource
+                )
             }
             throw mapSiteSpecificError(error, url: url)
         }
