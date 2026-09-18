@@ -157,8 +157,8 @@ struct SiphonApp: App {
         let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
         let queryItems = components?.queryItems
         let videoUrl = queryItems?.first(where: { $0.name == "url" })?.value
-        let rawCookies = (url.host == "download" || url.host == "fast-download") ? queryItems?.first(where: { $0.name == "cookies" })?.value : nil
-        let rawUserAgent = (url.host == "download" || url.host == "fast-download") ? queryItems?.first(where: { $0.name == "ua" })?.value : nil
+        let rawUserAgent = queryItems?.first(where: { $0.name == "ua" })?.value
+        let rawBrowserSource = queryItems?.first(where: { $0.name == "browser" })?.value
         
         guard let rawVideoUrl = videoUrl?.trimmingCharacters(in: .whitespacesAndNewlines),
               !rawVideoUrl.isEmpty,
@@ -167,10 +167,10 @@ struct SiphonApp: App {
               let host = targetURL.host, !host.isEmpty,
               targetURL.scheme == "http" || targetURL.scheme == "https" else { return }
         
-        let sanitizedCookies: String? = {
-            guard let cookies = rawCookies, !cookies.isEmpty, cookies.count <= 64 * 1024 else { return nil }
-            return cookies.components(separatedBy: CharacterSet.controlCharacters.subtracting(CharacterSet(charactersIn: "\t"))).joined()
-        }()
+        // Never accept browser credential values through a custom URL. The extension
+        // sends only a browser identifier; Siphon asks yt-dlp to read that browser's
+        // cookie store directly, preserving the browser's original cookie metadata.
+        let sanitizedBrowserSource = AppState.normalizedBrowserCookieSource(rawBrowserSource)
         let sanitizedUserAgent: String? = {
             guard let userAgent = rawUserAgent?.trimmingCharacters(in: .whitespacesAndNewlines),
                   !userAgent.isEmpty,
@@ -183,16 +183,18 @@ struct SiphonApp: App {
 
         appState.setBrowserSession(
             for: targetURL,
-            rawCookies: sanitizedCookies,
-            rawUserAgent: sanitizedUserAgent
+            rawCookies: nil,
+            rawUserAgent: sanitizedUserAgent,
+            browserCookieSource: sanitizedBrowserSource
         )
 
         if url.host == "fast-download" {
             let session = appState.consumeBrowserSession(for: rawVideoUrl)
             downloadManager.quickDownload(
                 url: rawVideoUrl,
-                rawCookies: session?.rawCookies,
-                rawUserAgent: session?.rawUserAgent
+                rawCookies: nil,
+                rawUserAgent: session?.rawUserAgent,
+                browserCookieSource: session?.browserCookieSource
             )
             appState.selectedNavItem = .downloading
             appState.showAddDownloadSheet = false
