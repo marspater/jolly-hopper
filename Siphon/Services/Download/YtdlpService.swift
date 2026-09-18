@@ -2087,6 +2087,12 @@ public struct DownloadResult: Sendable {
                lower.contains("cf-turnstile")
     }
 
+    private func isBoyfriendTVLoginHTML(_ html: String) -> Bool {
+        let lower = html.lowercased()
+        return (lower.contains("to watch this video please") && lower.contains("login")) ||
+               lower.contains("user has been banned")
+    }
+
     private func boyfriendTVWebViewDocumentHTML(_ webView: WKWebView) async -> String? {
         await withCheckedContinuation { continuation in
             webView.evaluateJavaScript("document.documentElement.outerHTML") { value, error in
@@ -2331,11 +2337,17 @@ public struct DownloadResult: Sendable {
         // to a real WebKit engine before falling back to a plain HTTP request.
         if html.isEmpty, (sawChallenge || sawForbidden),
            let rendered = try await loadBoyfriendTVRenderedPage(pageURL, stage: "main-webkit"),
-           hasBoyfriendTVMediaData(rendered) {
+           !isBoyfriendTVChallengeHTML(rendered) {
+            // WebKit reached the real page, so an earlier curl/yt-dlp 403 is no
+            // longer the authoritative failure state.
+            sawChallenge = false
+            sawForbidden = false
+            sawUnauthorized = false
+            sawLoginPage = sawLoginPage || isBoyfriendTVLoginHTML(rendered)
             html = rendered
         }
 
-        // Fallback to URLSession if browser/WebKit output was empty or didn't contain media data.
+        // Fallback to URLSession if browser/WebKit output was still only a challenge or empty.
         if html.isEmpty && (processRunner is DefaultYtdlpProcessRunner) {
             var request = URLRequest(url: pageURL)
             request.timeoutInterval = 3.0
@@ -2478,10 +2490,16 @@ public struct DownloadResult: Sendable {
                 if streamUrl == nil, (sawChallenge || sawForbidden),
                    let embedPageURL = URL(string: embed),
                    let rendered = try await loadBoyfriendTVRenderedPage(embedPageURL, stage: "embed-webkit"),
-                   let extracted = extractStreamURLFromHTML(rendered) {
-                    streamUrl = extracted
-                    embedUrl = embed
-                    break
+                   !isBoyfriendTVChallengeHTML(rendered) {
+                    sawChallenge = false
+                    sawForbidden = false
+                    sawUnauthorized = false
+                    sawLoginPage = sawLoginPage || isBoyfriendTVLoginHTML(rendered)
+                    if let extracted = extractStreamURLFromHTML(rendered) {
+                        streamUrl = extracted
+                        embedUrl = embed
+                        break
+                    }
                 }
 
                 // HTTP fallback for embed URL if yt-dlp/WebKit did not extract stream.
