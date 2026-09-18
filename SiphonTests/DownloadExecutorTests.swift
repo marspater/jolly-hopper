@@ -127,6 +127,69 @@ final class DownloadExecutorTests: XCTestCase {
         XCTAssertEqual(mockDelegate.broadcastCount, 1)
     }
 
+    func testStoppingActiveFetchKeepsOwnershipUntilTaskTeardown() {
+        final class MockDelegate: DownloadExecutorDelegate {
+            var finishedCount = 0
+
+            func executorDidUpdateStatus(for download: Download, to status: DownloadStatus) {
+                download.status = status
+            }
+
+            func executorDidRequestAddToHistory(_ download: Download, skipSave: Bool) {}
+
+            func executorDidFinishDownload() {
+                finishedCount += 1
+            }
+
+            func executorDidRequestBroadcast() {}
+        }
+
+        let delegate = MockDelegate()
+        let executor = DownloadExecutor(ytdlpService: YtdlpService(), delegate: delegate)
+        let queue = DownloadQueue()
+        let download = Download(url: "https://example.com/fetching", options: .default)
+        download.status = .fetching
+
+        let placeholderTask = Task<Void, Never> {}
+        executor.activeTasks[download.id] = placeholderTask
+        XCTAssertTrue(queue.reserveSlot(for: download.id))
+
+        executor.stopDownload(
+            download,
+            queue: queue,
+            languageService: nil,
+            suppressNotification: true,
+            skipSaveAndBroadcast: true
+        )
+
+        XCTAssertEqual(download.status, .stopped)
+        XCTAssertNotNil(executor.activeTasks[download.id], "Cancellation must not drop task ownership before teardown")
+        XCTAssertTrue(queue.isSlotReserved(for: download.id), "Concurrency slot must remain reserved until teardown")
+        XCTAssertEqual(delegate.finishedCount, 0, "Finish callback belongs to task teardown, not the cancellation request")
+
+        executor.activeTasks.removeValue(forKey: download.id)
+        queue.releaseSlot(for: download.id)
+    }
+
+    func testShutdownRequestsCancellationWithoutDroppingOwnership() {
+        let executor = DownloadExecutor(ytdlpService: YtdlpService())
+        let downloadID = UUID()
+        let task = Task<Void, Never> {}
+        let controller = DownloadProcessController()
+
+        executor.activeTasks[downloadID] = task
+        executor.activeControllers[downloadID] = controller
+
+        executor.shutdown()
+
+        XCTAssertNotNil(executor.activeTasks[downloadID])
+        XCTAssertNotNil(executor.activeControllers[downloadID])
+        XCTAssertTrue(controller.isCancelled)
+
+        executor.activeTasks.removeValue(forKey: downloadID)
+        executor.activeControllers.removeValue(forKey: downloadID)
+    }
+
     func testSuccessfulCompletionRespectsCancellationAndUserStatus() {
         XCTAssertTrue(DownloadExecutor.shouldFinalizeSuccessfulDownload(
             taskIsCancelled: false,
