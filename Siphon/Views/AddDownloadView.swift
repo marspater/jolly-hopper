@@ -219,7 +219,7 @@ struct AddDownloadView: View {
             isLoading = false
 
             let clean = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
-            appState.clearBrowserSessionIfHostChanged(to: clean)
+            appState.clearBrowserSessionIfOriginChanged(to: clean)
             if clean.hasPrefix("http://") || clean.hasPrefix("https://") {
                 fetchInfo(debounce: true)
             }
