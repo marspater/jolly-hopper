@@ -232,6 +232,19 @@ public enum SiphonAnimation {
         }
         return .spring(response: 0.18, dampingFraction: 0.82)
     }
+
+    /// Shared tactile motion used by all custom button styles. These values are
+    /// independent of refresh rate; 120 Hz displays simply sample them more often.
+    public static let buttonPressSpring = Animation.spring(
+        response: 0.24,
+        dampingFraction: 0.68,
+        blendDuration: 0
+    )
+    public static let buttonHoverSpring = Animation.spring(
+        response: 0.28,
+        dampingFraction: 0.72,
+        blendDuration: 0
+    )
 }
 
 // MARK: - Per-window Rendering Capabilities
@@ -993,8 +1006,8 @@ public struct BouncyButtonStyle: ButtonStyle {
         
         configuration.label
             .scaleEffect(configuration.isPressed ? effectivePressScale : (isHovered ? effectiveHoverScale : 1.0))
-            .animation(reduceMotion ? nil : .spring(response: 0.28, dampingFraction: 0.65, blendDuration: 0), value: configuration.isPressed)
-            .animation(reduceMotion ? nil : .spring(response: 0.32, dampingFraction: 0.70, blendDuration: 0), value: isHovered)
+            .animation(reduceMotion ? nil : SiphonAnimation.buttonPressSpring, value: configuration.isPressed)
+            .animation(reduceMotion ? nil : SiphonAnimation.buttonHoverSpring, value: isHovered)
             .onHover { isHovered = $0 }
     }
 }
@@ -1033,8 +1046,8 @@ public struct SiphonPrimaryButtonStyle: ButtonStyle {
             )
             .shadow(color: SiphonTheme.accent.opacity(isHovered ? 0.35 : 0.20), radius: isHovered ? 8 : 4, y: 2)
             .scaleEffect(reduceMotion ? 1.0 : (configuration.isPressed ? 0.97 : (isHovered ? 1.015 : 1.0)))
-            .animation(reduceMotion ? nil : .spring(response: 0.28, dampingFraction: 0.65), value: configuration.isPressed)
-            .animation(reduceMotion ? nil : .spring(response: 0.30, dampingFraction: 0.70), value: isHovered)
+            .animation(reduceMotion ? nil : SiphonAnimation.buttonPressSpring, value: configuration.isPressed)
+            .animation(reduceMotion ? nil : SiphonAnimation.buttonHoverSpring, value: isHovered)
             .onHover { isHovered = $0 }
     }
 }
@@ -1060,8 +1073,8 @@ public struct SiphonSecondaryButtonStyle: ButtonStyle {
                 SiphonTheme.controlBorder(cornerRadius: cornerRadius, isHovered: isHovered)
             )
             .scaleEffect(reduceMotion ? 1.0 : (configuration.isPressed ? 0.97 : (isHovered ? 1.015 : 1.0)))
-            .animation(reduceMotion ? nil : .spring(response: 0.28, dampingFraction: 0.65), value: configuration.isPressed)
-            .animation(reduceMotion ? nil : .spring(response: 0.30, dampingFraction: 0.70), value: isHovered)
+            .animation(reduceMotion ? nil : SiphonAnimation.buttonPressSpring, value: configuration.isPressed)
+            .animation(reduceMotion ? nil : SiphonAnimation.buttonHoverSpring, value: isHovered)
             .onHover { isHovered = $0 }
     }
 }
@@ -1092,8 +1105,8 @@ public struct SiphonGhostButtonStyle: ButtonStyle {
                     .stroke(Color.secondary.opacity(showBorders ? 0.65 : 0.0), lineWidth: 1)
             )
             .scaleEffect(reduceMotion ? 1.0 : (configuration.isPressed ? 0.97 : 1.0))
-            .animation(reduceMotion ? nil : .spring(response: 0.28, dampingFraction: 0.65), value: configuration.isPressed)
-            .animation(reduceMotion ? nil : .spring(response: 0.30, dampingFraction: 0.70), value: isHovered)
+            .animation(reduceMotion ? nil : SiphonAnimation.buttonPressSpring, value: configuration.isPressed)
+            .animation(reduceMotion ? nil : SiphonAnimation.buttonHoverSpring, value: isHovered)
             .onHover { isHovered = $0 }
     }
 }
@@ -1121,8 +1134,8 @@ public struct SiphonIconButtonStyle: ButtonStyle {
                     .stroke(Color.secondary.opacity(showBorders ? 0.65 : 0.0), lineWidth: 1)
             )
             .scaleEffect(reduceMotion ? 1.0 : (configuration.isPressed ? 0.92 : (isHovered ? 1.05 : 1.0)))
-            .animation(reduceMotion ? nil : .spring(response: 0.25, dampingFraction: 0.65), value: configuration.isPressed)
-            .animation(reduceMotion ? nil : .spring(response: 0.28, dampingFraction: 0.70), value: isHovered)
+            .animation(reduceMotion ? nil : SiphonAnimation.buttonPressSpring, value: configuration.isPressed)
+            .animation(reduceMotion ? nil : SiphonAnimation.buttonHoverSpring, value: isHovered)
             .onHover { isHovered = $0 }
     }
 }

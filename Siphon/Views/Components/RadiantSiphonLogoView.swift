@@ -12,10 +12,12 @@ struct RadiantSiphonLogoView: View {
     @Environment(\.siphonRenderingCapabilities) private var renderingCapabilities
 
     var body: some View {
-        if !renderingEnvironment.shouldAnimateAmbient {
-            staticLogoView
-        } else {
+        // Ambient branding stays static at rest. The timeline wakes only for
+        // direct pointer interaction, reducing idle rendering work.
+        if renderingEnvironment.shouldAnimateAmbient && isHovered {
             animatedLogoView
+        } else {
+            staticLogoView
         }
     }
 

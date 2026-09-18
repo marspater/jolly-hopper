@@ -10,6 +10,7 @@ struct RecentDownloadRowView: View {
     @EnvironmentObject var downloadManager: DownloadManager
     @EnvironmentObject var languageService: LanguageService
     @State private var isHovered: Bool = false
+    @ObservedObject private var renderingEnvironment = AdaptiveRenderingEnvironment.shared
 
     init(download: Download) {
         self.download = download
@@ -173,6 +174,10 @@ struct RecentDownloadRowView: View {
                         .progressViewStyle(.linear)
                         .frame(width: 80)
                         .tint(SiphonTheme.statusDownloading)
+                        .animation(
+                            renderingEnvironment.reduceMotion ? nil : SiphonAnimation.snappySpring,
+                            value: safeProgress
+                        )
                 }
 
                 Button {
