@@ -1745,6 +1745,47 @@ final class QueueAndErrorUXTests: XCTestCase {
         XCTAssertTrue(delegate.applicationShouldHandleReopen(NSApplication.shared, hasVisibleWindows: false))
         XCTAssertTrue(delegate.applicationShouldHandleReopen(NSApplication.shared, hasVisibleWindows: true))
     }
+
+    func testBrowserSessionCredentialsAreBoundToOriginalHost() throws {
+        let state = AppState()
+        let sourceURL = try XCTUnwrap(URL(string: "https://secure.example.com/video/1"))
+        state.setBrowserSession(
+            for: sourceURL,
+            rawCookies: "session=secret",
+            rawUserAgent: "FixtureBrowser/1.0"
+        )
+
+        let sameHost = try XCTUnwrap(state.browserSession(for: "https://secure.example.com/video/2"))
+        XCTAssertEqual(sameHost.originHost, "secure.example.com")
+        XCTAssertEqual(sameHost.rawCookies, "session=secret")
+        XCTAssertEqual(sameHost.rawUserAgent, "FixtureBrowser/1.0")
+        XCTAssertNil(state.browserSession(for: "https://other.example.com/video/2"))
+
+        state.clearBrowserSessionIfHostChanged(to: "https://other.example.com/video/2")
+        XCTAssertNil(state.browserSessionOriginHost)
+        XCTAssertNil(state.rawCookiesToDownload)
+        XCTAssertNil(state.rawUserAgentToDownload)
+    }
+
+    func testBrowserSessionBatchRejectsMixedHostsAndClearsCredentials() throws {
+        let state = AppState()
+        let sourceURL = try XCTUnwrap(URL(string: "https://secure.example.com/video/1"))
+        state.setBrowserSession(
+            for: sourceURL,
+            rawCookies: "session=secret",
+            rawUserAgent: "FixtureBrowser/1.0"
+        )
+
+        let credentials = state.consumeBrowserSession(for: [
+            "https://secure.example.com/video/2",
+            "https://other.example.com/video/3"
+        ])
+
+        XCTAssertNil(credentials, "A browser session must never be copied into a mixed-host batch")
+        XCTAssertNil(state.browserSessionOriginHost)
+        XCTAssertNil(state.rawCookiesToDownload)
+        XCTAssertNil(state.rawUserAgentToDownload)
+    }
 }
 
 
