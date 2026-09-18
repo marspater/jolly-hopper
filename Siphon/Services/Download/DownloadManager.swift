@@ -295,7 +295,11 @@ class DownloadManager: ObservableObject {
         }
         processQueue()
 
-        while download.status == .queued || download.status == .fetching || download.status == .downloading || download.status == .processing {
+        while download.status == .queued ||
+              download.status == .fetching ||
+              download.status == .downloading ||
+              download.status == .processing ||
+              activeTasks[download.id] != nil {
             if Task.isCancelled {
                 return
             }
