@@ -142,14 +142,23 @@ final class ReleaseNotesService {
 
         do {
             let (data, response) = try await session.data(for: request)
-            guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            guard let httpResponse = response as? HTTPURLResponse else {
+                LoggerService.shared.log("Release notes request returned a non-HTTP response.", level: .warning)
+                return nil
+            }
+            guard httpResponse.statusCode == 200 else {
+                LoggerService.shared.log("Release notes request failed with HTTP \(httpResponse.statusCode).", level: .warning)
                 return nil
             }
             guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                LoggerService.shared.log("Release notes response could not be parsed as a JSON object.", level: .warning)
                 return nil
             }
 
-            guard let tagName = json["tag_name"] as? String else { return nil }
+            guard let tagName = json["tag_name"] as? String else {
+                LoggerService.shared.log("Release notes response did not contain a tag name.", level: .warning)
+                return nil
+            }
             let cleanTag = tagName.replacingOccurrences(of: "v", with: "")
             if cleanTag.compare(version, options: .numeric) == .orderedAscending {
                 return nil
@@ -162,7 +171,11 @@ final class ReleaseNotesService {
             if !rawBody.isEmpty {
                 return (title: title, body: rawBody)
             }
+        } catch is CancellationError {
+            LoggerService.shared.log("Release notes request was cancelled.", level: .debug)
+            return nil
         } catch {
+            LoggerService.shared.log("Failed to fetch release notes: \(error.localizedDescription)", level: .warning)
             return nil
         }
         return nil
