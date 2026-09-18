@@ -59,7 +59,7 @@ xcodebuild test \
   -scheme Siphon \
   -destination 'platform=macOS' \
   -configuration Debug \
-  MACOSX_DEPLOYMENT_TARGET=14.0 \
+  MACOSX_DEPLOYMENT_TARGET=15.0 \
   CODE_SIGN_IDENTITY="" \
   CODE_SIGNING_REQUIRED=NO \
   CODE_SIGNING_ALLOWED=NO
