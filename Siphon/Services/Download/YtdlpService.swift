@@ -2460,14 +2460,25 @@ public struct DownloadResult: Sendable {
             return BoyfriendTVExtractedMedia(streamURL: validStreamUrl, embedURL: embedUrl ?? targetUrl, title: title, thumbnailURL: thumbnailUrl)
         }
         
-        if safariCookieAccessDenied {
+        if safariCookieAccessDenied && browserLabels.isEmpty {
             throw YtdlpError.safariCookiesFullDiskAccessRequired
         }
         try Task.checkCancellation()
-        if sawChallenge { throw YtdlpError.cloudflareBlocked }
+        if sawChallenge {
+            if !browserLabels.isEmpty {
+                throw YtdlpError.downloadFailed(
+                    "BoyfriendTV is still returning browser verification after Siphon tried the available browser sessions. Open BoyfriendTV in your browser, complete the verification once, then retry; Siphon will reuse that session automatically."
+                )
+            }
+            throw YtdlpError.cloudflareBlocked
+        }
         if sawLoginPage || sawUnauthorized {
-            throw configuredBrowserCookieSource() == nil && rawCookies?.isEmpty != false
-                ? YtdlpError.boyfriendTVNeedsBrowserCookies : YtdlpError.boyfriendTVLoginRequired
+            if browserLabels.isEmpty && rawCookies?.isEmpty != false {
+                throw YtdlpError.boyfriendTVNeedsBrowserCookies
+            }
+            throw YtdlpError.downloadFailed(
+                "BoyfriendTV returned a sign-in page for the available browser sessions. Sign in to BoyfriendTV in your browser, then retry; Siphon will reuse that session automatically."
+            )
         }
         if sawForbidden {
             throw YtdlpError.downloadFailed("BoyfriendTV denied access (HTTP 403). This may be an anti-bot challenge or an access restriction; it does not prove your cookies are invalid.")
