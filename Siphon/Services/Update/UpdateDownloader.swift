@@ -56,6 +56,51 @@ public final class UpdateDownloader: NSObject, URLSessionDownloadDelegate, @unch
         return false
     }
 
+    static func stagedFileURL(
+        for sourceURL: URL,
+        temporaryDirectory: URL = FileManager.default.temporaryDirectory
+    ) -> URL {
+        let sourceExtension = sourceURL.pathExtension.trimmingCharacters(in: .whitespacesAndNewlines)
+        let stagedName = sourceExtension.isEmpty
+            ? "Siphon_Update_\(UUID().uuidString)"
+            : "Siphon_Update_\(UUID().uuidString).\(sourceExtension)"
+        return temporaryDirectory.appendingPathComponent(stagedName)
+    }
+
+    static func parseExpectedChecksum(
+        from text: String,
+        targetAssetName: String,
+        checksumFileName: String
+    ) -> String? {
+        let lines = text.split(whereSeparator: \.isNewline)
+        let lowerTarget = targetAssetName.lowercased()
+        let lowerChecksumFileName = checksumFileName.lowercased()
+        let isAssetSpecificChecksumFile = !lowerTarget.isEmpty && lowerChecksumFileName.hasPrefix(lowerTarget)
+
+        for line in lines {
+            let parts = line.split(separator: " ", omittingEmptySubsequences: true)
+            guard let first = parts.first, first.count == 64 else { continue }
+            let hash = String(first).lowercased()
+            guard hash.range(of: "^[0-9a-f]{64}$", options: .regularExpression) != nil else { continue }
+
+            if isAssetSpecificChecksumFile && parts.count <= 2 {
+                return hash
+            }
+
+            if parts.count >= 2 {
+                let manifestFilename = parts.dropFirst().joined(separator: " ")
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                    .replacingOccurrences(of: "^\\*", with: "", options: .regularExpression)
+                    .lowercased()
+                if manifestFilename == lowerTarget ||
+                    URL(fileURLWithPath: manifestFilename).lastPathComponent.lowercased() == lowerTarget {
+                    return hash
+                }
+            }
+        }
+        return nil
+    }
+
     /// Fetches and parses a SHA-256 checksum from a GitHub release checksum file.
     public static func fetchExpectedChecksum(from checksumURL: URL, targetAssetName: String) async throws -> String {
         guard isTrustedGitHubURL(checksumURL) else {
@@ -73,32 +118,12 @@ public final class UpdateDownloader: NSObject, URLSessionDownloadDelegate, @unch
             throw UpdateDownloadError.checksumUnavailable("checksum response was not valid UTF-8")
         }
 
-        let lines = text.split(whereSeparator: \.isNewline)
-        let lowerTarget = targetAssetName.lowercased()
-        let cURLName = checksumURL.lastPathComponent.lowercased()
-        let isAssetSpecificChecksumFile = !lowerTarget.isEmpty && cURLName.hasPrefix(lowerTarget)
-
-        for line in lines {
-            let parts = line.split(separator: " ", omittingEmptySubsequences: true)
-            guard let first = parts.first, first.count == 64 else { continue }
-            let hash = String(first).lowercased()
-            guard hash.range(of: "^[0-9a-f]{64}$", options: .regularExpression) != nil else { continue }
-
-            // Single-hash file specifically named for this asset (e.g. Siphon-arm64.dmg.sha256)
-            if isAssetSpecificChecksumFile && parts.count <= 2 {
-                return hash
-            }
-
-            // Multi-entry manifest (e.g. SHA256SUMS.txt): must strictly match targeted asset name
-            if parts.count >= 2 {
-                let manifestFilename = parts.dropFirst().joined(separator: " ")
-                    .trimmingCharacters(in: .whitespacesAndNewlines)
-                    .replacingOccurrences(of: "^\\*", with: "", options: .regularExpression)
-                    .lowercased()
-                if manifestFilename == lowerTarget || URL(fileURLWithPath: manifestFilename).lastPathComponent.lowercased() == lowerTarget {
-                    return hash
-                }
-            }
+        if let checksum = parseExpectedChecksum(
+            from: text,
+            targetAssetName: targetAssetName,
+            checksumFileName: checksumURL.lastPathComponent
+        ) {
+            return checksum
         }
 
         throw UpdateDownloadError.checksumUnavailable("no SHA-256 entry matched \(targetAssetName)")
@@ -127,11 +152,7 @@ public final class UpdateDownloader: NSObject, URLSessionDownloadDelegate, @unch
                     return
                 }
 
-                let sourceExtension = url.pathExtension.trimmingCharacters(in: .whitespacesAndNewlines)
-                let stagedName = sourceExtension.isEmpty
-                    ? "Siphon_Update_\(UUID().uuidString)"
-                    : "Siphon_Update_\(UUID().uuidString).\(sourceExtension)"
-                self.destinationURL = FileManager.default.temporaryDirectory.appendingPathComponent(stagedName)
+                self.destinationURL = Self.stagedFileURL(for: url)
                 self.progressHandler = onProgress
                 self.continuation = continuation
 
