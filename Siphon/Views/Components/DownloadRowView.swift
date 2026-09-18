@@ -35,6 +35,7 @@ final class QuickLookPreviewHelper: NSObject, QLPreviewPanelDataSource, QLPrevie
 struct DownloadListView: View {
     let downloads: [Download]
     let emptyMessage: String
+    let emptyDetail: String
     var emptyIcon: String = "tray.fill"
     let showStop: Bool
     
@@ -64,7 +65,7 @@ struct DownloadListView: View {
         SiphonEmptyStateView(
             icon: emptyIcon,
             title: emptyMessage,
-            message: languageService.s("url_placeholder"),
+            message: emptyDetail,
             actionTitle: languageService.s("new_download")
         ) {
             appState.showAddDownloadSheet = true
