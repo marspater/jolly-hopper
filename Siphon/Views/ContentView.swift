@@ -611,7 +611,8 @@ struct StatusSegmentButton: View {
                     statusIndicator
 
                     Text("\(count)")
-                        .font(.siphonStandardSemibold.monospacedDigit())
+                        .font(.siphonStandardSemibold)
+                        .monospacedDigit()
                         .foregroundColor(count > 0 ? .primary : (isHovered ? .primary : .secondary))
 
                     Text(title)
