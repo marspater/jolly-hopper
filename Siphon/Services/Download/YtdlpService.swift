@@ -2046,6 +2046,57 @@ public struct DownloadResult: Sendable {
         return nil
     }
 
+    nonisolated static func boyfriendTVAlternateURL(for urlString: String) -> String? {
+        guard var components = URLComponents(string: urlString),
+              let host = components.host?.lowercased() else {
+            return nil
+        }
+
+        if host == "boyfriendtv.com" || host.hasSuffix(".boyfriendtv.com") {
+            components.host = "www.boyfriend.tv"
+        } else if host == "boyfriend.tv" || host.hasSuffix(".boyfriend.tv") {
+            components.host = "www.boyfriendtv.com"
+        } else {
+            return nil
+        }
+        components.scheme = "https"
+        return components.url?.absoluteString
+    }
+
+    nonisolated static func boyfriendTVBrowserCandidates(
+        configured: String?,
+        installed: [String],
+        hasFullDiskAccess: Bool
+    ) -> [String?] {
+        var result: [String?] = []
+        var seen = Set<String>()
+
+        func appendBrowser(_ browser: String) {
+            let normalized = browser.lowercased()
+            guard normalized != "none",
+                  !normalized.isEmpty,
+                  normalized != "safari" || hasFullDiskAccess,
+                  seen.insert(normalized).inserted else {
+                return
+            }
+            result.append(normalized)
+        }
+
+        if let configured {
+            appendBrowser(configured)
+        }
+
+        let installedSet = Set(installed.map { $0.lowercased() })
+        for browser in ["chrome", "brave", "edge", "vivaldi", "chromium", "firefox", "opera", "safari"]
+            where installedSet.contains(browser) {
+            appendBrowser(browser)
+        }
+
+        // Last resort keeps the existing anonymous request behavior.
+        result.append(nil)
+        return result
+    }
+
     nonisolated static func shouldForwardBoyfriendTVRawCookies(
         from sourceURL: String,
         to destinationURL: String
@@ -2078,14 +2129,20 @@ public struct DownloadResult: Sendable {
     private func resolveBoyfriendTVMediaInfo(url: String, rawCookies: String? = nil) async throws -> BoyfriendTVExtractedMedia? {
         let targetUrl = normalizeURLForYtdlp(url)
         guard let pageURL = URL(string: targetUrl) else { return nil }
-        
+
+        var pageCandidates: [URL] = [pageURL]
+        if let alternateString = Self.boyfriendTVAlternateURL(for: targetUrl),
+           let alternateURL = URL(string: alternateString),
+           alternateURL != pageURL {
+            pageCandidates.append(alternateURL)
+        }
+        var resolvedPageURL = pageURL
         var html = ""
         var safariCookieAccessDenied = false
         var sawChallenge = false
         var sawLoginPage = false
         var sawForbidden = false
         var sawUnauthorized = false
-        var didRetry = false
 
         // Keep diagnostics categorical: page dumps and signed URLs contain secrets.
         func inspectPage(_ output: String, stage: String) -> String {
@@ -2110,6 +2167,7 @@ public struct DownloadResult: Sendable {
         }
 
         func dumpPage(_ args: [String], stage: String) async throws -> String {
+            var didRetry = false
             while true {
                 try Task.checkCancellation()
                 let output: String
@@ -2189,52 +2247,68 @@ public struct DownloadResult: Sendable {
             if hasBoyfriendTVMediaData(rawHtml) { html = rawHtml }
         }
 
-        var browsersToTry: [String?] = []
-        if let configured = configuredBrowserCookieSource() {
-            if configured != "safari" || Self.hasFullDiskAccess {
-                browsersToTry.append(configured)
-            }
-        }
-        // Honour the selected browser; probing every installed profile multiplies
-        // requests and can mix unrelated sessions during a site challenge.
-        browsersToTry.append(nil)
+        let installedBrowsers = await BrowserUtils.shared.getInstalledBrowsers().map(\.id)
+        let browsersToTry = Self.boyfriendTVBrowserCandidates(
+            configured: configuredBrowserCookieSource(),
+            installed: installedBrowsers,
+            hasFullDiskAccess: Self.hasFullDiskAccess
+        )
+        let browserLabels = browsersToTry.compactMap { $0 }
+        LoggerService.shared.log(
+            "[BoyfriendTV] stage=session-recovery browser-candidates=\(browserLabels.count)",
+            level: .debug
+        )
 
         if html.isEmpty, let ytdlp = ytdlpBinary {
-            for browser in browsersToTry {
-                var args = [ytdlp.path, "--ignore-config", "--dump-pages", "--skip-download", "--no-playlist"]
-                if let browserName = browser {
-                    args.append(contentsOf: ["--cookies-from-browser", browserName])
+            for candidatePage in pageCandidates {
+                let candidateURL = candidatePage.absoluteString
+                let isAlternate = candidateURL != targetUrl
+                for browser in browsersToTry {
+                    var args = [ytdlp.path, "--ignore-config", "--dump-pages", "--skip-download", "--no-playlist"]
+                    if let browserName = browser {
+                        args.append(contentsOf: ["--cookies-from-browser", browserName])
+                    }
+                    appendSiteSpecificArgs(for: candidateURL, to: &args)
+                    args.append("--")
+                    args.append(candidateURL)
+
+                    let stage = isAlternate ? "main-browser-alt" : "main-browser"
+                    let browserHtml = try await dumpPage(args, stage: stage)
+                    if hasBoyfriendTVMediaData(browserHtml) {
+                        html = browserHtml
+                        resolvedPageURL = candidatePage
+                        break
+                    }
                 }
-                appendSiteSpecificArgs(for: targetUrl, to: &args)
-                args.append("--")
-                args.append(targetUrl)
-                
-                let browserHtml = try await dumpPage(args, stage: "main-browser")
-                if hasBoyfriendTVMediaData(browserHtml) {
-                    html = browserHtml
+                if !html.isEmpty { break }
+            }
+        }
+
+        // URLSession is a final transport fallback. Raw extension cookies are only
+        // forwarded within the same BoyfriendTV cookie scope.
+        if html.isEmpty && (processRunner is DefaultYtdlpProcessRunner) {
+            for candidatePage in pageCandidates {
+                var request = URLRequest(url: candidatePage)
+                request.timeoutInterval = 3.0
+                request.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36", forHTTPHeaderField: "User-Agent")
+                let pageBaseDomain = candidatePage.host?.lowercased().contains("boyfriendtv.com") == true
+                    ? "https://www.boyfriendtv.com"
+                    : "https://www.boyfriend.tv"
+                request.setValue(pageBaseDomain + "/", forHTTPHeaderField: "Referer")
+                request.setValue(pageBaseDomain, forHTTPHeaderField: "Origin")
+                if let raw = rawCookies, !raw.isEmpty,
+                   Self.shouldForwardBoyfriendTVRawCookies(from: targetUrl, to: candidatePage.absoluteString) {
+                    request.setValue(raw, forHTTPHeaderField: "Cookie")
+                }
+
+                let stage = candidatePage == pageURL ? "main-http" : "main-http-alt"
+                if let fetched = try await fetchPage(request, stage: stage),
+                   hasBoyfriendTVMediaData(fetched) {
+                    html = fetched
+                    resolvedPageURL = candidatePage
                     break
                 }
             }
-        }
-
-        // Fallback to URLSession if browser dump output was empty or didn't contain stream
-        if html.isEmpty && (processRunner is DefaultYtdlpProcessRunner) {
-            var request = URLRequest(url: pageURL)
-            request.timeoutInterval = 3.0
-            request.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36", forHTTPHeaderField: "User-Agent")
-            let pageBaseDomain = pageURL.host?.lowercased().contains("boyfriendtv.com") == true
-                ? "https://www.boyfriendtv.com"
-                : "https://www.boyfriend.tv"
-            request.setValue(pageBaseDomain + "/", forHTTPHeaderField: "Referer")
-            request.setValue(pageBaseDomain, forHTTPHeaderField: "Origin")
-            if let raw = rawCookies, !raw.isEmpty {
-                request.setValue(raw, forHTTPHeaderField: "Cookie")
-            }
-            
-            if let fetched = try await fetchPage(request, stage: "main-http"), hasBoyfriendTVMediaData(fetched) {
-                html = fetched
-            }
-
         }
         
         // Extract Title
@@ -2264,7 +2338,7 @@ public struct DownloadResult: Sendable {
         for regex in Self.boyfriendEmbedRegexes {
             for match in regex.matches(in: embedHTML, range: NSRange(embedHTML.startIndex..., in: embedHTML)) {
                 let value = (embedHTML as NSString).substring(with: match.range(at: 1))
-                guard let resolved = URL(string: value, relativeTo: pageURL)?.absoluteURL,
+                guard let resolved = URL(string: value, relativeTo: resolvedPageURL)?.absoluteURL,
                       isBoyfriendTVURL(resolved.absoluteString), resolved.path.hasPrefix("/embed/"),
                       resolved.user == nil, resolved.password == nil,
                       resolved.scheme == "https" || resolved.scheme == "http" else { continue }
