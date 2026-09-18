@@ -2333,21 +2333,7 @@ public struct DownloadResult: Sendable {
             }
         }
 
-        // curl/yt-dlp impersonation cannot execute a JavaScript challenge. Escalate
-        // to a real WebKit engine before falling back to a plain HTTP request.
-        if html.isEmpty, (sawChallenge || sawForbidden),
-           let rendered = try await loadBoyfriendTVRenderedPage(pageURL, stage: "main-webkit"),
-           !isBoyfriendTVChallengeHTML(rendered) {
-            // WebKit reached the real page, so an earlier curl/yt-dlp 403 is no
-            // longer the authoritative failure state.
-            sawChallenge = false
-            sawForbidden = false
-            sawUnauthorized = false
-            sawLoginPage = sawLoginPage || isBoyfriendTVLoginHTML(rendered)
-            html = rendered
-        }
-
-        // Fallback to URLSession if browser/WebKit output was still only a challenge or empty.
+        // Cheap direct HTTP fallback before escalating to a browser engine.
         if html.isEmpty && (processRunner is DefaultYtdlpProcessRunner) {
             var request = URLRequest(url: pageURL)
             request.timeoutInterval = 3.0
@@ -2364,7 +2350,18 @@ public struct DownloadResult: Sendable {
             if let fetched = try await fetchPage(request, stage: "main-http"), hasBoyfriendTVMediaData(fetched) {
                 html = fetched
             }
+        }
 
+        // curl/yt-dlp/plain HTTP cannot execute a JavaScript challenge. WebKit is
+        // the final network fallback so its post-challenge state is authoritative.
+        if html.isEmpty, (sawChallenge || sawForbidden),
+           let rendered = try await loadBoyfriendTVRenderedPage(pageURL, stage: "main-webkit"),
+           !isBoyfriendTVChallengeHTML(rendered) {
+            sawChallenge = false
+            sawForbidden = false
+            sawUnauthorized = false
+            sawLoginPage = sawLoginPage || isBoyfriendTVLoginHTML(rendered)
+            html = rendered
         }
         
         // Extract Title
@@ -2487,22 +2484,7 @@ public struct DownloadResult: Sendable {
                     }
                 }
 
-                if streamUrl == nil, (sawChallenge || sawForbidden),
-                   let embedPageURL = URL(string: embed),
-                   let rendered = try await loadBoyfriendTVRenderedPage(embedPageURL, stage: "embed-webkit"),
-                   !isBoyfriendTVChallengeHTML(rendered) {
-                    sawChallenge = false
-                    sawForbidden = false
-                    sawUnauthorized = false
-                    sawLoginPage = sawLoginPage || isBoyfriendTVLoginHTML(rendered)
-                    if let extracted = extractStreamURLFromHTML(rendered) {
-                        streamUrl = extracted
-                        embedUrl = embed
-                        break
-                    }
-                }
-
-                // HTTP fallback for embed URL if yt-dlp/WebKit did not extract stream.
+                // Cheap HTTP fallback before escalating this embed to WebKit.
                 if streamUrl == nil, let embedPageURL = URL(string: embed), (processRunner is DefaultYtdlpProcessRunner) {
                     var embedRequest = URLRequest(url: embedPageURL)
                     embedRequest.timeoutInterval = 3.0
@@ -2519,6 +2501,21 @@ public struct DownloadResult: Sendable {
 
                     if let fetched = try await fetchPage(embedRequest, stage: "embed-http"),
                        let extracted = extractStreamURLFromHTML(fetched) {
+                        streamUrl = extracted
+                        embedUrl = embed
+                        break
+                    }
+                }
+
+                if streamUrl == nil, (sawChallenge || sawForbidden),
+                   let embedPageURL = URL(string: embed),
+                   let rendered = try await loadBoyfriendTVRenderedPage(embedPageURL, stage: "embed-webkit"),
+                   !isBoyfriendTVChallengeHTML(rendered) {
+                    sawChallenge = false
+                    sawForbidden = false
+                    sawUnauthorized = false
+                    sawLoginPage = sawLoginPage || isBoyfriendTVLoginHTML(rendered)
+                    if let extracted = extractStreamURLFromHTML(rendered) {
                         streamUrl = extracted
                         embedUrl = embed
                         break
