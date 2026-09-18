@@ -49,7 +49,6 @@ struct SiphonApp: App {
                 .environmentObject(appState)
                 .environmentObject(languageService)
                 .environmentObject(updateChecker)
-                .preferredColorScheme(theme == "light" ? .light : (theme == "dark" ? .dark : nil))
                 .onAppear {
                     SiphonTheme.applyTheme(theme)
                     setupMenuBarIfNeeded()
