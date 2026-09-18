@@ -767,7 +767,7 @@ struct AddDownloadView: View {
                 Button(languageService.s("select_all")) { selectedPlaylistIds = Set(playlistItems.lazy.map(\.id)) }
                     .buttonStyle(.plain).foregroundColor(SiphonTheme.accentForeground(for: colorScheme))
                 Button(languageService.s("deselect_all")) { selectedPlaylistIds.removeAll() }
-                    .buttonStyle(.plain).foregroundColor(SiphonTheme.accent)
+                    .buttonStyle(.plain).foregroundColor(SiphonTheme.accentForeground(for: colorScheme))
                 Spacer()
                 Text("\(selectedPlaylistIds.count) / \(playlistItems.count)").font(.geistMono(11, weight: .semibold)).foregroundColor(.secondary)
             }
@@ -894,7 +894,7 @@ struct AddDownloadView: View {
                     HStack(spacing: 5) {
                         Image(systemName: "bolt.fill")
                             .font(.siphonMetadata)
-                            .foregroundColor(SiphonTheme.statusQueued)
+                            .foregroundColor(SiphonTheme.statusForeground(for: .queued, colorScheme: colorScheme))
                         if let presetName = selectedPresetName {
                             Text("\(languageService.s("quick_presets")): \(presetName)")
                                 .lineLimit(1)
@@ -1502,7 +1502,7 @@ struct AddDownloadView: View {
                     .font(.siphonStandard)
                 Text(error)
                     .font(.siphonSecondaryMedium)
-                    .foregroundColor(SiphonTheme.statusFailed)
+                    .foregroundColor(SiphonTheme.statusForeground(for: .failed, colorScheme: colorScheme))
                     .multilineTextAlignment(.leading)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
