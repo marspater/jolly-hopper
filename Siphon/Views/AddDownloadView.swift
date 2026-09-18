@@ -645,6 +645,7 @@ struct AddDownloadView: View {
                                 .font(.system(size: 11, weight: .bold))
                         }
                     }
+                    .frame(minWidth: 74, alignment: .center)
                     .foregroundColor(urlInput.isEmpty ? .secondary.opacity(0.5) : .white)
                     .padding(.horizontal, SiphonTheme.spacing12)
                     .padding(.vertical, 7)
@@ -688,10 +689,21 @@ struct AddDownloadView: View {
             .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusControl))
 
             VStack(alignment: .leading, spacing: 4) {
-                Text(info.title).font(.geist(15, weight: .semibold)).lineLimit(2)
+                Text(info.title)
+                    .font(.geist(15, weight: .semibold))
+                    .lineLimit(2)
+                    .truncationMode(.tail)
+                    .help(info.title)
+
                 if let uploader = info.uploader {
-                    Text(uploader).font(.siphonSecondary).foregroundColor(.secondary)
+                    Text(uploader)
+                        .font(.siphonSecondary)
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .help(uploader)
                 }
+
                 HStack(spacing: 12) {
                     if let duration = info.durationString {
                         Label(duration, systemImage: "clock").font(.geistMono(11)).foregroundColor(.secondary)
@@ -701,7 +713,10 @@ struct AddDownloadView: View {
                     }
                 }
             }
-            Spacer()
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .layoutPriority(1)
+
+            Spacer(minLength: SiphonTheme.spacing8)
         }
         .padding()
         .background(
@@ -775,13 +790,20 @@ struct AddDownloadView: View {
                             .frame(width: 50, height: 30)
                             .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusSmall))
 
-                            VStack(alignment: .leading) {
-                                Text(item.title).font(.siphonStandardMedium).lineLimit(1)
+                            VStack(alignment: .leading, spacing: SiphonTheme.spacing2) {
+                                Text(item.title)
+                                    .font(.siphonStandardMedium)
+                                    .lineLimit(1)
+                                    .truncationMode(.tail)
+                                    .help(item.title)
                                 if let duration = item.durationString {
-                                    Text(duration).font(.siphonMetadata).foregroundColor(.secondary)
+                                    Text(duration)
+                                        .font(.siphonMetadata)
+                                        .foregroundColor(.secondary)
                                 }
                             }
-                            Spacer()
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .layoutPriority(1)
                         }
                         .padding(8)
                         .background(
@@ -874,6 +896,8 @@ struct AddDownloadView: View {
                             .foregroundColor(SiphonTheme.statusQueued)
                         if let presetName = selectedPresetName {
                             Text("\(languageService.s("quick_presets")): \(presetName)")
+                                .lineLimit(1)
+                                .truncationMode(.tail)
                         } else {
                             Text(languageService.s("quick_presets"))
                         }
@@ -1098,7 +1122,10 @@ struct AddDownloadView: View {
                         .font(.geistMono(11, weight: .medium))
                         .lineLimit(1)
                         .truncationMode(.middle)
+                        .help(saveFolder.path)
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .layoutPriority(1)
                 .padding(.horizontal, SiphonTheme.spacing10)
                 .padding(.vertical, 6)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -1122,6 +1149,7 @@ struct AddDownloadView: View {
                         )
                 }
                 .buttonStyle(.plain)
+                .fixedSize(horizontal: true, vertical: false)
             }
         }
         .padding(SiphonTheme.spacing14)
