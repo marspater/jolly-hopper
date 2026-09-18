@@ -2431,7 +2431,7 @@ public struct DownloadResult: Sendable {
     // Let curl-impersonate supply a consistent TLS fingerprint and HTTP headers.
     // Hard-coded Chrome headers mixed with Safari/Firefox cookies are contradictory.
     private func refreshBrowserTransportIdentity(for url: String, args: inout [String]) {
-        guard usesBrowserTransport(url) else { return }
+        guard usesBrowserTransport(url), !isRecuURL(url) else { return }
         let optionEnd = args.firstIndex(of: "--") ?? args.count
         let options = Array(args[..<optionEnd])
         let suffix = Array(args[optionEnd...])
@@ -5189,7 +5189,7 @@ public struct DownloadResult: Sendable {
                 args.append(contentsOf: ["--add-header", "Origin:\(origin)"])
             }
         }
-        if usesBrowserTransport(url) {
+        if usesBrowserTransport(url) && !isRecu {
             refreshBrowserTransportIdentity(for: url, args: &args)
             // Smaller request bursts and bounded exponential backoff for sensitive hosts.
             for flag in ["--retries", "--fragment-retries", "--concurrent-fragments"] {
@@ -5197,6 +5197,11 @@ public struct DownloadResult: Sendable {
                     args[index + 1] = flag == "--concurrent-fragments" ? "2" : "3"
                 }
             }
+            args.append(contentsOf: ["--extractor-retries", "2",
+                                     "--retry-sleep", "http:exp=1:8",
+                                     "--retry-sleep", "fragment:exp=1:8",
+                                     "--retry-sleep", "extractor:exp=1:8"])
+        } else if isRecu {
             args.append(contentsOf: ["--extractor-retries", "2",
                                      "--retry-sleep", "http:exp=1:8",
                                      "--retry-sleep", "fragment:exp=1:8",

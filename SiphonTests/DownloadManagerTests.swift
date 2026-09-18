@@ -138,12 +138,18 @@ final class DownloadManagerTests: XCTestCase {
     }
 
     func testCustomFilenameCollisionResolution() async {
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent("testCustomFilenameCollisionResolution_\(UUID().uuidString)")
+        try? FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
         let manager = DownloadManager()
         var opts1 = DownloadOptions.default
+        opts1.saveFolder = tempDir
         opts1.customFilename = "custom_video"
         opts1.fileType = .mp4
 
         var opts2 = DownloadOptions.default
+        opts2.saveFolder = tempDir
         opts2.customFilename = "custom_video"
         opts2.fileType = .mp4
 
@@ -168,8 +174,13 @@ final class DownloadManagerTests: XCTestCase {
     }
 
     func testPlanUniqueOutputPathDoesNotMutateReservations() {
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent("testPlanUniqueOutputPathDoesNotMutateReservations_\(UUID().uuidString)")
+        try? FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
         let manager = DownloadManager()
         var opts = DownloadOptions.default
+        opts.saveFolder = tempDir
         opts.customFilename = "unreserved_test"
         opts.fileType = .mp4
         let dl = Download(url: "https://example.com/unreserved", options: opts, title: "Test")

@@ -547,7 +547,14 @@ struct DownloadOptions: Codable {
     }
     
     static var `default`: DownloadOptions {
-        let saveFolderURL = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first ?? URL(fileURLWithPath: NSHomeDirectory() + "/Downloads")
+        let saveFolderURL: URL
+        if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil || NSClassFromString("XCTestCase") != nil {
+            let testDir = FileManager.default.temporaryDirectory.appendingPathComponent("SiphonTestDownloads", isDirectory: true)
+            try? FileManager.default.createDirectory(at: testDir, withIntermediateDirectories: true)
+            saveFolderURL = testDir
+        } else {
+            saveFolderURL = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first ?? URL(fileURLWithPath: NSHomeDirectory() + "/Downloads")
+        }
         return DownloadOptions(
             saveFolder: saveFolderURL,
             fileType: .mp4,
