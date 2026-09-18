@@ -50,6 +50,39 @@ final class QueueAndErrorUXTests: XCTestCase {
         XCTAssertTrue(script.contains("BACKUP_PATH"))
         XCTAssertTrue(script.contains("ditto \"$NEW_APP\" \"$APP_PATH\""))
     }
+
+    func testGitHubAssetDigestParsingRequiresValidSHA256() {
+        let hash = String(repeating: "a", count: 64)
+        XCTAssertEqual(UpdateChecker.parseGitHubAssetSHA256("sha256:\(hash)"), hash)
+        XCTAssertEqual(UpdateChecker.parseGitHubAssetSHA256(" SHA256:\(hash.uppercased()) "), hash)
+        XCTAssertNil(UpdateChecker.parseGitHubAssetSHA256(nil))
+        XCTAssertNil(UpdateChecker.parseGitHubAssetSHA256("sha512:\(hash)"))
+        XCTAssertNil(UpdateChecker.parseGitHubAssetSHA256("sha256:deadbeef"))
+        XCTAssertNil(UpdateChecker.parseGitHubAssetSHA256("sha256:" + String(repeating: "z", count: 64)))
+    }
+
+    func testAdHocUpdateInstallRequiresPinnedChecksum() async throws {
+        let package = FileManager.default.temporaryDirectory
+            .appendingPathComponent("Siphon_Update_\(UUID().uuidString).zip")
+        try Data("fixture".utf8).write(to: package)
+        defer { try? FileManager.default.removeItem(at: package) }
+
+        let installer = UpdateInstaller()
+        do {
+            try await installer.install(
+                packageURL: package,
+                expectedChecksum: nil,
+                expectedTeamID: nil,
+                allowAdHoc: true
+            )
+            XCTFail("Expected checksum requirement to reject unpinned ad-hoc update")
+        } catch let error as UpdateInstallError {
+            guard case .verificationFailed(let message) = error else {
+                return XCTFail("Expected verificationFailed, got \(error)")
+            }
+            XCTAssertTrue(message.contains("pinned SHA-256"))
+        }
+    }
     
 
     func testSubtitleFormatLanguageLogic() {
