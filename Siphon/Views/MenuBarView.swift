@@ -59,7 +59,6 @@ struct MenuBarView: View {
         .padding(SiphonTheme.spacing12)
         .frame(minWidth: 350, idealWidth: 370, maxWidth: 420)
         .siphonAdaptiveRendering()
-        .preferredColorScheme(theme == "light" ? .light : (theme == "dark" ? .dark : nil))
         .siphonWindowBackground()
         .onAppear {
             customPresets = CustomPreset.loadAll()
