@@ -1476,18 +1476,31 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertNil(candidates[2], "Anonymous transport should remain the final fallback")
     }
 
-    func testBoyfriendTVBrowserCandidatesPrioritizeConfiguredBrowserWithoutDuplicates() {
+    func testBoyfriendTVBrowserCandidatesRespectConfiguredSessionWithoutProfileSpray() {
         let candidates = YtdlpService.boyfriendTVBrowserCandidates(
             configured: "firefox",
             installed: ["chrome", "firefox", "brave"],
             hasFullDiskAccess: true
         )
 
+        XCTAssertEqual(candidates.count, 2)
         XCTAssertEqual(candidates[0], "firefox")
-        XCTAssertEqual(candidates[1], "chrome")
-        XCTAssertEqual(candidates[2], "brave")
-        XCTAssertNil(candidates.last!)
-        XCTAssertEqual(candidates.compactMap { $0 }.filter { $0 == "firefox" }.count, 1)
+        XCTAssertNil(candidates[1], "Anonymous transport should remain the only fallback after the selected session")
+    }
+
+    func testBoyfriendTVRawCookieBridgePreservesValuesAndScopesHost() throws {
+        let url = try XCTUnwrap(URL(string: "https://www.boyfriendtv.com/videos/1710869/test/"))
+        let cookies = YtdlpService.boyfriendTVCookies(
+            from: "cf_clearance=abc==; session_id=xyz123; malformed",
+            for: url
+        )
+
+        XCTAssertEqual(cookies.count, 2)
+        XCTAssertEqual(cookies.first(where: { $0.name == "cf_clearance" })?.value, "abc==")
+        XCTAssertEqual(cookies.first(where: { $0.name == "session_id" })?.value, "xyz123")
+        XCTAssertTrue(cookies.allSatisfy { $0.domain == "www.boyfriendtv.com" })
+        XCTAssertTrue(cookies.allSatisfy { $0.path == "/" })
+        XCTAssertTrue(cookies.allSatisfy(\.isSecure))
     }
 
     func testBoyfriendTVAlternateURLPreservesVideoPath() {
@@ -1806,6 +1819,41 @@ final class YtdlpServiceTests: XCTestCase {
         } catch {
             XCTAssertFalse(String(describing: error).contains("1710869_preview.mp4"))
         }
+    }
+
+    func testBoyfriendTVWebKitChallengeTimeoutIsNotRepeatedAcrossMirrorsAndEmbeds() async throws {
+        UserDefaults.standard.set("none", forKey: UserDefaultsKeys.browserForCookies)
+        defer { UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.browserForCookies) }
+        service.installedBrowsersProvider = { [] }
+
+        let challenge = "<html><head><title>Just a moment...</title></head><body><script src='/cdn-cgi/challenge-platform/test'></script></body></html>"
+        let challengeOutput = Data(challenge.utf8).base64EncodedString() + "\nERROR: HTTP Error 403: Forbidden"
+        let renderedLoads = TestBox<[URL]>([])
+
+        service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
+            if args.contains("--dump-pages") {
+                throw YtdlpError.commandFailed(challengeOutput)
+            }
+            throw YtdlpError.commandFailed("ERROR: HTTP Error 403: Forbidden")
+        })
+        service.boyfriendTVRenderedPageLoader = { url in
+            renderedLoads.value.append(url)
+            return challenge
+        }
+
+        do {
+            _ = try await service.fetchInfo(
+                url: "https://www.boyfriendtv.com/videos/1710869/test/"
+            )
+            XCTFail("Expected Cloudflare challenge failure")
+        } catch let error as YtdlpError {
+            guard case .cloudflareBlocked = error else {
+                return XCTFail("Expected Cloudflare challenge failure, got \(error)")
+            }
+        }
+
+        XCTAssertEqual(renderedLoads.value.count, 1, "A timed-out WebKit challenge must not be replayed on mirror/embed URLs")
+        XCTAssertTrue(renderedLoads.value[0].path.contains("/videos/1710869"))
     }
 
     func testBoyfriendTVWebKitClearanceThenLoginReportsLoginNotCloudflare() async throws {
