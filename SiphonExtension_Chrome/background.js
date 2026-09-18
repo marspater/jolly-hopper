@@ -12,11 +12,39 @@ chrome.runtime.onInstalled.addListener(() => {
     });
 });
 
+async function detectBrowserSource() {
+    const ua = typeof navigator !== "undefined" ? (navigator.userAgent || "") : "";
+    const brands = typeof navigator !== "undefined" && navigator.userAgentData?.brands
+        ? navigator.userAgentData.brands.map((item) => item.brand.toLowerCase()).join(" ")
+        : "";
+
+    if (/\bEdg\//.test(ua)) return "edge";
+    if (/\bOPR\//.test(ua)) return "opera";
+    if (/\bVivaldi\//i.test(ua) || brands.includes("vivaldi")) return "vivaldi";
+    if (/\bHelium\//i.test(ua) || brands.includes("helium")) return "helium";
+
+    if (typeof navigator !== "undefined" &&
+        navigator.brave &&
+        typeof navigator.brave.isBrave === "function") {
+        try {
+            if (await navigator.brave.isBrave()) return "brave";
+        } catch {
+            // Fall through to Chromium/Chrome detection.
+        }
+    }
+
+    if (brands.includes("chromium") && !brands.includes("google chrome")) {
+        return "chromium";
+    }
+    return "chrome";
+}
+
 async function triggerDownload(url, host = "download") {
     if (!url || typeof url !== "string") return;
     if (!url.startsWith("http://") && !url.startsWith("https://")) return;
 
-    let deepLink = `siphon://${host}?url=${encodeURIComponent(url)}&browser=chrome`;
+    const browserSource = await detectBrowserSource();
+    let deepLink = `siphon://${host}?url=${encodeURIComponent(url)}&browser=${encodeURIComponent(browserSource)}`;
     const userAgent = typeof navigator !== "undefined" ? navigator.userAgent : "";
     if (userAgent) {
         deepLink += `&ua=${encodeURIComponent(userAgent)}`;
