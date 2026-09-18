@@ -420,6 +420,55 @@ final class YtdlpServiceTests: XCTestCase {
         }
     }
 
+    func testMetadataUsesExplicitBrowserSourceWithoutCookiePayload() async throws {
+        service.ytdlpPath = URL(fileURLWithPath: "/usr/local/bin/yt-dlp")
+        UserDefaults.standard.set("none", forKey: UserDefaultsKeys.browserForCookies)
+        defer { UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.browserForCookies) }
+
+        let exactUA = "Mozilla/5.0 Firefox/145.0"
+        service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
+            XCTAssertFalse(args.contains("--cookies"), "Extension handoff must not materialize flattened raw cookies")
+            let browserIndex = try XCTUnwrap(args.firstIndex(of: "--cookies-from-browser"))
+            XCTAssertEqual(args[browserIndex + 1], "firefox")
+            let uaIndex = try XCTUnwrap(args.firstIndex(of: "--user-agent"))
+            XCTAssertEqual(args[uaIndex + 1], exactUA)
+            return #"{"id":"fixture","title":"Fixture Video"}"#
+        })
+
+        let info = try await service.fetchInfo(
+            url: "https://example.com/video",
+            rawUserAgent: exactUA,
+            browserCookieSource: "firefox"
+        )
+
+        XCTAssertEqual(info.id, "fixture")
+        XCTAssertEqual(info.title, "Fixture Video")
+    }
+
+    func testPlaylistInfoUsesExplicitBrowserSourceWithoutCookiePayload() async throws {
+        service.ytdlpPath = URL(fileURLWithPath: "/usr/local/bin/yt-dlp")
+        UserDefaults.standard.set("none", forKey: UserDefaultsKeys.browserForCookies)
+        defer { UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.browserForCookies) }
+
+        let exactUA = "Mozilla/5.0 Safari/605.1.15"
+        service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
+            XCTAssertFalse(args.contains("--cookies"))
+            let browserIndex = try XCTUnwrap(args.firstIndex(of: "--cookies-from-browser"))
+            XCTAssertEqual(args[browserIndex + 1], "safari")
+            let uaIndex = try XCTUnwrap(args.firstIndex(of: "--user-agent"))
+            XCTAssertEqual(args[uaIndex + 1], exactUA)
+            return #"{"id":"entry-1","title":"Entry 1"}"#
+        })
+
+        let items = try await service.fetchPlaylistInfo(
+            url: "https://example.com/playlist",
+            rawUserAgent: exactUA,
+            browserCookieSource: "safari"
+        )
+
+        XCTAssertEqual(items.map(\.id), ["entry-1"])
+    }
+
     func testPlaylistInfoPreservesExtensionBrowserIdentity() async throws {
         let exactUA = "Mozilla/5.0 FixtureBrowser/140.0"
         service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
@@ -2064,6 +2113,41 @@ final class YtdlpServiceTests: XCTestCase {
             YtdlpService.recuPlaylistURL(from: api),
             "https://cdn.example.test/master.m3u8?token=a&expires=123"
         )
+    }
+
+    func testRecuMetadataUsesBrowserSourceWithoutCookieURLPayload() async throws {
+        let pageURL = "https://recu.me/polarny05/video/112873588/play"
+        let exactUA = "Mozilla/5.0 Firefox/145.0"
+        let stream = "https://cdn.example.test/browser-session.m3u8"
+        UserDefaults.standard.set("none", forKey: UserDefaultsKeys.browserForCookies)
+        defer { UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.browserForCookies) }
+
+        service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
+            let target = args.last ?? ""
+            if args.contains("--dump-pages") {
+                XCTAssertFalse(args.contains("--cookies"))
+                let browserIndex = try XCTUnwrap(args.firstIndex(of: "--cookies-from-browser"))
+                XCTAssertEqual(args[browserIndex + 1], "firefox")
+
+                if target.contains("/api/video/112873588") {
+                    return Data("<source src=\"\(stream)\">".utf8).base64EncodedString()
+                }
+                return Data("<html><head><title>Recu browser source</title></head><body><div id=\"112873588\" data-token=\"fixture-token\"></div></body></html>".utf8).base64EncodedString()
+            }
+            if args.contains("--dump-json") {
+                throw YtdlpError.commandFailed("probe unavailable in unit test")
+            }
+            return "{}"
+        })
+
+        let info = try await service.fetchInfo(
+            url: pageURL,
+            rawUserAgent: exactUA,
+            browserCookieSource: "firefox"
+        )
+
+        XCTAssertEqual(info.manifestUrl, stream)
+        XCTAssertEqual(info.title, "Recu browser source")
     }
 
     func testRecuMetadataUsesExtensionCookiesAndExactUserAgent() async throws {
