@@ -1808,6 +1808,8 @@ final class QueueAndErrorUXTests: XCTestCase {
             "http://192.168.1.10/video",
             "http://169.254.169.254/latest/meta-data",
             "http://[::1]/video",
+            "http://[::ffff:7f00:1]/video",
+            "http://[0:0:0:0:0:ffff:7f00:1]/video",
             "http://[fd00::1]/video",
             "http://printer.local/video",
             "http://intranet/video"
