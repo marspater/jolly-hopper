@@ -2114,12 +2114,14 @@ public struct DownloadResult: Sendable {
             return nil
         }
         let parts = url.path.split(separator: "/").map(String.init)
-        guard parts.count >= 4,
+        guard parts.count >= 3,
               parts[1].lowercased() == "video",
-              parts[3].lowercased() == "play",
               !parts[0].isEmpty,
               !parts[2].isEmpty,
               parts[2].allSatisfy(\.isNumber) else {
+            return nil
+        }
+        if parts.count >= 4 && parts[3].lowercased() != "play" {
             return nil
         }
         return (model: parts[0], videoID: parts[2])
@@ -2159,7 +2161,7 @@ public struct DownloadResult: Sendable {
                   let range = Range(match.range(at: 1), in: decoded) else {
                 continue
             }
-            let value = String(decoded[range]).replacingOccurrences(of: "amp;", with: "")
+            let value = String(decoded[range]).replacingOccurrences(of: "&amp;", with: "&")
             guard let url = URL(string: value),
                   ["http", "https"].contains(url.scheme?.lowercased() ?? ""),
                   url.user == nil,
@@ -2298,6 +2300,7 @@ public struct DownloadResult: Sendable {
             throw YtdlpError.safariCookiesFullDiskAccessRequired
         }
 
+        let pageURL = "https://recu.me/\(identity.model)/video/\(identity.videoID)/play"
         var lastPageHTML = ""
         var lastToken = ""
         var apiResponse = ""
@@ -2306,7 +2309,7 @@ public struct DownloadResult: Sendable {
         // Refresh the page and token once before surfacing a hard failure.
         for attempt in 0..<2 {
             lastPageHTML = try await recuDumpPage(
-                url,
+                pageURL,
                 referer: nil,
                 rawCookies: rawCookies,
                 rawUserAgent: rawUserAgent,
@@ -2329,7 +2332,7 @@ public struct DownloadResult: Sendable {
 
             apiResponse = try await recuDumpPage(
                 apiURL,
-                referer: url,
+                referer: pageURL,
                 rawCookies: rawCookies,
                 rawUserAgent: rawUserAgent,
                 stage: attempt == 0 ? "api" : "api-refresh"
@@ -2412,7 +2415,7 @@ public struct DownloadResult: Sendable {
             videoID: identity.videoID,
             model: identity.model,
             playlistURL: playlistURL,
-            pageURL: url,
+            pageURL: pageURL,
             title: title,
             thumbnailURL: thumbnail,
             userAgent: rawUserAgent
