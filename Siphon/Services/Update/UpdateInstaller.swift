@@ -60,6 +60,16 @@ public final class UpdateInstaller: Sendable {
             throw UpdateInstallError.packageNotFound(packageURL)
         }
 
+        // Ad-hoc/open-source releases have no Developer ID identity to pin.
+        // In that mode the package digest is the mandatory trust anchor.
+        if allowAdHoc && expectedTeamID == nil {
+            guard let checksum = expectedChecksum, !checksum.isEmpty else {
+                throw UpdateInstallError.verificationFailed(
+                    "Ad-hoc updates require a pinned SHA-256 checksum."
+                )
+            }
+        }
+
         // 1. Verify SHA-256 of package if expected checksum was provided
         if let checksum = expectedChecksum, !checksum.isEmpty {
             do {
