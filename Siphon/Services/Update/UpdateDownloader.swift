@@ -27,6 +27,12 @@ public enum UpdateDownloadError: LocalizedError, Sendable {
 
 public final class UpdateDownloader: NSObject, URLSessionDownloadDelegate, @unchecked Sendable {
     private let lock = NSLock()
+
+    private static func log(_ message: String, level: LoggerService.LogLevel) {
+        Task { @MainActor in
+            LoggerService.shared.log(message, level: level)
+        }
+    }
     private var activeSession: URLSession?
     private var activeTask: URLSessionDownloadTask?
     private var continuation: CheckedContinuation<URL, Error>?
@@ -230,7 +236,11 @@ public final class UpdateDownloader: NSObject, URLSessionDownloadDelegate, @unch
             if let cont {
                 cont.resume(returning: stagedFile)
             } else {
-                try? FileManager.default.removeItem(at: stagedFile)
+                do {
+                    try FileManager.default.removeItem(at: stagedFile)
+                } catch {
+                    Self.log("Failed to remove an unclaimed staged update: \(error.localizedDescription)", level: .warning)
+                }
             }
         } catch {
             lock.lock()
