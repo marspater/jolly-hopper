@@ -1756,12 +1756,15 @@ final class QueueAndErrorUXTests: XCTestCase {
         )
 
         let sameHost = try XCTUnwrap(state.browserSession(for: "https://secure.example.com/video/2"))
+        XCTAssertEqual(sameHost.originScheme, "https")
         XCTAssertEqual(sameHost.originHost, "secure.example.com")
         XCTAssertEqual(sameHost.rawCookies, "session=secret")
         XCTAssertEqual(sameHost.rawUserAgent, "FixtureBrowser/1.0")
         XCTAssertNil(state.browserSession(for: "https://other.example.com/video/2"))
+        XCTAssertNil(state.browserSession(for: "http://secure.example.com/video/2"), "HTTPS browser credentials must not cross to cleartext HTTP")
 
-        state.clearBrowserSessionIfHostChanged(to: "https://other.example.com/video/2")
+        state.clearBrowserSessionIfOriginChanged(to: "https://other.example.com/video/2")
+        XCTAssertNil(state.browserSessionOriginScheme)
         XCTAssertNil(state.browserSessionOriginHost)
         XCTAssertNil(state.rawCookiesToDownload)
         XCTAssertNil(state.rawUserAgentToDownload)
