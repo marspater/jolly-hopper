@@ -45,6 +45,15 @@ jobs:
             node --check "$file"
           done
 
+      - name: Verify hardened runtime entitlements
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -qE 'com\.apple\.security\.cs\.(allow-unsigned-executable-memory|disable-library-validation)' Siphon/Siphon.entitlements; then
+            echo "Dangerous Hardened Runtime exception reintroduced." >&2
+            exit 1
+          fi
+
       - name: Test companion server
         run: npm test --prefix server
 
