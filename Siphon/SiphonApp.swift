@@ -165,7 +165,14 @@ struct SiphonApp: App {
               !rawVideoUrl.contains("\r") && !rawVideoUrl.contains("\n") && !rawVideoUrl.contains("\0"),
               let targetURL = URL(string: rawVideoUrl),
               let host = targetURL.host, !host.isEmpty,
-              targetURL.scheme == "http" || targetURL.scheme == "https" else { return }
+              targetURL.scheme == "http" || targetURL.scheme == "https",
+              ExternalDownloadTargetPolicy.isAllowed(targetURL) else {
+            LoggerService.shared.log(
+                "Rejected external download target outside the public network boundary: \(LoggerService.sanitizeURLForLog(rawVideoUrl))",
+                level: .warning
+            )
+            return
+        }
         
         let sanitizedCookies: String? = {
             guard let cookies = rawCookies, !cookies.isEmpty, cookies.count <= 64 * 1024 else { return nil }
