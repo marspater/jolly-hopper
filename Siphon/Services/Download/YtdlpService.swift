@@ -2,6 +2,7 @@ import Foundation
 import CryptoKit
 import CommonCrypto
 import AppKit
+import WebKit
 
 struct DependencyChecksums {
     static let ytdlpVersion = "2026.08.19"
@@ -334,9 +335,12 @@ class YtdlpService: ObservableObject {
     var ffprobePath: URL?
     private var deniedCookieSources: Set<String> = []
     private var activeSetupTask: Task<Void, Never>?
+    private lazy var boyfriendTVWebDataStore = WKWebsiteDataStore.nonPersistent()
 
     var processRunner: YtdlpProcessRunning
     var updateYtdlpHandler: (() async throws -> String)?
+    // Test seam for the browser-engine fallback. Production uses WKWebView.
+    var boyfriendTVRenderedPageLoader: ((URL) async throws -> String?)?
 
     init(processRunner: YtdlpProcessRunning = DefaultYtdlpProcessRunner()) {
         self.processRunner = processRunner
@@ -2075,6 +2079,112 @@ public struct DownloadResult: Sendable {
         let thumbnailURL: String?
     }
 
+    private func isBoyfriendTVChallengeHTML(_ html: String) -> Bool {
+        let lower = html.lowercased()
+        return lower.contains("cf-chl-") ||
+               lower.contains("/cdn-cgi/challenge-platform/") ||
+               lower.contains("<title>just a moment") ||
+               lower.contains("cf-turnstile")
+    }
+
+    private func boyfriendTVWebViewDocumentHTML(_ webView: WKWebView) async -> String? {
+        await withCheckedContinuation { continuation in
+            webView.evaluateJavaScript("document.documentElement.outerHTML") { value, error in
+                guard error == nil else {
+                    continuation.resume(returning: nil)
+                    return
+                }
+                continuation.resume(returning: value as? String)
+            }
+        }
+    }
+
+    /// Executes BoyfriendTV's JavaScript challenge in a real browser engine.
+    /// The website data store is non-persistent but shared across main/embed loads so
+    /// short-lived Cloudflare clearance cookies can be reused during one app session.
+    private func loadBoyfriendTVRenderedPage(_ url: URL, stage: String) async throws -> String? {
+        guard (url.scheme == "https" || url.scheme == "http"),
+              url.user == nil,
+              url.password == nil,
+              isBoyfriendTVURL(url.absoluteString) else {
+            return nil
+        }
+
+        if let loader = boyfriendTVRenderedPageLoader {
+            let rendered = try await loader(url)
+            if let rendered {
+                let result = hasBoyfriendTVMediaData(rendered)
+                    ? "stream-or-player-found"
+                    : isBoyfriendTVChallengeHTML(rendered) ? "challenge-page" : "page-ready"
+                LoggerService.shared.log("[BoyfriendTV] stage=\(stage) result=\(result)", level: .debug)
+            }
+            return rendered
+        }
+
+        guard processRunner is DefaultYtdlpProcessRunner else {
+            return nil
+        }
+
+        let configuration = WKWebViewConfiguration()
+        configuration.websiteDataStore = boyfriendTVWebDataStore
+        configuration.defaultWebpagePreferences.allowsContentJavaScript = true
+
+        let webView = WKWebView(frame: .zero, configuration: configuration)
+        var request = URLRequest(
+            url: url,
+            cachePolicy: .reloadIgnoringLocalCacheData,
+            timeoutInterval: 15
+        )
+        request.setValue("text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8", forHTTPHeaderField: "Accept")
+
+        webView.load(request)
+        defer { webView.stopLoading() }
+
+        var lastHTML: String?
+        var settledPolls = 0
+
+        // Up to 12 seconds gives Cloudflare's managed JS challenge time to redirect
+        // and issue clearance without allowing an unbounded hidden browser task.
+        for _ in 0..<24 {
+            try Task.checkCancellation()
+            try await Task.sleep(nanoseconds: 500_000_000)
+            try Task.checkCancellation()
+
+            guard let rendered = await boyfriendTVWebViewDocumentHTML(webView),
+                  !rendered.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                continue
+            }
+
+            lastHTML = rendered
+            if hasBoyfriendTVMediaData(rendered) {
+                LoggerService.shared.log("[BoyfriendTV] stage=\(stage) result=stream-or-player-found", level: .debug)
+                return rendered
+            }
+
+            if isBoyfriendTVChallengeHTML(rendered) {
+                settledPolls = 0
+                continue
+            }
+
+            if !webView.isLoading {
+                settledPolls += 1
+                if settledPolls >= 3 {
+                    LoggerService.shared.log("[BoyfriendTV] stage=\(stage) result=page-ready", level: .debug)
+                    return rendered
+                }
+            }
+        }
+
+        let finalResult: String
+        if let lastHTML {
+            finalResult = isBoyfriendTVChallengeHTML(lastHTML) ? "challenge-timeout" : "page-timeout"
+        } else {
+            finalResult = "no-html"
+        }
+        LoggerService.shared.log("[BoyfriendTV] stage=\(stage) result=\(finalResult)", level: .debug)
+        return lastHTML
+    }
+
     private func resolveBoyfriendTVMediaInfo(url: String, rawCookies: String? = nil) async throws -> BoyfriendTVExtractedMedia? {
         let targetUrl = normalizeURLForYtdlp(url)
         guard let pageURL = URL(string: targetUrl) else { return nil }
@@ -2206,11 +2316,6 @@ public struct DownloadResult: Sendable {
                     args.append(contentsOf: ["--cookies-from-browser", browserName])
                 }
                 appendSiteSpecificArgs(for: targetUrl, to: &args)
-                // Cloudflare binds challenge cookies to the browser fingerprint that
-                // obtained them. Keep the page-resolution transport coherent with the
-                // selected cookie source instead of mixing Firefox/Brave/Edge cookies
-                // with a hard-coded Chrome user agent and client hints.
-                refreshBrowserTransportIdentity(for: targetUrl, args: &args)
                 args.append("--")
                 args.append(targetUrl)
                 
@@ -2222,7 +2327,15 @@ public struct DownloadResult: Sendable {
             }
         }
 
-        // Fallback to URLSession if browser dump output was empty or didn't contain stream
+        // curl/yt-dlp impersonation cannot execute a JavaScript challenge. Escalate
+        // to a real WebKit engine before falling back to a plain HTTP request.
+        if html.isEmpty,
+           let rendered = try await loadBoyfriendTVRenderedPage(pageURL, stage: "main-webkit"),
+           hasBoyfriendTVMediaData(rendered) {
+            html = rendered
+        }
+
+        // Fallback to URLSession if browser/WebKit output was empty or didn't contain media data.
         if html.isEmpty && (processRunner is DefaultYtdlpProcessRunner) {
             var request = URLRequest(url: pageURL)
             request.timeoutInterval = 3.0
@@ -2350,9 +2463,6 @@ public struct DownloadResult: Sendable {
                             embedArgs.append(contentsOf: ["--cookies-from-browser", browserName])
                         }
                         appendSiteSpecificArgs(for: embed, to: &embedArgs)
-                        // Match the impersonated browser fingerprint to the cookie
-                        // source for Cloudflare-protected embed pages as well.
-                        refreshBrowserTransportIdentity(for: embed, args: &embedArgs)
                         embedArgs.append("--")
                         embedArgs.append(embed)
                         
@@ -2365,7 +2475,16 @@ public struct DownloadResult: Sendable {
                     }
                 }
 
-                // HTTP fallback for embed URL if yt-dlp did not extract stream
+                if streamUrl == nil,
+                   let embedPageURL = URL(string: embed),
+                   let rendered = try await loadBoyfriendTVRenderedPage(embedPageURL, stage: "embed-webkit"),
+                   let extracted = extractStreamURLFromHTML(rendered) {
+                    streamUrl = extracted
+                    embedUrl = embed
+                    break
+                }
+
+                // HTTP fallback for embed URL if yt-dlp/WebKit did not extract stream.
                 if streamUrl == nil, let embedPageURL = URL(string: embed), (processRunner is DefaultYtdlpProcessRunner) {
                     var embedRequest = URLRequest(url: embedPageURL)
                     embedRequest.timeoutInterval = 3.0
