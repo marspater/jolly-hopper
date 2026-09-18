@@ -1598,7 +1598,11 @@ public struct DownloadResult: Sendable {
                     if let idx = currentArgs.firstIndex(of: "--cookies-from-browser"), idx + 1 < currentArgs.count {
                         let failedBrowser = currentArgs[idx + 1]
                         let installed = await BrowserUtils.shared.getInstalledBrowsers().map { $0.id.lowercased() }
-                        let pool = installed.isEmpty ? ["chrome", "brave", "firefox", "edge", "safari", "helium"] : ["chrome", "brave", "firefox", "edge", "safari", "helium"].filter { installed.contains($0) }
+                        let pool = options.browserCookieSource == nil
+                            ? (installed.isEmpty
+                                ? ["chrome", "brave", "firefox", "edge", "safari", "helium"]
+                                : ["chrome", "brave", "firefox", "edge", "safari", "helium"].filter { installed.contains($0) })
+                            : []
                         if let altBrowser = pool.first(where: { $0 != failedBrowser && ($0 != "safari" || Self.hasFullDiskAccess) && !triedAltBrowsers.contains($0) }) {
                             triedAltBrowsers.insert(altBrowser)
                             LoggerService.shared.log("Browser cookie access failed for '\(failedBrowser)'. Retrying download with alternative browser cookies from '\(altBrowser)'...", level: .info)
@@ -1610,7 +1614,7 @@ public struct DownloadResult: Sendable {
                     }
                     triedStrategies.insert(.stripCookies)
                     LoggerService.shared.log("Browser cookie access failed or database missing (\(errText.trimmingCharacters(in: .whitespacesAndNewlines))). Retrying download without browser cookies...", level: .warning)
-                    if let browser = configuredBrowserCookieSource() {
+                    if let browser = Self.validatedBrowserCookieSource(options.browserCookieSource) ?? configuredBrowserCookieSource() {
                         recordCookieDenial(browser: browser, url: normalizedURL)
                     }
                     onOutput("[Siphon Info] Browser cookies unavailable. Retrying download directly without browser cookies...\n")
@@ -1656,13 +1660,18 @@ public struct DownloadResult: Sendable {
                 if !errText.isEmpty, (normalizedURL.contains("youtube.com") || normalizedURL.contains("youtu.be")),
                    (errText.contains("403") || errText.contains("Sign in") || errText.contains("bot") || errText.contains("login_required")),
                    !currentArgs.contains("--cookies-from-browser"),
-                   let browser = configuredBrowserCookieSource(),
+                   let browser = Self.validatedBrowserCookieSource(options.browserCookieSource) ?? configuredBrowserCookieSource(),
                    !triedStrategies.contains(.injectBrowserCookies(browser: browser)) {
                     triedStrategies.insert(.injectBrowserCookies(browser: browser))
                     LoggerService.shared.log("YouTube 403 / bot challenge encountered. Retrying download with browser cookies from \(browser)...", level: .warning)
                     onOutput("[Siphon Info] YouTube authentication required. Retrying download with browser cookies from \(browser)...\n")
                     var cookieArgs = currentArgs
-                    _ = appendCookieArgs(for: normalizedURL, to: &cookieArgs, force: true)
+                    _ = appendCookieArgs(
+                        for: normalizedURL,
+                        to: &cookieArgs,
+                        force: true,
+                        browserOverride: options.browserCookieSource
+                    )
                     currentArgs = cookieArgs
                     continue
                 }
