@@ -6,6 +6,7 @@ struct AddDownloadView: View {
     @EnvironmentObject var languageService: LanguageService
     @Environment(\.dismiss) private var dismiss
     @Environment(\.appearsActive) private var appearsActive
+    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.siphonRenderingCapabilities) private var renderingCapabilities
     @FocusState private var focusedField: InputField?
 
@@ -617,7 +618,7 @@ struct AddDownloadView: View {
                         Text(languageService.s("paste"))
                             .font(.siphonSecondaryMedium)
                     }
-                    .foregroundColor(isPasted ? SiphonTheme.statusCompleted : .primary)
+                    .foregroundColor(isPasted ? SiphonTheme.statusForeground(for: .completed, colorScheme: colorScheme) : .primary)
                     .padding(.horizontal, SiphonTheme.spacing10)
                     .padding(.vertical, 7)
                     .background(SiphonTheme.controlBackground(cornerRadius: SiphonTheme.radiusControl))
@@ -764,7 +765,7 @@ struct AddDownloadView: View {
 
             HStack(spacing: 12) {
                 Button(languageService.s("select_all")) { selectedPlaylistIds = Set(playlistItems.lazy.map(\.id)) }
-                    .buttonStyle(.plain).foregroundColor(SiphonTheme.accent)
+                    .buttonStyle(.plain).foregroundColor(SiphonTheme.accentForeground(for: colorScheme))
                 Button(languageService.s("deselect_all")) { selectedPlaylistIds.removeAll() }
                     .buttonStyle(.plain).foregroundColor(SiphonTheme.accent)
                 Spacer()
@@ -1128,7 +1129,6 @@ struct AddDownloadView: View {
                 .layoutPriority(1)
                 .padding(.horizontal, SiphonTheme.spacing10)
                 .padding(.vertical, 6)
-                .frame(maxWidth: .infinity, alignment: .leading)
                 .background(SiphonTheme.fieldBackground(cornerRadius: SiphonTheme.radiusControl))
                 .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusControl, style: .continuous))
                 .overlay(
@@ -1498,7 +1498,7 @@ struct AddDownloadView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .firstTextBaseline, spacing: 10) {
                 Image(systemName: "exclamationmark.triangle.fill")
-                    .foregroundColor(SiphonTheme.statusFailed)
+                    .foregroundColor(SiphonTheme.statusForeground(for: .failed, colorScheme: colorScheme))
                     .font(.siphonStandard)
                 Text(error)
                     .font(.siphonSecondaryMedium)
