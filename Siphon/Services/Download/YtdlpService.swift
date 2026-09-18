@@ -799,8 +799,11 @@ class YtdlpService: ObservableObject {
                         parsedInfo = try? JSONDecoder().decode(MediaInfo.self, from: data)
                     }
                 } catch {
+                    if error is CancellationError { throw error }
+                    try Task.checkCancellation()
                     // If yt-dlp dump-json fails on the stream template, synthesize MediaInfo directly
                 }
+                try Task.checkCancellation()
 
                 let synthesizedFormats = parseBoyfriendTVFormats(from: btvMedia.streamURL)
                 let resolvedFormats = (parsedInfo?.formats?.isEmpty == false) ? parsedInfo?.formats : synthesizedFormats
@@ -2026,7 +2029,98 @@ public struct DownloadResult: Sendable {
         
         var html = ""
         var safariCookieAccessDenied = false
+        var sawChallenge = false
+        var sawLoginPage = false
+        var sawForbidden = false
+        var sawUnauthorized = false
+        var didRetry = false
+
+        // Keep diagnostics categorical: page dumps and signed URLs contain secrets.
+        func inspectPage(_ output: String, stage: String) -> String {
+            let decoded = output.split(whereSeparator: \.isNewline).compactMap { line -> String? in
+                let trimmed = line.trimmingCharacters(in: .whitespaces)
+                guard let data = Data(base64Encoded: trimmed),
+                      let text = String(data: data, encoding: .utf8) else { return nil }
+                return text
+            }.joined(separator: "\n")
+            let lower = decoded.lowercased()
+            let hasStream = extractStreamURLFromHTML(decoded) != nil
+            let challenge = !hasStream && (
+                lower.contains("cf-chl-") || lower.contains("/cdn-cgi/challenge-platform/") ||
+                lower.contains("<title>just a moment") || lower.contains("cf-turnstile")
+            )
+            let login = !hasStream && lower.contains("to watch this video please") && lower.contains("login")
+            sawChallenge = sawChallenge || challenge
+            sawLoginPage = sawLoginPage || login
+            let result = hasStream ? "stream-found" : challenge ? "challenge-page" : login ? "login-page" : decoded.isEmpty ? "no-html" : "no-stream"
+            LoggerService.shared.log("[BoyfriendTV] stage=\(stage) result=\(result)", level: .debug)
+            return decoded
+        }
+
+        func dumpPage(_ args: [String], stage: String) async throws -> String {
+            while true {
+                try Task.checkCancellation()
+                let output: String
+                do {
+                    output = try await processRunner.runCommand(args)
+                } catch is CancellationError {
+                    throw CancellationError()
+                } catch {
+                    try Task.checkCancellation()
+                    guard case YtdlpError.commandFailed(let failure) = error else {
+                        LoggerService.shared.log("[BoyfriendTV] stage=\(stage) result=process-failure", level: .debug)
+                        throw error
+                    }
+                    output = failure
+                }
+                try Task.checkCancellation()
+                // Classify only diagnostic lines, never URLs or base64 page content.
+                let diagnostic = output.split(whereSeparator: \.isNewline)
+                    .filter { $0.hasPrefix("ERROR:") || $0.hasPrefix("WARNING:") }
+                    .joined(separator: "\n")
+                    .replacingOccurrences(of: #"https?://\S+"#, with: "[URL]", options: .regularExpression)
+                let lower = diagnostic.lowercased()
+                let challenge = lower.contains("cloudflare") || lower.contains("captcha") || lower.contains("challenge") || lower.contains("turnstile")
+                sawChallenge = sawChallenge || challenge
+                sawForbidden = sawForbidden || lower.contains("403") || lower.contains("forbidden")
+                sawUnauthorized = sawUnauthorized || lower.contains("http error 401")
+                if args.contains("safari"), isSafariPermissionError(output) {
+                    safariCookieAccessDenied = true
+                }
+                let html = inspectPage(output, stage: stage)
+                let transient = isTransientServerError(lower) || lower.contains("timed out")
+                let classification = challenge ? "challenge" : transient ? "transient" : lower.contains("401") ? "http-401" : lower.contains("403") ? "http-403" : lower.contains("unsupported url") ? "unsupported-url" : diagnostic.isEmpty ? "none" : "other"
+                LoggerService.shared.log("[BoyfriendTV] stage=\(stage) yt-dlp=\(classification)", level: .debug)
+                let challengePage = html.lowercased().contains("cf-chl-") || html.lowercased().contains("/cdn-cgi/challenge-platform/") || html.lowercased().contains("<title>just a moment")
+                if !didRetry && (challenge || challengePage || transient) && !hasBoyfriendTVMediaData(html) {
+                    didRetry = true
+                    LoggerService.shared.log("[BoyfriendTV] Retrying transient page resolution once", level: .info)
+                    continue
+                }
+                return html
+            }
+        }
         
+        func fetchPage(_ request: URLRequest, stage: String) async throws -> String? {
+            try Task.checkCancellation()
+            do {
+                let (data, response) = try await URLSession.shared.data(for: request)
+                try Task.checkCancellation()
+                guard let http = response as? HTTPURLResponse else { return nil }
+                sawForbidden = sawForbidden || http.statusCode == 403
+                sawUnauthorized = sawUnauthorized || http.statusCode == 401
+                LoggerService.shared.log("[BoyfriendTV] stage=\(stage) http=\(http.statusCode)", level: .debug)
+                let page = inspectPage(data.base64EncodedString(), stage: stage)
+                return http.statusCode == 200 ? page : nil
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch {
+                try Task.checkCancellation()
+                LoggerService.shared.log("[BoyfriendTV] stage=\(stage) result=transport-failure", level: .debug)
+                return nil
+            }
+        }
+
         let appSupportYtdlp = Self.getAppSupportDirectory().appendingPathComponent("yt-dlp")
         let ytdlpBinary = ytdlpPath ?? Bundle.main.url(forResource: "yt-dlp", withExtension: nil) ?? (FileManager.default.fileExists(atPath: appSupportYtdlp.path) ? appSupportYtdlp : nil)
 
@@ -2034,44 +2128,13 @@ public struct DownloadResult: Sendable {
         if let raw = rawCookies, !raw.isEmpty, let ytdlp = ytdlpBinary,
            let tempFile = createTempCookiesFileFromHeader(url: targetUrl, cookieHeader: raw) {
             defer { try? FileManager.default.removeItem(at: tempFile) }
-            var rawArgs = [ytdlp.path, "--ignore-config", "--dump-pages", "--cookies", tempFile.path]
+            var rawArgs = [ytdlp.path, "--ignore-config", "--dump-pages", "--skip-download", "--no-playlist", "--cookies", tempFile.path]
             appendSiteSpecificArgs(for: targetUrl, to: &rawArgs)
             rawArgs.append("--")
             rawArgs.append(targetUrl)
             
-            var dumpOutput: String? = nil
-            do {
-                dumpOutput = try await processRunner.runCommand(rawArgs)
-            } catch let error as YtdlpError {
-                if case .commandFailed(let output) = error {
-                    dumpOutput = output
-                }
-            } catch {
-                LoggerService.shared.log("Non-YtdlpError during raw cookie dump-pages: \(error.localizedDescription)", level: .debug)
-            }
-            
-            if let output = dumpOutput, !output.isEmpty {
-                var rawChunks: [String] = []
-                for line in output.split(whereSeparator: \.isNewline) {
-                    let trimmed = String(line).trimmingCharacters(in: .whitespaces)
-                    if !trimmed.starts(with: "#") && !trimmed.starts(with: "[") && !trimmed.starts(with: "WARNING") && !trimmed.starts(with: "ERROR") {
-                        if let decodedData = Data(base64Encoded: trimmed, options: .ignoreUnknownCharacters) {
-                            let decodedString = String(decoding: decodedData, as: UTF8.self)
-                            if !decodedString.isEmpty {
-                                rawChunks.append(decodedString)
-                            }
-                        }
-                    }
-                }
-                if !rawChunks.isEmpty {
-                    let rawHtml = rawChunks.joined()
-                    let hasMediaData = hasBoyfriendTVMediaData(rawHtml)
-                    if hasMediaData {
-                        html = rawHtml
-                        LoggerService.shared.log("Successfully extracted BoyfriendTV page dump using session cookies", level: .info)
-                    }
-                }
-            }
+            let rawHtml = try await dumpPage(rawArgs, stage: "main-session")
+            if hasBoyfriendTVMediaData(rawHtml) { html = rawHtml }
         }
 
         var browsersToTry: [String?] = []
@@ -2092,7 +2155,7 @@ public struct DownloadResult: Sendable {
 
         if html.isEmpty, let ytdlp = ytdlpBinary {
             for browser in browsersToTry {
-                var args = [ytdlp.path, "--ignore-config", "--dump-pages"]
+                var args = [ytdlp.path, "--ignore-config", "--dump-pages", "--skip-download", "--no-playlist"]
                 if let browserName = browser {
                     args.append(contentsOf: ["--cookies-from-browser", browserName])
                 }
@@ -2100,48 +2163,14 @@ public struct DownloadResult: Sendable {
                 args.append("--")
                 args.append(targetUrl)
                 
-                var dumpOutput: String? = nil
-                do {
-                    dumpOutput = try await processRunner.runCommand(args)
-                } catch let error as YtdlpError {
-                    if case .commandFailed(let output) = error {
-                        dumpOutput = output
-                        if browser == "safari", isSafariPermissionError(output) {
-                            safariCookieAccessDenied = true
-                            LoggerService.shared.log("BoyfriendTV extraction could not read Safari cookies; trying remaining sources.", level: .warning)
-                        }
-                    }
-                } catch {
-                    // Ignore general process errors
-                }
-                
-                if let output = dumpOutput, !output.isEmpty {
-                    var browserChunks: [String] = []
-                    for line in output.split(whereSeparator: \.isNewline) {
-                        let trimmed = String(line).trimmingCharacters(in: .whitespaces)
-                        if !trimmed.starts(with: "#") && !trimmed.starts(with: "[") && !trimmed.starts(with: "WARNING") && !trimmed.starts(with: "ERROR") {
-                            if let decodedData = Data(base64Encoded: trimmed, options: .ignoreUnknownCharacters) {
-                                let decodedString = String(decoding: decodedData, as: UTF8.self)
-                                if !decodedString.isEmpty {
-                                    browserChunks.append(decodedString)
-                                }
-                            }
-                        }
-                    }
-                    if !browserChunks.isEmpty {
-                        let browserHtml = browserChunks.joined()
-                        let hasMediaData = hasBoyfriendTVMediaData(browserHtml)
-                        if hasMediaData {
-                            html = browserHtml
-                            let sourceLog = browser.map { "browser cookies from '\($0)'" } ?? "impersonated HTTP request"
-                            LoggerService.shared.log("Successfully extracted BoyfriendTV page dump using \(sourceLog)", level: .info)
-                            break
-                        }
-                    }
+                let browserHtml = try await dumpPage(args, stage: "main-browser")
+                if hasBoyfriendTVMediaData(browserHtml) {
+                    html = browserHtml
+                    break
                 }
             }
         }
-        
+
         // Fallback to URLSession if browser dump output was empty or didn't contain stream
         if html.isEmpty && (processRunner is DefaultYtdlpProcessRunner) {
             var request = URLRequest(url: pageURL)
@@ -2156,13 +2185,8 @@ public struct DownloadResult: Sendable {
                 request.setValue(raw, forHTTPHeaderField: "Cookie")
             }
             
-            if let (data, response) = try? await URLSession.shared.data(for: request),
-               let httpResponse = response as? HTTPURLResponse,
-               httpResponse.statusCode == 200,
-               let fetched = String(data: data, encoding: .utf8) {
-                if hasBoyfriendTVMediaData(fetched) {
-                    html = fetched
-                }
+            if let fetched = try await fetchPage(request, stage: "main-http"), hasBoyfriendTVMediaData(fetched) {
+                html = fetched
             }
 
         }
@@ -2182,34 +2206,35 @@ public struct DownloadResult: Sendable {
             }
         }
         
-        // Extract Embed URL
+        // Ads may precede the real player. Inspect all embeds, and only follow
+        // BoyfriendTV embeds for this video rather than arbitrary iframe targets.
         var embedUrl: String? = nil
+        var candidateEmbeds: [String] = []
+        let videoID = Self.boyfriendPathVideoIdRegex.flatMap { regex -> String? in
+            guard let match = regex.firstMatch(in: targetUrl, range: NSRange(targetUrl.startIndex..., in: targetUrl)) else { return nil }
+            return (targetUrl as NSString).substring(with: match.range(at: 1))
+        }
+        let embedHTML = html.replacingOccurrences(of: "\\/", with: "/").decodingHTMLEntities()
         for regex in Self.boyfriendEmbedRegexes {
-            if let match = regex.firstMatch(in: html, options: [], range: NSRange(location: 0, length: (html as NSString).length)),
-               match.numberOfRanges > 1 {
-                let val = (html as NSString).substring(with: match.range(at: 1))
-                    .replacingOccurrences(of: "\\/", with: "/")
-                if val.hasPrefix("http") {
-                    embedUrl = val
-                    break
-                } else if val.hasPrefix("/embed/") {
-                    let baseDomain = targetUrl.contains("boyfriendtv.com") ? "https://www.boyfriendtv.com" : "https://www.boyfriend.tv"
-                    embedUrl = baseDomain + val
-                    break
+            for match in regex.matches(in: embedHTML, range: NSRange(embedHTML.startIndex..., in: embedHTML)) {
+                let value = (embedHTML as NSString).substring(with: match.range(at: 1))
+                guard let resolved = URL(string: value, relativeTo: pageURL)?.absoluteURL,
+                      isBoyfriendTVURL(resolved.absoluteString), resolved.path.hasPrefix("/embed/"),
+                      resolved.user == nil, resolved.password == nil,
+                      resolved.scheme == "https" || resolved.scheme == "http" else { continue }
+                let embedID = resolved.path.split(separator: "/").dropFirst().first.map(String.init)
+                guard videoID == nil || embedID == videoID else { continue }
+                let embed = resolved.absoluteString
+                if !candidateEmbeds.contains(embed) { candidateEmbeds.append(embed) }
+                if var alternate = URLComponents(url: resolved, resolvingAgainstBaseURL: false) {
+                    alternate.host = Self.boyfriendTVCookieScope(for: embed) == "boyfriend.tv" ? "www.boyfriendtv.com" : "www.boyfriend.tv"
+                    if let candidate = alternate.url?.absoluteString, !candidateEmbeds.contains(candidate) {
+                        candidateEmbeds.append(candidate)
+                    }
                 }
             }
         }
 
-        // Generate candidate embed URLs for both domain variations (.com and .tv)
-        var candidateEmbeds: [String] = []
-        if let embed = embedUrl {
-            candidateEmbeds.append(embed)
-            if embed.contains("boyfriend.tv") {
-                candidateEmbeds.append(embed.replacingOccurrences(of: "boyfriend.tv", with: "boyfriendtv.com"))
-            } else if embed.contains("boyfriendtv.com") {
-                candidateEmbeds.append(embed.replacingOccurrences(of: "boyfriendtv.com", with: "boyfriend.tv"))
-            }
-        }
         if let regex = Self.boyfriendVideoIdRegex,
            let match = regex.firstMatch(in: targetUrl, options: [], range: NSRange(location: 0, length: (targetUrl as NSString).length)),
            match.numberOfRanges > 1 {
@@ -2219,6 +2244,12 @@ public struct DownloadResult: Sendable {
             if !candidateEmbeds.contains(defaultCom) { candidateEmbeds.append(defaultCom) }
             if !candidateEmbeds.contains(defaultTv) { candidateEmbeds.append(defaultTv) }
         }
+
+        candidateEmbeds = candidateEmbeds.filter {
+            guard let candidate = URL(string: $0), candidate.scheme == "https" || candidate.scheme == "http" else { return false }
+            return isBoyfriendTVURL($0) && candidate.path.hasPrefix("/embed/") && candidate.user == nil && candidate.password == nil
+        }
+        LoggerService.shared.log("[BoyfriendTV] stage=embed-discovery candidates=\(candidateEmbeds.count)", level: .debug)
 
         // Extract Thumbnail URL
         var thumbnailUrl: String? = nil
@@ -2249,48 +2280,21 @@ public struct DownloadResult: Sendable {
                        Self.shouldForwardBoyfriendTVRawCookies(from: targetUrl, to: embed),
                        let tempFile = createTempCookiesFileFromHeader(url: embed, cookieHeader: raw) {
                         defer { try? FileManager.default.removeItem(at: tempFile) }
-                        var rawEmbedArgs = [ytdlp.path, "--ignore-config", "--dump-pages", "--cookies", tempFile.path]
+                        var rawEmbedArgs = [ytdlp.path, "--ignore-config", "--dump-pages", "--skip-download", "--no-playlist", "--cookies", tempFile.path]
                         appendSiteSpecificArgs(for: embed, to: &rawEmbedArgs)
                         rawEmbedArgs.append("--")
                         rawEmbedArgs.append(embed)
 
-                        var rawEmbedDump: String? = nil
-                        do {
-                            rawEmbedDump = try await processRunner.runCommand(rawEmbedArgs)
-                        } catch let error as YtdlpError {
-                            if case .commandFailed(let output) = error {
-                                rawEmbedDump = output
-                            }
-                        } catch {
-                            LoggerService.shared.log("Non-YtdlpError during embed raw cookie dump-pages: \(error.localizedDescription)", level: .debug)
-                        }
-
-                        if let output = rawEmbedDump, !output.isEmpty {
-                            var embedChunks: [String] = []
-                            for line in output.split(whereSeparator: \.isNewline) {
-                                let trimmed = String(line).trimmingCharacters(in: .whitespaces)
-                                if !trimmed.starts(with: "#") && !trimmed.starts(with: "[") && !trimmed.starts(with: "WARNING") && !trimmed.starts(with: "ERROR") {
-                                    if let decodedData = Data(base64Encoded: trimmed, options: .ignoreUnknownCharacters) {
-                                        let decodedString = String(decoding: decodedData, as: UTF8.self)
-                                        if !decodedString.isEmpty {
-                                            embedChunks.append(decodedString)
-                                        }
-                                    }
-                                }
-                            }
-                            if !embedChunks.isEmpty {
-                                let embedHtml = embedChunks.joined()
-                                if let extracted = extractStreamURLFromHTML(embedHtml) {
-                                    streamUrl = extracted
-                                    embedUrl = embed
-                                    break
-                                }
-                            }
+                        let embedHtml = try await dumpPage(rawEmbedArgs, stage: "embed-session")
+                        if let extracted = extractStreamURLFromHTML(embedHtml) {
+                            streamUrl = extracted
+                            embedUrl = embed
+                            break
                         }
                     }
 
                     for browser in browsersToTry {
-                        var embedArgs = [ytdlp.path, "--ignore-config", "--dump-pages"]
+                        var embedArgs = [ytdlp.path, "--ignore-config", "--dump-pages", "--skip-download", "--no-playlist"]
                         if let browserName = browser {
                             embedArgs.append(contentsOf: ["--cookies-from-browser", browserName])
                         }
@@ -2298,38 +2302,11 @@ public struct DownloadResult: Sendable {
                         embedArgs.append("--")
                         embedArgs.append(embed)
                         
-                        var embedDump: String? = nil
-                        do {
-                            embedDump = try await processRunner.runCommand(embedArgs)
-                        } catch let error as YtdlpError {
-                            if case .commandFailed(let output) = error {
-                                embedDump = output
-                            }
-                        } catch {
-                            LoggerService.shared.log("Non-YtdlpError during embed dump-pages: \(error.localizedDescription)", level: .debug)
-                        }
-                        
-                        if let output = embedDump, !output.isEmpty {
-                            var embedChunks: [String] = []
-                            for line in output.split(whereSeparator: \.isNewline) {
-                                let trimmed = String(line).trimmingCharacters(in: .whitespaces)
-                                if !trimmed.starts(with: "#") && !trimmed.starts(with: "[") && !trimmed.starts(with: "WARNING") && !trimmed.starts(with: "ERROR") {
-                                    if let decodedData = Data(base64Encoded: trimmed, options: .ignoreUnknownCharacters) {
-                                        let decodedString = String(decoding: decodedData, as: UTF8.self)
-                                        if !decodedString.isEmpty {
-                                            embedChunks.append(decodedString)
-                                        }
-                                    }
-                                }
-                            }
-                            if !embedChunks.isEmpty {
-                                let embedHtml = embedChunks.joined()
-                                if let extracted = extractStreamURLFromHTML(embedHtml) {
-                                    streamUrl = extracted
-                                    embedUrl = embed
-                                    break
-                                }
-                            }
+                        let embedHtml = try await dumpPage(embedArgs, stage: "embed-browser")
+                        if let extracted = extractStreamURLFromHTML(embedHtml) {
+                            streamUrl = extracted
+                            embedUrl = embed
+                            break
                         }
                     }
                 }
@@ -2349,15 +2326,11 @@ public struct DownloadResult: Sendable {
                         embedRequest.setValue(raw, forHTTPHeaderField: "Cookie")
                     }
 
-                    if let (data, response) = try? await URLSession.shared.data(for: embedRequest),
-                       let httpResponse = response as? HTTPURLResponse,
-                       httpResponse.statusCode == 200,
-                       let fetchedEmbed = String(data: data, encoding: .utf8) {
-                        if let extracted = extractStreamURLFromHTML(fetchedEmbed) {
-                            streamUrl = extracted
-                            embedUrl = embed
-                            break
-                        }
+                    if let fetched = try await fetchPage(embedRequest, stage: "embed-http"),
+                       let extracted = extractStreamURLFromHTML(fetched) {
+                        streamUrl = extracted
+                        embedUrl = embed
+                        break
                     }
                 }
             }
@@ -2370,6 +2343,16 @@ public struct DownloadResult: Sendable {
         if safariCookieAccessDenied {
             throw YtdlpError.safariCookiesFullDiskAccessRequired
         }
+        try Task.checkCancellation()
+        if sawChallenge { throw YtdlpError.cloudflareBlocked }
+        if sawLoginPage || sawUnauthorized {
+            throw configuredBrowserCookieSource() == nil && rawCookies?.isEmpty != false
+                ? YtdlpError.boyfriendTVNeedsBrowserCookies : YtdlpError.boyfriendTVLoginRequired
+        }
+        if sawForbidden {
+            throw YtdlpError.downloadFailed("BoyfriendTV denied access (HTTP 403). This may be an anti-bot challenge or an access restriction; it does not prove your cookies are invalid.")
+        }
+        LoggerService.shared.log("[BoyfriendTV] stage=stream-resolution result=exhausted; falling back to yt-dlp", level: .warning)
         return nil
     }
 
@@ -2389,9 +2372,8 @@ public struct DownloadResult: Sendable {
 
     // Bolt Performance Optimization: Pre-compile static NSRegularExpression patterns as `nonisolated private static let` constants to eliminate compilation and allocation overhead during high-frequency parsing.
     nonisolated private static let boyfriendEmbedRegexes: [NSRegularExpression] = [
-        "\"embedUrl\"\\s*:\\s*\"([^\"]+)\"",
-        "<iframe[^>]+src=[\"'](https?://(?:www\\.)?boyfriend(?:tv)?\\.(?:tv|com)/embed/[^\"']+)[\"']",
-        "<iframe[^>]+src=[\"'](/embed/[^\"']+)[\"']"
+        #""embedUrl"\s*:\s*"([^"]+)""#,
+        #"<iframe[^>]+(?:data-src|src)\s*=\s*["']([^"']+)["']"#
     ].compactMap { try? NSRegularExpression(pattern: $0, options: .caseInsensitive) }
 
     nonisolated private static let boyfriendVideoIdRegex = try? NSRegularExpression(pattern: "/videos/(\\d+)", options: .caseInsensitive)
@@ -2400,11 +2382,8 @@ public struct DownloadResult: Sendable {
     nonisolated private static let singleVideoSlugRegex = try? NSRegularExpression(pattern: "^/video/([^/]+)", options: .caseInsensitive)
 
     nonisolated private static let boyfriendStreamRegexes: [NSRegularExpression] = [
-        "\"(?:hlsAuto|hls|videoUrl|media|src|file|video_url)\"\\s*:\\s*\"(https?:[^\"]+)\"",
-        "(https?:\\\\?/\\\\?/cdn\\.boyfriend(?:tv)?\\.(?:tv|com)[^\\s\"'<>]+?\\.mp4(?=[?\"'\\s<>]|$))",
-        "(https?:\\\\?/\\\\?/cdn\\.boyfriend(?:tv)?\\.(?:tv|com)[^\\s\"'<>]+?\\.m3u8(?=[?\"'\\s<>]|$))",
-        "(https?:\\\\?/\\\\?/[^\\s\"'<>]+\\.boyfriend(?:tv)?\\.(?:tv|com)[^\\s\"'<>]+?\\.m3u8(?=[?\"'\\s<>]|$))",
-        "(https?:\\\\?/\\\\?/[^\\s\"'<>]+\\.boyfriend(?:tv)?\\.(?:tv|com)[^\\s\"'<>]+?\\.mp4(?=[?\"'\\s<>]|$))"
+        #"["']?(?:hlsAuto|hls|videoUrl|media|src|file|video_url)["']?\s*:\s*["']((?:https?:)?//[^"']+)["']"#,
+        #"((?:https?:)?//(?:[a-z0-9-]+\.)*boyfriend(?:tv\.com|\.tv)/[^\s"'<>]+?\.(?:mp4|m3u8)(?:\?[^\s"'<>]*)?)(?=["'\s<>]|$)"#
     ].compactMap { try? NSRegularExpression(pattern: $0, options: .caseInsensitive) }
 
     nonisolated private static let gffTitleRegexes: [NSRegularExpression] = [
@@ -2498,10 +2477,20 @@ public struct DownloadResult: Sendable {
     ].compactMap { try? NSRegularExpression(pattern: $0, options: [.caseInsensitive]) }
 
     private func extractStreamURLFromHTML(_ html: String) -> String? {
+        let html = html.replacingOccurrences(of: "\\/", with: "/")
+            .replacingOccurrences(of: "\\u0026", with: "&")
+            .decodingHTMLEntities()
         for regex in Self.boyfriendStreamRegexes {
             let matches = regex.matches(in: html, options: [], range: NSRange(location: 0, length: (html as NSString).length))
             for match in matches where match.numberOfRanges > 1 {
-                let rawVal = (html as NSString).substring(with: match.range(at: 1)).replacingOccurrences(of: "\\/", with: "/")
+                var rawVal = (html as NSString).substring(with: match.range(at: 1))
+                if rawVal.hasPrefix("//") { rawVal = "https:" + rawVal }
+                guard let candidate = URL(string: rawVal),
+                      candidate.scheme == "https" || candidate.scheme == "http",
+                      isBoyfriendTVURL(rawVal), candidate.user == nil, candidate.password == nil,
+                      ["mp4", "m3u8"].contains(candidate.pathExtension.lowercased()) else { continue }
+                let pathParts = candidate.path.lowercased().split(separator: "/")
+                if pathParts.contains(where: { ["ads", "ad", "advert", "preroll", "vast"].contains(String($0)) }) { continue }
                 if rawVal.hasPrefix("http") {
                     let lowerVal = rawVal.lowercased()
                     // Ignore teaser / preview / rollover / thumbnail clips or image assets
@@ -3962,7 +3951,9 @@ public struct DownloadResult: Sendable {
 
     private func mapSiteSpecificError(_ error: Error, url: String) -> Error {
         let errString = "\(error)"
-        let lowerErr = errString.lowercased()
+        let lowerErr = (isBoyfriendTVURL(url)
+            ? errString.replacingOccurrences(of: #"https?://[^\s\"]+"#, with: "[URL]", options: .regularExpression)
+            : errString).lowercased()
         let configuredBrowser = configuredBrowserCookieSource()
 
         if (configuredBrowser == "safari" || configuredBrowser == nil) && isSafariPermissionError(errString) {
@@ -3970,14 +3961,20 @@ public struct DownloadResult: Sendable {
         }
 
         if isBoyfriendTVURL(url) {
+            if let siteError = error as? YtdlpError {
+                switch siteError {
+                case .cloudflareBlocked, .boyfriendTVLoginRequired, .boyfriendTVNeedsBrowserCookies, .safariCookiesFullDiskAccessRequired, .downloadFailed:
+                    return siteError
+                default: break
+                }
+            }
             if lowerErr.contains("cloudflare") || lowerErr.contains("anti-bot") || lowerErr.contains("captcha") || lowerErr.contains("challenge") || lowerErr.contains("turnstile") {
                 return YtdlpError.cloudflareBlocked
             }
             if (lowerErr.contains("video is unavailable") || lowerErr.contains("video unavailable") || lowerErr.contains("video has been removed") || lowerErr.contains("video removed") || lowerErr.contains("404 not found") || lowerErr.contains("page not found") || lowerErr.contains("http error 404")) && !lowerErr.contains("cookie") {
                 return YtdlpError.downloadFailed("This video is unavailable, private, or has been removed.")
             }
-            let isVideoPage = url.contains("/videos/") || url.contains("/embed/") || url.contains("/v/")
-            if lowerErr.contains("sign in") || lowerErr.contains("private video") || lowerErr.contains("login") || lowerErr.contains("members-only") || lowerErr.contains("403") || lowerErr.contains("forbidden") || (isVideoPage && lowerErr.contains("unsupported url")) {
+            if lowerErr.contains("sign in") || lowerErr.contains("private video") || lowerErr.contains("login") || lowerErr.contains("members-only") || lowerErr.contains("http error 401") {
                 if configuredBrowser == "safari" && !Self.hasFullDiskAccess {
                     return YtdlpError.safariCookiesFullDiskAccessRequired
                 }
@@ -3986,6 +3983,9 @@ public struct DownloadResult: Sendable {
                 } else {
                     return YtdlpError.boyfriendTVLoginRequired
                 }
+            }
+            if lowerErr.contains("403") || lowerErr.contains("forbidden") {
+                return YtdlpError.downloadFailed("BoyfriendTV denied access (HTTP 403). This may be an anti-bot challenge or an access restriction.")
             }
             if lowerErr.contains("unsupported url") {
                 return YtdlpError.downloadFailed("Could not extract video stream from this BoyfriendTV URL. Please verify the video link and try again.")
@@ -4089,7 +4089,7 @@ public struct DownloadResult: Sendable {
                 let safariUA = Self.safariUserAgent
                 args.append(contentsOf: ["--user-agent", safariUA])
                 args.append(contentsOf: ["--add-header", "Accept-Language:en-US,en;q=0.9"])
-                args.append(contentsOf: ["--extractor-args", "generic:impersonate"])
+                args.append(contentsOf: ["--extractor-args", isBoyfriendTV ? "generic:impersonate=safari" : "generic:impersonate"])
             } else {
                 // Common modern browser headers & Cloudflare extraction options
                 let defaultUA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
@@ -4101,7 +4101,7 @@ public struct DownloadResult: Sendable {
                 args.append(contentsOf: ["--add-header", "Sec-Ch-Ua-Mobile:?0"])
                 args.append(contentsOf: ["--add-header", "Sec-Ch-Ua-Platform:\"macOS\""])
                 args.append(contentsOf: ["--add-header", "Accept-Language:en-US,en;q=0.9"])
-                args.append(contentsOf: ["--extractor-args", "generic:impersonate"])
+                args.append(contentsOf: ["--extractor-args", isBoyfriendTV ? "generic:impersonate=chrome" : "generic:impersonate"])
             }
         }
 

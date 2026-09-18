@@ -1496,6 +1496,7 @@ final class YtdlpServiceTests: XCTestCase {
         let ua = capturedArgsBox.value[uaIdx + 1]
         XCTAssertTrue(ua.contains("Safari/605.1.15"), "Expected Safari user agent but got \(ua)")
         XCTAssertFalse(ua.contains("Chrome/"), "Safari user agent was clobbered by Chrome user agent: \(ua)")
+        XCTAssertTrue(capturedArgsBox.value.contains("generic:impersonate=safari"))
     }
 
     func testBoyfriendTVFullStreamSurvivesLoginUIInPageDump() async throws {
@@ -1708,6 +1709,128 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertEqual(info.title, "Hot Brazilian Threesome")
         XCTAssertEqual(info.formats?.count, 2)
         XCTAssertEqual(info.duration, 2992)
+    }
+
+    func testBoyfriendTVUnsupportedVideoDoesNotBlameCookiesOrURLSlug() async throws {
+        UserDefaults.standard.set("safari", forKey: UserDefaultsKeys.browserForCookies)
+        defer { UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.browserForCookies) }
+        service.processRunner = MockYtdlpProcessRunner(mockCommand: { _ in
+            throw YtdlpError.commandFailed("ERROR: Unsupported URL: https://www.boyfriend.tv/videos/123/login-challenge/")
+        })
+        do {
+            _ = try await service.fetchInfo(url: "https://www.boyfriend.tv/videos/123/login-challenge/")
+            XCTFail("Expected an extraction failure")
+        } catch let error as YtdlpError {
+            guard case .downloadFailed(let message) = error else { return XCTFail("Unexpected: \(error)") }
+            XCTAssertTrue(message.contains("extract video stream"))
+        }
+    }
+
+    func testBoyfriendTVBare403DoesNotAssertLoginRequired() async throws {
+        service.processRunner = MockYtdlpProcessRunner(mockCommand: { _ in
+            throw YtdlpError.commandFailed("ERROR: HTTP Error 403: Forbidden")
+        })
+        do {
+            _ = try await service.fetchInfo(url: "https://www.boyfriend.tv/videos/123/")
+            XCTFail("Expected access denial")
+        } catch let error as YtdlpError {
+            guard case .downloadFailed(let message) = error else { return XCTFail("Unexpected: \(error)") }
+            XCTAssertTrue(message.contains("403"))
+        }
+    }
+
+    func testBoyfriendTVChallengeHTMLSurvivesUnsupportedFallback() async throws {
+        let challenge = "<html><title>Just a moment...</title><script src='/cdn-cgi/challenge-platform/test'></script></html>"
+        service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
+            if args.contains("--dump-pages") { return Data(challenge.utf8).base64EncodedString() }
+            throw YtdlpError.commandFailed("ERROR: Unsupported URL")
+        })
+        do {
+            _ = try await service.fetchInfo(url: "https://www.boyfriend.tv/videos/123/")
+            XCTFail("Expected challenge failure")
+        } catch let error as YtdlpError {
+            guard case .cloudflareBlocked = error else { return XCTFail("Unexpected: \(error)") }
+        }
+    }
+
+    func testBoyfriendTVRetriesTransientPageWithSameRequestIdentity() async throws {
+        let calls = TestBox<[[String]]>([])
+        let stream = "https://cdn.boyfriend.tv/full.m3u8?token=signed&expires=123"
+        service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
+            if args.contains("--dump-pages") {
+                calls.value.append(args)
+                if calls.value.count == 1 { throw YtdlpError.commandFailed("ERROR: HTTP Error 503: Service Unavailable") }
+                return Data("<video src='\(stream)'></video>".utf8).base64EncodedString()
+            }
+            return "{\"id\":\"123\",\"title\":\"Test\"}"
+        })
+        let info = try await service.fetchInfo(url: "https://www.boyfriend.tv/videos/123/")
+        XCTAssertEqual(info.originalUrl, stream)
+        XCTAssertEqual(calls.value.count, 2)
+        XCTAssertEqual(calls.value.first, calls.value.last)
+        XCTAssertTrue(calls.value[0].contains("--skip-download"))
+    }
+
+    func testBoyfriendTVLazyEmbedTriesAlternateDomainAndPreservesSignedStream() async throws {
+        let stream = "https://cdn.boyfriendtv.com/full.m3u8?token=signed&expires=123"
+        let visited = TestBox<[String]>([])
+        service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
+            guard args.contains("--dump-pages") else { return "{\"id\":\"123\",\"title\":\"Test\"}" }
+            let url = args.last ?? ""
+            visited.value.append(url)
+            if url.contains("/videos/") {
+                return Data("<iframe data-src='//www.boyfriend.tv/embed/123/456/'></iframe>".utf8).base64EncodedString()
+            }
+            if url == "https://www.boyfriendtv.com/embed/123/456/" {
+                return Data("<script>sources = { hlsAuto: '//cdn.boyfriendtv.com/full.m3u8?token=signed&amp;expires=123' }</script>".utf8).base64EncodedString()
+            }
+            throw YtdlpError.commandFailed("ERROR: Unsupported URL")
+        })
+        let info = try await service.fetchInfo(url: "https://www.boyfriend.tv/videos/123/")
+        XCTAssertEqual(info.originalUrl, stream)
+        XCTAssertEqual(info.webpageUrl, "https://www.boyfriendtv.com/embed/123/456/")
+        XCTAssertTrue(visited.value.contains("https://www.boyfriend.tv/embed/123/456/"))
+    }
+
+    func testBoyfriendTVSkipsAdFramesAndAdStreamsBeforeRealPlayer() async throws {
+        let stream = "https://cdn.boyfriend.tv/full.m3u8?key=valid"
+        service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
+            guard args.contains("--dump-pages") else { return "{\"id\":\"123\",\"title\":\"Test\"}" }
+            let url = args.last ?? ""
+            XCTAssertFalse(url.contains("ads.example"))
+            XCTAssertFalse(url.contains("/embed/999/"))
+            if url.contains("/videos/") {
+                let html = """
+                <script>var ad = {src: 'https://ads.example/preroll.mp4'};</script>
+                <script>var ad2 = {file: 'https://cdn.boyfriend.tv/ads/preroll.mp4'};</script>
+                <iframe src='https://ads.example/frame'></iframe>
+                <iframe src='https://www.boyfriend.tv/embed/999/'></iframe>
+                <iframe data-src='/embed/123/456/'></iframe>
+                """
+                return Data(html.utf8).base64EncodedString()
+            }
+            if url.contains("/embed/123/456/") {
+                let html = "<script>var ad = {src: 'https://ads.example/ad.m3u8'}; var player = {hlsAuto: '\(stream)'};</script>"
+                return Data(html.utf8).base64EncodedString()
+            }
+            throw YtdlpError.commandFailed("ERROR: Unsupported URL")
+        })
+        let info = try await service.fetchInfo(url: "https://www.boyfriend.tv/videos/123/")
+        XCTAssertEqual(info.originalUrl, stream)
+    }
+
+    func testBoyfriendTVCancellationDoesNotStartFallbackRequests() async throws {
+        let calls = TestBox(0)
+        service.processRunner = MockYtdlpProcessRunner(mockCommand: { _ in
+            calls.value += 1
+            throw CancellationError()
+        })
+        do {
+            _ = try await service.fetchInfo(url: "https://www.boyfriend.tv/videos/123/")
+            XCTFail("Expected cancellation")
+        } catch is CancellationError {
+            XCTAssertEqual(calls.value, 1)
+        }
     }
 
     func testBoyfriendTVErrorMappingDistinguishesCloudflareAndUnsupportedURL() async throws {
