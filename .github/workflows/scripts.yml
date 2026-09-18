@@ -31,6 +31,13 @@ jobs:
           python3 --version
           node -e 'const major = Number(process.versions.node.split(".")[0]); if (major < 18) { throw new Error("Node.js 18+ is required"); }'
 
+      - name: Check release shell scripts
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n script/build_and_run.sh
+          bash -n script/build_release.sh
+
       - name: Check JavaScript syntax
         shell: bash
         run: |
