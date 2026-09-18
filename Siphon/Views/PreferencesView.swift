@@ -1143,10 +1143,8 @@ struct PreferencesView: View {
     private var aboutTab: some View {
         VStack(spacing: 0) {
             VStack(spacing: SiphonTheme.spacing8) {
-                Image(nsImage: NSApp.applicationIconImage)
-                    .resizable()
-                    .frame(width: 56, height: 56)
-                    .shadow(color: SiphonTheme.accent.opacity(0.25), radius: 12, x: 0, y: 4)
+                RadiantSiphonLogoView()
+                    .accessibilityHidden(true)
 
                 VStack(spacing: SiphonTheme.spacing4) {
                     Text("Siphon")
