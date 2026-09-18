@@ -1900,6 +1900,14 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertEqual(identity.model, "polarny05")
         XCTAssertEqual(identity.videoID, "112873588")
 
+        let identityWithoutPlay = try XCTUnwrap(
+            YtdlpService.recuVideoIdentity(
+                from: "https://recu.me/polarny05/video/112873588"
+            )
+        )
+        XCTAssertEqual(identityWithoutPlay.model, "polarny05")
+        XCTAssertEqual(identityWithoutPlay.videoID, "112873588")
+
         let html = """
         <div class="recording" id="112873588"
              data-token="abc&amp;xyz=="></div>
