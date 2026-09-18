@@ -5,16 +5,21 @@ struct AddDownloadView: View {
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var languageService: LanguageService
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.controlActiveState) private var controlActiveState
+    @Environment(\.appearsActive) private var appearsActive
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.siphonRenderingCapabilities) private var renderingCapabilities
     @FocusState private var focusedField: InputField?
+
+    private var showBorders: Bool {
+        renderingCapabilities.increaseContrast
+    }
 
     private enum InputField: Hashable {
         case url, batch, filename, arguments
     }
 
     private func showsFocus(_ field: InputField) -> Bool {
-        focusedField == field && controlActiveState == .key
+        focusedField == field && appearsActive
     }
     @AppStorage("selectedPreset") private var selectedPreset: String = "best_quality"
     @AppStorage("selectedCustomPresetId") private var selectedCustomPresetIdString: String = ""
@@ -112,7 +117,7 @@ struct AddDownloadView: View {
     }
 
     private var settingsAnimation: Animation? {
-        reduceMotion ? nil : .smooth(duration: 0.28)
+        reduceMotion ? nil : SiphonAnimation.fluidSpring
     }
 
     var body: some View {
@@ -177,7 +182,8 @@ struct AddDownloadView: View {
         // height as the fully-expanded inspector leaves a visually inert window;
         // the scroll view keeps metadata and advanced options resilient once they
         // are available.
-        .frame(minWidth: 480, idealWidth: 520, maxWidth: 620, minHeight: 420, idealHeight: 440, maxHeight: .infinity)
+        .frame(minWidth: 500, idealWidth: 540, maxWidth: 680, minHeight: 420, idealHeight: 440, maxHeight: .infinity)
+        .siphonAdaptiveRendering()
         .preferredColorScheme(selectedTheme == "light" ? .light : (selectedTheme == "dark" ? .dark : nil))
         .siphonWindowBackground()
         .onAppear {
@@ -280,7 +286,7 @@ struct AddDownloadView: View {
 
             HStack(spacing: SiphonTheme.spacing2) {
                 Button {
-                    withAnimation(.spring(response: 0.30, dampingFraction: 0.68, blendDuration: 0)) {
+                    withAnimation(SiphonAnimation.fluidSpring) {
                         inputMode = .single
                     }
                 } label: {
@@ -304,7 +310,7 @@ struct AddDownloadView: View {
                 .accessibilityAddTraits(inputMode == .single ? [.isButton, .isSelected] : [.isButton])
 
                 Button {
-                    withAnimation(.spring(response: 0.30, dampingFraction: 0.68, blendDuration: 0)) {
+                    withAnimation(SiphonAnimation.fluidSpring) {
                         inputMode = .batch
                     }
                 } label: {
@@ -328,15 +334,10 @@ struct AddDownloadView: View {
                 .accessibilityAddTraits(inputMode == .batch ? [.isButton, .isSelected] : [.isButton])
             }
             .padding(SiphonTheme.spacing2)
-            .background(
-                Capsule()
-                    .fill(Color.primary.opacity(0.04))
-                    .background(Capsule().fill(.ultraThinMaterial))
-            )
+            .background(SiphonTheme.pillBackground(isSelected: false))
             .clipShape(Capsule())
             .overlay(
-                Capsule()
-                    .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+                SiphonTheme.pillBorder(isSelected: false, showBorders: showBorders)
             )
         }
         .padding()
@@ -447,7 +448,7 @@ struct AddDownloadView: View {
             if let formats = info.formats, !formats.isEmpty {
                 VStack(alignment: .leading, spacing: 8) {
                     Button {
-                        withAnimation(.easeInOut(duration: 0.2)) {
+                        withAnimation(SiphonAnimation.snappySpring) {
                             showStreamInspector.toggle()
                         }
                     } label: {
@@ -902,7 +903,7 @@ struct AddDownloadView: View {
                 // Video / Audio Capsule Switcher
                 HStack(spacing: 2) {
                     Button {
-                        withAnimation(.spring(response: 0.30, dampingFraction: 0.68, blendDuration: 0)) {
+                        withAnimation(SiphonAnimation.fluidSpring) {
                             isVideoTab = true
                             fileType = .mp4
                         }
@@ -927,7 +928,7 @@ struct AddDownloadView: View {
                     .accessibilityAddTraits(isVideoTab ? [.isButton, .isSelected] : [.isButton])
 
                     Button {
-                        withAnimation(.spring(response: 0.30, dampingFraction: 0.68, blendDuration: 0)) {
+                        withAnimation(SiphonAnimation.fluidSpring) {
                             isVideoTab = false
                             fileType = .mp3
                         }
@@ -952,15 +953,10 @@ struct AddDownloadView: View {
                     .accessibilityAddTraits(!isVideoTab ? [.isButton, .isSelected] : [.isButton])
                 }
                 .padding(2)
-                .background(
-                    Capsule()
-                        .fill(Color.primary.opacity(0.04))
-                        .background(Capsule().fill(.ultraThinMaterial))
-                )
+                .background(SiphonTheme.pillBackground(isSelected: false))
                 .clipShape(Capsule())
                 .overlay(
-                    Capsule()
-                        .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+                    SiphonTheme.pillBorder(isSelected: false, showBorders: showBorders)
                 )
             }
 

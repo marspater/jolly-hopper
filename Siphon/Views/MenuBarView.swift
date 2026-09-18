@@ -3,6 +3,12 @@ import SwiftUI
 struct MenuBarView: View {
     @EnvironmentObject var downloadManager: DownloadManager
     @EnvironmentObject var languageService: LanguageService
+    @Environment(\.appearsActive) private var appearsActive
+    @Environment(\.siphonRenderingCapabilities) private var renderingCapabilities
+
+    private var showBorders: Bool {
+        renderingCapabilities.increaseContrast
+    }
 
     @FocusState private var isFieldFocused: Bool
     @State private var url: String = ""
@@ -51,7 +57,8 @@ struct MenuBarView: View {
             footer
         }
         .padding(SiphonTheme.spacing12)
-        .frame(width: 350)
+        .frame(minWidth: 350, idealWidth: 370, maxWidth: 420)
+        .siphonAdaptiveRendering()
         .preferredColorScheme(theme == "light" ? .light : (theme == "dark" ? .dark : nil))
         .siphonWindowBackground()
         .onAppear {
@@ -78,7 +85,7 @@ struct MenuBarView: View {
         HStack(spacing: SiphonTheme.spacing8) {
             Image(systemName: "link")
                 .font(.system(size: 12, weight: .medium))
-                .foregroundColor(isFieldFocused ? SiphonTheme.accent : .secondary)
+                .foregroundColor(isFieldFocused && appearsActive ? SiphonTheme.accent : .secondary)
 
             TextField(languageService.s("url_hint"), text: $url)
                 .textFieldStyle(.plain)
@@ -410,7 +417,7 @@ struct MenuBarView: View {
                         .lineLimit(1)
                 }
                 .lineLimit(1)
-                .fixedSize(horizontal: true, vertical: false)
+                .minimumScaleFactor(0.85)
                 .foregroundColor(.primary)
                 .padding(.horizontal, SiphonTheme.spacing10)
                 .frame(height: 28)
@@ -419,7 +426,7 @@ struct MenuBarView: View {
                 )
                 .clipShape(Capsule())
                 .overlay(
-                    SiphonTheme.pillBorder(isSelected: false)
+                    SiphonTheme.pillBorder(isSelected: false, showBorders: showBorders)
                 )
             }
             .buttonStyle(.bouncy)
@@ -439,7 +446,7 @@ struct MenuBarView: View {
                         .lineLimit(1)
                 }
                 .lineLimit(1)
-                .fixedSize(horizontal: true, vertical: false)
+                .minimumScaleFactor(0.85)
                 .foregroundColor(SiphonTheme.failed)
                 .padding(.horizontal, SiphonTheme.spacing10)
                 .frame(height: 28)

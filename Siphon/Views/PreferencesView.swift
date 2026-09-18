@@ -92,10 +92,15 @@ struct PreferencesView: View {
     @Environment(\.dismiss) var dismiss
     
     @Namespace private var tabNamespace
+    @Environment(\.siphonRenderingCapabilities) private var renderingCapabilities
+
+    private var showBorders: Bool {
+        renderingCapabilities.increaseContrast
+    }
 
     var body: some View {
         VStack(spacing: 0) {
-            // Fluid Glass Segmented Tab Bar (38px height with targeted EDR accent glow)
+            // Fluid Glass segmented tab bar with restrained SDR accent emphasis
             HStack(spacing: 3) {
                 tabSegment(.general, title: languageService.s("general"), icon: "gearshape.fill")
                 tabSegment(.download, title: languageService.s("download"), icon: "arrow.down.circle.fill")
@@ -104,21 +109,21 @@ struct PreferencesView: View {
             }
             .padding(3)
             .frame(height: 38)
-            .background(
-                Capsule()
-                    .fill(Color.primary.opacity(0.04))
-                    .background(Capsule().fill(.ultraThinMaterial))
-            )
+            .background(SiphonTheme.pillBackground(isSelected: false))
             .clipShape(Capsule())
             .overlay(
                 Capsule()
                     .strokeBorder(
                         LinearGradient(
-                            colors: [Color.primary.opacity(0.16), Color.primary.opacity(0.04), Color.clear],
+                            colors: [
+                                Color.primary.opacity(showBorders ? 0.34 : 0.16),
+                                Color.primary.opacity(showBorders ? 0.14 : 0.04),
+                                Color.clear
+                            ],
                             startPoint: .top,
                             endPoint: .bottom
                         ),
-                        lineWidth: 1
+                        lineWidth: showBorders ? 1.5 : 1
                     )
             )
             .padding(.top, SiphonTheme.spacing10)
@@ -141,11 +146,12 @@ struct PreferencesView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .clipped()
-            .animation(.spring(response: 0.30, dampingFraction: 0.72), value: selectedTab)
+            .animation(SiphonAnimation.fluidSpring, value: selectedTab)
         }
         .padding(.horizontal, SiphonTheme.spacing16)
         .padding(.bottom, SiphonTheme.spacing16)
         .frame(minWidth: 500, idealWidth: 520, maxWidth: 620, minHeight: 646, idealHeight: 662, maxHeight: 780)
+        .siphonAdaptiveRendering()
         .preferredColorScheme(theme == "light" ? .light : (theme == "dark" ? .dark : nil))
         .accentColor(SiphonTheme.accent)
         .background(PreferencesWindowConfigurator())
@@ -205,7 +211,7 @@ struct PreferencesView: View {
     @ViewBuilder
     private func tabSegment(_ tab: PreferenceTab, title: String, icon: String) -> some View {
         Button {
-            withAnimation(.spring(response: 0.30, dampingFraction: 0.68, blendDuration: 0)) {
+            withAnimation(SiphonAnimation.fluidSpring) {
                 selectedTab = tab
             }
         } label: {
@@ -215,7 +221,7 @@ struct PreferencesView: View {
                 Text(title)
                     .font(.geist(12, weight: .semibold))
                     .lineLimit(1)
-                    .fixedSize(horizontal: true, vertical: false)
+                    .minimumScaleFactor(0.82)
             }
             .foregroundColor(selectedTab == tab ? .white : .secondary)
             .padding(.horizontal, 8)
@@ -227,7 +233,6 @@ struct PreferencesView: View {
                             .fill(SiphonTheme.accent.opacity(0.35))
                             .blur(radius: 6)
                             .padding(-1)
-                            .allowedDynamicRange(AdaptiveRenderingEnvironment.shared.capabilities.supportsEDR ? .high : .standard)
 
                         Capsule()
                             .fill(SiphonTheme.primaryGradient)
@@ -1096,7 +1101,7 @@ struct PreferencesView: View {
         let granted = YtdlpService.hasFullDiskAccess
         hasFullDiskAccess = granted
         isCheckingPermission = false
-        withAnimation(.easeInOut(duration: 0.2)) {
+        withAnimation(SiphonAnimation.snappySpring) {
             if granted {
                 permissionCheckMessage = languageService.s("safari_fda_granted_feedback")
             } else {

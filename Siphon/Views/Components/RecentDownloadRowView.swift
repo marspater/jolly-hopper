@@ -10,6 +10,7 @@ struct RecentDownloadRowView: View {
     @EnvironmentObject var downloadManager: DownloadManager
     @EnvironmentObject var languageService: LanguageService
     @State private var isHovered: Bool = false
+    @ObservedObject private var renderingEnvironment = AdaptiveRenderingEnvironment.shared
 
     init(download: Download) {
         self.download = download
@@ -105,12 +106,13 @@ struct RecentDownloadRowView: View {
             HStack(spacing: 6) {
                 if download.sourceDomain == "YouTube" {
                     Circle()
-                        .fill(Color.red)
+                        .fill(SiphonTheme.sourceYouTube)
                         .frame(width: 6, height: 6)
                 }
                 Text(download.sourceDomain)
                     .font(.geist(11, weight: .regular))
                     .foregroundColor(.secondary)
+                    .lineLimit(1)
             }
         }
         .frame(minWidth: 160, alignment: .leading)
@@ -173,6 +175,10 @@ struct RecentDownloadRowView: View {
                         .progressViewStyle(.linear)
                         .frame(width: 80)
                         .tint(SiphonTheme.statusDownloading)
+                        .animation(
+                            renderingEnvironment.reduceMotion ? nil : SiphonAnimation.snappySpring,
+                            value: safeProgress
+                        )
                 }
 
                 Button {
@@ -229,6 +235,6 @@ struct RecentDownloadRowView: View {
                     .foregroundColor(.secondary)
             }
         }
-        .frame(width: 160, alignment: .trailing)
+        .frame(minWidth: 120, idealWidth: 160, maxWidth: 190, alignment: .trailing)
     }
 }

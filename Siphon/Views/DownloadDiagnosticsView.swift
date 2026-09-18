@@ -43,7 +43,8 @@ struct DownloadDiagnosticsView: View {
             
             footerView
         }
-        .frame(minWidth: 580, idealWidth: 620, minHeight: 480, idealHeight: 540)
+        .frame(minWidth: 580, idealWidth: 640, maxWidth: 760, minHeight: 480, idealHeight: 540)
+        .siphonAdaptiveRendering()
         .siphonWindowBackground()
     }
     
@@ -344,7 +345,7 @@ struct DownloadDiagnosticsView: View {
             Text(label)
                 .font(.geist(12))
                 .foregroundColor(.secondary)
-                .frame(width: 170, alignment: .leading)
+                .frame(minWidth: 150, idealWidth: 170, maxWidth: 220, alignment: .leading)
             
             Spacer()
             

@@ -44,16 +44,8 @@ struct DebugLogView: View {
 
             // Log Console Container
             ZStack {
-                RoundedRectangle(cornerRadius: SiphonTheme.radiusControl)
-                    .fill(Color.primary.opacity(0.03))
-                    .background(
-                        RoundedRectangle(cornerRadius: SiphonTheme.radiusControl)
-                            .fill(.ultraThinMaterial)
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: SiphonTheme.radiusControl)
-                            .stroke(Color.primary.opacity(0.08), lineWidth: 1)
-                    )
+                SiphonTheme.cardBackground(cornerRadius: SiphonTheme.radiusControl)
+                    .overlay(SiphonTheme.cardBorder(cornerRadius: SiphonTheme.radiusControl))
 
                 ReadOnlyLogView(
                     text: logger.logs.isEmpty ? languageService.s("no_log_output") : logger.logs.joined(separator: "\n"),
@@ -70,12 +62,12 @@ struct DebugLogView: View {
                     let pasteboard = NSPasteboard.general
                     pasteboard.clearContents()
                     pasteboard.setString(logger.logs.joined(separator: "\n"), forType: .string)
-                    withAnimation {
+                    withAnimation(SiphonAnimation.snappySpring) {
                         isCopied = true
                     }
                     Task {
                         try? await Task.sleep(nanoseconds: 1_500_000_000)
-                        withAnimation {
+                        withAnimation(SiphonAnimation.snappySpring) {
                             isCopied = false
                         }
                     }
@@ -135,7 +127,8 @@ struct DebugLogView: View {
             .padding(.horizontal, SiphonTheme.spacing16)
             .padding(.bottom, SiphonTheme.spacing16)
         }
-        .frame(minWidth: 550, minHeight: 350)
+        .frame(minWidth: 550, idealWidth: 620, minHeight: 350, idealHeight: 420)
+        .siphonAdaptiveRendering()
         .siphonWindowBackground()
         .overlay(
             RoundedRectangle(cornerRadius: SiphonTheme.radiusSheet)
