@@ -123,12 +123,8 @@ struct LiquidWaterWaveView: View {
     @ObservedObject private var renderingEnvironment = AdaptiveRenderingEnvironment.shared
     @Environment(\.siphonRenderingCapabilities) private var renderingCapabilities
 
-    private var shouldShowMotion: Bool {
-        isActive || isHovered
-    }
-
     var body: some View {
-        if !renderingEnvironment.shouldAnimateAmbient || !shouldShowMotion {
+        if !renderingEnvironment.shouldAnimateAmbient {
             LinearGradient(
                 colors: [
                     color.opacity(isHovered ? 0.16 : 0.08),
@@ -143,12 +139,12 @@ struct LiquidWaterWaveView: View {
             // liquid continues smoothly instead of jumping when state changes.
             TimelineView(.animation(minimumInterval: renderingCapabilities.animationMinimumInterval)) { timeline in
                 let time = timeline.date.timeIntervalSince(startedAt)
-                let visibility = isActive ? 1.0 : 0.72
+                let visibility = isActive ? 1.0 : (isHovered ? 0.86 : 0.58)
 
                 ZStack {
                     LissajousHarmonicBlobShape(
                         time: time,
-                        speed: 0.58,
+                        speed: 0.66,
                         intensity: 0.92,
                         seed: seed,
                         phaseOffset: 0.0,
@@ -159,8 +155,8 @@ struct LiquidWaterWaveView: View {
                     .fill(
                         LinearGradient(
                             colors: [
-                                color.opacity(0.22 * visibility),
-                                color.opacity(0.07 * visibility),
+                                color.opacity(0.32 * visibility),
+                                color.opacity(0.11 * visibility),
                                 Color.clear
                             ],
                             startPoint: .topLeading,
@@ -170,7 +166,7 @@ struct LiquidWaterWaveView: View {
 
                     LissajousHarmonicBlobShape(
                         time: time,
-                        speed: 0.58,
+                        speed: 0.66,
                         intensity: 0.82,
                         seed: seed + 3.1415,
                         phaseOffset: 2.7,
@@ -181,8 +177,8 @@ struct LiquidWaterWaveView: View {
                     .fill(
                         LinearGradient(
                             colors: [
-                                color.opacity(0.13 * visibility),
-                                Color.primary.opacity(0.02),
+                                color.opacity(0.19 * visibility),
+                                Color.primary.opacity(0.035),
                                 Color.clear
                             ],
                             startPoint: .bottomLeading,
@@ -192,7 +188,7 @@ struct LiquidWaterWaveView: View {
 
                     LissajousHarmonicBlobShape(
                         time: time,
-                        speed: 0.58,
+                        speed: 0.66,
                         intensity: 0.92,
                         seed: seed,
                         phaseOffset: 0.0,
@@ -200,7 +196,7 @@ struct LiquidWaterWaveView: View {
                         freqY: 0.86,
                         harmonicRatio: 1.4
                     )
-                    .stroke(color.opacity(0.11 * visibility), lineWidth: 0.5)
+                    .stroke(color.opacity(0.18 * visibility), lineWidth: 0.65)
 
                     LissajousHarmonicBlobShape(
                         time: time,
@@ -215,7 +211,7 @@ struct LiquidWaterWaveView: View {
                     .fill(
                         RadialGradient(
                             colors: [
-                                color.opacity(0.08 * visibility),
+                                color.opacity(0.13 * visibility),
                                 Color.clear
                             ],
                             center: .center,
