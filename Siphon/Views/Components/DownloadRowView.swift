@@ -79,6 +79,7 @@ struct DownloadRowView: View {
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var languageService: LanguageService
     @EnvironmentObject var updateChecker: UpdateChecker
+    @Environment(\.colorScheme) private var colorScheme
     let showStop: Bool
     
     @State private var isHovering = false
@@ -98,8 +99,10 @@ struct DownloadRowView: View {
                     Text(download.status == .fetching ? languageService.s("fetching") : download.displayTitle)
                         .font(.geist(14, weight: .semibold))
                         .lineLimit(2)
+                        .truncationMode(.tail)
                         .fixedSize(horizontal: false, vertical: true)
                         .layoutPriority(1)
+                        .help(download.displayTitle)
                     
                     // Line 2: Subtitle (Domain • Quality • Format • Duration)
                     Text(download.formatSubtitle(lang: languageService))
@@ -107,6 +110,7 @@ struct DownloadRowView: View {
                         .foregroundColor(.secondary)
                         .lineLimit(1)
                         .truncationMode(.tail)
+                        .help(download.formatSubtitle(lang: languageService))
                     
                     // Line 3: Status / Progress / Metrics
                     if download.status == .downloading || download.status == .processing || download.status == .fetching {
@@ -150,20 +154,21 @@ struct DownloadRowView: View {
                             
                             if download.status == .paused && download.progress > 0 {
                                 Text("\(Int(download.progress * 100))%")
-                                        .font(.geistMono(11, weight: .semibold))
-                                    .foregroundColor(SiphonTheme.statusQueued)
+                                    .font(.geistMono(11, weight: .semibold))
+                                    .foregroundColor(SiphonTheme.statusForeground(for: .paused, colorScheme: colorScheme))
                             }
                         }
                     }
                 }
+                .frame(minHeight: 68, alignment: .topLeading)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .layoutPriority(1)
                 
-                Spacer(minLength: 8)
+                Spacer(minLength: SiphonTheme.spacing8)
                 
                 actionButtons
-            }
-            
-            if download.status == .downloading || download.status == .processing {
-                LinearProgressBar(value: max(0, min(1, download.progress)))
+                    .frame(minWidth: download.status == .fileExists ? 0 : 62, alignment: .trailing)
+                    .padding(.top, 1)
             }
         }
         .padding(SiphonTheme.spacing14)
@@ -174,7 +179,15 @@ struct DownloadRowView: View {
         .overlay(
             SiphonTheme.cardBorder(cornerRadius: SiphonTheme.radiusCard, isHovered: isHovering)
         )
-        .siphonCardHover(isHovered: isHovering, tint: badgeForegroundColor)
+        .overlay(alignment: .bottom) {
+            if download.status == .downloading || download.status == .processing {
+                LinearProgressBar(value: max(0, min(1, download.progress)))
+                    .padding(.horizontal, SiphonTheme.spacing14)
+                    .padding(.bottom, SiphonTheme.spacing6)
+                    .transition(.opacity)
+            }
+        }
+        .siphonCardHover(isHovered: isHovering, tint: statusTint)
         .onHover { hovering in
             isHovering = hovering
         }
@@ -194,20 +207,24 @@ struct DownloadRowView: View {
         Group {
             if let info = download.errorUXInfo(lang: languageService) {
                 VStack(alignment: .leading, spacing: 6) {
-                    HStack(spacing: 6) {
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
                         Image(systemName: "exclamationmark.triangle.fill")
                             .font(.geist(12))
-                            .foregroundColor(SiphonTheme.statusFailed)
+                            .foregroundColor(SiphonTheme.statusForeground(for: .failed, colorScheme: colorScheme))
                         Text(info.headline)
                             .font(.geist(13, weight: .bold))
-                            .foregroundColor(SiphonTheme.statusFailed)
+                            .foregroundColor(SiphonTheme.statusForeground(for: .failed, colorScheme: colorScheme))
+                            .lineLimit(1)
                         
                         Text("—")
-                            .foregroundColor(SiphonTheme.statusFailed.opacity(0.5))
+                            .foregroundColor(SiphonTheme.statusForeground(for: .failed, colorScheme: colorScheme).opacity(0.55))
                         
                         Text(info.description)
                             .font(.geist(12))
                             .foregroundColor(.secondary)
+                            .lineLimit(2)
+                            .truncationMode(.tail)
+                            .layoutPriority(1)
                     }
                     
                     HStack(spacing: 8) {
@@ -500,14 +517,17 @@ struct FileThumbnailView: View {
         )
     }
 
-    private var badgeForegroundColor: Color {
+    private var statusTint: Color {
         switch download.status {
         case .downloading, .fetching, .processing: return SiphonTheme.statusDownloading
         case .completed: return SiphonTheme.statusCompleted
-        case .failed: return SiphonTheme.statusFailed
+        case .failed, .stopped: return SiphonTheme.statusFailed
         case .queued, .paused, .fileExists: return SiphonTheme.statusQueued
-        default: return .secondary
         }
+    }
+
+    private var badgeForegroundColor: Color {
+        SiphonTheme.statusForeground(for: download.status, colorScheme: colorScheme)
     }
     
     private var actionButtons: some View {
