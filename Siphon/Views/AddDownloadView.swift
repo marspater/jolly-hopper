@@ -1946,15 +1946,19 @@ struct AddDownloadView: View {
         finalOptions.forceOverwrite = forceOverwrite
 
         let cleanURL = urlInput.trimmingCharacters(in: .whitespacesAndNewlines)
-        if let session = appState.consumeBrowserSession(for: cleanURL) {
-            finalOptions.rawCookies = session.rawCookies
-            finalOptions.rawUserAgent = session.rawUserAgent
-        }
         if downloadMode == .single {
+            if let session = appState.consumeBrowserSession(for: cleanURL) {
+                finalOptions.rawCookies = session.rawCookies
+                finalOptions.rawUserAgent = session.rawUserAgent
+            }
             downloadManager.addDownload(url: cleanURL, options: finalOptions, mediaInfo: mediaInfo)
         } else {
             let selectedItems = playlistItems.filter { selectedPlaylistIds.contains($0.id) }
             let urls = selectedItems.map { $0.resolvedURL }
+            if let session = appState.consumeBrowserSession(for: urls) {
+                finalOptions.rawCookies = session.rawCookies
+                finalOptions.rawUserAgent = session.rawUserAgent
+            }
             var itemOptions = finalOptions
             itemOptions.customFilename = nil
             downloadManager.addDownloads(urls: urls, options: itemOptions)
