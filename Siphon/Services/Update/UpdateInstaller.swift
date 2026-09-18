@@ -187,15 +187,15 @@ public final class UpdateInstaller: Sendable {
             let replacementError = error
             var rollbackFailures: [String] = []
 
-            if fm.fileExists(atPath: currentAppURL.path) {
-                do {
-                    try fm.removeItem(at: currentAppURL)
-                } catch {
-                    rollbackFailures.append("could not remove failed replacement: \(error.localizedDescription)")
-                }
-            }
-
             if didMoveCurrentToBackup {
+                if fm.fileExists(atPath: currentAppURL.path) {
+                    do {
+                        try fm.removeItem(at: currentAppURL)
+                    } catch {
+                        rollbackFailures.append("could not remove failed replacement: \(error.localizedDescription)")
+                    }
+                }
+
                 if fm.fileExists(atPath: backupURL.path) {
                     do {
                         try fm.moveItem(at: backupURL, to: currentAppURL)
@@ -272,9 +272,10 @@ public final class UpdateInstaller: Sendable {
         guard process.terminationStatus == 0 else {
             let data = errorPipe.fileHandleForReading.readDataToEndOfFile()
             let details = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines)
-            throw UpdateInstallError.unmountFailed(
-                details?.isEmpty == false ? details! : "hdiutil detach exited with status \(process.terminationStatus)"
-            )
+            if let details, !details.isEmpty {
+                throw UpdateInstallError.unmountFailed(details)
+            }
+            throw UpdateInstallError.unmountFailed("hdiutil detach exited with status \(process.terminationStatus)")
         }
     }
 
