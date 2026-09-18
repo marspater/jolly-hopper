@@ -1528,6 +1528,48 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertTrue(info.manifestUrl?.contains("cdn.boyfriend.tv") == true)
     }
 
+    func testBoyfriendTVAlternateHostGetsItsOwnTransientRetryBudget() async throws {
+        service.ytdlpPath = URL(fileURLWithPath: "/usr/local/bin/yt-dlp")
+        UserDefaults.standard.set("none", forKey: UserDefaultsKeys.browserForCookies)
+        defer { UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.browserForCookies) }
+
+        let tvCalls = TestBox<Int>(0)
+        service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
+            guard args.contains("--dump-pages") else { return "{}" }
+            let target = args.last ?? ""
+
+            if target.contains("boyfriendtv.com") {
+                throw YtdlpError.commandFailed("ERROR: Cloudflare challenge")
+            }
+
+            if target.contains("www.boyfriend.tv") {
+                tvCalls.value += 1
+                if tvCalls.value == 1 {
+                    throw YtdlpError.commandFailed("ERROR: Cloudflare challenge")
+                }
+                let html = """
+                <!DOCTYPE html>
+                <html><head><title>Recovered Video | BoyFriendTV</title></head>
+                <body><script>
+                var playerConfig = {
+                    sources: {"hlsAuto":"https://cdn.boyfriend.tv/key=abc,end=9999999999/media=hls4A/multi=1280x720:hq/2026-09/_TPL_.mp4"}
+                };
+                </script></body></html>
+                """
+                return html.data(using: .utf8)!.base64EncodedString()
+            }
+
+            return ""
+        })
+
+        let info = try await service.fetchInfo(
+            url: "https://www.boyfriendtv.com/videos/1710869/test-slug/"
+        )
+
+        XCTAssertEqual(tvCalls.value, 2, "Alternate host must receive its own one-time transient retry")
+        XCTAssertEqual(info.title, "Recovered Video")
+    }
+
     func testBoyfriendTVWithSafariCookiesUsesCoherentSafariTransport() async throws {
         service.ytdlpPath = URL(fileURLWithPath: "/usr/local/bin/yt-dlp")
         UserDefaults.standard.set("safari", forKey: UserDefaultsKeys.browserForCookies)
