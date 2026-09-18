@@ -50,6 +50,36 @@ final class ProcessLifecycleTests: XCTestCase {
         XCTAssertEqual(controller.lifecycleState, .terminated(exitCode: 0, reason: .exit))
     }
 
+    func testTerminatedControllerCanBeReusedForRecoveryWhenNotCancelled() throws {
+        let controller = DownloadProcessController()
+        controller.transitionToTerminated(exitCode: 1, reason: .exit)
+
+        let recoveryProc = Process()
+        recoveryProc.executableURL = URL(fileURLWithPath: "/usr/bin/true")
+
+        XCTAssertNoThrow(try controller.start(recoveryProc))
+        recoveryProc.waitUntilExit()
+        XCTAssertEqual(recoveryProc.terminationStatus, 0)
+    }
+
+    func testCancelledControllerCannotRestartAfterTermination() {
+        let controller = DownloadProcessController()
+        controller.cancel()
+        controller.transitionToTerminated(exitCode: 15, reason: .uncaughtSignal)
+
+        let proc = Process()
+        proc.executableURL = URL(fileURLWithPath: "/usr/bin/true")
+
+        XCTAssertThrowsError(try controller.start(proc)) { error in
+            guard let ytdlpErr = error as? YtdlpError,
+                  case .downloadFailed(let reason) = ytdlpErr else {
+                XCTFail("Expected downloadFailed, got \(error)")
+                return
+            }
+            XCTAssertEqual(reason, "Download was stopped.")
+        }
+    }
+
     func testCancelBeforeStartTransitionsToCancelling() {
         let controller = DownloadProcessController()
         controller.cancel()
