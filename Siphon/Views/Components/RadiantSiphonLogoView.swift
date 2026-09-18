@@ -9,6 +9,7 @@ import AppKit
 struct RadiantSiphonLogoView: View {
     @State private var isHovered: Bool = false
     @ObservedObject private var renderingEnvironment = AdaptiveRenderingEnvironment.shared
+    @Environment(\.siphonRenderingCapabilities) private var renderingCapabilities
 
     var body: some View {
         if !renderingEnvironment.shouldAnimateAmbient {
@@ -21,10 +22,9 @@ struct RadiantSiphonLogoView: View {
     // MARK: - Animated Complex Radiant Logo
 
     private var animatedLogoView: some View {
-        // This is ambient branding, not direct manipulation. Keep it inexpensive
-        // on ProMotion displays and leave their frame budget to app interactions.
-        let minInterval = 1.0 / 30.0
-        return TimelineView(.animation(minimumInterval: minInterval)) { timeline in
+        // Keep the same motion physics everywhere; higher-refresh displays get
+        // more temporal samples rather than faster animation.
+        return TimelineView(.animation(minimumInterval: renderingCapabilities.animationMinimumInterval)) { timeline in
             let time = timeline.date.timeIntervalSinceReferenceDate
             let spinSpeed = isHovered ? 1.8 : 0.8
             let angle1 = Angle(degrees: (time * 24.0 * spinSpeed).truncatingRemainder(dividingBy: 360))
@@ -38,9 +38,9 @@ struct RadiantSiphonLogoView: View {
                         AngularGradient(
                             gradient: Gradient(colors: [
                                 SiphonTheme.accent.opacity(isHovered ? 0.50 : 0.30),
-                                Color.cyan.opacity(isHovered ? 0.35 : 0.18),
-                                Color.indigo.opacity(isHovered ? 0.25 : 0.12),
-                                Color.cyan.opacity(isHovered ? 0.40 : 0.22),
+                                SiphonTheme.accentSecondary.opacity(isHovered ? 0.35 : 0.18),
+                                SiphonTheme.accentViolet.opacity(isHovered ? 0.25 : 0.12),
+                                SiphonTheme.accentSecondary.opacity(isHovered ? 0.40 : 0.22),
                                 SiphonTheme.accent.opacity(isHovered ? 0.50 : 0.30)
                             ]),
                             center: .center
@@ -58,7 +58,7 @@ struct RadiantSiphonLogoView: View {
                             gradient: Gradient(colors: [
                                 SiphonTheme.accent.opacity(isHovered ? 0.85 : 0.60),
                                 Color.white.opacity(isHovered ? 0.55 : 0.25),
-                                Color.cyan.opacity(isHovered ? 0.75 : 0.50),
+                                SiphonTheme.accentSecondary.opacity(isHovered ? 0.75 : 0.50),
                                 SiphonTheme.accent.opacity(isHovered ? 0.85 : 0.60)
                             ]),
                             center: .center
@@ -74,7 +74,7 @@ struct RadiantSiphonLogoView: View {
                         RadialGradient(
                             colors: [
                                 Color.white.opacity(isHovered ? 0.45 : 0.25),
-                                Color.cyan.opacity(isHovered ? 0.50 : 0.30),
+                                SiphonTheme.accentSecondary.opacity(isHovered ? 0.50 : 0.30),
                                 Color.clear
                             ],
                             center: .center,
@@ -125,7 +125,7 @@ struct RadiantSiphonLogoView: View {
                     RadialGradient(
                         colors: [
                             SiphonTheme.accent.opacity(isHovered ? 0.65 : 0.40),
-                            Color.cyan.opacity(isHovered ? 0.35 : 0.18),
+                            SiphonTheme.accentSecondary.opacity(isHovered ? 0.35 : 0.18),
                             Color.clear
                         ],
                         center: .center,

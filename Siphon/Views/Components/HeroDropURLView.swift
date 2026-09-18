@@ -37,7 +37,7 @@ struct HeroDropURLView: View {
                     LinearGradient(
                         colors: [
                             SiphonTheme.accent.opacity(isTargeted ? 0.22 : 0.08),
-                            Color.cyan.opacity(isTargeted ? 0.12 : 0.03),
+                            SiphonTheme.accentSecondary.opacity(isTargeted ? 0.12 : 0.03),
                             Color.clear
                         ],
                         startPoint: .topLeading,
@@ -51,7 +51,7 @@ struct HeroDropURLView: View {
                 RadialGradient(
                     colors: [
                         SiphonTheme.accent.opacity(isTargeted ? 0.35 : 0.20),
-                        Color.cyan.opacity(isTargeted ? 0.18 : 0.08),
+                        SiphonTheme.accentSecondary.opacity(isTargeted ? 0.18 : 0.08),
                         Color.clear
                     ],
                     center: .center,

@@ -1,5 +1,6 @@
 import XCTest
 import AppKit
+import AVFoundation
 @testable import Siphon
 
 final class ImageUtilitiesTests: XCTestCase {
@@ -37,4 +38,18 @@ final class ImageUtilitiesTests: XCTestCase {
         XCTAssertEqual(icon.size.width, 0)
         XCTAssertEqual(icon.size.height, 0)
     }
+
+    func testImageGeneratorUsesPreferredTransform() {
+        let generator = AVAssetImageGenerator(asset: AVMutableComposition())
+        ImageUtilities.configureImageGenerator(generator)
+        XCTAssertTrue(generator.appliesPreferredTrackTransform)
+    }
+
+    func testImageGeneratorPreservesSourceDynamicRangeWhenAvailable() {
+        guard #available(macOS 15.0, *) else { return }
+        let generator = AVAssetImageGenerator(asset: AVMutableComposition())
+        ImageUtilities.configureImageGenerator(generator)
+        XCTAssertEqual(generator.dynamicRangePolicy, .matchSource)
+    }
+
 }

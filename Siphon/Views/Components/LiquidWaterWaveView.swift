@@ -121,6 +121,7 @@ struct LiquidWaterWaveView: View {
 
     @State private var startedAt = Date()
     @ObservedObject private var renderingEnvironment = AdaptiveRenderingEnvironment.shared
+    @Environment(\.siphonRenderingCapabilities) private var renderingCapabilities
 
     private var shouldShowMotion: Bool {
         isActive || isHovered
@@ -140,7 +141,7 @@ struct LiquidWaterWaveView: View {
         } else {
             // Keep the phase and speed independent of hover/selection so the
             // liquid continues smoothly instead of jumping when state changes.
-            TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { timeline in
+            TimelineView(.animation(minimumInterval: renderingCapabilities.animationMinimumInterval)) { timeline in
                 let time = timeline.date.timeIntervalSince(startedAt)
                 let visibility = isActive ? 1.0 : 0.72
 
