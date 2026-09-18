@@ -1724,7 +1724,10 @@ final class YtdlpServiceTests: XCTestCase {
         })
         service.boyfriendTVRenderedPageLoader = { url in
             renderedLoads.value.append(url)
-            return "<html><head><title>Rendered challenge test | BoyFriendTV</title></head><body><script>var playerConfig={sources:{hlsAuto:\"\(stream)\"}};</script></body></html>"
+            return "<html><head><title>Rendered challenge test | BoyFriendTV</title></head><body><div id='player'></div></body></html>"
+        }
+        service.boyfriendTVRenderedStreamLoader = { url in
+            url.path.contains("/videos/1710869") ? stream : nil
         }
 
         let info = try await service.fetchInfo(
@@ -1756,10 +1759,13 @@ final class YtdlpServiceTests: XCTestCase {
         })
         service.boyfriendTVRenderedPageLoader = { url in
             renderedLoads.value.append(url)
-            if url.path.contains("/embed/") || url.path.contains("/embed/1710869") {
-                return "<html><body><script>var playerConfig={sources:{hlsAuto:\"\(stream)\"}};</script></body></html>"
+            if url.path.contains("/embed/") {
+                return "<html><body><div id='player'></div></body></html>"
             }
             return "<html><head><title>Rendered embed test | BoyFriendTV</title></head><body><iframe data-src='/embed/1710869/'></iframe></body></html>"
+        }
+        service.boyfriendTVRenderedStreamLoader = { url in
+            url.path.contains("/embed/1710869") ? stream : nil
         }
 
         let info = try await service.fetchInfo(
@@ -1769,6 +1775,37 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertEqual(info.manifestUrl, stream)
         XCTAssertTrue(renderedLoads.value.contains(where: { $0.path.contains("/videos/1710869") }))
         XCTAssertTrue(renderedLoads.value.contains(where: { $0.path.contains("/embed/1710869") }))
+    }
+
+    func testBoyfriendTVWebKitRuntimeRejectsPreviewMedia() async throws {
+        UserDefaults.standard.set("none", forKey: UserDefaultsKeys.browserForCookies)
+        defer { UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.browserForCookies) }
+        service.installedBrowsersProvider = { [] }
+
+        let challenge = "<html><head><title>Just a moment...</title></head><body><script src='/cdn-cgi/challenge-platform/test'></script></body></html>"
+        let challengeOutput = Data(challenge.utf8).base64EncodedString() + "\nERROR: HTTP Error 403: Forbidden"
+
+        service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
+            if args.contains("--dump-pages") {
+                throw YtdlpError.commandFailed(challengeOutput)
+            }
+            throw YtdlpError.commandFailed("ERROR: HTTP Error 403: Forbidden")
+        })
+        service.boyfriendTVRenderedPageLoader = { _ in
+            "<html><head><title>Runtime preview test | BoyFriendTV</title></head><body><div id='player'></div></body></html>"
+        }
+        service.boyfriendTVRenderedStreamLoader = { _ in
+            "https://cdn.boyfriendtv.com/preview/1710869_preview.mp4"
+        }
+
+        do {
+            _ = try await service.fetchInfo(
+                url: "https://www.boyfriendtv.com/videos/1710869/test/"
+            )
+            XCTFail("Preview media must never be accepted as the downloadable stream")
+        } catch {
+            XCTAssertFalse(String(describing: error).contains("1710869_preview.mp4"))
+        }
     }
 
     func testBoyfriendTVWebKitClearanceThenLoginReportsLoginNotCloudflare() async throws {
