@@ -3048,7 +3048,7 @@ final class YtdlpServiceTests: XCTestCase {
         defer { if let file = headerFile { try? FileManager.default.removeItem(at: file) } }
         
         let headerContent = try String(contentsOf: headerFile!, encoding: .utf8)
-        XCTAssertTrue(headerContent.contains(".boyfriendtv.com\tTRUE\t/\tFALSE\t"), "Must contain .boyfriendtv.com domain entry")
+        XCTAssertTrue(headerContent.contains(".boyfriendtv.com\tTRUE\t/\tTRUE\t"), "HTTPS header cookies must remain scoped to .boyfriendtv.com and require secure transport")
         XCTAssertFalse(headerContent.contains(".boyfriend.tv\t"), "Must NOT contain cross-domain .boyfriend.tv entry")
         XCTAssertTrue(headerContent.contains("session\txyz123"), "Must contain session cookie")
 
@@ -3061,7 +3061,7 @@ final class YtdlpServiceTests: XCTestCase {
         defer { if let file = consolidatedFile { try? FileManager.default.removeItem(at: file) } }
         
         let consolidatedContent = try String(contentsOf: consolidatedFile!, encoding: .utf8)
-        XCTAssertTrue(consolidatedContent.contains(".boyfriendtv.com\tTRUE\t/\tFALSE\t"), "Consolidated file must contain .boyfriendtv.com domain")
+        XCTAssertTrue(consolidatedContent.contains(".boyfriendtv.com\tTRUE\t/\tTRUE\t"), "HTTPS consolidated cookies must remain scoped to .boyfriendtv.com and require secure transport")
         XCTAssertFalse(consolidatedContent.contains(".boyfriend.tv\t"), "Consolidated file must NOT contain cross-domain .boyfriend.tv entry")
     }
 
