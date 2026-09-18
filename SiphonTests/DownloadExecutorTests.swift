@@ -213,4 +213,40 @@ final class DownloadExecutorTests: XCTestCase {
             status: .stopped
         ))
     }
+
+    func testFailedDownloadPopulatesDownloadLog() async {
+        final class MockDelegate: DownloadExecutorDelegate {
+            func executorDidUpdateStatus(for download: Download, to status: DownloadStatus) {
+                download.status = status
+            }
+            func executorDidRequestAddToHistory(_ download: Download, skipSave: Bool) {}
+            func executorDidFinishDownload() {}
+            func executorDidRequestBroadcast() {}
+        }
+
+        let runner = MockYtdlpProcessRunner(mockCommand: { _ in
+            throw YtdlpError.commandFailed("ERROR: [generic] Got HTTP Error 403 caused by Cloudflare anti-bot challenge")
+        })
+        let service = YtdlpService(processRunner: runner)
+        service.ytdlpPath = URL(fileURLWithPath: "/usr/local/bin/yt-dlp")
+        let delegate = MockDelegate()
+        let executor = DownloadExecutor(ytdlpService: service, delegate: delegate)
+        let queue = DownloadQueue()
+        let download = Download(url: "https://example.com/blocked", options: .default)
+
+        XCTAssertTrue(download.log.isEmpty)
+
+        await executor.executeDownload(
+            download,
+            queue: queue,
+            ytdlpVersion: "2026.09.01",
+            languageService: LanguageService()
+        )
+
+        XCTAssertEqual(download.status, .failed)
+        XCTAssertFalse(download.log.isEmpty, "Download log must be populated on failure")
+        XCTAssertTrue(download.log.contains("[INFO] Initializing metadata extraction"), "Log should contain initialization line")
+        XCTAssertTrue(download.log.contains("[ERROR]"), "Log should contain error line")
+        XCTAssertTrue(download.log.contains("Cloudflare"), "Log should contain diagnostic output")
+    }
 }

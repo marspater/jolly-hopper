@@ -188,8 +188,17 @@ class Download: ObservableObject, Identifiable {
         let lower = error.lowercased()
         let rawError = LoggerService.sanitizeDiagnosticText(log.isEmpty ? error : log)
         
-        if lower.contains("sign in to confirm") || lower.contains("bot") || lower.contains("cloudflare") || lower.contains("login") || lower.contains("cookies") {
-            let isYouTube = url.lowercased().contains("youtube.com") || url.lowercased().contains("youtu.be")
+        let isYouTube = url.lowercased().contains("youtube.com") || url.lowercased().contains("youtu.be")
+        let isYouTubeSignIn = isYouTube && lower.contains("sign in to confirm")
+        
+        if lower.contains("cloudflare") || lower.contains("anti-bot") || lower.contains("captcha") || lower.contains("challenge") || isYouTubeSignIn {
+            return ErrorUXInfo(
+                headline: lang.s("couldnt_download"),
+                description: isYouTubeSignIn ? lang.s("youtube_auth_required") : lang.s("anti_bot_desc"),
+                actionType: isYouTubeSignIn ? .fixInSettings : .retry,
+                rawError: rawError
+            )
+        } else if lower.contains("sign in") || lower.contains("login") || lower.contains("cookies") {
             let desc = isYouTube ? lang.s("youtube_auth_required") : lang.s("login_required_desc")
             return ErrorUXInfo(
                 headline: lang.s("couldnt_download"),

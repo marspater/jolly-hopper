@@ -296,6 +296,18 @@ final class YtdlpServiceTests: XCTestCase {
         }
     }
 
+    func testCookiesFromBrowserArgumentForHeliumTranslatesToChromiumProfile() {
+        let heliumArg = YtdlpService.cookiesFromBrowserArgument(for: "helium")
+        XCTAssertTrue(heliumArg.hasPrefix("chromium:"), "Helium must be mapped to chromium profile argument for yt-dlp compatibility")
+        XCTAssertTrue(heliumArg.contains("net.imput.helium/Default"), "Helium argument must point to net.imput.helium Default profile")
+        
+        let safariArg = YtdlpService.cookiesFromBrowserArgument(for: "safari")
+        XCTAssertEqual(safariArg, "safari")
+
+        let chromeArg = YtdlpService.cookiesFromBrowserArgument(for: "chrome")
+        XCTAssertEqual(chromeArg, "chrome")
+    }
+
     func testCreateAspectFitIconPreservesAspectRatioOnSquareCanvas() {
         // Test rectangular 16:9 image
         let wideImage = NSImage(size: NSSize(width: 1920, height: 1080))
@@ -1451,6 +1463,125 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertTrue(capturedArgsBox.value.contains(where: { $0.contains("Referer:https://www.boyfriend") }))
     }
 
+    func testBoyfriendTVBrowserCandidatesAutomaticallyUseInstalledSessions() {
+        let candidates = YtdlpService.boyfriendTVBrowserCandidates(
+            configured: nil,
+            installed: ["safari", "firefox", "chrome"],
+            hasFullDiskAccess: false
+        )
+
+        XCTAssertEqual(candidates.count, 3)
+        XCTAssertEqual(candidates[0], "chrome")
+        XCTAssertEqual(candidates[1], "firefox")
+        XCTAssertNil(candidates[2], "Anonymous transport should remain the final fallback")
+    }
+
+    func testBoyfriendTVBrowserCandidatesPrioritizeConfiguredBrowserWithoutDuplicates() {
+        let candidates = YtdlpService.boyfriendTVBrowserCandidates(
+            configured: "firefox",
+            installed: ["chrome", "firefox", "brave"],
+            hasFullDiskAccess: true
+        )
+
+        XCTAssertEqual(candidates[0], "firefox")
+        XCTAssertEqual(candidates[1], "chrome")
+        XCTAssertEqual(candidates[2], "brave")
+        XCTAssertNil(candidates.last!)
+        XCTAssertEqual(candidates.compactMap { $0 }.filter { $0 == "firefox" }.count, 1)
+    }
+
+    func testBoyfriendTVAlternateURLPreservesVideoPath() {
+        let comURL = "https://www.boyfriendtv.com/videos/1710869/test-slug/"
+        let tvURL = YtdlpService.boyfriendTVAlternateURL(for: comURL)
+        XCTAssertEqual(tvURL, "https://www.boyfriend.tv/videos/1710869/test-slug/")
+
+        let roundTrip = tvURL.flatMap { YtdlpService.boyfriendTVAlternateURL(for: $0) }
+        XCTAssertEqual(roundTrip, comURL)
+    }
+
+    func testBoyfriendTVResolverRecoversThroughAlternateMainHost() async throws {
+        service.ytdlpPath = URL(fileURLWithPath: "/usr/local/bin/yt-dlp")
+        UserDefaults.standard.set("none", forKey: UserDefaultsKeys.browserForCookies)
+        defer { UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.browserForCookies) }
+
+        let calls = TestBox<[String]>([])
+        service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
+            guard args.contains("--dump-pages") else { return "{}" }
+            let target = args.last ?? ""
+            calls.value.append(target)
+
+            if target.contains("boyfriendtv.com") {
+                throw YtdlpError.commandFailed("ERROR: HTTP Error 403: Forbidden")
+            }
+
+            if target.contains("boyfriend.tv") {
+                let html = """
+                <!DOCTYPE html>
+                <html><head><title>Mirror Video | BoyFriendTV</title></head>
+                <body><script>
+                var playerConfig = {
+                    sources: {"hlsAuto":"https://cdn.boyfriend.tv/key=abc,end=9999999999/media=hls4A/multi=1280x720:hq/2026-09/_TPL_.mp4"}
+                };
+                </script></body></html>
+                """
+                return html.data(using: .utf8)!.base64EncodedString()
+            }
+
+            return ""
+        })
+
+        let info = try await service.fetchInfo(
+            url: "https://www.boyfriendtv.com/videos/1710869/test-slug/"
+        )
+
+        XCTAssertEqual(info.title, "Mirror Video")
+        XCTAssertTrue(calls.value.contains(where: { $0.contains("www.boyfriendtv.com/videos/1710869/") }))
+        XCTAssertTrue(calls.value.contains(where: { $0.contains("www.boyfriend.tv/videos/1710869/") }))
+        XCTAssertTrue(info.manifestUrl?.contains("cdn.boyfriend.tv") == true)
+    }
+
+    func testBoyfriendTVAlternateHostGetsItsOwnTransientRetryBudget() async throws {
+        service.ytdlpPath = URL(fileURLWithPath: "/usr/local/bin/yt-dlp")
+        UserDefaults.standard.set("none", forKey: UserDefaultsKeys.browserForCookies)
+        defer { UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.browserForCookies) }
+
+        let tvCalls = TestBox<Int>(0)
+        service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
+            guard args.contains("--dump-pages") else { return "{}" }
+            let target = args.last ?? ""
+
+            if target.contains("boyfriendtv.com") {
+                throw YtdlpError.commandFailed("ERROR: Cloudflare challenge")
+            }
+
+            if target.contains("www.boyfriend.tv") {
+                tvCalls.value += 1
+                if tvCalls.value == 1 {
+                    throw YtdlpError.commandFailed("ERROR: Cloudflare challenge")
+                }
+                let html = """
+                <!DOCTYPE html>
+                <html><head><title>Recovered Video | BoyFriendTV</title></head>
+                <body><script>
+                var playerConfig = {
+                    sources: {"hlsAuto":"https://cdn.boyfriend.tv/key=abc,end=9999999999/media=hls4A/multi=1280x720:hq/2026-09/_TPL_.mp4"}
+                };
+                </script></body></html>
+                """
+                return html.data(using: .utf8)!.base64EncodedString()
+            }
+
+            return ""
+        })
+
+        let info = try await service.fetchInfo(
+            url: "https://www.boyfriendtv.com/videos/1710869/test-slug/"
+        )
+
+        XCTAssertEqual(tvCalls.value, 2, "Alternate host must receive its own one-time transient retry")
+        XCTAssertEqual(info.title, "Recovered Video")
+    }
+
     func testBoyfriendTVWithSafariCookiesUsesCoherentSafariTransport() async throws {
         service.ytdlpPath = URL(fileURLWithPath: "/usr/local/bin/yt-dlp")
         UserDefaults.standard.set("safari", forKey: UserDefaultsKeys.browserForCookies)
@@ -1496,6 +1627,183 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertFalse(capturedArgsBox.value.contains("--user-agent"), "The impersonation profile must own the user agent")
         XCTAssertFalse(capturedArgsBox.value.contains(where: { $0.hasPrefix("Sec-Ch-Ua:") }))
         XCTAssertTrue(capturedArgsBox.value.contains("generic:impersonate=safari:macos"))
+    }
+
+    func testBoyfriendTVResolverMatchesFirefoxCookiesToFirefoxFingerprint() async throws {
+        service.ytdlpPath = URL(fileURLWithPath: "/usr/local/bin/yt-dlp")
+        UserDefaults.standard.set("firefox", forKey: UserDefaultsKeys.browserForCookies)
+        defer { UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.browserForCookies) }
+
+        let dumpArgs = TestBox<[[String]]>([])
+        let mainHTML = """
+        <html><head><title>Firefox Session Test | BoyFriendTV</title></head>
+        <body><iframe data-src="/embed/1710869/"></iframe></body></html>
+        """
+        let stream = "https://cdn.boyfriendtv.com/key=test/media=hls4A/multi=854x480:v480/2026-09/_TPL_.mp4"
+        let embedHTML = """
+        <html><body><script>var playerConfig = {sources: {hlsAuto: "\(stream)"}};</script></body></html>
+        """
+
+        service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
+            if args.contains("--dump-pages") {
+                dumpArgs.value.append(args)
+
+                XCTAssertTrue(args.contains("--cookies-from-browser"))
+                XCTAssertTrue(args.contains("firefox"))
+                XCTAssertTrue(args.contains("generic:impersonate=firefox:macos"))
+                XCTAssertFalse(args.contains("--user-agent"), "Impersonation must own the UA for Cloudflare coherence")
+                XCTAssertFalse(args.contains(where: { $0.hasPrefix("Sec-Ch-Ua:") }), "Firefox cookies must never be paired with Chromium client hints")
+
+                let target = args.last ?? ""
+                let html = target.contains("/embed/") ? embedHTML : mainHTML
+                return Data(html.utf8).base64EncodedString()
+            }
+            if args.contains("--dump-json") {
+                return "{\"id\":\"1710869\",\"title\":\"Firefox Session Test\"}"
+            }
+            return "{}"
+        })
+
+        let info = try await service.fetchInfo(
+            url: "https://www.boyfriendtv.com/videos/1710869/test/"
+        )
+
+        XCTAssertEqual(info.manifestUrl, stream)
+        XCTAssertGreaterThanOrEqual(dumpArgs.value.count, 2)
+    }
+
+    func testBoyfriendTVResolverNoCookieFallbackUsesCoherentChromeImpersonation() async throws {
+        service.ytdlpPath = URL(fileURLWithPath: "/usr/local/bin/yt-dlp")
+        UserDefaults.standard.set("none", forKey: UserDefaultsKeys.browserForCookies)
+        defer { UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.browserForCookies) }
+        service.installedBrowsersProvider = { [] }
+
+        let captured = TestBox<[String]>([])
+        let stream = "https://cdn.boyfriendtv.com/key=test/media=hls4A/multi=854x480:v480/2026-09/_TPL_.mp4"
+
+        service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
+            if args.contains("--dump-pages") {
+                captured.value = args
+                let html = "<script>var playerConfig = {sources: {hlsAuto: \"\(stream)\"}};</script>"
+                return Data(html.utf8).base64EncodedString()
+            }
+            if args.contains("--dump-json") {
+                return "{\"id\":\"1710869\",\"title\":\"Chrome Impersonation Test\"}"
+            }
+            return "{}"
+        })
+
+        let info = try await service.fetchInfo(
+            url: "https://www.boyfriendtv.com/videos/1710869/test/"
+        )
+
+        XCTAssertEqual(info.manifestUrl, stream)
+        XCTAssertFalse(captured.value.contains("--cookies-from-browser"))
+        XCTAssertTrue(captured.value.contains("generic:impersonate=chrome:macos"))
+        XCTAssertFalse(captured.value.contains("--user-agent"))
+        XCTAssertFalse(captured.value.contains(where: { $0.hasPrefix("Sec-Ch-Ua:") }))
+    }
+
+    func testBoyfriendTVWebKitFallbackResolvesMainPageChallenge() async throws {
+        UserDefaults.standard.set("none", forKey: UserDefaultsKeys.browserForCookies)
+        defer { UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.browserForCookies) }
+
+        let stream = "https://cdn.boyfriendtv.com/key=clearance/media=hls4A/multi=854x480:v480/2026-09/_TPL_.mp4"
+        let challenge = "<html><head><title>Just a moment...</title></head><body><script src='/cdn-cgi/challenge-platform/test'></script></body></html>"
+        let challengeOutput = Data(challenge.utf8).base64EncodedString() + "\nERROR: HTTP Error 403: Forbidden"
+        let renderedLoads = TestBox<[URL]>([])
+
+        service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
+            if args.contains("--dump-pages") {
+                throw YtdlpError.commandFailed(challengeOutput)
+            }
+            if args.contains("--dump-json") {
+                return "{\"id\":\"1710869\",\"title\":\"Rendered challenge test\"}"
+            }
+            return "{}"
+        })
+        service.boyfriendTVRenderedPageLoader = { url in
+            renderedLoads.value.append(url)
+            return "<html><head><title>Rendered challenge test | BoyFriendTV</title></head><body><script>var playerConfig={sources:{hlsAuto:\"\(stream)\"}};</script></body></html>"
+        }
+
+        let info = try await service.fetchInfo(
+            url: "https://www.boyfriendtv.com/videos/1710869/test/"
+        )
+
+        XCTAssertEqual(info.manifestUrl, stream)
+        XCTAssertEqual(renderedLoads.value.count, 1)
+        XCTAssertTrue(renderedLoads.value[0].path.contains("/videos/1710869"))
+    }
+
+    func testBoyfriendTVWebKitFallbackResolvesEmbedChallenge() async throws {
+        UserDefaults.standard.set("none", forKey: UserDefaultsKeys.browserForCookies)
+        defer { UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.browserForCookies) }
+
+        let stream = "https://cdn.boyfriendtv.com/key=clearance/media=hls4A/multi=1280x720:v720/2026-09/_TPL_.mp4"
+        let challenge = "<html><head><title>Just a moment...</title></head><body><script src='/cdn-cgi/challenge-platform/test'></script></body></html>"
+        let challengeOutput = Data(challenge.utf8).base64EncodedString() + "\nERROR: HTTP Error 403: Forbidden"
+        let renderedLoads = TestBox<[URL]>([])
+
+        service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
+            if args.contains("--dump-pages") {
+                throw YtdlpError.commandFailed(challengeOutput)
+            }
+            if args.contains("--dump-json") {
+                return "{\"id\":\"1710869\",\"title\":\"Rendered embed test\"}"
+            }
+            return "{}"
+        })
+        service.boyfriendTVRenderedPageLoader = { url in
+            renderedLoads.value.append(url)
+            if url.path.contains("/embed/") || url.path.contains("/embed/1710869") {
+                return "<html><body><script>var playerConfig={sources:{hlsAuto:\"\(stream)\"}};</script></body></html>"
+            }
+            return "<html><head><title>Rendered embed test | BoyFriendTV</title></head><body><iframe data-src='/embed/1710869/'></iframe></body></html>"
+        }
+
+        let info = try await service.fetchInfo(
+            url: "https://www.boyfriendtv.com/videos/1710869/test/"
+        )
+
+        XCTAssertEqual(info.manifestUrl, stream)
+        XCTAssertTrue(renderedLoads.value.contains(where: { $0.path.contains("/videos/1710869") }))
+        XCTAssertTrue(renderedLoads.value.contains(where: { $0.path.contains("/embed/1710869") }))
+    }
+
+    func testBoyfriendTVWebKitClearanceThenLoginReportsLoginNotCloudflare() async throws {
+        UserDefaults.standard.set("none", forKey: UserDefaultsKeys.browserForCookies)
+        defer { UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.browserForCookies) }
+        service.installedBrowsersProvider = { [] }
+
+        let challenge = "<html><head><title>Just a moment...</title></head><body><script src='/cdn-cgi/challenge-platform/test'></script></body></html>"
+        let challengeOutput = Data(challenge.utf8).base64EncodedString() + "\nERROR: HTTP Error 403: Forbidden"
+
+        service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
+            if args.contains("--dump-pages") {
+                throw YtdlpError.commandFailed(challengeOutput)
+            }
+            return "{}"
+        })
+        service.boyfriendTVRenderedPageLoader = { _ in
+            "<html><head><title>Members only</title></head><body>To watch this video please Login</body></html>"
+        }
+
+        do {
+            _ = try await service.fetchInfo(
+                url: "https://www.boyfriendtv.com/videos/1710869/test/"
+            )
+            XCTFail("Expected browser-cookie requirement after WebKit cleared the challenge")
+        } catch let error as YtdlpError {
+            switch error {
+            case .boyfriendTVNeedsBrowserCookies:
+                break
+            case .downloadFailed(let message):
+                XCTAssertTrue(message.contains("sign-in page") || message.contains("browser sessions"))
+            default:
+                XCTFail("Expected login/cookie error after clearance, got \(error)")
+            }
+        }
     }
 
     func testGayPornTubeMetadataUsesNativeHTML5AndSiteHeaders() async throws {

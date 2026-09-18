@@ -64,7 +64,7 @@ xattr -cr /Applications/"Siphon.app"
 ### Browser Extensions 🌐
 
 Integrate Siphon directly into your favorite web browser for 1-click video downloads:
-- **Chrome / Brave / Edge**: Navigate to `chrome://extensions`, enable **Developer Mode**, and click **Load Unpacked** pointing to `SiphonExtension_Chrome`.
+- **Chrome / Brave / Edge / Helium**: Navigate to `chrome://extensions`, enable **Developer Mode**, and click **Load Unpacked** pointing to `SiphonExtension_Chrome`.
 - **Safari**: Enable the extension in Safari Preferences > Extensions.
 - **Firefox**: Load `SiphonExtension_Firefox` in `about:debugging#/runtime/this-firefox`.
 

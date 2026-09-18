@@ -1038,9 +1038,35 @@ struct PreferencesView: View {
                 
                 if browserForCookies == "safari" {
                     safariWarningView
+                } else if browserForCookies == "helium" {
+                    heliumHintView
                 }
             }
         }
+    }
+
+    private var heliumHintView: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                Image(systemName: "puzzlepiece.extension.fill")
+                    .foregroundColor(SiphonTheme.accent)
+                    .font(.geist(13))
+                Text(languageService.s("helium_extension_supported"))
+                    .font(.geist(11, weight: .semibold))
+                    .foregroundColor(SiphonTheme.accent)
+            }
+            Text(languageService.s("helium_hint"))
+                .font(.geist(11))
+                .foregroundColor(.secondary)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(SiphonTheme.accent.opacity(0.08))
+        .cornerRadius(SiphonTheme.radiusControl)
+        .overlay(
+            RoundedRectangle(cornerRadius: SiphonTheme.radiusControl)
+                .stroke(SiphonTheme.accent.opacity(0.20), lineWidth: 1)
+        )
     }
 
     private var safariWarningView: some View {
