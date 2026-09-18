@@ -1349,7 +1349,7 @@ struct AddDownloadView: View {
 
                     SiphonTheme.subtleDivider
 
-                    advancedOptionsContent(mediaInfo)
+                    advancedOptionsContent(inputMode == .single ? mediaInfo : nil)
                 }
                 .padding(SiphonTheme.spacing14)
                 .background(
