@@ -7,9 +7,7 @@
     "permissions": [
         "contextMenus",
         "tabs",
-        "activeTab",
-        "cookies",
-        "scripting"
+        "cookies"
     ],
     "host_permissions": [
         "*://*/*"
