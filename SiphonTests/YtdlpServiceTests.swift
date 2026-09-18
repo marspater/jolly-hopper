@@ -1498,6 +1498,80 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertTrue(capturedArgsBox.value.contains("generic:impersonate=safari:macos"))
     }
 
+    func testBoyfriendTVResolverMatchesFirefoxCookiesToFirefoxFingerprint() async throws {
+        service.ytdlpPath = URL(fileURLWithPath: "/usr/local/bin/yt-dlp")
+        UserDefaults.standard.set("firefox", forKey: UserDefaultsKeys.browserForCookies)
+        defer { UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.browserForCookies) }
+
+        let dumpArgs = TestBox<[[String]]>([])
+        let mainHTML = """
+        <html><head><title>Firefox Session Test | BoyFriendTV</title></head>
+        <body><iframe data-src="/embed/1710869/"></iframe></body></html>
+        """
+        let stream = "https://cdn.boyfriendtv.com/key=test/media=hls4A/multi=854x480:v480/2026-09/_TPL_.mp4"
+        let embedHTML = """
+        <html><body><script>var playerConfig = {sources: {hlsAuto: "\(stream)"}};</script></body></html>
+        """
+
+        service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
+            if args.contains("--dump-pages") {
+                dumpArgs.value.append(args)
+
+                XCTAssertTrue(args.contains("--cookies-from-browser"))
+                XCTAssertTrue(args.contains("firefox"))
+                XCTAssertTrue(args.contains("generic:impersonate=firefox:macos"))
+                XCTAssertFalse(args.contains("--user-agent"), "Impersonation must own the UA for Cloudflare coherence")
+                XCTAssertFalse(args.contains(where: { $0.hasPrefix("Sec-Ch-Ua:") }), "Firefox cookies must never be paired with Chromium client hints")
+
+                let target = args.last ?? ""
+                let html = target.contains("/embed/") ? embedHTML : mainHTML
+                return Data(html.utf8).base64EncodedString()
+            }
+            if args.contains("--dump-json") {
+                return "{\"id\":\"1710869\",\"title\":\"Firefox Session Test\"}"
+            }
+            return "{}"
+        })
+
+        let info = try await service.fetchInfo(
+            url: "https://www.boyfriendtv.com/videos/1710869/test/"
+        )
+
+        XCTAssertEqual(info.manifestUrl, stream)
+        XCTAssertGreaterThanOrEqual(dumpArgs.value.count, 2)
+    }
+
+    func testBoyfriendTVResolverNoCookieFallbackUsesCoherentChromeImpersonation() async throws {
+        service.ytdlpPath = URL(fileURLWithPath: "/usr/local/bin/yt-dlp")
+        UserDefaults.standard.set("none", forKey: UserDefaultsKeys.browserForCookies)
+        defer { UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.browserForCookies) }
+
+        let captured = TestBox<[String]>([])
+        let stream = "https://cdn.boyfriendtv.com/key=test/media=hls4A/multi=854x480:v480/2026-09/_TPL_.mp4"
+
+        service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
+            if args.contains("--dump-pages") {
+                captured.value = args
+                let html = "<script>var playerConfig = {sources: {hlsAuto: \"\(stream)\"}};</script>"
+                return Data(html.utf8).base64EncodedString()
+            }
+            if args.contains("--dump-json") {
+                return "{\"id\":\"1710869\",\"title\":\"Chrome Impersonation Test\"}"
+            }
+            return "{}"
+        })
+
+        let info = try await service.fetchInfo(
+            url: "https://www.boyfriendtv.com/videos/1710869/test/"
+        )
+
+        XCTAssertEqual(info.manifestUrl, stream)
+        XCTAssertFalse(captured.value.contains("--cookies-from-browser"))
+        XCTAssertTrue(captured.value.contains("generic:impersonate=chrome:macos"))
+        XCTAssertFalse(captured.value.contains("--user-agent"))
+        XCTAssertFalse(captured.value.contains(where: { $0.hasPrefix("Sec-Ch-Ua:") }))
+    }
+
     func testGayPornTubeMetadataUsesNativeHTML5AndSiteHeaders() async throws {
         let url = "https://www.gayporntube.com/video/1507912/test-video"
         UserDefaults.standard.set("none", forKey: UserDefaultsKeys.browserForCookies)
