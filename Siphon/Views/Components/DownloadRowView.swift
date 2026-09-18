@@ -259,7 +259,7 @@ struct DownloadRowView: View {
                         }
                         
                         Button {
-                            withAnimation(.easeInOut(duration: 0.2)) {
+                            withAnimation(SiphonAnimation.snappySpring) {
                                 showRawError.toggle()
                             }
                         } label: {

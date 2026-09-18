@@ -92,10 +92,15 @@ struct PreferencesView: View {
     @Environment(\.dismiss) var dismiss
     
     @Namespace private var tabNamespace
+    @Environment(\.siphonRenderingCapabilities) private var renderingCapabilities
+
+    private var showBorders: Bool {
+        renderingCapabilities.increaseContrast
+    }
 
     var body: some View {
         VStack(spacing: 0) {
-            // Fluid Glass Segmented Tab Bar (38px height with targeted EDR accent glow)
+            // Fluid Glass segmented tab bar with restrained SDR accent emphasis
             HStack(spacing: 3) {
                 tabSegment(.general, title: languageService.s("general"), icon: "gearshape.fill")
                 tabSegment(.download, title: languageService.s("download"), icon: "arrow.down.circle.fill")
@@ -114,11 +119,15 @@ struct PreferencesView: View {
                 Capsule()
                     .strokeBorder(
                         LinearGradient(
-                            colors: [Color.primary.opacity(0.16), Color.primary.opacity(0.04), Color.clear],
+                            colors: [
+                                Color.primary.opacity(showBorders ? 0.34 : 0.16),
+                                Color.primary.opacity(showBorders ? 0.14 : 0.04),
+                                Color.clear
+                            ],
                             startPoint: .top,
                             endPoint: .bottom
                         ),
-                        lineWidth: 1
+                        lineWidth: showBorders ? 1.5 : 1
                     )
             )
             .padding(.top, SiphonTheme.spacing10)
@@ -141,7 +150,7 @@ struct PreferencesView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .clipped()
-            .animation(.spring(response: 0.30, dampingFraction: 0.72), value: selectedTab)
+            .animation(SiphonAnimation.fluidSpring, value: selectedTab)
         }
         .padding(.horizontal, SiphonTheme.spacing16)
         .padding(.bottom, SiphonTheme.spacing16)
@@ -206,7 +215,7 @@ struct PreferencesView: View {
     @ViewBuilder
     private func tabSegment(_ tab: PreferenceTab, title: String, icon: String) -> some View {
         Button {
-            withAnimation(.spring(response: 0.30, dampingFraction: 0.68, blendDuration: 0)) {
+            withAnimation(SiphonAnimation.fluidSpring) {
                 selectedTab = tab
             }
         } label: {
