@@ -6,7 +6,6 @@ struct AddDownloadView: View {
     @EnvironmentObject var languageService: LanguageService
     @Environment(\.dismiss) private var dismiss
     @Environment(\.appearsActive) private var appearsActive
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.siphonRenderingCapabilities) private var renderingCapabilities
     @FocusState private var focusedField: InputField?
 
@@ -116,8 +115,8 @@ struct AddDownloadView: View {
         return VideoResolution.allCases
     }
 
-    private var settingsAnimation: Animation? {
-        reduceMotion ? nil : SiphonAnimation.fluidSpring
+    private var settingsAnimation: Animation {
+        SiphonAnimation.fluidSpring
     }
 
     var body: some View {
@@ -184,7 +183,6 @@ struct AddDownloadView: View {
         // are available.
         .frame(minWidth: 500, idealWidth: 540, maxWidth: 680, minHeight: 420, idealHeight: 440, maxHeight: .infinity)
         .siphonAdaptiveRendering()
-        .preferredColorScheme(selectedTheme == "light" ? .light : (selectedTheme == "dark" ? .dark : nil))
         .siphonWindowBackground()
         .onAppear {
             focusedField = .url
