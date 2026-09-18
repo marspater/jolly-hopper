@@ -71,8 +71,8 @@ async function triggerDownload(url, host = "download", tabId = null) {
         }
     }
 
-    // Fallback: create temporary tab with sufficient lifetime for macOS LaunchServices handoff
-    chrome.tabs.create({ url: deepLink, active: false }, (createdTab) => {
+    // Fallback: create temporary active tab for macOS LaunchServices handoff
+    chrome.tabs.create({ url: deepLink, active: true }, (createdTab) => {
         if (chrome.runtime.lastError) {
             console.warn("Failed to open Siphon deep link:", chrome.runtime.lastError.message);
             return;
@@ -82,7 +82,7 @@ async function triggerDownload(url, host = "download", tabId = null) {
                 chrome.tabs.remove(createdTab.id).catch((error) => {
                     console.debug("Failed to close temporary Siphon deep-link tab:", error);
                 });
-            }, 3500);
+            }, 3000);
         }
     });
 }
