@@ -51,6 +51,15 @@ final class QueueAndErrorUXTests: XCTestCase {
         XCTAssertTrue(script.contains("ditto \"$NEW_APP\" \"$APP_PATH\""))
     }
 
+    func testUnsignedCurrentAppUsesOneTimeAdHocMigrationPolicy() {
+        let missing = FileManager.default.temporaryDirectory
+            .appendingPathComponent("unsigned_\(UUID().uuidString).app")
+        let policy = UpdateChecker.signingPolicy(for: missing)
+
+        XCTAssertNil(policy.expectedTeamID)
+        XCTAssertTrue(policy.allowAdHoc)
+    }
+
     func testGitHubAssetDigestParsingRequiresValidSHA256() {
         let hash = String(repeating: "a", count: 64)
         XCTAssertEqual(UpdateChecker.parseGitHubAssetSHA256("sha256:\(hash)"), hash)
