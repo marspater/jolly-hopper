@@ -5608,6 +5608,7 @@ public struct DownloadResult: Sendable {
         guard let urlObj = URL(string: url), let host = urlObj.host, !host.isEmpty else { return nil }
         guard let cookiesDir = YtdlpService.getSecureTempCookiesDirectory() else { return nil }
         let domain = host.hasPrefix(".") ? host : ".\(host)"
+        let requireSecureTransport = urlObj.scheme?.lowercased() == "https"
         let tempCookiesURL = cookiesDir.appendingPathComponent("siphon_header_cookies_\(UUID().uuidString).txt")
 
         var domains: [String] = [domain]
@@ -5630,7 +5631,7 @@ public struct DownloadResult: Sendable {
                 let value = sanitizeCookieToken(parts[1].trimmingCharacters(in: .whitespacesAndNewlines))
                 if !key.isEmpty && !value.isEmpty {
                     for d in uniqueDomains {
-                        lines.append("\(d)\tTRUE\t/\tFALSE\t\(expiry)\t\(key)\t\(value)")
+                        lines.append("\(d)\tTRUE\t/\t\(requireSecureTransport ? "TRUE" : "FALSE")\t\(expiry)\t\(key)\t\(value)")
                     }
                 }
             }
