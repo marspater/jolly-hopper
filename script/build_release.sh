@@ -76,6 +76,23 @@ if ! printf '%s\n' "$SIGNING_INFO" | grep -q 'Authority=Developer ID Application
     exit 1
 fi
 
+HELPER="$APP/Contents/Helpers/siphon-pgrp"
+if [[ ! -x "$HELPER" ]]; then
+    echo "Signed release is missing the native process-group helper." >&2
+    exit 1
+fi
+codesign --verify --strict --verbose=2 "$HELPER"
+HELPER_SIGNING_INFO="$(codesign -dv --verbose=4 "$HELPER" 2>&1)"
+HELPER_TEAM_ID="$(printf '%s\n' "$HELPER_SIGNING_INFO" | sed -n 's/^TeamIdentifier=//p' | head -n 1)"
+if [[ "$HELPER_TEAM_ID" != "$SIPHON_DEVELOPMENT_TEAM" ]]; then
+    echo "Helper TeamIdentifier mismatch: expected $SIPHON_DEVELOPMENT_TEAM, got ${HELPER_TEAM_ID:-none}." >&2
+    exit 1
+fi
+if ! printf '%s\n' "$HELPER_SIGNING_INFO" | grep -q 'runtime'; then
+    echo "Embedded helper is missing the Hardened Runtime signing flag." >&2
+    exit 1
+fi
+
 NOTARY_ZIP="$BUILD_DIR/Siphon-notary.zip"
 ditto -c -k --keepParent "$APP" "$NOTARY_ZIP"
 
