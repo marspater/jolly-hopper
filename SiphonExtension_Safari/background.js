@@ -14,14 +14,7 @@ chrome.runtime.onInstalled.addListener(() => {
 
 chrome.contextMenus.onClicked.addListener((info) => {
     const url = info.linkUrl || info.srcUrl || info.pageUrl;
-    if (typeof url !== "string") return;
-    let parsedURL;
-    try {
-        parsedURL = new URL(url);
-    } catch {
-        return;
-    }
-    if (parsedURL.protocol !== "http:" && parsedURL.protocol !== "https:") return;
+    if (!url || typeof url !== "string" || !/^https?:\/\//i.test(url)) return;
 
     let host = "";
     if (info.menuItemId === "download-siphon") {
@@ -31,10 +24,7 @@ chrome.contextMenus.onClicked.addListener((info) => {
     }
 
     if (host) {
-        const deepLink = "siphon://" + host
-            + "?url=" + encodeURIComponent(url)
-            + "&browser=safari"
-            + "&ua=" + encodeURIComponent(navigator.userAgent || "");
+        const deepLink = "siphon://" + host + "?url=" + encodeURIComponent(url) + "&browser=safari&ua=" + encodeURIComponent(navigator.userAgent || "");
         chrome.tabs.create({ url: deepLink, active: false }, (createdTab) => {
             if (chrome.runtime.lastError) {
                 console.warn("Failed to open Siphon deep link:", chrome.runtime.lastError.message);
