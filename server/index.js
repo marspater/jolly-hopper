@@ -35,8 +35,12 @@ async function getLatestRelease() {
     return { ...releaseCache.data, cached: true };
   }
 
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10_000);
+
   try {
     const res = await fetch('https://api.github.com/repos/marspater/jolly-hopper/releases/latest', {
+      signal: controller.signal,
       headers: {
         'User-Agent': 'Siphon-Companion-Service',
         'Accept': 'application/vnd.github.v3+json'
@@ -67,7 +71,8 @@ async function getLatestRelease() {
     };
 
     return { ...cleanData, cached: false };
-  } catch {
+  } catch (error) {
+    console.error('Failed to refresh release metadata:', error instanceof Error ? error.message : String(error));
     if (releaseCache.data) {
       return { ...releaseCache.data, cached: true, stale: true };
     }
@@ -81,13 +86,28 @@ async function getLatestRelease() {
       cached: false,
       fallback: true
     };
+  } finally {
+    clearTimeout(timeout);
   }
 }
 
 function createServer() {
   return http.createServer(async (req, res) => {
-    const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
-    const pathname = url.pathname;
+    try {
+      let url;
+      try {
+        url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+      } catch {
+        const payload = JSON.stringify({ error: 'Bad Request' });
+        res.writeHead(400, {
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(payload)
+        });
+        res.end(payload);
+        return;
+      }
+
+      const pathname = url.pathname;
 
     // Health checks
     if (req.method === 'GET' && (pathname === '/' || pathname === '/health' || pathname === '/healthz')) {
@@ -144,17 +164,33 @@ function createServer() {
       return;
     }
 
-    const notFoundPayload = JSON.stringify({ error: 'Not Found' });
-    res.writeHead(404, {
-      'Content-Type': 'application/json',
-      'Content-Length': Buffer.byteLength(notFoundPayload)
-    });
-    res.end(notFoundPayload);
+      const notFoundPayload = JSON.stringify({ error: 'Not Found' });
+      res.writeHead(404, {
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(notFoundPayload)
+      });
+      res.end(notFoundPayload);
+    } catch (error) {
+      console.error('Unhandled companion request error:', error instanceof Error ? error.message : String(error));
+      if (!res.headersSent) {
+        const payload = JSON.stringify({ error: 'Internal Server Error' });
+        res.writeHead(500, {
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(payload)
+        });
+        res.end(payload);
+      } else if (!res.writableEnded) {
+        res.destroy();
+      }
+    }
   });
 }
 
 if (require.main === module) {
-  const port = parseInt(process.env.PORT, 10) || 3000;
+  const configuredPort = Number.parseInt(process.env.PORT ?? '', 10);
+  const port = Number.isInteger(configuredPort) && configuredPort >= 1 && configuredPort <= 65535
+    ? configuredPort
+    : 3000;
   const host = '0.0.0.0';
   const server = createServer();
 

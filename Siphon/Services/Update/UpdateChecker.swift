@@ -29,6 +29,7 @@ public final class UpdateChecker: ObservableObject {
     private var downloadAssetName: String?
     private var expectedChecksum: String?
     private var checksumURL: URL?
+    private var updateOperationID: UUID?
 
     private let downloader = UpdateDownloader()
     private let installer = UpdateInstaller()
@@ -36,6 +37,7 @@ public final class UpdateChecker: ObservableObject {
     public init() {}
 
     public func cancelUpdate() {
+        updateOperationID = nil
         downloader.cancel()
         downloadURL = nil
         downloadAssetName = nil
@@ -49,8 +51,14 @@ public final class UpdateChecker: ObservableObject {
     public func checkForUpdates(manual: Bool = false) async {
         guard !isChecking else { return }
         isChecking = true
+        defer { isChecking = false }
+
         guard let url = URL(string: "https://api.github.com/repos/\(repoOwner)/\(repoName)/releases/latest") else {
-            isChecking = false
+            let message = "Could not construct the GitHub releases URL."
+            LoggerService.shared.log(message, level: .error)
+            if manual {
+                NotificationService.shared.sendAppUpdateNotification(title: "Update Check Failed", body: message)
+            }
             return
         }
 
@@ -63,23 +71,33 @@ public final class UpdateChecker: ObservableObject {
             if let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode != 200 {
                 throw NSError(domain: "UpdateChecker", code: httpResponse.statusCode, userInfo: [NSLocalizedDescriptionKey: "GitHub returned HTTP \(httpResponse.statusCode)"])
             }
-            if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-               let tagName = json["tag_name"] as? String {
+            guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let tagName = json["tag_name"] as? String,
+                  !tagName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                throw NSError(
+                    domain: "UpdateChecker",
+                    code: -2,
+                    userInfo: [NSLocalizedDescriptionKey: "GitHub returned a malformed release response."]
+                )
+            }
 
-                let cleanTag = tagName.replacingOccurrences(of: "v", with: "")
-                latestVersion = cleanTag
-                hasUpdate = cleanTag.compare(currentVersion, options: .numeric) == .orderedDescending
+            let trimmedTag = tagName.trimmingCharacters(in: .whitespacesAndNewlines)
+            let cleanTag = (trimmedTag.hasPrefix("v") || trimmedTag.hasPrefix("V"))
+                ? String(trimmedTag.dropFirst())
+                : trimmedTag
+            latestVersion = cleanTag
+            hasUpdate = cleanTag.compare(currentVersion, options: .numeric) == .orderedDescending
 
-                if let htmlUrlStr = json["html_url"] as? String, let htmlUrl = URL(string: htmlUrlStr) {
-                    releasePageURL = htmlUrl
-                }
+            if let htmlUrlStr = json["html_url"] as? String, let htmlUrl = URL(string: htmlUrlStr) {
+                releasePageURL = htmlUrl
+            }
 
-                downloadURL = nil
-                downloadAssetName = nil
-                expectedChecksum = nil
-                checksumURL = nil
+            downloadURL = nil
+            downloadAssetName = nil
+            expectedChecksum = nil
+            checksumURL = nil
 
-                if let assets = json["assets"] as? [[String: Any]] {
+            if let assets = json["assets"] as? [[String: Any]] {
                     #if arch(arm64)
                     let targetArch = "arm64"
                     let altArch = "aarch64"
@@ -132,7 +150,7 @@ public final class UpdateChecker: ObservableObject {
                     }
                 }
 
-                if !hasUpdate {
+            if !hasUpdate {
                     showUpToDateMessage = true
                     if manual {
                         NotificationService.shared.sendAppUpdateNotification(
@@ -141,16 +159,24 @@ public final class UpdateChecker: ObservableObject {
                         )
                     }
                     Task { @MainActor [weak self] in
-                        try? await Task.sleep(nanoseconds: 3 * 1_000_000_000)
+                        do {
+                            try await Task.sleep(nanoseconds: 3 * 1_000_000_000)
+                        } catch is CancellationError {
+                            return
+                        } catch {
+                            LoggerService.shared.log("Unexpected update-message timer failure: \(error.localizedDescription)", level: .warning)
+                            return
+                        }
                         self?.showUpToDateMessage = false
                     }
-                } else if manual {
-                    NotificationService.shared.sendAppUpdateNotification(
-                        title: "Update Available",
-                        body: "Siphon v\(cleanTag) is now available."
-                    )
-                }
+            } else if manual {
+                NotificationService.shared.sendAppUpdateNotification(
+                    title: "Update Available",
+                    body: "Siphon v\(cleanTag) is now available."
+                )
             }
+        } catch is CancellationError {
+            LoggerService.shared.log("App update check was cancelled.", level: .debug)
         } catch {
             LoggerService.shared.log("Failed to check for app updates: \(error.localizedDescription)", level: .warning)
             if latestVersion == nil {
@@ -164,10 +190,17 @@ public final class UpdateChecker: ObservableObject {
                 )
             }
         }
-        isChecking = false
     }
 
     public func downloadAndInstallUpdate() async {
+        let operationID = UUID()
+        updateOperationID = operationID
+        defer {
+            if updateOperationID == operationID {
+                updateOperationID = nil
+            }
+        }
+
         guard let url = downloadURL, UpdateDownloader.isTrustedGitHubURL(url) else {
             if let pageURL = releasePageURL {
                 NSWorkspace.shared.open(pageURL)
@@ -176,11 +209,28 @@ public final class UpdateChecker: ObservableObject {
         }
 
         // 1. Fetch checksum in background if available
-        if let cURL = checksumURL, UpdateDownloader.isTrustedGitHubURL(cURL) {
-            expectedChecksum = await UpdateDownloader.fetchExpectedChecksum(
-                from: cURL,
-                targetAssetName: downloadAssetName ?? ""
-            )
+        if let cURL = checksumURL {
+            guard UpdateDownloader.isTrustedGitHubURL(cURL) else {
+                updateError = UpdateDownloadError.invalidURL.localizedDescription
+                LoggerService.shared.log("Refusing untrusted checksum URL for app update.", level: .error)
+                return
+            }
+            do {
+                expectedChecksum = try await UpdateDownloader.fetchExpectedChecksum(
+                    from: cURL,
+                    targetAssetName: downloadAssetName ?? ""
+                )
+            } catch is CancellationError {
+                return
+            } catch {
+                updateError = error.localizedDescription
+                LoggerService.shared.log("Update checksum verification could not be prepared: \(error.localizedDescription)", level: .error)
+                return
+            }
+        }
+
+        guard updateOperationID == operationID else {
+            return
         }
 
         isDownloading = true
@@ -192,6 +242,15 @@ public final class UpdateChecker: ObservableObject {
                 Task { @MainActor in
                     self?.updateProgress = progress
                 }
+            }
+
+            guard updateOperationID == operationID else {
+                do {
+                    try FileManager.default.removeItem(at: downloadedPkgURL)
+                } catch {
+                    LoggerService.shared.log("Failed to remove cancelled update package: \(error.localizedDescription)", level: .warning)
+                }
+                return
             }
 
             isDownloading = false
@@ -207,6 +266,19 @@ public final class UpdateChecker: ObservableObject {
             isInstalling = false
             needsRestart = true
             LoggerService.shared.log("Update installed successfully.", level: .info)
+        } catch UpdateDownloadError.downloadCancelled {
+            isDownloading = false
+            isInstalling = false
+            updateProgress = 0
+            updateError = nil
+            LoggerService.shared.log("App update download was cancelled.", level: .info)
+        } catch is CancellationError {
+            downloader.cancel()
+            isDownloading = false
+            isInstalling = false
+            updateProgress = 0
+            updateError = nil
+            LoggerService.shared.log("App update task was cancelled.", level: .info)
         } catch {
             isDownloading = false
             isInstalling = false

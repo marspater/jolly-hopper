@@ -26,9 +26,15 @@ chrome.contextMenus.onClicked.addListener((info) => {
     if (host) {
         const deepLink = "siphon://" + host + "?url=" + encodeURIComponent(url);
         chrome.tabs.create({ url: deepLink, active: false }, (createdTab) => {
+            if (chrome.runtime.lastError) {
+                console.warn("Failed to open Siphon deep link:", chrome.runtime.lastError.message);
+                return;
+            }
             if (createdTab && createdTab.id) {
                 setTimeout(() => {
-                    chrome.tabs.remove(createdTab.id).catch(() => {});
+                    chrome.tabs.remove(createdTab.id).catch((error) => {
+                        console.debug("Failed to close temporary Siphon deep-link tab:", error);
+                    });
                 }, 500);
             }
         });
