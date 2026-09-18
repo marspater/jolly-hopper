@@ -36,6 +36,30 @@ final class DownloadHistoryStoreTests: XCTestCase {
         XCTAssertEqual(loaded.first?.title, "Test Video")
     }
 
+    func testHistoryStripsSecretsFromLogsAndAdvancedArguments() {
+        var options = DownloadOptions.default
+        options.additionalArguments = "--add-header Authorization:Bearer super_secret --proxy https://user:pass@example.com"
+        options.rawCookies = "session=secret"
+        options.rawUserAgent = "FixtureBrowser/1.0"
+
+        let download = Download(
+            url: "https://example.com/video",
+            options: options,
+            title: "Sensitive"
+        )
+        download.log = "failed https://cdn.example.com/master.m3u8?token=secret_token&expires=999"
+        download.errorMessage = "request token=another_secret"
+
+        let historic = HistoricDownload(download: download)
+
+        XCTAssertNil(historic.options.rawCookies)
+        XCTAssertNil(historic.options.rawUserAgent)
+        XCTAssertNil(historic.options.additionalArguments)
+        XCTAssertFalse(historic.log.contains("secret_token"))
+        XCTAssertFalse(historic.log.contains("expires=999"))
+        XCTAssertFalse(historic.errorMessage?.contains("another_secret") == true)
+    }
+
     func testAddToHistoryCapsAt500() {
         let store = DownloadHistoryStore(userDefaults: testDefaults, historyKey: "test_history")
         var history: [HistoricDownload] = []
