@@ -611,13 +611,45 @@ public enum SiphonTheme {
     }
     
     @ViewBuilder
-    public static func pillBorder(isSelected: Bool = false, isHovered: Bool = false) -> some View {
-        if isSelected {
-            Capsule()
-                .stroke(Color.primary.opacity(0.25), lineWidth: 1)
+    public static func tintedPillBackground(
+        tint: Color,
+        opacity: Double = 0.12
+    ) -> some View {
+        if NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency {
+            ZStack {
+                Capsule()
+                    .fill(Color(nsColor: .controlBackgroundColor))
+                Capsule()
+                    .fill(tint.opacity(opacity))
+            }
         } else {
             Capsule()
-                .stroke(Color.primary.opacity(isHovered ? 0.12 : 0.06), lineWidth: 1)
+                .fill(tint.opacity(opacity))
+                .background(
+                    Capsule()
+                        .fill(.thinMaterial)
+                )
+        }
+    }
+
+    @ViewBuilder
+    public static func pillBorder(
+        isSelected: Bool = false,
+        isHovered: Bool = false,
+        showBorders: Bool = false
+    ) -> some View {
+        if isSelected {
+            Capsule()
+                .stroke(
+                    Color.primary.opacity(showBorders ? 0.50 : 0.25),
+                    lineWidth: showBorders ? 1.5 : 1
+                )
+        } else {
+            Capsule()
+                .stroke(
+                    Color.primary.opacity(showBorders ? 0.42 : (isHovered ? 0.12 : 0.06)),
+                    lineWidth: showBorders ? 1.5 : 1
+                )
         }
     }
     
@@ -1212,9 +1244,10 @@ struct SiphonStatusBadge: View {
         .padding(.vertical, 3.5)
         .foregroundColor(foregroundColor)
         .background(
-            Capsule()
-                .fill(foregroundColor.opacity(0.12))
-                .background(Capsule().fill(.ultraThinMaterial))
+            SiphonTheme.tintedPillBackground(
+                tint: foregroundColor,
+                opacity: 0.12
+            )
         )
         .clipShape(Capsule())
         .overlay(
