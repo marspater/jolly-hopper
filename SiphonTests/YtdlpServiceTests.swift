@@ -392,6 +392,62 @@ final class YtdlpServiceTests: XCTestCase {
         _ = try await service.fetchInfo(url: "https://example.com/video", rawCookies: "session=fixture", rawUserAgent: exactUA)
     }
 
+    func testHeliumExportFailsWhenNoCookiesMatchTargetHost() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let profile = root.appendingPathComponent("Default")
+        try FileManager.default.createDirectory(at: profile, withIntermediateDirectories: true)
+
+        var db: OpaquePointer?
+        XCTAssertEqual(sqlite3_open(profile.appendingPathComponent("Cookies").path, &db), SQLITE_OK)
+        defer { sqlite3_close(db) }
+        let sql = """
+        CREATE TABLE meta(key TEXT, value TEXT);
+        INSERT INTO meta VALUES ('version','24');
+        CREATE TABLE cookies(host_key TEXT, name TEXT, value TEXT, encrypted_value BLOB, path TEXT, expires_utc INTEGER, is_secure INTEGER, is_httponly INTEGER, has_expires INTEGER);
+        INSERT INTO cookies VALUES('other.test','session','fixture',X'','/',0,1,1,0);
+        """
+        XCTAssertEqual(sqlite3_exec(db, sql, nil, nil, nil), SQLITE_OK)
+
+        XCTAssertThrowsError(
+            try HeliumCookieReader.export(
+                for: URL(string: "https://example.com/video")!,
+                root: root,
+                password: { Data("unused".utf8) }
+            )
+        ) { error in
+            XCTAssertTrue(error.localizedDescription.contains("No matching cookies"))
+        }
+    }
+
+    func testPlaylistInfoPreservesExtensionBrowserIdentity() async throws {
+        let exactUA = "Mozilla/5.0 FixtureBrowser/140.0"
+        service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
+            XCTAssertTrue(args.contains("--cookies"))
+            XCTAssertFalse(args.contains("--cookies-from-browser"))
+            let uaIndex = try XCTUnwrap(args.firstIndex(of: "--user-agent"))
+            XCTAssertEqual(args[uaIndex + 1], exactUA)
+            return #"{"id":"entry-1","title":"Entry 1"}"#
+        })
+
+        let items = try await service.fetchPlaylistInfo(
+            url: "https://example.com/playlist",
+            rawCookies: "session=fixture",
+            rawUserAgent: exactUA
+        )
+
+        XCTAssertEqual(items.count, 1)
+        XCTAssertEqual(items.first?.id, "entry-1")
+    }
+
+    func testRecuPlaylistRejectsCleartextHTTP() {
+        XCTAssertNil(
+            YtdlpService.recuPlaylistURL(
+                from: #"<video><source src="http://cdn.example.test/master.m3u8?token=secret"></video>"#
+            )
+        )
+    }
+
     func testCreateAspectFitIconPreservesAspectRatioOnSquareCanvas() {
         // Test rectangular 16:9 image
         let wideImage = NSImage(size: NSSize(width: 1920, height: 1080))
@@ -2992,7 +3048,7 @@ final class YtdlpServiceTests: XCTestCase {
         defer { if let file = headerFile { try? FileManager.default.removeItem(at: file) } }
         
         let headerContent = try String(contentsOf: headerFile!, encoding: .utf8)
-        XCTAssertTrue(headerContent.contains(".boyfriendtv.com\tTRUE\t/\tFALSE\t"), "Must contain .boyfriendtv.com domain entry")
+        XCTAssertTrue(headerContent.contains(".boyfriendtv.com\tTRUE\t/\tTRUE\t"), "HTTPS header cookies must remain scoped to .boyfriendtv.com and require secure transport")
         XCTAssertFalse(headerContent.contains(".boyfriend.tv\t"), "Must NOT contain cross-domain .boyfriend.tv entry")
         XCTAssertTrue(headerContent.contains("session\txyz123"), "Must contain session cookie")
 
@@ -3005,7 +3061,7 @@ final class YtdlpServiceTests: XCTestCase {
         defer { if let file = consolidatedFile { try? FileManager.default.removeItem(at: file) } }
         
         let consolidatedContent = try String(contentsOf: consolidatedFile!, encoding: .utf8)
-        XCTAssertTrue(consolidatedContent.contains(".boyfriendtv.com\tTRUE\t/\tFALSE\t"), "Consolidated file must contain .boyfriendtv.com domain")
+        XCTAssertTrue(consolidatedContent.contains(".boyfriendtv.com\tTRUE\t/\tTRUE\t"), "HTTPS consolidated cookies must remain scoped to .boyfriendtv.com and require secure transport")
         XCTAssertFalse(consolidatedContent.contains(".boyfriend.tv\t"), "Consolidated file must NOT contain cross-domain .boyfriend.tv entry")
     }
 

@@ -164,6 +164,7 @@ public final class SecureCookieFile: @unchecked Sendable {
         }
 
         let defaultDomain = host.hasPrefix(".") ? host : ".\(host)"
+        let requireSecureTransport = urlObj.scheme?.lowercased() == "https"
         let tempCookiesURL = cookiesDir.appendingPathComponent("siphon_consolidated_cookies_\(UUID().uuidString).txt")
         let defaultExpiry = Int(Date().addingTimeInterval(86400 * 30).timeIntervalSince1970)
 
@@ -194,7 +195,7 @@ public final class SecureCookieFile: @unchecked Sendable {
                                 domain: d,
                                 includeSubdomains: true,
                                 path: "/",
-                                isSecure: false,
+                                isSecure: requireSecureTransport,
                                 expiry: defaultExpiry,
                                 name: key,
                                 value: value
@@ -243,7 +244,7 @@ public final class SecureCookieFile: @unchecked Sendable {
                     domain: defaultDomain,
                     includeSubdomains: true,
                     path: "/",
-                    isSecure: false,
+                    isSecure: requireSecureTransport,
                     expiry: defaultExpiry,
                     name: key,
                     value: value

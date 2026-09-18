@@ -161,6 +161,9 @@ enum HeliumCookieReader {
             let secure = sqlite3_column_int(statement, 6) != 0 ? "TRUE" : "FALSE"
             lines.append("\(httpOnly)\(domain)\t\(subdomains)\t\(path)\t\(secure)\t\(expiry)\t\(name)\t\(value)")
         }
+        guard lines.count > 1 else {
+            throw failure("No matching cookies for \(host). Open the target page in Helium and sign in first.")
+        }
         guard let directory = CookieManager.getSecureTempCookiesDirectory() else {
             throw failure("Could not prepare temporary cookie storage.")
         }
