@@ -60,7 +60,7 @@ jobs:
           set -euo pipefail
           for file in             SiphonExtension_Chrome/background.js             SiphonExtension_Firefox/background.js             SiphonExtension_Safari/background.js
           do
-            if grep -Eq '([?&]cookies=|getCookiesForUrl|chrome\.cookies)' "$file"; then
+            if grep -Eq '([?&]cookies=|getCookiesForUrl|(chrome|browser)\.cookies)' "$file"; then
               echo "Browser credential material must not enter extension deep-link transport: $file" >&2
               exit 1
             fi
