@@ -1106,6 +1106,7 @@ struct FileThumbnailView: View {
 
 struct LinearProgressBar: View {
     let value: Double
+    @ObservedObject private var renderingEnvironment = AdaptiveRenderingEnvironment.shared
 
     // Bug #3 fix: Guard against NaN to prevent SwiftUI layout crash
     var safeValue: Double {
@@ -1136,7 +1137,7 @@ struct LinearProgressBar: View {
                     .fill(SiphonTheme.primaryGradient)
                     .frame(width: max(0, geometry.size.width * CGFloat(safeValue)))
                     .shadow(color: SiphonTheme.accent.opacity(0.35), radius: 3, y: 1)
-                    .animation(.easeOut(duration: 0.12), value: safeValue)
+                    .animation(renderingEnvironment.reduceMotion ? nil : SiphonAnimation.snappySpring, value: safeValue)
             }
         }
         .frame(height: 5)
