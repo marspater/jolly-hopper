@@ -1970,12 +1970,19 @@ struct HistoricDownload: Codable, Identifiable {
         self.status = download.status
         self.thumbnailURL = download.thumbnailURL
         self.duration = download.duration
-        self.errorMessage = download.errorMessage
-        self.log = download.log
+        self.errorMessage = download.errorMessage.map {
+            LoggerService.sanitizeLogContentForExport(
+                LoggerService.sanitizeDiagnosticText($0)
+            )
+        }
+        self.log = LoggerService.sanitizeLogContentForExport(
+            LoggerService.sanitizeDiagnosticText(download.log)
+        )
         self.progress = download.progress
         var sanitizedOptions = download.options
         sanitizedOptions.rawCookies = nil
         sanitizedOptions.rawUserAgent = nil
+        sanitizedOptions.additionalArguments = nil
         self.options = sanitizedOptions
     }
 
