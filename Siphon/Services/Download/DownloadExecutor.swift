@@ -430,21 +430,10 @@ final class DownloadExecutor: ObservableObject {
             return
         }
         let previousStatus = download.status
-        if download.status == .fetching {
-            activeTasks[download.id]?.cancel()
-            activeTasks.removeValue(forKey: download.id)
-            activeControllers[download.id]?.cancel()
-            activeControllers.removeValue(forKey: download.id)
-            queue.releaseSlot(for: download.id)
-            delegate?.executorDidFinishDownload()
-            delegate?.executorDidUpdateStatus(for: download, to: .stopped)
-            delegate?.executorDidRequestAddToHistory(download, skipSave: skipSaveAndBroadcast)
-            if !skipSaveAndBroadcast {
-                delegate?.executorDidRequestBroadcast()
-            }
-            return
-        }
 
+        // Task/process ownership stays with executeDownload until its defer runs.
+        // Releasing the slot or removing the task here can allow a replacement
+        // download to start while the cancelled metadata/process work is still unwinding.
         delegate?.executorDidUpdateStatus(for: download, to: .stopped)
         if activeTasks[download.id] == nil {
             queue.releaseSlot(for: download.id)
@@ -495,8 +484,8 @@ final class DownloadExecutor: ObservableObject {
         for (_, controller) in activeControllers {
             controller.cancel()
         }
-        activeTasks.removeAll()
-        activeControllers.removeAll()
+        // Do not clear ownership eagerly. Active tasks remove themselves from
+        // activeTasks/activeControllers only after process teardown completes.
     }
 
     // MARK: - Helpers
