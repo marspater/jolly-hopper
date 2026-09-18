@@ -1500,7 +1500,7 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertEqual(cookies.first(where: { $0.name == "session_id" })?.value, "xyz123")
         XCTAssertTrue(cookies.allSatisfy { $0.domain == "www.boyfriendtv.com" })
         XCTAssertTrue(cookies.allSatisfy { $0.path == "/" })
-        XCTAssertTrue(cookies.allSatisfy(\.isSecure))
+        XCTAssertTrue(cookies.allSatisfy { $0.isSecure })
     }
 
     func testBoyfriendTVAlternateURLPreservesVideoPath() {
