@@ -7,11 +7,13 @@ import Foundation
 import Combine
 
 public struct BrowserSessionCredentials: Equatable, Sendable {
+    public let originScheme: String
     public let originHost: String
     public let rawCookies: String?
     public let rawUserAgent: String?
 
-    public init(originHost: String, rawCookies: String?, rawUserAgent: String?) {
+    public init(originScheme: String, originHost: String, rawCookies: String?, rawUserAgent: String?) {
+        self.originScheme = originScheme
         self.originHost = originHost
         self.rawCookies = rawCookies
         self.rawUserAgent = rawUserAgent
@@ -25,14 +27,19 @@ public final class AppState: ObservableObject {
     @Published public var urlToDownload: String = ""
     @Published public private(set) var rawCookiesToDownload: String? = nil
     @Published public private(set) var rawUserAgentToDownload: String? = nil
+    @Published public private(set) var browserSessionOriginScheme: String? = nil
     @Published public private(set) var browserSessionOriginHost: String? = nil
 
     public init() {}
 
-    private static func normalizedHost(for urlString: String) -> String? {
-        URL(string: urlString.trimmingCharacters(in: .whitespacesAndNewlines))?
-            .host?
-            .lowercased()
+    private static func normalizedOrigin(for urlString: String) -> (scheme: String, host: String)? {
+        guard let url = URL(string: urlString.trimmingCharacters(in: .whitespacesAndNewlines)),
+              let scheme = url.scheme?.lowercased(),
+              let host = url.host?.lowercased(),
+              ["http", "https"].contains(scheme) else {
+            return nil
+        }
+        return (scheme, host)
     }
 
     public func setBrowserSession(
@@ -40,7 +47,9 @@ public final class AppState: ObservableObject {
         rawCookies: String?,
         rawUserAgent: String?
     ) {
-        guard let host = targetURL.host?.lowercased(),
+        guard let scheme = targetURL.scheme?.lowercased(),
+              let host = targetURL.host?.lowercased(),
+              ["http", "https"].contains(scheme),
               rawCookies?.isEmpty == false || rawUserAgent?.isEmpty == false else {
             clearBrowserSession()
             return
@@ -48,27 +57,32 @@ public final class AppState: ObservableObject {
 
         rawCookiesToDownload = rawCookies?.isEmpty == false ? rawCookies : nil
         rawUserAgentToDownload = rawUserAgent?.isEmpty == false ? rawUserAgent : nil
+        browserSessionOriginScheme = scheme
         browserSessionOriginHost = host
     }
 
     public func browserSession(for urlString: String) -> BrowserSessionCredentials? {
-        guard let originHost = browserSessionOriginHost,
-              let targetHost = Self.normalizedHost(for: urlString),
-              targetHost == originHost else {
+        guard let originScheme = browserSessionOriginScheme,
+              let originHost = browserSessionOriginHost,
+              let target = Self.normalizedOrigin(for: urlString),
+              target.scheme == originScheme,
+              target.host == originHost else {
             return nil
         }
 
         return BrowserSessionCredentials(
+            originScheme: originScheme,
             originHost: originHost,
             rawCookies: rawCookiesToDownload,
             rawUserAgent: rawUserAgentToDownload
         )
     }
 
-    public func clearBrowserSessionIfHostChanged(to urlString: String) {
+    public func clearBrowserSessionIfOriginChanged(to urlString: String) {
         guard browserSessionOriginHost != nil else { return }
-        guard let targetHost = Self.normalizedHost(for: urlString),
-              targetHost == browserSessionOriginHost else {
+        guard let target = Self.normalizedOrigin(for: urlString),
+              target.scheme == browserSessionOriginScheme,
+              target.host == browserSessionOriginHost else {
             clearBrowserSession()
             return
         }
@@ -81,13 +95,19 @@ public final class AppState: ObservableObject {
     }
 
     public func consumeBrowserSession(for urls: [String]) -> BrowserSessionCredentials? {
-        guard let originHost = browserSessionOriginHost, !urls.isEmpty else {
+        guard let originScheme = browserSessionOriginScheme,
+              let originHost = browserSessionOriginHost,
+              !urls.isEmpty else {
             clearBrowserSession()
             return nil
         }
-        let allMatch = urls.allSatisfy { Self.normalizedHost(for: $0) == originHost }
+        let allMatch = urls.allSatisfy {
+            guard let target = Self.normalizedOrigin(for: $0) else { return false }
+            return target.scheme == originScheme && target.host == originHost
+        }
         let credentials = allMatch
             ? BrowserSessionCredentials(
+                originScheme: originScheme,
                 originHost: originHost,
                 rawCookies: rawCookiesToDownload,
                 rawUserAgent: rawUserAgentToDownload
@@ -100,6 +120,7 @@ public final class AppState: ObservableObject {
     public func clearBrowserSession() {
         rawCookiesToDownload = nil
         rawUserAgentToDownload = nil
+        browserSessionOriginScheme = nil
         browserSessionOriginHost = nil
     }
 }
