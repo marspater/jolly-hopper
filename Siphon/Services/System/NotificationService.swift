@@ -133,10 +133,14 @@ final class NotificationService: NSObject, @unchecked Sendable, UNUserNotificati
                 } else {
                     let data = errorPipe.fileHandleForReading.readDataToEndOfFile()
                     let details = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines)
-                    let reason = details?.isEmpty == false
-                        ? details!
-                        : "osascript exited with status \(process.terminationStatus)"
-                    self?.logMessage("Fallback notification failed: \(reason)", level: .warning)
+                    if let details, !details.isEmpty {
+                        self?.logMessage("Fallback notification failed: \(details)", level: .warning)
+                    } else {
+                        self?.logMessage(
+                            "Fallback notification failed: osascript exited with status \(process.terminationStatus)",
+                            level: .warning
+                        )
+                    }
                 }
             } catch {
                 self?.logMessage("Fallback notification failed: \(error.localizedDescription)", level: .warning)
