@@ -64,6 +64,18 @@ final class DownloadQueue: ObservableObject {
 
     // MARK: - Output Path Planning & Reservation
 
+    nonisolated static func reservationKey(for path: String) -> String {
+        URL(fileURLWithPath: path)
+            .standardizedFileURL
+            .path
+            .precomposedStringWithCanonicalMapping
+            .lowercased()
+    }
+
+    nonisolated static func filenameCollisionKey(_ value: String) -> String {
+        value.precomposedStringWithCanonicalMapping.lowercased()
+    }
+
     func planUniqueOutputPath(
         for download: Download,
         forceIncrement: Bool = false,
@@ -77,14 +89,14 @@ final class DownloadQueue: ObservableObject {
         let existingFiles = (try? fileManager.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)) ?? []
         let existingBaseNames = Set(existingFiles.compactMap { file -> String? in
             guard YtdlpService.isMediaFilePath(file.path) else { return nil }
-            return file.deletingPathExtension().lastPathComponent
+            return Self.filenameCollisionKey(file.deletingPathExtension().lastPathComponent)
         })
 
         if download.options.forceOverwrite == true && !forceIncrement {
             var candidateName = sanitizedBase
             var candidatePath = folder.appendingPathComponent("\(candidateName).\(ext)").path
             var counter = 1
-            while reservedOutputPaths.contains(candidatePath) {
+            while isPathReserved(candidatePath) {
                 candidateName = "\(sanitizedBase) (\(counter))"
                 candidatePath = folder.appendingPathComponent("\(candidateName).\(ext)").path
                 counter += 1
@@ -100,9 +112,9 @@ final class DownloadQueue: ObservableObject {
         }
         var candidatePath = folder.appendingPathComponent("\(candidateName).\(ext)").path
 
-        while existingBaseNames.contains(candidateName) ||
+        while existingBaseNames.contains(Self.filenameCollisionKey(candidateName)) ||
               fileManager.fileExists(atPath: candidatePath) ||
-              reservedOutputPaths.contains(candidatePath) {
+              isPathReserved(candidatePath) {
             candidateName = "\(sanitizedBase) (\(counter))"
             candidatePath = folder.appendingPathComponent("\(candidateName).\(ext)").path
             counter += 1
@@ -122,21 +134,21 @@ final class DownloadQueue: ObservableObject {
             forceIncrement: forceIncrement,
             fileManager: fileManager
         )
-        reservedOutputPaths.insert(candidatePath)
+        reserveOutputPath(candidatePath)
         download.options.customFilename = candidateName
         return (candidateName, candidatePath)
     }
 
     func reserveOutputPath(_ path: String) {
-        reservedOutputPaths.insert(path)
+        reservedOutputPaths.insert(Self.reservationKey(for: path))
     }
 
     func unreserveOutputPath(_ path: String) {
-        reservedOutputPaths.remove(path)
+        reservedOutputPaths.remove(Self.reservationKey(for: path))
     }
 
     func isPathReserved(_ path: String) -> Bool {
-        reservedOutputPaths.contains(path)
+        reservedOutputPaths.contains(Self.reservationKey(for: path))
     }
 
     func clearReservedOutputPaths() {
