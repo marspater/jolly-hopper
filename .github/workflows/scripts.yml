@@ -1,0 +1,52 @@
+name: Scripting - Test and Syntax
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  scripting:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Verify runtimes
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --version
+          python3 --version
+          node -e 'const major = Number(process.versions.node.split(".")[0]); if (major < 18) { throw new Error("Node.js 18+ is required"); }'
+
+      - name: Check JavaScript syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          for file in \
+            SiphonExtension_Chrome/background.js \
+            SiphonExtension_Firefox/background.js \
+            SiphonExtension_Safari/background.js \
+            server/index.js \
+            server/test/server.test.js
+          do
+            node --check "$file"
+          done
+
+      - name: Test companion server
+        run: npm test --prefix server
+
+      - name: Check Python syntax
+        run: python3 -m py_compile scripts/update-supported-sites.py
