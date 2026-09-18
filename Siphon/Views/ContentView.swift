@@ -180,14 +180,10 @@ struct SidebarView: View {
         .safeAreaInset(edge: .bottom) {
             VStack(spacing: SiphonTheme.spacing10) {
                 // Catchy Slogan
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Play videos.")
-                        .font(.geist(13, weight: .medium))
-                        .foregroundColor(.secondary)
-                    Text("Your way.")
-                        .font(.geist(13, weight: .medium))
-                        .foregroundColor(.secondary.opacity(0.8))
-                }
+                Text(languageService.s("play_videos_your_way"))
+                    .font(.siphonStandardMedium)
+                    .foregroundColor(.secondary)
+                    .lineSpacing(2)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 14)
 
@@ -377,8 +373,8 @@ struct HomeView: View {
                     Spacer()
                     
                     HStack(spacing: 4) {
-                        Text("Built for a more open internet.")
-                            .font(.geist(11, weight: .regular))
+                        Text(languageService.s("built_for_open_internet"))
+                            .font(.siphonMetadata)
                             .foregroundColor(.secondary.opacity(0.7))
                         Image(systemName: "heart.fill")
                             .font(.system(size: 9))
@@ -498,7 +494,7 @@ struct StatusBarView: View {
                 title: languageService.s("stat_queued"),
                 count: downloadManager.queuedCount,
                 color: SiphonTheme.statusQueued,
-                ringProgress: downloadManager.queuedCount > 0 ? 0.5 : 0.0,
+                ringProgress: 0.0,
                 isActive: downloadManager.queuedCount > 0
             )
 
@@ -511,7 +507,7 @@ struct StatusBarView: View {
                 title: languageService.s("stat_completed"),
                 count: downloadManager.completedCount,
                 color: SiphonTheme.statusCompleted,
-                ringProgress: 1.0,
+                ringProgress: 0.0,
                 isActive: downloadManager.completedCount > 0
             )
 
@@ -537,6 +533,7 @@ struct StatusBarView: View {
 
 struct StatusSegmentButton: View {
     @EnvironmentObject var appState: AppState
+    @EnvironmentObject var languageService: LanguageService
     @Environment(\.colorScheme) var colorScheme
     let item: NavigationItem
     let title: String
@@ -561,6 +558,43 @@ struct StatusSegmentButton: View {
         }
     }
 
+    @ViewBuilder
+    private var statusIndicator: some View {
+        switch item {
+        case .downloading:
+            ZStack {
+                Circle()
+                    .stroke(color.opacity(0.34), lineWidth: 2)
+                Circle()
+                    .trim(from: 0, to: CGFloat(ringProgress))
+                    .stroke(color, style: StrokeStyle(lineWidth: 2, lineCap: .round))
+                    .rotationEffect(.degrees(-90))
+                Circle()
+                    .fill(color)
+                    .frame(width: 4.5, height: 4.5)
+            }
+            .frame(width: 16, height: 16)
+
+        case .queued:
+            Image(systemName: "clock.fill")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundColor(color)
+                .frame(width: 16, height: 16)
+
+        case .completed:
+            Image(systemName: "checkmark.circle.fill")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundColor(color)
+                .frame(width: 16, height: 16)
+
+        default:
+            Circle()
+                .fill(color)
+                .frame(width: 8, height: 8)
+                .frame(width: 16, height: 16)
+        }
+    }
+
     var body: some View {
         Button {
             appState.selectedNavItem = item
@@ -568,37 +602,20 @@ struct StatusSegmentButton: View {
             ZStack {
                 // Liquid water wave animation in accent color (ambient in background)
                 LiquidWaterWaveView(color: color, isHovered: isHovered, isActive: isActive, seed: segmentSeed)
-                    .opacity(isActive ? 0.70 : (isHovered ? 0.45 : 0.15))
+                    .opacity(isActive ? 0.86 : (isHovered ? 0.64 : 0.24))
                     .animation(SiphonAnimation.hoverSpring, value: isHovered)
                     .animation(SiphonAnimation.fluidSpring, value: isActive)
                     .zIndex(0)
 
-                // Status text, count, and progress ring prominently in the front
-                HStack(spacing: 8) {
-                    // Circular Progress Ring
-                    ZStack {
-                        Circle()
-                            .stroke(color.opacity(0.35), lineWidth: 2)
-                            .frame(width: 16, height: 16)
-
-                        Circle()
-                            .trim(from: 0, to: CGFloat(ringProgress))
-                            .stroke(color, style: StrokeStyle(lineWidth: 2, lineCap: .round))
-                            .rotationEffect(.degrees(-90))
-                            .frame(width: 16, height: 16)
-
-                        Circle()
-                            .fill(color)
-                            .frame(width: 5, height: 5)
-                            .opacity(isActive ? 1.0 : (isHovered ? 0.85 : 0.45))
-                    }
+                HStack(spacing: SiphonTheme.spacing8) {
+                    statusIndicator
 
                     Text("\(count)")
-                        .font(.geistMono(13, weight: .bold))
+                        .font(.siphonStandardSemibold.monospacedDigit())
                         .foregroundColor(count > 0 ? .primary : (isHovered ? .primary : .secondary))
 
                     Text(title)
-                        .font(.geist(13, weight: .semibold))
+                        .font(.siphonStandardSemibold)
                         .foregroundColor(count > 0 || isActive ? .primary : (isHovered ? .primary : .secondary))
                 }
                 .padding(.horizontal, 16)
@@ -612,8 +629,8 @@ struct StatusSegmentButton: View {
             Button("\(title): \(count)") {
                 appState.selectedNavItem = item
             }
-            .accessibilityValue(isActive ? "Active" : "")
-            .accessibilityHint("Show \(title.lowercased()) downloads")
+            .accessibilityValue(isActive ? languageService.s("status_active") : "")
+            .accessibilityHint(String(format: languageService.s("show_downloads_hint"), title.lowercased()))
         }
         .onHover { hovering in
             withAnimation(SiphonAnimation.hoverSpring) {
@@ -813,9 +830,13 @@ private struct FeatureCardRow: View {
                 .fill(Color.primary.opacity(isHovered ? 0.055 : 0.035))
         )
         .overlay(
-            RoundedRectangle(cornerRadius: SiphonTheme.radiusControl)
-                .stroke(Color.primary.opacity(isHovered ? 0.10 : 0.06), lineWidth: 1)
+            SiphonTheme.cardBorder(
+                cornerRadius: SiphonTheme.radiusControl,
+                isHovered: isHovered,
+                accentColor: feature.iconColor
+            )
         )
+        .siphonCardHover(isHovered: isHovered, tint: feature.iconColor)
         .onHover { hovering in
             withAnimation(SiphonAnimation.hoverSpring) {
                 isHovered = hovering
