@@ -181,10 +181,23 @@ struct SiphonApp: App {
             return userAgent
         }()
 
-        if url.host == "download" || url.host == "fast-download" {
+        appState.setBrowserSession(
+            for: targetURL,
+            rawCookies: sanitizedCookies,
+            rawUserAgent: sanitizedUserAgent
+        )
+
+        if url.host == "fast-download" {
+            let session = appState.consumeBrowserSession(for: rawVideoUrl)
+            downloadManager.quickDownload(
+                url: rawVideoUrl,
+                rawCookies: session?.rawCookies,
+                rawUserAgent: session?.rawUserAgent
+            )
+            appState.selectedNavItem = .downloading
+            appState.showAddDownloadSheet = false
+        } else {
             appState.urlToDownload = rawVideoUrl
-            appState.rawCookiesToDownload = sanitizedCookies
-            appState.rawUserAgentToDownload = sanitizedUserAgent
             appState.showAddDownloadSheet = true
         }
         
