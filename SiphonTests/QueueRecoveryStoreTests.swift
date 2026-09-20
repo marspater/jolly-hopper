@@ -307,6 +307,32 @@ final class QueueRecoveryStoreTests: XCTestCase {
         XCTAssertEqual(restoredOrder, ["Third", "First", "Second"])
     }
 
+    func testRetryPersistsResetQueuedState() throws {
+        let manager = DownloadManager(recoveryFileURL: recoveryFileURL)
+        manager.ytdlpService.isUpdating = true
+        defer { manager.shutdown() }
+
+        let download = Download(
+            url: "https://example.com/retry",
+            options: .default,
+            title: "Retry"
+        )
+        download.status = .failed
+        download.progress = 0.73
+        download.errorMessage = "old failure"
+        download.log = "old failure log"
+        manager.downloads = [download]
+
+        manager.retryDownload(download)
+
+        let restored = try XCTUnwrap(manager.recoveryStore.loadInterruptedJobs().first)
+        XCTAssertEqual(restored.id, download.id)
+        XCTAssertEqual(restored.status, .queued)
+        XCTAssertEqual(restored.progress, 0)
+        XCTAssertNil(restored.errorMessage)
+        XCTAssertTrue(restored.log.isEmpty)
+    }
+
     func testClearHistoryPreservesPausedJobPersistence() throws {
         let manager = DownloadManager(recoveryFileURL: recoveryFileURL)
         defer { manager.shutdown() }
