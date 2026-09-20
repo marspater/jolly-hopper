@@ -172,9 +172,23 @@ class DownloadManager: ObservableObject {
     }
 
     func discardInterruptedJobs() {
+        let jobsToDiscard = pendingRecoveryJobs
+        let discardedIDs = Set(jobsToDiscard.map(\.id))
         pendingRecoveryJobs.removeAll()
         recoverableJobsCount = 0
         showQueueRecoveryAlert = false
+
+        // "Discard" means the interrupted work is no longer resumable. Delete
+        // only validated Siphon-owned scratch directories and remove any stale
+        // same-ID history copy that was loaded before recovery was evaluated.
+        for job in jobsToDiscard {
+            job.status = .stopped
+            cleanupTemporaryFiles(for: job)
+        }
+        downloads.removeAll { discardedIDs.contains($0.id) }
+        history.removeAll { discardedIDs.contains($0.id) }
+        saveHistory()
+
         recoveryStore.clearRecoveryState()
         persistQueueRecoveryState()
         objectWillChange.send()
