@@ -183,5 +183,27 @@ final class DownloadHistoryStoreTests: XCTestCase {
         XCTAssertNil(historic.scratchDirectoryPath)
     }
 
+    func testTerminalHistoryDoesNotPersistOwnedScratchDirectory() throws {
+        let scratch = ScratchDirectoryPolicy.makeURL()
+        try FileManager.default.createDirectory(at: scratch, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: scratch) }
+
+        for status in [DownloadStatus.stopped, .failed, .completed, .fileExists] {
+            let download = Download(
+                url: "https://example.com/terminal/\(status.rawValue)",
+                options: .default,
+                title: "Terminal"
+            )
+            download.status = status
+            download.scratchDirectory = scratch
+
+            let historic = HistoricDownload(download: download)
+            XCTAssertNil(
+                historic.scratchDirectoryPath,
+                "Only paused jobs should retain resumable scratch paths in history"
+            )
+        }
+    }
+
 }
 
