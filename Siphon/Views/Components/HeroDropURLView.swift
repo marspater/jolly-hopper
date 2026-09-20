@@ -29,7 +29,9 @@ struct HeroDropURLView: View {
         renderingCapabilities.increaseContrast
     }
 
-    init() {}
+    init() {
+        // Intentionally empty initializer for SwiftUI View (swift:S1186)
+    }
 
     var body: some View {
         ZStack {
@@ -351,11 +353,10 @@ struct HeroDropURLView: View {
 
                     if let raw = urlString {
                         Task { @MainActor in
-                            switch DownloadURLValidator.validate(raw) {
-                            case .valid(_, let original):
+                            if case .valid(_, let original) = DownloadURLValidator.validate(raw) {
                                 inputURL = original
                                 submitURL()
-                            default:
+                            } else {
                                 feedback.show(languageService.s("hero_invalid_url"), isSuccess: false, icon: "exclamationmark.circle.fill")
                             }
                         }

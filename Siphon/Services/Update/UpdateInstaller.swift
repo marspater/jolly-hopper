@@ -39,7 +39,9 @@ public enum UpdateInstallError: LocalizedError, Sendable {
 }
 
 public final class UpdateInstaller: Sendable {
-    public init() {}
+    public init() {
+        // Intentionally empty initializer for class instantiation (swift:S1186)
+    }
 
     private static func log(_ message: String, level: LoggerService.LogLevel) {
         Task { @MainActor in

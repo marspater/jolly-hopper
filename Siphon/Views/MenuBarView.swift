@@ -314,16 +314,11 @@ struct MenuBarView: View {
         let cleanURL = url.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !cleanURL.isEmpty else { return }
 
-        switch DownloadURLValidator.validate(cleanURL) {
-        case .valid(_, let resolved):
+        if case .valid(_, let resolved) = DownloadURLValidator.validate(cleanURL) {
             submitToManager(resolvedURL: resolved)
-        default:
+        } else if cleanURL.contains(".") && !cleanURL.contains(" ") {
             // If user typed without scheme, try prefixing https://
-            if cleanURL.contains(".") && !cleanURL.contains(" ") {
-                submitToManager(resolvedURL: "https://" + cleanURL)
-            } else {
-                return
-            }
+            submitToManager(resolvedURL: "https://" + cleanURL)
         }
     }
 

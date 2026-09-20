@@ -259,9 +259,6 @@ final class NotificationService: NSObject, @unchecked Sendable, UNUserNotificati
     }
 
     private func sendYtdlpUpdateNotification(title: String, body: String) {
-        let content = UNMutableNotificationContent()
-        content.title = title
-        content.body = body
-        sendNotification(content: content, logName: title)
+        sendAppUpdateNotification(title: title, body: body)
     }
 }

@@ -10,7 +10,7 @@ public enum SupportedBrowser: String, CaseIterable, Identifiable, Sendable {
     case vivaldi = "vivaldi"
     case safari = "safari"
     case chromium = "chromium"
-    case helium = "helium"
+    case chromiumBased = "chromium-based"
 
     public var id: String { rawValue }
 
@@ -24,7 +24,7 @@ public enum SupportedBrowser: String, CaseIterable, Identifiable, Sendable {
         case .vivaldi: return "Vivaldi"
         case .safari: return "Safari"
         case .chromium: return "Chromium"
-        case .helium: return "Helium"
+        case .chromiumBased: return "Chromium-based"
         }
     }
 
@@ -38,8 +38,13 @@ public enum SupportedBrowser: String, CaseIterable, Identifiable, Sendable {
         case .vivaldi: return "com.vivaldi.Vivaldi"
         case .safari: return "com.apple.Safari"
         case .chromium: return "org.chromium.Chromium"
-        case .helium: return "net.imput.helium"
+        case .chromiumBased: return "net.imput.helium"
         }
+    }
+
+    /// Backward compatibility alias for Helium browser option
+    public static var helium: SupportedBrowser {
+        .chromiumBased
     }
 }
 
@@ -48,7 +53,9 @@ public actor BrowserUtils {
 
     private var cachedBrowsers: [SupportedBrowser]?
 
-    public init() {}
+    public init() {
+        // Intentionally empty: singleton and test instantiation (swift:S1186)
+    }
 
     public func getInstalledBrowsers() -> [SupportedBrowser] {
         if let cached = cachedBrowsers {
@@ -59,7 +66,18 @@ public actor BrowserUtils {
         var installed: [SupportedBrowser] = []
 
         for browser in SupportedBrowser.allCases {
-            if let _ = workspace.urlForApplication(withBundleIdentifier: browser.bundleIdentifier) {
+            if browser == .chromiumBased {
+                let candidateIDs = [
+                    "net.imput.helium",
+                    "org.chromium.Chromium",
+                    "company.thebrowser.Browser",
+                    "org.thorium.Thorium",
+                    "io.github.ungoogled-software.ungoogled-chromium"
+                ]
+                if candidateIDs.contains(where: { workspace.urlForApplication(withBundleIdentifier: $0) != nil }) {
+                    installed.append(browser)
+                }
+            } else if workspace.urlForApplication(withBundleIdentifier: browser.bundleIdentifier) != nil {
                 installed.append(browser)
             }
         }

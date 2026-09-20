@@ -24,8 +24,7 @@ async function detectBrowserSource() {
     if (/\bHelium\//i.test(ua) || brands.includes("helium")) return "helium";
 
     if (typeof navigator !== "undefined" &&
-        navigator.brave &&
-        typeof navigator.brave.isBrave === "function") {
+        typeof navigator.brave?.isBrave === "function") {
         try {
             if (await navigator.brave.isBrave()) return "brave";
         } catch {
@@ -57,7 +56,7 @@ async function triggerDownload(url, host = "download") {
             console.warn("Failed to open Siphon deep link:", chrome.runtime.lastError.message);
             return;
         }
-        if (createdTab && createdTab.id) {
+        if (createdTab?.id) {
             setTimeout(() => {
                 chrome.tabs.remove(createdTab.id).catch((error) => {
                     console.debug("Failed to close temporary Siphon deep-link tab:", error);
@@ -67,9 +66,9 @@ async function triggerDownload(url, host = "download") {
     });
 }
 
-if (chrome.action && chrome.action.onClicked) {
+if (chrome.action?.onClicked) {
     chrome.action.onClicked.addListener(async (tab) => {
-        if (!tab || !tab.url) return;
+        if (!tab?.url) return;
         await triggerDownload(tab.url, "download");
     });
 }

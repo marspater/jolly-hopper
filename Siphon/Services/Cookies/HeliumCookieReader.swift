@@ -4,11 +4,73 @@ import CommonCrypto
 import CryptoKit
 import SQLite3
 
-/// Helium uses Chromium's cookie format, but its own Keychain service.
-/// yt-dlp's chromium:PROFILE option cannot select that service on macOS.
-enum HeliumCookieReader {
+/// Chromium-based browser cookie reader.
+/// Supports universal Chromium browsers (Helium, Chromium, Chrome, Brave, Edge, Arc, Vivaldi, Opera)
+/// on macOS using each browser's respective Keychain storage key and standard on-disk SQLite cookie database.
+enum ChromiumCookieReader {
+    struct ChromiumBrowserTarget: Sendable {
+        let name: String
+        let relativePath: String
+        let keychainService: String
+        let keychainAccount: String
+    }
+
+    static let defaultHeliumRoot = FileManager.default.homeDirectoryForCurrentUser
+        .appendingPathComponent("Library/Application Support/net.imput.helium")
+
+    static let knownChromiumBrowsers: [ChromiumBrowserTarget] = [
+        ChromiumBrowserTarget(
+            name: "Helium",
+            relativePath: "Library/Application Support/net.imput.helium",
+            keychainService: "Helium Storage Key",
+            keychainAccount: "Helium"
+        ),
+        ChromiumBrowserTarget(
+            name: "Chromium",
+            relativePath: "Library/Application Support/Chromium",
+            keychainService: "Chromium Safe Storage",
+            keychainAccount: "Chromium"
+        ),
+        ChromiumBrowserTarget(
+            name: "Google Chrome",
+            relativePath: "Library/Application Support/Google/Chrome",
+            keychainService: "Chrome Safe Storage",
+            keychainAccount: "Chrome"
+        ),
+        ChromiumBrowserTarget(
+            name: "Brave",
+            relativePath: "Library/Application Support/BraveSoftware/Brave-Browser",
+            keychainService: "Brave Safe Storage",
+            keychainAccount: "Brave"
+        ),
+        ChromiumBrowserTarget(
+            name: "Microsoft Edge",
+            relativePath: "Library/Application Support/Microsoft Edge",
+            keychainService: "Microsoft Edge Safe Storage",
+            keychainAccount: "Microsoft Edge"
+        ),
+        ChromiumBrowserTarget(
+            name: "Arc",
+            relativePath: "Library/Application Support/Arc/User Data",
+            keychainService: "Arc Safe Storage",
+            keychainAccount: "Arc"
+        ),
+        ChromiumBrowserTarget(
+            name: "Vivaldi",
+            relativePath: "Library/Application Support/Vivaldi",
+            keychainService: "Vivaldi Safe Storage",
+            keychainAccount: "Vivaldi"
+        ),
+        ChromiumBrowserTarget(
+            name: "Opera",
+            relativePath: "Library/Application Support/com.operasoftware.Opera",
+            keychainService: "Opera Safe Storage",
+            keychainAccount: "Opera"
+        )
+    ]
+
     static func failure(_ message: String) -> YtdlpError {
-        .downloadFailed("Helium cookies: \(message)")
+        .downloadFailed("Chromium cookies: \(message)")
     }
 
     static func profileDirectory(root: URL) throws -> URL {
@@ -37,18 +99,18 @@ enum HeliumCookieReader {
         return host == domain
     }
 
-    static func keychainPassword() throws -> Data {
+    static func keychainPassword(service: String = "Helium Storage Key", account: String = "Helium") throws -> Data {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: "Helium Storage Key",
-            kSecAttrAccount as String: "Helium",
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account,
             kSecReturnData as String: true,
             kSecMatchLimit as String: kSecMatchLimitOne
         ]
         var result: CFTypeRef?
         let status = SecItemCopyMatching(query as CFDictionary, &result)
         guard status == errSecSuccess, let password = result as? Data else {
-            throw failure("Could not read Helium Storage Key from Keychain (\(status)). Allow Siphon access when macOS asks, or send this page using the Helium extension.")
+            throw failure("Could not read \(service) from Keychain (\(status)). Allow Siphon access when macOS asks, or send this page using the browser extension.")
         }
         return password
     }
@@ -68,9 +130,29 @@ enum HeliumCookieReader {
         return key
     }
 
+    // Helper extracting the inner buffer call to avoid nesting more than 2 closure expressions (swift:S3087)
+    private static func decryptBlock(
+        keyBytes: UnsafeRawBufferPointer,
+        keyCount: Int,
+        iv: [UInt8],
+        ciphertext: Data,
+        output: UnsafeMutableRawBufferPointer,
+        capacity: Int,
+        count: inout Int
+    ) -> CCCryptorStatus {
+        var localCount = 0
+        let status = ciphertext.withUnsafeBytes { input in
+            CCCrypt(CCOperation(kCCDecrypt), CCAlgorithm(kCCAlgorithmAES), CCOptions(kCCOptionPKCS7Padding),
+                    keyBytes.baseAddress, keyCount, iv, input.baseAddress, ciphertext.count,
+                    output.baseAddress, capacity, &localCount)
+        }
+        count = localCount
+        return status
+    }
+
     static func decrypt(_ encrypted: Data, key: Data, domain: String, version: Int) throws -> String {
         guard encrypted.starts(with: Data("v10".utf8)) else {
-            throw failure("Unsupported encrypted cookie format. Use the Helium extension for this browser version.")
+            throw failure("Unsupported encrypted cookie format. Use the browser extension for this browser version.")
         }
         let ciphertext = Data(encrypted.dropFirst(3))
         let iv = [UInt8](repeating: 32, count: kCCBlockSizeAES128)
@@ -79,11 +161,15 @@ enum HeliumCookieReader {
         var count = 0
         let status = plaintext.withUnsafeMutableBytes { output in
             key.withUnsafeBytes { keyBytes in
-                ciphertext.withUnsafeBytes { input in
-                    CCCrypt(CCOperation(kCCDecrypt), CCAlgorithm(kCCAlgorithmAES), CCOptions(kCCOptionPKCS7Padding),
-                            keyBytes.baseAddress, key.count, iv, input.baseAddress, ciphertext.count,
-                            output.baseAddress, capacity, &count)
-                }
+                decryptBlock(
+                    keyBytes: keyBytes,
+                    keyCount: key.count,
+                    iv: iv,
+                    ciphertext: ciphertext,
+                    output: output,
+                    capacity: capacity,
+                    count: &count
+                )
             }
         }
         guard status == kCCSuccess else { throw failure("Cookie decryption failed. The browser key may have changed.") }
@@ -99,14 +185,49 @@ enum HeliumCookieReader {
         return value
     }
 
-    static func export(for target: URL, root: URL = FileManager.default.homeDirectoryForCurrentUser
-        .appendingPathComponent("Library/Application Support/net.imput.helium"),
-        password: () throws -> Data = keychainPassword) throws -> SecureCookieFile {
+    static func export(
+        for target: URL,
+        root: URL = defaultHeliumRoot,
+        password: () throws -> Data = { try keychainPassword() }
+    ) throws -> SecureCookieFile {
         guard let host = target.host else { throw failure("Missing target host.") }
+
+        // If default root does not exist, look across known Chromium browser installations
+        var candidateRoots: [URL] = [root]
+        if root == defaultHeliumRoot {
+            let home = FileManager.default.homeDirectoryForCurrentUser
+            for browser in knownChromiumBrowsers {
+                let candidateURL = home.appendingPathComponent(browser.relativePath)
+                if candidateURL != root && FileManager.default.fileExists(atPath: candidateURL.path) {
+                    candidateRoots.append(candidateURL)
+                }
+            }
+        }
+
+        var lastError: Error?
+        for candidateRoot in candidateRoots {
+            do {
+                return try exportFromProfile(targetHost: host, root: candidateRoot, password: password)
+            } catch {
+                lastError = error
+            }
+        }
+
+        if let lastError {
+            throw lastError
+        }
+        throw failure("No cookie database found in any active Chromium profile. Open the page in your Chromium browser and sign in first.")
+    }
+
+    private static func exportFromProfile(
+        targetHost host: String,
+        root: URL,
+        password: () throws -> Data
+    ) throws -> SecureCookieFile {
         let profile = try profileDirectory(root: root)
         let candidates = [profile.appendingPathComponent("Network/Cookies"), profile.appendingPathComponent("Cookies")]
         guard let database = candidates.first(where: { FileManager.default.fileExists(atPath: $0.path) }) else {
-            throw failure("No cookie database in the active profile. Open the page in Helium and sign in first.")
+            throw failure("No cookie database in the active profile. Open the page in your Chromium-based browser and sign in first.")
         }
         // Read the live SQLite snapshot, including WAL, without copying or modifying browser files.
         var db: OpaquePointer?
@@ -162,7 +283,7 @@ enum HeliumCookieReader {
             lines.append("\(httpOnly)\(domain)\t\(subdomains)\t\(path)\t\(secure)\t\(expiry)\t\(name)\t\(value)")
         }
         guard lines.count > 1 else {
-            throw failure("No matching cookies for \(host). Open the target page in Helium and sign in first.")
+            throw failure("No matching cookies for \(host). Open the target page in your browser and sign in first.")
         }
         guard let directory = CookieManager.getSecureTempCookiesDirectory() else {
             throw failure("Could not prepare temporary cookie storage.")
@@ -177,8 +298,13 @@ enum HeliumCookieReader {
     }
 
     static func prepare(_ args: [String]) throws -> (args: [String], cookieFile: SecureCookieFile?) {
-        guard let index = args.firstIndex(of: "--cookies-from-browser"), index + 1 < args.count,
-              args[index + 1] == "helium" else { return (args, nil) }
+        guard let index = args.firstIndex(of: "--cookies-from-browser"), index + 1 < args.count else {
+            return (args, nil)
+        }
+        let browserArg = args[index + 1].lowercased()
+        guard browserArg == "helium" || browserArg == "chromium-based" || browserArg == "chromium" else {
+            return (args, nil)
+        }
         guard let target = args.last.flatMap(URL.init(string:)), ["http", "https"].contains(target.scheme) else {
             throw failure("Missing HTTP target for cookie extraction.")
         }
@@ -188,3 +314,6 @@ enum HeliumCookieReader {
         return (prepared, file)
     }
 }
+
+/// Backward compatibility alias for HeliumCookieReader
+typealias HeliumCookieReader = ChromiumCookieReader

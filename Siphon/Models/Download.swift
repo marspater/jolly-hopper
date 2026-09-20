@@ -348,7 +348,7 @@ enum HDRAction: String, Codable, CaseIterable, Identifiable {
 
     var id: String { rawValue }
 
-    func title(lang: LanguageService) -> String {
+    func title(lang _: LanguageService) -> String {
         switch self {
         case .preserveHDR:
             return "Preserve HDR (Original)"
@@ -629,10 +629,10 @@ enum AudioQuality: String, Codable, CaseIterable, Identifiable {
     var id: String { rawValue }
     
     func title(lang: LanguageService) -> String {
-        switch self {
-        case .best: return lang.s("res_best")
-        default: return rawValue
+        if self == .best {
+            return lang.s("res_best")
         }
+        return rawValue
     }
     
     var ytdlpValue: String {
@@ -785,7 +785,7 @@ enum VideoCodec: String, Codable, CaseIterable, Identifiable {
         }
     }
 
-    func title(lang: LanguageService) -> String {
+    func title(lang _: LanguageService) -> String {
         formattedTitleName
     }
     
@@ -820,7 +820,7 @@ enum ConversionCodec: String, Codable, CaseIterable, Identifiable {
     
     var id: String { rawValue }
     
-    func title(lang: LanguageService) -> String {
+    func title(lang _: LanguageService) -> String {
         switch self {
         case .none: return "None (Do not convert)"
         case .h264: return "Convert to H.264"
@@ -1235,15 +1235,13 @@ struct MediaInfo: Codable {
     }
 
     var isFragmented: Bool {
-        if let proto = formatProtocol?.lowercased() {
-            if proto.contains("m3u8") || proto.contains("dash") || proto.contains("fragment") || proto.contains("ism") {
-                return true
-            }
+        if let proto = formatProtocol?.lowercased(),
+           proto.contains("m3u8") || proto.contains("dash") || proto.contains("fragment") || proto.contains("ism") {
+            return true
         }
-        if let manifest = manifestUrl?.lowercased() {
-            if manifest.contains(".m3u8") || manifest.contains(".mpd") || manifest.contains("/manifest") {
-                return true
-            }
+        if let manifest = manifestUrl?.lowercased(),
+           manifest.contains(".m3u8") || manifest.contains(".mpd") || manifest.contains("/manifest") {
+            return true
         }
         return false
     }
@@ -1278,10 +1276,9 @@ struct MediaInfo: Codable {
                     }
                 } else if matched.count == 1 {
                     let single = matched[0]
-                    if single.isVideoOnly && options.fileType.isVideo {
-                        if let bestAudio = getBestAudio() {
-                            return [single, bestAudio]
-                        }
+                    if single.isVideoOnly && options.fileType.isVideo,
+                       let bestAudio = getBestAudio() {
+                        return [single, bestAudio]
                     }
                     return matched
                 }
@@ -1289,10 +1286,8 @@ struct MediaInfo: Codable {
         }
         
         // 2. If audio-only download:
-        if options.fileType.isAudio {
-            if let best = getBestAudio() {
-                return [best]
-            }
+        if options.fileType.isAudio, let best = getBestAudio() {
+            return [best]
         }
         
         // 3. Video formats: filter by hard constraints (codec & resolution), then rank deterministically
@@ -1318,10 +1313,8 @@ struct MediaInfo: Codable {
         }
         
         if let bestVideo = sortedVideos.first {
-            if bestVideo.isVideoOnly {
-                if let bestAudio = getBestAudio() {
-                    return [bestVideo, bestAudio]
-                }
+            if bestVideo.isVideoOnly, let bestAudio = getBestAudio() {
+                return [bestVideo, bestAudio]
             }
             return [bestVideo]
         }
@@ -1347,10 +1340,9 @@ struct MediaInfo: Codable {
             return resolved.contains(where: { $0.isFragmented })
         }
         
-        if let customId = options.selectedFormatId?.lowercased() {
-            if customId.contains("dash") || customId.contains("m3u8") || customId.contains("hls") {
-                return true
-            }
+        if let customId = options.selectedFormatId?.lowercased(),
+           customId.contains("dash") || customId.contains("m3u8") || customId.contains("hls") {
+            return true
         }
         
         return isFragmented
@@ -1579,15 +1571,13 @@ struct MediaFormat: Codable, Identifiable, Hashable {
     }
 
     var isFragmented: Bool {
-        if let proto = formatProtocol?.lowercased() {
-            if proto.contains("m3u8") || proto.contains("dash") || proto.contains("fragment") || proto.contains("ism") {
-                return true
-            }
+        if let proto = formatProtocol?.lowercased(),
+           proto.contains("m3u8") || proto.contains("dash") || proto.contains("fragment") || proto.contains("ism") {
+            return true
         }
-        if let manifest = manifestUrl?.lowercased() {
-            if manifest.contains(".m3u8") || manifest.contains(".mpd") || manifest.contains("/manifest") {
-                return true
-            }
+        if let manifest = manifestUrl?.lowercased(),
+           manifest.contains(".m3u8") || manifest.contains(".mpd") || manifest.contains("/manifest") {
+            return true
         }
         return false
     }
@@ -1772,16 +1762,13 @@ struct MediaFormat: Codable, Identifiable, Hashable {
             if ra.height != rb.height {
                 return ra.height < rb.height
             }
-        } else {
-            if ra.height != rb.height {
-                return ra.height > rb.height
-            }
+        } else if ra.height != rb.height {
+            return ra.height > rb.height
         }
         // 4. For MP4 containers under auto codec, prefer Apple-native codecs (H.264/HEVC) for QuickTime & Finder QuickLook compatibility
-        if options.fileType == .mp4 && (options.videoCodec == nil || options.videoCodec == .auto) {
-            if ra.isAppleNativeCodec != rb.isAppleNativeCodec {
-                return ra.isAppleNativeCodec
-            }
+        if options.fileType == .mp4 && (options.videoCodec == nil || options.videoCodec == .auto),
+           ra.isAppleNativeCodec != rb.isAppleNativeCodec {
+            return ra.isAppleNativeCodec
         }
         // 5. Tested status as a tie-breaker factor
         if ra.tested != rb.tested {
@@ -1799,7 +1786,7 @@ struct MediaFormat: Codable, Identifiable, Hashable {
         return ra.size > rb.size
     }
 
-    func videoQualityScore(options: DownloadOptions) -> Double {
+    func videoQualityScore(options _: DownloadOptions) -> Double {
         var score: Double = 0
         let h = parsedHeight ?? 0
         score += Double(h) * 10000.0
@@ -1860,10 +1847,9 @@ struct MediaFormat: Codable, Identifiable, Hashable {
         }
         
         // Codec match preference if requested
-        if let requestedCodec = options.audioCodec, requestedCodec != .auto {
-            if let ac = acodec?.lowercased(), ac.contains(requestedCodec.rawValue.lowercased()) {
-                score += 500_000.0
-            }
+        if let requestedCodec = options.audioCodec, requestedCodec != .auto,
+           let ac = acodec?.lowercased(), ac.contains(requestedCodec.rawValue.lowercased()) {
+            score += 500_000.0
         }
         
         // Bitrate
@@ -2102,12 +2088,10 @@ public struct DownloadURLValidator: Sendable {
             .filter { !$0.isEmpty }
 
         return lines.compactMap { line in
-            switch validate(line) {
-            case .valid(_, let original):
+            if case .valid(_, let original) = validate(line) {
                 return original
-            default:
-                return nil
             }
+            return nil
         }
     }
 }

@@ -40,7 +40,9 @@ public enum UpdateVerificationError: LocalizedError, Sendable {
 }
 
 public struct UpdateVerifier: Sendable {
-    public init() {}
+    public init() {
+        // Intentionally empty initializer for struct instantiation (swift:S1186)
+    }
 
     /// Computes the SHA-256 hexadecimal hash of a file using streaming chunks to bound memory.
     public static func computeSHA256(for fileURL: URL) throws -> String {
@@ -52,12 +54,15 @@ public struct UpdateVerifier: Sendable {
 
         var hasher = SHA256()
         let bufferSize = 64 * 1024
-        while autoreleasepool(invoking: {
-            let data = handle.readData(ofLength: bufferSize)
-            guard !data.isEmpty else { return false }
-            hasher.update(data: data)
-            return true
-        }) {}
+        var hasMoreData = true
+        while hasMoreData {
+            hasMoreData = autoreleasepool {
+                let data = handle.readData(ofLength: bufferSize)
+                guard !data.isEmpty else { return false }
+                hasher.update(data: data)
+                return true
+            }
+        }
 
         let digest = hasher.finalize()
         return digest.map { String(format: "%02x", $0) }.joined()

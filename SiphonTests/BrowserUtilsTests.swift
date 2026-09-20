@@ -33,11 +33,15 @@ final class BrowserUtilsTests: XCTestCase {
         XCTAssertEqual(firstResult, secondResult)
     }
 
-    func testSupportedBrowserHeliumProperties() {
+    func testSupportedBrowserChromiumBasedProperties() {
+        let chromiumBased = SupportedBrowser.chromiumBased
+        XCTAssertEqual(chromiumBased.rawValue, "chromium-based")
+        XCTAssertEqual(chromiumBased.displayName, "Chromium-based")
+        XCTAssertEqual(chromiumBased.bundleIdentifier, "net.imput.helium")
+        XCTAssertTrue(SupportedBrowser.allCases.contains(.chromiumBased))
+
+        // Backward compatibility alias
         let helium = SupportedBrowser.helium
-        XCTAssertEqual(helium.rawValue, "helium")
-        XCTAssertEqual(helium.displayName, "Helium")
-        XCTAssertEqual(helium.bundleIdentifier, "net.imput.helium")
-        XCTAssertTrue(SupportedBrowser.allCases.contains(.helium))
+        XCTAssertEqual(helium, .chromiumBased)
     }
 }

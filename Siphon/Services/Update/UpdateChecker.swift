@@ -34,7 +34,9 @@ public final class UpdateChecker: ObservableObject {
     private let downloader = UpdateDownloader()
     private let installer = UpdateInstaller()
 
-    public init() {}
+    public init() {
+        // Intentionally empty initializer for actor instantiation (swift:S1186)
+    }
 
     nonisolated static func parseGitHubAssetSHA256(_ digest: String?) -> String? {
         guard let digest = digest?.trimmingCharacters(in: .whitespacesAndNewlines),
