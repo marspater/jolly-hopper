@@ -366,7 +366,6 @@ final class QueueRecoveryStoreTests: XCTestCase {
     }
 
     func testFileExistsHistoryRestoresActionRequiredState() throws {
-        let store = DownloadHistoryStore()
         let download = Download(
             url: "https://example.com/existing",
             options: .default,
