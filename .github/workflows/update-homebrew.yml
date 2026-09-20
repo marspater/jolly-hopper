@@ -1,4 +1,4 @@
-name: Update Homebrew Tap
+name: Update Homebrew Cask
 
 on:
   release:
@@ -10,14 +10,14 @@ on:
         required: true
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
-  group: update-homebrew-tap
+  group: update-homebrew-cask
   cancel-in-progress: false
 
 jobs:
-  update-tap:
+  update-cask:
     runs-on: ubuntu-latest
     steps:
       - name: Extract version from tag
@@ -51,37 +51,28 @@ jobs:
           SHA256=$(sha256sum siphon.dmg | cut -d' ' -f1)
           echo "sha256=$SHA256" >> $GITHUB_OUTPUT
 
-      - name: Checkout Homebrew Tap
+      - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          repository: marspater/homebrew-luma
-          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
-          path: homebrew-tap
+          ref: main
 
       - name: Update Cask formula
         run: |
-          cd homebrew-tap
-          if [ -f "Casks/siphon.rb" ]; then
-            sed -i 's/version "[^"]*"/version "${{ steps.version.outputs.version }}"/' Casks/siphon.rb
-            sed -i 's/sha256 "[^"]*"/sha256 "${{ steps.asset.outputs.sha256 }}"/' Casks/siphon.rb
-            git add Casks/siphon.rb
-          elif [ -f "Casks/luma-pro.rb" ]; then
-            sed -i 's/version "[^"]*"/version "${{ steps.version.outputs.version }}"/' Casks/luma-pro.rb
-            sed -i 's/sha256 "[^"]*"/sha256 "${{ steps.asset.outputs.sha256 }}"/' Casks/luma-pro.rb
-            git add Casks/luma-pro.rb
-          else
-            echo "No supported Siphon cask was found in the Homebrew tap." >&2
-            exit 1
-          fi
+          set -euo pipefail
+          test -f Casks/siphon.rb
+          sed -i 's/version "[^"]*"/version "${{ steps.version.outputs.version }}"/' Casks/siphon.rb
+          sed -i 's/sha256 "[^"]*"/sha256 "${{ steps.asset.outputs.sha256 }}"/' Casks/siphon.rb
+          git diff --check
+          git add Casks/siphon.rb
 
       - name: Commit and push changes
         run: |
-          cd homebrew-tap
+          set -euo pipefail
           git config user.name "GitHub Actions Bot"
           git config user.email "actions@github.com"
           if ! git diff --cached --quiet; then
-            git commit -m "Update Siphon to v${{ steps.version.outputs.version }}"
-            git push
+            git commit -m "chore(cask): update Siphon to v${{ steps.version.outputs.version }}"
+            git push origin HEAD:main
           else
-            echo "No changes to commit"
+            echo "Cask already matches the published release"
           fi
