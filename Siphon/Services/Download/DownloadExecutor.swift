@@ -15,6 +15,10 @@ protocol DownloadExecutorDelegate: AnyObject {
     func executorDidRequestBroadcast()
 }
 
+extension DownloadExecutorDelegate {
+    func executorDidRequestRecoveryPersist() {}
+}
+
 enum DownloadExecutionState: Equatable {
     case idle
     case active
