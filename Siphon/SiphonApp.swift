@@ -70,7 +70,9 @@ struct SiphonApp: App {
                     SiphonTheme.applyTheme(newTheme)
                 }
                 .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in
-                    downloadManager.stopAllDownloads()
+                    // A normal app quit must not turn explicitly paused jobs into
+                    // stopped jobs or delete the resumable scratch data they own.
+                    downloadManager.stopAllDownloads(preservePaused: true)
                     downloadManager.shutdown()
                 }
                 .onOpenURL { url in
