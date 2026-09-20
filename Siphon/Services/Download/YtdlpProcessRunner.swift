@@ -261,6 +261,7 @@ public struct DownloadProcessResult: Sendable {
 
 public protocol YtdlpProcessRunning: Sendable {
     func runCommand(_ args: [String]) async throws -> String
+    func runCommand(_ args: [String], processController: DownloadProcessController?) async throws -> String
     func runDownloadProcess(
         args: [String],
         saveFolder: URL,
@@ -268,6 +269,14 @@ public protocol YtdlpProcessRunning: Sendable {
         onProgress: @escaping @Sendable (Double, String?, String?) -> Void,
         onOutput: @escaping @Sendable (String) -> Void
     ) async throws -> DownloadProcessResult
+}
+
+extension YtdlpProcessRunning {
+    public func runCommand(_ args: [String], processController: DownloadProcessController?) async throws -> String {
+        try Task.checkCancellation()
+        guard processController?.isCancelled != true else { throw CancellationError() }
+        return try await runCommand(args)
+    }
 }
 
 public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
@@ -323,15 +332,20 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
     }
 
     public func runCommand(_ args: [String]) async throws -> String {
+        try await runCommand(args, processController: nil)
+    }
+
+    public func runCommand(_ args: [String], processController: DownloadProcessController?) async throws -> String {
         try Task.checkCancellation()
         let prepared = try ChromiumCookieReader.prepare(args)
         defer { prepared.cookieFile?.cleanup() }
         let args = prepared.args
         let process = Process()
         let pipe = Pipe()
-        let controller = DownloadProcessController()
+        let controller = processController ?? DownloadProcessController()
 
         Self.configureProcessCommand(process, args: args)
+        process.standardInput = FileHandle.nullDevice
         process.standardOutput = pipe
         process.standardError = pipe
         process.environment = YtdlpService.createSanitizedEnvironment()

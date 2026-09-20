@@ -59,6 +59,40 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertTrue(delegate.responds(to: selector), "WebKit must invoke the host restriction callback")
     }
 
+    func testThumbnailFallbackUsesRunnerAndReplacesMediaOnlyAfterSuccess() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let media = root.appendingPathComponent("video.mp4")
+        let image = root.appendingPathComponent("cover.jpg")
+        try Data("original".utf8).write(to: media)
+        try Data("image".utf8).write(to: image)
+        for tool in ["ffmpeg", "ffprobe"] {
+            try FileManager.default.createSymbolicLink(at: root.appendingPathComponent(tool), withDestinationURL: URL(fileURLWithPath: "/usr/bin/true"))
+        }
+        service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
+            if args.first?.hasSuffix("ffprobe") == true { return "" }
+            XCTAssertEqual(try String(contentsOf: media, encoding: .utf8), "original")
+            let output = try XCTUnwrap(args.last)
+            try Data("embedded".utf8).write(to: URL(fileURLWithPath: output))
+            return ""
+        })
+        let controller = DownloadProcessController()
+        let hasThumbnail = try await service.hasAttachedThumbnail(mediaFile: media, ffmpegDir: root.path, processController: controller)
+        XCTAssertFalse(hasThumbnail)
+        let embedded = try await service.embedThumbnailWithFfmpeg(imageFile: image, mediaFile: media, ffmpegDir: root.path, processController: controller)
+        XCTAssertTrue(embedded)
+        XCTAssertEqual(try String(contentsOf: media, encoding: .utf8), "embedded")
+
+        service.processRunner = MockYtdlpProcessRunner(mockCommand: { _ in throw CancellationError() })
+        do {
+            _ = try await service.embedThumbnailWithFfmpeg(imageFile: image, mediaFile: media, ffmpegDir: root.path, processController: controller)
+            XCTFail("Cancellation must propagate instead of becoming a thumbnail warning")
+        } catch is CancellationError {}
+        XCTAssertEqual(try String(contentsOf: media, encoding: .utf8), "embedded")
+        XCTAssertFalse(try FileManager.default.contentsOfDirectory(atPath: root.path).contains { $0.hasPrefix("thumb_") })
+    }
+
     override func setUp() {
         super.setUp()
         service = YtdlpService()
