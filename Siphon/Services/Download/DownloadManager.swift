@@ -481,6 +481,9 @@ class DownloadManager: ObservableObject {
         }
         objectWillChange.send()
         saveHistory()
+        // stopDownload(..., skipSaveAndBroadcast: true) deliberately defers
+        // recovery removal until this batched history write is durable.
+        persistQueueRecoveryState()
     }
 
 
@@ -631,7 +634,17 @@ class DownloadManager: ObservableObject {
         default:
             break
         }
-        persistQueueRecoveryState()
+
+        // Paused, terminal, and action-required states are persisted through
+        // history. Keep the previous active recovery snapshot until that history
+        // write succeeds so a crash between the status transition and history
+        // commit cannot make the job disappear.
+        switch status {
+        case .paused, .completed, .failed, .stopped, .fileExists:
+            break
+        default:
+            persistQueueRecoveryState()
+        }
     }
 }
 
@@ -644,6 +657,13 @@ extension DownloadManager: DownloadExecutorDelegate {
         // Cancellation can finish after the user removed the job from the app.
         guard downloads.contains(where: { $0.id == download.id }) else { return }
         addToHistory(download, skipSave: skipSave)
+
+        // For normal single-job transitions, history is durable at this point,
+        // so recovery can now drop the old active snapshot. Batched callers
+        // persist recovery only after their shared saveHistory() call.
+        if !skipSave {
+            persistQueueRecoveryState()
+        }
     }
 
     func executorDidFinishDownload() {
