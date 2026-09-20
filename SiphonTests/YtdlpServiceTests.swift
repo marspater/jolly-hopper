@@ -1,5 +1,6 @@
 import XCTest
 import SQLite3
+import WebKit
 @testable import Siphon
 
 final class TestBox<T>: @unchecked Sendable {
@@ -51,6 +52,12 @@ final class MockYtdlpProcessRunner: YtdlpProcessRunning, @unchecked Sendable {
 final class YtdlpServiceTests: XCTestCase {
 
     var service: YtdlpService!
+
+    func testBrowserNavigationPolicyIsRegisteredWithWebKit() {
+        let delegate = YtdlpService.BoyfriendTVNavigationDelegate()
+        let selector = NSSelectorFromString("webView:decidePolicyForNavigationAction:decisionHandler:")
+        XCTAssertTrue(delegate.responds(to: selector), "WebKit must invoke the host restriction callback")
+    }
 
     override func setUp() {
         super.setUp()
@@ -4288,8 +4295,6 @@ final class YtdlpServiceTests: XCTestCase {
         validProcess.waitUntilExit()
     }
 }
-
-
 
 
 
