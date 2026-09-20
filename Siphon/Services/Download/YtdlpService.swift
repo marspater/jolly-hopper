@@ -849,7 +849,7 @@ class YtdlpService: ObservableObject {
             } catch {
                 if error is CancellationError { throw error }
                 try Task.checkCancellation()
-                LoggerService.shared.log("[Recu] playlist metadata probe failed; using synthesized HLS metadata", level: .debug)
+                LoggerService.shared.log("[ProtectedSite] playlist metadata probe failed; using synthesized HLS metadata", level: .debug)
             }
 
             let fallbackFormat = MediaFormat(
@@ -925,7 +925,7 @@ class YtdlpService: ObservableObject {
                     description: parsedInfo?.description,
                     thumbnail: parsedInfo?.thumbnail ?? btvMedia.thumbnailURL,
                     duration: parsedInfo?.duration,
-                    uploader: parsedInfo?.uploader ?? "BoyfriendTV",
+                    uploader: parsedInfo?.uploader ?? "Protected Site",
                     uploadDate: parsedInfo?.uploadDate,
                     viewCount: parsedInfo?.viewCount,
                     likeCount: parsedInfo?.likeCount,
@@ -961,15 +961,15 @@ class YtdlpService: ObservableObject {
                     title: guywhMedia.title,
                     thumbnail: guywhMedia.thumbnailURL,
                     duration: guywhMedia.duration,
-                    uploader: "Guywh",
+                    uploader: "Protected Site",
                     formats: [format]
                 )
         }
 
         if isGFFURL(url) {
-            LoggerService.shared.log("Initiating GayForFans media info resolution for: \(LoggerService.sanitizeURLForLog(url))", level: .info)
+            LoggerService.shared.log("Initiating protected-site media info resolution for: \(LoggerService.sanitizeURLForLog(url))", level: .info)
             if let gffMedia = await resolveGFFMediaInfo(url: url, rawCookies: rawCookies) {
-                LoggerService.shared.log("GayForFans media successfully extracted: '\(gffMedia.title)' with stream: \(LoggerService.sanitizeURLForLog(gffMedia.streamURL))", level: .info)
+                LoggerService.shared.log("Protected-site media successfully extracted: '\(gffMedia.title)' with stream: \(LoggerService.sanitizeURLForLog(gffMedia.streamURL))", level: .info)
                 let quality = gffMedia.quality ?? "720p"
                 let height = Int(quality.replacingOccurrences(of: "p", with: "")) ?? 720
                 let format = MediaFormat(
@@ -986,18 +986,18 @@ class YtdlpService: ObservableObject {
                     title: gffMedia.title,
                     thumbnail: gffMedia.thumbnailURL,
                     duration: gffMedia.duration,
-                    uploader: "GayForFans",
+                    uploader: "Protected Site",
                     formats: [format]
                 )
             } else {
-                LoggerService.shared.log("GayForFans custom extractor could not resolve media directly. Falling back to yt-dlp native extraction...", level: .warning)
+                LoggerService.shared.log("Protected-site resolver could not resolve media directly. Falling back to yt-dlp native extraction...", level: .warning)
             }
         }
 
         if isBestCamURL(url) {
-            LoggerService.shared.log("Initiating BestCam media info resolution for: \(LoggerService.sanitizeURLForLog(url))", level: .info)
+            LoggerService.shared.log("Initiating protected-site media info resolution for: \(LoggerService.sanitizeURLForLog(url))", level: .info)
             if let bestCamMedia = await resolveBestCamMediaInfo(url: url, rawCookies: rawCookies) {
-                LoggerService.shared.log("BestCam media successfully extracted: '\(bestCamMedia.title)' with \(bestCamMedia.allSources.count) format(s)", level: .info)
+                LoggerService.shared.log("Protected-site media successfully extracted: '\(bestCamMedia.title)' with \(bestCamMedia.allSources.count) format(s)", level: .info)
                 let formats: [MediaFormat] = bestCamMedia.allSources.map { src in
                     let quality = src.label
                     let height = Int(quality.replacingOccurrences(of: "p", with: "")) ?? 720
@@ -1017,11 +1017,11 @@ class YtdlpService: ObservableObject {
                     title: bestCamMedia.title,
                     thumbnail: bestCamMedia.thumbnailURL,
                     duration: bestCamMedia.duration,
-                    uploader: "BestCam",
+                    uploader: "Protected Site",
                     formats: formats.isEmpty ? nil : formats
                 )
             } else {
-                LoggerService.shared.log("BestCam custom extractor could not resolve media directly. Falling back to yt-dlp native extraction...", level: .warning)
+                LoggerService.shared.log("Protected-site resolver could not resolve media directly. Falling back to yt-dlp native extraction...", level: .warning)
             }
         }
 
@@ -1505,7 +1505,7 @@ public struct DownloadResult: Sendable {
         if isRecuURL(normalizedURL) {
             // Recu session cookies are only for resolving the signed playlist URL.
             // The CDN playlist/segments are intentionally fetched without account cookies.
-            LoggerService.shared.log("Recu stream download uses the resolved CDN URL without forwarding account cookies", level: .debug)
+            LoggerService.shared.log("Protected-site stream download uses the resolved CDN URL without forwarding account cookies", level: .debug)
         } else if (options.rawCookies?.isEmpty == false) || !additionalCookies.isEmpty {
             if let cookieFile = try? SecureCookieFile.create(
                 url: targetURL,
@@ -1908,10 +1908,11 @@ public struct DownloadResult: Sendable {
     private func buildFormatArgs(url: String? = nil, options: DownloadOptions, mediaInfo: MediaInfo? = nil) -> [String] {
         var args: [String] = []
 
-        let isSynthesizedDirectStream = (mediaInfo?.uploader == "Guywh" || isGuywhURL(mediaInfo?.id ?? "")) ||
-                                        (mediaInfo?.uploader == "GayForFans" || isGFFURL(mediaInfo?.id ?? "")) ||
-                                        (mediaInfo?.uploader == "BoyfriendTV" || isBoyfriendTVURL(mediaInfo?.id ?? "")) ||
-                                        (mediaInfo?.uploader == "BestCam" || isBestCamURL(mediaInfo?.id ?? "")) ||
+        let isSynthesizedDirectStream = mediaInfo?.uploader == "Protected Site" ||
+                                        isGuywhURL(mediaInfo?.id ?? "") ||
+                                        isGFFURL(mediaInfo?.id ?? "") ||
+                                        isBoyfriendTVURL(mediaInfo?.id ?? "") ||
+                                        isBestCamURL(mediaInfo?.id ?? "") ||
                                         (url.map(isGuywhURL) ?? false) ||
                                         (url.map(isGFFURL) ?? false) ||
                                         (url.map(isBoyfriendTVURL) ?? false) ||
@@ -2383,18 +2384,18 @@ public struct DownloadResult: Sendable {
             lower.contains("/cdn-cgi/challenge-platform/") ||
             lower.contains("<title>just a moment") ||
             lower.contains("cloudflare") && lower.contains("403") {
-            LoggerService.shared.log("[Recu] stage=\(stage) result=cloudflare-challenge", level: .debug)
+            LoggerService.shared.log("[ProtectedSite] stage=\(stage) result=anti-bot-challenge", level: .debug)
             throw YtdlpError.cloudflareBlocked
         }
         guard !body.isEmpty else {
             let classification = lower.contains("403") ? "http-403" : "no-body"
-            LoggerService.shared.log("[Recu] stage=\(stage) result=\(classification)", level: .debug)
+            LoggerService.shared.log("[ProtectedSite] stage=\(stage) result=\(classification)", level: .debug)
             if lower.contains("403") {
                 throw YtdlpError.cloudflareBlocked
             }
-            throw YtdlpError.downloadFailed("Recu.me returned no usable page content.")
+            throw YtdlpError.downloadFailed("The protected site returned no usable page content.")
         }
-        LoggerService.shared.log("[Recu] stage=\(stage) result=ok", level: .debug)
+        LoggerService.shared.log("[ProtectedSite] stage=\(stage) result=ok", level: .debug)
         return body
     }
 
@@ -2405,7 +2406,7 @@ public struct DownloadResult: Sendable {
         browserCookieSource: String?
     ) async throws -> RecuExtractedMedia {
         guard let identity = Self.recuVideoIdentity(from: url) else {
-            throw YtdlpError.downloadFailed("Unsupported Recu.me URL. Expected /<model>/video/<id>/play.")
+            throw YtdlpError.downloadFailed("Unsupported protected-site URL. Expected /<model>/video/<id>/play.")
         }
 
         let pageURL = "https://recu.me/\(identity.model)/video/\(identity.videoID)/play"
@@ -2450,7 +2451,7 @@ public struct DownloadResult: Sendable {
 
             let state = apiResponse.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
             if state == "wrong_token" && attempt == 0 {
-                LoggerService.shared.log("[Recu] API rejected a stale token; refreshing once", level: .info)
+                LoggerService.shared.log("[ProtectedSite] API rejected a stale token; refreshing once", level: .info)
                 continue
             }
             if state == "shall_signin" {
@@ -2877,7 +2878,7 @@ public struct DownloadResult: Sendable {
             } else {
                 result = "page-ready"
             }
-            LoggerService.shared.log("[BoyfriendTV] stage=\(stage) result=\(result)", level: .debug)
+            LoggerService.shared.log("[ProtectedSite] stage=\(stage) result=\(result)", level: .debug)
             return resolved
         }
 
@@ -2930,7 +2931,7 @@ public struct DownloadResult: Sendable {
             lastHTML = resolved
 
             if extractStreamURLFromHTML(resolved) != nil {
-                LoggerService.shared.log("[BoyfriendTV] stage=\(stage) result=stream-found", level: .debug)
+                LoggerService.shared.log("[ProtectedSite] stage=\(stage) result=stream-found", level: .debug)
                 return resolved
             }
 
@@ -2943,7 +2944,7 @@ public struct DownloadResult: Sendable {
                 settledPolls += 1
                 if settledPolls >= 3 {
                     let result = hasBoyfriendTVMediaData(resolved) ? "player-ready" : "page-ready"
-                    LoggerService.shared.log("[BoyfriendTV] stage=\(stage) result=\(result)", level: .debug)
+                    LoggerService.shared.log("[ProtectedSite] stage=\(stage) result=\(result)", level: .debug)
                     return resolved
                 }
             }
@@ -2955,7 +2956,7 @@ public struct DownloadResult: Sendable {
         } else {
             finalResult = "no-html"
         }
-        LoggerService.shared.log("[BoyfriendTV] stage=\(stage) result=\(finalResult)", level: .debug)
+        LoggerService.shared.log("[ProtectedSite] stage=\(stage) result=\(finalResult)", level: .debug)
         return lastHTML
     }
 
@@ -3014,7 +3015,7 @@ public struct DownloadResult: Sendable {
             } else {
                 result = "no-stream"
             }
-            LoggerService.shared.log("[BoyfriendTV] stage=\(stage) result=\(result)", level: .debug)
+            LoggerService.shared.log("[ProtectedSite] stage=\(stage) result=\(result)", level: .debug)
             return decoded
         }
 
@@ -3030,7 +3031,7 @@ public struct DownloadResult: Sendable {
                 } catch {
                     try Task.checkCancellation()
                     guard case YtdlpError.commandFailed(let failure) = error else {
-                        LoggerService.shared.log("[BoyfriendTV] stage=\(stage) result=process-failure", level: .debug)
+                        LoggerService.shared.log("[ProtectedSite] stage=\(stage) result=process-failure", level: .debug)
                         throw error
                     }
                     output = failure
@@ -3067,11 +3068,11 @@ public struct DownloadResult: Sendable {
                 } else {
                     classification = "other"
                 }
-                LoggerService.shared.log("[BoyfriendTV] stage=\(stage) yt-dlp=\(classification)", level: .debug)
+                LoggerService.shared.log("[ProtectedSite] stage=\(stage) yt-dlp=\(classification)", level: .debug)
                 let challengePage = html.lowercased().contains("cf-chl-") || html.lowercased().contains("/cdn-cgi/challenge-platform/") || html.lowercased().contains("<title>just a moment")
                 if !didRetry && (challenge || challengePage || transient) && !hasBoyfriendTVMediaData(html) {
                     didRetry = true
-                    LoggerService.shared.log("[BoyfriendTV] Retrying transient page resolution once", level: .info)
+                    LoggerService.shared.log("[ProtectedSite] Retrying transient page resolution once", level: .info)
                     continue
                 }
                 return html
@@ -3086,14 +3087,14 @@ public struct DownloadResult: Sendable {
                 guard let http = response as? HTTPURLResponse else { return nil }
                 sawForbidden = sawForbidden || http.statusCode == 403
                 sawUnauthorized = sawUnauthorized || http.statusCode == 401
-                LoggerService.shared.log("[BoyfriendTV] stage=\(stage) http=\(http.statusCode)", level: .debug)
+                LoggerService.shared.log("[ProtectedSite] stage=\(stage) http=\(http.statusCode)", level: .debug)
                 let page = inspectPage(data.base64EncodedString(), stage: stage)
                 return http.statusCode == 200 ? page : nil
             } catch is CancellationError {
                 throw CancellationError()
             } catch {
                 try Task.checkCancellation()
-                LoggerService.shared.log("[BoyfriendTV] stage=\(stage) result=transport-failure", level: .debug)
+                LoggerService.shared.log("[ProtectedSite] stage=\(stage) result=transport-failure", level: .debug)
                 return nil
             }
         }
@@ -3291,7 +3292,7 @@ public struct DownloadResult: Sendable {
             guard let candidate = URL(string: $0), candidate.scheme == "https" || candidate.scheme == "http" else { return false }
             return isBoyfriendTVURL($0) && candidate.path.hasPrefix("/embed/") && candidate.user == nil && candidate.password == nil
         }
-        LoggerService.shared.log("[BoyfriendTV] stage=embed-discovery candidates=\(candidateEmbeds.count)", level: .debug)
+        LoggerService.shared.log("[ProtectedSite] stage=embed-discovery candidates=\(candidateEmbeds.count)", level: .debug)
 
         // Extract Thumbnail URL
         var thumbnailUrl: String? = nil
@@ -3425,14 +3426,14 @@ public struct DownloadResult: Sendable {
         }
         if sawLoginPage || sawUnauthorized {
             if browserLabels.isEmpty && rawCookies?.isEmpty != false {
-                throw YtdlpError.boyfriendTVNeedsBrowserCookies
+                throw YtdlpError.protectedSiteNeedsBrowserCookies
             }
-            throw YtdlpError.boyfriendTVLoginRequired
+            throw YtdlpError.protectedSiteLoginRequired
         }
         if sawForbidden {
-            throw YtdlpError.downloadFailed("BoyfriendTV denied access (HTTP 403). This may be an anti-bot challenge or an access restriction; it does not prove your cookies are invalid.")
+            throw YtdlpError.downloadFailed("The protected site denied access (HTTP 403). This may be an anti-bot challenge or an access restriction; it does not prove your cookies are invalid.")
         }
-        LoggerService.shared.log("[BoyfriendTV] stage=stream-resolution result=exhausted; falling back to yt-dlp", level: .warning)
+        LoggerService.shared.log("[ProtectedSite] stage=stream-resolution result=exhausted; falling back to yt-dlp", level: .warning)
         return nil
     }
 
@@ -4001,7 +4002,7 @@ public struct DownloadResult: Sendable {
                                        rawHtml.contains("playerConfig")
                     if hasMediaData {
                         html = rawHtml
-                        LoggerService.shared.log("[GFF] Successfully extracted GayForFans page dump using session cookies (length: \(rawHtml.count) bytes)", level: .info)
+                        LoggerService.shared.log("[ProtectedSite] Successfully extracted page data using session cookies (length: \(rawHtml.count) bytes)", level: .info)
                     }
                 }
             }
@@ -4070,7 +4071,7 @@ public struct DownloadResult: Sendable {
                         if hasMediaData {
                             html = browserHtml
                             let sourceLog = browser.map { "browser cookies from '\($0)'" } ?? "impersonated HTTP request"
-                            LoggerService.shared.log("[GFF] Successfully extracted GayForFans page dump using \(sourceLog) (length: \(browserHtml.count) bytes)", level: .info)
+                            LoggerService.shared.log("[ProtectedSite] Successfully extracted page data using \(sourceLog) (length: \(browserHtml.count) bytes)", level: .info)
                             break
                         }
                     }
@@ -5079,7 +5080,7 @@ public struct DownloadResult: Sendable {
         if isBoyfriendTVURL(url) {
             if let siteError = error as? YtdlpError {
                 switch siteError {
-                case .cloudflareBlocked, .boyfriendTVLoginRequired, .boyfriendTVNeedsBrowserCookies, .safariCookiesFullDiskAccessRequired, .downloadFailed:
+                case .cloudflareBlocked, .protectedSiteLoginRequired, .protectedSiteNeedsBrowserCookies, .safariCookiesFullDiskAccessRequired, .downloadFailed:
                     return siteError
                 default: break
                 }
@@ -5092,16 +5093,16 @@ public struct DownloadResult: Sendable {
             }
             if lowerErr.contains("sign in") || lowerErr.contains("private video") || lowerErr.contains("login") || lowerErr.contains("members-only") || lowerErr.contains("http error 401") {
                 if configuredBrowser == nil {
-                    return YtdlpError.boyfriendTVNeedsBrowserCookies
+                    return YtdlpError.protectedSiteNeedsBrowserCookies
                 } else {
-                    return YtdlpError.boyfriendTVLoginRequired
+                    return YtdlpError.protectedSiteLoginRequired
                 }
             }
             if lowerErr.contains("403") || lowerErr.contains("forbidden") {
-                return YtdlpError.downloadFailed("BoyfriendTV denied access (HTTP 403). This may be an anti-bot challenge or an access restriction.")
+                return YtdlpError.downloadFailed("The protected site denied access (HTTP 403). This may be an anti-bot challenge or an access restriction.")
             }
             if lowerErr.contains("unsupported url") {
-                return YtdlpError.downloadFailed("Could not extract video stream from this BoyfriendTV URL. Please verify the video link and try again.")
+                return YtdlpError.downloadFailed("Could not extract a media stream from this protected-site URL. Please verify the link and try again.")
             }
             return error
         }
@@ -5120,7 +5121,7 @@ public struct DownloadResult: Sendable {
                 return YtdlpError.cloudflareBlocked
             }
             if lowerErr.contains("unsupported url") {
-                return YtdlpError.downloadFailed("Could not resolve this Recu.me recording. Use a /<model>/video/<id>/play URL.")
+                return YtdlpError.downloadFailed("Could not resolve this protected-site recording. Use a /<model>/video/<id>/play URL.")
             }
         }
 
@@ -5129,10 +5130,10 @@ public struct DownloadResult: Sendable {
                 return YtdlpError.cloudflareBlocked
             }
             if lowerErr.contains("unsupported url") {
-                return YtdlpError.downloadFailed("Could not resolve the GayPornTube player. Verify the video link and retry.")
+                return YtdlpError.downloadFailed("Could not resolve the protected-site player. Verify the video link and retry.")
             }
             if lowerErr.contains("403") || lowerErr.contains("forbidden") {
-                return YtdlpError.downloadFailed("GayPornTube denied access (HTTP 403). The page may require browser verification or have an access restriction.")
+                return YtdlpError.downloadFailed("The protected site denied access (HTTP 403). The page may require browser verification or have an access restriction.")
             }
         }
 
@@ -5878,8 +5879,8 @@ enum YtdlpError: LocalizedError {
     case subtitleError(String)
     case cloudflareBlocked
     case ffmpegInstallationFailed(String)
-    case boyfriendTVNeedsBrowserCookies
-    case boyfriendTVLoginRequired
+    case protectedSiteNeedsBrowserCookies
+    case protectedSiteLoginRequired
     case safariCookiesFullDiskAccessRequired
     case securityViolation(String)
 
@@ -5901,9 +5902,9 @@ enum YtdlpError: LocalizedError {
             return "Blocked by Cloudflare anti-bot protection. Siphon could not complete the browser challenge automatically."
         case .ffmpegInstallationFailed(let path):
             return "FFmpeg installation failed. Please try updating dependencies again. Attempted path: \(path)"
-        case .boyfriendTVNeedsBrowserCookies:
+        case .protectedSiteNeedsBrowserCookies:
             return "This video site requires signed-in browser cookies. Open Settings > Advanced > Browser Cookies, choose your browser, then try again."
-        case .boyfriendTVLoginRequired:
+        case .protectedSiteLoginRequired:
             return "BoyfriendTV returned a sign-in page for the available browser sessions. Sign in to BoyfriendTV in your browser, then retry; Siphon will reuse that session automatically."
         case .safariCookiesFullDiskAccessRequired:
             return "Safari cookies require Full Disk Access on macOS. Please grant Full Disk Access to Siphon in System Settings > Privacy & Security > Full Disk Access, or choose another browser in Settings > Advanced."
