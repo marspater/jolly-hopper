@@ -724,7 +724,7 @@ final class QueueAndErrorUXTests: XCTestCase {
         XCTAssertEqual(restoredFfprobe, "old_ffprobe_v1", "Original FFprobe must be restored on halfway failure")
     }
 
-    func testAppTerminationDuringActiveDownloads() {
+    func testAppTerminationDuringActiveDownloads() async {
         let manager = DownloadManager()
         let options = DownloadOptions.default
 
@@ -746,8 +746,21 @@ final class QueueAndErrorUXTests: XCTestCase {
         XCTAssertEqual(d1.status, .stopped)
         XCTAssertEqual(d2.status, .stopped)
         XCTAssertEqual(d3.status, .stopped)
-        XCTAssertEqual(manager.activeExecutionCount, 0, "Manager must expose execution state without owning mutable task maps")
         XCTAssertFalse(manager.queue.isPathReserved(testPath), "Shutdown must clear output-path reservations")
+
+        // A queued item can briefly acquire executor ownership while stopAllDownloads
+        // is notifying the queue. Cancellation deliberately keeps that ownership
+        // until task teardown completes; wait for the public state to become idle.
+        for _ in 0..<100 {
+            if manager.activeExecutionCount == 0 { break }
+            await Task.yield()
+        }
+
+        XCTAssertEqual(
+            manager.activeExecutionCount,
+            0,
+            "Shutdown must eventually release executor ownership after cancellation teardown"
+        )
     }
 
     func testNotificationFloodResilience() async {
