@@ -223,6 +223,9 @@ public final class AppState: ObservableObject {
     ) async {
         dependencyCoordinator.bind(to: ytdlpService)
         await dependencyCoordinator.initialize(service: ytdlpService, skipBinarySetup: skipBinarySetup)
+        // Do not rely on the RunLoop-delivered Combine mirror for values that
+        // callers expect to be current when this async operation returns.
+        ytdlpVersion = dependencyCoordinator.version
         await checkAndFetchWhatsNew(languageService: languageService)
     }
 
@@ -240,6 +243,8 @@ public final class AppState: ObservableObject {
     func updateYtdlp(using ytdlpService: YtdlpService) async {
         dependencyCoordinator.bind(to: ytdlpService)
         await dependencyCoordinator.updateYtdlp(service: ytdlpService)
+        ytdlpVersion = dependencyCoordinator.version
+        ytdlpUpdateMessage = dependencyCoordinator.updateMessage
     }
 
     public static func normalizedBrowserCookieSource(_ raw: String?) -> String? {
