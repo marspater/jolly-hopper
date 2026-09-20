@@ -5905,7 +5905,7 @@ enum YtdlpError: LocalizedError {
         case .protectedSiteNeedsBrowserCookies:
             return "This video site requires signed-in browser cookies. Open Settings > Advanced > Browser Cookies, choose your browser, then try again."
         case .protectedSiteLoginRequired:
-            return "BoyfriendTV returned a sign-in page for the available browser sessions. Sign in to BoyfriendTV in your browser, then retry; Siphon will reuse that session automatically."
+            return "The site returned a sign-in page for the available browser sessions. Sign in to the site in your browser, then retry; Siphon will reuse that session automatically."
         case .safariCookiesFullDiskAccessRequired:
             return "Safari cookies require Full Disk Access on macOS. Please grant Full Disk Access to Siphon in System Settings > Privacy & Security > Full Disk Access, or choose another browser in Settings > Advanced."
         case .securityViolation(let message):
