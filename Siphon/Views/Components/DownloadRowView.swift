@@ -236,6 +236,7 @@ struct DownloadRowView: View {
                                     languageService: languageService,
                                     updateChecker: updateChecker,
                                     downloadManager: downloadManager,
+                                    appState: appState,
                                     initialTab: .advanced
                                 )
                             } label: {
@@ -261,7 +262,8 @@ struct DownloadRowView: View {
                                 PreferencesWindowManager.shared.showPreferencesWindow(
                                     languageService: languageService,
                                     updateChecker: updateChecker,
-                                    downloadManager: downloadManager
+                                    downloadManager: downloadManager,
+                                    appState: appState
                                 )
                             } label: {
                                 Text(languageService.s("change_folder"))

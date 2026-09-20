@@ -7,7 +7,13 @@ final class PreferencesWindowManager: NSObject, NSWindowDelegate {
     
     private var windowController: NSWindowController?
     
-    func showPreferencesWindow(languageService: LanguageService, updateChecker: UpdateChecker, downloadManager: DownloadManager, initialTab: PreferencesView.PreferenceTab = .general) {
+    func showPreferencesWindow(
+        languageService: LanguageService,
+        updateChecker: UpdateChecker,
+        downloadManager: DownloadManager,
+        appState: AppState,
+        initialTab: PreferencesView.PreferenceTab = .general
+    ) {
         if let existingController = windowController, let existingWindow = existingController.window {
             if existingWindow.frame.height > 690 || existingWindow.frame.height < 646 {
                 var f = existingWindow.frame
@@ -24,6 +30,7 @@ final class PreferencesWindowManager: NSObject, NSWindowDelegate {
             .environmentObject(languageService)
             .environmentObject(updateChecker)
             .environmentObject(downloadManager)
+            .environmentObject(appState)
         
         let hostingController = NSHostingController(rootView: prefsView)
         
