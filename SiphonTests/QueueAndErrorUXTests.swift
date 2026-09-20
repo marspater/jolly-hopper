@@ -805,11 +805,64 @@ final class QueueAndErrorUXTests: XCTestCase {
             return "2025.01.01"
         }
 
-        let t1 = Task { await appState.updateYtdlp(using: manager.ytdlpService) }
-        let t2 = Task { await appState.updateYtdlp(using: manager.ytdlpService) }
+        let t1 = Task { await appState.updateYtdlp(
+                using: manager.ytdlpService,
+                activeExecutionCount: manager.activeExecutionCount
+            ) }
+        let t2 = Task { await appState.updateYtdlp(
+                using: manager.ytdlpService,
+                activeExecutionCount: manager.activeExecutionCount
+            ) }
 
         _ = await (t1.value, t2.value)
         XCTAssertFalse(appState.isUpdatingYtdlp, "isUpdatingYtdlp must be false once operations complete")
+    }
+
+    func testDependencyUpdateBlockedWhileExecutionIsActive() async {
+        let manager = DownloadManager()
+        let appState = AppState()
+        let updateWasInvoked = TestBox(false)
+        manager.ytdlpService.updateYtdlpHandler = {
+            updateWasInvoked.value = true
+            return "2025.01.01"
+        }
+
+        await appState.updateYtdlp(
+            using: manager.ytdlpService,
+            activeExecutionCount: 1
+        )
+
+        XCTAssertFalse(updateWasInvoked.value, "Dependency update must not start while executor-owned work is active")
+        XCTAssertEqual(appState.ytdlpUpdateMessage?.title, "yt-dlp Update Unavailable")
+        XCTAssertTrue(appState.ytdlpUpdateMessage?.message.contains("active downloads") == true)
+    }
+
+    func testDownloadQueueWaitsWhileDependencyUpdateIsActive() async {
+        let manager = DownloadManager()
+        manager.ytdlpService.ytdlpPath = URL(fileURLWithPath: "/usr/bin/true")
+        manager.ytdlpService.processRunner = MockYtdlpProcessRunner(mockCommand: { _ in
+            try await Task.sleep(nanoseconds: 5_000_000_000)
+            return "{}"
+        })
+
+        let download = Download(url: "https://example.com/update-gate", options: .default)
+        manager.ytdlpService.isUpdating = true
+        manager.downloads = [download]
+        manager.processQueue()
+
+        XCTAssertEqual(download.status, .queued)
+        XCTAssertEqual(manager.activeExecutionCount, 0)
+        XCTAssertEqual(manager.queue.activeSlotCount, 0)
+
+        manager.ytdlpService.isUpdating = false
+        for _ in 0..<20 {
+            if manager.activeExecutionCount == 1 { break }
+            await Task.yield()
+        }
+
+        XCTAssertEqual(manager.activeExecutionCount, 1)
+        XCTAssertEqual(manager.queue.activeSlotCount, 1)
+        manager.shutdown()
     }
 
     func testFormatSubtitleRetainsResolutionFromDiagnosticsAfterPruning() {

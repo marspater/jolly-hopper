@@ -1008,6 +1008,11 @@ struct PreferencesView: View {
                             .font(.geistMono(10, weight: .semibold))
                             .foregroundColor(.secondary)
                     }
+                } else if downloadManager.activeExecutionCount > 0 {
+                    Text("Finish active downloads before updating yt-dlp.")
+                        .font(.geist(11))
+                        .foregroundColor(.secondary)
+                        .lineLimit(2)
                 } else if let message = appState.ytdlpUpdateMessage?.message {
                     Text(message)
                         .font(.geist(11))
@@ -1335,7 +1340,10 @@ struct PreferencesView: View {
     
     private func updateYtdlp() {
         Task {
-            await appState.updateYtdlp(using: downloadManager.ytdlpService)
+            await appState.updateYtdlp(
+                using: downloadManager.ytdlpService,
+                activeExecutionCount: downloadManager.activeExecutionCount
+            )
         }
     }
 }
