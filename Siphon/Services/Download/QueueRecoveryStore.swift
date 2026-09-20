@@ -14,6 +14,7 @@ struct QueueRecoveryRecord: Codable, Identifiable, Sendable {
     let status: DownloadStatus
     let progress: Double
     let scratchDirectoryPath: String?
+    let browserCookieSource: String?
     let thumbnailURL: URL?
     let duration: String?
     let errorMessage: String?
@@ -26,6 +27,8 @@ struct QueueRecoveryRecord: Codable, Identifiable, Sendable {
         self.title = download.displayTitle
         self.createdAt = download.createdAt
 
+        self.browserCookieSource = AppState.normalizedBrowserCookieSource(download.options.browserCookieSource)
+
         var sanitizedOptions = download.options
         sanitizedOptions.rawCookies = nil
         sanitizedOptions.rawUserAgent = nil
@@ -35,7 +38,9 @@ struct QueueRecoveryRecord: Codable, Identifiable, Sendable {
 
         self.status = download.status
         self.progress = download.progress
-        self.scratchDirectoryPath = download.scratchDirectory?.path
+        self.scratchDirectoryPath = download.scratchDirectory.flatMap {
+            ScratchDirectoryPolicy.isOwned($0) ? $0.path : nil
+        }
         self.thumbnailURL = download.thumbnailURL
         self.duration = download.duration
         self.errorMessage = download.errorMessage.map {
@@ -46,11 +51,23 @@ struct QueueRecoveryRecord: Codable, Identifiable, Sendable {
 
     @MainActor
     func toDownload() -> Download {
-        let download = Download(url: self.url, options: self.options, title: self.title, id: self.id)
+        var restoredOptions = self.options
+        restoredOptions.browserCookieSource = AppState.normalizedBrowserCookieSource(self.browserCookieSource)
+        let download = Download(
+            url: self.url,
+            options: restoredOptions,
+            title: self.title,
+            id: self.id,
+            createdAt: self.createdAt
+        )
         download.status = self.status
         download.progress = self.progress
-        if let path = self.scratchDirectoryPath, FileManager.default.fileExists(atPath: path) {
-            download.scratchDirectory = URL(fileURLWithPath: path)
+        if let path = self.scratchDirectoryPath {
+            let scratchDirectory = URL(fileURLWithPath: path)
+            if ScratchDirectoryPolicy.isOwned(scratchDirectory),
+               FileManager.default.fileExists(atPath: scratchDirectory.path) {
+                download.scratchDirectory = scratchDirectory
+            }
         }
         download.thumbnailURL = self.thumbnailURL
         download.duration = self.duration

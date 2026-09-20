@@ -1153,9 +1153,15 @@ class YtdlpService: ObservableObject {
 
         if let exactUA = rawUserAgent?.trimmingCharacters(in: .whitespacesAndNewlines), !exactUA.isEmpty {
             args.append(contentsOf: ["--user-agent", exactUA])
-            args.append(contentsOf: ["--extractor-args", "generic:impersonate=\(recuImpersonationTarget(rawUserAgent: exactUA))"])
+            args.append(contentsOf: [
+                "--extractor-args",
+                "generic:impersonate=\(recuImpersonationTarget(rawUserAgent: exactUA, browserCookieSource: browserCookieSource))"
+            ])
         } else {
-            args.append(contentsOf: ["--extractor-args", "generic:impersonate"])
+            args.append(contentsOf: [
+                "--extractor-args",
+                "generic:impersonate=\(recuImpersonationTarget(rawUserAgent: nil, browserCookieSource: browserCookieSource))"
+            ])
         }
         args.append("--")
         args.append(url)
@@ -1241,10 +1247,16 @@ class YtdlpService: ObservableObject {
             args.append(contentsOf: ["--user-agent", exactUA])
             args.append(contentsOf: ["--add-header", "Accept-Language:en-US,en;q=0.9"])
             if !isYouTube {
-                args.append(contentsOf: ["--extractor-args", "generic:impersonate=\(recuImpersonationTarget(rawUserAgent: exactUA))"])
+                args.append(contentsOf: [
+                    "--extractor-args",
+                    "generic:impersonate=\(recuImpersonationTarget(rawUserAgent: exactUA, browserCookieSource: browserCookieSource))"
+                ])
             }
         } else if !isYouTube {
-            args.append(contentsOf: ["--extractor-args", "generic:impersonate"])
+            args.append(contentsOf: [
+                "--extractor-args",
+                "generic:impersonate=\(recuImpersonationTarget(rawUserAgent: nil, browserCookieSource: browserCookieSource))"
+            ])
         }
         args.append("--")
         args.append(url)
@@ -2278,13 +2290,16 @@ public struct DownloadResult: Sendable {
         return nil
     }
 
-    private func recuImpersonationTarget(rawUserAgent: String?) -> String {
+    private func recuImpersonationTarget(
+        rawUserAgent: String?,
+        browserCookieSource: String? = nil
+    ) -> String {
         let ua = rawUserAgent?.lowercased() ?? ""
         if ua.contains("firefox/") { return "firefox:macos" }
         if ua.contains("safari/") && !ua.contains("chrome/") && !ua.contains("chromium/") {
             return "safari:macos"
         }
-        switch configuredBrowserCookieSource() {
+        switch Self.validatedBrowserCookieSource(browserCookieSource) ?? configuredBrowserCookieSource() {
         case "firefox": return "firefox:macos"
         case "safari": return "safari:macos"
         default: return "chrome:macos"
@@ -2352,7 +2367,10 @@ public struct DownloadResult: Sendable {
         if let userAgent, !userAgent.isEmpty {
             args.append(contentsOf: ["--user-agent", userAgent])
         }
-        args.append(contentsOf: ["--extractor-args", "generic:impersonate=\(recuImpersonationTarget(rawUserAgent: userAgent))"])
+        args.append(contentsOf: [
+            "--extractor-args",
+            "generic:impersonate=\(recuImpersonationTarget(rawUserAgent: userAgent, browserCookieSource: browserCookieSource))"
+        ])
         args.append(contentsOf: ["--add-header", "Accept-Language:en-US,en;q=0.9"])
         args.append(contentsOf: ["--add-header", "Origin:https://recu.me"])
         if let referer, !referer.isEmpty {
@@ -5213,20 +5231,29 @@ public struct DownloadResult: Sendable {
         args.append(contentsOf: ["--socket-timeout", "15"])
         args.append("--no-mtime")
 
-        let isSafari: Bool = {
+        let browserSource: String? = {
             if let idx = args.firstIndex(of: "--cookies-from-browser"), idx + 1 < args.count {
-                return args[idx + 1] == "safari"
+                return Self.validatedBrowserCookieSource(args[idx + 1])
             }
-            if args.contains("--cookies") {
-                return configuredBrowserCookieSource() == "safari"
-            }
-            return configuredBrowserCookieSource() == "safari"
+            return Self.validatedBrowserCookieSource(options?.browserCookieSource)
+                ?? configuredBrowserCookieSource()
         }()
+        let isSafari = browserSource == "safari"
+        let isFirefox = browserSource == "firefox"
+
         if !isYouTube {
             if let exactUA = (rawUserAgent ?? options?.rawUserAgent)?.trimmingCharacters(in: .whitespacesAndNewlines), !exactUA.isEmpty {
                 args.append(contentsOf: ["--user-agent", exactUA])
                 args.append(contentsOf: ["--add-header", "Accept-Language:en-US,en;q=0.9"])
-                args.append(contentsOf: ["--extractor-args", "generic:impersonate=\(recuImpersonationTarget(rawUserAgent: exactUA))"])
+                args.append(contentsOf: [
+                    "--extractor-args",
+                    "generic:impersonate=\(recuImpersonationTarget(rawUserAgent: exactUA, browserCookieSource: browserSource))"
+                ])
+            } else if isFirefox {
+                // When recovery intentionally drops the raw browser UA, keep the
+                // request fingerprint coherent with the explicit Firefox cookie source.
+                args.append(contentsOf: ["--add-header", "Accept-Language:en-US,en;q=0.9"])
+                args.append(contentsOf: ["--extractor-args", "generic:impersonate=firefox:macos"])
             } else if isSafari {
                 let safariUA = Self.safariUserAgent
                 args.append(contentsOf: ["--user-agent", safariUA])
@@ -5282,7 +5309,7 @@ public struct DownloadResult: Sendable {
         }
 
         if isBoyfriendTV {
-            if !isSafari {
+            if !isSafari && !isFirefox {
                 if let uaIdx = args.firstIndex(of: "--user-agent") {
                     args[uaIdx + 1] = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
                 } else {

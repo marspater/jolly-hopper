@@ -41,6 +41,7 @@ final class DownloadHistoryStoreTests: XCTestCase {
         options.additionalArguments = "--add-header Authorization:Bearer super_secret --proxy https://user:pass@example.com"
         options.rawCookies = "session=secret"
         options.rawUserAgent = "FixtureBrowser/1.0"
+        options.browserCookieSource = "firefox"
 
         let download = Download(
             url: "https://example.com/video",
@@ -54,6 +55,8 @@ final class DownloadHistoryStoreTests: XCTestCase {
 
         XCTAssertNil(historic.options.rawCookies)
         XCTAssertNil(historic.options.rawUserAgent)
+        XCTAssertNil(historic.options.browserCookieSource)
+        XCTAssertNil(historic.browserCookieSource)
         XCTAssertNil(historic.options.additionalArguments)
         XCTAssertFalse(historic.log.contains("secret_token"))
         XCTAssertFalse(historic.log.contains("expires=999"))
@@ -136,5 +139,49 @@ final class DownloadHistoryStoreTests: XCTestCase {
         XCTAssertNotEqual(restored.first?.title, "___FETCHING___")
         XCTAssertEqual(restored.first?.title, "Amazing Clip")
     }
+    func testPausedHistoryPreservesOwnedScratchDirectoryAndCreationDate() throws {
+        let store = DownloadHistoryStore(userDefaults: testDefaults, historyKey: "test_history")
+        let scratch = ScratchDirectoryPolicy.makeURL()
+        try FileManager.default.createDirectory(at: scratch, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: scratch) }
+
+        let createdAt = Date(timeIntervalSince1970: 1_700_000_123)
+        var options = DownloadOptions.default
+        options.browserCookieSource = "firefox"
+        let download = Download(
+            url: "https://example.com/paused",
+            options: options,
+            title: "Paused",
+            createdAt: createdAt
+        )
+        download.status = .paused
+        download.progress = 0.51
+        download.scratchDirectory = scratch
+
+        var history: [HistoricDownload] = []
+        store.addToHistory(download, history: &history)
+        let loaded = store.loadHistory()
+        let restored = try XCTUnwrap(
+            DownloadHistoryStore.restoreDownloads(from: loaded, existingDownloads: []).first
+        )
+
+        XCTAssertEqual(restored.status, .paused)
+        XCTAssertEqual(restored.createdAt, createdAt)
+        XCTAssertEqual(restored.progress, 0.51)
+        XCTAssertEqual(restored.options.browserCookieSource, "firefox")
+        XCTAssertEqual(restored.scratchDirectory?.standardizedFileURL.path, scratch.standardizedFileURL.path)
+    }
+
+    func testHistoryDoesNotPersistUnownedScratchDirectory() {
+        let download = Download(url: "https://example.com/paused", options: .default)
+        let unowned = FileManager.default.temporaryDirectory
+            .appendingPathComponent("siphon_scratch_not-a-uuid-\(UUID().uuidString)", isDirectory: true)
+        download.status = .paused
+        download.scratchDirectory = unowned
+
+        let historic = HistoricDownload(download: download)
+        XCTAssertNil(historic.scratchDirectoryPath)
+    }
+
 }
 
