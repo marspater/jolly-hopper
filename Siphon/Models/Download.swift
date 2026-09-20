@@ -1998,9 +1998,11 @@ struct HistoricDownload: Codable, Identifiable {
             LoggerService.sanitizeDiagnosticText(download.log)
         )
         self.progress = download.progress
-        self.scratchDirectoryPath = download.scratchDirectory.flatMap {
-            ScratchDirectoryPolicy.isOwned($0) ? $0.path : nil
-        }
+        self.scratchDirectoryPath = download.status == .paused
+            ? download.scratchDirectory.flatMap {
+                ScratchDirectoryPolicy.isOwned($0) ? $0.path : nil
+            }
+            : nil
         self.browserCookieSource = download.status == .paused
             ? AppState.normalizedBrowserCookieSource(download.options.browserCookieSource)
             : nil
