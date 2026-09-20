@@ -1098,10 +1098,9 @@ struct AddDownloadView: View {
         sponsorBlock = preset.sponsorBlock ?? false
         splitChapters = preset.splitChapters ?? false
 
-        if !presetSubtitleLanguage.isEmpty && !availableSubtitles.isEmpty {
-            if availableSubtitles.contains(where: { $0.id == presetSubtitleLanguage }) {
-                selectedSubtitleLangs = [presetSubtitleLanguage]
-            }
+        if !presetSubtitleLanguage.isEmpty && !availableSubtitles.isEmpty,
+           availableSubtitles.contains(where: { $0.id == presetSubtitleLanguage }) {
+            selectedSubtitleLangs = [presetSubtitleLanguage]
         }
     }
 
@@ -1526,9 +1525,7 @@ struct AddDownloadView: View {
                         .buttonStyle(.borderedProminent)
                         .tint(SiphonTheme.accent)
                         .controlSize(.small)
-                    }
 
-                    if isFDAError {
                         Button {
                             PreferencesWindowManager.shared.showPreferencesWindow(
                                 languageService: languageService,
@@ -1687,26 +1684,18 @@ struct AddDownloadView: View {
                 if let formats = info.formats {
                     for format in formats {
                         if let vcodec = format.vcodec, vcodec != "none" {
-                            if vcodec.hasPrefix("avc1") {
-                                if !codecs.contains("h264") {
-                                    codecs.insert("h264")
-                                    codecOptions.append(CodecOption(id: "h264", name: "H.264"))
-                                }
-                            } else if vcodec.hasPrefix("vp9") {
-                                if !codecs.contains("vp9") {
-                                    codecs.insert("vp9")
-                                    codecOptions.append(CodecOption(id: "vp9", name: "VP9"))
-                                }
-                            } else if vcodec.hasPrefix("av01") {
-                                if !codecs.contains("av1") {
-                                    codecs.insert("av1")
-                                    codecOptions.append(CodecOption(id: "av1", name: "AV1"))
-                                }
-                            } else if vcodec.hasPrefix("hev1") || vcodec.hasPrefix("hvc1") {
-                                if !codecs.contains("h265") {
-                                    codecs.insert("h265")
-                                    codecOptions.append(CodecOption(id: "h265", name: "H.265 (HEVC)"))
-                                }
+                            if vcodec.hasPrefix("avc1"), !codecs.contains("h264") {
+                                codecs.insert("h264")
+                                codecOptions.append(CodecOption(id: "h264", name: "H.264"))
+                            } else if vcodec.hasPrefix("vp9"), !codecs.contains("vp9") {
+                                codecs.insert("vp9")
+                                codecOptions.append(CodecOption(id: "vp9", name: "VP9"))
+                            } else if vcodec.hasPrefix("av01"), !codecs.contains("av1") {
+                                codecs.insert("av1")
+                                codecOptions.append(CodecOption(id: "av1", name: "AV1"))
+                            } else if (vcodec.hasPrefix("hev1") || vcodec.hasPrefix("hvc1")), !codecs.contains("h265") {
+                                codecs.insert("h265")
+                                codecOptions.append(CodecOption(id: "h265", name: "H.265 (HEVC)"))
                             }
                         }
                     }

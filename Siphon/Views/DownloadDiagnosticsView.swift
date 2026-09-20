@@ -126,12 +126,26 @@ struct DownloadDiagnosticsView: View {
     }
     
     // MARK: - Tab 1: Runtime & Process
+
+    private var diagnosticExitStatus: String {
+        if let status = download.diagnostics.exitStatus {
+            return status
+        }
+        switch download.status {
+        case .completed:
+            return "Completed (0)"
+        case .failed:
+            return "Failed"
+        default:
+            return "Running"
+        }
+    }
     
     private var runtimeTab: some View {
         VStack(spacing: 12) {
             diagnosticSection(title: "Process Execution") {
                 diagnosticRow(label: "Process ID (PID)", value: download.diagnostics.pid.map { "\($0)" } ?? (download.status == .downloading || download.status == .processing ? "Active Subprocess" : "Terminated"))
-                diagnosticRow(label: "Exit Status", value: download.diagnostics.exitStatus ?? (download.status == .completed ? "Completed (0)" : download.status == .failed ? "Failed" : "Running"))
+                diagnosticRow(label: "Exit Status", value: diagnosticExitStatus)
                 diagnosticRow(label: "yt-dlp Engine", value: download.diagnostics.ytdlpVersion ?? "yt-dlp (System/AppSupport)")
                 diagnosticRow(label: "FFmpeg Pipeline", value: download.diagnostics.ffmpegVersion ?? "FFmpeg (Static build)")
             }

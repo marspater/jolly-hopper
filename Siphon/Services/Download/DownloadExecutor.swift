@@ -674,22 +674,20 @@ final class DownloadExecutor: ObservableObject {
         fileName: String,
         rawBaseName: String,
         sanitizedBaseName: String,
-        videoId: String? = nil
+        videoId _: String? = nil
     ) -> Bool {
         guard isTemporaryFileName(fileName) else { return false }
 
         let trimmedRaw = rawBaseName.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !trimmedRaw.isEmpty {
-            if fileName.hasPrefix("\(trimmedRaw).") || fileName == "\(trimmedRaw).part" || fileName == "\(trimmedRaw).ytdl" {
-                return true
-            }
+        if !trimmedRaw.isEmpty,
+           fileName.hasPrefix("\(trimmedRaw).") || fileName == "\(trimmedRaw).part" || fileName == "\(trimmedRaw).ytdl" {
+            return true
         }
 
         let trimmedSanitized = sanitizedBaseName.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !trimmedSanitized.isEmpty {
-            if fileName.hasPrefix("\(trimmedSanitized).") || fileName == "\(trimmedSanitized).part" || fileName == "\(trimmedSanitized).ytdl" {
-                return true
-            }
+        if !trimmedSanitized.isEmpty,
+           fileName.hasPrefix("\(trimmedSanitized).") || fileName == "\(trimmedSanitized).part" || fileName == "\(trimmedSanitized).ytdl" {
+            return true
         }
 
         return false

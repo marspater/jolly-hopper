@@ -212,12 +212,23 @@ class DownloadManager: ObservableObject {
             (FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Downloads")) :
             URL(fileURLWithPath: defaultPath)
 
+        let resolution: VideoResolution
+        if type != "video" {
+            resolution = .worst
+        } else if quality == "best" {
+            resolution = .best
+        } else if quality == "1080" {
+            resolution = .r1080p
+        } else {
+            resolution = .r720p
+        }
+
         let options = DownloadOptions(
             saveFolder: folder,
             fileType: type == "video" ? .mp4 : .m4a,
             videoFormat: nil,
             audioFormat: nil,
-            videoResolution: type == "video" ? (quality == "best" ? .best : (quality == "1080" ? .r1080p : .r720p)) : .worst,
+            videoResolution: resolution,
             audioQuality: .best,
             downloadSubtitles: false,
             subtitleLanguages: ["en"],

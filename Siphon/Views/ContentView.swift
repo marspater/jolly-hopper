@@ -5,7 +5,7 @@ import AppKit
 
 // Makes the main window transparent so .ultraThinMaterial shows desktop blur
 struct MainWindowConfigurator: NSViewRepresentable {
-    func makeNSView(context: Context) -> NSView {
+    func makeNSView(context _: Context) -> NSView {
         let view = NSView()
         DispatchQueue.main.async {
             guard let window = view.window else { return }
@@ -20,7 +20,7 @@ struct MainWindowConfigurator: NSViewRepresentable {
         }
         return view
     }
-    func updateNSView(_ nsView: NSView, context: Context) {
+    func updateNSView(_ _: NSView, context _: Context) {
         // No-op: Window configuration does not require dynamic view updates
     }
 }
@@ -627,12 +627,12 @@ struct StatusSegmentButton: View {
                     Text("\(count)")
                         .font(.siphonStandardSemibold)
                         .monospacedDigit()
-                        .foregroundColor(count > 0 ? .primary : (isHovered ? .primary : .secondary))
+                        .foregroundColor((count > 0 || isHovered) ? .primary : .secondary)
                         .frame(minWidth: 20, alignment: .trailing)
 
                     Text(title)
                         .font(.siphonStandardSemibold)
-                        .foregroundColor(count > 0 || isActive ? .primary : (isHovered ? .primary : .secondary))
+                        .foregroundColor((count > 0 || isActive || isHovered) ? .primary : .secondary)
                         .lineLimit(1)
                         .truncationMode(.tail)
                 }

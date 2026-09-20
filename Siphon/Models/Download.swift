@@ -550,7 +550,7 @@ struct DownloadOptions: Codable {
         self.additionalArguments = try container.decodeIfPresent(String.self, forKey: .additionalArguments)
     }
     
-    static var `default`: DownloadOptions {
+    static var defaultOptions: DownloadOptions {
         let saveFolderURL: URL
         if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil || NSClassFromString("XCTestCase") != nil {
             let testDir = FileManager.default.temporaryDirectory.appendingPathComponent("SiphonTestDownloads", isDirectory: true)
@@ -578,6 +578,11 @@ struct DownloadOptions: Codable {
             browserCookieSource: nil,
             selectedFormatId: nil
         )
+    }
+
+    @inlinable
+    static var `default`: DownloadOptions {
+        defaultOptions
     }
 }
 

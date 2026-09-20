@@ -135,6 +135,16 @@ struct DebugLogView: View {
                 .stroke(Color.primary.opacity(0.08), lineWidth: 1)
                 .ignoresSafeArea()
         )
-        .preferredColorScheme(theme == "light" ? .light : (theme == "dark" ? .dark : nil))
+        .preferredColorScheme(activeColorScheme)
+    }
+
+    private var activeColorScheme: ColorScheme? {
+        if theme == "light" {
+            return .light
+        } else if theme == "dark" {
+            return .dark
+        } else {
+            return nil
+        }
     }
 }

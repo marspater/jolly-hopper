@@ -28,7 +28,7 @@ struct ReadOnlyLogView: NSViewRepresentable {
         Coordinator()
     }
 
-    func makeNSView(context: Context) -> NSScrollView {
+    func makeNSView(context _: Context) -> NSScrollView {
         let scrollView = NSScrollView()
         scrollView.hasVerticalScroller = true
         scrollView.hasHorizontalScroller = true

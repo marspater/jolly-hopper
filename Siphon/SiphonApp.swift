@@ -3,7 +3,7 @@ import CryptoKit
 @preconcurrency import UserNotifications
 
 final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
-    func applicationDidFinishLaunching(_ notification: Notification) {
+    func applicationDidFinishLaunching(_ _: Notification) {
         UNUserNotificationCenter.current().delegate = NotificationService.shared
         NotificationService.shared.setup()
     }

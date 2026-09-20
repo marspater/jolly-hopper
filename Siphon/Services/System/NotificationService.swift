@@ -47,16 +47,16 @@ final class NotificationService: NSObject, @unchecked Sendable, UNUserNotificati
 
     // Foreground notification presentation handler for macOS
     @objc func userNotificationCenter(
-        _ center: UNUserNotificationCenter,
-        willPresent notification: UNNotification,
+        _ _: UNUserNotificationCenter,
+        willPresent _: UNNotification,
         withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
     ) {
         completionHandler([.banner, .sound, .list, .badge])
     }
 
     @objc func userNotificationCenter(
-        _ center: UNUserNotificationCenter,
-        didReceive response: UNNotificationResponse,
+        _ _: UNUserNotificationCenter,
+        didReceive _: UNNotificationResponse,
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
         DispatchQueue.main.async {
@@ -212,7 +212,7 @@ final class NotificationService: NSObject, @unchecked Sendable, UNUserNotificati
         self.sendNotification(content: content, logName: "Completed: \(cleanFilename)")
     }
 
-    func sendEncodingCompleted(filename: String, codec: String, languageService: LanguageService? = nil) {
+    func sendEncodingCompleted(filename: String, codec: String, languageService _: LanguageService? = nil) {
         let cleanFilename = filename.decodingHTMLEntities()
         let content = UNMutableNotificationContent()
         content.title = "⚡ Video Conversion Complete"
