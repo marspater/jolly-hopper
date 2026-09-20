@@ -114,6 +114,27 @@ final class DownloadQueueTests: XCTestCase {
         XCTAssertFalse(queue.isPathReserved(path1))
     }
 
+    func testOutputReservationsAreCaseInsensitiveAndUnicodeCanonicalized() {
+        let queue = DownloadQueue(userDefaults: testDefaults)
+        let upper = "/tmp/Siphon/Video Name.mp4"
+        let lower = "/tmp/siphon/video name.mp4"
+
+        queue.reserveOutputPath(upper)
+
+        XCTAssertTrue(
+            queue.isPathReserved(lower),
+            "A case-only path variant must collide on normal macOS volumes"
+        )
+        XCTAssertEqual(
+            DownloadQueue.reservationKey(for: "/tmp/Siphon/Café.mp4"),
+            DownloadQueue.reservationKey(for: "/tmp/siphon/Cafe\u{301}.mp4"),
+            "Canonical Unicode variants must reserve the same output path"
+        )
+
+        queue.unreserveOutputPath(lower)
+        XCTAssertFalse(queue.isPathReserved(upper))
+    }
+
     func testForceOverwritePreservesExactFilenameWithoutIncrementing() throws {
         let queue = DownloadQueue(userDefaults: testDefaults)
         let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
