@@ -2003,9 +2003,17 @@ struct HistoricDownload: Codable, Identifiable {
                 ScratchDirectoryPolicy.isOwned($0) ? $0.path : nil
             }
             : nil
-        self.browserCookieSource = download.status == .paused
-            ? AppState.normalizedBrowserCookieSource(download.options.browserCookieSource)
-            : nil
+        switch download.status {
+        case .paused, .failed, .stopped, .fileExists:
+            // Browser family/source is non-secret retry context. Preserve it for
+            // states that can be resumed or retried after a clean restart while
+            // raw cookies and raw User-Agent remain ephemeral.
+            self.browserCookieSource = AppState.normalizedBrowserCookieSource(
+                download.options.browserCookieSource
+            )
+        default:
+            self.browserCookieSource = nil
+        }
         var sanitizedOptions = download.options
         sanitizedOptions.rawCookies = nil
         sanitizedOptions.rawUserAgent = nil
