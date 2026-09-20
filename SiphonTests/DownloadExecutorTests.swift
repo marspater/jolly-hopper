@@ -114,6 +114,34 @@ final class DownloadExecutorTests: XCTestCase {
         XCTAssertEqual(box.lines, ["line 1", "line 2"])
     }
 
+    func testOwnedScratchSurvivesPauseAndIsCleanedOnStopOrCompletion() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let unrelated = root.appendingPathComponent("unrelated.part")
+        try Data("keep".utf8).write(to: unrelated)
+        for terminalStatus in [DownloadStatus.stopped, .completed, .failed] {
+            let download = Download(url: "https://example.com/video", options: .default)
+            let scratch = root.appendingPathComponent(download.id.uuidString)
+            try FileManager.default.createDirectory(at: scratch, withIntermediateDirectories: true)
+            let partial = scratch.appendingPathComponent("video.mp4.part")
+            try Data("partial".utf8).write(to: partial)
+            download.scratchDirectory = scratch
+            for status in [DownloadStatus.paused, .queued] {
+                download.status = status
+                DownloadExecutor.cleanupTemporaryFiles(for: download)
+                XCTAssertTrue(FileManager.default.fileExists(atPath: partial.path))
+                XCTAssertEqual(download.scratchDirectory, scratch)
+            }
+            download.status = terminalStatus
+            DownloadExecutor.cleanupTemporaryFiles(for: download)
+            XCTAssertFalse(FileManager.default.fileExists(atPath: scratch.path))
+            XCTAssertNil(download.scratchDirectory)
+            DownloadExecutor.cleanupTemporaryFiles(for: download)
+            XCTAssertTrue(FileManager.default.fileExists(atPath: unrelated.path))
+        }
+    }
+
     func testExecutorDelegateInvocations() {
         class MockDelegate: DownloadExecutorDelegate {
             var updatedStatuses: [(Download, DownloadStatus)] = []
