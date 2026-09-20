@@ -377,11 +377,11 @@ class DownloadManager: ObservableObject {
     func retryDownload(_ download: Download) {
         guard download.status == .failed || download.status == .stopped || download.status == .fileExists else { return }
         download.options.forceOverwrite = false
-        updateStatus(for: download, to: .queued)
         download.progress = 0
-        objectWillChange.send()
         download.errorMessage = nil
         download.log = ""
+        updateStatus(for: download, to: .queued)
+        objectWillChange.send()
 
         processQueue()
     }
