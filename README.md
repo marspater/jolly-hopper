@@ -78,6 +78,10 @@ Integrate Siphon directly into your favorite web browser for 1-click video downl
 - **Logging & Diagnostics**: Centralized structured `LoggerService` & os_log tracing
 - **Target OS**: macOS 15.0 (Sequoia) through macOS 27+
 
+## 🧭 Architecture
+
+Runtime ownership, cancellation guarantees, dependency-update exclusion, and browser-extension ingress are documented in [ARCHITECTURE.md](ARCHITECTURE.md).
+
 ## 🎨 Design language
 
 The UI system, motion rules, accessibility expectations, and Liquid Glass policy

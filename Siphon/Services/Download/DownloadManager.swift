@@ -14,6 +14,8 @@ class DownloadManager: ObservableObject {
     let historyStore = DownloadHistoryStore()
     let queue = DownloadQueue()
     private var executor: DownloadExecutor!
+    private var cancellables = Set<AnyCancellable>()
+    private var isShuttingDown = false
 
 
     private var maxConcurrentDownloads: Int {
@@ -35,6 +37,17 @@ class DownloadManager: ObservableObject {
     init() {
         self.executor = DownloadExecutor(ytdlpService: ytdlpService)
         self.executor.delegate = self
+
+        ytdlpService.$isUpdating
+            .removeDuplicates()
+            .dropFirst()
+            .sink { [weak self] isUpdating in
+                guard !isUpdating else { return }
+                Task { @MainActor [weak self] in
+                    self?.processQueue()
+                }
+            }
+            .store(in: &cancellables)
 
         NotificationCenter.default.addObserver(
             forName: UserDefaults.didChangeNotification,
@@ -223,6 +236,8 @@ class DownloadManager: ObservableObject {
 
     /// Event-driven queue dispatcher: schedules queued downloads whenever a concurrent slot becomes available.
     func processQueue() {
+        guard !isShuttingDown else { return }
+        guard !ytdlpService.isUpdating else { return }
         guard !isProcessingQueue else { return }
         isProcessingQueue = true
         defer { isProcessingQueue = false }
@@ -357,7 +372,11 @@ class DownloadManager: ObservableObject {
     }
 
     func shutdown() {
+        isShuttingDown = true
         executor.shutdown()
+        // Shutdown is terminal for this manager. Queue admission is disabled
+        // before reservations are cleared, so cancelled work cannot be replaced
+        // while executor-owned teardown is still unwinding.
         queue.clearReservedSlots()
         queue.clearReservedOutputPaths()
     }
