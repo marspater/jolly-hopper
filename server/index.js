@@ -52,7 +52,7 @@ async function getLatestRelease() {
     }
 
     const payload = await res.json();
-    const dmgAsset = (payload.assets || []).find((a) => a.name && a.name.endsWith('.dmg'));
+    const dmgAsset = (payload.assets || []).find((a) => a.name?.endsWith('.dmg'));
     const downloadUrl = dmgAsset ? dmgAsset.browser_download_url : (payload.html_url || 'https://github.com/marspater/jolly-hopper/releases/latest');
 
     const cleanData = {
@@ -89,6 +89,68 @@ async function getLatestRelease() {
   }
 }
 
+function sendResponse(res, statusCode, headers, body) {
+  res.writeHead(statusCode, headers);
+  res.end(body);
+}
+
+function sendJson(res, statusCode, data) {
+  const payload = JSON.stringify(data);
+  sendResponse(res, statusCode, {
+    'Content-Type': 'application/json',
+    'Content-Length': Buffer.byteLength(payload)
+  }, payload);
+}
+
+function handleHealthCheck(req, res, pathname) {
+  if (req.method !== 'GET' || (pathname !== '/' && pathname !== '/health' && pathname !== '/healthz')) {
+    return false;
+  }
+  sendJson(res, 200, {
+    status: 'ok',
+    service: 'siphon-companion',
+    timestamp: new Date().toISOString()
+  });
+  return true;
+}
+
+function handleMockFixtures(req, res, pathname) {
+  if (req.method !== 'GET') {
+    return false;
+  }
+  if (pathname === '/mock/subtitles.vtt') {
+    sendResponse(res, 200, {
+      'Content-Type': 'text/vtt; charset=utf-8',
+      'Content-Length': Buffer.byteLength(SAMPLE_VTT)
+    }, SAMPLE_VTT);
+    return true;
+  }
+  if (pathname === '/mock/playlist.m3u8') {
+    sendResponse(res, 200, {
+      'Content-Type': 'application/vnd.apple.mpegurl',
+      'Content-Length': Buffer.byteLength(SAMPLE_M3U8)
+    }, SAMPLE_M3U8);
+    return true;
+  }
+  if (pathname === '/mock/video.mp4') {
+    sendResponse(res, 200, {
+      'Content-Type': 'video/mp4',
+      'Content-Length': SAMPLE_MP4.length
+    }, SAMPLE_MP4);
+    return true;
+  }
+  return false;
+}
+
+async function handleReleaseApi(req, res, pathname) {
+  if (req.method !== 'GET' || pathname !== '/api/latest') {
+    return false;
+  }
+  const releaseInfo = await getLatestRelease();
+  sendJson(res, 200, releaseInfo);
+  return true;
+}
+
 function createServer() {
   return http.createServer(async (req, res) => {
     try {
@@ -96,87 +158,20 @@ function createServer() {
       try {
         url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
       } catch {
-        const payload = JSON.stringify({ error: 'Bad Request' });
-        res.writeHead(400, {
-          'Content-Type': 'application/json',
-          'Content-Length': Buffer.byteLength(payload)
-        });
-        res.end(payload);
+        sendJson(res, 400, { error: 'Bad Request' });
         return;
       }
 
       const pathname = url.pathname;
+      if (handleHealthCheck(req, res, pathname)) return;
+      if (handleMockFixtures(req, res, pathname)) return;
+      if (await handleReleaseApi(req, res, pathname)) return;
 
-    // Health checks
-    if (req.method === 'GET' && (pathname === '/' || pathname === '/health' || pathname === '/healthz')) {
-      const payload = JSON.stringify({
-        status: 'ok',
-        service: 'siphon-companion',
-        timestamp: new Date().toISOString()
-      });
-      res.writeHead(200, {
-        'Content-Type': 'application/json',
-        'Content-Length': Buffer.byteLength(payload)
-      });
-      res.end(payload);
-      return;
-    }
-
-    // Mock fixtures for video, subtitles, and HLS streaming
-    if (req.method === 'GET' && pathname === '/mock/subtitles.vtt') {
-      res.writeHead(200, {
-        'Content-Type': 'text/vtt; charset=utf-8',
-        'Content-Length': Buffer.byteLength(SAMPLE_VTT)
-      });
-      res.end(SAMPLE_VTT);
-      return;
-    }
-
-    if (req.method === 'GET' && pathname === '/mock/playlist.m3u8') {
-      res.writeHead(200, {
-        'Content-Type': 'application/vnd.apple.mpegurl',
-        'Content-Length': Buffer.byteLength(SAMPLE_M3U8)
-      });
-      res.end(SAMPLE_M3U8);
-      return;
-    }
-
-    if (req.method === 'GET' && pathname === '/mock/video.mp4') {
-      res.writeHead(200, {
-        'Content-Type': 'video/mp4',
-        'Content-Length': SAMPLE_MP4.length
-      });
-      res.end(SAMPLE_MP4);
-      return;
-    }
-
-    // Release cache API
-    if (req.method === 'GET' && pathname === '/api/latest') {
-      const releaseInfo = await getLatestRelease();
-      const payload = JSON.stringify(releaseInfo);
-      res.writeHead(200, {
-        'Content-Type': 'application/json',
-        'Content-Length': Buffer.byteLength(payload)
-      });
-      res.end(payload);
-      return;
-    }
-
-      const notFoundPayload = JSON.stringify({ error: 'Not Found' });
-      res.writeHead(404, {
-        'Content-Type': 'application/json',
-        'Content-Length': Buffer.byteLength(notFoundPayload)
-      });
-      res.end(notFoundPayload);
+      sendJson(res, 404, { error: 'Not Found' });
     } catch (error) {
       console.error('Unhandled companion request error:', error instanceof Error ? error.message : String(error));
       if (!res.headersSent) {
-        const payload = JSON.stringify({ error: 'Internal Server Error' });
-        res.writeHead(500, {
-          'Content-Type': 'application/json',
-          'Content-Length': Buffer.byteLength(payload)
-        });
-        res.end(payload);
+        sendJson(res, 500, { error: 'Internal Server Error' });
       } else if (!res.writableEnded) {
         res.destroy();
       }

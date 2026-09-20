@@ -88,7 +88,9 @@ struct ContentView: View {
                     initialTab: .about
                 )
             }
-            Button(languageService.s("later"), role: .cancel) { }
+            Button(languageService.s("later"), role: .cancel) {
+                // User chose to dismiss update alert (swift:S1186)
+            }
         } message: {
             Text(String(format: languageService.s("update_available_message"), updateChecker.latestVersion ?? ""))
         }

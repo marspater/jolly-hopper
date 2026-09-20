@@ -10,7 +10,9 @@ import Foundation
 public actor CookieManager {
     public static let shared = CookieManager()
 
-    public init() {}
+    public init() {
+        // Intentionally empty initializer for actor instantiation (swift:S1186)
+    }
 
     private nonisolated static func log(_ message: String, level: LoggerService.LogLevel) {
         Task { @MainActor in

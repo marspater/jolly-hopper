@@ -349,7 +349,9 @@ public final class TransientFeedbackState: ObservableObject {
     @Published public private(set) var current: Item?
     private var dismissTask: Task<Void, Never>?
 
-    public init() {}
+    public init() {
+        // Intentionally empty initializer for ObservableObject instantiation (swift:S1186)
+    }
 
     public func show(_ message: String, isSuccess: Bool, icon: String? = nil, duration: TimeInterval = 3.5) {
         dismissTask?.cancel()
@@ -747,7 +749,9 @@ public enum SiphonTheme {
 // MARK: - Adaptive Window Surface
 
 public struct SiphonWindowBackgroundModifier: ViewModifier {
-    public init() {}
+    public init() {
+        // Intentionally empty initializer for ViewModifier struct instantiation (swift:S1186)
+    }
 
     public func body(content: Content) -> some View {
         content.background(.ultraThinMaterial)

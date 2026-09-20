@@ -2,7 +2,7 @@ import SwiftUI
 import AppKit
 
 struct PreferencesWindowConfigurator: NSViewRepresentable {
-    func makeNSView(context: Context) -> NSView {
+    func makeNSView(context _: Context) -> NSView {
         let view = NSView()
         DispatchQueue.main.async {
             guard let window = view.window else { return }
@@ -17,7 +17,7 @@ struct PreferencesWindowConfigurator: NSViewRepresentable {
         }
         return view
     }
-    func updateNSView(_ nsView: NSView, context: Context) {
+    func updateNSView(_: NSView, context _: Context) {
         // No-op: Window configuration does not require dynamic view updates
     }
 }
@@ -1038,24 +1038,24 @@ struct PreferencesView: View {
                 
                 if browserForCookies == "safari" {
                     safariWarningView
-                } else if browserForCookies == "helium" {
-                    heliumHintView
+                } else if browserForCookies == "helium" || browserForCookies == "chromium-based" {
+                    chromiumHintView
                 }
             }
         }
     }
 
-    private var heliumHintView: some View {
+    private var chromiumHintView: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 8) {
                 Image(systemName: "puzzlepiece.extension.fill")
                     .foregroundColor(SiphonTheme.accent)
                     .font(.geist(13))
-                Text(languageService.s("helium_extension_supported"))
+                Text(languageService.s("chromium_extension_supported"))
                     .font(.geist(11, weight: .semibold))
                     .foregroundColor(SiphonTheme.accent)
             }
-            Text(languageService.s("helium_hint"))
+            Text(languageService.s("chromium_hint"))
                 .font(.geist(11))
                 .foregroundColor(.secondary)
         }

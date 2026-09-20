@@ -2145,6 +2145,7 @@ public struct DownloadResult: Sendable {
         guard let raw else { return nil }
         let browser = raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         if browser == "none" || browser.isEmpty { return nil }
+        if browser == "helium" { return "chromium-based" }
         let allowed = Set(SupportedBrowser.allCases.map(\.rawValue))
         return allowed.contains(browser) ? browser : nil
     }
@@ -2632,7 +2633,7 @@ public struct DownloadResult: Sendable {
         // when no usable browser was selected.
         if result.isEmpty {
             let installedSet = Set(installed.map { $0.lowercased() })
-            for browser in ["chrome", "brave", "edge", "vivaldi", "chromium", "firefox", "opera", "safari", "helium"]
+            for browser in ["chrome", "brave", "edge", "vivaldi", "chromium", "firefox", "opera", "safari", "helium", "chromium-based"]
                 where installedSet.contains(browser) {
                 appendBrowser(browser)
             }
@@ -2837,6 +2838,21 @@ public struct DownloadResult: Sendable {
         return html + "\n<script type=\"application/json\" data-siphon-runtime-media>\(json)</script>"
     }
 
+    private final class BoyfriendTVNavigationDelegate: NSObject, WKNavigationDelegate {
+        func webView(
+            _ webView: WKWebView,
+            decidePolicyFor navigationAction: WKNavigationAction,
+            decisionHandler: @escaping (WKNavigationActionPolicy) -> Void
+        ) {
+            if let targetHost = navigationAction.request.url?.host?.lowercased(),
+               targetHost == "boyfriendtv.com" || targetHost.hasSuffix(".boyfriendtv.com") {
+                decisionHandler(.allow)
+                return
+            }
+            decisionHandler(.cancel)
+        }
+    }
+
     /// Executes BoyfriendTV's JavaScript challenge in a real browser engine.
     /// The website data store is non-persistent but shared across main/embed loads so
     /// short-lived Cloudflare clearance cookies can be reused during one app session.
@@ -2852,10 +2868,16 @@ public struct DownloadResult: Sendable {
             guard let rendered = try await loader(url) else { return nil }
             let runtimeStream = try await boyfriendTVRenderedStreamLoader?(url)
             let resolved = boyfriendTVHTML(rendered, appendingRuntimeStream: runtimeStream)
-            let result = extractStreamURLFromHTML(resolved) != nil
-                ? "stream-found"
-                : isBoyfriendTVChallengeHTML(resolved) ? "challenge-page"
-                : hasBoyfriendTVMediaData(resolved) ? "player-found" : "page-ready"
+            let result: String
+            if extractStreamURLFromHTML(resolved) != nil {
+                result = "stream-found"
+            } else if isBoyfriendTVChallengeHTML(resolved) {
+                result = "challenge-page"
+            } else if hasBoyfriendTVMediaData(resolved) {
+                result = "player-found"
+            } else {
+                result = "page-ready"
+            }
             LoggerService.shared.log("[BoyfriendTV] stage=\(stage) result=\(result)", level: .debug)
             return resolved
         }
@@ -2871,6 +2893,8 @@ public struct DownloadResult: Sendable {
         await seedBoyfriendTVWebKitCookies(rawCookies, for: url)
 
         let webView = WKWebView(frame: .zero, configuration: configuration)
+        let navigationDelegate = BoyfriendTVNavigationDelegate()
+        webView.navigationDelegate = navigationDelegate
         // Keep WKWebView's native user-agent. Pretending to be Safari while running
         // inside WKWebView creates a contradictory JS/browser fingerprint and can
         // cause managed Cloudflare challenges to loop forever.
@@ -2882,7 +2906,10 @@ public struct DownloadResult: Sendable {
         request.setValue("text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8", forHTTPHeaderField: "Accept")
 
         webView.load(request)
-        defer { webView.stopLoading() }
+        defer {
+            _ = navigationDelegate
+            webView.stopLoading()
+        }
 
         var lastHTML: String?
         var settledPolls = 0
@@ -2976,7 +3003,18 @@ public struct DownloadResult: Sendable {
             let login = !hasStream && lower.contains("to watch this video please") && lower.contains("login")
             sawChallenge = sawChallenge || challenge
             sawLoginPage = sawLoginPage || login
-            let result = hasStream ? "stream-found" : challenge ? "challenge-page" : login ? "login-page" : decoded.isEmpty ? "no-html" : "no-stream"
+            let result: String
+            if hasStream {
+                result = "stream-found"
+            } else if challenge {
+                result = "challenge-page"
+            } else if login {
+                result = "login-page"
+            } else if decoded.isEmpty {
+                result = "no-html"
+            } else {
+                result = "no-stream"
+            }
             LoggerService.shared.log("[BoyfriendTV] stage=\(stage) result=\(result)", level: .debug)
             return decoded
         }
@@ -3014,7 +3052,22 @@ public struct DownloadResult: Sendable {
                 }
                 let html = inspectPage(output, stage: stage)
                 let transient = isTransientServerError(lower) || lower.contains("timed out")
-                let classification = challenge ? "challenge" : transient ? "transient" : lower.contains("401") ? "http-401" : lower.contains("403") ? "http-403" : lower.contains("unsupported url") ? "unsupported-url" : diagnostic.isEmpty ? "none" : "other"
+                let classification: String
+                if challenge {
+                    classification = "challenge"
+                } else if transient {
+                    classification = "transient"
+                } else if lower.contains("401") {
+                    classification = "http-401"
+                } else if lower.contains("403") {
+                    classification = "http-403"
+                } else if lower.contains("unsupported url") {
+                    classification = "unsupported-url"
+                } else if diagnostic.isEmpty {
+                    classification = "none"
+                } else {
+                    classification = "other"
+                }
                 LoggerService.shared.log("[BoyfriendTV] stage=\(stage) yt-dlp=\(classification)", level: .debug)
                 let challengePage = html.lowercased().contains("cf-chl-") || html.lowercased().contains("/cdn-cgi/challenge-platform/") || html.lowercased().contains("<title>just a moment")
                 if !didRetry && (challenge || challengePage || transient) && !hasBoyfriendTVMediaData(html) {
@@ -3929,12 +3982,11 @@ public struct DownloadResult: Sendable {
                 var rawChunks: [String] = []
                 for line in output.split(whereSeparator: \.isNewline) {
                     let trimmed = String(line).trimmingCharacters(in: .whitespaces)
-                    if !trimmed.starts(with: "#") && !trimmed.starts(with: "[") && !trimmed.starts(with: "WARNING") && !trimmed.starts(with: "ERROR") {
-                        if let decodedData = Data(base64Encoded: trimmed, options: .ignoreUnknownCharacters) {
-                            let decodedString = String(decoding: decodedData, as: UTF8.self)
-                            if !decodedString.isEmpty {
-                                rawChunks.append(decodedString)
-                            }
+                    if !trimmed.starts(with: "#") && !trimmed.starts(with: "[") && !trimmed.starts(with: "WARNING") && !trimmed.starts(with: "ERROR"),
+                       let decodedData = Data(base64Encoded: trimmed, options: .ignoreUnknownCharacters) {
+                        let decodedString = String(decoding: decodedData, as: UTF8.self)
+                        if !decodedString.isEmpty {
+                            rawChunks.append(decodedString)
                         }
                     }
                 }
@@ -3962,7 +4014,7 @@ public struct DownloadResult: Sendable {
         if let configured = configuredBrowserCookieSource() {
             browsersToTry.append(configured)
         }
-        for candidate in ["safari", "chrome", "brave", "firefox", "edge", "helium"] {
+        for candidate in ["safari", "chrome", "brave", "firefox", "edge", "helium", "chromium-based"] {
             if candidate == "safari" && !Self.hasFullDiskAccess {
                 continue
             }
@@ -4352,9 +4404,13 @@ public struct DownloadResult: Sendable {
                     let o = chunkStart + i * 4
                     m[i] = UInt32(padded[o]) | (UInt32(padded[o + 1]) << 8) | (UInt32(padded[o + 2]) << 16) | (UInt32(padded[o + 3]) << 24)
                 }
-                var aa = a, bb = b, cc = c, dd = d
+                var aa = a
+                var bb = b
+                var cc = c
+                var dd = d
                 for i in 0..<64 {
-                    var f: UInt32 = 0, g = 0
+                    var f: UInt32 = 0
+                    var g = 0
                     if i < 16 { f = (bb & cc) | ((~bb) & dd); g = i }
                     else if i < 32 { f = (dd & bb) | ((~dd) & cc); g = (5 * i + 1) % 16 }
                     else if i < 48 { f = bb ^ cc ^ dd; g = (3 * i + 5) % 16 }
@@ -4894,7 +4950,14 @@ public struct DownloadResult: Sendable {
                 return nil
             }()
 
-            let targetHost = host.contains("boyfriendtv.com") ? "www.boyfriendtv.com" : (host.contains("boyfriend.tv") ? "www.boyfriend.tv" : host)
+            let targetHost: String
+            if host.contains("boyfriendtv.com") {
+                targetHost = "www.boyfriendtv.com"
+            } else if host.contains("boyfriend.tv") {
+                targetHost = "www.boyfriend.tv"
+            } else {
+                targetHost = host
+            }
             if let id = videoId {
                 return "https://\(targetHost)/videos/\(id)/"
             }

@@ -100,7 +100,8 @@ public enum ExternalDownloadTargetPolicy {
 
     private static func isGloballyRoutableIPv4(_ b: [UInt8]) -> Bool {
         guard b.count == 4 else { return false }
-        let a = b[0], second = b[1]
+        let a = b[0]
+        let second = b[1]
 
         if a == 0 || a == 10 || a == 127 || a >= 224 { return false }
         if a == 100 && (64...127).contains(second) { return false }
@@ -185,11 +186,14 @@ public final class AppState: ObservableObject {
     @Published public private(set) var browserSessionOriginScheme: String? = nil
     @Published public private(set) var browserSessionOriginHost: String? = nil
 
-    public init() {}
+    public init() {
+        // Intentionally empty initializer for MainActor AppState (swift:S1186)
+    }
 
     public static func normalizedBrowserCookieSource(_ raw: String?) -> String? {
         guard let raw else { return nil }
         let browser = raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if browser == "helium" { return "chromium-based" }
         let allowed = Set(SupportedBrowser.allCases.map(\.rawValue))
         return allowed.contains(browser) ? browser : nil
     }

@@ -82,10 +82,8 @@ public final class DownloadProcessController: @unchecked Sendable {
         }
         if resolvedPID > 0 {
             kill(resolvedPID, SIGTERM)
-        }
 
-        // 3. Multi-pass sweep to catch any late spawns during shutdown
-        if resolvedPID > 0 {
+            // 3. Multi-pass sweep to catch any late spawns during shutdown
             for _ in 0..<2 {
                 usleep(25_000) // 25ms grace period
                 let currentDescendants = getDescendantPIDs(for: resolvedPID)
@@ -326,7 +324,7 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
 
     public func runCommand(_ args: [String]) async throws -> String {
         try Task.checkCancellation()
-        let prepared = try HeliumCookieReader.prepare(args)
+        let prepared = try ChromiumCookieReader.prepare(args)
         defer { prepared.cookieFile?.cleanup() }
         let args = prepared.args
         let process = Process()
@@ -339,63 +337,71 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
         process.environment = YtdlpService.createSanitizedEnvironment()
 
         return try await withTaskCancellationHandler {
-            try await withCheckedThrowingContinuation { continuation in
-                let safeContinuation = SafeContinuation(continuation)
+            try await executeRunCommand(process: process, pipe: pipe, controller: controller)
+        } onCancel: {
+            controller.cancel()
+        }
+    }
 
-                if Task.isCancelled || controller.isCancelled {
+    private func executeRunCommand(
+        process: Process,
+        pipe: Pipe,
+        controller: DownloadProcessController
+    ) async throws -> String {
+        try await withCheckedThrowingContinuation { continuation in
+            let safeContinuation = SafeContinuation(continuation)
+
+            if Task.isCancelled || controller.isCancelled {
+                safeContinuation.resume(throwing: YtdlpError.downloadFailed("Command was cancelled."))
+                return
+            }
+
+            let outputBuffer = ThreadSafeDataBuffer()
+            pipe.fileHandleForReading.readabilityHandler = { handle in
+                let data = handle.availableData
+                if !data.isEmpty {
+                    outputBuffer.append(data)
+                }
+            }
+
+            process.terminationHandler = { proc in
+                pipe.fileHandleForReading.readabilityHandler = nil
+
+                let remainingData = pipe.fileHandleForReading.readDataToEndOfFile()
+                try? pipe.fileHandleForReading.close()
+                proc.terminationHandler = nil
+
+                if !remainingData.isEmpty {
+                    outputBuffer.append(remainingData)
+                }
+
+                let output = outputBuffer.getString()
+                controller.transitionToTerminated(exitCode: proc.terminationStatus, reason: proc.terminationReason)
+
+                if Task.isCancelled || controller.isCancelled || proc.terminationReason == .uncaughtSignal {
                     safeContinuation.resume(throwing: YtdlpError.downloadFailed("Command was cancelled."))
-                    return
+                } else if proc.terminationStatus == 0 {
+                    safeContinuation.resume(returning: output)
+                } else {
+                    safeContinuation.resume(throwing: YtdlpError.commandFailed(output))
                 }
+            }
 
-                let outputBuffer = ThreadSafeDataBuffer()
-                pipe.fileHandleForReading.readabilityHandler = { handle in
-                    let data = handle.availableData
-                    if !data.isEmpty {
-                        outputBuffer.append(data)
-                    }
-                }
-
-                process.terminationHandler = { proc in
-                    pipe.fileHandleForReading.readabilityHandler = nil
-
-                    let remainingData = pipe.fileHandleForReading.readDataToEndOfFile()
-                    try? pipe.fileHandleForReading.close()
-                    proc.terminationHandler = nil
-
-                    if !remainingData.isEmpty {
-                        outputBuffer.append(remainingData)
-                    }
-
-                    let output = outputBuffer.getString()
-                    controller.transitionToTerminated(exitCode: proc.terminationStatus, reason: proc.terminationReason)
-
-                    if Task.isCancelled || controller.isCancelled || proc.terminationReason == .uncaughtSignal {
-                        safeContinuation.resume(throwing: YtdlpError.downloadFailed("Command was cancelled."))
-                    } else if proc.terminationStatus == 0 {
-                        safeContinuation.resume(returning: output)
-                    } else {
-                        safeContinuation.resume(throwing: YtdlpError.commandFailed(output))
-                    }
-                }
-
-                do {
-                    if Task.isCancelled {
-                        pipe.fileHandleForReading.readabilityHandler = nil
-                        try? pipe.fileHandleForReading.close()
-                        process.terminationHandler = nil
-                        safeContinuation.resume(throwing: YtdlpError.downloadFailed("Command was cancelled."))
-                        return
-                    }
-                    try controller.start(process)
-                } catch {
+            do {
+                if Task.isCancelled {
                     pipe.fileHandleForReading.readabilityHandler = nil
                     try? pipe.fileHandleForReading.close()
                     process.terminationHandler = nil
-                    safeContinuation.resume(throwing: error)
+                    safeContinuation.resume(throwing: YtdlpError.downloadFailed("Command was cancelled."))
+                    return
                 }
+                try controller.start(process)
+            } catch {
+                pipe.fileHandleForReading.readabilityHandler = nil
+                try? pipe.fileHandleForReading.close()
+                process.terminationHandler = nil
+                safeContinuation.resume(throwing: error)
             }
-        } onCancel: {
-            controller.cancel()
         }
     }
 
@@ -407,19 +413,38 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
         onOutput: @escaping @Sendable (String) -> Void
     ) async throws -> DownloadProcessResult {
         try Task.checkCancellation()
-        let prepared = try HeliumCookieReader.prepare(args)
+        let prepared = try ChromiumCookieReader.prepare(args)
         defer { prepared.cookieFile?.cleanup() }
         let args = prepared.args
         let controller = processController ?? DownloadProcessController()
 
         return try await withTaskCancellationHandler(operation: {
-            try await withCheckedThrowingContinuation { continuation in
-                let safeContinuation = SafeContinuation(continuation)
+            try await executeDownloadProcess(
+                args: args,
+                saveFolder: saveFolder,
+                controller: controller,
+                onProgress: onProgress,
+                onOutput: onOutput
+            )
+        }, onCancel: {
+            controller.cancel()
+        })
+    }
 
-                if Task.isCancelled || controller.isCancelled {
-                    safeContinuation.resume(throwing: YtdlpError.downloadFailed("Download was stopped."))
-                    return
-                }
+    private func executeDownloadProcess(
+        args: [String],
+        saveFolder: URL,
+        controller: DownloadProcessController,
+        onProgress: @escaping @Sendable (Double, String?, String?) -> Void,
+        onOutput: @escaping @Sendable (String) -> Void
+    ) async throws -> DownloadProcessResult {
+        try await withCheckedThrowingContinuation { continuation in
+            let safeContinuation = SafeContinuation(continuation)
+
+            if Task.isCancelled || controller.isCancelled {
+                safeContinuation.resume(throwing: YtdlpError.downloadFailed("Download was stopped."))
+                return
+            }
 
             let process = Process()
             let outputPipe = Pipe()
@@ -453,117 +478,106 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
                     let speed = fields.count > 1 ? String(fields[1]).trimmingCharacters(in: .whitespaces) : nil
                     let eta = fields.count > 2 ? String(fields[2]).trimmingCharacters(in: .whitespaces) : nil
                     if normalized != "NA" && !normalized.isEmpty, let percent = Double(normalized), !percent.isNaN && !percent.isInfinite {
-                        let safeSpeed = (speed == "NA" || speed?.isEmpty == true) ? nil : speed
-                        let safeEta = (eta == "NA" || eta?.isEmpty == true) ? nil : eta
-                        onProgress(max(0.0, min(1.0, percent / 100.0)), safeSpeed, safeEta)
+                        let safePercent = max(0.0, min(1.0, percent / 100.0))
+                        onProgress(safePercent, speed, eta)
                     }
-                    return
-                }
-
-                // Parse aria2c multi-connection progress lines (e.g. "[#50a1f3 18MiB/220MiB(8%) CN:16 DL:27MiB ETA:7s]")
-                if (line.hasPrefix("[#") || line.contains("CN:")) && line.contains("DL:") {
-                    if let openParen = line.range(of: "("),
-                       let closeParen = line.range(of: "%)", range: openParen.upperBound..<line.endIndex) {
-                        let percentStr = String(line[openParen.upperBound..<closeParen.lowerBound]).trimmingCharacters(in: .whitespaces)
-                        if let percentVal = Double(percentStr), !percentVal.isNaN && !percentVal.isInfinite {
-                            let safePercent = max(0.0, min(1.0, percentVal / 100.0))
-
-                            var speedStr: String? = nil
-                            if let dlRange = line.range(of: "DL:") {
-                                let afterDl = line[dlRange.upperBound...]
-                                if let token = afterDl.split(whereSeparator: { $0.isWhitespace || $0 == "]" }).first {
-                                    speedStr = String(token) + "/s"
-                                }
-                            }
-
-                            var etaStr: String? = nil
-                            if let etaRange = line.range(of: "ETA:") {
-                                let afterEta = line[etaRange.upperBound...]
-                                if let token = afterEta.split(whereSeparator: { $0.isWhitespace || $0 == "]" }).first {
-                                    etaStr = String(token)
-                                }
-                            }
-
-                            onOutput(line)
-                            onProgress(safePercent, speedStr, etaStr)
-                            return
-                        }
-                    }
-                }
-
-                if line.contains("[info] Writing video thumbnail") ||
-                   line.contains("[info] Writing video subtitle") ||
-                   line.contains("[info] Writing video description") ||
-                   line.contains("[ThumbnailsConvertor]") ||
-                   line.contains("[EmbedThumbnail]") ||
-                   line.contains("[EmbedSubtitle]") {
                     onOutput(line)
                     return
                 }
 
-                if let range = line.range(of: "[download] Destination: ") {
-                    outputState.addCandidatePath(String(line[range.upperBound...]))
-                }
+                // Parse aria2c multi-connection progress lines (e.g. "[#50a1f3 18MiB/220MiB(8%) CN:16 DL:27MiB ETA:7s]")
+                if (line.hasPrefix("[#") || line.contains("CN:")) && line.contains("DL:"),
+                   let openParen = line.range(of: "("),
+                   let closeParen = line.range(of: "%)", range: openParen.upperBound..<line.endIndex) {
+                    let percentStr = String(line[openParen.upperBound..<closeParen.lowerBound]).trimmingCharacters(in: .whitespaces)
+                    if let percentVal = Double(percentStr), !percentVal.isNaN && !percentVal.isInfinite {
+                        let safePercent = max(0.0, min(1.0, percentVal / 100.0))
 
-                if let range = line.range(of: " has already been downloaded"),
-                   let dlRange = line.range(of: "[download] "),
-                   dlRange.upperBound <= range.lowerBound {
-                    let pathPart = String(line[dlRange.upperBound..<range.lowerBound])
-                    if !pathPart.isEmpty {
-                        outputState.addCandidatePath(pathPart)
+                        var speedStr: String? = nil
+                        if let dlRange = line.range(of: "DL:") {
+                            let afterDl = line[dlRange.upperBound...]
+                            if let token = afterDl.split(whereSeparator: { $0.isWhitespace || $0 == "]" }).first {
+                                speedStr = String(token) + "/s"
+                            }
+                        }
+
+                        var etaStr: String? = nil
+                        if let etaRange = line.range(of: "ETA:") {
+                            let afterEta = line[etaRange.upperBound...]
+                            if let token = afterEta.split(whereSeparator: { $0.isWhitespace || $0 == "]" }).first {
+                                etaStr = String(token)
+                            }
+                        }
+
+                        onProgress(safePercent, speedStr, etaStr)
                     }
                 }
 
-                if line.contains("[Merger] Merging formats into") {
-                    let parts = line.split(separator: "\"")
-                    if parts.count > 1 {
-                        outputState.addCandidatePath(String(parts[1]))
+                // Parse direct download destination file path from standard yt-dlp logs
+                if line.contains("[download] Destination:") {
+                    let path = line.replacingOccurrences(of: "[download] Destination:", with: "").trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !path.isEmpty {
+                        outputState.addCandidatePath(path)
+                    }
+                } else if line.contains("[Merger] Merging formats into") {
+                    let path = line.replacingOccurrences(of: "[Merger] Merging formats into", with: "")
+                        .trimmingCharacters(in: .whitespacesAndNewlines)
+                        .trimmingCharacters(in: CharacterSet(charactersIn: "\""))
+                    if !path.isEmpty {
+                        outputState.addCandidatePath(path)
+                    }
+                } else if line.contains("[VideoConvertor] Converting video to") {
+                    let path = line.replacingOccurrences(of: "[VideoConvertor] Converting video to", with: "")
+                        .trimmingCharacters(in: .whitespacesAndNewlines)
+                        .trimmingCharacters(in: CharacterSet(charactersIn: "\""))
+                    if !path.isEmpty {
+                        outputState.addCandidatePath(path)
+                    }
+                } else if line.contains("[Fixup") && line.contains("into") {
+                    if let intoRange = line.range(of: "into") {
+                        let path = line[intoRange.upperBound...]
+                            .trimmingCharacters(in: .whitespacesAndNewlines)
+                            .trimmingCharacters(in: CharacterSet(charactersIn: "\""))
+                        if !path.isEmpty {
+                            outputState.addCandidatePath(path)
+                        }
+                    }
+                } else if line.contains("has already been downloaded") {
+                    if let prefixRange = line.range(of: "[download] ") {
+                        let sub = line[prefixRange.upperBound...]
+                        if let endRange = sub.range(of: " has already been downloaded") {
+                            let path = sub[..<endRange.lowerBound].trimmingCharacters(in: .whitespacesAndNewlines)
+                            if !path.isEmpty {
+                                outputState.addCandidatePath(path)
+                            }
+                        }
+                    }
+                } else if line.contains("[ExtractAudio] Destination:") {
+                    let path = line.replacingOccurrences(of: "[ExtractAudio] Destination:", with: "").trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !path.isEmpty {
+                        outputState.addCandidatePath(path)
+                    }
+                } else if line.contains("[download]") && line.contains("100%") {
+                    if let destRange = line.range(of: "Destination: ") {
+                        let path = line[destRange.upperBound...].trimmingCharacters(in: .whitespacesAndNewlines)
+                        if !path.isEmpty {
+                            outputState.addCandidatePath(path)
+                        }
                     }
                 }
 
-                if let range = line.range(of: "[ExtractAudio] Destination: ") {
-                    outputState.addCandidatePath(String(line[range.upperBound...]))
-                }
-
-                if let range = line.range(of: " to \"", options: .backwards) {
-                    let afterTo = line[range.upperBound...]
-                    if let endQuote = afterTo.firstIndex(of: "\"") {
-                        let target = String(afterTo[..<endQuote])
-                        if !target.isEmpty {
-                            outputState.addCandidatePath(target)
+                // If yt-dlp finishes downloading 100% of a file, check if it printed the filename
+                if line.hasPrefix("[download] 100% of ") {
+                    let sub = line.replacingOccurrences(of: "[download] 100% of ", with: "")
+                    if let inRange = sub.range(of: " in ") {
+                        let path = sub[..<inRange.lowerBound].trimmingCharacters(in: .whitespacesAndNewlines)
+                        if !path.isEmpty && !path.contains(" ") && !path.contains("MiB") && !path.contains("GiB") {
+                            outputState.addCandidatePath(path)
                         }
                     }
                 }
 
                 onOutput(line)
-
-                DispatchQueue.main.async {
-                    if line.contains("%") {
-                        let components = line.split(whereSeparator: \.isWhitespace)
-                        if let percentIndex = components.firstIndex(where: { $0.hasSuffix("%") }) {
-                            let percentStr = components[percentIndex].dropLast()
-                            if let percent = Double(percentStr), !percent.isNaN && !percent.isInfinite {
-                                let speed = components.indices.contains(percentIndex + 3) ? String(components[percentIndex + 3]) : nil
-                                let eta = components.indices.contains(percentIndex + 5) ? String(components[percentIndex + 5]) : nil
-                                onProgress(max(0.0, min(1.0, percent / 100.0)), speed, eta)
-                            }
-                        }
-                    } else if line.contains("[EmbedThumbnail]") {
-                        onProgress(0.99, "Embedding thumbnail...", "Finalizing file")
-                    } else if line.contains("[Metadata]") {
-                        onProgress(0.99, "Adding metadata...", "Finalizing file")
-                    } else if line.contains("[Merger]") {
-                        onProgress(0.99, "Merging video & audio...", "Please wait")
-                    } else if line.contains("[VideoConvertor]") || line.contains("Converting video") {
-                        onProgress(0.99, "Converting video...", "Please wait")
-                    } else if line.contains("[ThumbnailsConvertor]") {
-                        onProgress(0.99, "Preparing thumbnail...", "Please wait")
-                    } else if line.contains("[EmbedSubtitle]") {
-                        onProgress(0.99, "Embedding subtitles...", "Please wait")
-                    } else if line.contains("[ffmpeg]") {
-                        onProgress(0.99, "Processing media...", "Please wait")
-                    }
-                }
             }
 
             let outputBuffer = StreamBuffer()
@@ -638,10 +652,9 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
                        let values = try? resolved.resourceValues(forKeys: [.isRegularFileKey]),
                        values.isRegularFile == true,
                        YtdlpService.isMediaFilePath(resolved.path),
-                       YtdlpService.isPathContained(targetURL: resolved, inside: saveFolder) {
-                        if !verifiedFinalPaths.contains(resolved.path) {
-                            verifiedFinalPaths.append(resolved.path)
-                        }
+                       YtdlpService.isPathContained(targetURL: resolved, inside: saveFolder),
+                       !verifiedFinalPaths.contains(resolved.path) {
+                        verifiedFinalPaths.append(resolved.path)
                     }
                 }
 
@@ -702,8 +715,5 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
                 safeContinuation.resume(throwing: error)
             }
         }
-    }, onCancel: {
-        controller.cancel()
-    })
     }
 }
