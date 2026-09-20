@@ -5,7 +5,7 @@ A high-performance, native macOS media extractor & downloader powered by `yt-dlp
 <div align="center">
   <img src="assets/app_screenshot.png?v=3" alt="Siphon Interface" width="880" style="border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.3);" />
   <p>
-    <a href="https://github.com/marspater/jolly-hopper/releases/latest"><img src="https://img.shields.io/badge/Version-v5.3.0-indigo?style=for-the-badge&logo=swift&logoColor=white" alt="Version 5.3.0" /></a>
+    <a href="https://github.com/marspater/jolly-hopper/releases/latest"><img src="https://img.shields.io/badge/Version-v5.4.0-indigo?style=for-the-badge&logo=swift&logoColor=white" alt="Version 5.4.0" /></a>
     <a href="https://github.com/marspater/jolly-hopper/releases/latest"><img src="https://img.shields.io/badge/Download-macOS-blue?style=for-the-badge&logo=apple&logoColor=white" alt="Download Siphon for macOS" /></a>
     <a href="https://github.com/marspater/jolly-hopper"><img src="https://img.shields.io/badge/Repository-jolly--hopper-818cf8?style=for-the-badge&logo=github&logoColor=white" alt="GitHub Repository" /></a>
     <a href="https://github.com/marspater/jolly-hopper/blob/main/SUPPORTED_SITES.md"><img src="https://img.shields.io/badge/Supported--Sites-1000%2B-green?style=for-the-badge&logo=globe&logoColor=white" alt="Supported Sites" /></a>
@@ -16,13 +16,15 @@ A high-performance, native macOS media extractor & downloader powered by `yt-dlp
 
 ## ✨ Highlights & Features
 
-- 💧 **Translucent macOS Glassmorphism**: Engineered using native Apple SwiftUI materials and AppKit window translucency for a sleek macOS experience.
-- ⚡ **Browser-aware extraction**: Browser-matched transport profiles, scoped cookies, bounded retries and exponential backoff for BoyfriendTV and GayPornTube. Challenge responses are distinguished from missing authentication.
-- 🎞️ **GayPornTube**: Native HTML5 extraction with site-specific Referer/Origin headers; singular `/video/` links and signed media URLs are preserved.
-- 🎯 **Deep Provider Resolvers**: Built-in specialized stream extraction for YouTube, Playlists, TikTok, X (Twitter), Instagram, Twitch, and 1,000+ video platforms.
-- 🚀 **Atomic Dependency Engine**: Safe, self-testing background updates for `yt-dlp` and native Apple Silicon (`arm64`) + Intel (`x86_64`) `FFmpeg` / `FFprobe` 6.0 binaries.
-- 🛠 **Custom Quality Presets & Codec Control**: Full control over H.264, VP9, AV1, AAC, Opus, MP3, FLAC extraction, resolution scaling (up to 8K), and SponsorBlock segment skipping.
-- 🌐 **Browser Extensions & Menu Bar Companion**: 1-click downloading directly from Safari, Chrome, and Firefox, plus a lightweight macOS status bar popover.
+- 🔐 **Credential-free browser handoff**: Safari, Chrome-family, Firefox, and Helium integrations pass browser identity without putting raw cookies into custom URLs. Session state is scoped to validated origins and private-network deep links are rejected.
+- ♻️ **Reliable pause, resume, and cancellation**: Per-download scratch storage preserves resumable partial data, while executor ownership remains intact until process teardown actually finishes.
+- 🛡️ **Hardened update trust chain**: App and dependency updates use verified release metadata, pinned digests, rollback protection, stale-operation guards, and explicit exclusion between yt-dlp replacement and active downloads.
+- 🌐 **Protected-site recovery**: Hardened BoyfriendTV, Recu, and GayPornTube extraction keeps browser cookies, user agents, origins, signed streams, and CDN boundaries coherent.
+- 💧 **Native macOS presentation**: Refined Liquid Glass surfaces, stronger light/dark contrast, responsive download rows, accessibility improvements, and lower idle rendering overhead.
+- 🧭 **Explicit runtime ownership**: Download queueing, execution, app-level update state, shutdown, and browser ingress now have documented ownership boundaries and regression coverage.
+- 🎯 **Broad extraction & media control**: yt-dlp-backed support for 1,000+ sites, quality/codec presets, playlists, subtitles, SponsorBlock, FFmpeg processing, and fast browser-triggered downloads.
+
+For release-by-release details, see [CHANGELOG.md](CHANGELOG.md).
 
 ---
 

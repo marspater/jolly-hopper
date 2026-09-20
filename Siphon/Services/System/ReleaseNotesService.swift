@@ -28,34 +28,34 @@ final class ReleaseNotesService {
 
     static let defaultFeatures: [ReleaseFeature] = [
         ReleaseFeature(
-            icon: "bolt.fill",
-            iconColor: .blue,
-            title: "BoyfriendTV Stream Resolution",
-            description: "Full extraction and authenticated download support for restricted and banned uploaders across BoyfriendTV domains."
-        ),
-        ReleaseFeature(
-            icon: "shield.checkerboard",
+            icon: "lock.shield.fill",
             iconColor: .green,
-            title: "Hardened Security & Process Isolation",
-            description: "Redacted downloader credentials in debug logs, strict helper path containment, and automated cookie cleanup."
+            title: "Secure Browser Handoff",
+            description: "Browser extensions no longer put raw cookies in custom URLs; browser identity is validated and scoped to the target origin."
         ),
         ReleaseFeature(
-            icon: "bolt.badge.clock.fill",
-            iconColor: .cyan,
-            title: "Zero-Allocation Parsing & Regex Speedups",
-            description: "Pre-compiled Sucuri regexes, zero-allocation substring format splitting, and optimized single-pass HTML entity decoding."
-        ),
-        ReleaseFeature(
-            icon: "accessibility",
-            iconColor: .orange,
-            title: "VoiceOver Accessibility & Controls",
-            description: "Comprehensive accessibility labels across MenuBar controls, preferences tabs, switch toggles, and playlist pickers."
+            icon: "arrow.triangle.2.circlepath.circle.fill",
+            iconColor: .blue,
+            title: "Reliable Pause & Resume",
+            description: "Per-download scratch directories preserve resumable partial data while cancellation keeps executor ownership until teardown completes."
         ),
         ReleaseFeature(
             icon: "checkmark.seal.fill",
             iconColor: .purple,
-            title: "Custom Preset Serialization & Tests",
-            description: "Robust JSON serialization and deserialization test suite for custom presets and UserDefaults key integrity."
+            title: "Hardened Update Pipeline",
+            description: "Pinned release digests, rollback safety, stale-operation protection, and download/update exclusion keep dependency replacement deterministic."
+        ),
+        ReleaseFeature(
+            icon: "network.badge.shield.half.filled",
+            iconColor: .cyan,
+            title: "Protected-Site Recovery",
+            description: "Expanded BoyfriendTV, Recu, GayPornTube, Safari, Chromium, and Helium handling preserves the correct browser and transport identity."
+        ),
+        ReleaseFeature(
+            icon: "macwindow",
+            iconColor: .orange,
+            title: "Lifecycle & macOS Polish",
+            description: "Explicit executor ownership, terminal shutdown semantics, macOS 15 baseline, and refined Liquid Glass accessibility improve day-to-day reliability."
         )
     ]
 
