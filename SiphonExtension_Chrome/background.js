@@ -12,37 +12,46 @@ chrome.runtime.onInstalled.addListener(() => {
     });
 });
 
-async function getCookiesForUrl(url) {
-    try {
-        if (chrome.cookies && typeof chrome.cookies.getAll === "function") {
-            const cookies = await chrome.cookies.getAll({ url: url });
-            if (cookies && cookies.length > 0) {
-                return cookies.map(c => `${c.name}=${c.value}`).join("; ");
-            }
+async function detectBrowserSource() {
+    const ua = typeof navigator !== "undefined" ? (navigator.userAgent || "") : "";
+    const brands = typeof navigator !== "undefined" && navigator.userAgentData?.brands
+        ? navigator.userAgentData.brands.map((item) => item.brand.toLowerCase()).join(" ")
+        : "";
+
+    if (/\bEdg\//.test(ua)) return "edge";
+    if (/\bOPR\//.test(ua)) return "opera";
+    if (/\bVivaldi\//i.test(ua) || brands.includes("vivaldi")) return "vivaldi";
+    if (/\bHelium\//i.test(ua) || brands.includes("helium")) return "helium";
+
+    if (typeof navigator !== "undefined" &&
+        navigator.brave &&
+        typeof navigator.brave.isBrave === "function") {
+        try {
+            if (await navigator.brave.isBrave()) return "brave";
+        } catch {
+            // Fall through to Chromium/Chrome detection.
         }
-    } catch (error) {
-        console.debug("Could not retrieve cookies for deep link:", error);
     }
-    return null;
+
+    if (brands.includes("chromium") && !brands.includes("google chrome")) {
+        return "chromium";
+    }
+    return "chrome";
 }
 
 async function triggerDownload(url, host = "download") {
     if (!url || typeof url !== "string") return;
     if (!url.startsWith("http://") && !url.startsWith("https://")) return;
 
-    let deepLink = `siphon://${host}?url=${encodeURIComponent(url)}`;
-    const cookies = await getCookiesForUrl(url);
-    if (cookies) {
-        deepLink += `&cookies=${encodeURIComponent(cookies)}`;
-    }
+    const browserSource = await detectBrowserSource();
+    let deepLink = `siphon://${host}?url=${encodeURIComponent(url)}&browser=${encodeURIComponent(browserSource)}`;
     const userAgent = typeof navigator !== "undefined" ? navigator.userAgent : "";
     if (userAgent) {
         deepLink += `&ua=${encodeURIComponent(userAgent)}`;
     }
 
-    // Never inject a credential-bearing deep link into the source page DOM.
-    // A page can observe DOM mutations and would otherwise be able to read
-    // cookies, including HttpOnly values retrieved by the extension.
+    // Browser credentials never enter the custom URL. Siphon reads Chrome's
+    // cookie database directly after receiving the non-secret browser identifier.
     chrome.tabs.create({ url: deepLink, active: true }, (createdTab) => {
         if (chrome.runtime.lastError) {
             console.warn("Failed to open Siphon deep link:", chrome.runtime.lastError.message);

@@ -766,32 +766,65 @@ class YtdlpService: ObservableObject {
         return false
     }
 
-    func fetchInfo(url: String, rawCookies: String? = nil, rawUserAgent: String? = nil) async throws -> MediaInfo {
+    func fetchInfo(
+        url: String,
+        rawCookies: String? = nil,
+        rawUserAgent: String? = nil,
+        browserCookieSource: String? = nil
+    ) async throws -> MediaInfo {
         guard let path = ytdlpPath else {
             throw YtdlpError.notFound
         }
         
         let normalizedURL = normalizeURLForYtdlp(url)
         do {
-             return try await fetchSingleVideoInfo(path: path.path, url: normalizedURL, rawCookies: rawCookies, rawUserAgent: rawUserAgent)
+             return try await fetchSingleVideoInfo(
+                path: path.path,
+                url: normalizedURL,
+                rawCookies: rawCookies,
+                rawUserAgent: rawUserAgent,
+                browserCookieSource: browserCookieSource
+             )
         } catch {
             if isPlaylistURL(normalizedURL) {
                 do {
-                    return try await fetchPlaylistSummaryInfo(path: path.path, url: normalizedURL, rawCookies: rawCookies)
+                    return try await fetchPlaylistSummaryInfo(
+                        path: path.path,
+                        url: normalizedURL,
+                        rawCookies: rawCookies,
+                        rawUserAgent: rawUserAgent,
+                        browserCookieSource: browserCookieSource
+                    )
                 } catch {
-                    throw mapSiteSpecificError(error, url: normalizedURL)
+                    throw mapSiteSpecificError(
+                        error,
+                        url: normalizedURL,
+                        browserCookieSource: browserCookieSource
+                    )
                 }
             }
-            throw mapSiteSpecificError(error, url: normalizedURL)
+            throw mapSiteSpecificError(
+                error,
+                url: normalizedURL,
+                browserCookieSource: browserCookieSource
+            )
         }
     }
 
-    private func fetchSingleVideoInfo(path: String, url: String, forceBrowserCookies: Bool = false, rawCookies: String? = nil, rawUserAgent: String? = nil) async throws -> MediaInfo {
+    private func fetchSingleVideoInfo(
+        path: String,
+        url: String,
+        forceBrowserCookies: Bool = false,
+        rawCookies: String? = nil,
+        rawUserAgent: String? = nil,
+        browserCookieSource: String? = nil
+    ) async throws -> MediaInfo {
         if isRecuURL(url) {
             let recuMedia = try await resolveRecuMediaInfo(
                 url: url,
                 rawCookies: rawCookies,
-                rawUserAgent: rawUserAgent
+                rawUserAgent: rawUserAgent,
+                browserCookieSource: browserCookieSource
             )
             var parsedInfo: MediaInfo?
             var probeArgs = [
@@ -854,7 +887,12 @@ class YtdlpService: ObservableObject {
         }
 
         if isBoyfriendTVURL(url) {
-            if let btvMedia = try await resolveBoyfriendTVMediaInfo(url: url, rawCookies: rawCookies) {
+            if let btvMedia = try await resolveBoyfriendTVMediaInfo(
+                url: url,
+                rawCookies: rawCookies,
+                rawUserAgent: rawUserAgent,
+                browserCookieSource: browserCookieSource
+            ) {
                 var btvArgs = [
                     path,
                     "--ignore-config",
@@ -1023,7 +1061,12 @@ class YtdlpService: ObservableObject {
                 }
             }
         } else {
-            let usingBrowserCookies = appendCookieArgs(for: url, to: &args, force: forceBrowserCookies)
+            let usingBrowserCookies = appendCookieArgs(
+                for: url,
+                to: &args,
+                force: forceBrowserCookies,
+                browserOverride: browserCookieSource
+            )
             logCookieUsage(for: url, usingBrowserCookies: usingBrowserCookies)
         }
 
@@ -1042,15 +1085,38 @@ class YtdlpService: ObservableObject {
             }
         } catch {
             let usingBrowserCookies = args.contains("--cookies-from-browser")
-            if shouldRetryWithBrowserCookies(error: error, url: url, usingBrowserCookies: usingBrowserCookies, forceBrowserCookies: forceBrowserCookies) {
+            if shouldRetryWithBrowserCookies(
+                error: error,
+                url: url,
+                usingBrowserCookies: usingBrowserCookies,
+                forceBrowserCookies: forceBrowserCookies,
+                browserCookieSource: browserCookieSource
+            ) {
                 LoggerService.shared.log("Retrying metadata extraction with configured browser cookies", level: .info)
-                return try await fetchSingleVideoInfo(path: path, url: url, forceBrowserCookies: true, rawCookies: rawCookies, rawUserAgent: rawUserAgent)
+                return try await fetchSingleVideoInfo(
+                    path: path,
+                    url: url,
+                    forceBrowserCookies: true,
+                    rawCookies: rawCookies,
+                    rawUserAgent: rawUserAgent,
+                    browserCookieSource: browserCookieSource
+                )
             }
-            throw mapSiteSpecificError(error, url: url)
+            throw mapSiteSpecificError(
+                error,
+                url: url,
+                browserCookieSource: browserCookieSource
+            )
         }
     }
 
-    private func fetchPlaylistSummaryInfo(path: String, url: String, rawCookies: String? = nil) async throws -> MediaInfo {
+    private func fetchPlaylistSummaryInfo(
+        path: String,
+        url: String,
+        rawCookies: String? = nil,
+        rawUserAgent: String? = nil,
+        browserCookieSource: String? = nil
+    ) async throws -> MediaInfo {
         var args = [
             path,
             "--ignore-config",
@@ -1084,11 +1150,16 @@ class YtdlpService: ObservableObject {
                 }
             }
         } else {
-            let usingBrowserCookies = appendCookieArgs(for: url, to: &args)
+            let usingBrowserCookies = appendCookieArgs(for: url, to: &args, browserOverride: browserCookieSource)
             logCookieUsage(for: url, usingBrowserCookies: usingBrowserCookies)
         }
 
-        args.append(contentsOf: ["--extractor-args", "generic:impersonate"])
+        if let exactUA = rawUserAgent?.trimmingCharacters(in: .whitespacesAndNewlines), !exactUA.isEmpty {
+            args.append(contentsOf: ["--user-agent", exactUA])
+            args.append(contentsOf: ["--extractor-args", "generic:impersonate=\(recuImpersonationTarget(rawUserAgent: exactUA))"])
+        } else {
+            args.append(contentsOf: ["--extractor-args", "generic:impersonate"])
+        }
         args.append("--")
         args.append(url)
 
@@ -1120,7 +1191,12 @@ class YtdlpService: ObservableObject {
     }
 
 
-    func fetchPlaylistInfo(url: String, rawCookies: String? = nil, rawUserAgent: String? = nil) async throws -> [MediaInfo] {
+    func fetchPlaylistInfo(
+        url: String,
+        rawCookies: String? = nil,
+        rawUserAgent: String? = nil,
+        browserCookieSource: String? = nil
+    ) async throws -> [MediaInfo] {
         guard let path = ytdlpPath else {
             throw YtdlpError.notFound
         }
@@ -1158,7 +1234,7 @@ class YtdlpService: ObservableObject {
                 }
             }
         } else {
-            let usingBrowserCookies = appendCookieArgs(for: url, to: &args)
+            let usingBrowserCookies = appendCookieArgs(for: url, to: &args, browserOverride: browserCookieSource)
             logCookieUsage(for: url, usingBrowserCookies: usingBrowserCookies)
         }
 
@@ -1246,7 +1322,8 @@ public struct DownloadResult: Sendable {
                 let recuMedia = try await resolveRecuMediaInfo(
                     url: normalizedURL,
                     rawCookies: options.rawCookies,
-                    rawUserAgent: options.rawUserAgent
+                    rawUserAgent: options.rawUserAgent,
+                    browserCookieSource: options.browserCookieSource
                 )
                 targetURL = recuMedia.playlistURL
                 customResolvedTitle = recuMedia.title
@@ -1259,7 +1336,12 @@ public struct DownloadResult: Sendable {
                 customResolvedTitle = mediaInfo?.title
                 customEmbedURL = mediaInfo?.webpageUrl
                 customThumbnailURL = mediaInfo?.thumbnail
-            } else if let btvMedia = try await resolveBoyfriendTVMediaInfo(url: url, rawCookies: options.rawCookies) {
+            } else if let btvMedia = try await resolveBoyfriendTVMediaInfo(
+                url: url,
+                rawCookies: options.rawCookies,
+                rawUserAgent: options.rawUserAgent,
+                browserCookieSource: options.browserCookieSource
+            ) {
                 targetURL = resolveBoyfriendTVStreamURLForDownload(streamURL: btvMedia.streamURL, options: options)
                 customResolvedTitle = btvMedia.title
                 customEmbedURL = btvMedia.embedURL
@@ -1440,7 +1522,11 @@ public struct DownloadResult: Sendable {
                 }
             }
         } else {
-            let usingBrowserCookies = appendCookieArgs(for: normalizedURL, to: &args)
+            let usingBrowserCookies = appendCookieArgs(
+                for: normalizedURL,
+                to: &args,
+                browserOverride: options.browserCookieSource
+            )
             logCookieUsage(for: normalizedURL, usingBrowserCookies: usingBrowserCookies)
         }
         
@@ -1477,7 +1563,6 @@ public struct DownloadResult: Sendable {
         }
 
         var triedStrategies = Set<DownloadRecoveryStrategy>()
-        var triedAltBrowsers = Set<String>()
         var currentArgs = args
         var processResult: DownloadProcessResult? = nil
 
@@ -1505,20 +1590,14 @@ public struct DownloadResult: Sendable {
                 if !errText.isEmpty, isCookieFailureError(errText), currentArgs.contains("--cookies-from-browser"), !triedStrategies.contains(.stripCookies) {
                     if let idx = currentArgs.firstIndex(of: "--cookies-from-browser"), idx + 1 < currentArgs.count {
                         let failedBrowser = currentArgs[idx + 1]
-                        let installed = await BrowserUtils.shared.getInstalledBrowsers().map { $0.id.lowercased() }
-                        let pool = installed.isEmpty ? ["chrome", "brave", "firefox", "edge", "safari", "helium"] : ["chrome", "brave", "firefox", "edge", "safari", "helium"].filter { installed.contains($0) }
-                        if let altBrowser = pool.first(where: { $0 != failedBrowser && ($0 != "safari" || Self.hasFullDiskAccess) && !triedAltBrowsers.contains($0) }) {
-                            triedAltBrowsers.insert(altBrowser)
-                            LoggerService.shared.log("Browser cookie access failed for '\(failedBrowser)'. Retrying download with alternative browser cookies from '\(altBrowser)'...", level: .info)
-                            onOutput("[Siphon Info] Retrying with cookies from \(altBrowser.capitalized)...\n")
-                            currentArgs[idx + 1] = Self.cookiesFromBrowserArgument(for: altBrowser)
-                            refreshBrowserTransportIdentity(for: normalizedURL, args: &currentArgs)
-                            continue
-                        }
+                        LoggerService.shared.log(
+                            "Browser cookie access failed for '\(failedBrowser)'. Unrelated browser profiles will not be probed.",
+                            level: .info
+                        )
                     }
                     triedStrategies.insert(.stripCookies)
                     LoggerService.shared.log("Browser cookie access failed or database missing (\(errText.trimmingCharacters(in: .whitespacesAndNewlines))). Retrying download without browser cookies...", level: .warning)
-                    if let browser = configuredBrowserCookieSource() {
+                    if let browser = Self.validatedBrowserCookieSource(options.browserCookieSource) ?? configuredBrowserCookieSource() {
                         recordCookieDenial(browser: browser, url: normalizedURL)
                     }
                     onOutput("[Siphon Info] Browser cookies unavailable. Retrying download directly without browser cookies...\n")
@@ -1564,13 +1643,18 @@ public struct DownloadResult: Sendable {
                 if !errText.isEmpty, (normalizedURL.contains("youtube.com") || normalizedURL.contains("youtu.be")),
                    (errText.contains("403") || errText.contains("Sign in") || errText.contains("bot") || errText.contains("login_required")),
                    !currentArgs.contains("--cookies-from-browser"),
-                   let browser = configuredBrowserCookieSource(),
+                   let browser = Self.validatedBrowserCookieSource(options.browserCookieSource) ?? configuredBrowserCookieSource(),
                    !triedStrategies.contains(.injectBrowserCookies(browser: browser)) {
                     triedStrategies.insert(.injectBrowserCookies(browser: browser))
                     LoggerService.shared.log("YouTube 403 / bot challenge encountered. Retrying download with browser cookies from \(browser)...", level: .warning)
                     onOutput("[Siphon Info] YouTube authentication required. Retrying download with browser cookies from \(browser)...\n")
                     var cookieArgs = currentArgs
-                    _ = appendCookieArgs(for: normalizedURL, to: &cookieArgs, force: true)
+                    _ = appendCookieArgs(
+                        for: normalizedURL,
+                        to: &cookieArgs,
+                        force: true,
+                        browserOverride: options.browserCookieSource
+                    )
                     currentArgs = cookieArgs
                     continue
                 }
@@ -1604,7 +1688,11 @@ public struct DownloadResult: Sendable {
                     continue
                 }
 
-                throw mapSiteSpecificError(error, url: normalizedURL)
+                throw mapSiteSpecificError(
+                    error,
+                    url: normalizedURL,
+                    browserCookieSource: options.browserCookieSource
+                )
             }
         }
 
@@ -2032,8 +2120,19 @@ public struct DownloadResult: Sendable {
         return browser
     }
 
-    private func appendCookieArgs(for url: String, to args: inout [String], force: Bool = false) -> Bool {
-        guard let browser = configuredBrowserCookieSource() else { return false }
+    private func appendCookieArgs(
+        for url: String,
+        to args: inout [String],
+        force: Bool = false,
+        browserOverride: String? = nil
+    ) -> Bool {
+        let browser: String?
+        if browserOverride != nil {
+            browser = Self.validatedBrowserCookieSource(browserOverride)
+        } else {
+            browser = configuredBrowserCookieSource()
+        }
+        guard let browser else { return false }
         if isCookieDenied(browser: browser, url: url) { return false }
         if force || !args.contains("--cookies-from-browser") {
             let cookieArg = Self.cookiesFromBrowserArgument(for: browser)
@@ -2042,16 +2141,23 @@ public struct DownloadResult: Sendable {
         return true
     }
 
+    nonisolated static func validatedBrowserCookieSource(_ raw: String?) -> String? {
+        guard let raw else { return nil }
+        let browser = raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if browser == "none" || browser.isEmpty { return nil }
+        let allowed = Set(SupportedBrowser.allCases.map(\.rawValue))
+        return allowed.contains(browser) ? browser : nil
+    }
+
     private func configuredBrowserCookieSource() -> String? {
         let raw = UserDefaults.standard.string(forKey: UserDefaultsKeys.browserForCookies) ?? "safari"
-        let browser = raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        if browser == "none" { return nil }
-        let allowed = Set(SupportedBrowser.allCases.map(\.rawValue))
-        if allowed.contains(browser) {
-            return browser
+        guard let browser = Self.validatedBrowserCookieSource(raw) else {
+            if raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() != "none" {
+                LoggerService.shared.log("Invalid or unrecognized browserForCookies setting '\(raw)', falling back to none", level: .warning)
+            }
+            return nil
         }
-        LoggerService.shared.log("Invalid or unrecognized browserForCookies setting '\(raw)', falling back to none", level: .warning)
-        return nil
+        return browser
     }
 
     private func logCookieUsage(for url: String, usingBrowserCookies: Bool) {
@@ -2206,6 +2312,7 @@ public struct DownloadResult: Sendable {
         referer: String?,
         rawCookies: String?,
         rawUserAgent: String?,
+        browserCookieSource: String?,
         stage: String
     ) async throws -> String {
         guard let ytdlp = ytdlpPath else { throw YtdlpError.notFound }
@@ -2233,7 +2340,11 @@ public struct DownloadResult: Sendable {
                 args.append(contentsOf: ["--cookies", cookieFile.path])
             }
         } else {
-            _ = appendCookieArgs(for: targetURL, to: &args)
+            _ = appendCookieArgs(
+                for: targetURL,
+                to: &args,
+                browserOverride: browserCookieSource
+            )
         }
 
         let userAgent = rawUserAgent?.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -2290,7 +2401,8 @@ public struct DownloadResult: Sendable {
     private func resolveRecuMediaInfo(
         url: String,
         rawCookies: String?,
-        rawUserAgent: String?
+        rawUserAgent: String?,
+        browserCookieSource: String?
     ) async throws -> RecuExtractedMedia {
         guard let identity = Self.recuVideoIdentity(from: url) else {
             throw YtdlpError.downloadFailed("Unsupported Recu.me URL. Expected /<model>/video/<id>/play.")
@@ -2309,6 +2421,7 @@ public struct DownloadResult: Sendable {
                 referer: nil,
                 rawCookies: rawCookies,
                 rawUserAgent: rawUserAgent,
+                browserCookieSource: browserCookieSource,
                 stage: attempt == 0 ? "page" : "page-refresh"
             )
             guard let token = Self.recuToken(from: lastPageHTML, videoID: identity.videoID) else {
@@ -2331,6 +2444,7 @@ public struct DownloadResult: Sendable {
                 referer: pageURL,
                 rawCookies: rawCookies,
                 rawUserAgent: rawUserAgent,
+                browserCookieSource: browserCookieSource,
                 stage: attempt == 0 ? "api" : "api-refresh"
             )
 
@@ -2819,9 +2933,16 @@ public struct DownloadResult: Sendable {
         return lastHTML
     }
 
-    private func resolveBoyfriendTVMediaInfo(url: String, rawCookies: String? = nil) async throws -> BoyfriendTVExtractedMedia? {
+    private func resolveBoyfriendTVMediaInfo(
+        url: String,
+        rawCookies: String? = nil,
+        rawUserAgent: String? = nil,
+        browserCookieSource: String? = nil
+    ) async throws -> BoyfriendTVExtractedMedia? {
         let targetUrl = normalizeURLForYtdlp(url)
         guard let pageURL = URL(string: targetUrl) else { return nil }
+        let effectiveBrowserSource =
+            Self.validatedBrowserCookieSource(browserCookieSource) ?? configuredBrowserCookieSource()
 
         var pageCandidates: [URL] = [pageURL]
         if let alternateString = Self.boyfriendTVAlternateURL(for: targetUrl),
@@ -2948,7 +3069,7 @@ public struct DownloadResult: Sendable {
             installedBrowsers = await BrowserUtils.shared.getInstalledBrowsers().map(\.id)
         }
         let browsersToTry = Self.boyfriendTVBrowserCandidates(
-            configured: configuredBrowserCookieSource(),
+            configured: effectiveBrowserSource,
             installed: installedBrowsers,
             hasFullDiskAccess: Self.hasFullDiskAccess
         )
@@ -2967,7 +3088,14 @@ public struct DownloadResult: Sendable {
                     if let browserName = browser {
                         args.append(contentsOf: ["--cookies-from-browser", Self.cookiesFromBrowserArgument(for: browserName)])
                     }
-                    appendSiteSpecificArgs(for: candidateURL, to: &args)
+                    appendSiteSpecificArgs(
+                        for: candidateURL,
+                        rawUserAgent: rawUserAgent,
+                        to: &args
+                    )
+                    if rawUserAgent?.isEmpty != false, browser != nil {
+                        refreshBrowserTransportIdentity(for: candidateURL, args: &args)
+                    }
                     args.append("--")
                     args.append(candidateURL)
 
@@ -2989,7 +3117,13 @@ public struct DownloadResult: Sendable {
             for candidatePage in pageCandidates {
                 var request = URLRequest(url: candidatePage)
                 request.timeoutInterval = 3.0
-                let effectiveUA = (configuredBrowserCookieSource() == "safari") ? Self.safariUserAgent : "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+                let effectiveUA: String = {
+                    let trimmed = rawUserAgent?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                    if !trimmed.isEmpty { return trimmed }
+                    return effectiveBrowserSource == "safari"
+                        ? Self.safariUserAgent
+                        : "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+                }()
                 request.setValue(effectiveUA, forHTTPHeaderField: "User-Agent")
                 let pageBaseDomain = candidatePage.host?.lowercased().contains("boyfriendtv.com") == true
                     ? "https://www.boyfriendtv.com"
@@ -3171,7 +3305,13 @@ public struct DownloadResult: Sendable {
                 if streamUrl == nil, let embedPageURL = URL(string: embed), (processRunner is DefaultYtdlpProcessRunner) {
                     var embedRequest = URLRequest(url: embedPageURL)
                     embedRequest.timeoutInterval = 3.0
-                    let effectiveUA = (configuredBrowserCookieSource() == "safari") ? Self.safariUserAgent : "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+                    let effectiveUA: String = {
+                        let trimmed = rawUserAgent?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                        if !trimmed.isEmpty { return trimmed }
+                        return effectiveBrowserSource == "safari"
+                            ? Self.safariUserAgent
+                            : "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+                    }()
                     embedRequest.setValue(effectiveUA, forHTTPHeaderField: "User-Agent")
                     let embedBaseDomain = embedPageURL.host?.lowercased().contains("boyfriendtv.com") == true
                         ? "https://www.boyfriendtv.com"
@@ -3224,7 +3364,7 @@ public struct DownloadResult: Sendable {
             return BoyfriendTVExtractedMedia(streamURL: validStreamUrl, embedURL: embedUrl ?? targetUrl, title: title, thumbnailURL: thumbnailUrl)
         }
         
-        if safariCookieAccessDenied && (configuredBrowserCookieSource() == "safari" || browserLabels.allSatisfy { $0 == "safari" }) {
+        if safariCookieAccessDenied && (effectiveBrowserSource == "safari" || browserLabels.allSatisfy { $0 == "safari" }) {
             throw YtdlpError.safariCookiesFullDiskAccessRequired
         }
         try Task.checkCancellation()
@@ -4852,22 +4992,33 @@ public struct DownloadResult: Sendable {
         return host == "thisvid.com" || host.hasSuffix(".thisvid.com")
     }
 
-    private func shouldRetryWithBrowserCookies(error: Error, url: String, usingBrowserCookies: Bool, forceBrowserCookies: Bool) -> Bool {
+    private func shouldRetryWithBrowserCookies(
+        error: Error,
+        url: String,
+        usingBrowserCookies: Bool,
+        forceBrowserCookies: Bool,
+        browserCookieSource: String? = nil
+    ) -> Bool {
+        let selectedBrowser = Self.validatedBrowserCookieSource(browserCookieSource) ?? configuredBrowserCookieSource()
         guard !(error is CancellationError), !Task.isCancelled,
               usesBrowserTransport(url) || isGFFURL(url),
-              !usingBrowserCookies, !forceBrowserCookies, configuredBrowserCookieSource() != nil else { return false }
+              !usingBrowserCookies, !forceBrowserCookies, selectedBrowser != nil else { return false }
         let message = String(describing: error)
             .replacingOccurrences(of: #"https?://[^\s\"]+"#, with: "[URL]", options: .regularExpression).lowercased()
         return message.contains("403") || message.contains("401") || message.contains("sign in") ||
             message.contains("login") || message.contains("cloudflare") || message.contains("challenge")
     }
 
-    private func mapSiteSpecificError(_ error: Error, url: String) -> Error {
+    private func mapSiteSpecificError(
+        _ error: Error,
+        url: String,
+        browserCookieSource: String? = nil
+    ) -> Error {
         let errString = "\(error)"
         let lowerErr = (usesBrowserTransport(url)
             ? errString.replacingOccurrences(of: #"https?://[^\s\"]+"#, with: "[URL]", options: .regularExpression)
             : errString).lowercased()
-        let configuredBrowser = configuredBrowserCookieSource()
+        let configuredBrowser = Self.validatedBrowserCookieSource(browserCookieSource) ?? configuredBrowserCookieSource()
 
         if (configuredBrowser == "safari" || configuredBrowser == nil) && isSafariPermissionError(errString) {
             return YtdlpError.safariCookiesFullDiskAccessRequired
@@ -5296,28 +5447,10 @@ public struct DownloadResult: Sendable {
                     recordCookieDenial(browser: browser, url: urlArg)
                 }
                 
-                let installed = await BrowserUtils.shared.getInstalledBrowsers().map { $0.id.lowercased() }
-                let pool = installed.isEmpty ? ["chrome", "brave", "firefox", "edge", "safari", "helium"] : ["chrome", "brave", "firefox", "edge", "safari", "helium"].filter { installed.contains($0) }
-                let altBrowsers = pool.filter { $0 != browser && ($0 != "safari" || Self.hasFullDiskAccess) }
-                for alt in altBrowsers {
-                    var altArgs = args
-                    try Task.checkCancellation()
-                    altArgs[idx + 1] = Self.cookiesFromBrowserArgument(for: alt)
-                    refreshBrowserTransportIdentity(for: args.last ?? "", args: &altArgs)
-                    LoggerService.shared.log("Retrying command with alternative browser cookies from '\(alt)'...", level: .info)
-                    do {
-                        return try await runTransportCommand(altArgs)
-                    } catch let altErr as YtdlpError {
-                        if case .commandFailed(let altOut) = altErr, isCookieFailureError(altOut) {
-                            continue
-                        }
-                        throw altErr
-                    } catch {
-                        throw error
-                    }
-                }
-                
-                LoggerService.shared.log("All browser cookie attempts failed. Retrying command without browser cookies...", level: .info)
+                LoggerService.shared.log(
+                    "Selected browser cookie source '\(browser)' is unavailable. Retrying without browser cookies; unrelated browser profiles will not be probed.",
+                    level: .info
+                )
                 var cleanArgs = stripCookieArgs(from: args)
                 refreshBrowserTransportIdentity(for: args.last ?? "", args: &cleanArgs)
                 return try await runTransportCommand(cleanArgs)
