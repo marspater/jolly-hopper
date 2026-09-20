@@ -147,6 +147,54 @@ final class QueueRecoveryStoreTests: XCTestCase {
         XCTAssertEqual(manager.recoverableJobsCount, 0)
         XCTAssertTrue(manager.downloads.isEmpty)
     }
+
+    func testDiscardRecoveryDeletesOwnedScratchAndStaleHistoryCopy() throws {
+        let id = UUID()
+        let scratch = ScratchDirectoryPolicy.makeURL()
+        try FileManager.default.createDirectory(at: scratch, withIntermediateDirectories: true)
+        let partial = scratch.appendingPathComponent("video.mp4.part")
+        try Data("partial".utf8).write(to: partial)
+        defer { try? FileManager.default.removeItem(at: scratch) }
+
+        let recovered = Download(
+            url: "https://example.com/discard-active",
+            options: .default,
+            title: "Recovered",
+            id: id
+        )
+        recovered.status = .downloading
+        recovered.scratchDirectory = scratch
+        QueueRecoveryStore(fileURL: recoveryFileURL).persist(activeJobs: [recovered])
+
+        let stale = Download(
+            url: "https://example.com/discard-active",
+            options: .default,
+            title: "Stale Paused",
+            id: id
+        )
+        stale.status = .paused
+        stale.scratchDirectory = scratch
+        let historyData = try JSONEncoder().encode([HistoricDownload(download: stale)])
+        UserDefaults.standard.set(historyData, forKey: UserDefaultsKeys.downloadHistory)
+
+        let manager = DownloadManager(recoveryFileURL: recoveryFileURL)
+        defer { manager.shutdown() }
+        manager.initialize(languageService: LanguageService())
+
+        XCTAssertTrue(manager.showQueueRecoveryAlert)
+        XCTAssertTrue(manager.downloads.contains(where: { $0.id == id }))
+        XCTAssertTrue(manager.history.contains(where: { $0.id == id }))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: partial.path))
+
+        manager.discardInterruptedJobs()
+
+        XCTAssertFalse(manager.showQueueRecoveryAlert)
+        XCTAssertFalse(manager.downloads.contains(where: { $0.id == id }))
+        XCTAssertFalse(manager.history.contains(where: { $0.id == id }))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: scratch.path))
+        XCTAssertTrue(manager.recoveryStore.loadInterruptedJobs().isEmpty)
+        XCTAssertFalse(manager.historyStore.loadHistory().contains(where: { $0.id == id }))
+    }
     func testRecoveryPreservesOwnedScratchDirectoryBrowserSourceAndCreationDate() throws {
         let store = QueueRecoveryStore(fileURL: recoveryFileURL)
         let scratch = ScratchDirectoryPolicy.makeURL()
