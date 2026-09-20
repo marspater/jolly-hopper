@@ -209,6 +209,7 @@ public final class UpdateChecker: ObservableObject {
     }
 
     public func downloadAndInstallUpdate() async {
+        guard updateOperationID == nil else { return }
         let operationID = UUID()
         updateOperationID = operationID
         defer {
@@ -236,6 +237,7 @@ public final class UpdateChecker: ObservableObject {
                     from: cURL,
                     targetAssetName: downloadAssetName ?? ""
                 )
+                guard updateOperationID == operationID else { return }
                 if let apiChecksum = expectedChecksum, apiChecksum != manifestChecksum {
                     let message = "GitHub asset digest does not match the published checksum manifest."
                     updateError = UpdateDownloadError.checksumUnavailable(message).localizedDescription
@@ -246,6 +248,7 @@ public final class UpdateChecker: ObservableObject {
             } catch is CancellationError {
                 return
             } catch {
+                guard updateOperationID == operationID else { return }
                 updateError = error.localizedDescription
                 LoggerService.shared.log("Update checksum verification could not be prepared: \(error.localizedDescription)", level: .error)
                 return
@@ -270,6 +273,7 @@ public final class UpdateChecker: ObservableObject {
         do {
             let downloadedPkgURL = try await downloader.download(from: url) { [weak self] progress in
                 Task { @MainActor in
+                    guard self?.updateOperationID == operationID else { return }
                     self?.updateProgress = progress
                 }
             }
@@ -297,12 +301,14 @@ public final class UpdateChecker: ObservableObject {
             needsRestart = true
             LoggerService.shared.log("Update installed successfully.", level: .info)
         } catch UpdateDownloadError.downloadCancelled {
+            guard updateOperationID == operationID else { return }
             isDownloading = false
             isInstalling = false
             updateProgress = 0
             updateError = nil
             LoggerService.shared.log("App update download was cancelled.", level: .info)
         } catch is CancellationError {
+            guard updateOperationID == operationID else { return }
             downloader.cancel()
             isDownloading = false
             isInstalling = false
@@ -310,6 +316,7 @@ public final class UpdateChecker: ObservableObject {
             updateError = nil
             LoggerService.shared.log("App update task was cancelled.", level: .info)
         } catch {
+            guard updateOperationID == operationID else { return }
             isDownloading = false
             isInstalling = false
             updateError = error.localizedDescription
@@ -472,4 +479,3 @@ public final class UpdateChecker: ObservableObject {
         """
     }
 }
-
