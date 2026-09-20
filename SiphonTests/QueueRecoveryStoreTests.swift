@@ -147,4 +147,114 @@ final class QueueRecoveryStoreTests: XCTestCase {
         XCTAssertEqual(manager.recoverableJobsCount, 0)
         XCTAssertTrue(manager.downloads.isEmpty)
     }
+    func testRecoveryPreservesOwnedScratchDirectoryBrowserSourceAndCreationDate() throws {
+        let store = QueueRecoveryStore(fileURL: recoveryFileURL)
+        let scratch = ScratchDirectoryPolicy.makeURL()
+        try FileManager.default.createDirectory(at: scratch, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: scratch) }
+
+        var options = DownloadOptions.default
+        options.rawCookies = "session=secret"
+        options.rawUserAgent = "FixtureBrowser/1.0"
+        options.browserCookieSource = "firefox"
+        options.additionalArguments = "--add-header Authorization: secret"
+
+        let createdAt = Date(timeIntervalSince1970: 1_700_000_000)
+        let download = Download(
+            url: "https://example.com/recover",
+            options: options,
+            title: "Recover",
+            createdAt: createdAt
+        )
+        download.status = .downloading
+        download.progress = 0.42
+        download.scratchDirectory = scratch
+
+        store.persist(activeJobs: [download])
+        let restored = try XCTUnwrap(store.loadInterruptedJobs().first)
+
+        XCTAssertEqual(restored.createdAt, createdAt)
+        XCTAssertEqual(restored.scratchDirectory?.standardizedFileURL.path, scratch.standardizedFileURL.path)
+        XCTAssertEqual(restored.options.browserCookieSource, "firefox")
+        XCTAssertNil(restored.options.rawCookies)
+        XCTAssertNil(restored.options.rawUserAgent)
+        XCTAssertNil(restored.options.additionalArguments)
+    }
+
+    func testRecoveryRejectsUnownedScratchDirectory() throws {
+        let store = QueueRecoveryStore(fileURL: recoveryFileURL)
+        let unowned = tempDir.appendingPathComponent("siphon_scratch_tampered", isDirectory: true)
+        try FileManager.default.createDirectory(at: unowned, withIntermediateDirectories: true)
+
+        let download = Download(url: "https://example.com/recover", options: .default)
+        download.status = .downloading
+        download.scratchDirectory = unowned
+
+        store.persist(activeJobs: [download])
+        let restored = try XCTUnwrap(store.loadInterruptedJobs().first)
+        XCTAssertNil(restored.scratchDirectory)
+    }
+
+    func testRecoveryReplacesStaleHistoryCopyForSameJob() throws {
+        let store = QueueRecoveryStore(fileURL: recoveryFileURL)
+        let id = UUID()
+        let scratch = ScratchDirectoryPolicy.makeURL()
+        try FileManager.default.createDirectory(at: scratch, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: scratch) }
+
+        var recoveredOptions = DownloadOptions.default
+        recoveredOptions.customFilename = "Recovered Name"
+        recoveredOptions.browserCookieSource = "firefox"
+        let recovered = Download(
+            url: "https://example.com/active",
+            options: recoveredOptions,
+            title: "Recovered",
+            id: id
+        )
+        recovered.status = .downloading
+        recovered.progress = 0.67
+        recovered.scratchDirectory = scratch
+        store.persist(activeJobs: [recovered])
+
+        let stale = Download(
+            url: "https://example.com/active",
+            options: .default,
+            title: "Stale History",
+            id: id
+        )
+        stale.status = .paused
+        let historyData = try JSONEncoder().encode([HistoricDownload(download: stale)])
+        UserDefaults.standard.set(historyData, forKey: UserDefaultsKeys.downloadHistory)
+
+        let manager = DownloadManager(recoveryFileURL: recoveryFileURL)
+        manager.ytdlpService.isUpdating = true
+        defer { manager.shutdown() }
+        manager.initialize(languageService: LanguageService())
+        manager.recoverInterruptedJobs()
+
+        let restored = try XCTUnwrap(manager.downloads.first(where: { $0.id == id }))
+        XCTAssertEqual(restored.status, .queued)
+        XCTAssertEqual(restored.progress, 0.67)
+        XCTAssertEqual(restored.options.customFilename, "Recovered Name")
+        XCTAssertEqual(restored.options.browserCookieSource, "firefox")
+        XCTAssertEqual(restored.scratchDirectory?.standardizedFileURL.path, scratch.standardizedFileURL.path)
+    }
+
+    func testQueueReorderIsPersistedForCrashRecovery() {
+        let manager = DownloadManager(recoveryFileURL: recoveryFileURL)
+        manager.ytdlpService.isUpdating = true
+        defer { manager.shutdown() }
+
+        let first = Download(url: "https://example.com/1", options: .default, title: "First")
+        let second = Download(url: "https://example.com/2", options: .default, title: "Second")
+        let third = Download(url: "https://example.com/3", options: .default, title: "Third")
+        manager.downloads = [first, second, third]
+        manager.persistQueueRecoveryState()
+
+        manager.moveDownloadToTop(third)
+
+        let restoredOrder = manager.recoveryStore.loadInterruptedJobs().map(\.title)
+        XCTAssertEqual(restoredOrder, ["Third", "First", "Second"])
+    }
+
 }

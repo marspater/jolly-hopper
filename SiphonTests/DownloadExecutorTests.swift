@@ -115,14 +115,15 @@ final class DownloadExecutorTests: XCTestCase {
     }
 
     func testOwnedScratchSurvivesPauseAndIsCleanedOnStopOrCompletion() throws {
-        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
-        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: root) }
-        let unrelated = root.appendingPathComponent("unrelated.part")
+        let unrelatedRoot = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: unrelatedRoot, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: unrelatedRoot) }
+        let unrelated = unrelatedRoot.appendingPathComponent("unrelated.part")
         try Data("keep".utf8).write(to: unrelated)
+
         for terminalStatus in [DownloadStatus.stopped, .completed, .failed] {
             let download = Download(url: "https://example.com/video", options: .default)
-            let scratch = root.appendingPathComponent(download.id.uuidString)
+            let scratch = ScratchDirectoryPolicy.makeURL()
             try FileManager.default.createDirectory(at: scratch, withIntermediateDirectories: true)
             let partial = scratch.appendingPathComponent("video.mp4.part")
             try Data("partial".utf8).write(to: partial)
@@ -140,6 +141,24 @@ final class DownloadExecutorTests: XCTestCase {
             DownloadExecutor.cleanupTemporaryFiles(for: download)
             XCTAssertTrue(FileManager.default.fileExists(atPath: unrelated.path))
         }
+    }
+
+    func testCleanupRefusesUnownedScratchDirectory() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let unowned = root.appendingPathComponent("siphon_scratch_tampered", isDirectory: true)
+        try FileManager.default.createDirectory(at: unowned, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let marker = unowned.appendingPathComponent("keep.txt")
+        try Data("keep".utf8).write(to: marker)
+        let download = Download(url: "https://example.com/video", options: .default)
+        download.status = .failed
+        download.scratchDirectory = unowned
+
+        DownloadExecutor.cleanupTemporaryFiles(for: download)
+
+        XCTAssertTrue(FileManager.default.fileExists(atPath: marker.path))
+        XCTAssertNil(download.scratchDirectory)
     }
 
     func testExecutorDelegateInvocations() {

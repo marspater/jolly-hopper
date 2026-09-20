@@ -1,6 +1,22 @@
 import Foundation
 import os
 
+enum ScratchDirectoryPolicy {
+    static let directoryPrefix = "siphon_scratch_"
+
+    static func makeURL(fileManager: FileManager = .default) -> URL {
+        fileManager.temporaryDirectory
+            .appendingPathComponent(directoryPrefix + UUID().uuidString, isDirectory: true)
+    }
+
+    static func isOwned(_ url: URL, fileManager: FileManager = .default) -> Bool {
+        let root = fileManager.temporaryDirectory.standardizedFileURL.resolvingSymlinksInPath()
+        let candidate = url.standardizedFileURL.resolvingSymlinksInPath()
+        guard candidate.lastPathComponent.hasPrefix(directoryPrefix) else { return false }
+        return candidate.deletingLastPathComponent().path == root.path
+    }
+}
+
 @MainActor
 class Download: ObservableObject, Identifiable {
     let id: UUID
@@ -1950,11 +1966,12 @@ struct HistoricDownload: Codable, Identifiable {
     let errorMessage: String?
     let log: String
     let progress: Double
+    let scratchDirectoryPath: String?
     let options: DownloadOptions
 
 
     enum CodingKeys: String, CodingKey {
-        case id, url, title, filePath, filePaths, downloadDate, fileType, status, thumbnailURL, duration, errorMessage, log, progress, options
+        case id, url, title, filePath, filePaths, downloadDate, fileType, status, thumbnailURL, duration, errorMessage, log, progress, scratchDirectoryPath, options
     }
 
     @MainActor
@@ -1977,6 +1994,9 @@ struct HistoricDownload: Codable, Identifiable {
             LoggerService.sanitizeDiagnosticText(download.log)
         )
         self.progress = download.progress
+        self.scratchDirectoryPath = download.scratchDirectory.flatMap {
+            ScratchDirectoryPolicy.isOwned($0) ? $0.path : nil
+        }
         var sanitizedOptions = download.options
         sanitizedOptions.rawCookies = nil
         sanitizedOptions.rawUserAgent = nil
@@ -1998,6 +2018,7 @@ struct HistoricDownload: Codable, Identifiable {
         self.errorMessage = try container.decodeIfPresent(String.self, forKey: .errorMessage)
         self.log = try container.decode(String.self, forKey: .log)
         self.progress = try container.decode(Double.self, forKey: .progress)
+        self.scratchDirectoryPath = try container.decodeIfPresent(String.self, forKey: .scratchDirectoryPath)
         self.options = try container.decode(DownloadOptions.self, forKey: .options)
 
         // Legacy deserialization fallback: read single filePath only if filePaths is not present
@@ -2024,6 +2045,7 @@ struct HistoricDownload: Codable, Identifiable {
         try container.encode(filePaths, forKey: .filePaths)
         try container.encode(downloadDate, forKey: .downloadDate)
         try container.encode(fileType, forKey: .fileType)
+        try container.encodeIfPresent(scratchDirectoryPath, forKey: .scratchDirectoryPath)
         try container.encodeIfPresent(thumbnailURL, forKey: .thumbnailURL)
         try container.encodeIfPresent(duration, forKey: .duration)
     }
@@ -2038,9 +2060,22 @@ struct HistoricDownload: Codable, Identifiable {
     // Helper to convert back to Download object for UI
     @MainActor
     func toDownload() -> Download {
-        let download = Download(url: self.url, options: self.options, title: self.title, id: self.id)
+        let download = Download(
+            url: self.url,
+            options: self.options,
+            title: self.title,
+            id: self.id,
+            createdAt: self.downloadDate
+        )
         download.status = self.status
         download.progress = self.progress
+        if let path = self.scratchDirectoryPath {
+            let scratchDirectory = URL(fileURLWithPath: path)
+            if ScratchDirectoryPolicy.isOwned(scratchDirectory),
+               FileManager.default.fileExists(atPath: scratchDirectory.path) {
+                download.scratchDirectory = scratchDirectory
+            }
+        }
         download.thumbnailURL = self.thumbnailURL
         download.duration = self.duration
         download.errorMessage = self.errorMessage

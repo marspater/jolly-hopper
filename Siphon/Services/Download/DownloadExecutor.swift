@@ -321,6 +321,13 @@ final class DownloadExecutor: ObservableObject {
                 return
             }
 
+            if download.scratchDirectory == nil {
+                download.scratchDirectory = ScratchDirectoryPolicy.makeURL()
+            }
+
+            // The .downloading transition persists recovery state. Allocate the
+            // scratch path first so a crash immediately after launch can still
+            // reconnect to resumable partial data.
             delegate?.executorDidUpdateStatus(for: download, to: .downloading)
             delegate?.executorDidRequestBroadcast()
             Self.appendToLog(for: download, text: "[\(Self.logTimestamp())] [INFO] Metadata acquired. Starting download stream...\n")
@@ -359,9 +366,6 @@ final class DownloadExecutor: ObservableObject {
                 }
             }
 
-            if download.scratchDirectory == nil {
-                download.scratchDirectory = FileManager.default.temporaryDirectory.appendingPathComponent("siphon_scratch_\(UUID().uuidString)")
-            }
             let downloadResult = try await ytdlpService.download(
                 url: download.url,
                 options: download.options,
@@ -728,6 +732,14 @@ final class DownloadExecutor: ObservableObject {
     static func cleanupTemporaryFiles(for download: Download) {
         guard download.status != .paused && download.status != .queued,
               let directory = download.scratchDirectory else { return }
+        guard ScratchDirectoryPolicy.isOwned(directory) else {
+            LoggerService.shared.log(
+                "Refusing to delete unowned scratch directory: \(directory.lastPathComponent)",
+                level: .warning
+            )
+            download.scratchDirectory = nil
+            return
+        }
         // Delete only the directory allocated to this job, never scan the save folder.
         do {
             if FileManager.default.fileExists(atPath: directory.path) {
