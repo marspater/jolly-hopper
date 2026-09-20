@@ -10,6 +10,7 @@ import AppKit
 protocol DownloadExecutorDelegate: AnyObject {
     func executorDidUpdateStatus(for download: Download, to status: DownloadStatus)
     func executorDidRequestAddToHistory(_ download: Download, skipSave: Bool)
+    func executorDidRequestRecoveryPersist()
     func executorDidFinishDownload()
     func executorDidRequestBroadcast()
 }
@@ -175,7 +176,21 @@ final class DownloadExecutor: ObservableObject {
 
     private let ytdlpService: YtdlpService
     private let notificationService: NotificationService
+    private var lastRecoveryProgressBucket: [UUID: Int] = [:]
     weak var delegate: DownloadExecutorDelegate?
+
+    nonisolated static func recoveryProgressBucket(for progress: Double) -> Int {
+        let safeProgress = progress.isNaN ? 0 : max(0, min(1, progress))
+        return Int((safeProgress * 20).rounded(.down))
+    }
+
+    private func persistRecoveryProgressIfNeeded(for download: Download) {
+        let bucket = Self.recoveryProgressBucket(for: download.progress)
+        let previousBucket = lastRecoveryProgressBucket[download.id] ?? bucket
+        guard bucket > previousBucket else { return }
+        lastRecoveryProgressBucket[download.id] = bucket
+        delegate?.executorDidRequestRecoveryPersist()
+    }
 
     init(
         ytdlpService: YtdlpService,
@@ -249,6 +264,7 @@ final class DownloadExecutor: ObservableObject {
             queue.releaseSlot(for: downloadId)
             activeTasks.removeValue(forKey: downloadId)
             activeControllers.removeValue(forKey: downloadId)
+            lastRecoveryProgressBucket.removeValue(forKey: downloadId)
             if download.status != .paused && download.status != .queued {
                 Self.cleanupTemporaryFiles(for: downloadCopy)
             }
@@ -333,6 +349,7 @@ final class DownloadExecutor: ObservableObject {
             // scratch path first so a crash immediately after launch can still
             // reconnect to resumable partial data.
             delegate?.executorDidUpdateStatus(for: download, to: .downloading)
+            lastRecoveryProgressBucket[download.id] = Self.recoveryProgressBucket(for: download.progress)
             delegate?.executorDidRequestBroadcast()
             Self.appendToLog(for: download, text: "[\(Self.logTimestamp())] [INFO] Metadata acquired. Starting download stream...\n")
 
@@ -341,9 +358,9 @@ final class DownloadExecutor: ObservableObject {
 
             LoggerService.shared.log("Starting download for URL: \(LoggerService.sanitizeURLForLog(download.url))", level: .info)
 
-            let coalescer = DownloadEventCoalescer { [weak download] progress, speed, eta, lines in
-                DispatchQueue.main.async { [weak download] in
-                    guard let download else { return }
+            let coalescer = DownloadEventCoalescer { [weak self, weak download] progress, speed, eta, lines in
+                DispatchQueue.main.async { [weak self, weak download] in
+                    guard let self, let download else { return }
                     guard download.status == .downloading || download.status == .fetching || download.status == .processing else {
                         return
                     }
@@ -354,6 +371,7 @@ final class DownloadExecutor: ObservableObject {
                         if let speed, !speed.isEmpty {
                             download.diagnostics.peakSpeed = speed
                         }
+                        self.persistRecoveryProgressIfNeeded(for: download)
                     }
                     if !lines.isEmpty {
                         let combined = lines.joined(separator: "\n") + "\n"
@@ -361,7 +379,8 @@ final class DownloadExecutor: ObservableObject {
                         if download.status == .downloading {
                             for line in lines {
                                 if line.contains("[EmbedThumbnail]") || line.contains("[Metadata]") || line.contains("[Merger]") || line.contains("[VideoConvertor]") || line.contains("[ThumbnailsConvertor]") || line.contains("[EmbedSubtitle]") {
-                                    download.status = .processing
+                                    self.delegate?.executorDidUpdateStatus(for: download, to: .processing)
+                                    self.delegate?.executorDidRequestBroadcast()
                                     break
                                 }
                             }
