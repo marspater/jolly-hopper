@@ -682,6 +682,10 @@ extension DownloadManager: DownloadExecutorDelegate {
         }
     }
 
+    func executorDidRequestRecoveryPersist() {
+        persistQueueRecoveryState()
+    }
+
     func executorDidFinishDownload() {
         processQueue()
     }
