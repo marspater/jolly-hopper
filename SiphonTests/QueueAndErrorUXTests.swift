@@ -606,15 +606,14 @@ final class QueueAndErrorUXTests: XCTestCase {
         download.status = .processing
         manager.downloads.append(download)
 
-        let controller = DownloadProcessController()
-        let proc = Process()
-        _ = controller.attachProcess(proc)
-        manager.activeControllers[download.id] = controller
-
-        // Stop download while in postprocessing
+        // Execution internals are owned exclusively by DownloadExecutor. This
+        // integration test verifies the manager-level state transition only;
+        // controller cancellation/teardown is covered by DownloadExecutorTests.
+        XCTAssertEqual(manager.executionState(for: download.id), .idle)
         manager.stopDownload(download)
+
         XCTAssertEqual(download.status, .stopped, "Stopping during postprocessing must set status to .stopped")
-        XCTAssertTrue(controller.isCancelled, "Attached controller must be cancelled")
+        XCTAssertEqual(manager.executionState(for: download.id), .idle)
     }
 
     func testProcessExitingWhilePipeCallbacksAreActive() async {
@@ -738,28 +737,17 @@ final class QueueAndErrorUXTests: XCTestCase {
 
         manager.downloads = [d1, d2, d3]
 
-        let c1 = DownloadProcessController()
-        let p1 = Process()
-        _ = c1.attachProcess(p1)
-        manager.activeControllers[d1.id] = c1
-
-        let t1 = Task { }
-        manager.activeTasks[d1.id] = t1
-
         let testPath = "/tmp/test_term.mp4"
         manager.reserveOutputPath(testPath)
 
         manager.stopAllDownloads()
         manager.shutdown()
 
-        XCTAssertTrue(c1.isCancelled, "All controllers must be cancelled on shutdown")
-        XCTAssertTrue(t1.isCancelled, "All active tasks must be cancelled on shutdown")
         XCTAssertEqual(d1.status, .stopped)
         XCTAssertEqual(d2.status, .stopped)
-        XCTAssertFalse(manager.activeControllers.isEmpty, "Shutdown requests cancellation without dropping controller ownership prematurely")
-        XCTAssertFalse(manager.activeTasks.isEmpty, "Shutdown requests cancellation without dropping task ownership prematurely")
-        manager.activeControllers.removeAll()
-        manager.activeTasks.removeAll()
+        XCTAssertEqual(d3.status, .stopped)
+        XCTAssertEqual(manager.activeExecutionCount, 0, "Manager must expose execution state without owning mutable task maps")
+        XCTAssertFalse(manager.queue.isPathReserved(testPath), "Shutdown must clear output-path reservations")
     }
 
     func testNotificationFloodResilience() async {
