@@ -1294,6 +1294,7 @@ public struct DownloadResult: Sendable {
         options: DownloadOptions,
         mediaInfo: MediaInfo? = nil,
         processController: DownloadProcessController? = nil,
+        temporaryDirectory: URL? = nil,
         onProgress: @escaping @Sendable (Double, String?, String?) -> Void,
         onOutput: @escaping @Sendable (String) -> Void
     ) async throws -> DownloadResult {
@@ -1381,23 +1382,25 @@ public struct DownloadResult: Sendable {
         args.append(contentsOf: ["--ffmpeg-location", ffmpegDir])
 
         // Safe per-download isolated scratch directory for temporary chunks and thumbnail conversions
-        let scratchDirectory = FileManager.default.temporaryDirectory.appendingPathComponent("siphon_scratch_\(UUID().uuidString)")
+        let scratchDirectory = temporaryDirectory ?? FileManager.default.temporaryDirectory.appendingPathComponent("siphon_scratch_\(UUID().uuidString)")
         do {
             try FileManager.default.createDirectory(at: scratchDirectory, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
         } catch {
             LoggerService.shared.log("Failed to create temporary scratch directory at \(scratchDirectory.path): \(error.localizedDescription)", level: .error)
             throw YtdlpError.downloadFailed("Failed to initialize temporary scratch directory: \(error.localizedDescription)")
         }
+        args.append(contentsOf: ["--paths", "home:\(options.saveFolder.path)"])
         args.append(contentsOf: ["--paths", "temp:\(scratchDirectory.path)"])
-        args.append(contentsOf: ["--paths", "thumbnail:\(scratchDirectory.path)"])
+        let thumbnailDirectory = options.downloadThumbnail ? options.saveFolder : scratchDirectory
+        args.append(contentsOf: ["--paths", "thumbnail:\(thumbnailDirectory.path)"])
         args.append("--no-playlist")
 
         let outputTemplate: String
         if let customFilename = options.customFilename ?? customResolvedTitle, !customFilename.isEmpty {
             let safeName = Self.sanitizeFilename(customFilename)
-            outputTemplate = options.saveFolder.appendingPathComponent("\(safeName).%(ext)s").path
+            outputTemplate = "\(safeName).%(ext)s"
         } else {
-            outputTemplate = options.saveFolder.appendingPathComponent("%(title)s.%(ext)s").path
+            outputTemplate = "%(title)s.%(ext)s"
         }
         args.append("--windows-filenames")
         args.append("--continue")
@@ -1486,7 +1489,11 @@ public struct DownloadResult: Sendable {
             for file in secureCookieFiles {
                 file.cleanup()
             }
-            try? FileManager.default.removeItem(at: scratchDirectory)
+            // Executor-owned directories survive a pause and are cleaned at job teardown.
+            if temporaryDirectory == nil {
+                do { try FileManager.default.removeItem(at: scratchDirectory) }
+                catch { LoggerService.shared.log("Could not remove download scratch directory: \(error.localizedDescription)", level: .warning) }
+            }
         }
 
         let sucuriCookie = await resolveSucuriCookie(for: normalizedURL)
