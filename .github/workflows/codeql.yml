@@ -14,29 +14,38 @@ concurrency:
 
 jobs:
   analyze:
-    name: Analyze (Swift + JavaScript/TypeScript + Python)
-    runs-on: macos-latest
-    timeout-minutes: 120
+    name: Analyze (${{ matrix.language }})
+    runs-on: ${{ matrix.language == 'swift' && 'macos-latest' || 'ubuntu-latest' }}
+    timeout-minutes: ${{ matrix.language == 'swift' && 120 || 30 }}
     permissions:
       actions: read
       contents: read
       security-events: write
 
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: swift
+            build-mode: manual
+          - language: javascript-typescript
+            build-mode: none
+          - language: python
+            build-mode: none
+
     steps:
     - name: Checkout repository
       uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-    # Run all CodeQL languages in one job and upload one combined SARIF payload.
-    # GitHub's PR "Code scanning results" check otherwise evaluates the fast
-    # JavaScript/Python uploads before the slower Swift database exists and
-    # reports a false "1 configuration not found" for /language:swift.
     - name: Initialize CodeQL
       uses: github/codeql-action/init@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0
       with:
-        languages: swift,javascript-typescript,python
+        languages: ${{ matrix.language }}
+        build-mode: ${{ matrix.build-mode }}
         queries: security-extended,security-and-quality
 
-    - name: Build Siphon for CodeQL extraction
+    - if: matrix.language == 'swift'
+      name: Build Siphon for CodeQL extraction
       run: |
         xcodebuild build \
           -project Siphon.xcodeproj \
@@ -48,59 +57,13 @@ jobs:
           CODE_SIGNING_REQUIRED=NO \
           CODE_SIGNING_ALLOWED=NO
 
-    - name: Generate CodeQL SARIF
+    - name: Perform CodeQL Analysis
       uses: github/codeql-action/analyze@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0
       with:
-        output: ${{ runner.temp }}/codeql-results
-        post-processed-sarif-path: ${{ runner.temp }}/codeql-results-processed
-        upload: never
-
-    - name: Preserve language configuration IDs
-      shell: bash
-      run: |
-        python3 - <<'PY'
-        import glob
-        import json
-        import os
-
-        root = os.path.join(os.environ["RUNNER_TEMP"], "codeql-results-processed")
-        files = sorted(glob.glob(os.path.join(root, "*.sarif")))
-        expected = {"swift", "javascript-typescript", "python"}
-        found = {os.path.splitext(os.path.basename(path))[0] for path in files}
-
-        missing = expected - found
-        if missing:
-            raise SystemExit(f"Missing CodeQL SARIF files: {sorted(missing)}")
-
-        for path in files:
-            language = os.path.splitext(os.path.basename(path))[0]
-            if language not in expected:
-                continue
-
-            with open(path, encoding="utf-8") as handle:
-                sarif = json.load(handle)
-
-            runs = sarif.get("runs", [])
-            if not runs:
-                raise SystemExit(f"No SARIF runs found in {path}")
-
-            for run in runs:
-                run["automationDetails"] = {"id": f"/language:{language}/"}
-
-            with open(path, "w", encoding="utf-8") as handle:
-                json.dump(sarif, handle, separators=(",", ":"))
-
-            print(f"Prepared {language} as /language:{language}/")
-        PY
-
-    # A directory upload is combined into one SARIF payload. The individual
-    # runs retain their existing /language:<lang>/ automation IDs, matching the
-    # configurations already stored on main while making the upload atomic.
-    - name: Upload CodeQL results
-      uses: github/codeql-action/upload-sarif@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0
-      with:
-        sarif_file: ${{ runner.temp }}/codeql-results-processed
-        wait-for-processing: true
+        # Keep the category stable across main and pull requests. GitHub code
+        # scanning uses these categories to determine which configurations are
+        # expected on every commit.
+        category: "/language:${{ matrix.language }}"
 
   swift-tests:
     name: Test Swift (Debug + Release)
