@@ -799,16 +799,17 @@ final class QueueAndErrorUXTests: XCTestCase {
 
     func testSimultaneousDependencyInstallationCalls() async {
         let manager = DownloadManager()
+        let appState = AppState()
         manager.ytdlpService.updateYtdlpHandler = {
             try? await Task.sleep(nanoseconds: 10_000_000)
             return "2025.01.01"
         }
 
-        let t1 = Task { await manager.updateYtdlp() }
-        let t2 = Task { await manager.updateYtdlp() }
+        let t1 = Task { await appState.updateYtdlp(using: manager.ytdlpService) }
+        let t2 = Task { await appState.updateYtdlp(using: manager.ytdlpService) }
 
         _ = await (t1.value, t2.value)
-        XCTAssertFalse(manager.isUpdatingYtdlp, "isUpdatingYtdlp must be false once operations complete")
+        XCTAssertFalse(appState.isUpdatingYtdlp, "isUpdatingYtdlp must be false once operations complete")
     }
 
     func testFormatSubtitleRetainsResolutionFromDiagnosticsAfterPruning() {
@@ -1241,24 +1242,22 @@ final class QueueAndErrorUXTests: XCTestCase {
     }
 
     func testWhatsNewOnlyShowsOnFirstRunOrUpdate() async {
-        let manager = DownloadManager()
-        let testVersion = manager.appVersion
+        let appState = AppState()
+        let languageService = LanguageService()
+        let testVersion = appState.appVersion
         let userDefaults = UserDefaults.standard
 
-        // 1. Simulate already up to date (normal launch)
         userDefaults.set(testVersion, forKey: UserDefaultsKeys.lastSeenVersion)
-        manager.showWhatsNew = false
-        await manager.checkAndFetchWhatsNew()
-        XCTAssertFalse(manager.showWhatsNew, "What's New must not show if app is already on current seen version")
+        appState.showWhatsNew = false
+        await appState.checkAndFetchWhatsNew(languageService: languageService)
+        XCTAssertFalse(appState.showWhatsNew, "What's New must not show if app is already on current seen version")
 
-        // 2. Simulate app update (older seen version)
         userDefaults.set("4.2.0", forKey: UserDefaultsKeys.lastSeenVersion)
-        manager.showWhatsNew = false
-        await manager.checkAndFetchWhatsNew()
-        XCTAssertTrue(manager.showWhatsNew, "What's New must show when app was updated from an older version")
+        appState.showWhatsNew = false
+        await appState.checkAndFetchWhatsNew(languageService: languageService)
+        XCTAssertTrue(appState.showWhatsNew, "What's New must show when app was updated from an older version")
         XCTAssertEqual(userDefaults.string(forKey: UserDefaultsKeys.lastSeenVersion), testVersion, "Seen version must be updated to current")
 
-        // 3. Reset to up-to-date
         userDefaults.set(testVersion, forKey: UserDefaultsKeys.lastSeenVersion)
     }
 

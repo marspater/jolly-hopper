@@ -767,32 +767,40 @@ final class DownloadManagerTests: XCTestCase {
 
     func testInitializeVersionFetchingAndAssignment() async {
         let manager = DownloadManager()
+        let appState = AppState()
         let languageService = LanguageService()
+        let lastSeenKey = UserDefaultsKeys.lastSeenVersion
+        let previousLastSeen = UserDefaults.standard.string(forKey: lastSeenKey)
+        defer {
+            if let previousLastSeen {
+                UserDefaults.standard.set(previousLastSeen, forKey: lastSeenKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: lastSeenKey)
+            }
+        }
 
+        UserDefaults.standard.set(appState.appVersion, forKey: lastSeenKey)
         manager.ytdlpService.ytdlpPath = URL(fileURLWithPath: "/usr/local/bin/yt-dlp")
         let expectedVersion = "2025.02.20"
         manager.ytdlpService.processRunner = MockYtdlpProcessRunner(mockCommand: { _ in
-            return expectedVersion
+            expectedVersion
         })
 
-        await manager.initialize(languageService: languageService)
+        await appState.initializeApplicationServices(
+            ytdlpService: manager.ytdlpService,
+            languageService: languageService
+        )
 
-        XCTAssertEqual(manager.ytdlpVersion, expectedVersion)
+        XCTAssertEqual(appState.ytdlpVersion, expectedVersion)
     }
 
     func testInitializeLoadsHistoryAndResetsActiveStatuses() async {
         let manager = DownloadManager()
-        manager.urlSession = makeMockURLSession()
         let languageService = LanguageService()
 
         let historyKey = UserDefaultsKeys.downloadHistory
         defer {
             UserDefaults.standard.removeObject(forKey: historyKey)
-            MockURLProtocol.requestHandler = nil
-        }
-        MockURLProtocol.requestHandler = { _ in
-            let response = HTTPURLResponse(url: URL(string: "https://api.github.com")!, statusCode: 404, httpVersion: nil, headerFields: nil)!
-            return (response, Data())
         }
 
         let download = Download(url: "https://example.com/init_history", options: .default)
@@ -803,7 +811,7 @@ final class DownloadManagerTests: XCTestCase {
             UserDefaults.standard.set(data, forKey: historyKey)
         }
 
-        await manager.initialize(languageService: languageService, skipBinarySetup: true)
+        manager.initialize(languageService: languageService)
 
         XCTAssertEqual(manager.history.count, 1)
         XCTAssertEqual(manager.downloads.count, 1)
@@ -812,8 +820,9 @@ final class DownloadManagerTests: XCTestCase {
 
     func testInitializeWhatsNewDisplayWhenVersionChanges() async {
         let manager = DownloadManager()
-        manager.urlSession = makeMockURLSession()
+        let appState = AppState()
         let languageService = LanguageService()
+        appState.urlSession = makeMockURLSession()
 
         let lastSeenKey = UserDefaultsKeys.lastSeenVersion
         defer {
@@ -826,20 +835,25 @@ final class DownloadManagerTests: XCTestCase {
             return (response, Data())
         }
 
-        // Set last seen version to older version
         UserDefaults.standard.set("0.0.1", forKey: lastSeenKey)
 
-        await manager.initialize(languageService: languageService, skipBinarySetup: true)
+        await appState.initializeApplicationServices(
+            ytdlpService: manager.ytdlpService,
+            languageService: languageService,
+            skipBinarySetup: true
+        )
 
-        let currentVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "4.2.0"
-        XCTAssertTrue(manager.showWhatsNew)
-        XCTAssertEqual(UserDefaults.standard.string(forKey: lastSeenKey), currentVersion)
+        XCTAssertTrue(appState.showWhatsNew)
+        XCTAssertEqual(UserDefaults.standard.string(forKey: lastSeenKey), appState.appVersion)
 
-        // Run initialize again with current version already stored -> showWhatsNew should remain false on fresh instance
-        let manager2 = DownloadManager()
-        manager2.urlSession = makeMockURLSession()
-        await manager2.initialize(languageService: languageService, skipBinarySetup: true)
-        XCTAssertFalse(manager2.showWhatsNew)
+        let appState2 = AppState()
+        appState2.urlSession = makeMockURLSession()
+        await appState2.initializeApplicationServices(
+            ytdlpService: manager.ytdlpService,
+            languageService: languageService,
+            skipBinarySetup: true
+        )
+        XCTAssertFalse(appState2.showWhatsNew)
     }
 
     func testQueueSlotAccountingDoesNotExceedMaxConcurrentDownloads() async {
@@ -1031,20 +1045,19 @@ final class DownloadManagerTests: XCTestCase {
     }
 
     func testFetchReleaseNotesFromGitHubNetworkErrorReturnsNil() async {
-        let manager = DownloadManager()
+        let service = ReleaseNotesService()
         MockURLProtocol.requestHandler = { _ in
             throw URLError(.notConnectedToInternet)
         }
         let mockSession = makeMockURLSession()
 
-        let result = await manager.fetchReleaseNotesFromGitHub(version: "1.0.0", session: mockSession)
+        let result = await service.fetchReleaseNotesFromGitHub(version: "1.0.0", session: mockSession)
 
         XCTAssertNil(result, "Network error during fetchReleaseNotesFromGitHub must return nil")
-        manager.shutdown()
     }
 
     func testFetchReleaseNotesFromGitHubHTTPStatusCodeFailureReturnsNil() async {
-        let manager = DownloadManager()
+        let service = ReleaseNotesService()
         MockURLProtocol.requestHandler = { request in
             let response = HTTPURLResponse(
                 url: request.url!,
@@ -1056,14 +1069,13 @@ final class DownloadManagerTests: XCTestCase {
         }
         let mockSession = makeMockURLSession()
 
-        let result = await manager.fetchReleaseNotesFromGitHub(version: "1.0.0", session: mockSession)
+        let result = await service.fetchReleaseNotesFromGitHub(version: "1.0.0", session: mockSession)
 
         XCTAssertNil(result, "Non-200 HTTP response must return nil")
-        manager.shutdown()
     }
 
     func testFetchReleaseNotesFromGitHubInvalidJSONReturnsNil() async {
-        let manager = DownloadManager()
+        let service = ReleaseNotesService()
         MockURLProtocol.requestHandler = { request in
             let response = HTTPURLResponse(
                 url: request.url!,
@@ -1076,14 +1088,13 @@ final class DownloadManagerTests: XCTestCase {
         }
         let mockSession = makeMockURLSession()
 
-        let result = await manager.fetchReleaseNotesFromGitHub(version: "1.0.0", session: mockSession)
+        let result = await service.fetchReleaseNotesFromGitHub(version: "1.0.0", session: mockSession)
 
         XCTAssertNil(result, "Invalid JSON data must return nil")
-        manager.shutdown()
     }
 
     func testFetchReleaseNotesFromGitHubOlderTagVersionReturnsNil() async {
-        let manager = DownloadManager()
+        let service = ReleaseNotesService()
         MockURLProtocol.requestHandler = { request in
             let response = HTTPURLResponse(
                 url: request.url!,
@@ -1102,14 +1113,13 @@ final class DownloadManagerTests: XCTestCase {
         }
         let mockSession = makeMockURLSession()
 
-        let result = await manager.fetchReleaseNotesFromGitHub(version: "1.0.0", session: mockSession)
+        let result = await service.fetchReleaseNotesFromGitHub(version: "1.0.0", session: mockSession)
 
         XCTAssertNil(result, "Release notes for older tag version must return nil")
-        manager.shutdown()
     }
 
     func testFetchReleaseNotesFromGitHubEmptyBodyReturnsNil() async {
-        let manager = DownloadManager()
+        let service = ReleaseNotesService()
         MockURLProtocol.requestHandler = { request in
             let response = HTTPURLResponse(
                 url: request.url!,
@@ -1128,14 +1138,13 @@ final class DownloadManagerTests: XCTestCase {
         }
         let mockSession = makeMockURLSession()
 
-        let result = await manager.fetchReleaseNotesFromGitHub(version: "1.0.0", session: mockSession)
+        let result = await service.fetchReleaseNotesFromGitHub(version: "1.0.0", session: mockSession)
 
         XCTAssertNil(result, "Release notes with empty body after sanitization must return nil")
-        manager.shutdown()
     }
 
     func testFetchReleaseNotesFromGitHubSuccessReturnsNotes() async {
-        let manager = DownloadManager()
+        let service = ReleaseNotesService()
         MockURLProtocol.requestHandler = { request in
             let response = HTTPURLResponse(
                 url: request.url!,
@@ -1154,12 +1163,11 @@ final class DownloadManagerTests: XCTestCase {
         }
         let mockSession = makeMockURLSession()
 
-        let result = await manager.fetchReleaseNotesFromGitHub(version: "1.0.0", session: mockSession)
+        let result = await service.fetchReleaseNotesFromGitHub(version: "1.0.0", session: mockSession)
 
         XCTAssertNotNil(result, "Valid release notes response must return non-nil tuple")
         XCTAssertEqual(result?.title, "Siphon v1.0.0")
         XCTAssertEqual(result?.body, "✨ Added feature A\n🚀 Performance fix B")
-        manager.shutdown()
     }
 
     func testRemoveIndividualHistoryEntryPreservesFileAndOtherDownloads() throws {

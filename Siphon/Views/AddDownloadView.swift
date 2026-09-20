@@ -1531,6 +1531,7 @@ struct AddDownloadView: View {
                                 languageService: languageService,
                                 updateChecker: UpdateChecker(),
                                 downloadManager: downloadManager,
+                                appState: appState,
                                 initialTab: .advanced
                             )
                         } label: {
@@ -1545,6 +1546,7 @@ struct AddDownloadView: View {
                                 languageService: languageService,
                                 updateChecker: UpdateChecker(),
                                 downloadManager: downloadManager,
+                                appState: appState,
                                 initialTab: .advanced
                             )
                         } label: {
