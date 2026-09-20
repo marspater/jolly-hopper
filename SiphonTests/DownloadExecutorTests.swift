@@ -59,6 +59,28 @@ final class DownloadExecutorTests: XCTestCase {
         ))
     }
 
+    func testCleanupNeverDeletesUnownedSaveFolderPartials() throws {
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let partial = tempDir.appendingPathComponent("MyVideo.mp4.part")
+        try Data("pre-existing partial".utf8).write(to: partial)
+
+        var options = DownloadOptions.default
+        options.saveFolder = tempDir
+        options.customFilename = "MyVideo"
+        let download = Download(url: "https://example.com/video", options: options, title: "MyVideo")
+        download.status = .failed
+
+        DownloadExecutor.cleanupTemporaryFiles(for: download)
+
+        XCTAssertTrue(
+            FileManager.default.fileExists(atPath: partial.path),
+            "Cleanup must not infer ownership from a filename and delete another process's partial"
+        )
+    }
+
     func testVideoIdExtraction() {
         XCTAssertEqual(DownloadExecutor.extractVideoId(from: "https://www.youtube.com/watch?v=dQw4w9WgXcQ"), "dQw4w9WgXcQ")
         XCTAssertEqual(DownloadExecutor.extractVideoId(from: "https://youtu.be/dQw4w9WgXcQ"), "dQw4w9WgXcQ")
@@ -212,6 +234,18 @@ final class DownloadExecutorTests: XCTestCase {
             taskIsCancelled: false,
             status: .stopped
         ))
+    }
+
+    func testErrorMessagesSanitizeSignedURLs() {
+        let lang = LanguageService()
+        let error = YtdlpError.downloadFailed(
+            "request failed https://cdn.example.com/video.m3u8?token=top_secret&expires=123"
+        )
+        let message = DownloadExecutor.errorMessage(for: error, languageService: lang)
+
+        XCTAssertFalse(message.contains("top_secret"))
+        XCTAssertFalse(message.contains("expires=123"))
+        XCTAssertTrue(message.contains("https://cdn.example.com/video.m3u8"))
     }
 
     func testFailedDownloadPopulatesDownloadLog() async {
