@@ -5,9 +5,72 @@
 
 import XCTest
 import CryptoKit
+import os
 @testable import Siphon
 
 final class UpdateVerifierTests: XCTestCase {
+
+    func testStaleUpdateCallbacksCannotFinishOrReportProgressForNewAttempt() async throws {
+        let sessions = OSAllocatedUnfairLock(initialState: [URLSession]())
+        let progress = OSAllocatedUnfairLock(initialState: [Double]())
+        let firstCreated = expectation(description: "First session")
+        let secondCreated = expectation(description: "Second session")
+        let downloader = UpdateDownloader(sessionFactory: { delegate in
+            let configuration = URLSessionConfiguration.ephemeral
+            configuration.protocolClasses = [HoldingUpdateURLProtocol.self]
+            let session = URLSession(configuration: configuration, delegate: delegate, delegateQueue: nil)
+            let count = sessions.withLock { $0.append(session); return $0.count }
+            if count == 1 { firstCreated.fulfill() } else { secondCreated.fulfill() }
+            return session
+        })
+        defer {
+            downloader.cancel()
+            sessions.withLock { $0 }.forEach { $0.invalidateAndCancel() }
+        }
+        let url = URL(string: "https://github.com/marspater/jolly-hopper/releases/download/test/Siphon.dmg")!
+        let first = Task { try await downloader.download(from: url) }
+        await fulfillment(of: [firstCreated], timeout: 2)
+        let oldSession = try XCTUnwrap(sessions.withLock { $0.first })
+        let oldTask = try await activeDownloadTask(in: oldSession)
+        downloader.cancel()
+        _ = try? await first.value
+
+        let second = Task {
+            try await downloader.download(from: url) { value in progress.withLock { $0.append(value) } }
+        }
+        await fulfillment(of: [secondCreated], timeout: 2)
+        let newSession = try XCTUnwrap(sessions.withLock { $0.last })
+        let newTask = try await activeDownloadTask(in: newSession)
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let oldFile = root.appendingPathComponent("old.dmg")
+        let newFile = root.appendingPathComponent("new.dmg")
+        try Data("old".utf8).write(to: oldFile)
+        try Data("new".utf8).write(to: newFile)
+
+        downloader.urlSession(oldSession, task: oldTask, didCompleteWithError: URLError(.cancelled))
+        downloader.urlSession(oldSession, downloadTask: oldTask, didFinishDownloadingTo: oldFile)
+        downloader.urlSession(oldSession, downloadTask: oldTask, didWriteData: 50, totalBytesWritten: 50, totalBytesExpectedToWrite: 100)
+        downloader.urlSession(newSession, task: oldTask, didCompleteWithError: URLError(.cancelled))
+        XCTAssertTrue(progress.withLock { $0.isEmpty })
+        XCTAssertTrue(FileManager.default.fileExists(atPath: oldFile.path))
+        downloader.urlSession(newSession, downloadTask: newTask, didWriteData: 25, totalBytesWritten: 25, totalBytesExpectedToWrite: 100)
+        XCTAssertEqual(progress.withLock { $0 }, [0.25])
+        downloader.urlSession(newSession, downloadTask: newTask, didFinishDownloadingTo: newFile)
+        downloader.urlSession(newSession, task: newTask, didCompleteWithError: nil)
+        let staged = try await second.value
+        defer { try? FileManager.default.removeItem(at: staged) }
+        XCTAssertEqual(try String(contentsOf: staged, encoding: .utf8), "new")
+    }
+
+    private func activeDownloadTask(in session: URLSession) async throws -> URLSessionDownloadTask {
+        for _ in 0..<200 {
+            if let task = await session.allTasks.first as? URLSessionDownloadTask { return task }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        throw NSError(domain: "UpdateTest", code: 1, userInfo: [NSLocalizedDescriptionKey: "Download task did not start"])
+    }
 
     func testComputeSHA256MatchesExpected() throws {
         let tempDir = FileManager.default.temporaryDirectory
@@ -183,14 +246,22 @@ final class UpdateVerifierTests: XCTestCase {
     }
 
     func testUpdateDownloaderRejectsConcurrentCalls() async throws {
-        let downloader = UpdateDownloader()
+        let started = expectation(description: "First update started")
+        let downloader = UpdateDownloader(sessionFactory: { delegate in
+            let configuration = URLSessionConfiguration.ephemeral
+            configuration.protocolClasses = [HoldingUpdateURLProtocol.self]
+            let session = URLSession(configuration: configuration, delegate: delegate, delegateQueue: nil)
+            started.fulfill()
+            return session
+        })
+        defer { downloader.cancel() }
         let url = URL(string: "https://github.com/marspater/jolly-hopper/releases/download/v1.0.0/Siphon.dmg")!
 
         let task1 = Task {
             try await downloader.download(from: url)
         }
 
-        try await Task.sleep(nanoseconds: 20_000_000)
+        await fulfillment(of: [started], timeout: 2)
 
         do {
             _ = try await downloader.download(from: url)
@@ -208,4 +279,11 @@ final class UpdateVerifierTests: XCTestCase {
         downloader.cancel()
         _ = try? await task1.value
     }
+}
+
+private final class HoldingUpdateURLProtocol: URLProtocol, @unchecked Sendable {
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override func startLoading() { /* Delegate events are delivered explicitly by the test. */ }
+    override func stopLoading() {}
 }
