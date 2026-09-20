@@ -8,6 +8,28 @@ import XCTest
 
 final class ProcessLifecycleTests: XCTestCase {
 
+    @MainActor
+    func testCommandUsesSharedControllerAndAllowsMainActorCancellation() async throws {
+        let controller = DownloadProcessController()
+        let task = Task {
+            try await DefaultYtdlpProcessRunner().runCommand(["/bin/sleep", "30"], processController: controller)
+        }
+        defer { task.cancel(); controller.cancel() }
+        for _ in 0..<200 {
+            if controller.lifecycleState.isRunning { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTAssertTrue(controller.lifecycleState.isRunning, "Command must start without blocking the main actor")
+        controller.cancel()
+        do {
+            _ = try await task.value
+            XCTFail("Cancelled post-processing must not succeed")
+        } catch {
+            XCTAssertTrue(controller.isCancelled)
+            XCTAssertTrue(controller.lifecycleState.isTerminated, "Awaiting cancellation must include process teardown")
+        }
+    }
+
     func testInitialLifecycleStateIsCreated() {
         let controller = DownloadProcessController()
         XCTAssertEqual(controller.lifecycleState, .created)

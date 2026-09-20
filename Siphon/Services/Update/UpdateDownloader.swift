@@ -33,6 +33,9 @@ public final class UpdateDownloader: NSObject, URLSessionDownloadDelegate, @unch
             LoggerService.shared.log(message, level: level)
         }
     }
+    // All attempt state is protected by lock; callbacks must match both identities.
+    private let sessionFactory: @Sendable (any URLSessionDelegate) -> URLSession
+    private var activeOperationID: UUID?
     private var activeSession: URLSession?
     private var activeTask: URLSessionDownloadTask?
     private var continuation: CheckedContinuation<URL, Error>?
@@ -40,6 +43,12 @@ public final class UpdateDownloader: NSObject, URLSessionDownloadDelegate, @unch
     private var destinationURL: URL?
 
     public override init() {
+        sessionFactory = { URLSession(configuration: .ephemeral, delegate: $0, delegateQueue: nil) }
+        super.init()
+    }
+
+    init(sessionFactory: @escaping @Sendable (any URLSessionDelegate) -> URLSession) {
+        self.sessionFactory = sessionFactory
         super.init()
     }
 
@@ -144,6 +153,7 @@ public final class UpdateDownloader: NSObject, URLSessionDownloadDelegate, @unch
             throw UpdateDownloadError.invalidURL
         }
 
+        let operationID = UUID()
         return try await withTaskCancellationHandler(operation: {
             try await withCheckedThrowingContinuation { continuation in
                 lock.lock()
@@ -158,11 +168,12 @@ public final class UpdateDownloader: NSObject, URLSessionDownloadDelegate, @unch
                     return
                 }
 
+                self.activeOperationID = operationID
                 self.destinationURL = Self.stagedFileURL(for: url)
                 self.progressHandler = onProgress
                 self.continuation = continuation
 
-                let session = URLSession(configuration: .ephemeral, delegate: self, delegateQueue: nil)
+                let session = sessionFactory(self)
                 self.activeSession = session
                 let task = session.downloadTask(with: url)
                 self.activeTask = task
@@ -171,101 +182,90 @@ public final class UpdateDownloader: NSObject, URLSessionDownloadDelegate, @unch
                 task.resume()
             }
         }, onCancel: {
-            self.cancel()
+            self.cancel(operationID: operationID)
         })
     }
 
-    /// Cancels any in-flight download task and cleans up sessions.
+    /// Cancels the current attempt. Task cancellation is scoped to its own operation ID.
     public func cancel() {
+        cancel(operationID: nil)
+    }
+
+    private func cancel(operationID: UUID?) {
         lock.lock()
-        activeTask?.cancel()
+        if let operationID, activeOperationID != operationID {
+            lock.unlock()
+            return
+        }
+        let task = activeTask
+        let session = activeSession
+        let cont = clearAttemptLocked()
+        lock.unlock()
+        task?.cancel()
+        session?.invalidateAndCancel()
+        cont?.resume(throwing: UpdateDownloadError.downloadCancelled)
+    }
+
+    /// Caller holds lock. Claim the continuation and clear ownership exactly once.
+    private func clearAttemptLocked() -> CheckedContinuation<URL, Error>? {
+        let cont = continuation
+        continuation = nil
+        activeOperationID = nil
         activeTask = nil
-        activeSession?.invalidateAndCancel()
         activeSession = nil
         progressHandler = nil
         destinationURL = nil
-        if let cont = continuation {
-            continuation = nil
-            lock.unlock()
-            cont.resume(throwing: UpdateDownloadError.downloadCancelled)
-        } else {
-            lock.unlock()
-        }
+        return cont
     }
 
     // MARK: - URLSessionDownloadDelegate
 
     public func urlSession(
-        _ _: URLSession,
-        downloadTask _: URLSessionDownloadTask,
+        _ session: URLSession,
+        downloadTask: URLSessionDownloadTask,
         didWriteData _: Int64,
         totalBytesWritten: Int64,
         totalBytesExpectedToWrite: Int64
     ) {
         guard totalBytesExpectedToWrite > 0 else { return }
+        lock.lock()
+        let handler = activeSession === session && activeTask === downloadTask ? progressHandler : nil
+        lock.unlock()
         let progress = max(0.0, min(1.0, Double(totalBytesWritten) / Double(totalBytesExpectedToWrite)))
-        progressHandler?(progress)
+        handler?(progress)
     }
 
-    public func urlSession(_ session: URLSession, downloadTask _: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {
-        session.finishTasksAndInvalidate()
-
+    public func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {
         lock.lock()
-        let stagedFile = destinationURL
-        lock.unlock()
-
-        guard let stagedFile else {
+        guard activeSession === session, activeTask === downloadTask, let stagedFile = destinationURL else {
+            lock.unlock()
             return
         }
 
+        // Keep staging and claiming the result atomic with cancellation. The source
+        // is URLSession's temporary file and the destination is unique to this attempt.
+        let result: Result<URL, Error>
         do {
-            if FileManager.default.fileExists(atPath: stagedFile.path) {
-                try FileManager.default.removeItem(at: stagedFile)
-            }
             try FileManager.default.moveItem(at: location, to: stagedFile)
-
-            lock.lock()
-            activeTask = nil
-            activeSession = nil
-            progressHandler = nil
-            destinationURL = nil
-            let cont = continuation
-            continuation = nil
-            lock.unlock()
-
-            if let cont {
-                cont.resume(returning: stagedFile)
-            } else {
-                do {
-                    try FileManager.default.removeItem(at: stagedFile)
-                } catch {
-                    Self.log("Failed to remove an unclaimed staged update: \(error.localizedDescription)", level: .warning)
-                }
-            }
+            result = .success(stagedFile)
         } catch {
-            lock.lock()
-            activeTask = nil
-            activeSession = nil
-            progressHandler = nil
-            destinationURL = nil
-            let cont = continuation
-            continuation = nil
-            lock.unlock()
-
-            cont?.resume(throwing: UpdateDownloadError.downloadFailed("Failed to move downloaded file: \(error.localizedDescription)"))
+            result = .failure(UpdateDownloadError.downloadFailed("Failed to move downloaded file: \(error.localizedDescription)"))
         }
+        let cont = clearAttemptLocked()
+        lock.unlock()
+        session.finishTasksAndInvalidate()
+        cont?.resume(with: result)
     }
 
-    public func urlSession(_ session: URLSession, task _: URLSessionTask, didCompleteWithError error: Error?) {
-        session.finishTasksAndInvalidate()
+    public func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
         lock.lock()
-        activeTask = nil
-        activeSession = nil
-        progressHandler = nil
-        destinationURL = nil
-        let cont = continuation
-        continuation = nil
+        guard activeSession === session, activeTask === task else {
+            lock.unlock()
+            return
+        }
+        let cont = clearAttemptLocked()
         lock.unlock()
+        session.finishTasksAndInvalidate()
 
         if let error {
             let nsError = error as NSError
@@ -274,6 +274,8 @@ public final class UpdateDownloader: NSObject, URLSessionDownloadDelegate, @unch
             } else {
                 cont?.resume(throwing: UpdateDownloadError.downloadFailed(error.localizedDescription))
             }
+        } else {
+            cont?.resume(throwing: UpdateDownloadError.downloadFailed("Download completed without a staged package"))
         }
     }
 }

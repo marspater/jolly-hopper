@@ -249,7 +249,7 @@ final class DownloadExecutor: ObservableObject {
             queue.releaseSlot(for: downloadId)
             activeTasks.removeValue(forKey: downloadId)
             activeControllers.removeValue(forKey: downloadId)
-            if download.status == .stopped || download.status == .failed {
+            if download.status != .paused && download.status != .queued {
                 Self.cleanupTemporaryFiles(for: downloadCopy)
             }
             delegate?.executorDidFinishDownload()
@@ -359,11 +359,15 @@ final class DownloadExecutor: ObservableObject {
                 }
             }
 
+            if download.scratchDirectory == nil {
+                download.scratchDirectory = FileManager.default.temporaryDirectory.appendingPathComponent("siphon_scratch_\(UUID().uuidString)")
+            }
             let downloadResult = try await ytdlpService.download(
                 url: download.url,
                 options: download.options,
                 mediaInfo: download.mediaInfo,
                 processController: controller,
+                temporaryDirectory: download.scratchDirectory,
                 onProgress: { progress, speed, eta in
                     let safeProgress = progress.isNaN ? 0 : max(0, min(1, progress))
                     coalescer.recordProgress(progress: safeProgress, speed: speed, eta: eta)
@@ -511,7 +515,7 @@ final class DownloadExecutor: ObservableObject {
         }
         delegate?.executorDidRequestAddToHistory(download, skipSave: skipSaveAndBroadcast)
 
-        if previousStatus == .queued || previousStatus == .paused {
+        if activeTasks[download.id] == nil && (previousStatus == .queued || previousStatus == .paused) {
             Self.cleanupTemporaryFiles(for: download)
         }
 
@@ -722,11 +726,16 @@ final class DownloadExecutor: ObservableObject {
     }
 
     static func cleanupTemporaryFiles(for download: Download) {
-        guard shouldCleanupTemporaryFiles(for: download.status) else { return }
-
-        // yt-dlp temporary data is routed to a per-download siphon_scratch_* directory
-        // and removed by YtdlpService's scoped defer. Do not scan the user's save
-        // folder for .part/.tmp names: those files may pre-date this download or
-        // belong to another process, and filename similarity is not ownership.
+        guard download.status != .paused && download.status != .queued,
+              let directory = download.scratchDirectory else { return }
+        // Delete only the directory allocated to this job, never scan the save folder.
+        do {
+            if FileManager.default.fileExists(atPath: directory.path) {
+                try FileManager.default.removeItem(at: directory)
+            }
+            download.scratchDirectory = nil
+        } catch {
+            LoggerService.shared.log("Could not remove download scratch directory: \(error.localizedDescription)", level: .warning)
+        }
     }
 }

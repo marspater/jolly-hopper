@@ -4,6 +4,94 @@ import XCTest
 @MainActor
 final class DownloadManagerTests: XCTestCase {
 
+    func testPauseResumeReusesPartialDataAndCompletionRemovesScratch() async throws {
+        let originalHistory = UserDefaults.standard.object(forKey: UserDefaultsKeys.downloadHistory)
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer {
+            UserDefaults.standard.set(originalHistory, forKey: UserDefaultsKeys.downloadHistory)
+            try? FileManager.default.removeItem(at: root)
+        }
+        let manager = DownloadManager()
+        defer { manager.shutdown() }
+        manager.ytdlpService.ytdlpPath = URL(fileURLWithPath: "/mock/yt-dlp")
+        let started = expectation(description: "Partial file written")
+        let resumed = expectation(description: "Partial file reused")
+        let attempt = TestBox(0)
+        let directory = TestBox<URL?>(nil)
+        manager.ytdlpService.processRunner = MockYtdlpProcessRunner(
+            mockCommand: { _ in #"{"id":"fixture","title":"fixture"}"# },
+            mockDownload: { args in
+                let path = try XCTUnwrap(args.first { $0.hasPrefix("temp:") })
+                let scratch = URL(fileURLWithPath: String(path.dropFirst(5)))
+                let partial = scratch.appendingPathComponent("fixture.mp4.part")
+                attempt.value += 1
+                if attempt.value == 1 {
+                    directory.value = scratch
+                    try Data("partial".utf8).write(to: partial)
+                    started.fulfill()
+                    try await Task.sleep(for: .seconds(30))
+                    throw CancellationError()
+                }
+                XCTAssertEqual(scratch, directory.value)
+                XCTAssertEqual(try String(contentsOf: partial, encoding: .utf8), "partial")
+                resumed.fulfill()
+                let final = root.appendingPathComponent("fixture.mp4")
+                try Data("complete".utf8).write(to: final)
+                return final.path
+            }
+        )
+        var options = DownloadOptions.default
+        options.saveFolder = root
+        options.embedThumbnail = false
+        manager.addDownload(url: "https://example.com/fixture", options: options)
+        let download = try XCTUnwrap(manager.downloads.first)
+        await fulfillment(of: [started], timeout: 3)
+        manager.pauseDownload(download)
+        for _ in 0..<200 {
+            if manager.activeExecutionCount == 0 { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTAssertEqual(manager.activeExecutionCount, 0)
+        XCTAssertEqual(download.status, .paused)
+        XCTAssertNotNil(download.scratchDirectory)
+        manager.resumeDownload(download)
+        await fulfillment(of: [resumed], timeout: 3)
+        for _ in 0..<200 {
+            if manager.activeExecutionCount == 0 { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTAssertEqual(download.status, .completed)
+        XCTAssertNil(download.scratchDirectory)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: try XCTUnwrap(directory.value).path))
+    }
+
+    func testRemovingActiveDownloadDoesNotRestoreHistoryAfterCancellation() async throws {
+        let originalHistory = UserDefaults.standard.object(forKey: UserDefaultsKeys.downloadHistory)
+        defer { UserDefaults.standard.set(originalHistory, forKey: UserDefaultsKeys.downloadHistory) }
+        let manager = DownloadManager()
+        defer { manager.shutdown() }
+        manager.ytdlpService.ytdlpPath = URL(fileURLWithPath: "/mock/yt-dlp")
+        let started = expectation(description: "Metadata fetch started")
+        manager.ytdlpService.processRunner = MockYtdlpProcessRunner(mockCommand: { _ in
+            started.fulfill()
+            try await Task.sleep(for: .seconds(30))
+            throw CancellationError()
+        })
+        manager.addDownload(url: "https://example.com/removed", options: .default)
+        let download = try XCTUnwrap(manager.downloads.first)
+        await fulfillment(of: [started], timeout: 3)
+        manager.removeDownload(download)
+        for _ in 0..<200 {
+            if manager.activeExecutionCount == 0 { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTAssertEqual(manager.activeExecutionCount, 0)
+        XCTAssertTrue(manager.downloads.isEmpty)
+        XCTAssertTrue(manager.history.isEmpty, "Late cancellation must not resurrect a removed entry")
+        XCTAssertTrue(manager.historyStore.loadHistory().isEmpty, "Removed entry must stay absent after relaunch")
+    }
+
     func testAddDownload() {
         // Arrange
         let manager = DownloadManager()

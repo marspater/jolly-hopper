@@ -1294,6 +1294,7 @@ public struct DownloadResult: Sendable {
         options: DownloadOptions,
         mediaInfo: MediaInfo? = nil,
         processController: DownloadProcessController? = nil,
+        temporaryDirectory: URL? = nil,
         onProgress: @escaping @Sendable (Double, String?, String?) -> Void,
         onOutput: @escaping @Sendable (String) -> Void
     ) async throws -> DownloadResult {
@@ -1381,23 +1382,25 @@ public struct DownloadResult: Sendable {
         args.append(contentsOf: ["--ffmpeg-location", ffmpegDir])
 
         // Safe per-download isolated scratch directory for temporary chunks and thumbnail conversions
-        let scratchDirectory = FileManager.default.temporaryDirectory.appendingPathComponent("siphon_scratch_\(UUID().uuidString)")
+        let scratchDirectory = temporaryDirectory ?? FileManager.default.temporaryDirectory.appendingPathComponent("siphon_scratch_\(UUID().uuidString)")
         do {
             try FileManager.default.createDirectory(at: scratchDirectory, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
         } catch {
             LoggerService.shared.log("Failed to create temporary scratch directory at \(scratchDirectory.path): \(error.localizedDescription)", level: .error)
             throw YtdlpError.downloadFailed("Failed to initialize temporary scratch directory: \(error.localizedDescription)")
         }
+        args.append(contentsOf: ["--paths", "home:\(options.saveFolder.path)"])
         args.append(contentsOf: ["--paths", "temp:\(scratchDirectory.path)"])
-        args.append(contentsOf: ["--paths", "thumbnail:\(scratchDirectory.path)"])
+        let thumbnailDirectory = options.downloadThumbnail ? options.saveFolder : scratchDirectory
+        args.append(contentsOf: ["--paths", "thumbnail:\(thumbnailDirectory.path)"])
         args.append("--no-playlist")
 
         let outputTemplate: String
         if let customFilename = options.customFilename ?? customResolvedTitle, !customFilename.isEmpty {
             let safeName = Self.sanitizeFilename(customFilename)
-            outputTemplate = options.saveFolder.appendingPathComponent("\(safeName).%(ext)s").path
+            outputTemplate = "\(safeName).%(ext)s"
         } else {
-            outputTemplate = options.saveFolder.appendingPathComponent("%(title)s.%(ext)s").path
+            outputTemplate = "%(title)s.%(ext)s"
         }
         args.append("--windows-filenames")
         args.append("--continue")
@@ -1486,7 +1489,11 @@ public struct DownloadResult: Sendable {
             for file in secureCookieFiles {
                 file.cleanup()
             }
-            try? FileManager.default.removeItem(at: scratchDirectory)
+            // Executor-owned directories survive a pause and are cleaned at job teardown.
+            if temporaryDirectory == nil {
+                do { try FileManager.default.removeItem(at: scratchDirectory) }
+                catch { LoggerService.shared.log("Could not remove download scratch directory: \(error.localizedDescription)", level: .warning) }
+            }
         }
 
         let sucuriCookie = await resolveSucuriCookie(for: normalizedURL)
@@ -1703,9 +1710,9 @@ public struct DownloadResult: Sendable {
 
         // Post-download cover art fallback: if the output file lacks an embedded thumbnail and we have a local cover image, embed it via FFmpeg
         if options.embedThumbnail && FileManager.default.fileExists(atPath: scratchThumbnailURL.path) {
-            let hasThumb = await hasAttachedThumbnail(mediaFile: finalFileURL, ffmpegDir: ffmpegDir)
+            let hasThumb = try await hasAttachedThumbnail(mediaFile: finalFileURL, ffmpegDir: ffmpegDir, processController: processController)
             if !hasThumb {
-                let embedded = await embedThumbnailWithFfmpeg(imageFile: scratchThumbnailURL, mediaFile: finalFileURL, ffmpegDir: ffmpegDir)
+                let embedded = try await embedThumbnailWithFfmpeg(imageFile: scratchThumbnailURL, mediaFile: finalFileURL, ffmpegDir: ffmpegDir, processController: processController)
                 if !embedded {
                     onOutput("[WARNING] Thumbnail embedding was requested, but FFmpeg could not embed the cover art into \(finalFileURL.lastPathComponent).\n")
                     LoggerService.shared.log("Thumbnail embedding failed for \(finalFileURL.lastPathComponent)", level: .warning)
@@ -1772,7 +1779,8 @@ public struct DownloadResult: Sendable {
         }
     }
 
-    private func embedThumbnailWithFfmpeg(imageFile: URL, mediaFile: URL, ffmpegDir: String) async -> Bool {
+    func embedThumbnailWithFfmpeg(imageFile: URL, mediaFile: URL, ffmpegDir: String, processController: DownloadProcessController? = nil) async throws -> Bool {
+        try Task.checkCancellation()
         let ext = mediaFile.pathExtension.lowercased()
         let fm = FileManager.default
         guard fm.fileExists(atPath: mediaFile.path), fm.fileExists(atPath: imageFile.path) else { return false }
@@ -1819,36 +1827,35 @@ public struct DownloadResult: Sendable {
             return false
         }
 
-        let proc = Process()
-        proc.executableURL = ffmpegBin
-        proc.arguments = procArgs
-        proc.environment = Self.createSanitizedEnvironment()
-        let pipe = Pipe()
-        proc.standardOutput = pipe
-        proc.standardError = pipe
-
+        defer {
+            if fm.fileExists(atPath: tempOutput.path) {
+                do { try fm.removeItem(at: tempOutput) }
+                catch { LoggerService.shared.log("Could not remove thumbnail staging file: \(error.localizedDescription)", level: .warning) }
+            }
+        }
         do {
-            try proc.run()
-            _ = pipe.fileHandleForReading.readDataToEndOfFile()
-            proc.waitUntilExit()
-            if proc.terminationStatus == 0 && fm.fileExists(atPath: tempOutput.path), ((try? tempOutput.resourceValues(forKeys: [.fileSizeKey]))?.fileSize ?? 0) > 0 {
+            _ = try await processRunner.runCommand([ffmpegBin.path] + procArgs, processController: processController)
+            try Task.checkCancellation()
+            guard processController?.isCancelled != true else { throw CancellationError() }
+            if fm.fileExists(atPath: tempOutput.path), ((try? tempOutput.resourceValues(forKeys: [.fileSizeKey]))?.fileSize ?? 0) > 0 {
                 let backupURL = mediaFile.deletingLastPathComponent().appendingPathComponent("thumb_orig_\(UUID().uuidString).\(ext)")
                 try fm.moveItem(at: mediaFile, to: backupURL)
                 do {
                     try fm.moveItem(at: tempOutput, to: mediaFile)
-                    try? fm.removeItem(at: backupURL)
-                    return true
                 } catch {
-                    try? fm.moveItem(at: backupURL, to: mediaFile)
-                    try? fm.removeItem(at: tempOutput)
-                    return false
+                    try fm.moveItem(at: backupURL, to: mediaFile)
+                    throw error
                 }
-            } else {
-                try? fm.removeItem(at: tempOutput)
-                return false
+                do { try fm.removeItem(at: backupURL) }
+                catch { LoggerService.shared.log("Could not remove thumbnail backup: \(error.localizedDescription)", level: .warning) }
+                return true
             }
+            return false
         } catch {
-            try? fm.removeItem(at: tempOutput)
+            if error is CancellationError { throw error }
+            try Task.checkCancellation()
+            guard processController?.isCancelled != true else { throw CancellationError() }
+            LoggerService.shared.log("Thumbnail post-processing failed: \(error.localizedDescription)", level: .warning)
             return false
         }
     }
@@ -1857,32 +1864,30 @@ public struct DownloadResult: Sendable {
         ImageUtilities.createAspectFitIcon(from: image, targetSize: targetSize)
     }
 
-    private func hasAttachedThumbnail(mediaFile: URL, ffmpegDir: String) async -> Bool {
+    func hasAttachedThumbnail(mediaFile: URL, ffmpegDir: String, processController: DownloadProcessController? = nil) async throws -> Bool {
+        try Task.checkCancellation()
         let ffprobeBin = URL(fileURLWithPath: ffmpegDir).appendingPathComponent("ffprobe")
         guard FileManager.default.isExecutableFile(atPath: ffprobeBin.path) else { return false }
 
-        let proc = Process()
-        proc.executableURL = ffprobeBin
-        proc.arguments = [
+        let args = [
+            ffprobeBin.path,
             "-v", "error",
             "-show_entries", "stream_disposition=attached_pic:format_tags=cover:format_tags=covr:stream_tags=cover:stream_tags=covr",
             "-of", "csv=p=0",
             mediaFile.path
         ]
-        proc.environment = Self.createSanitizedEnvironment()
-        let pipe = Pipe()
-        proc.standardOutput = pipe
-        proc.standardError = pipe
-
         do {
-            try proc.run()
-            let data = pipe.fileHandleForReading.readDataToEndOfFile()
-            proc.waitUntilExit()
-            let output = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let output = try await processRunner.runCommand(args, processController: processController)
+            try Task.checkCancellation()
+            guard processController?.isCancelled != true else { throw CancellationError() }
             return output.lazy.split(whereSeparator: \.isNewline).contains { line in
                 line.contains { !$0.isWhitespace }
             }
         } catch {
+            if error is CancellationError { throw error }
+            try Task.checkCancellation()
+            guard processController?.isCancelled != true else { throw CancellationError() }
+            LoggerService.shared.log("Thumbnail inspection failed: \(error.localizedDescription)", level: .warning)
             return false
         }
     }
@@ -2832,11 +2837,11 @@ public struct DownloadResult: Sendable {
         return html + "\n<script type=\"application/json\" data-siphon-runtime-media>\(json)</script>"
     }
 
-    private final class BoyfriendTVNavigationDelegate: NSObject, WKNavigationDelegate {
+    final class BoyfriendTVNavigationDelegate: NSObject, WKNavigationDelegate {
         func webView(
             _ _: WKWebView,
             decidePolicyFor navigationAction: WKNavigationAction,
-            decisionHandler: @escaping (WKNavigationActionPolicy) -> Void
+            decisionHandler: @escaping @MainActor (WKNavigationActionPolicy) -> Void
         ) {
             if let targetHost = navigationAction.request.url?.host?.lowercased(),
                targetHost == "boyfriendtv.com" || targetHost.hasSuffix(".boyfriendtv.com") {
