@@ -165,7 +165,8 @@ class DownloadManager: ObservableObject {
                 downloads.append(job)
             }
         }
-        recoveryStore.clearRecoveryState()
+        // Atomically replace the interrupted snapshot with the restored
+        // queued state. Deleting first creates a crash window with no recovery file.
         persistQueueRecoveryState()
         objectWillChange.send()
         processQueue()
@@ -189,7 +190,8 @@ class DownloadManager: ObservableObject {
         history.removeAll { discardedIDs.contains($0.id) }
         saveHistory()
 
-        recoveryStore.clearRecoveryState()
+        // Atomically replace the old interrupted snapshot with whatever
+        // active queue remains after discard. Do not delete-then-rewrite.
         persistQueueRecoveryState()
         objectWillChange.send()
     }
