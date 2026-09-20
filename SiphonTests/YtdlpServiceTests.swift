@@ -119,8 +119,8 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertEqual(try String(contentsOf: scratch.appendingPathComponent("fixture.mp4.part"), encoding: .utf8), "partial")
     }
 
-    override func setUp() {
-        super.setUp()
+    override func setUp() async throws {
+        try await super.setUp()
         service = YtdlpService()
         // Setup mock paths so we don't throw notFound initially, except when testing for it.
         service.ytdlpPath = URL(fileURLWithPath: "/usr/local/bin/yt-dlp")
@@ -128,9 +128,9 @@ final class YtdlpServiceTests: XCTestCase {
         service.ffprobePath = URL(fileURLWithPath: "/usr/local/bin/ffprobe")
     }
 
-    override func tearDown() {
+    override func tearDown() async throws {
         service = nil
-        super.tearDown()
+        try await super.tearDown()
     }
 
     func testFetchInfoSuccess() async throws {

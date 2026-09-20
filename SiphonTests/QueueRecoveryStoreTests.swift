@@ -12,8 +12,8 @@ final class QueueRecoveryStoreTests: XCTestCase {
     private var recoveryFileURL: URL!
     private var originalHistory: Any?
 
-    override func setUp() {
-        super.setUp()
+    override func setUp() async throws {
+        try await super.setUp()
         originalHistory = UserDefaults.standard.object(forKey: UserDefaultsKeys.downloadHistory)
         UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.downloadHistory)
         tempDir = FileManager.default.temporaryDirectory.appendingPathComponent("QueueRecoveryTests_\(UUID().uuidString)", isDirectory: true)
@@ -21,14 +21,14 @@ final class QueueRecoveryStoreTests: XCTestCase {
         recoveryFileURL = tempDir.appendingPathComponent("queue_recovery_test.json")
     }
 
-    override func tearDown() {
+    override func tearDown() async throws {
         if let originalHistory = originalHistory {
             UserDefaults.standard.set(originalHistory, forKey: UserDefaultsKeys.downloadHistory)
         } else {
             UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.downloadHistory)
         }
         try? FileManager.default.removeItem(at: tempDir)
-        super.tearDown()
+        try await super.tearDown()
     }
 
     func testAtomicPersistenceAndCrashRecovery() {
