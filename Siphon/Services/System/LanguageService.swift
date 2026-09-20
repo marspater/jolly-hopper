@@ -23,6 +23,10 @@ class LanguageService: ObservableObject {
     }
     
     private let translations: [String: String] = [
+        "queue_recovery_title": "Interrupted Downloads Detected",
+        "queue_recovery_message": "Siphon detected %d download(s) that were interrupted when the app closed unexpectedly. Would you like to restore them to the queue?",
+        "queue_recovery_restore": "Restore Queue",
+        "queue_recovery_discard": "Discard",
         "legal_disclaimer": "Legal Disclaimer",
         "about_app": "About Siphon",
         "couldnt_download": "Couldn't download",
@@ -155,7 +159,7 @@ class LanguageService: ObservableObject {
         "whats_new_title": "What's New in Siphon",
         "whats_new_subtitle": "Discover the latest enhancements, improvements, and fixes in this release.",
         "whats_new_title_format": "What's New in Siphon v%@",
-        "whats_new_message": "✨ Siphon v5.4.0 Highlights:\n• Secure Browser Handoff: Extensions no longer transport raw cookies; browser identity is scoped to the validated origin.\n• Reliable Pause & Resume: Per-download scratch storage preserves partial work safely across cancellation and resume.\n• Hardened Updates: Trusted release digests, rollback protection, stale-operation guards, and download/update exclusion keep binaries consistent.\n• Protected-Site Recovery: Stronger BoyfriendTV, Recu, GayPornTube, Safari, Chromium, and Helium session handling.\n• Lifecycle & UI Polish: Explicit executor ownership, safer shutdown semantics, macOS 15 baseline, and refined Liquid Glass accessibility.",
+        "whats_new_message": "✨ Siphon v5.4.5 Highlights:\n• Durable Queue Recovery: Interrupted download queues are atomically persisted across state changes and offered for restoration after unexpected crashes.\n• Secure Browser Handoff: Extensions no longer transport raw cookies; browser identity is scoped to the validated origin.\n• Reliable Pause & Resume: Per-download scratch storage preserves partial work safely across cancellation and resume.\n• Hardened Updates: Trusted release digests, rollback protection, stale-operation guards, and download/update exclusion keep binaries consistent.\n• Protected-Site Recovery: Stronger BoyfriendTV, Recu, GayPornTube, Safari, Chromium, and Helium session handling.\n• Lifecycle & UI Polish: Explicit executor ownership, safer shutdown semantics, macOS 15 baseline, and refined Liquid Glass accessibility.",
         "continue": "Continue",
         "get_started": "Get Started",
         "view_on_github": "Release Notes",

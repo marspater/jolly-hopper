@@ -2,7 +2,7 @@
 
 This repository-owned page mirrors the yt-dlp supported sites list for the Siphon About tab.
 
-Attribution: this list is cloned from [`yt-dlp/supportedsites.md`](https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md) by the yt-dlp project. The upstream content is maintained by yt-dlp contributors and distributed under yt-dlp's license. Source/update date: 2026-08-31.
+Attribution: this list is cloned from [`yt-dlp/supportedsites.md`](https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md) by the yt-dlp project. The upstream content is maintained by yt-dlp contributors and distributed under yt-dlp's license. Source/update date: 2026-09-20.
 
 ## Maintainer refresh instructions
 

@@ -5,7 +5,7 @@ A high-performance, native macOS media extractor & downloader powered by `yt-dlp
 <div align="center">
   <img src="assets/app_screenshot.png?v=3" alt="Siphon Interface" width="880" style="border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.3);" />
   <p>
-    <a href="https://github.com/marspater/jolly-hopper/releases/latest"><img src="https://img.shields.io/badge/Version-v5.4.0-indigo?style=for-the-badge&logo=swift&logoColor=white" alt="Version 5.4.0" /></a>
+    <a href="https://github.com/marspater/jolly-hopper/releases/latest"><img src="https://img.shields.io/badge/Version-v5.4.5-indigo?style=for-the-badge&logo=swift&logoColor=white" alt="Version 5.4.5" /></a>
     <a href="https://github.com/marspater/jolly-hopper/releases/latest"><img src="https://img.shields.io/badge/Download-macOS-blue?style=for-the-badge&logo=apple&logoColor=white" alt="Download Siphon for macOS" /></a>
     <a href="https://github.com/marspater/jolly-hopper"><img src="https://img.shields.io/badge/Repository-jolly--hopper-818cf8?style=for-the-badge&logo=github&logoColor=white" alt="GitHub Repository" /></a>
     <a href="https://github.com/marspater/jolly-hopper/blob/main/SUPPORTED_SITES.md"><img src="https://img.shields.io/badge/Supported--Sites-1000%2B-green?style=for-the-badge&logo=globe&logoColor=white" alt="Supported Sites" /></a>
@@ -16,6 +16,7 @@ A high-performance, native macOS media extractor & downloader powered by `yt-dlp
 
 ## ✨ Highlights & Features
 
+- 💾 **Durable queue recovery**: Queued and running jobs are persisted atomically across state changes so interrupted work can be recovered with one click after unexpected exits or crashes.
 - 🔐 **Credential-free browser handoff**: Safari, Chrome-family, Firefox, and Helium integrations pass browser identity without putting raw cookies into custom URLs. Session state is scoped to validated origins and private-network deep links are rejected.
 - ♻️ **Reliable pause, resume, and cancellation**: Per-download scratch storage preserves resumable partial data, while executor ownership remains intact until process teardown actually finishes.
 - 🛡️ **Hardened update trust chain**: App and dependency updates use verified release metadata, pinned digests, rollback protection, stale-operation guards, and explicit exclusion between yt-dlp replacement and active downloads.

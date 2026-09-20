@@ -1,11 +1,12 @@
 # Changelog
 
-## 5.4.0 - 2026-09-20
+## 5.4.5 - 2026-09-20
 
-Siphon 5.4.0 focuses on download reliability, browser-session security, updater integrity, and clearer runtime ownership.
+Siphon 5.4.5 focuses on durable queue recovery, download reliability, browser-session security, updater integrity, and clearer runtime ownership.
 
 ### Highlights
 
+- **Durable queue recovery:** Interrupted queued and running downloads are atomically persisted across state changes to disk. If the app closes unexpectedly, Siphon detects the interrupted session on launch and offers one-click queue recovery with preserved scratch data.
 - **Credential-free browser handoff:** Browser extensions no longer transport raw cookies in custom URLs. Browser source and user-agent context are sanitized, scoped to the validated origin, and prevented from crossing hosts, schemes, or private-network boundaries.
 - **Reliable pause and resume:** Each download owns isolated scratch storage so paused partial data can be reused safely. Cancellation retains executor ownership until the underlying task/process actually tears down.
 - **Safer update pipeline:** GitHub release assets require trusted digests, staged packages are cleaned up deterministically, rollback paths preserve the installed app, and stale updater callbacks cannot overwrite newer state.
