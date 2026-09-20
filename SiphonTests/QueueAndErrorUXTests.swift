@@ -525,7 +525,7 @@ final class QueueAndErrorUXTests: XCTestCase {
         try? FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: tempDir) }
 
-        let baseName = "Hung bodybuilder jerk flex and shoot a huge load"
+        let baseName = "Protected sample video"
         let thumbFile = tempDir.appendingPathComponent("\(baseName).jpg")
         let partFile = tempDir.appendingPathComponent("\(baseName).mp4.part")
         try? "thumb".data(using: .utf8)?.write(to: thumbFile)
@@ -1933,5 +1933,4 @@ final class QueueAndErrorUXTests: XCTestCase {
         XCTAssertNil(state.browserCookieSourceToDownload)
     }
 }
-
 

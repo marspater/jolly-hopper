@@ -108,8 +108,8 @@ final class MediaInfoTests: XCTestCase {
     }
 
     func testDecodingHTMLEntities() {
-        let input = "Riped stud fucks Sam Ledger&#039;s pussy pt.1"
-        XCTAssertEqual(input.decodingHTMLEntities(), "Riped stud fucks Sam Ledger's pussy pt.1")
+        let input = "Creator&#039;s sample video pt.1"
+        XCTAssertEqual(input.decodingHTMLEntities(), "Creator's sample video pt.1")
 
         let input2 = "Tom &amp; Jerry &#39;The Movie&#39; &quot;Special&quot; &#x27;HD&#x27; &lt;1080p&gt;"
         XCTAssertEqual(input2.decodingHTMLEntities(), "Tom & Jerry 'The Movie' \"Special\" 'HD' <1080p>")
@@ -161,12 +161,12 @@ final class MediaInfoTests: XCTestCase {
         let json = """
         {
             "id": "1689702",
-            "title": "Riped stud fucks Sam Ledger&#039;s pussy pt.1"
+            "title": "Creator&#039;s sample video pt.1"
         }
         """.data(using: .utf8)!
 
         let decoded = try JSONDecoder().decode(MediaInfo.self, from: json)
-        XCTAssertEqual(decoded.title, "Riped stud fucks Sam Ledger's pussy pt.1")
+        XCTAssertEqual(decoded.title, "Creator's sample video pt.1")
     }
 
     // MARK: - MediaFormat videoQualityScore Tests
@@ -721,4 +721,3 @@ final class MediaInfoTests: XCTestCase {
         XCTAssertEqual(decoded.formatProtocol, original.formatProtocol)
     }
 }
-
