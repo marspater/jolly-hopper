@@ -1,37 +1,18 @@
 #!/usr/bin/env python3
-"""Refresh SUPPORTED_SITES.md from yt-dlp's upstream supported-sites page."""
+"""Refresh the repository's neutral supported-sites summary."""
 from __future__ import annotations
 
-from datetime import date
 from pathlib import Path
-from urllib.request import urlopen
 
-UPSTREAM = "https://raw.githubusercontent.com/yt-dlp/yt-dlp/master/supportedsites.md"
 TARGET = Path(__file__).resolve().parents[1] / "SUPPORTED_SITES.md"
-MARKER = "## Cloned yt-dlp supported-sites list"
+CONTENT = """# Supported sites
 
-with urlopen(UPSTREAM, timeout=60) as response:
-    upstream_markdown = response.read().decode("utf-8")
+Siphon uses [yt-dlp](https://github.com/yt-dlp/yt-dlp) for broad extractor coverage across more than 1,000 websites.
 
-head = f"""# Supported sites
+Supported services change frequently as websites and upstream extractors evolve. The reliable way to check a URL is to paste it into Siphon and let the app inspect it. For the current upstream compatibility catalog, see [yt-dlp's supported-sites documentation](https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md).
 
-This repository-owned page mirrors the yt-dlp supported sites list for the Siphon About tab.
-
-Attribution: this list is cloned from [`yt-dlp/supportedsites.md`](https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md) by the yt-dlp project. The upstream content is maintained by yt-dlp contributors and distributed under yt-dlp's license. Source/update date: {date.today().isoformat()}.
-
-## Maintainer refresh instructions
-
-Refresh this file whenever yt-dlp support changes materially or before releases that advertise current extractor coverage:
-
-```sh
-python3 scripts/update-supported-sites.py
-```
-
-The script downloads `{UPSTREAM}`, preserves this repository's attribution and refresh instructions, and replaces the cloned list below.
-
-{MARKER}
-
+Some services require an authenticated browser session, and availability can vary by region or account.
 """
 
-TARGET.write_text(head + upstream_markdown, encoding="utf-8")
-print(f"Updated {TARGET.relative_to(TARGET.parent)} from {UPSTREAM}")
+TARGET.write_text(CONTENT, encoding="utf-8")
+print(f"Updated {TARGET.relative_to(TARGET.parent)}")

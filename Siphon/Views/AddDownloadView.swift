@@ -1769,9 +1769,9 @@ struct AddDownloadView: View {
                 return languageService.s("ytdlp_not_found")
             case .parseError:
                 return languageService.s("parse_error")
-            case .boyfriendTVNeedsBrowserCookies:
+            case .protectedSiteNeedsBrowserCookies:
                 return "This site requires signed-in browser cookies. Open Settings > Advanced > Browser Cookies, choose your browser, then try again."
-            case .boyfriendTVLoginRequired:
+            case .protectedSiteLoginRequired:
                 return languageService.s("login_required")
             case .subtitleError(let details):
                 return String(format: languageService.s("subtitle_download_failed"), details)

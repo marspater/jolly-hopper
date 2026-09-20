@@ -623,9 +623,9 @@ final class DownloadExecutor: ObservableObject {
                 return lang.s("too_many_requests")
             case .cloudflareBlocked:
                 return lang.s("cloudflare_blocked")
-            case .boyfriendTVNeedsBrowserCookies:
+            case .protectedSiteNeedsBrowserCookies:
                 return "This site requires signed-in browser cookies. Open Settings > Advanced > Browser Cookies, choose your browser, then try again."
-            case .boyfriendTVLoginRequired:
+            case .protectedSiteLoginRequired:
                 return lang.s("login_required")
             case .notFound:
                 return lang.s("ytdlp_not_found")
