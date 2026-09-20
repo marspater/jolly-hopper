@@ -114,6 +114,7 @@ final class QueueRecoveryStoreTests: XCTestCase {
         defer { restartedManager.shutdown() }
 
         let languageService = LanguageService()
+        restartedManager.ytdlpService.isUpdating = true
         restartedManager.initialize(languageService: languageService)
 
         XCTAssertTrue(restartedManager.showQueueRecoveryAlert)
@@ -126,6 +127,11 @@ final class QueueRecoveryStoreTests: XCTestCase {
         XCTAssertEqual(restartedManager.downloads.count, 1)
         XCTAssertEqual(restartedManager.downloads.first?.url, "https://example.com/active")
         XCTAssertEqual(restartedManager.downloads.first?.status, .queued)
+
+        let rePersisted = restartedManager.recoveryStore.loadInterruptedJobs()
+        XCTAssertEqual(rePersisted.count, 1)
+        XCTAssertEqual(rePersisted.first?.id, dl.id)
+        XCTAssertEqual(rePersisted.first?.status, .queued)
     }
 
     func testDownloadManagerDiscardRecovery() async throws {
