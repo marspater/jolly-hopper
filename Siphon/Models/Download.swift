@@ -12,8 +12,11 @@ enum ScratchDirectoryPolicy {
     static func isOwned(_ url: URL, fileManager: FileManager = .default) -> Bool {
         let root = fileManager.temporaryDirectory.standardizedFileURL.resolvingSymlinksInPath()
         let candidate = url.standardizedFileURL.resolvingSymlinksInPath()
-        guard candidate.lastPathComponent.hasPrefix(directoryPrefix) else { return false }
-        return candidate.deletingLastPathComponent().path == root.path
+        let name = candidate.lastPathComponent
+        guard candidate.deletingLastPathComponent().path == root.path,
+              name.hasPrefix(directoryPrefix) else { return false }
+        let identifier = String(name.dropFirst(directoryPrefix.count))
+        return UUID(uuidString: identifier) != nil
     }
 }
 
@@ -1967,11 +1970,12 @@ struct HistoricDownload: Codable, Identifiable {
     let log: String
     let progress: Double
     let scratchDirectoryPath: String?
+    let browserCookieSource: String?
     let options: DownloadOptions
 
 
     enum CodingKeys: String, CodingKey {
-        case id, url, title, filePath, filePaths, downloadDate, fileType, status, thumbnailURL, duration, errorMessage, log, progress, scratchDirectoryPath, options
+        case id, url, title, filePath, filePaths, downloadDate, fileType, status, thumbnailURL, duration, errorMessage, log, progress, scratchDirectoryPath, browserCookieSource, options
     }
 
     @MainActor
@@ -1997,6 +2001,9 @@ struct HistoricDownload: Codable, Identifiable {
         self.scratchDirectoryPath = download.scratchDirectory.flatMap {
             ScratchDirectoryPolicy.isOwned($0) ? $0.path : nil
         }
+        self.browserCookieSource = download.status == .paused
+            ? AppState.normalizedBrowserCookieSource(download.options.browserCookieSource)
+            : nil
         var sanitizedOptions = download.options
         sanitizedOptions.rawCookies = nil
         sanitizedOptions.rawUserAgent = nil
@@ -2019,6 +2026,7 @@ struct HistoricDownload: Codable, Identifiable {
         self.log = try container.decode(String.self, forKey: .log)
         self.progress = try container.decode(Double.self, forKey: .progress)
         self.scratchDirectoryPath = try container.decodeIfPresent(String.self, forKey: .scratchDirectoryPath)
+        self.browserCookieSource = try container.decodeIfPresent(String.self, forKey: .browserCookieSource)
         self.options = try container.decode(DownloadOptions.self, forKey: .options)
 
         // Legacy deserialization fallback: read single filePath only if filePaths is not present
@@ -2046,6 +2054,7 @@ struct HistoricDownload: Codable, Identifiable {
         try container.encode(downloadDate, forKey: .downloadDate)
         try container.encode(fileType, forKey: .fileType)
         try container.encodeIfPresent(scratchDirectoryPath, forKey: .scratchDirectoryPath)
+        try container.encodeIfPresent(browserCookieSource, forKey: .browserCookieSource)
         try container.encodeIfPresent(thumbnailURL, forKey: .thumbnailURL)
         try container.encodeIfPresent(duration, forKey: .duration)
     }
@@ -2060,9 +2069,11 @@ struct HistoricDownload: Codable, Identifiable {
     // Helper to convert back to Download object for UI
     @MainActor
     func toDownload() -> Download {
+        var restoredOptions = self.options
+        restoredOptions.browserCookieSource = AppState.normalizedBrowserCookieSource(self.browserCookieSource)
         let download = Download(
             url: self.url,
-            options: self.options,
+            options: restoredOptions,
             title: self.title,
             id: self.id,
             createdAt: self.downloadDate

@@ -144,10 +144,10 @@ final class DownloadExecutorTests: XCTestCase {
     }
 
     func testCleanupRefusesUnownedScratchDirectory() throws {
-        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
-        let unowned = root.appendingPathComponent("siphon_scratch_tampered", isDirectory: true)
+        let unowned = FileManager.default.temporaryDirectory
+            .appendingPathComponent("siphon_scratch_not-a-uuid-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: unowned, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: root) }
+        defer { try? FileManager.default.removeItem(at: unowned) }
 
         let marker = unowned.appendingPathComponent("keep.txt")
         try Data("keep".utf8).write(to: marker)

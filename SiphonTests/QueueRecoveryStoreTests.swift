@@ -183,8 +183,10 @@ final class QueueRecoveryStoreTests: XCTestCase {
 
     func testRecoveryRejectsUnownedScratchDirectory() throws {
         let store = QueueRecoveryStore(fileURL: recoveryFileURL)
-        let unowned = tempDir.appendingPathComponent("siphon_scratch_tampered", isDirectory: true)
+        let unowned = FileManager.default.temporaryDirectory
+            .appendingPathComponent("siphon_scratch_not-a-uuid-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: unowned, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: unowned) }
 
         let download = Download(url: "https://example.com/recover", options: .default)
         download.status = .downloading

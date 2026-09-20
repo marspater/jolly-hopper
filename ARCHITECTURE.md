@@ -48,7 +48,7 @@ The normal cleanup path releases the queue slot, removes task/controller ownersh
 
 - Active job metadata (URLs, titles, options, progress, scratch directory paths) is encoded and written atomically to `Application Support/Siphon/queue_recovery.json`. Raw cookies, raw user agents, and arbitrary extra arguments are redacted; the validated non-secret browser-source identifier is retained so protected-site recovery does not silently switch browser profiles.
 - Scratch paths are accepted only when they point to Siphon-owned `siphon_scratch_*` directories directly under the process temporary directory. Cleanup refuses any unowned path.
-- Paused-job history stores the validated scratch path so pause → quit → reopen → resume can continue partial work across a clean restart.
+- Paused-job history stores the validated scratch path and non-secret browser-source identifier so pause → quit → reopen → resume can continue partial work against the same browser profile across a clean restart. Raw cookies and raw user agents remain ephemeral.
 - Terminal shutdown (`DownloadManager.shutdown()`) records `isCleanShutdown = true`, preventing false-positive recovery prompts across clean application exits.
 - If the application process terminates abruptly (crash, SIGKILL, power loss), the uncompleted snapshot remains marked as interrupted. On subsequent launch, `DownloadManager.initialize(...)` detects the interrupted jobs and prompts the user in `ContentView` to restore them back to `.queued` state (preserving per-job scratch directories) or discard them cleanly.
 
