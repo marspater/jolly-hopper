@@ -521,6 +521,55 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertEqual(items.map(\.id), ["entry-1"])
     }
 
+    func testExplicitFirefoxSourceWinsWithoutRawUserAgent() async throws {
+        UserDefaults.standard.set("safari", forKey: UserDefaultsKeys.browserForCookies)
+        defer { UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.browserForCookies) }
+
+        service.processRunner = MockYtdlpProcessRunner(
+            mockCommand: { args in
+                let browserIndex = try XCTUnwrap(args.firstIndex(of: "--cookies-from-browser"))
+                XCTAssertEqual(args[browserIndex + 1], "firefox")
+                XCTAssertTrue(args.contains("generic:impersonate=firefox:macos"))
+                XCTAssertFalse(args.contains("--user-agent"))
+                XCTAssertFalse(args.contains(where: { $0.hasPrefix("Sec-Ch-Ua:") }))
+
+                if args.contains("--flat-playlist") {
+                    return #"{"id":"entry-1","title":"Entry 1"}"#
+                }
+                return #"{"id":"fixture","title":"Fixture Video"}"#
+            },
+            mockDownload: { args in
+                let browserIndex = try XCTUnwrap(args.firstIndex(of: "--cookies-from-browser"))
+                XCTAssertEqual(args[browserIndex + 1], "firefox")
+                XCTAssertTrue(args.contains("generic:impersonate=firefox:macos"))
+                XCTAssertFalse(args.contains("--user-agent"))
+                XCTAssertFalse(args.contains(where: { $0.hasPrefix("Sec-Ch-Ua:") }))
+                return "/tmp/firefox-explicit-source.mp4"
+            }
+        )
+
+        let info = try await service.fetchInfo(
+            url: "https://example.com/video",
+            browserCookieSource: "firefox"
+        )
+        XCTAssertEqual(info.id, "fixture")
+
+        let playlist = try await service.fetchPlaylistInfo(
+            url: "https://example.com/playlist",
+            browserCookieSource: "firefox"
+        )
+        XCTAssertEqual(playlist.map(\.id), ["entry-1"])
+
+        var options = DownloadOptions.default
+        options.browserCookieSource = "firefox"
+        _ = try await service.download(
+            url: "https://example.com/video",
+            options: options,
+            onProgress: { _, _, _ in },
+            onOutput: { _ in }
+        )
+    }
+
     func testPlaylistInfoPreservesExtensionBrowserIdentity() async throws {
         let exactUA = "Mozilla/5.0 FixtureBrowser/140.0"
         service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
@@ -2169,9 +2218,8 @@ final class YtdlpServiceTests: XCTestCase {
 
     func testRecuMetadataUsesBrowserSourceWithoutCookieURLPayload() async throws {
         let pageURL = "https://recu.me/polarny05/video/112873588/play"
-        let exactUA = "Mozilla/5.0 Firefox/145.0"
         let stream = "https://cdn.example.test/browser-session.m3u8"
-        UserDefaults.standard.set("none", forKey: UserDefaultsKeys.browserForCookies)
+        UserDefaults.standard.set("safari", forKey: UserDefaultsKeys.browserForCookies)
         defer { UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.browserForCookies) }
 
         service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
@@ -2180,6 +2228,8 @@ final class YtdlpServiceTests: XCTestCase {
                 XCTAssertFalse(args.contains("--cookies"))
                 let browserIndex = try XCTUnwrap(args.firstIndex(of: "--cookies-from-browser"))
                 XCTAssertEqual(args[browserIndex + 1], "firefox")
+                XCTAssertTrue(args.contains("generic:impersonate=firefox:macos"))
+                XCTAssertFalse(args.contains("--user-agent"))
 
                 if target.contains("/api/video/112873588") {
                     return Data("<source src=\"\(stream)\">".utf8).base64EncodedString()
@@ -2194,7 +2244,6 @@ final class YtdlpServiceTests: XCTestCase {
 
         let info = try await service.fetchInfo(
             url: pageURL,
-            rawUserAgent: exactUA,
             browserCookieSource: "firefox"
         )
 
