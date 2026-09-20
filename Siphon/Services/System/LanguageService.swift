@@ -155,7 +155,7 @@ class LanguageService: ObservableObject {
         "whats_new_title": "What's New in Siphon",
         "whats_new_subtitle": "Discover the latest enhancements, improvements, and fixes in this release.",
         "whats_new_title_format": "What's New in Siphon v%@",
-        "whats_new_message": "✨ Siphon v5.3.0 Highlights:\n• Architecture Modularization: Dedicated DownloadQueue, DownloadExecutor, DownloadHistoryStore, and ProcessLifecycleState.\n• Sandboxed Cookie Lifecycle: SecureCookieFile with 0o600 permissions, scoped automatic cleanup, and startup orphan sweep.\n• Swift-Owned Auto-Updater: Native DMG staging, atomic backup/rollback, and dual-mode Developer ID / ad-hoc signature verification.\n• Sanitized Log Export: Async log snapshot export with automatic credential, cookie, and token redaction.\n• Swift 6 Concurrency: Actor-isolated BrowserUtils and CookieManager eliminating concurrency races.",
+        "whats_new_message": "✨ Siphon v5.4.0 Highlights:\n• Secure Browser Handoff: Extensions no longer transport raw cookies; browser identity is scoped to the validated origin.\n• Reliable Pause & Resume: Per-download scratch storage preserves partial work safely across cancellation and resume.\n• Hardened Updates: Trusted release digests, rollback protection, stale-operation guards, and download/update exclusion keep binaries consistent.\n• Protected-Site Recovery: Stronger BoyfriendTV, Recu, GayPornTube, Safari, Chromium, and Helium session handling.\n• Lifecycle & UI Polish: Explicit executor ownership, safer shutdown semantics, macOS 15 baseline, and refined Liquid Glass accessibility.",
         "continue": "Continue",
         "get_started": "Get Started",
         "view_on_github": "Release Notes",
