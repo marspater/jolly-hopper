@@ -66,6 +66,32 @@ final class DownloadManagerTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: try XCTUnwrap(directory.value).path))
     }
 
+    func testRemovingActiveDownloadDoesNotRestoreHistoryAfterCancellation() async throws {
+        let originalHistory = UserDefaults.standard.object(forKey: UserDefaultsKeys.downloadHistory)
+        defer { UserDefaults.standard.set(originalHistory, forKey: UserDefaultsKeys.downloadHistory) }
+        let manager = DownloadManager()
+        defer { manager.shutdown() }
+        manager.ytdlpService.ytdlpPath = URL(fileURLWithPath: "/mock/yt-dlp")
+        let started = expectation(description: "Metadata fetch started")
+        manager.ytdlpService.processRunner = MockYtdlpProcessRunner(mockCommand: { _ in
+            started.fulfill()
+            try await Task.sleep(for: .seconds(30))
+            throw CancellationError()
+        })
+        manager.addDownload(url: "https://example.com/removed", options: .default)
+        let download = try XCTUnwrap(manager.downloads.first)
+        await fulfillment(of: [started], timeout: 3)
+        manager.removeDownload(download)
+        for _ in 0..<200 {
+            if manager.activeExecutionCount == 0 { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTAssertEqual(manager.activeExecutionCount, 0)
+        XCTAssertTrue(manager.downloads.isEmpty)
+        XCTAssertTrue(manager.history.isEmpty, "Late cancellation must not resurrect a removed entry")
+        XCTAssertTrue(manager.historyStore.loadHistory().isEmpty, "Removed entry must stay absent after relaunch")
+    }
+
     func testAddDownload() {
         // Arrange
         let manager = DownloadManager()
