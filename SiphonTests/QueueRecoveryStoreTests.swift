@@ -257,4 +257,27 @@ final class QueueRecoveryStoreTests: XCTestCase {
         XCTAssertEqual(restoredOrder, ["Third", "First", "Second"])
     }
 
+    func testTerminationStopAllPreservesPausedScratchWork() throws {
+        let manager = DownloadManager(recoveryFileURL: recoveryFileURL)
+        defer { manager.shutdown() }
+
+        let scratch = ScratchDirectoryPolicy.makeURL()
+        try FileManager.default.createDirectory(at: scratch, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: scratch) }
+        let partial = scratch.appendingPathComponent("video.mp4.part")
+        try Data("partial".utf8).write(to: partial)
+
+        let paused = Download(url: "https://example.com/paused", options: .default, title: "Paused")
+        paused.status = .paused
+        paused.progress = 0.45
+        paused.scratchDirectory = scratch
+        manager.downloads = [paused]
+
+        manager.stopAllDownloads(preservePaused: true)
+
+        XCTAssertEqual(paused.status, .paused)
+        XCTAssertEqual(paused.scratchDirectory?.standardizedFileURL.path, scratch.standardizedFileURL.path)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: partial.path))
+    }
+
 }
