@@ -467,8 +467,11 @@ class DownloadManager: ObservableObject {
         queue.unreserveOutputPath(path)
     }
     
-    func stopAllDownloads() {
-        for download in downloadingDownloads + queuedDownloads {
+    func stopAllDownloads(preservePaused: Bool = false) {
+        let queuedToStop = downloads.filter {
+            $0.status == .queued || (!preservePaused && $0.status == .paused)
+        }
+        for download in downloadingDownloads + queuedToStop {
             stopDownload(download, suppressNotification: false, skipSaveAndBroadcast: true)
         }
         objectWillChange.send()
