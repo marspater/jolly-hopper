@@ -319,4 +319,68 @@ final class QueueRecoveryStoreTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: partial.path))
     }
 
+    func testRecoveryIsKeptUntilDurableHistoryCommitForNonActiveStates() throws {
+        let manager = DownloadManager(recoveryFileURL: recoveryFileURL)
+        manager.ytdlpService.isUpdating = true
+        defer { manager.shutdown() }
+
+        let download = Download(
+            url: "https://example.com/crash-consistency",
+            options: .default,
+            title: "Crash Consistency"
+        )
+        manager.downloads = [download]
+
+        let durableStatuses: [DownloadStatus] = [
+            .paused, .completed, .failed, .stopped, .fileExists
+        ]
+
+        for status in durableStatuses {
+            download.status = .downloading
+            manager.persistQueueRecoveryState()
+            XCTAssertEqual(
+                manager.recoveryStore.loadInterruptedJobs().count,
+                1,
+                "Precondition failed for \(status.rawValue)"
+            )
+
+            manager.executorDidUpdateStatus(for: download, to: status)
+
+            XCTAssertEqual(
+                manager.recoveryStore.loadInterruptedJobs().count,
+                1,
+                "Recovery must remain available until \(status.rawValue) is durably written to history"
+            )
+
+            manager.executorDidRequestAddToHistory(download, skipSave: false)
+
+            XCTAssertTrue(
+                manager.recoveryStore.loadInterruptedJobs().isEmpty,
+                "Recovery should be cleared only after \(status.rawValue) history is durable"
+            )
+            XCTAssertEqual(
+                manager.historyStore.loadHistory().first(where: { $0.id == download.id })?.status,
+                status
+            )
+        }
+    }
+
+    func testFileExistsHistoryRestoresActionRequiredState() throws {
+        let store = DownloadHistoryStore()
+        let download = Download(
+            url: "https://example.com/existing",
+            options: .default,
+            title: "Existing"
+        )
+        download.status = .fileExists
+
+        let historic = HistoricDownload(download: download)
+        let restored = try XCTUnwrap(
+            DownloadHistoryStore.restoreDownloads(from: [historic], existingDownloads: []).first
+        )
+
+        XCTAssertEqual(restored.id, download.id)
+        XCTAssertEqual(restored.status, .fileExists)
+    }
+
 }
