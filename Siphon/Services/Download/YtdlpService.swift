@@ -542,13 +542,12 @@ class YtdlpService: ObservableObject {
         let appSupport = Self.getAppSupportDirectory()
         let invalidBackup = appSupport.appendingPathComponent("yt-dlp.invalid-backup")
 
-        if let bundledPath = Bundle.main.url(forResource: "yt-dlp", withExtension: nil) {
-            if Self.verifySHA256(fileURL: bundledPath, expectedHash: DependencyChecksums.ytdlpExecutableSHA256) {
-                ytdlpPath = bundledPath
-                isAvailable = true
-                try? FileManager.default.removeItem(at: invalidBackup)
-                return
-            }
+        if let bundledPath = Bundle.main.url(forResource: "yt-dlp", withExtension: nil),
+           Self.verifySHA256(fileURL: bundledPath, expectedHash: DependencyChecksums.ytdlpExecutableSHA256) {
+            ytdlpPath = bundledPath
+            isAvailable = true
+            try? FileManager.default.removeItem(at: invalidBackup)
+            return
         }
 
         let ytdlpInSupport = appSupport.appendingPathComponent("yt-dlp")
@@ -886,13 +885,13 @@ class YtdlpService: ObservableObject {
             )
         }
 
-        if isBoyfriendTVURL(url) {
-            if let btvMedia = try await resolveBoyfriendTVMediaInfo(
-                url: url,
-                rawCookies: rawCookies,
-                rawUserAgent: rawUserAgent,
-                browserCookieSource: browserCookieSource
-            ) {
+        if isBoyfriendTVURL(url),
+           let btvMedia = try await resolveBoyfriendTVMediaInfo(
+               url: url,
+               rawCookies: rawCookies,
+               rawUserAgent: rawUserAgent,
+               browserCookieSource: browserCookieSource
+           ) {
                 var btvArgs = [
                     path,
                     "--ignore-config",
@@ -942,11 +941,10 @@ class YtdlpService: ObservableObject {
                     formatProtocol: "m3u8_native",
                     manifestUrl: btvMedia.streamURL
                 )
-            }
         }
 
-        if isGuywhURL(url) {
-            if let guywhMedia = await resolveGuywhMediaInfo(url: url, rawCookies: rawCookies) {
+        if isGuywhURL(url),
+           let guywhMedia = await resolveGuywhMediaInfo(url: url, rawCookies: rawCookies) {
                 let quality = guywhMedia.quality ?? "720p"
                 let height = Int(quality.replacingOccurrences(of: "p", with: "")) ?? 720
                 let format = MediaFormat(
@@ -966,7 +964,6 @@ class YtdlpService: ObservableObject {
                     uploader: "Guywh",
                     formats: [format]
                 )
-            }
         }
 
         if isGFFURL(url) {
@@ -1347,28 +1344,25 @@ public struct DownloadResult: Sendable {
                 customEmbedURL = btvMedia.embedURL
                 customThumbnailURL = btvMedia.thumbnailURL
             }
-        } else if isGuywhURL(url) {
-            if let guywhMedia = await resolveGuywhMediaInfo(url: url, rawCookies: options.rawCookies) {
-                targetURL = guywhMedia.streamURL
-                customResolvedTitle = guywhMedia.title
-                customEmbedURL = guywhMedia.embedURL
-                customThumbnailURL = guywhMedia.thumbnailURL
-            }
-        } else if isGFFURL(url) {
-            if let gffMedia = await resolveGFFMediaInfo(url: url, rawCookies: options.rawCookies) {
-                targetURL = gffMedia.streamURL
-                customResolvedTitle = gffMedia.title
-                customEmbedURL = gffMedia.embedURL
-                customThumbnailURL = gffMedia.thumbnailURL
-            }
-        } else if isBestCamURL(url) {
-            if let bestCamMedia = await resolveBestCamMediaInfo(url: url, rawCookies: options.rawCookies, requestedFormat: options.selectedFormatId) {
-                targetURL = bestCamMedia.streamURL
-                customResolvedTitle = bestCamMedia.title
-                customEmbedURL = bestCamMedia.embedURL
-                customThumbnailURL = bestCamMedia.thumbnailURL
-                bestCamDecryptionKey = bestCamMedia.encryptedFilename
-            }
+        } else if isGuywhURL(url),
+                  let guywhMedia = await resolveGuywhMediaInfo(url: url, rawCookies: options.rawCookies) {
+            targetURL = guywhMedia.streamURL
+            customResolvedTitle = guywhMedia.title
+            customEmbedURL = guywhMedia.embedURL
+            customThumbnailURL = guywhMedia.thumbnailURL
+        } else if isGFFURL(url),
+                  let gffMedia = await resolveGFFMediaInfo(url: url, rawCookies: options.rawCookies) {
+            targetURL = gffMedia.streamURL
+            customResolvedTitle = gffMedia.title
+            customEmbedURL = gffMedia.embedURL
+            customThumbnailURL = gffMedia.thumbnailURL
+        } else if isBestCamURL(url),
+                  let bestCamMedia = await resolveBestCamMediaInfo(url: url, rawCookies: options.rawCookies, requestedFormat: options.selectedFormatId) {
+            targetURL = bestCamMedia.streamURL
+            customResolvedTitle = bestCamMedia.title
+            customEmbedURL = bestCamMedia.embedURL
+            customThumbnailURL = bestCamMedia.thumbnailURL
+            bestCamDecryptionKey = bestCamMedia.encryptedFilename
         }
 
         var args = [path.path, "--ignore-config"]
@@ -2840,7 +2834,7 @@ public struct DownloadResult: Sendable {
 
     private final class BoyfriendTVNavigationDelegate: NSObject, WKNavigationDelegate {
         func webView(
-            _ webView: WKWebView,
+            _ _: WKWebView,
             decidePolicyFor navigationAction: WKNavigationAction,
             decisionHandler: @escaping (WKNavigationActionPolicy) -> Void
         ) {
@@ -3774,12 +3768,11 @@ public struct DownloadResult: Sendable {
                     var chunks: [String] = []
                     for line in output.split(whereSeparator: \.isNewline) {
                         let trimmed = String(line).trimmingCharacters(in: .whitespaces)
-                        if !trimmed.starts(with: "#") && !trimmed.starts(with: "[") && !trimmed.starts(with: "WARNING") && !trimmed.starts(with: "ERROR") {
-                            if let decodedData = Data(base64Encoded: trimmed, options: .ignoreUnknownCharacters),
-                               let decodedString = String(decoding: decodedData, as: UTF8.self) as String?,
-                               !decodedString.isEmpty {
-                                chunks.append(decodedString)
-                            }
+                        if !trimmed.starts(with: "#") && !trimmed.starts(with: "[") && !trimmed.starts(with: "WARNING") && !trimmed.starts(with: "ERROR"),
+                           let decodedData = Data(base64Encoded: trimmed, options: .ignoreUnknownCharacters),
+                           let decodedString = String(decoding: decodedData, as: UTF8.self) as String?,
+                           !decodedString.isEmpty {
+                            chunks.append(decodedString)
                         }
                     }
                     if !chunks.isEmpty {
@@ -3922,12 +3915,11 @@ public struct DownloadResult: Sendable {
         if candidate.isEmpty { return nil }
         
         // Base64 decoded check (e.g. kt_player base64 encoded strings)
-        if !candidate.contains("://") && !candidate.hasPrefix("//") && !candidate.hasPrefix("/") {
-            if let decodedData = Data(base64Encoded: candidate, options: .ignoreUnknownCharacters),
-               let decodedStr = String(data: decodedData, encoding: .utf8),
-               decodedStr.hasPrefix("http") || decodedStr.hasPrefix("//") || decodedStr.hasPrefix("/") {
-                candidate = decodedStr
-            }
+        if !candidate.contains("://") && !candidate.hasPrefix("//") && !candidate.hasPrefix("/"),
+           let decodedData = Data(base64Encoded: candidate, options: .ignoreUnknownCharacters),
+           let decodedStr = String(data: decodedData, encoding: .utf8),
+           decodedStr.hasPrefix("http") || decodedStr.hasPrefix("//") || decodedStr.hasPrefix("/") {
+            candidate = decodedStr
         }
         
         if candidate.hasPrefix("//") {
@@ -4050,12 +4042,11 @@ public struct DownloadResult: Sendable {
                     var browserChunks: [String] = []
                     for line in output.split(whereSeparator: \.isNewline) {
                         let trimmed = String(line).trimmingCharacters(in: .whitespaces)
-                        if !trimmed.starts(with: "#") && !trimmed.starts(with: "[") && !trimmed.starts(with: "WARNING") && !trimmed.starts(with: "ERROR") {
-                            if let decodedData = Data(base64Encoded: trimmed, options: .ignoreUnknownCharacters) {
-                                let decodedString = String(decoding: decodedData, as: UTF8.self)
-                                if !decodedString.isEmpty {
-                                    browserChunks.append(decodedString)
-                                }
+                        if !trimmed.starts(with: "#") && !trimmed.starts(with: "[") && !trimmed.starts(with: "WARNING") && !trimmed.starts(with: "ERROR"),
+                           let decodedData = Data(base64Encoded: trimmed, options: .ignoreUnknownCharacters) {
+                            let decodedString = String(decoding: decodedData, as: UTF8.self)
+                            if !decodedString.isEmpty {
+                                browserChunks.append(decodedString)
                             }
                         }
                     }
@@ -4230,12 +4221,11 @@ public struct DownloadResult: Sendable {
                             var embedChunks: [String] = []
                             for line in output.split(whereSeparator: \.isNewline) {
                                 let trimmed = String(line).trimmingCharacters(in: .whitespaces)
-                                if !trimmed.starts(with: "#") && !trimmed.starts(with: "[") && !trimmed.starts(with: "WARNING") && !trimmed.starts(with: "ERROR") {
-                                    if let decodedData = Data(base64Encoded: trimmed, options: .ignoreUnknownCharacters) {
-                                        let decodedString = String(decoding: decodedData, as: UTF8.self)
-                                        if !decodedString.isEmpty {
-                                            embedChunks.append(decodedString)
-                                        }
+                                if !trimmed.starts(with: "#") && !trimmed.starts(with: "[") && !trimmed.starts(with: "WARNING") && !trimmed.starts(with: "ERROR"),
+                                   let decodedData = Data(base64Encoded: trimmed, options: .ignoreUnknownCharacters) {
+                                    let decodedString = String(decoding: decodedData, as: UTF8.self)
+                                    if !decodedString.isEmpty {
+                                        embedChunks.append(decodedString)
                                     }
                                 }
                             }
@@ -4734,12 +4724,11 @@ public struct DownloadResult: Sendable {
                         var chunks: [String] = []
                         for line in output.split(whereSeparator: \.isNewline) {
                             let trimmed = String(line).trimmingCharacters(in: .whitespaces)
-                            if !trimmed.starts(with: "#") && !trimmed.starts(with: "[") && !trimmed.starts(with: "WARNING") && !trimmed.starts(with: "ERROR") {
-                                if let decodedData = Data(base64Encoded: trimmed, options: .ignoreUnknownCharacters),
-                                   let decodedString = String(decoding: decodedData, as: UTF8.self) as String?,
-                                   !decodedString.isEmpty {
-                                    chunks.append(decodedString)
-                                }
+                            if !trimmed.starts(with: "#") && !trimmed.starts(with: "[") && !trimmed.starts(with: "WARNING") && !trimmed.starts(with: "ERROR"),
+                               let decodedData = Data(base64Encoded: trimmed, options: .ignoreUnknownCharacters),
+                               let decodedString = String(decoding: decodedData, as: UTF8.self) as String?,
+                               !decodedString.isEmpty {
+                                chunks.append(decodedString)
                             }
                         }
                         if !chunks.isEmpty {
@@ -4805,27 +4794,25 @@ public struct DownloadResult: Sendable {
         if let (data, response) = try? await URLSession.shared.data(for: abyssReq),
            let httpResponse = response as? HTTPURLResponse,
            (200...299).contains(httpResponse.statusCode),
-           let pageHtml = String(data: data, encoding: .utf8) {
-            if let m = pageHtml.range(of: "const datas = \"([^\"]+)\"", options: .regularExpression) {
-                let matched = String(pageHtml[m])
-                datasB64 = matched.replacingOccurrences(of: "const datas = \"", with: "").replacingOccurrences(of: "\"", with: "")
-            }
+           let pageHtml = String(data: data, encoding: .utf8),
+           let m = pageHtml.range(of: "const datas = \"([^\"]+)\"", options: .regularExpression) {
+            let matched = String(pageHtml[m])
+            datasB64 = matched.replacingOccurrences(of: "const datas = \"", with: "").replacingOccurrences(of: "\"", with: "")
         }
 
-        if datasB64 == nil {
-            if let infoURL = URL(string: "https://abyssplayer.com/info/\(slug)") {
-                var infoReq = URLRequest(url: infoURL)
-                infoReq.timeoutInterval = 8.0
-                infoReq.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36", forHTTPHeaderField: "User-Agent")
-                infoReq.setValue("https://bestcam.tv/", forHTTPHeaderField: "Referer")
-                infoReq.setValue("https://bestcam.tv/", forHTTPHeaderField: "x-referer")
-                infoReq.setValue("1920x1080", forHTTPHeaderField: "x-client-screen")
-                if let (data, response) = try? await URLSession.shared.data(for: infoReq),
-                   let httpResponse = response as? HTTPURLResponse,
-                   (200...299).contains(httpResponse.statusCode),
-                   let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
-                    infoJSON = json
-                }
+        if datasB64 == nil,
+           let infoURL = URL(string: "https://abyssplayer.com/info/\(slug)") {
+            var infoReq = URLRequest(url: infoURL)
+            infoReq.timeoutInterval = 8.0
+            infoReq.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36", forHTTPHeaderField: "User-Agent")
+            infoReq.setValue("https://bestcam.tv/", forHTTPHeaderField: "Referer")
+            infoReq.setValue("https://bestcam.tv/", forHTTPHeaderField: "x-referer")
+            infoReq.setValue("1920x1080", forHTTPHeaderField: "x-client-screen")
+            if let (data, response) = try? await URLSession.shared.data(for: infoReq),
+               let httpResponse = response as? HTTPURLResponse,
+               (200...299).contains(httpResponse.statusCode),
+               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                infoJSON = json
             }
         }
 
@@ -4840,16 +4827,14 @@ public struct DownloadResult: Sendable {
                 if let output = try? await processRunner.runCommand(dumpArgs) {
                     for line in output.split(whereSeparator: \.isNewline) {
                         let trimmed = String(line).trimmingCharacters(in: .whitespaces)
-                        if !trimmed.starts(with: "#") && !trimmed.starts(with: "[") && !trimmed.starts(with: "WARNING") && !trimmed.starts(with: "ERROR") {
-                            if let decodedData = Data(base64Encoded: trimmed, options: .ignoreUnknownCharacters),
-                               let pageHtml = String(decoding: decodedData, as: UTF8.self) as String?,
-                               !pageHtml.isEmpty {
-                                if let m = pageHtml.range(of: "const datas = \"([^\"]+)\"", options: .regularExpression) {
-                                    let matched = String(pageHtml[m])
-                                    datasB64 = matched.replacingOccurrences(of: "const datas = \"", with: "").replacingOccurrences(of: "\"", with: "")
-                                    break
-                                }
-                            }
+                        if !trimmed.starts(with: "#") && !trimmed.starts(with: "[") && !trimmed.starts(with: "WARNING") && !trimmed.starts(with: "ERROR"),
+                           let decodedData = Data(base64Encoded: trimmed, options: .ignoreUnknownCharacters),
+                           let pageHtml = String(decoding: decodedData, as: UTF8.self) as String?,
+                           !pageHtml.isEmpty,
+                           let m = pageHtml.range(of: "const datas = \"([^\"]+)\"", options: .regularExpression) {
+                            let matched = String(pageHtml[m])
+                            datasB64 = matched.replacingOccurrences(of: "const datas = \"", with: "").replacingOccurrences(of: "\"", with: "")
+                            break
                         }
                     }
                 }
@@ -4974,14 +4959,13 @@ public struct DownloadResult: Sendable {
             let videoSlug = (path as NSString).substring(with: match.range(at: 1))
             components.path = "/videos/\(videoSlug)/"
             return components.url?.absoluteString ?? components.string ?? urlString
-        } else if host.contains("thisvid") {
-            if let regex = Self.singleVideoSlugRegex,
-               let match = regex.firstMatch(in: path, options: [], range: NSRange(location: 0, length: (path as NSString).length)),
-               match.numberOfRanges > 1 {
-                let videoSlug = (path as NSString).substring(with: match.range(at: 1))
-                components.path = "/videos/\(videoSlug)/"
-                return components.url?.absoluteString ?? components.string ?? urlString
-            }
+        } else if host.contains("thisvid"),
+                  let regex = Self.singleVideoSlugRegex,
+                  let match = regex.firstMatch(in: path, options: [], range: NSRange(location: 0, length: (path as NSString).length)),
+                  match.numberOfRanges > 1 {
+            let videoSlug = (path as NSString).substring(with: match.range(at: 1))
+            components.path = "/videos/\(videoSlug)/"
+            return components.url?.absoluteString ?? components.string ?? urlString
         }
 
         // 3. xHamster normalization
@@ -5159,12 +5143,10 @@ public struct DownloadResult: Sendable {
 
         let parsedHost = (URL(string: url)?.host ?? url).lowercased()
         let isYouTube = parsedHost == "youtube.com" || parsedHost.hasSuffix(".youtube.com") || parsedHost == "youtu.be" || parsedHost.hasSuffix(".youtu.be")
-        if isYouTube {
-            if lowerErr.contains("403") || lowerErr.contains("sign in") || lowerErr.contains("bot") || lowerErr.contains("login_required") {
-                if configuredBrowser == nil {
-                    return YtdlpError.downloadFailed("YouTube requires authentication or browser cookies. Go to Settings > Advanced > Browser Cookies to select your browser.")
-                }
-            }
+        if isYouTube,
+           (lowerErr.contains("403") || lowerErr.contains("sign in") || lowerErr.contains("bot") || lowerErr.contains("login_required")),
+           configuredBrowser == nil {
+            return YtdlpError.downloadFailed("YouTube requires authentication or browser cookies. Go to Settings > Advanced > Browser Cookies to select your browser.")
         }
 
         return error
@@ -5558,7 +5540,7 @@ public struct DownloadResult: Sendable {
         return siphonDir
     }
 
-    private func extractBrowserCookiesToTempFile(url: String, browser: String) async -> URL? {
+    private func extractBrowserCookiesToTempFile(url _: String, browser _: String) async -> URL? {
         // Not used explicitly here but kept for architecture
         return nil
     }

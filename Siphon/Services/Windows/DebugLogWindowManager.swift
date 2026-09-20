@@ -48,7 +48,7 @@ final class DebugLogWindowManager: NSObject, NSWindowDelegate {
         windowController = nil
     }
 
-    func windowWillClose(_ notification: Notification) {
+    func windowWillClose(_ _: Notification) {
         windowController = nil
     }
 }

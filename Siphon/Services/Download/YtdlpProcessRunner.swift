@@ -431,6 +431,22 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
         })
     }
 
+    private static func parseAriaToken(from substring: Substring) -> String? {
+        if let token = substring.split(whereSeparator: { $0.isWhitespace || $0 == "]" }).first {
+            return String(token)
+        }
+        return nil
+    }
+
+    private static func extractCleanError(from errorOutput: String) -> String {
+        for line in errorOutput.split(whereSeparator: \.isNewline).reversed() {
+            if line.contains("ERROR:") {
+                return String(line).replacingOccurrences(of: "ERROR: ", with: "")
+            }
+        }
+        return errorOutput
+    }
+
     private func executeDownloadProcess(
         args: [String],
         saveFolder: URL,
@@ -496,16 +512,16 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
                         var speedStr: String? = nil
                         if let dlRange = line.range(of: "DL:") {
                             let afterDl = line[dlRange.upperBound...]
-                            if let token = afterDl.split(whereSeparator: { $0.isWhitespace || $0 == "]" }).first {
-                                speedStr = String(token) + "/s"
+                            if let token = Self.parseAriaToken(from: afterDl) {
+                                speedStr = token + "/s"
                             }
                         }
 
                         var etaStr: String? = nil
                         if let etaRange = line.range(of: "ETA:") {
                             let afterEta = line[etaRange.upperBound...]
-                            if let token = afterEta.split(whereSeparator: { $0.isWhitespace || $0 == "]" }).first {
-                                etaStr = String(token)
+                            if let token = Self.parseAriaToken(from: afterEta) {
+                                etaStr = token
                             }
                         }
 
@@ -557,12 +573,11 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
                     if !path.isEmpty {
                         outputState.addCandidatePath(path)
                     }
-                } else if line.contains("[download]") && line.contains("100%") {
-                    if let destRange = line.range(of: "Destination: ") {
-                        let path = line[destRange.upperBound...].trimmingCharacters(in: .whitespacesAndNewlines)
-                        if !path.isEmpty {
-                            outputState.addCandidatePath(path)
-                        }
+                } else if line.contains("[download]") && line.contains("100%"),
+                          let destRange = line.range(of: "Destination: ") {
+                    let path = line[destRange.upperBound...].trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !path.isEmpty {
+                        outputState.addCandidatePath(path)
                     }
                 }
 
@@ -583,6 +598,11 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
             let outputBuffer = StreamBuffer()
             let errorBuffer = StreamBuffer()
 
+            let postErrorLine: @Sendable (String) -> Void = { line in
+                outputState.appendError(line + "\n")
+                DispatchQueue.main.async { onOutput("[ERROR] \(line)") }
+            }
+
             outputPipe.fileHandleForReading.readabilityHandler = { handle in
                 let data = handle.availableData
                 guard !data.isEmpty else { return }
@@ -595,8 +615,7 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
                 let data = handle.availableData
                 guard !data.isEmpty else { return }
                 for line in errorBuffer.appendAndExtractLines(data) {
-                    outputState.appendError(line + "\n")
-                    DispatchQueue.main.async { onOutput("[ERROR] \(line)") }
+                    postErrorLine(line)
                 }
             }
 
@@ -622,13 +641,11 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
 
                 if !remainingError.isEmpty {
                     for line in errorBuffer.appendAndExtractLines(remainingError) {
-                        outputState.appendError(line + "\n")
-                        DispatchQueue.main.async { onOutput("[ERROR] \(line)") }
+                        postErrorLine(line)
                     }
                 }
                 for line in errorBuffer.flush() {
-                    outputState.appendError(line + "\n")
-                    DispatchQueue.main.async { onOutput("[ERROR] \(line)") }
+                    postErrorLine(line)
                 }
 
                 // If user requested cancellation or process was terminated via signal, resume with appropriate error
@@ -693,11 +710,7 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
                     } else if errorOutput.contains("subtitle") || errorOutput.contains("caption") {
                         safeContinuation.resume(throwing: YtdlpError.subtitleError(errorOutput))
                     } else {
-                        let cleanError = errorOutput.split(whereSeparator: \.isNewline)
-                            .reversed()
-                            .first(where: { $0.contains("ERROR:") })
-                            .map { String($0).replacingOccurrences(of: "ERROR: ", with: "") }
-                            ?? errorOutput
+                        let cleanError = Self.extractCleanError(from: errorOutput)
                         safeContinuation.resume(throwing: YtdlpError.downloadFailed(cleanError.isEmpty ? "Process exited with code \(proc.terminationStatus)" : cleanError))
                     }
                 }

@@ -196,9 +196,9 @@ public final class UpdateDownloader: NSObject, URLSessionDownloadDelegate, @unch
     // MARK: - URLSessionDownloadDelegate
 
     public func urlSession(
-        _ session: URLSession,
-        downloadTask: URLSessionDownloadTask,
-        didWriteData bytesWritten: Int64,
+        _ _: URLSession,
+        downloadTask _: URLSessionDownloadTask,
+        didWriteData _: Int64,
         totalBytesWritten: Int64,
         totalBytesExpectedToWrite: Int64
     ) {
@@ -207,7 +207,7 @@ public final class UpdateDownloader: NSObject, URLSessionDownloadDelegate, @unch
         progressHandler?(progress)
     }
 
-    public func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {
+    public func urlSession(_ session: URLSession, downloadTask _: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {
         session.finishTasksAndInvalidate()
 
         lock.lock()
@@ -256,7 +256,7 @@ public final class UpdateDownloader: NSObject, URLSessionDownloadDelegate, @unch
         }
     }
 
-    public func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+    public func urlSession(_ session: URLSession, task _: URLSessionTask, didCompleteWithError error: Error?) {
         session.finishTasksAndInvalidate()
         lock.lock()
         activeTask = nil

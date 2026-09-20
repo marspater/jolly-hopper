@@ -256,13 +256,7 @@ struct HeroDropURLView: View {
                     }
                     Spacer()
                 }
-                .foregroundColor(
-                    feedback.current?.isSuccess == true
-                        ? SiphonTheme.statusForeground(for: .completed, colorScheme: colorScheme)
-                        : (feedback.current != nil
-                            ? SiphonTheme.statusForeground(for: .failed, colorScheme: colorScheme)
-                            : .secondary)
-                )
+                .foregroundColor(feedbackForegroundColor)
                 .frame(height: 16)
                 .padding(.horizontal, 4)
             }
@@ -286,6 +280,16 @@ struct HeroDropURLView: View {
         }
         .onChange(of: appState.showAddDownloadSheet) { _, showing in
             isFieldFocused = !showing
+        }
+    }
+
+    private var feedbackForegroundColor: Color {
+        if feedback.current?.isSuccess == true {
+            return SiphonTheme.statusForeground(for: .completed, colorScheme: colorScheme)
+        } else if feedback.current != nil {
+            return SiphonTheme.statusForeground(for: .failed, colorScheme: colorScheme)
+        } else {
+            return .secondary
         }
     }
 
@@ -375,18 +379,17 @@ struct HeroDropURLView: View {
                         fileURL = URL(string: path)
                     }
 
-                    if let fURL = fileURL, fURL.pathExtension.lowercased() == "txt" {
-                        if let content = try? String(contentsOf: fURL, encoding: .utf8) {
-                            let urls = DownloadURLValidator.extractURLs(from: content)
-                            if !urls.isEmpty {
-                                Task { @MainActor in
-                                    startDownloads(urls: urls)
-                                    feedback.show(String(format: languageService.s("hero_started_downloads"), urls.count), isSuccess: true, icon: "checkmark.circle.fill")
-                                }
-                            } else {
-                                Task { @MainActor in
-                                    feedback.show(languageService.s("no_valid_urls"), isSuccess: false, icon: "exclamationmark.circle.fill")
-                                }
+                    if let fURL = fileURL, fURL.pathExtension.lowercased() == "txt",
+                       let content = try? String(contentsOf: fURL, encoding: .utf8) {
+                        let urls = DownloadURLValidator.extractURLs(from: content)
+                        if !urls.isEmpty {
+                            Task { @MainActor in
+                                startDownloads(urls: urls)
+                                feedback.show(String(format: languageService.s("hero_started_downloads"), urls.count), isSuccess: true, icon: "checkmark.circle.fill")
+                            }
+                        } else {
+                            Task { @MainActor in
+                                feedback.show(languageService.s("no_valid_urls"), isSuccess: false, icon: "exclamationmark.circle.fill")
                             }
                         }
                     }

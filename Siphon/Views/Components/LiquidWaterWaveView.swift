@@ -139,7 +139,7 @@ struct LiquidWaterWaveView: View {
             // liquid continues smoothly instead of jumping when state changes.
             TimelineView(.animation(minimumInterval: renderingCapabilities.animationMinimumInterval)) { timeline in
                 let time = timeline.date.timeIntervalSince(startedAt)
-                let visibility = isActive ? 1.0 : (isHovered ? 0.82 : 0.42)
+                let visibility = waveVisibility
 
                 ZStack {
                     LissajousHarmonicBlobShape(
@@ -221,6 +221,16 @@ struct LiquidWaterWaveView: View {
                     )
                 }
             }
+        }
+    }
+
+    private var waveVisibility: Double {
+        if isActive {
+            return 1.0
+        } else if isHovered {
+            return 0.82
+        } else {
+            return 0.42
         }
     }
 }

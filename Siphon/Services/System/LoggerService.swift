@@ -258,11 +258,10 @@ class LoggerService: ObservableObject {
             let lines = extractTailLines(from: data, maxEntries: maxEntries)
             guard !lines.isEmpty else { return }
             let trimmed = lines.joined(separator: "\n") + "\n"
-            if let trimmedData = trimmed.data(using: .utf8) {
-                if !FileManager.default.createFile(atPath: logFileURL.path, contents: trimmedData, attributes: [.posixPermissions: 0o600]) {
-                    try? trimmed.write(to: logFileURL, atomically: true, encoding: .utf8)
-                    try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: logFileURL.path)
-                }
+            if let trimmedData = trimmed.data(using: .utf8),
+               !FileManager.default.createFile(atPath: logFileURL.path, contents: trimmedData, attributes: [.posixPermissions: 0o600]) {
+                try? trimmed.write(to: logFileURL, atomically: true, encoding: .utf8)
+                try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: logFileURL.path)
             }
         }
     }

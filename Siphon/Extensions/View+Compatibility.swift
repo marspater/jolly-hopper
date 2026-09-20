@@ -7,7 +7,7 @@ struct VisualEffectView: NSViewRepresentable {
     var blendingMode: NSVisualEffectView.BlendingMode = .behindWindow
     var state: NSVisualEffectView.State = .active
 
-    func makeNSView(context: Context) -> NSVisualEffectView {
+    func makeNSView(context _: Context) -> NSVisualEffectView {
         let nsView = NSVisualEffectView()
         nsView.material = material
         nsView.blendingMode = blendingMode
@@ -15,7 +15,7 @@ struct VisualEffectView: NSViewRepresentable {
         return nsView
     }
 
-    func updateNSView(_ nsView: NSVisualEffectView, context: Context) {
+    func updateNSView(_ nsView: NSVisualEffectView, context _: Context) {
         nsView.material = material
         nsView.blendingMode = blendingMode
         nsView.state = state
@@ -284,13 +284,13 @@ private final class SiphonScreenObserverView: NSView {
 private struct SiphonScreenObserver: NSViewRepresentable {
     let onScreenChange: (NSScreen?) -> Void
 
-    func makeNSView(context: Context) -> SiphonScreenObserverView {
+    func makeNSView(context _: Context) -> SiphonScreenObserverView {
         let view = SiphonScreenObserverView()
         view.onScreenChange = onScreenChange
         return view
     }
 
-    func updateNSView(_ nsView: SiphonScreenObserverView, context: Context) {
+    func updateNSView(_ nsView: SiphonScreenObserverView, context _: Context) {
         nsView.onScreenChange = onScreenChange
     }
 }
@@ -625,6 +625,16 @@ public enum SiphonTheme {
             )
     }
 
+    private static func pillBorderOpacity(showBorders: Bool, isHovered: Bool) -> Double {
+        if showBorders {
+            return 0.42
+        } else if isHovered {
+            return 0.12
+        } else {
+            return 0.06
+        }
+    }
+
     @ViewBuilder
     public static func pillBorder(
         isSelected: Bool = false,
@@ -640,7 +650,7 @@ public enum SiphonTheme {
         } else {
             Capsule()
                 .stroke(
-                    Color.primary.opacity(showBorders ? 0.42 : (isHovered ? 0.12 : 0.06)),
+                    Color.primary.opacity(pillBorderOpacity(showBorders: showBorders, isHovered: isHovered)),
                     lineWidth: showBorders ? 1.5 : 1
                 )
         }
@@ -843,6 +853,16 @@ public struct SiphonInteractiveGlassBackground: View {
         self.effectiveTint = effectiveTint
     }
 
+    private var overlayColor: Color {
+        if isSelected {
+            return effectiveTint.opacity(0.88)
+        } else if isHovered {
+            return effectiveTint.opacity(0.19)
+        } else {
+            return Color.primary.opacity(0.045)
+        }
+    }
+
     public var body: some View {
         ZStack {
             if isHovered && !isSelected {
@@ -860,13 +880,8 @@ public struct SiphonInteractiveGlassBackground: View {
                 )
 
             RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                .fill(
-                    isSelected
-                        ? effectiveTint.opacity(0.88)
-                        : (isHovered ? effectiveTint.opacity(0.19) : Color.primary.opacity(0.045))
-                )
+                .fill(overlayColor)
         }
-
     }
 }
 
@@ -890,16 +905,29 @@ public struct SiphonInteractiveGlassBorder: View {
         self.effectiveTint = effectiveTint
     }
 
+    private var showBorders: Bool {
+        renderingCapabilities.increaseContrast
+    }
+
+    private var gradientColors: [Color] {
+        if isSelected {
+            return [effectiveTint.opacity(0.88), effectiveTint.opacity(0.44)]
+        } else if isHovered {
+            let topOpacity = showBorders ? 0.88 : 0.70
+            let bottomOpacity = showBorders ? 0.46 : 0.28
+            return [effectiveTint.opacity(topOpacity), effectiveTint.opacity(bottomOpacity)]
+        } else {
+            let topOpacity = showBorders ? 0.42 : 0.20
+            let bottomOpacity = showBorders ? 0.20 : 0.07
+            return [Color.primary.opacity(topOpacity), Color.primary.opacity(bottomOpacity)]
+        }
+    }
+
     public var body: some View {
-        let showBorders = renderingCapabilities.increaseContrast
         RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
             .strokeBorder(
                 LinearGradient(
-                    colors: isSelected
-                        ? [effectiveTint.opacity(0.88), effectiveTint.opacity(0.44)]
-                        : (isHovered
-                            ? [effectiveTint.opacity(showBorders ? 0.88 : 0.70), effectiveTint.opacity(showBorders ? 0.46 : 0.28)]
-                            : [Color.primary.opacity(showBorders ? 0.42 : 0.20), Color.primary.opacity(showBorders ? 0.20 : 0.07)]),
+                    colors: gradientColors,
                     startPoint: .top,
                     endPoint: .bottom
                 ),
@@ -973,9 +1001,19 @@ public struct BouncyButtonStyle: ButtonStyle {
         self.hoverScale = hoverScale
     }
     
+    private func buttonScale(isPressed: Bool) -> CGFloat {
+        if isPressed {
+            return scaleAmount
+        } else if isHovered {
+            return hoverScale
+        } else {
+            return 1.0
+        }
+    }
+
     public func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .scaleEffect(configuration.isPressed ? scaleAmount : (isHovered ? hoverScale : 1.0))
+            .scaleEffect(buttonScale(isPressed: configuration.isPressed))
             .animation(SiphonAnimation.buttonPressSpring, value: configuration.isPressed)
             .animation(SiphonAnimation.buttonHoverSpring, value: isHovered)
             .onHover { isHovered = $0 }
@@ -1001,6 +1039,16 @@ public struct SiphonPrimaryButtonStyle: ButtonStyle {
         self.cornerRadius = cornerRadius
     }
     
+    private func buttonScale(isPressed: Bool) -> CGFloat {
+        if isPressed {
+            return 0.965
+        } else if isHovered {
+            return 1.02
+        } else {
+            return 1.0
+        }
+    }
+
     public func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.geist(13, weight: .semibold))
@@ -1015,7 +1063,7 @@ public struct SiphonPrimaryButtonStyle: ButtonStyle {
                     .stroke(Color.white.opacity(0.25), lineWidth: 1)
             )
             .shadow(color: SiphonTheme.accent.opacity(isHovered ? 0.35 : 0.20), radius: isHovered ? 8 : 4, y: 2)
-            .scaleEffect(configuration.isPressed ? 0.965 : (isHovered ? 1.02 : 1.0))
+            .scaleEffect(buttonScale(isPressed: configuration.isPressed))
             .animation(SiphonAnimation.buttonPressSpring, value: configuration.isPressed)
             .animation(SiphonAnimation.buttonHoverSpring, value: isHovered)
             .onHover { isHovered = $0 }
@@ -1030,6 +1078,16 @@ public struct SiphonSecondaryButtonStyle: ButtonStyle {
         self.cornerRadius = cornerRadius
     }
     
+    private func buttonScale(isPressed: Bool) -> CGFloat {
+        if isPressed {
+            return 0.97
+        } else if isHovered {
+            return 1.018
+        } else {
+            return 1.0
+        }
+    }
+
     public func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.geist(13, weight: .medium))
@@ -1042,7 +1100,7 @@ public struct SiphonSecondaryButtonStyle: ButtonStyle {
             .overlay(
                 SiphonTheme.controlBorder(cornerRadius: cornerRadius, isHovered: isHovered)
             )
-            .scaleEffect(configuration.isPressed ? 0.97 : (isHovered ? 1.018 : 1.0))
+            .scaleEffect(buttonScale(isPressed: configuration.isPressed))
             .animation(SiphonAnimation.buttonPressSpring, value: configuration.isPressed)
             .animation(SiphonAnimation.buttonHoverSpring, value: isHovered)
             .onHover { isHovered = $0 }
@@ -1090,9 +1148,19 @@ public struct SiphonIconButtonStyle: ButtonStyle {
         self.size = size
     }
     
+    private func buttonScale(isPressed: Bool) -> CGFloat {
+        if isPressed {
+            return 0.92
+        } else if isHovered {
+            return 1.06
+        } else {
+            return 1.0
+        }
+    }
+
     public func makeBody(configuration: Configuration) -> some View {
         let showBorders = renderingCapabilities.increaseContrast
-        configuration.label
+        return configuration.label
             .frame(width: size, height: size)
             .background(
                 Circle()
@@ -1102,7 +1170,7 @@ public struct SiphonIconButtonStyle: ButtonStyle {
                 Circle()
                     .stroke(Color.secondary.opacity(showBorders ? 0.65 : 0.0), lineWidth: 1)
             )
-            .scaleEffect(configuration.isPressed ? 0.92 : (isHovered ? 1.06 : 1.0))
+            .scaleEffect(buttonScale(isPressed: configuration.isPressed))
             .animation(SiphonAnimation.buttonPressSpring, value: configuration.isPressed)
             .animation(SiphonAnimation.buttonHoverSpring, value: isHovered)
             .onHover { isHovered = $0 }

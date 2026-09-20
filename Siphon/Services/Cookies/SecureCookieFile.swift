@@ -97,11 +97,9 @@ public final class SecureCookieFile: @unchecked Sendable {
             throw SecureCookieError.notARegularFile(fileURL)
         }
 
-        if let perm = (attrs[.posixPermissions] as? NSNumber)?.intValue {
+        if let perm = (attrs[.posixPermissions] as? NSNumber)?.intValue, (perm & 0o077) != 0 {
             // Group and others must have 0 access (e.g. 0o600 or 0o700)
-            if (perm & 0o077) != 0 {
-                throw SecureCookieError.insecurePermissions(fileURL, perm)
-            }
+            throw SecureCookieError.insecurePermissions(fileURL, perm)
         }
 
         guard let fileSize = attrs[.size] as? NSNumber, fileSize.intValue > 0 else {
