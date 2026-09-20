@@ -318,6 +318,10 @@ final class DownloadExecutor: ObservableObject {
             if fileExists && download.options.forceOverwrite != true {
                 delegate?.executorDidUpdateStatus(for: download, to: .fileExists)
                 delegate?.executorDidRequestBroadcast()
+                // File-exists is action-required state, not disposable runtime
+                // state. Persist it before allowing recovery to drop the prior
+                // active snapshot so a crash does not make the job disappear.
+                delegate?.executorDidRequestAddToHistory(download, skipSave: false)
                 return
             }
 
