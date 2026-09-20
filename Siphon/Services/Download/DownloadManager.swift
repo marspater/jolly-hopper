@@ -10,22 +10,8 @@ class DownloadManager: ObservableObject {
 
     @Published var downloads: [Download] = []
     @Published var history: [HistoricDownload] = []
-    @Published var ytdlpVersion: String?
-    @Published var showWhatsNew: Bool = false
-    @Published var whatsNewTitle: String = ""
-    @Published var whatsNewMessage: String = ""
-    @Published var whatsNewFeatures: [ReleaseFeature] = []
-    @Published var isFetchingWhatsNew: Bool = false
-    @Published var ytdlpUpdateMessage: YtdlpUpdateMessage?
-    @Published var isUpdatingYtdlp: Bool = false
-    @Published var ytdlpUpdateProgress: Double = 0
-
-
     let ytdlpService = YtdlpService()
-    var urlSession: URLSession = .shared
     let historyStore = DownloadHistoryStore()
-    let releaseNotesService = ReleaseNotesService()
-    let dependencyCoordinator = DependencyUpdateCoordinator()
     let queue = DownloadQueue()
     private var executor: DownloadExecutor!
 
@@ -49,19 +35,6 @@ class DownloadManager: ObservableObject {
     init() {
         self.executor = DownloadExecutor(ytdlpService: ytdlpService)
         self.executor.delegate = self
-        dependencyCoordinator.bind(to: ytdlpService)
-        dependencyCoordinator.$isUpdating
-            .receive(on: RunLoop.main)
-            .assign(to: &$isUpdatingYtdlp)
-        dependencyCoordinator.$updateProgress
-            .receive(on: RunLoop.main)
-            .assign(to: &$ytdlpUpdateProgress)
-        dependencyCoordinator.$version
-            .receive(on: RunLoop.main)
-            .assign(to: &$ytdlpVersion)
-        dependencyCoordinator.$updateMessage
-            .receive(on: RunLoop.main)
-            .assign(to: &$ytdlpUpdateMessage)
 
         NotificationCenter.default.addObserver(
             forName: UserDefaults.didChangeNotification,
@@ -142,49 +115,10 @@ class DownloadManager: ObservableObject {
 
 
 
-    func initialize(languageService: LanguageService, skipBinarySetup: Bool = false) async {
+    func initialize(languageService: LanguageService) {
         self.languageService = languageService
-
-        await dependencyCoordinator.initialize(service: ytdlpService, skipBinarySetup: skipBinarySetup)
-        ytdlpVersion = dependencyCoordinator.version
-
         loadHistory()
-
-        await checkAndFetchWhatsNew()
     }
-
-    var appVersion: String {
-        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "5.3.0"
-    }
-
-    static var defaultFeatures: [ReleaseFeature] {
-        ReleaseNotesService.defaultFeatures
-    }
-
-    func parseReleaseFeatures(from text: String) -> [ReleaseFeature] {
-        releaseNotesService.parseReleaseFeatures(from: text)
-    }
-
-    func checkAndFetchWhatsNew() async {
-        isFetchingWhatsNew = true
-        if let result = await releaseNotesService.checkAndFetchWhatsNew(appVersion: appVersion, languageService: languageService, session: urlSession) {
-            whatsNewTitle = result.title
-            whatsNewFeatures = result.features
-            showWhatsNew = result.shouldShow
-        }
-        isFetchingWhatsNew = false
-    }
-
-    func fetchReleaseNotesFromGitHub(version: String, session: URLSession = .shared) async -> (title: String, body: String)? {
-        await releaseNotesService.fetchReleaseNotesFromGitHub(version: version, session: session)
-    }
-
-    func updateYtdlp() async {
-        await dependencyCoordinator.updateYtdlp(service: ytdlpService)
-        ytdlpVersion = dependencyCoordinator.version
-        ytdlpUpdateMessage = dependencyCoordinator.updateMessage
-    }
-
 
 
 
@@ -303,7 +237,7 @@ class DownloadManager: ObservableObject {
         executor.startDownloadTask(
             download,
             queue: queue,
-            ytdlpVersion: ytdlpVersion,
+            ytdlpVersion: ytdlpService.version,
             languageService: languageService
         )
     }
@@ -337,7 +271,7 @@ class DownloadManager: ObservableObject {
         await executor.executeDownload(
             download,
             queue: queue,
-            ytdlpVersion: ytdlpVersion,
+            ytdlpVersion: ytdlpService.version,
             languageService: languageService
         )
     }

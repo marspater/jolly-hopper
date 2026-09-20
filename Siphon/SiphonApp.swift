@@ -87,6 +87,7 @@ struct SiphonApp: App {
                         languageService: languageService,
                         updateChecker: updateChecker,
                         downloadManager: downloadManager,
+                        appState: appState,
                         initialTab: .about
                     )
                 }
@@ -102,17 +103,18 @@ struct SiphonApp: App {
                     PreferencesWindowManager.shared.showPreferencesWindow(
                         languageService: languageService,
                         updateChecker: updateChecker,
-                        downloadManager: downloadManager
+                        downloadManager: downloadManager,
+                        appState: appState
                     )
                 }
                 .keyboardShortcut(",", modifiers: .command)
                 
                 Button(languageService.s("ytdlp_update")) {
                     Task {
-                        await downloadManager.updateYtdlp()
+                        await appState.updateYtdlp(using: downloadManager.ytdlpService)
                     }
                 }
-                .disabled(downloadManager.isUpdatingYtdlp)
+                .disabled(appState.isUpdatingYtdlp)
             }
         }
     }
