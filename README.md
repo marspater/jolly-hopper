@@ -33,22 +33,19 @@ For release-by-release details, see [CHANGELOG.md](CHANGELOG.md).
 
 ### Homebrew (Recommended) 🍺
 
-Install Siphon using Homebrew Cask:
+Install Siphon from this repository as a custom Homebrew tap:
 
 ```bash
-brew tap marspater/jolly-hopper
-brew install --cask siphon
-```
-
-Or install in a single command without tapping first:
-
-```bash
+brew tap marspater/jolly-hopper https://github.com/marspater/jolly-hopper.git
 brew install --cask marspater/jolly-hopper/siphon
 ```
 
+The explicit repository URL is required because this project repository is not named with Homebrew's `homebrew-` tap prefix.
+
 To update in the future:
 ```bash
-brew upgrade --cask siphon
+brew update
+brew upgrade --cask marspater/jolly-hopper/siphon
 ```
 
 ---
