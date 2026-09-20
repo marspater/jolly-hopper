@@ -541,6 +541,8 @@ extension DownloadManager: DownloadExecutorDelegate {
     }
 
     func executorDidRequestAddToHistory(_ download: Download, skipSave: Bool) {
+        // Cancellation can finish after the user removed the job from the app.
+        guard downloads.contains(where: { $0.id == download.id }) else { return }
         addToHistory(download, skipSave: skipSave)
     }
 
