@@ -474,6 +474,11 @@ class DownloadManager: ObservableObject {
         for download in downloadingDownloads + queuedToStop {
             stopDownload(download, suppressNotification: false, skipSaveAndBroadcast: true)
         }
+        if preservePaused {
+            for download in downloads where download.status == .paused {
+                addToHistory(download, skipSave: true)
+            }
+        }
         objectWillChange.send()
         saveHistory()
     }
@@ -571,7 +576,13 @@ class DownloadManager: ObservableObject {
     }
 
     func clearHistory() {
-        historyStore.clearHistory(history: &history)
+        // Paused downloads are live resumable jobs, not disposable history.
+        // Keep a sanitized persistence record for them while clearing terminal entries.
+        history = downloads
+            .filter { $0.status == .paused }
+            .map { HistoricDownload(download: $0) }
+        historyStore.saveHistory(history)
+
         downloads.removeAll {
             switch $0.status {
             case .completed, .failed, .stopped, .fileExists:
