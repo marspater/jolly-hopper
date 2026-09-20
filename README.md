@@ -17,10 +17,10 @@ A high-performance, native macOS media extractor & downloader powered by `yt-dlp
 ## ✨ Highlights & Features
 
 - 💾 **Durable queue recovery**: Queued and running jobs are persisted atomically across state changes so interrupted work can be recovered with one click after unexpected exits or crashes.
-- 🔐 **Credential-free browser handoff**: Safari, Chrome-family, Firefox, and Helium integrations pass browser identity without putting raw cookies into custom URLs. Session state is scoped to validated origins and private-network deep links are rejected.
+- 🔐 **Credential-free browser handoff**: Safari, Chrome-family, and Firefox integrations pass browser identity without putting raw cookies into custom URLs. Session state is scoped to validated origins and private-network deep links are rejected.
 - ♻️ **Reliable pause, resume, and cancellation**: Per-download scratch storage preserves resumable partial data, while executor ownership remains intact until process teardown actually finishes.
 - 🛡️ **Hardened update trust chain**: App and dependency updates use verified release metadata, pinned digests, rollback protection, stale-operation guards, and explicit exclusion between yt-dlp replacement and active downloads.
-- 🌐 **Protected-site recovery**: Hardened BoyfriendTV, Recu, and GayPornTube extraction keeps browser cookies, user agents, origins, signed streams, and CDN boundaries coherent.
+- 🌐 **Protected-site recovery**: Hardened site-spesific extraction keeps browser cookies, user agents, origins, signed streams, and CDN boundaries coherent.
 - 💧 **Native macOS presentation**: Refined Liquid Glass surfaces, stronger light/dark contrast, responsive download rows, accessibility improvements, and lower idle rendering overhead.
 - 🧭 **Explicit runtime ownership**: Download queueing, execution, app-level update state, shutdown, and browser ingress now have documented ownership boundaries and regression coverage.
 - 🎯 **Broad extraction & media control**: yt-dlp-backed support for 1,000+ sites, quality/codec presets, playlists, subtitles, SponsorBlock, FFmpeg processing, and fast browser-triggered downloads.
