@@ -93,6 +93,32 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertFalse(try FileManager.default.contentsOfDirectory(atPath: root.path).contains { $0.hasPrefix("thumb_") })
     }
 
+    func testDownloadUsesRelativeTemplateAndPreservesOwnedScratchOnCancellation() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let scratch = root.appendingPathComponent("scratch")
+        let destination = root.appendingPathComponent("destination")
+        defer { try? FileManager.default.removeItem(at: root) }
+        var options = DownloadOptions.default
+        options.saveFolder = destination
+        options.customFilename = "fixture"
+        options.embedThumbnail = false
+        options.downloadThumbnail = true
+        service.processRunner = MockYtdlpProcessRunner(mockDownload: { args in
+            let index = try XCTUnwrap(args.firstIndex(of: "-o"))
+            XCTAssertEqual(args[index + 1], "fixture.%(ext)s")
+            XCTAssertTrue(args.contains("home:\(destination.path)"))
+            XCTAssertTrue(args.contains("temp:\(scratch.path)"))
+            XCTAssertTrue(args.contains("thumbnail:\(destination.path)"), "Requested thumbnail is a permanent output")
+            try Data("partial".utf8).write(to: scratch.appendingPathComponent("fixture.mp4.part"))
+            throw CancellationError()
+        })
+        do {
+            _ = try await service.download(url: "https://example.com/video", options: options, temporaryDirectory: scratch, onProgress: { _, _, _ in }, onOutput: { _ in })
+            XCTFail("Expected cancellation")
+        } catch is CancellationError {}
+        XCTAssertEqual(try String(contentsOf: scratch.appendingPathComponent("fixture.mp4.part"), encoding: .utf8), "partial")
+    }
+
     override func setUp() {
         super.setUp()
         service = YtdlpService()

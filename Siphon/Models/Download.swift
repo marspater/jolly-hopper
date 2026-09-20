@@ -7,6 +7,8 @@ class Download: ObservableObject, Identifiable {
     let url: String
     let createdAt: Date
     var options: DownloadOptions
+    // Owned by this job; retained across pause/resume, never shared by filename.
+    var scratchDirectory: URL?
     
     @Published var title: String
     @Published var duration: String?
@@ -2100,4 +2102,3 @@ public struct DownloadURLValidator: Sendable {
         }
     }
 }
-
