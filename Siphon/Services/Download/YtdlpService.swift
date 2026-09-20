@@ -2832,11 +2832,11 @@ public struct DownloadResult: Sendable {
         return html + "\n<script type=\"application/json\" data-siphon-runtime-media>\(json)</script>"
     }
 
-    private final class BoyfriendTVNavigationDelegate: NSObject, WKNavigationDelegate {
+    final class BoyfriendTVNavigationDelegate: NSObject, WKNavigationDelegate {
         func webView(
             _ _: WKWebView,
             decidePolicyFor navigationAction: WKNavigationAction,
-            decisionHandler: @escaping (WKNavigationActionPolicy) -> Void
+            decisionHandler: @escaping @MainActor (WKNavigationActionPolicy) -> Void
         ) {
             if let targetHost = navigationAction.request.url?.host?.lowercased(),
                targetHost == "boyfriendtv.com" || targetHost.hasSuffix(".boyfriendtv.com") {
