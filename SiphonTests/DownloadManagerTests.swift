@@ -860,8 +860,8 @@ final class DownloadManagerTests: XCTestCase {
         manager.processQueue()
         manager.processQueue()
 
-        // Count active tasks and reserved slots
-        let activeCount = manager.activeTasks.count
+        // Count active executions and reserved slots without exposing task ownership.
+        let activeCount = manager.activeExecutionCount
         XCTAssertLessThanOrEqual(activeCount, limit, "Active tasks must never exceed the concurrency limit")
 
         manager.shutdown()
@@ -963,18 +963,20 @@ final class DownloadManagerTests: XCTestCase {
         let manager = DownloadManager()
 
         let download = Download(url: "https://example.com/test_pause_task", options: .default)
-        download.status = .downloading
+        download.status = .queued
         manager.downloads = [download]
 
-        let task = Task {
-            _ = try? await Task.sleep(nanoseconds: 1_000_000_000)
-        }
-        manager.activeTasks[download.id] = task
+        manager.processQueue()
+        XCTAssertEqual(manager.executionState(for: download.id), .active)
 
         manager.pauseDownload(download)
 
         XCTAssertEqual(download.status, .paused)
-        XCTAssertTrue(task.isCancelled, "activeTask should be cancelled when pauseDownload is invoked")
+        XCTAssertEqual(
+            manager.executionState(for: download.id),
+            .cancelling,
+            "pauseDownload should request cancellation without exposing the underlying task"
+        )
 
         manager.shutdown()
     }

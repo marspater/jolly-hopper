@@ -27,21 +27,22 @@ class DownloadManager: ObservableObject {
     let releaseNotesService = ReleaseNotesService()
     let dependencyCoordinator = DependencyUpdateCoordinator()
     let queue = DownloadQueue()
-    var executor: DownloadExecutor!
+    private var executor: DownloadExecutor!
 
 
     private var maxConcurrentDownloads: Int {
         queue.maxConcurrentDownloads
     }
     private let userDefaults = UserDefaults.standard
-    var activeControllers: [UUID: DownloadProcessController] {
-        get { executor.activeControllers }
-        set { executor.activeControllers = newValue }
+
+    var activeExecutionCount: Int {
+        executor.activeExecutionCount
     }
-    var activeTasks: [UUID: Task<Void, Never>] {
-        get { executor.activeTasks }
-        set { executor.activeTasks = newValue }
+
+    func executionState(for downloadID: UUID) -> DownloadExecutionState {
+        executor.executionState(for: downloadID)
     }
+
     private var isProcessingQueue = false
     var languageService: LanguageService?
 
@@ -317,7 +318,7 @@ class DownloadManager: ObservableObject {
               download.status == .fetching ||
               download.status == .downloading ||
               download.status == .processing ||
-              activeTasks[download.id] != nil {
+              executor.hasActiveTask(for: download.id) {
             if Task.isCancelled {
                 return
             }

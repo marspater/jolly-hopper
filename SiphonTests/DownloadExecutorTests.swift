@@ -149,7 +149,7 @@ final class DownloadExecutorTests: XCTestCase {
         XCTAssertEqual(mockDelegate.broadcastCount, 1)
     }
 
-    func testStoppingActiveFetchKeepsOwnershipUntilTaskTeardown() {
+    func testStoppingActiveFetchKeepsOwnershipUntilTaskTeardown() async {
         final class MockDelegate: DownloadExecutorDelegate {
             var finishedCount = 0
 
@@ -170,11 +170,16 @@ final class DownloadExecutorTests: XCTestCase {
         let executor = DownloadExecutor(ytdlpService: YtdlpService(), delegate: delegate)
         let queue = DownloadQueue()
         let download = Download(url: "https://example.com/fetching", options: .default)
-        download.status = .fetching
+        download.status = .queued
 
-        let placeholderTask = Task<Void, Never> {}
-        executor.activeTasks[download.id] = placeholderTask
         XCTAssertTrue(queue.reserveSlot(for: download.id))
+        executor.startDownloadTask(
+            download,
+            queue: queue,
+            ytdlpVersion: nil,
+            languageService: nil
+        )
+        XCTAssertEqual(executor.executionState(for: download.id), .active)
 
         executor.stopDownload(
             download,
@@ -185,31 +190,92 @@ final class DownloadExecutorTests: XCTestCase {
         )
 
         XCTAssertEqual(download.status, .stopped)
-        XCTAssertNotNil(executor.activeTasks[download.id], "Cancellation must not drop task ownership before teardown")
+        XCTAssertEqual(executor.executionState(for: download.id), .cancelling, "Cancellation must not drop task ownership before teardown")
         XCTAssertTrue(queue.isSlotReserved(for: download.id), "Concurrency slot must remain reserved until teardown")
         XCTAssertEqual(delegate.finishedCount, 0, "Finish callback belongs to task teardown, not the cancellation request")
 
-        executor.activeTasks.removeValue(forKey: download.id)
-        queue.releaseSlot(for: download.id)
+        for _ in 0..<20 {
+            if executor.executionState(for: download.id) == .idle { break }
+            await Task.yield()
+        }
+
+        XCTAssertEqual(executor.executionState(for: download.id), .idle)
+        XCTAssertFalse(queue.isSlotReserved(for: download.id))
+        XCTAssertEqual(delegate.finishedCount, 1)
     }
 
-    func testShutdownRequestsCancellationWithoutDroppingOwnership() {
-        let executor = DownloadExecutor(ytdlpService: YtdlpService())
-        let downloadID = UUID()
-        let task = Task<Void, Never> {}
-        let controller = DownloadProcessController()
+    func testShutdownRequestsCancellationWithoutDroppingOwnership() async {
+        final class MockDelegate: DownloadExecutorDelegate {
+            func executorDidUpdateStatus(for download: Download, to status: DownloadStatus) {
+                download.status = status
+            }
 
-        executor.activeTasks[downloadID] = task
-        executor.activeControllers[downloadID] = controller
+            func executorDidRequestAddToHistory(_ download: Download, skipSave: Bool) {}
+            func executorDidFinishDownload() {}
+            func executorDidRequestBroadcast() {}
+        }
+
+        let metadataJSON = """
+        {
+            "id": "shutdown-test",
+            "title": "Shutdown Test",
+            "duration": 10.0,
+            "uploader": "Test"
+        }
+        """
+        let runner = MockYtdlpProcessRunner(
+            mockCommand: { _ in metadataJSON },
+            mockDownloadResult: { _ in
+                try await Task.sleep(nanoseconds: 10_000_000_000)
+                return DownloadProcessResult(primaryPath: "/tmp/shutdown-test.mp4")
+            }
+        )
+        let service = YtdlpService(processRunner: runner)
+        service.ytdlpPath = URL(fileURLWithPath: "/usr/bin/true")
+        service.ffmpegPath = URL(fileURLWithPath: "/usr/bin/true")
+        service.ffprobePath = URL(fileURLWithPath: "/usr/bin/true")
+
+        let delegate = MockDelegate()
+        let executor = DownloadExecutor(ytdlpService: service, delegate: delegate)
+        let queue = DownloadQueue()
+        let download = Download(url: "https://example.com/shutdown-test", options: .default)
+
+        XCTAssertTrue(queue.reserveSlot(for: download.id))
+        executor.startDownloadTask(
+            download,
+            queue: queue,
+            ytdlpVersion: "test",
+            languageService: nil
+        )
+
+        for _ in 0..<100 {
+            if executor.activeControllers[download.id] != nil { break }
+            await Task.yield()
+        }
+
+        guard let controller = executor.activeControllers[download.id] else {
+            XCTFail("Expected executor to own the process controller before shutdown")
+            executor.shutdown()
+            return
+        }
 
         executor.shutdown()
 
-        XCTAssertNotNil(executor.activeTasks[downloadID])
-        XCTAssertNotNil(executor.activeControllers[downloadID])
+        XCTAssertEqual(executor.executionState(for: download.id), .cancelling)
+        XCTAssertNotNil(executor.activeTasks[download.id])
+        XCTAssertNotNil(executor.activeControllers[download.id])
         XCTAssertTrue(controller.isCancelled)
+        XCTAssertTrue(queue.isSlotReserved(for: download.id), "Shutdown must not release capacity before task teardown")
 
-        executor.activeTasks.removeValue(forKey: downloadID)
-        executor.activeControllers.removeValue(forKey: downloadID)
+        for _ in 0..<100 {
+            if executor.executionState(for: download.id) == .idle { break }
+            await Task.yield()
+        }
+
+        XCTAssertEqual(executor.executionState(for: download.id), .idle)
+        XCTAssertNil(executor.activeTasks[download.id])
+        XCTAssertNil(executor.activeControllers[download.id])
+        XCTAssertFalse(queue.isSlotReserved(for: download.id))
     }
 
     func testSuccessfulCompletionRespectsCancellationAndUserStatus() {

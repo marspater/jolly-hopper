@@ -14,6 +14,12 @@ protocol DownloadExecutorDelegate: AnyObject {
     func executorDidRequestBroadcast()
 }
 
+enum DownloadExecutionState: Equatable {
+    case idle
+    case active
+    case cancelling
+}
+
 /// Thread-safe coalescer that batches high-frequency progress and log updates to minimize MainActor thread churn.
 final class DownloadEventCoalescer: @unchecked Sendable {
     private let lock = NSLock()
@@ -146,8 +152,26 @@ final class DownloadEventCoalescer: @unchecked Sendable {
 
 @MainActor
 final class DownloadExecutor: ObservableObject {
-    var activeControllers: [UUID: DownloadProcessController] = [:]
-    var activeTasks: [UUID: Task<Void, Never>] = [:]
+    private(set) var activeControllers: [UUID: DownloadProcessController] = [:]
+    private(set) var activeTasks: [UUID: Task<Void, Never>] = [:]
+
+    var activeExecutionCount: Int {
+        activeTasks.count
+    }
+
+    func executionState(for downloadID: UUID) -> DownloadExecutionState {
+        if activeTasks[downloadID]?.isCancelled == true || activeControllers[downloadID]?.isCancelled == true {
+            return .cancelling
+        }
+        if activeTasks[downloadID] != nil || activeControllers[downloadID] != nil {
+            return .active
+        }
+        return .idle
+    }
+
+    func hasActiveTask(for downloadID: UUID) -> Bool {
+        activeTasks[downloadID] != nil
+    }
 
     private let ytdlpService: YtdlpService
     private let notificationService: NotificationService
