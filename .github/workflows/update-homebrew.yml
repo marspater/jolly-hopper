@@ -6,9 +6,8 @@ on:
   workflow_dispatch:
     inputs:
       tag_name:
-        description: 'Tag name to update (e.g. v4.0.0)'
+        description: 'Release tag to update (for example vX.Y.Z)'
         required: true
-        default: 'v4.0.0'
 
 permissions:
   contents: read
