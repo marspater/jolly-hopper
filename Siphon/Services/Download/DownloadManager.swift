@@ -238,7 +238,12 @@ class DownloadManager: ObservableObject {
         addDownload(url: url, options: options)
     }
 
-    func quickDownload(url: String, rawCookies: String? = nil, rawUserAgent: String? = nil) {
+    func quickDownload(
+        url: String,
+        rawCookies: String? = nil,
+        rawUserAgent: String? = nil,
+        browserCookieSource: String? = nil
+    ) {
         let preset = DownloadPreset.maxCompatibility
 
         // Get default save folder from AppStorage
@@ -266,6 +271,7 @@ class DownloadManager: ObservableObject {
         )
         options.rawCookies = rawCookies
         options.rawUserAgent = rawUserAgent
+        options.browserCookieSource = AppState.normalizedBrowserCookieSource(browserCookieSource)
         addDownload(url: url, options: options)
     }
 

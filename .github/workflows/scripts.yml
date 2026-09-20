@@ -54,6 +54,22 @@ jobs:
             exit 1
           fi
 
+      - name: Verify extension credential boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          for file in             SiphonExtension_Chrome/background.js             SiphonExtension_Firefox/background.js             SiphonExtension_Safari/background.js
+          do
+            if grep -Eq '([?&]cookies=|getCookiesForUrl|(chrome|browser)\.cookies)' "$file"; then
+              echo "Browser credential material must not enter extension deep-link transport: $file" >&2
+              exit 1
+            fi
+          done
+          if grep -Eq '"cookies"|host_permissions' SiphonExtension_Chrome/manifest.json; then
+            echo "Chrome extension must not request cookie/all-host access for Siphon handoff." >&2
+            exit 1
+          fi
+
       - name: Test companion server
         run: npm test --prefix server
 

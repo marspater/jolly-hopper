@@ -157,12 +157,20 @@ public struct BrowserSessionCredentials: Equatable, Sendable {
     public let originHost: String
     public let rawCookies: String?
     public let rawUserAgent: String?
+    public let browserCookieSource: String?
 
-    public init(originScheme: String, originHost: String, rawCookies: String?, rawUserAgent: String?) {
+    public init(
+        originScheme: String,
+        originHost: String,
+        rawCookies: String?,
+        rawUserAgent: String?,
+        browserCookieSource: String?
+    ) {
         self.originScheme = originScheme
         self.originHost = originHost
         self.rawCookies = rawCookies
         self.rawUserAgent = rawUserAgent
+        self.browserCookieSource = browserCookieSource
     }
 }
 
@@ -173,10 +181,18 @@ public final class AppState: ObservableObject {
     @Published public var urlToDownload: String = ""
     @Published public private(set) var rawCookiesToDownload: String? = nil
     @Published public private(set) var rawUserAgentToDownload: String? = nil
+    @Published public private(set) var browserCookieSourceToDownload: String? = nil
     @Published public private(set) var browserSessionOriginScheme: String? = nil
     @Published public private(set) var browserSessionOriginHost: String? = nil
 
     public init() {}
+
+    public static func normalizedBrowserCookieSource(_ raw: String?) -> String? {
+        guard let raw else { return nil }
+        let browser = raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let allowed = Set(SupportedBrowser.allCases.map(\.rawValue))
+        return allowed.contains(browser) ? browser : nil
+    }
 
     private static func normalizedOrigin(for urlString: String) -> (scheme: String, host: String)? {
         guard let url = URL(string: urlString.trimmingCharacters(in: .whitespacesAndNewlines)),
@@ -191,18 +207,23 @@ public final class AppState: ObservableObject {
     public func setBrowserSession(
         for targetURL: URL,
         rawCookies: String?,
-        rawUserAgent: String?
+        rawUserAgent: String?,
+        browserCookieSource: String? = nil
     ) {
+        let normalizedBrowser = Self.normalizedBrowserCookieSource(browserCookieSource)
         guard let scheme = targetURL.scheme?.lowercased(),
               let host = targetURL.host?.lowercased(),
               ["http", "https"].contains(scheme),
-              rawCookies?.isEmpty == false || rawUserAgent?.isEmpty == false else {
+              rawCookies?.isEmpty == false ||
+                rawUserAgent?.isEmpty == false ||
+                normalizedBrowser != nil else {
             clearBrowserSession()
             return
         }
 
         rawCookiesToDownload = rawCookies?.isEmpty == false ? rawCookies : nil
         rawUserAgentToDownload = rawUserAgent?.isEmpty == false ? rawUserAgent : nil
+        browserCookieSourceToDownload = normalizedBrowser
         browserSessionOriginScheme = scheme
         browserSessionOriginHost = host
     }
@@ -220,7 +241,8 @@ public final class AppState: ObservableObject {
             originScheme: originScheme,
             originHost: originHost,
             rawCookies: rawCookiesToDownload,
-            rawUserAgent: rawUserAgentToDownload
+            rawUserAgent: rawUserAgentToDownload,
+            browserCookieSource: browserCookieSourceToDownload
         )
     }
 
@@ -256,7 +278,8 @@ public final class AppState: ObservableObject {
                 originScheme: originScheme,
                 originHost: originHost,
                 rawCookies: rawCookiesToDownload,
-                rawUserAgent: rawUserAgentToDownload
+                rawUserAgent: rawUserAgentToDownload,
+                browserCookieSource: browserCookieSourceToDownload
             )
             : nil
         clearBrowserSession()
@@ -266,6 +289,7 @@ public final class AppState: ObservableObject {
     public func clearBrowserSession() {
         rawCookiesToDownload = nil
         rawUserAgentToDownload = nil
+        browserCookieSourceToDownload = nil
         browserSessionOriginScheme = nil
         browserSessionOriginHost = nil
     }

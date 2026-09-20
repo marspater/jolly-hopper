@@ -420,6 +420,7 @@ struct DownloadOptions: Codable {
     var forceOverwrite: Bool?
     var rawCookies: String?
     var rawUserAgent: String?
+    var browserCookieSource: String?
     var selectedFormatId: String?
     var hdrAction: HDRAction?
     var resolutionFallbackPolicy: ResolutionFallbackPolicy?
@@ -479,6 +480,7 @@ struct DownloadOptions: Codable {
         forceOverwrite: Bool? = false,
         rawCookies: String? = nil,
         rawUserAgent: String? = nil,
+        browserCookieSource: String? = nil,
         selectedFormatId: String? = nil,
         hdrAction: HDRAction? = .preserveHDR,
         resolutionFallbackPolicy: ResolutionFallbackPolicy? = .strictCeiling,
@@ -508,6 +510,7 @@ struct DownloadOptions: Codable {
         self.forceOverwrite = forceOverwrite
         self.rawCookies = rawCookies
         self.rawUserAgent = rawUserAgent
+        self.browserCookieSource = browserCookieSource
         self.selectedFormatId = selectedFormatId
         self.hdrAction = hdrAction
         self.resolutionFallbackPolicy = resolutionFallbackPolicy ?? .strictCeiling
@@ -540,6 +543,7 @@ struct DownloadOptions: Codable {
         self.forceOverwrite = try container.decodeIfPresent(Bool.self, forKey: .forceOverwrite)
         self.rawCookies = nil // Ephemeral only, never loaded from persistent history/json
         self.rawUserAgent = nil // Ephemeral browser identity, never persisted
+        self.browserCookieSource = nil // Ephemeral browser cookie source, never persisted
         self.selectedFormatId = try container.decodeIfPresent(String.self, forKey: .selectedFormatId)
         self.hdrAction = try container.decodeIfPresent(HDRAction.self, forKey: .hdrAction) ?? .preserveHDR
         self.resolutionFallbackPolicy = try container.decodeIfPresent(ResolutionFallbackPolicy.self, forKey: .resolutionFallbackPolicy) ?? .strictCeiling
@@ -571,6 +575,7 @@ struct DownloadOptions: Codable {
             forceOverwrite: false,
             rawCookies: nil,
             rawUserAgent: nil,
+            browserCookieSource: nil,
             selectedFormatId: nil
         )
     }
@@ -1983,6 +1988,7 @@ struct HistoricDownload: Codable, Identifiable {
         sanitizedOptions.rawCookies = nil
         sanitizedOptions.rawUserAgent = nil
         sanitizedOptions.additionalArguments = nil
+        sanitizedOptions.browserCookieSource = nil
         self.options = sanitizedOptions
     }
 

@@ -1241,16 +1241,18 @@ final class DownloadManagerTests: XCTestCase {
         let manager = DownloadManager()
         manager.quickDownload(
             url: "https://example.com/quick",
-            rawCookies: "session=fixture",
-            rawUserAgent: "FixtureBrowser/1.0"
+            rawCookies: nil,
+            rawUserAgent: "FixtureBrowser/1.0",
+            browserCookieSource: "chrome"
         )
         guard let quickItem = manager.downloads.last else {
             XCTFail("Quick download was not added")
             return
         }
         XCTAssertEqual(quickItem.options.subtitleLanguages, ["en"], "Quick download must default to English only")
-        XCTAssertEqual(quickItem.options.rawCookies, "session=fixture")
+        XCTAssertNil(quickItem.options.rawCookies)
         XCTAssertEqual(quickItem.options.rawUserAgent, "FixtureBrowser/1.0")
+        XCTAssertEqual(quickItem.options.browserCookieSource, "chrome")
 
         manager.menuDownload(url: "https://example.com/menu", type: "video", quality: "1080")
         guard let menuItem = manager.downloads.last else {
