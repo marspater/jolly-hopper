@@ -969,6 +969,19 @@ final class DownloadManagerTests: XCTestCase {
         manager.shutdown()
     }
 
+    func testShutdownPreventsFutureQueueAdmission() {
+        let manager = DownloadManager()
+        manager.shutdown()
+
+        let download = Download(url: "https://example.com/after-shutdown", options: .default)
+        manager.downloads = [download]
+        manager.processQueue()
+
+        XCTAssertEqual(download.status, .queued)
+        XCTAssertEqual(manager.activeExecutionCount, 0)
+        XCTAssertEqual(manager.queue.activeSlotCount, 0)
+    }
+
     // MARK: - Single-Pass Status Counts Tests
 
     func testStatusCountsAccurateCalculation() {

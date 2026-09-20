@@ -111,10 +111,13 @@ struct SiphonApp: App {
                 
                 Button(languageService.s("ytdlp_update")) {
                     Task {
-                        await appState.updateYtdlp(using: downloadManager.ytdlpService)
+                        await appState.updateYtdlp(
+                            using: downloadManager.ytdlpService,
+                            activeExecutionCount: downloadManager.activeExecutionCount
+                        )
                     }
                 }
-                .disabled(appState.isUpdatingYtdlp)
+                .disabled(appState.isUpdatingYtdlp || downloadManager.activeExecutionCount > 0)
             }
         }
     }
