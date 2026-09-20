@@ -99,6 +99,16 @@ struct ContentView: View {
         } message: {
             Text(String(format: languageService.s("update_available_message"), updateChecker.latestVersion ?? ""))
         }
+        .alert(languageService.s("queue_recovery_title"), isPresented: $downloadManager.showQueueRecoveryAlert) {
+            Button(languageService.s("queue_recovery_restore")) {
+                downloadManager.recoverInterruptedJobs()
+            }
+            Button(languageService.s("queue_recovery_discard"), role: .cancel) {
+                downloadManager.discardInterruptedJobs()
+            }
+        } message: {
+            Text(String(format: languageService.s("queue_recovery_message"), downloadManager.recoverableJobsCount))
+        }
         .frame(minWidth: 860, idealWidth: 980, minHeight: 580, idealHeight: 620)
     }
     

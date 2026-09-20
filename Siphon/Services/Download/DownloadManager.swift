@@ -13,6 +13,10 @@ class DownloadManager: ObservableObject {
     let ytdlpService = YtdlpService()
     let historyStore = DownloadHistoryStore()
     let queue = DownloadQueue()
+    let recoveryStore: QueueRecoveryStore
+    @Published var showQueueRecoveryAlert: Bool = false
+    @Published var recoverableJobsCount: Int = 0
+    private var pendingRecoveryJobs: [Download] = []
     private var executor: DownloadExecutor!
     private var cancellables = Set<AnyCancellable>()
     private var isShuttingDown = false
@@ -34,7 +38,8 @@ class DownloadManager: ObservableObject {
     private var isProcessingQueue = false
     var languageService: LanguageService?
 
-    init() {
+    init(recoveryFileURL: URL = QueueRecoveryStore.defaultFileURL) {
+        self.recoveryStore = QueueRecoveryStore(fileURL: recoveryFileURL)
         self.executor = DownloadExecutor(ytdlpService: ytdlpService)
         self.executor.delegate = self
 
@@ -131,9 +136,58 @@ class DownloadManager: ObservableObject {
     func initialize(languageService: LanguageService) {
         self.languageService = languageService
         loadHistory()
+        checkQueueRecovery()
     }
 
+    func checkQueueRecovery() {
+        let interrupted = recoveryStore.loadInterruptedJobs()
+        guard !interrupted.isEmpty else { return }
+        pendingRecoveryJobs = interrupted
+        recoverableJobsCount = interrupted.count
+        showQueueRecoveryAlert = true
+    }
 
+    func recoverInterruptedJobs() {
+        let jobsToRecover = pendingRecoveryJobs
+        pendingRecoveryJobs.removeAll()
+        recoverableJobsCount = 0
+        showQueueRecoveryAlert = false
+
+        for job in jobsToRecover {
+            job.status = .queued
+            job.errorMessage = nil
+            if let existingIndex = downloads.firstIndex(where: { $0.id == job.id }) {
+                downloads[existingIndex].status = .queued
+                downloads[existingIndex].errorMessage = nil
+            } else {
+                downloads.append(job)
+            }
+        }
+        recoveryStore.clearRecoveryState()
+        persistQueueRecoveryState()
+        objectWillChange.send()
+        processQueue()
+    }
+
+    func discardInterruptedJobs() {
+        pendingRecoveryJobs.removeAll()
+        recoverableJobsCount = 0
+        showQueueRecoveryAlert = false
+        recoveryStore.clearRecoveryState()
+        persistQueueRecoveryState()
+        objectWillChange.send()
+    }
+
+    func persistQueueRecoveryState() {
+        guard !isShuttingDown else { return }
+        let activeJobs = downloads.filter {
+            $0.status == .queued ||
+            $0.status == .fetching ||
+            $0.status == .downloading ||
+            $0.status == .processing
+        }
+        recoveryStore.persist(activeJobs: activeJobs)
+    }
 
     func addDownload(url: String, options: DownloadOptions, mediaInfo: MediaInfo? = nil) {
         let download = Download(url: url, options: options, title: mediaInfo?.title ?? "___FETCHING___")
@@ -143,6 +197,7 @@ class DownloadManager: ObservableObject {
             download.duration = info.durationString
         }
         downloads.append(download)
+        persistQueueRecoveryState()
         processQueue()
     }
 
@@ -150,6 +205,7 @@ class DownloadManager: ObservableObject {
     func addDownloads(urls: [String], options: DownloadOptions) {
         let newDownloads = urls.map { Download(url: $0, options: options) }
         downloads.append(contentsOf: newDownloads)
+        persistQueueRecoveryState()
         processQueue()
     }
 
@@ -379,6 +435,7 @@ class DownloadManager: ObservableObject {
         // while executor-owned teardown is still unwinding.
         queue.clearReservedSlots()
         queue.clearReservedOutputPaths()
+        recoveryStore.markCleanShutdown()
     }
 
     func planUniqueOutputPath(for download: Download, forceIncrement: Bool = false) -> (resolvedBaseName: String, candidatePath: String) {
@@ -449,6 +506,7 @@ class DownloadManager: ObservableObject {
         history.removeAll { itemIds.contains($0.id) }
         objectWillChange.send()
         saveHistory()
+        persistQueueRecoveryState()
     }
 
 
@@ -551,6 +609,7 @@ class DownloadManager: ObservableObject {
         default:
             break
         }
+        persistQueueRecoveryState()
     }
 }
 

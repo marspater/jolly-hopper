@@ -17,6 +17,7 @@ flowchart TD
 
     DownloadManager --> History[Download history]
     DownloadManager --> Queue[DownloadQueue]
+    DownloadManager --> Recovery[QueueRecoveryStore]
     DownloadManager --> Executor[DownloadExecutor]
     Executor --> Ytdlp[YtdlpService facade]
     Ytdlp --> Runner[YtdlpProcessRunner]
@@ -31,7 +32,7 @@ flowchart TD
 
 `AppState` owns application-level presentation state and coordination for release notes and dependency updates. Views and app commands observe that state directly.
 
-`DownloadManager` owns download history, queue admission, download lifecycle, and the executor. It does not own release-note or dependency-update presentation state.
+`DownloadManager` owns download history, queue admission, durable queue recovery, download lifecycle, and the executor. It does not own release-note or dependency-update presentation state.
 
 ### Execution ownership
 
@@ -40,6 +41,14 @@ flowchart TD
 Stopping or pausing a download requests cancellation. It does not mean the underlying task or process has finished. Executor ownership remains active until `executeDownload` unwinds and its cleanup runs.
 
 The normal cleanup path releases the queue slot, removes task/controller ownership, releases the reserved output path, cleans owned temporary files when appropriate, and notifies the manager that execution finished.
+
+### Durable queue recovery
+
+`QueueRecoveryStore` persists active jobs (`.queued`, `.fetching`, `.downloading`, `.processing`) atomically whenever download state, queue order, or job membership changes.
+
+- Active job metadata (URLs, titles, options, progress, scratch directory paths) is encoded and written atomically to `Application Support/Siphon/queue_recovery.json` with ephemeral credentials (such as raw session cookies) redacted.
+- Terminal shutdown (`DownloadManager.shutdown()`) records `isCleanShutdown = true`, preventing false-positive recovery prompts across clean application exits.
+- If the application process terminates abruptly (crash, SIGKILL, power loss), the uncompleted snapshot remains marked as interrupted. On subsequent launch, `DownloadManager.initialize(...)` detects the interrupted jobs and prompts the user in `ContentView` to restore them back to `.queued` state (preserving per-job scratch directories) or discard them cleanly.
 
 ### Dependency update exclusion
 

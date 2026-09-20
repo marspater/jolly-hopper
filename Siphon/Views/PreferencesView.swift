@@ -1200,7 +1200,7 @@ struct PreferencesView: View {
                         .font(.geist(20, weight: .bold))
 
                     SiphonTagBadge(
-                        text: "v\(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "5.4.0")",
+                        text: "v\(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "5.4.5")",
                         tintColor: SiphonTheme.accent,
                         isMonospaced: true
                     )

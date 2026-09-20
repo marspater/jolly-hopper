@@ -28,6 +28,12 @@ final class ReleaseNotesService {
 
     static let defaultFeatures: [ReleaseFeature] = [
         ReleaseFeature(
+            icon: "arrow.clockwise.icloud.fill",
+            iconColor: .orange,
+            title: "Durable Queue Recovery",
+            description: "Interrupted download jobs are atomically persisted across state changes, offering one-click queue restoration after unexpected crashes."
+        ),
+        ReleaseFeature(
             icon: "lock.shield.fill",
             iconColor: .green,
             title: "Secure Browser Handoff",
@@ -50,12 +56,6 @@ final class ReleaseNotesService {
             iconColor: .cyan,
             title: "Protected-Site Recovery",
             description: "Expanded BoyfriendTV, Recu, GayPornTube, Safari, Chromium, and Helium handling preserves the correct browser and transport identity."
-        ),
-        ReleaseFeature(
-            icon: "macwindow",
-            iconColor: .orange,
-            title: "Lifecycle & macOS Polish",
-            description: "Explicit executor ownership, terminal shutdown semantics, macOS 15 baseline, and refined Liquid Glass accessibility improve day-to-day reliability."
         )
     ]
 
