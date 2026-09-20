@@ -45,6 +45,7 @@ struct PreferencesView: View {
     @EnvironmentObject var languageService: LanguageService
     @EnvironmentObject var updateChecker: UpdateChecker
     @EnvironmentObject var downloadManager: DownloadManager
+    @EnvironmentObject var appState: AppState
     @Environment(\.colorScheme) private var colorScheme
     @State private var selectedReleaseId: Int? = nil
     @State private var showLanguageChangeAlert = false
@@ -992,22 +993,22 @@ struct PreferencesView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("yt-dlp")
                         .fontWeight(.medium)
-                    if let version = downloadManager.ytdlpVersion {
+                    if let version = appState.ytdlpVersion {
                         Text("\(languageService.s("version")): \(version)")
                             .font(.geistMono(11, weight: .medium))
                             .foregroundColor(.secondary)
                     }
                 }
                 Spacer()
-                if downloadManager.isUpdatingYtdlp {
+                if appState.isUpdatingYtdlp {
                     VStack(alignment: .trailing, spacing: 4) {
-                        ProgressView(value: max(0, min(1, downloadManager.ytdlpUpdateProgress)))
+                        ProgressView(value: max(0, min(1, appState.ytdlpUpdateProgress)))
                             .frame(width: 120)
-                        Text("\(Int(downloadManager.ytdlpUpdateProgress * 100))%")
+                        Text("\(Int(appState.ytdlpUpdateProgress * 100))%")
                             .font(.geistMono(10, weight: .semibold))
                             .foregroundColor(.secondary)
                     }
-                } else if let message = downloadManager.ytdlpUpdateMessage?.message {
+                } else if let message = appState.ytdlpUpdateMessage?.message {
                     Text(message)
                         .font(.geist(11))
                         .foregroundColor(.secondary)
@@ -1334,7 +1335,7 @@ struct PreferencesView: View {
     
     private func updateYtdlp() {
         Task {
-            await downloadManager.updateYtdlp()
+            await appState.updateYtdlp(using: downloadManager.ytdlpService)
         }
     }
 }

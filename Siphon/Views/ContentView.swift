@@ -52,7 +52,11 @@ struct ContentView: View {
                     }
                 }
                 .task {
-                    await downloadManager.initialize(languageService: languageService)
+                    downloadManager.initialize(languageService: languageService)
+                    await appState.initializeApplicationServices(
+                        ytdlpService: downloadManager.ytdlpService,
+                        languageService: languageService
+                    )
                     await updateChecker.checkForUpdates()
                     if updateChecker.hasUpdate {
                         showUpdateAlert = true
@@ -67,10 +71,10 @@ struct ContentView: View {
                 .onChange(of: showMenuBarIcon) { _, newValue in
                     MenuBarManager.shared.setVisible(newValue)
                 }
-                .sheet(isPresented: $downloadManager.showWhatsNew) {
+                .sheet(isPresented: $appState.showWhatsNew) {
                     WhatsNewSheetView()
                 }
-                .alert(item: $downloadManager.ytdlpUpdateMessage) { status in
+                .alert(item: $appState.ytdlpUpdateMessage) { status in
                     Alert(
                         title: Text(status.title),
                         message: Text(status.message),
@@ -85,6 +89,7 @@ struct ContentView: View {
                     languageService: languageService,
                     updateChecker: updateChecker,
                     downloadManager: downloadManager,
+                    appState: appState,
                     initialTab: .about
                 )
             }
@@ -195,7 +200,8 @@ struct SidebarView: View {
                     PreferencesWindowManager.shared.showPreferencesWindow(
                         languageService: languageService,
                         updateChecker: updateChecker,
-                        downloadManager: downloadManager
+                        downloadManager: downloadManager,
+                        appState: appState
                     )
                 } label: {
                     HStack(spacing: SiphonTheme.spacing8) {
@@ -362,7 +368,7 @@ struct HomeView: View {
                 
                 // Footer
                 HStack {
-                    if let version = downloadManager.ytdlpVersion {
+                    if let version = appState.ytdlpVersion {
                         HStack(spacing: 5) {
                             Image(systemName: "terminal.fill")
                                 .font(.system(size: 10, weight: .medium))
@@ -705,7 +711,7 @@ struct SponsorView: View {
 }
 
 struct WhatsNewSheetView: View {
-    @EnvironmentObject var downloadManager: DownloadManager
+    @EnvironmentObject var appState: AppState
     @EnvironmentObject var languageService: LanguageService
     @Environment(\.dismiss) private var dismiss
 
@@ -724,7 +730,7 @@ struct WhatsNewSheetView: View {
                         .clipShape(Capsule())
 
                     SiphonTagBadge(
-                        text: "v\(downloadManager.appVersion)",
+                        text: "v\(appState.appVersion)",
                         tintColor: SiphonTheme.accent,
                         isMonospaced: true
                     )
@@ -749,7 +755,7 @@ struct WhatsNewSheetView: View {
             // Feature Showcase - Beautiful structured cards instead of raw unstyled markdown
             ScrollView(showsIndicators: true) {
                 VStack(spacing: 10) {
-                    ForEach(downloadManager.whatsNewFeatures) { feature in
+                    ForEach(appState.whatsNewFeatures) { feature in
                         FeatureCardRow(feature: feature)
                     }
                 }
@@ -781,7 +787,7 @@ struct WhatsNewSheetView: View {
                 Spacer()
 
                 Button {
-                    downloadManager.showWhatsNew = false
+                    appState.showWhatsNew = false
                     dismiss()
                 } label: {
                     Text(languageService.s("continue"))

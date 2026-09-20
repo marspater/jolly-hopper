@@ -186,8 +186,65 @@ public final class AppState: ObservableObject {
     @Published public private(set) var browserSessionOriginScheme: String? = nil
     @Published public private(set) var browserSessionOriginHost: String? = nil
 
+    @Published var ytdlpVersion: String?
+    @Published var showWhatsNew: Bool = false
+    @Published var whatsNewFeatures: [ReleaseFeature] = []
+    @Published var ytdlpUpdateMessage: YtdlpUpdateMessage?
+    @Published var isUpdatingYtdlp: Bool = false
+    @Published var ytdlpUpdateProgress: Double = 0
+
+    var urlSession: URLSession = .shared
+    private let releaseNotesService = ReleaseNotesService()
+    private let dependencyCoordinator = DependencyUpdateCoordinator()
+
     public init() {
-        // Intentionally empty initializer for MainActor AppState (swift:S1186)
+        dependencyCoordinator.$isUpdating
+            .receive(on: RunLoop.main)
+            .assign(to: &$isUpdatingYtdlp)
+        dependencyCoordinator.$updateProgress
+            .receive(on: RunLoop.main)
+            .assign(to: &$ytdlpUpdateProgress)
+        dependencyCoordinator.$version
+            .receive(on: RunLoop.main)
+            .assign(to: &$ytdlpVersion)
+        dependencyCoordinator.$updateMessage
+            .receive(on: RunLoop.main)
+            .assign(to: &$ytdlpUpdateMessage)
+    }
+
+    var appVersion: String {
+        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "5.3.0"
+    }
+
+    func initializeApplicationServices(
+        ytdlpService: YtdlpService,
+        languageService: LanguageService,
+        skipBinarySetup: Bool = false
+    ) async {
+        dependencyCoordinator.bind(to: ytdlpService)
+        await dependencyCoordinator.initialize(service: ytdlpService, skipBinarySetup: skipBinarySetup)
+        // Do not rely on the RunLoop-delivered Combine mirror for values that
+        // callers expect to be current when this async operation returns.
+        ytdlpVersion = dependencyCoordinator.version
+        await checkAndFetchWhatsNew(languageService: languageService)
+    }
+
+    func checkAndFetchWhatsNew(languageService: LanguageService) async {
+        if let result = await releaseNotesService.checkAndFetchWhatsNew(
+            appVersion: appVersion,
+            languageService: languageService,
+            session: urlSession
+        ) {
+            whatsNewFeatures = result.features
+            showWhatsNew = result.shouldShow
+        }
+    }
+
+    func updateYtdlp(using ytdlpService: YtdlpService) async {
+        dependencyCoordinator.bind(to: ytdlpService)
+        await dependencyCoordinator.updateYtdlp(service: ytdlpService)
+        ytdlpVersion = dependencyCoordinator.version
+        ytdlpUpdateMessage = dependencyCoordinator.updateMessage
     }
 
     public static func normalizedBrowserCookieSource(_ raw: String?) -> String? {
