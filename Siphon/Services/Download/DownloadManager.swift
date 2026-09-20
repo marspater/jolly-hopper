@@ -157,8 +157,10 @@ class DownloadManager: ObservableObject {
             job.status = .queued
             job.errorMessage = nil
             if let existingIndex = downloads.firstIndex(where: { $0.id == job.id }) {
-                downloads[existingIndex].status = .queued
-                downloads[existingIndex].errorMessage = nil
+                // History may contain a stale copy of the same job. Recovery is
+                // authoritative because it carries resumable scratch state and
+                // the most recent active-job options.
+                downloads[existingIndex] = job
             } else {
                 downloads.append(job)
             }
@@ -316,6 +318,7 @@ class DownloadManager: ObservableObject {
     func processDownload(_ download: Download) async {
         if !downloads.contains(where: { $0.id == download.id }) {
             downloads.append(download)
+            persistQueueRecoveryState()
         }
         processQueue()
 
@@ -384,30 +387,35 @@ class DownloadManager: ObservableObject {
     func moveDownloadUp(_ download: Download) {
         guard queue.moveUp(download: download, in: &downloads) else { return }
         objectWillChange.send()
+        persistQueueRecoveryState()
         processQueue()
     }
 
     func moveDownloadDown(_ download: Download) {
         guard queue.moveDown(download: download, in: &downloads) else { return }
         objectWillChange.send()
+        persistQueueRecoveryState()
         processQueue()
     }
 
     func moveDownloadToTop(_ download: Download) {
         guard queue.moveToTop(download: download, in: &downloads) else { return }
         objectWillChange.send()
+        persistQueueRecoveryState()
         processQueue()
     }
 
     func moveDownloadToBottom(_ download: Download) {
         guard queue.moveToBottom(download: download, in: &downloads) else { return }
         objectWillChange.send()
+        persistQueueRecoveryState()
         processQueue()
     }
 
     func moveDownload(from source: IndexSet, to destination: Int) {
         queue.move(from: source, to: destination, in: &downloads)
         objectWillChange.send()
+        persistQueueRecoveryState()
         processQueue()
     }
 
