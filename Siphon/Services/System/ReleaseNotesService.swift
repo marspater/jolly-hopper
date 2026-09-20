@@ -55,7 +55,7 @@ final class ReleaseNotesService {
             icon: "network.badge.shield.half.filled",
             iconColor: .cyan,
             title: "Protected-Site Recovery",
-            description: "Expanded BoyfriendTV, Recu, GayPornTube, Safari, Chromium, and Helium handling preserves the correct browser and transport identity."
+            description: "Expanded protected-site and browser-session handling preserves the correct browser and transport identity."
         )
     ]
 

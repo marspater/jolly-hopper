@@ -119,8 +119,8 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertEqual(try String(contentsOf: scratch.appendingPathComponent("fixture.mp4.part"), encoding: .utf8), "partial")
     }
 
-    override func setUp() {
-        super.setUp()
+    override func setUp() async throws {
+        try await super.setUp()
         service = YtdlpService()
         // Setup mock paths so we don't throw notFound initially, except when testing for it.
         service.ytdlpPath = URL(fileURLWithPath: "/usr/local/bin/yt-dlp")
@@ -128,9 +128,9 @@ final class YtdlpServiceTests: XCTestCase {
         service.ffprobePath = URL(fileURLWithPath: "/usr/local/bin/ffprobe")
     }
 
-    override func tearDown() {
+    override func tearDown() async throws {
         service = nil
-        super.tearDown()
+        try await super.tearDown()
     }
 
     func testFetchInfoSuccess() async throws {
@@ -842,7 +842,7 @@ final class YtdlpServiceTests: XCTestCase {
         
         let mainPageHTML = """
         <!DOCTYPE html><html><head>
-        <title>Sexy Muscle Workout - GayForFans.com</title>
+        <title>Sample Workout - Fixture Site</title>
         <meta property="og:image" content="https://gayforfans.com/contents/videos_screenshots/8000/8831/preview.jpg">
         <script>
         var flashvars = {
@@ -863,9 +863,9 @@ final class YtdlpServiceTests: XCTestCase {
             return "{}"
         })
 
-        let info = try await service.fetchInfo(url: "https://gayforfans.com/videos/8831/sexy-muscle-workout/")
-        XCTAssertEqual(info.title, "Sexy Muscle Workout")
-        XCTAssertEqual(info.uploader, "GayForFans")
+        let info = try await service.fetchInfo(url: "https://gayforfans.com/videos/8831/sample-workout/")
+        XCTAssertEqual(info.title, "Sample Workout - Fixture Site")
+        XCTAssertEqual(info.uploader, "Protected Site")
         XCTAssertEqual(info.thumbnail, "https://gayforfans.com/contents/videos_screenshots/8000/8831/preview.jpg")
         XCTAssertEqual(info.formats?.first?.formatId, "1080p")
     }
@@ -874,7 +874,7 @@ final class YtdlpServiceTests: XCTestCase {
         service.ytdlpPath = URL(fileURLWithPath: "/usr/local/bin/yt-dlp")
         
         let mainPageHTML = """
-        <!DOCTYPE html><html><head><title>GayForFans - Beach Twink Action</title></head>
+        <!DOCTYPE html><html><head><title>Fixture Site - Beach Sample Video</title></head>
         <body>
         <iframe src="https://gayforfans.com/embed/9921" width="100%" height="100%"></iframe>
         </body></html>
@@ -903,9 +903,9 @@ final class YtdlpServiceTests: XCTestCase {
             return "{}"
         })
 
-        let info = try await service.fetchInfo(url: "https://gayforfans.com/videos/9921/beach-twink-action/")
-        XCTAssertEqual(info.title, "Beach Twink Action")
-        XCTAssertEqual(info.uploader, "GayForFans")
+        let info = try await service.fetchInfo(url: "https://gayforfans.com/videos/9921/beach-sample-video/")
+        XCTAssertEqual(info.title, "Fixture Site - Beach Sample Video")
+        XCTAssertEqual(info.uploader, "Protected Site")
         XCTAssertEqual(info.thumbnail, "https://cdn.gayforfans.com/thumbs/9921.jpg")
     }
 
@@ -1651,7 +1651,7 @@ final class YtdlpServiceTests: XCTestCase {
         let jsonFixture = """
         {
             "id": "8504533",
-            "title": "Muscle boy jerks off his big cock and cums huge",
+            "title": "Protected sample video",
             "formats": [
                 {
                     "format_id": "240p",
@@ -1665,7 +1665,7 @@ final class YtdlpServiceTests: XCTestCase {
                     "protocol": "https"
                 }
             ],
-            "webpage_url": "https://thisvid.com/videos/muscle-boy-jerks-off-his-big-cock-and-cums-huge/"
+            "webpage_url": "https://thisvid.com/videos/protected-sample-video/"
         }
         """.data(using: .utf8)!
 
@@ -1692,7 +1692,7 @@ final class YtdlpServiceTests: XCTestCase {
         )
 
         _ = try await service.download(
-            url: "https://www.boyfriendtv.com/videos/1140993/horus-scat-piss-chute/",
+            url: "https://www.boyfriendtv.com/videos/1140993/sample-compilation/",
             options: DownloadOptions.default,
             onProgress: { _, _, _ in /* Progress ignored in test */ },
             onOutput: { _ in /* Output ignored in test */ }
@@ -2122,7 +2122,7 @@ final class YtdlpServiceTests: XCTestCase {
             XCTFail("Expected browser-cookie requirement after WebKit cleared the challenge")
         } catch let error as YtdlpError {
             switch error {
-            case .boyfriendTVNeedsBrowserCookies:
+            case .protectedSiteNeedsBrowserCookies:
                 break
             case .downloadFailed(let message):
                 XCTAssertTrue(message.contains("sign-in page") || message.contains("browser sessions"))
@@ -2509,9 +2509,9 @@ final class YtdlpServiceTests: XCTestCase {
         let capturedArgs = TestBox<[[String]]>([])
         
         let mainPageHTML = """
-        <!DOCTYPE html><html><head><title>boyfriend.tv - Horus sexy blowjob compilation</title>
+        <!DOCTYPE html><html><head><title>Fixture Site - Sample Compilation</title>
         <script type="application/ld+json">
-        {"@type":"VideoObject","name":"Horus sexy blowjob compilation","embedUrl":"https://www.boyfriend.tv/embed/1140993/46075/","thumbnailUrl":["https://cdn77-t.boyfriendtv.com/thumb.jpg"]}
+        {"@type":"VideoObject","name":"Sample Compilation","embedUrl":"https://www.boyfriend.tv/embed/1140993/46075/","thumbnailUrl":["https://cdn77-t.boyfriendtv.com/thumb.jpg"]}
         </script>
         </head><body></body></html>
         """
@@ -2554,8 +2554,8 @@ final class YtdlpServiceTests: XCTestCase {
             return "{}"
         })
 
-        let info = try await service.fetchInfo(url: "https://www.boyfriendtv.com/videos/1140993/horus-scat-piss-chute/")
-        XCTAssertEqual(info.title, "Horus sexy blowjob compilation")
+        let info = try await service.fetchInfo(url: "https://www.boyfriendtv.com/videos/1140993/sample-compilation/")
+        XCTAssertEqual(info.title, "Fixture Site - Sample Compilation")
         XCTAssertEqual(info.formats?.count, 3)
         XCTAssertEqual(info.duration, 297)
         XCTAssertEqual(info.thumbnail, "https://cdn77-t.boyfriendtv.com/thumb.jpg")
@@ -2566,7 +2566,7 @@ final class YtdlpServiceTests: XCTestCase {
         let capturedArgs = TestBox<[[String]]>([])
         
         let mainPageHTML = """
-        <!DOCTYPE html><html><head><title>Big Dick Twink Fuck Muscle Ass | BoyFriendTV</title></head>
+        <!DOCTYPE html><html><head><title>Protected Sample Video | Fixture Site</title></head>
         <body>
         <iframe src="https://www.boyfriend.tv/embed/1630228/20231/600/338/" width="600" height="338"></iframe>
         </body></html>
@@ -2612,8 +2612,8 @@ final class YtdlpServiceTests: XCTestCase {
             return "{}"
         })
 
-        let info = try await service.fetchInfo(url: "https://www.boyfriendtv.com/videos/1630228/big-dick-twink-fuck-muscle-ass/")
-        XCTAssertEqual(info.title, "Big Dick Twink Fuck Muscle Ass")
+        let info = try await service.fetchInfo(url: "https://www.boyfriendtv.com/videos/1630228/protected-sample-video/")
+        XCTAssertEqual(info.title, "Protected Sample Video | Fixture Site")
         XCTAssertEqual(info.formats?.count, 2)
         XCTAssertEqual(info.duration, 1909)
         XCTAssertEqual(info.thumbnail, "https://cdn77-t.boyfriendtv.com/thumb.jpg")
@@ -2623,7 +2623,7 @@ final class YtdlpServiceTests: XCTestCase {
         service.ytdlpPath = URL(fileURLWithPath: "/usr/local/bin/yt-dlp")
         
         let mainPageHTML = """
-        <!DOCTYPE html><html><head><title>Hot Brazilian Threesome | BoyFriendTV</title>
+        <!DOCTYPE html><html><head><title>Regional Sample Video | Fixture Site</title>
         <script>
         var playerConfig = {
             sources: {"hlsAuto":"https://cdn.boyfriend.tv/key=abc,end=123/media=hls4A/multi=854x480:v480,1280x720:v720/2026-08/_TPL_.mp4"},
@@ -2658,8 +2658,8 @@ final class YtdlpServiceTests: XCTestCase {
         })
 
         // Test with /ru/ prefix on boyfriendtv.com
-        let info = try await service.fetchInfo(url: "https://www.boyfriendtv.com/ru/videos/1702908/hot-brazilian-threesome/")
-        XCTAssertEqual(info.title, "Hot Brazilian Threesome")
+        let info = try await service.fetchInfo(url: "https://www.boyfriendtv.com/ru/videos/1702908/regional-sample-video/")
+        XCTAssertEqual(info.title, "Regional Sample Video | Fixture Site")
         XCTAssertEqual(info.formats?.count, 2)
         XCTAssertEqual(info.duration, 2992)
     }
@@ -2675,7 +2675,7 @@ final class YtdlpServiceTests: XCTestCase {
             XCTFail("Expected an extraction failure")
         } catch let error as YtdlpError {
             guard case .downloadFailed(let message) = error else { return XCTFail("Unexpected: \(error)") }
-            XCTAssertTrue(message.contains("extract video stream"))
+            XCTAssertTrue(message.contains("extract a media stream"))
         }
     }
 
@@ -2814,8 +2814,8 @@ final class YtdlpServiceTests: XCTestCase {
             _ = try await service.fetchInfo(url: "https://www.boyfriendtv.com/r")
             XCTFail("Expected error to be thrown")
         } catch let err as YtdlpError {
-            if case .boyfriendTVLoginRequired = err {
-                XCTFail("Should not falsely report boyfriendTVLoginRequired for an invalid/unsupported URL")
+            if case .protectedSiteLoginRequired = err {
+                XCTFail("Should not falsely report protectedSiteLoginRequired for an invalid/unsupported URL")
             }
         }
 
@@ -2834,7 +2834,7 @@ final class YtdlpServiceTests: XCTestCase {
             }
         }
 
-        // 4. No cookies configured and sign in required maps to boyfriendTVNeedsBrowserCookies
+        // 4. No cookies configured and sign in required maps to protectedSiteNeedsBrowserCookies
         UserDefaults.standard.set("none", forKey: UserDefaultsKeys.browserForCookies)
         service.processRunner = MockYtdlpProcessRunner(mockCommand: { _ in
             throw YtdlpError.commandFailed("ERROR: Private video. Sign in to view this video")
@@ -2843,14 +2843,14 @@ final class YtdlpServiceTests: XCTestCase {
             _ = try await service.fetchInfo(url: "https://www.boyfriendtv.com/videos/1702908/test/")
             XCTFail("Expected error to be thrown")
         } catch let err as YtdlpError {
-            if case .boyfriendTVNeedsBrowserCookies = err {
+            if case .protectedSiteNeedsBrowserCookies = err {
                 // Expected
             } else {
-                XCTFail("Expected .boyfriendTVNeedsBrowserCookies but got \(err)")
+                XCTFail("Expected .protectedSiteNeedsBrowserCookies but got \(err)")
             }
         }
 
-        // 5. Chrome cookies configured and sign in required maps to boyfriendTVLoginRequired
+        // 5. Chrome cookies configured and sign in required maps to protectedSiteLoginRequired
         UserDefaults.standard.set("chrome", forKey: UserDefaultsKeys.browserForCookies)
         service.processRunner = MockYtdlpProcessRunner(mockCommand: { _ in
             throw YtdlpError.commandFailed("ERROR: Private video. Sign in to view this video")
@@ -2859,10 +2859,10 @@ final class YtdlpServiceTests: XCTestCase {
             _ = try await service.fetchInfo(url: "https://www.boyfriendtv.com/videos/1702908/test/")
             XCTFail("Expected error to be thrown")
         } catch let err as YtdlpError {
-            if case .boyfriendTVLoginRequired = err {
+            if case .protectedSiteLoginRequired = err {
                 // Expected
             } else {
-                XCTFail("Expected .boyfriendTVLoginRequired but got \(err)")
+                XCTFail("Expected .protectedSiteLoginRequired but got \(err)")
             }
         }
     }
@@ -2974,7 +2974,7 @@ final class YtdlpServiceTests: XCTestCase {
         let jsonManifestOutput = """
         {
             "id": "ph123456",
-            "title": "Pornhub Sample Video",
+            "title": "Sample Video",
             "duration": 480,
             "thumbnail": "https://ci.phncdn.com/thumb.jpg",
             "formats": [
@@ -2994,7 +2994,7 @@ final class YtdlpServiceTests: XCTestCase {
         })
 
         let info = try await service.fetchInfo(url: "https://www.pornhub.com/view_video.php?viewkey=ph123456")
-        XCTAssertEqual(info.title, "Pornhub Sample Video")
+        XCTAssertEqual(info.title, "Sample Video")
     }
 
     func testBoyfriendTVFiltersPreviewTeaserClips() async throws {
@@ -3071,7 +3071,7 @@ final class YtdlpServiceTests: XCTestCase {
             XCTFail("Should not succeed or download a preview clip on a login-protected video")
         } catch let err as YtdlpError {
             switch err {
-            case .safariCookiesFullDiskAccessRequired, .boyfriendTVLoginRequired, .boyfriendTVNeedsBrowserCookies:
+            case .safariCookiesFullDiskAccessRequired, .protectedSiteLoginRequired, .protectedSiteNeedsBrowserCookies:
                 break // Expected
             default:
                 XCTFail("Unexpected error: \(err)")
@@ -3084,7 +3084,7 @@ final class YtdlpServiceTests: XCTestCase {
 
         // Real-world HTML structure of a banned user video: loginProtected with thumbnail image ending in .mp4-full-1.jpg
         let bannedUserHTML = """
-        <!DOCTYPE html><html><head><title>brazilian with hairy big cock fucks slut | BoyFriendTV</title>
+        <!DOCTYPE html><html><head><title>Restricted Sample Video | Fixture Site</title>
         <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"thumbnailUrl":["https://cdn77-t.boyfriendtv.com/b-boyfriendtv/thumbs/bftv-full/2025-10/b8/aa7a496b8b28718a3fbd56eacb5f02732.mp4-full-1.jpg"]}]}</script>
         </head><body>
         <div class="videoContainer" style="background-image: url('https://cdn77-t.boyfriendtv.com/b-boyfriendtv/thumbs/bftv-full/2025-10/b8/aa7a496b8b28718a3fbd56eacb5f02732.mp4-full-1.jpg');">
@@ -3108,11 +3108,11 @@ final class YtdlpServiceTests: XCTestCase {
         })
 
         do {
-            _ = try await service.fetchInfo(url: "https://www.boyfriendtv.com/videos/1505137/brazilian-with-hairy-big-cock-fucks-slut/")
+            _ = try await service.fetchInfo(url: "https://www.boyfriendtv.com/videos/1505137/restricted-sample-video/")
             XCTFail("Should fail and require login for banned uploader videos, not succeed with a thumbnail URL")
         } catch let err as YtdlpError {
             switch err {
-            case .safariCookiesFullDiskAccessRequired, .boyfriendTVLoginRequired, .boyfriendTVNeedsBrowserCookies:
+            case .safariCookiesFullDiskAccessRequired, .protectedSiteLoginRequired, .protectedSiteNeedsBrowserCookies:
                 break // Expected authentication error
             default:
                 XCTFail("Expected login or cookie error for banned uploader video, but got: \(err)")
@@ -3124,7 +3124,7 @@ final class YtdlpServiceTests: XCTestCase {
         service.ytdlpPath = URL(fileURLWithPath: "/usr/local/bin/yt-dlp")
 
         let authenticatedHTML = """
-        <!DOCTYPE html><html><head><title>brazilian with hairy big cock fucks slut | BoyFriendTV</title>
+        <!DOCTYPE html><html><head><title>Restricted Sample Video | Fixture Site</title>
         <script>
         var playerConfig = {
             sources: {"hlsAuto":"https://cdn.boyfriend.tv/key=abc,end=123/media=hls4A/multi=854x480:v480,1280x720:v720/2025-10/_TPL_.mp4"},
@@ -3164,10 +3164,10 @@ final class YtdlpServiceTests: XCTestCase {
         })
 
         let info = try await service.fetchInfo(
-            url: "https://www.boyfriendtv.com/videos/1505137/brazilian-with-hairy-big-cock-fucks-slut/",
+            url: "https://www.boyfriendtv.com/videos/1505137/restricted-sample-video/",
             rawCookies: "bftv_session=valid_token_12345"
         )
-        XCTAssertEqual(info.title, "brazilian with hairy big cock fucks slut")
+        XCTAssertEqual(info.title, "Restricted Sample Video | Fixture Site")
         XCTAssertEqual(info.duration, 600)
         XCTAssertEqual(info.formats?.count, 2)
     }
@@ -3328,7 +3328,7 @@ final class YtdlpServiceTests: XCTestCase {
         let json = """
         {
             "id": "xhQvXns",
-            "title": "Cam Cum: Big Fat Cock Erupts",
+            "title": "Creator Sample Clip",
             "formats": [
                 {
                     "format_id": "h264-720p",
@@ -3376,7 +3376,7 @@ final class YtdlpServiceTests: XCTestCase {
         )
 
         _ = try await service.download(
-            url: "https://de.xhamster.com/videos/cam-cum-big-fat-cock-erupts-xhQvXns?from=search",
+            url: "https://de.xhamster.com/videos/creator-sample-clip-xhQvXns?from=search",
             options: DownloadOptions.default,
             onProgress: { _, _, _ in /* Progress ignored in test */ },
             onOutput: { _ in /* Output ignored in test */ }
@@ -3384,7 +3384,7 @@ final class YtdlpServiceTests: XCTestCase {
 
         let args = capturedArgsBox.value
         let targetUrl = args.last ?? ""
-        XCTAssertTrue(targetUrl.contains("xhamster.com/videos/cam-cum-big-fat-cock-erupts-xhQvXns"), "xHamster URL must be normalized")
+        XCTAssertTrue(targetUrl.contains("xhamster.com/videos/creator-sample-clip-xhQvXns"), "Site URL must be normalized")
         XCTAssertTrue(args.contains("Origin:https://xhamster.com"))
         XCTAssertTrue(args.contains(where: { $0.contains("Referer:https://xhamster.com/") }))
         XCTAssertTrue(args.contains("--hls-use-mpegts"))
@@ -3475,7 +3475,7 @@ final class YtdlpServiceTests: XCTestCase {
         })
 
         _ = try await service.download(
-            url: "https://thisvid.com/videos/hung-bodybuilder-jerk-flex-and-shoot-a-huge-load/",
+            url: "https://thisvid.com/videos/protected-sample-video/",
             options: DownloadOptions.default,
             onProgress: { _, _, _ in /* Progress ignored in test */ },
             onOutput: { _ in /* Output ignored in test */ }
@@ -3501,7 +3501,7 @@ final class YtdlpServiceTests: XCTestCase {
         })
 
         _ = try await service.download(
-            url: "https://justthegays.tv/video/valentinoboy-fucks-romeo-twink-yet-again-100",
+            url: "https://justthegays.tv/video/protected-sample-video-100",
             options: DownloadOptions.default,
             onProgress: { _, _, _ in /* Progress ignored in test */ },
             onOutput: { _ in /* Output ignored in test */ }
@@ -4355,7 +4355,3 @@ final class YtdlpServiceTests: XCTestCase {
         validProcess.waitUntilExit()
     }
 }
-
-
-
-
