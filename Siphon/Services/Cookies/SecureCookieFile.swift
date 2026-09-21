@@ -205,18 +205,20 @@ public final class SecureCookieFile: @unchecked Sendable {
         }
 
         // 2. Process additional Netscape lines
+        // Bolt Performance Optimization: Use `split(separator: "\t", omittingEmptySubsequences: false)` over Substrings
+        // to avoid allocating [String] column arrays for every Netscape line.
         for line in additionalNetscapeLines {
             let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !trimmed.isEmpty && !trimmed.hasPrefix("#") else { continue }
-            let columns = trimmed.components(separatedBy: "\t")
+            let columns = trimmed.split(separator: "\t", omittingEmptySubsequences: false)
             if columns.count >= 7 {
-                let domain = sanitizeCookieToken(columns[0])
+                let domain = sanitizeCookieToken(String(columns[0]))
                 let includeSub = columns[1].uppercased() == "TRUE"
-                let path = sanitizeCookieToken(columns[2])
+                let path = sanitizeCookieToken(String(columns[2]))
                 let isSec = columns[3].uppercased() == "TRUE"
                 let exp = Int(columns[4]) ?? defaultExpiry
-                let name = sanitizeCookieToken(columns[5])
-                let val = sanitizeCookieToken(columns[6])
+                let name = sanitizeCookieToken(String(columns[5]))
+                let val = sanitizeCookieToken(String(columns[6]))
                 if !name.isEmpty && !val.isEmpty {
                     let mapKey = CookieKey(domain: domain.lowercased(), path: path.isEmpty ? "/" : path, name: name)
                     cookieMap[mapKey] = CookieEntry(
