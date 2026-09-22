@@ -138,4 +138,53 @@ final class SecureCookieFileTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: orphan1.path))
         XCTAssertFalse(FileManager.default.fileExists(atPath: orphan2.path))
     }
+
+    func testCookieManagerCreateSecureCookieFile() async throws {
+        let manager = CookieManager()
+        let cookie = try await manager.createSecureCookieFile(
+            url: "https://www.youtube.com/watch?v=98765",
+            rawCookies: "SID=test123; HSID=test456",
+            additionalCookies: [("PREF", "f1=50000")],
+            additionalNetscapeLines: [".youtube.com	TRUE	/	FALSE	2000000000	EXTRA	val"]
+        )
+        defer { cookie.cleanup() }
+
+        XCTAssertNoThrow(try cookie.validate())
+        XCTAssertTrue(FileManager.default.fileExists(atPath: cookie.path))
+
+        let attrs = try FileManager.default.attributesOfItem(atPath: cookie.path)
+        let perm = (attrs[.posixPermissions] as? NSNumber)?.intValue ?? 0
+        XCTAssertEqual(perm, 0o600, "Permissions must be strictly 0o600")
+
+        let fileContent = try String(contentsOf: cookie.fileURL, encoding: .utf8)
+        XCTAssertTrue(fileContent.contains("SID	test123"))
+        XCTAssertTrue(fileContent.contains("PREF	f1=50000"))
+        XCTAssertTrue(fileContent.contains("EXTRA	val"))
+    }
+
+    func testCookieManagerPurgeOrphanedFilesInstanceMethod() async {
+        guard let dir = CookieManager.getSecureTempCookiesDirectory() else { return }
+        let orphan = dir.appendingPathComponent("siphon_cookies_instance_orphan.txt")
+        try? "dummy".write(to: orphan, atomically: true, encoding: .utf8)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: orphan.path))
+
+        let manager = CookieManager()
+        await manager.purgeOrphanedFiles()
+
+        XCTAssertFalse(FileManager.default.fileExists(atPath: orphan.path))
+    }
+
+    func testCookieManagerGetSecureTempCookiesDirectory() {
+        guard let dir = CookieManager.getSecureTempCookiesDirectory() else {
+            XCTFail("Directory should not be nil")
+            return
+        }
+
+        XCTAssertTrue(FileManager.default.fileExists(atPath: dir.path))
+
+        if let attrs = try? FileManager.default.attributesOfItem(atPath: dir.path),
+           let perm = (attrs[.posixPermissions] as? NSNumber)?.intValue {
+            XCTAssertEqual(perm, 0o700, "Directory permissions must be 0o700")
+        }
+    }
 }
