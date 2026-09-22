@@ -235,6 +235,7 @@ public final class UpdateInstaller: Sendable {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/hdiutil")
         process.arguments = ["attach", dmgURL.path, "-nobrowse", "-readonly", "-plist"]
+        process.environment = YtdlpService.createSanitizedEnvironment()
 
         let pipe = Pipe()
         process.standardOutput = pipe
@@ -274,6 +275,7 @@ public final class UpdateInstaller: Sendable {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/hdiutil")
         process.arguments = ["detach", mountPoint, "-force"]
+        process.environment = YtdlpService.createSanitizedEnvironment()
         process.standardOutput = Pipe()
         let errorPipe = Pipe()
         process.standardError = errorPipe
@@ -295,6 +297,7 @@ public final class UpdateInstaller: Sendable {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/ditto")
         process.arguments = ["-xk", zipURL.path, destinationDir.path]
+        process.environment = YtdlpService.createSanitizedEnvironment()
         process.standardOutput = Pipe()
         process.standardError = Pipe()
 
