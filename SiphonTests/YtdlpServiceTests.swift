@@ -979,6 +979,37 @@ final class YtdlpServiceTests: XCTestCase {
         }
     }
 
+    func testIsVideoUnavailableErrorAndErrorMapping() async throws {
+        // 1. Direct helper function assertions
+        XCTAssertTrue(YtdlpService.isVideoUnavailableError("video is unavailable"))
+        XCTAssertTrue(YtdlpService.isVideoUnavailableError("video has been removed"))
+        XCTAssertTrue(YtdlpService.isVideoUnavailableError("http error 404"))
+        XCTAssertTrue(YtdlpService.isVideoUnavailableError("404 not found"))
+        XCTAssertTrue(YtdlpService.isVideoUnavailableError("page not found"))
+        XCTAssertFalse(YtdlpService.isVideoUnavailableError("video is unavailable because cookie is expired"))
+        XCTAssertFalse(YtdlpService.isVideoUnavailableError("some random error"))
+
+        // 2. GFF and BoyfriendTV error mapping assertion
+        service.ytdlpPath = URL(fileURLWithPath: "/usr/local/bin/yt-dlp")
+        UserDefaults.standard.set("none", forKey: UserDefaultsKeys.browserForCookies)
+        defer { UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.browserForCookies) }
+
+        service.processRunner = MockYtdlpProcessRunner(mockCommand: { _ in
+            throw YtdlpError.commandFailed("ERROR: Video unavailable: video has been removed by the user")
+        })
+
+        do {
+            _ = try await service.fetchInfo(url: "https://gayforfans.com/videos/8831/test/")
+            XCTFail("Expected video unavailable error to be thrown")
+        } catch let err as YtdlpError {
+            if case .downloadFailed(let message) = err {
+                XCTAssertEqual(message, "This video is unavailable, private, or has been removed.")
+            } else {
+                XCTFail("Expected .downloadFailed but got \(err)")
+            }
+        }
+    }
+
     func testEpornerSubdomainNormalization() async throws {
         let capturedArgsBox = TestBox<[String]>([])
         service.processRunner = MockYtdlpProcessRunner(mockDownload: { args in
