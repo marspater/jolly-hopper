@@ -25,6 +25,19 @@ final class DownloadExecutorTests: XCTestCase {
         XCTAssertEqual(DownloadExecutor.errorMessage(for: errDiskFull, languageService: lang), lang.s("disk_full"))
     }
 
+    func testRecoveryProgressBucketUsesFivePercentCheckpoints() {
+        XCTAssertEqual(DownloadExecutor.recoveryProgressBucket(for: -0.5), 0)
+        XCTAssertEqual(DownloadExecutor.recoveryProgressBucket(for: .nan), 0)
+        XCTAssertEqual(DownloadExecutor.recoveryProgressBucket(for: 0.0), 0)
+        XCTAssertEqual(DownloadExecutor.recoveryProgressBucket(for: 0.049), 0)
+        XCTAssertEqual(DownloadExecutor.recoveryProgressBucket(for: 0.05), 1)
+        XCTAssertEqual(DownloadExecutor.recoveryProgressBucket(for: 0.249), 4)
+        XCTAssertEqual(DownloadExecutor.recoveryProgressBucket(for: 0.25), 5)
+        XCTAssertEqual(DownloadExecutor.recoveryProgressBucket(for: 0.999), 19)
+        XCTAssertEqual(DownloadExecutor.recoveryProgressBucket(for: 1.0), 20)
+        XCTAssertEqual(DownloadExecutor.recoveryProgressBucket(for: 1.5), 20)
+    }
+
     func testTemporaryFileMatching() {
         XCTAssertTrue(DownloadExecutor.isTemporaryFileName("video.mp4.part"))
         XCTAssertTrue(DownloadExecutor.isTemporaryFileName("video.mp4.ytdl"))

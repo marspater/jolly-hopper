@@ -172,6 +172,48 @@ final class DownloadHistoryStoreTests: XCTestCase {
         XCTAssertEqual(restored.scratchDirectory?.standardizedFileURL.path, scratch.standardizedFileURL.path)
     }
 
+    func testRetryableHistoryPreservesBrowserFamilyWithoutSecrets() {
+        for status in [DownloadStatus.failed, .stopped, .fileExists] {
+            var options = DownloadOptions.default
+            options.browserCookieSource = "chromium-based"
+            options.rawCookies = "session=secret"
+            options.rawUserAgent = "FixtureBrowser/1.0"
+            options.additionalArguments = "--add-header Authorization: secret"
+
+            let download = Download(
+                url: "https://example.com/retryable/\(status.rawValue)",
+                options: options,
+                title: "Retryable"
+            )
+            download.status = status
+
+            let historic = HistoricDownload(download: download)
+            let restored = historic.toDownload()
+
+            XCTAssertEqual(historic.browserCookieSource, "chromium-based")
+            XCTAssertEqual(restored.options.browserCookieSource, "chromium-based")
+            XCTAssertNil(restored.options.rawCookies)
+            XCTAssertNil(restored.options.rawUserAgent)
+            XCTAssertNil(restored.options.additionalArguments)
+        }
+    }
+
+    func testCompletedHistoryDoesNotPersistBrowserFamily() {
+        var options = DownloadOptions.default
+        options.browserCookieSource = "chromium-based"
+        let download = Download(
+            url: "https://example.com/completed",
+            options: options,
+            title: "Completed"
+        )
+        download.status = .completed
+
+        let historic = HistoricDownload(download: download)
+
+        XCTAssertNil(historic.browserCookieSource)
+        XCTAssertNil(historic.toDownload().options.browserCookieSource)
+    }
+
     func testHistoryDoesNotPersistUnownedScratchDirectory() {
         let download = Download(url: "https://example.com/paused", options: .default)
         let unowned = FileManager.default.temporaryDirectory
@@ -181,6 +223,28 @@ final class DownloadHistoryStoreTests: XCTestCase {
 
         let historic = HistoricDownload(download: download)
         XCTAssertNil(historic.scratchDirectoryPath)
+    }
+
+    func testTerminalHistoryDoesNotPersistOwnedScratchDirectory() throws {
+        let scratch = ScratchDirectoryPolicy.makeURL()
+        try FileManager.default.createDirectory(at: scratch, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: scratch) }
+
+        for status in [DownloadStatus.stopped, .failed, .completed, .fileExists] {
+            let download = Download(
+                url: "https://example.com/terminal/\(status.rawValue)",
+                options: .default,
+                title: "Terminal"
+            )
+            download.status = status
+            download.scratchDirectory = scratch
+
+            let historic = HistoricDownload(download: download)
+            XCTAssertNil(
+                historic.scratchDirectoryPath,
+                "Only paused jobs should retain resumable scratch paths in history"
+            )
+        }
     }
 
 }
