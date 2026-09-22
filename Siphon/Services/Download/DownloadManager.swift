@@ -26,11 +26,6 @@ class DownloadManager: ObservableObject {
     private var executor: DownloadExecutor!
     private var cancellables = Set<AnyCancellable>()
     private var isShuttingDown = false
-
-
-    private var maxConcurrentDownloads: Int {
-        queue.maxConcurrentDownloads
-    }
     private let userDefaults = UserDefaults.standard
 
     var activeExecutionCount: Int {
@@ -582,12 +577,6 @@ class DownloadManager: ObservableObject {
             videoId: videoId
         )
     }
-
-    private func cleanupTemporaryFiles(for download: Download) {
-        DownloadExecutor.cleanupTemporaryFiles(for: download)
-    }
-
-
 
     func loadHistory() {
         history = historyStore.loadHistory()
