@@ -185,7 +185,7 @@ class DownloadManager: ObservableObject {
         // same-ID history copy that was loaded before recovery was evaluated.
         for job in jobsToDiscard {
             job.status = .stopped
-            cleanupTemporaryFiles(for: job)
+            DownloadExecutor.cleanupTemporaryFiles(for: job)
         }
         downloads.removeAll { discardedIDs.contains($0.id) }
         history.removeAll { discardedIDs.contains($0.id) }
