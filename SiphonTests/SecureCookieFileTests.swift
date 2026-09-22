@@ -145,7 +145,7 @@ final class SecureCookieFileTests: XCTestCase {
             url: "https://www.youtube.com/watch?v=98765",
             rawCookies: "SID=test123; HSID=test456",
             additionalCookies: [("PREF", "f1=50000")],
-            additionalNetscapeLines: [".youtube.com	TRUE	/	FALSE	2000000000	EXTRA	val"]
+            additionalNetscapeLines: [".youtube.com\tTRUE\t/\tFALSE\t2000000000\tEXTRA\tval"]
         )
         defer { cookie.cleanup() }
 
@@ -157,9 +157,9 @@ final class SecureCookieFileTests: XCTestCase {
         XCTAssertEqual(perm, 0o600, "Permissions must be strictly 0o600")
 
         let fileContent = try String(contentsOf: cookie.fileURL, encoding: .utf8)
-        XCTAssertTrue(fileContent.contains("SID	test123"))
-        XCTAssertTrue(fileContent.contains("PREF	f1=50000"))
-        XCTAssertTrue(fileContent.contains("EXTRA	val"))
+        XCTAssertTrue(fileContent.contains("SID\ttest123"))
+        XCTAssertTrue(fileContent.contains("PREF\tf1=50000"))
+        XCTAssertTrue(fileContent.contains("EXTRA\tval"))
     }
 
     func testCookieManagerPurgeOrphanedFilesInstanceMethod() async {
