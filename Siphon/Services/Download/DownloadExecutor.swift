@@ -240,10 +240,16 @@ final class DownloadExecutor: ObservableObject {
         activeTasks[downloadId] = task
     }
 
-    private static func logTimestamp() -> String {
+    // Bolt Performance Optimization: Pre-compile static DateFormatter instance to eliminate
+    // object allocation and ICU locale initialization overhead on every log timestamp formatting call.
+    private static let logDateFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
-        return formatter.string(from: Date())
+        return formatter
+    }()
+
+    private static func logTimestamp() -> String {
+        return logDateFormatter.string(from: Date())
     }
 
     private static func appendToLog(for download: Download, text: String) {
