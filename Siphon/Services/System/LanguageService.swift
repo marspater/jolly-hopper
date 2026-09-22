@@ -15,14 +15,22 @@ class LanguageService: ObservableObject {
     public static let shared = LanguageService()
     @AppStorage("selectedLanguage") var selectedLanguage: Language = .english
     
-    nonisolated func s(_ key: String) -> String {
-        if let translated = translations[key] {
+    nonisolated static func s(_ key: String) -> String {
+        if let translated = staticTranslations[key] {
             return translated
         }
         return key.replacingOccurrences(of: "_", with: " ").capitalized
     }
-    
-    private let translations: [String: String] = [
+
+    nonisolated func s(_ key: String) -> String {
+        Self.s(key)
+    }
+
+    private var translations: [String: String] {
+        Self.staticTranslations
+    }
+
+    nonisolated private static let staticTranslations: [String: String] = [
         "queue_recovery_title": "Interrupted Downloads Detected",
         "queue_recovery_message": "Siphon detected %d download(s) that were interrupted when the app closed unexpectedly. Would you like to restore them to the queue?",
         "queue_recovery_restore": "Restore Queue",
