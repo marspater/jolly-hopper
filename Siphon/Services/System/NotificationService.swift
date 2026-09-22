@@ -61,9 +61,8 @@ final class NotificationService: NSObject, @unchecked Sendable, UNUserNotificati
     ) {
         DispatchQueue.main.async {
             NSApp.activate(ignoringOtherApps: true)
-            for window in NSApp.windows where window.canBecomeMain {
+            if let window = NSApp.windows.first(where: { $0.canBecomeMain }) {
                 window.makeKeyAndOrderFront(nil)
-                break
             }
         }
         completionHandler()
