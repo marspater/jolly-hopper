@@ -325,7 +325,15 @@ class LoggerService: ObservableObject {
             let exportFilename = "Siphon_Exported_Logs_\(Int(Date().timeIntervalSince1970)).log"
             let exportURL = fm.temporaryDirectory.appendingPathComponent(exportFilename)
 
-            let rawContent = (try? String(contentsOf: fileURL, encoding: .utf8)) ?? ""
+            let rawData: Data
+            if let handle = try? FileHandle(forReadingFrom: fileURL) {
+                defer { try? handle.close() }
+                rawData = (try? handle.readToEnd()) ?? Data()
+            } else {
+                rawData = (try? Data(contentsOf: fileURL)) ?? Data()
+            }
+
+            let rawContent = String(decoding: rawData, as: UTF8.self)
             let sanitized = Self.sanitizeLogContentForExport(rawContent)
             guard let data = sanitized.data(using: .utf8) else {
                 throw NSError(domain: "LoggerService", code: 1, userInfo: [NSLocalizedDescriptionKey: "Failed to encode sanitized logs"])
