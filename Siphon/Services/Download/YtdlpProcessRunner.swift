@@ -453,19 +453,10 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
     }
 
     private static func extractCleanError(from errorOutput: String) -> String {
-        var searchEnd = errorOutput.endIndex
-        while searchEnd > errorOutput.startIndex {
-            let lineStart: String.Index
-            if let newlineIndex = errorOutput[errorOutput.startIndex..<searchEnd].lastIndex(where: \.isNewline) {
-                lineStart = errorOutput.index(after: newlineIndex)
-            } else {
-                lineStart = errorOutput.startIndex
-            }
-            let line = errorOutput[lineStart..<searchEnd]
+        for line in errorOutput.lazy.split(whereSeparator: \.isNewline).reversed() {
             if line.contains("ERROR:") {
                 return String(line).replacingOccurrences(of: "ERROR: ", with: "")
             }
-            searchEnd = lineStart == errorOutput.startIndex ? errorOutput.startIndex : errorOutput.index(before: lineStart)
         }
         return errorOutput
     }
