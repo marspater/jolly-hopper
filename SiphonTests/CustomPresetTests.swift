@@ -137,4 +137,31 @@ final class CustomPresetTests: XCTestCase {
         UserDefaults.standard.set(corruptedData, forKey: UserDefaultsKeys.customPresets)
         XCTAssertTrue(CustomPreset.loadAll().isEmpty)
     }
+
+    func testCustomPresetConfigurationInitialization() throws {
+        let config = CustomPresetConfiguration(
+            name: "Configured Preset",
+            videoCodec: .av1,
+            audioCodec: .flac,
+            videoResolution: .r1440p,
+            fileType: .mkv,
+            downloadSubtitles: true,
+            subtitleLanguage: "fr",
+            subtitleFormat: .vtt,
+            sponsorBlock: true,
+            splitChapters: true
+        )
+        let preset = CustomPreset(configuration: config)
+
+        XCTAssertEqual(preset.name, "Configured Preset")
+        XCTAssertEqual(preset.videoCodec, .av1)
+        XCTAssertEqual(preset.audioCodec, .flac)
+        XCTAssertEqual(preset.videoResolution, .r1440p)
+        XCTAssertEqual(preset.fileType, .mkv)
+        XCTAssertEqual(preset.downloadSubtitles, true)
+        XCTAssertEqual(preset.subtitleLanguage, "fr")
+        XCTAssertEqual(preset.subtitleFormat, .vtt)
+        XCTAssertEqual(preset.sponsorBlock, true)
+        XCTAssertEqual(preset.splitChapters, true)
+    }
 }
