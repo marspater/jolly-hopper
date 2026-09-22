@@ -215,6 +215,7 @@ struct RecentDownloadRowView: View {
                 }
                 .buttonStyle(.plain)
                 .help(languageService.s("stop_download"))
+                .accessibilityLabel(languageService.s("stop_download"))
 
             case .queued:
                 Text(languageService.s("queued"))
@@ -244,6 +245,7 @@ struct RecentDownloadRowView: View {
                     }
                     .buttonStyle(.plain)
                     .help(languageService.s("reveal_in_finder"))
+                    .accessibilityLabel(languageService.s("reveal_in_finder"))
                 }
 
             case .failed:
