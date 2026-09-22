@@ -62,3 +62,7 @@
 ## 2026-09-17 - Zero-Allocation Set Initialization via `lazy.map` Key-Paths
 **Learning:** Constructing a `Set` from a collection via `Set(items.map { $0.id })` allocates an intermediate `Array` buffer on the heap before constructing the `Set`. Passing `items.lazy.map(\.id)` directly into `Set.init(_:)` streams elements into the `Set` without intermediate array allocation.
 **Action:** Use `Set(collection.lazy.map(\.property))` instead of `Set(collection.map { $0.property })` to prevent temporary array allocations.
+
+## 2026-09-22 - Lazy Substring Splitting with Reverse Search in Error Parsing
+**Learning:** Using `errorOutput.split(whereSeparator: \.isNewline).reversed()` allocates an intermediate `Array<Substring>` containing all lines before reversing. Prepending `.lazy` (`errorOutput.lazy.split(whereSeparator: \.isNewline).reversed()`) constructs a lazy reversed collection that scans backward from the end without allocating an array for all line substrings, short-circuiting as soon as the first matching line from the end is found.
+**Action:** Use `.lazy.split(whereSeparator: \.isNewline).reversed()` when searching backwards for specific log or error lines in multiline string outputs.
