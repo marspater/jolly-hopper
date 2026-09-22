@@ -154,9 +154,10 @@ class LoggerService: ObservableObject {
 
     nonisolated static func extractTailLines(from data: Data, maxEntries: Int) -> [String] {
         guard !data.isEmpty else { return [] }
+        let count = data.count
         var lineStarts: [Int] = [0]
-        for (i, byte) in data.enumerated() {
-            if byte == 0x0A && i + 1 < data.count {
+        for i in 0..<count {
+            if data[i] == 0x0A && i + 1 < count {
                 lineStarts.append(i + 1)
             }
         }
