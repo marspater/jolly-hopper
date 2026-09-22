@@ -5106,7 +5106,7 @@ public struct DownloadResult: Sendable {
             if lowerErr.contains("cloudflare") || lowerErr.contains("anti-bot") || lowerErr.contains("captcha") || lowerErr.contains("challenge") || lowerErr.contains("turnstile") {
                 return YtdlpError.cloudflareBlocked
             }
-            if (lowerErr.contains("video is unavailable") || lowerErr.contains("video unavailable") || lowerErr.contains("video has been removed") || lowerErr.contains("video removed") || lowerErr.contains("404 not found") || lowerErr.contains("page not found") || lowerErr.contains("http error 404")) && !lowerErr.contains("cookie") {
+            if Self.isVideoUnavailableError(lowerErr) {
                 return YtdlpError.downloadFailed("This video is unavailable, private, or has been removed.")
             }
             if lowerErr.contains("sign in") || lowerErr.contains("private video") || lowerErr.contains("login") || lowerErr.contains("members-only") || lowerErr.contains("http error 401") {
@@ -5159,7 +5159,7 @@ public struct DownloadResult: Sendable {
             if lowerErr.contains("cloudflare") || lowerErr.contains("403") || lowerErr.contains("anti-bot") || lowerErr.contains("captcha") || lowerErr.contains("challenge") || lowerErr.contains("turnstile") {
                 return YtdlpError.cloudflareBlocked
             }
-            if (lowerErr.contains("video is unavailable") || lowerErr.contains("video unavailable") || lowerErr.contains("video has been removed") || lowerErr.contains("video removed") || lowerErr.contains("404 not found") || lowerErr.contains("page not found") || lowerErr.contains("http error 404")) && !lowerErr.contains("cookie") {
+            if Self.isVideoUnavailableError(lowerErr) {
                 return YtdlpError.downloadFailed("This video is unavailable, private, or has been removed.")
             }
             return error
@@ -5483,6 +5483,16 @@ public struct DownloadResult: Sendable {
         return lower.contains("operation not permitted") ||
                lower.contains("errno 1") ||
                lower.contains("permission denied")
+    }
+
+    nonisolated static func isVideoUnavailableError(_ lowerErr: String) -> Bool {
+        (lowerErr.contains("video is unavailable") ||
+         lowerErr.contains("video unavailable") ||
+         lowerErr.contains("video has been removed") ||
+         lowerErr.contains("video removed") ||
+         lowerErr.contains("404 not found") ||
+         lowerErr.contains("page not found") ||
+         lowerErr.contains("http error 404")) && !lowerErr.contains("cookie")
     }
 
     private func stripCookieArgs(from args: [String]) -> [String] {
