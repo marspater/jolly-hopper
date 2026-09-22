@@ -8,7 +8,13 @@ import SwiftUI
 @MainActor
 class DownloadManager: ObservableObject {
 
-    @Published var downloads: [Download] = []
+    // Bolt Performance Optimization: Maintain O(1) Set lookup cache for download IDs to avoid linear scans
+    @Published var downloads: [Download] = [] {
+        didSet {
+            downloadIDs = Set(downloads.map { $0.id })
+        }
+    }
+    private(set) var downloadIDs: Set<UUID> = []
     @Published var history: [HistoricDownload] = []
     let ytdlpService = YtdlpService()
     let historyStore = DownloadHistoryStore()
@@ -316,7 +322,7 @@ class DownloadManager: ObservableObject {
     }
 
     func processDownload(_ download: Download) async {
-        if !downloads.contains(where: { $0.id == download.id }) {
+        if !downloadIDs.contains(download.id) {
             downloads.append(download)
             persistQueueRecoveryState()
         }
@@ -642,7 +648,7 @@ extension DownloadManager: DownloadExecutorDelegate {
 
     func executorDidRequestAddToHistory(_ download: Download, skipSave: Bool) {
         // Cancellation can finish after the user removed the job from the app.
-        guard downloads.contains(where: { $0.id == download.id }) else { return }
+        guard downloadIDs.contains(download.id) else { return }
         addToHistory(download, skipSave: skipSave)
     }
 
