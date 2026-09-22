@@ -182,11 +182,13 @@ class DownloadManager: ObservableObject {
 
     func persistQueueRecoveryState() {
         guard !isShuttingDown else { return }
-        let activeJobs = downloads.filter {
-            $0.status == .queued ||
-            $0.status == .fetching ||
-            $0.status == .downloading ||
-            $0.status == .processing
+        let activeJobs = downloads.filter { download in
+            switch download.status {
+            case .queued, .fetching, .downloading, .processing:
+                return true
+            default:
+                return false
+            }
         }
         recoveryStore.persist(activeJobs: activeJobs)
     }
