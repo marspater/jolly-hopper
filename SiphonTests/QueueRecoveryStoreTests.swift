@@ -114,6 +114,7 @@ final class QueueRecoveryStoreTests: XCTestCase {
         defer { restartedManager.shutdown() }
 
         let languageService = LanguageService()
+        restartedManager.ytdlpService.isUpdating = true
         restartedManager.initialize(languageService: languageService)
 
         XCTAssertTrue(restartedManager.showQueueRecoveryAlert)
@@ -126,6 +127,11 @@ final class QueueRecoveryStoreTests: XCTestCase {
         XCTAssertEqual(restartedManager.downloads.count, 1)
         XCTAssertEqual(restartedManager.downloads.first?.url, "https://example.com/active")
         XCTAssertEqual(restartedManager.downloads.first?.status, .queued)
+
+        let rePersisted = restartedManager.recoveryStore.loadInterruptedJobs()
+        XCTAssertEqual(rePersisted.count, 1)
+        XCTAssertEqual(rePersisted.first?.id, dl.id)
+        XCTAssertEqual(rePersisted.first?.status, .queued)
     }
 
     func testDownloadManagerDiscardRecovery() async throws {
@@ -146,6 +152,54 @@ final class QueueRecoveryStoreTests: XCTestCase {
         XCTAssertFalse(manager.showQueueRecoveryAlert)
         XCTAssertEqual(manager.recoverableJobsCount, 0)
         XCTAssertTrue(manager.downloads.isEmpty)
+    }
+
+    func testDiscardRecoveryDeletesOwnedScratchAndStaleHistoryCopy() throws {
+        let id = UUID()
+        let scratch = ScratchDirectoryPolicy.makeURL()
+        try FileManager.default.createDirectory(at: scratch, withIntermediateDirectories: true)
+        let partial = scratch.appendingPathComponent("video.mp4.part")
+        try Data("partial".utf8).write(to: partial)
+        defer { try? FileManager.default.removeItem(at: scratch) }
+
+        let recovered = Download(
+            url: "https://example.com/discard-active",
+            options: .default,
+            title: "Recovered",
+            id: id
+        )
+        recovered.status = .downloading
+        recovered.scratchDirectory = scratch
+        QueueRecoveryStore(fileURL: recoveryFileURL).persist(activeJobs: [recovered])
+
+        let stale = Download(
+            url: "https://example.com/discard-active",
+            options: .default,
+            title: "Stale Paused",
+            id: id
+        )
+        stale.status = .paused
+        stale.scratchDirectory = scratch
+        let historyData = try JSONEncoder().encode([HistoricDownload(download: stale)])
+        UserDefaults.standard.set(historyData, forKey: UserDefaultsKeys.downloadHistory)
+
+        let manager = DownloadManager(recoveryFileURL: recoveryFileURL)
+        defer { manager.shutdown() }
+        manager.initialize(languageService: LanguageService())
+
+        XCTAssertTrue(manager.showQueueRecoveryAlert)
+        XCTAssertTrue(manager.downloads.contains(where: { $0.id == id }))
+        XCTAssertTrue(manager.history.contains(where: { $0.id == id }))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: partial.path))
+
+        manager.discardInterruptedJobs()
+
+        XCTAssertFalse(manager.showQueueRecoveryAlert)
+        XCTAssertFalse(manager.downloads.contains(where: { $0.id == id }))
+        XCTAssertFalse(manager.history.contains(where: { $0.id == id }))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: scratch.path))
+        XCTAssertTrue(manager.recoveryStore.loadInterruptedJobs().isEmpty)
+        XCTAssertFalse(manager.historyStore.loadHistory().contains(where: { $0.id == id }))
     }
     func testRecoveryPreservesOwnedScratchDirectoryBrowserSourceAndCreationDate() throws {
         let store = QueueRecoveryStore(fileURL: recoveryFileURL)
@@ -259,6 +313,32 @@ final class QueueRecoveryStoreTests: XCTestCase {
         XCTAssertEqual(restoredOrder, ["Third", "First", "Second"])
     }
 
+    func testRetryPersistsResetQueuedState() throws {
+        let manager = DownloadManager(recoveryFileURL: recoveryFileURL)
+        manager.ytdlpService.isUpdating = true
+        defer { manager.shutdown() }
+
+        let download = Download(
+            url: "https://example.com/retry",
+            options: .default,
+            title: "Retry"
+        )
+        download.status = .failed
+        download.progress = 0.73
+        download.errorMessage = "old failure"
+        download.log = "old failure log"
+        manager.downloads = [download]
+
+        manager.retryDownload(download)
+
+        let restored = try XCTUnwrap(manager.recoveryStore.loadInterruptedJobs().first)
+        XCTAssertEqual(restored.id, download.id)
+        XCTAssertEqual(restored.status, .queued)
+        XCTAssertEqual(restored.progress, 0)
+        XCTAssertNil(restored.errorMessage)
+        XCTAssertTrue(restored.log.isEmpty)
+    }
+
     func testClearHistoryPreservesPausedJobPersistence() throws {
         let manager = DownloadManager(recoveryFileURL: recoveryFileURL)
         defer { manager.shutdown() }
@@ -317,6 +397,69 @@ final class QueueRecoveryStoreTests: XCTestCase {
         XCTAssertEqual(paused.status, .paused)
         XCTAssertEqual(paused.scratchDirectory?.standardizedFileURL.path, scratch.standardizedFileURL.path)
         XCTAssertTrue(FileManager.default.fileExists(atPath: partial.path))
+    }
+
+    func testRecoveryIsKeptUntilDurableHistoryCommitForNonActiveStates() throws {
+        let manager = DownloadManager(recoveryFileURL: recoveryFileURL)
+        manager.ytdlpService.isUpdating = true
+        defer { manager.shutdown() }
+
+        let download = Download(
+            url: "https://example.com/crash-consistency",
+            options: .default,
+            title: "Crash Consistency"
+        )
+        manager.downloads = [download]
+
+        let durableStatuses: [DownloadStatus] = [
+            .paused, .completed, .failed, .stopped, .fileExists
+        ]
+
+        for status in durableStatuses {
+            download.status = .downloading
+            manager.persistQueueRecoveryState()
+            XCTAssertEqual(
+                manager.recoveryStore.loadInterruptedJobs().count,
+                1,
+                "Precondition failed for \(status.rawValue)"
+            )
+
+            manager.executorDidUpdateStatus(for: download, to: status)
+
+            XCTAssertEqual(
+                manager.recoveryStore.loadInterruptedJobs().count,
+                1,
+                "Recovery must remain available until \(status.rawValue) is durably written to history"
+            )
+
+            manager.executorDidRequestAddToHistory(download, skipSave: false)
+
+            XCTAssertTrue(
+                manager.recoveryStore.loadInterruptedJobs().isEmpty,
+                "Recovery should be cleared only after \(status.rawValue) history is durable"
+            )
+            XCTAssertEqual(
+                manager.historyStore.loadHistory().first(where: { $0.id == download.id })?.status,
+                status
+            )
+        }
+    }
+
+    func testFileExistsHistoryRestoresActionRequiredState() throws {
+        let download = Download(
+            url: "https://example.com/existing",
+            options: .default,
+            title: "Existing"
+        )
+        download.status = .fileExists
+
+        let historic = HistoricDownload(download: download)
+        let restored = try XCTUnwrap(
+            DownloadHistoryStore.restoreDownloads(from: [historic], existingDownloads: []).first
+        )
+
+        XCTAssertEqual(restored.id, download.id)
+        XCTAssertEqual(restored.status, .fileExists)
     }
 
 }

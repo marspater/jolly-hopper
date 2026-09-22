@@ -165,17 +165,33 @@ class DownloadManager: ObservableObject {
                 downloads.append(job)
             }
         }
-        recoveryStore.clearRecoveryState()
+        // Atomically replace the interrupted snapshot with the restored
+        // queued state. Deleting first creates a crash window with no recovery file.
         persistQueueRecoveryState()
         objectWillChange.send()
         processQueue()
     }
 
     func discardInterruptedJobs() {
+        let jobsToDiscard = pendingRecoveryJobs
+        let discardedIDs = Set(jobsToDiscard.map(\.id))
         pendingRecoveryJobs.removeAll()
         recoverableJobsCount = 0
         showQueueRecoveryAlert = false
-        recoveryStore.clearRecoveryState()
+
+        // "Discard" means the interrupted work is no longer resumable. Delete
+        // only validated Siphon-owned scratch directories and remove any stale
+        // same-ID history copy that was loaded before recovery was evaluated.
+        for job in jobsToDiscard {
+            job.status = .stopped
+            cleanupTemporaryFiles(for: job)
+        }
+        downloads.removeAll { discardedIDs.contains($0.id) }
+        history.removeAll { discardedIDs.contains($0.id) }
+        saveHistory()
+
+        // Atomically replace the old interrupted snapshot with whatever
+        // active queue remains after discard. Do not delete-then-rewrite.
         persistQueueRecoveryState()
         objectWillChange.send()
     }
@@ -363,11 +379,11 @@ class DownloadManager: ObservableObject {
     func retryDownload(_ download: Download) {
         guard download.status == .failed || download.status == .stopped || download.status == .fileExists else { return }
         download.options.forceOverwrite = false
-        updateStatus(for: download, to: .queued)
         download.progress = 0
-        objectWillChange.send()
         download.errorMessage = nil
         download.log = ""
+        updateStatus(for: download, to: .queued)
+        objectWillChange.send()
 
         processQueue()
     }
@@ -481,6 +497,9 @@ class DownloadManager: ObservableObject {
         }
         objectWillChange.send()
         saveHistory()
+        // stopDownload(..., skipSaveAndBroadcast: true) deliberately defers
+        // recovery removal until this batched history write is durable.
+        persistQueueRecoveryState()
     }
 
 
@@ -631,7 +650,17 @@ class DownloadManager: ObservableObject {
         default:
             break
         }
-        persistQueueRecoveryState()
+
+        // Paused, terminal, and action-required states are persisted through
+        // history. Keep the previous active recovery snapshot until that history
+        // write succeeds so a crash between the status transition and history
+        // commit cannot make the job disappear.
+        switch status {
+        case .paused, .completed, .failed, .stopped, .fileExists:
+            break
+        default:
+            persistQueueRecoveryState()
+        }
     }
 }
 
@@ -644,6 +673,17 @@ extension DownloadManager: DownloadExecutorDelegate {
         // Cancellation can finish after the user removed the job from the app.
         guard downloads.contains(where: { $0.id == download.id }) else { return }
         addToHistory(download, skipSave: skipSave)
+
+        // For normal single-job transitions, history is durable at this point,
+        // so recovery can now drop the old active snapshot. Batched callers
+        // persist recovery only after their shared saveHistory() call.
+        if !skipSave {
+            persistQueueRecoveryState()
+        }
+    }
+
+    func executorDidRequestRecoveryPersist() {
+        persistQueueRecoveryState()
     }
 
     func executorDidFinishDownload() {

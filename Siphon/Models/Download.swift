@@ -1998,12 +1998,22 @@ struct HistoricDownload: Codable, Identifiable {
             LoggerService.sanitizeDiagnosticText(download.log)
         )
         self.progress = download.progress
-        self.scratchDirectoryPath = download.scratchDirectory.flatMap {
-            ScratchDirectoryPolicy.isOwned($0) ? $0.path : nil
-        }
-        self.browserCookieSource = download.status == .paused
-            ? AppState.normalizedBrowserCookieSource(download.options.browserCookieSource)
+        self.scratchDirectoryPath = download.status == .paused
+            ? download.scratchDirectory.flatMap {
+                ScratchDirectoryPolicy.isOwned($0) ? $0.path : nil
+            }
             : nil
+        switch download.status {
+        case .paused, .failed, .stopped, .fileExists:
+            // Browser family/source is non-secret retry context. Preserve it for
+            // states that can be resumed or retried after a clean restart while
+            // raw cookies and raw User-Agent remain ephemeral.
+            self.browserCookieSource = AppState.normalizedBrowserCookieSource(
+                download.options.browserCookieSource
+            )
+        default:
+            self.browserCookieSource = nil
+        }
         var sanitizedOptions = download.options
         sanitizedOptions.rawCookies = nil
         sanitizedOptions.rawUserAgent = nil
