@@ -5065,6 +5065,23 @@ public struct DownloadResult: Sendable {
         return host == "thisvid.com" || host.hasSuffix(".thisvid.com")
     }
 
+    nonisolated private static let cloudflareErrorKeywords = [
+        "cloudflare", "anti-bot", "captcha", "challenge", "turnstile"
+    ]
+
+    nonisolated private static let videoUnavailableErrorKeywords = [
+        "video is unavailable", "video unavailable", "video has been removed",
+        "video removed", "404 not found", "page not found", "http error 404"
+    ]
+
+    nonisolated private static let loginRequiredErrorKeywords = [
+        "sign in", "private video", "login", "members-only", "http error 401"
+    ]
+
+    nonisolated private static let accessDeniedErrorKeywords = [
+        "403", "forbidden"
+    ]
+
     private func shouldRetryWithBrowserCookies(
         error: Error,
         url: String,
@@ -5078,8 +5095,7 @@ public struct DownloadResult: Sendable {
               !usingBrowserCookies, !forceBrowserCookies, selectedBrowser != nil else { return false }
         let message = String(describing: error)
             .replacingOccurrences(of: #"https?://[^\s\"]+"#, with: "[URL]", options: .regularExpression).lowercased()
-        return message.contains("403") || message.contains("401") || message.contains("sign in") ||
-            message.contains("login") || message.contains("cloudflare") || message.contains("challenge")
+        return message.containsAny(["403", "401", "sign in", "login", "cloudflare", "challenge"])
     }
 
     private func mapSiteSpecificError(
@@ -5105,20 +5121,20 @@ public struct DownloadResult: Sendable {
                 default: break
                 }
             }
-            if lowerErr.contains("cloudflare") || lowerErr.contains("anti-bot") || lowerErr.contains("captcha") || lowerErr.contains("challenge") || lowerErr.contains("turnstile") {
+            if lowerErr.containsAny(Self.cloudflareErrorKeywords) {
                 return YtdlpError.cloudflareBlocked
             }
             if Self.isVideoUnavailableError(lowerErr) {
                 return YtdlpError.downloadFailed("This video is unavailable, private, or has been removed.")
             }
-            if lowerErr.contains("sign in") || lowerErr.contains("private video") || lowerErr.contains("login") || lowerErr.contains("members-only") || lowerErr.contains("http error 401") {
+            if lowerErr.containsAny(Self.loginRequiredErrorKeywords) {
                 if configuredBrowser == nil {
                     return YtdlpError.protectedSiteNeedsBrowserCookies
                 } else {
                     return YtdlpError.protectedSiteLoginRequired
                 }
             }
-            if lowerErr.contains("403") || lowerErr.contains("forbidden") {
+            if lowerErr.containsAny(Self.accessDeniedErrorKeywords) {
                 return YtdlpError.downloadFailed("The protected site denied access (HTTP 403). This may be an anti-bot challenge or an access restriction.")
             }
             if lowerErr.contains("unsupported url") {
@@ -5135,9 +5151,7 @@ public struct DownloadResult: Sendable {
                 default: break
                 }
             }
-            if lowerErr.contains("cloudflare") || lowerErr.contains("captcha") ||
-                lowerErr.contains("challenge") || lowerErr.contains("turnstile") ||
-                lowerErr.contains("403") || lowerErr.contains("forbidden") {
+            if lowerErr.containsAny(Self.cloudflareErrorKeywords) || lowerErr.containsAny(Self.accessDeniedErrorKeywords) {
                 return YtdlpError.cloudflareBlocked
             }
             if lowerErr.contains("unsupported url") {
@@ -5146,19 +5160,19 @@ public struct DownloadResult: Sendable {
         }
 
         if isGayPornTubeURL(url) {
-            if lowerErr.contains("cloudflare") || lowerErr.contains("captcha") || lowerErr.contains("challenge") || lowerErr.contains("turnstile") {
+            if lowerErr.containsAny(Self.cloudflareErrorKeywords) {
                 return YtdlpError.cloudflareBlocked
             }
             if lowerErr.contains("unsupported url") {
                 return YtdlpError.downloadFailed("Could not resolve the protected-site player. Verify the video link and retry.")
             }
-            if lowerErr.contains("403") || lowerErr.contains("forbidden") {
+            if lowerErr.containsAny(Self.accessDeniedErrorKeywords) {
                 return YtdlpError.downloadFailed("The protected site denied access (HTTP 403). The page may require browser verification or have an access restriction.")
             }
         }
 
         if isGFFURL(url) {
-            if lowerErr.contains("cloudflare") || lowerErr.contains("403") || lowerErr.contains("anti-bot") || lowerErr.contains("captcha") || lowerErr.contains("challenge") || lowerErr.contains("turnstile") {
+            if lowerErr.containsAny(Self.cloudflareErrorKeywords) || lowerErr.containsAny(Self.accessDeniedErrorKeywords) {
                 return YtdlpError.cloudflareBlocked
             }
             if Self.isVideoUnavailableError(lowerErr) {
@@ -5170,7 +5184,7 @@ public struct DownloadResult: Sendable {
         let parsedHost = (URL(string: url)?.host ?? url).lowercased()
         let isYouTube = parsedHost == "youtube.com" || parsedHost.hasSuffix(".youtube.com") || parsedHost == "youtu.be" || parsedHost.hasSuffix(".youtu.be")
         if isYouTube,
-           (lowerErr.contains("403") || lowerErr.contains("sign in") || lowerErr.contains("bot") || lowerErr.contains("login_required")),
+           lowerErr.containsAny(["403", "sign in", "bot", "login_required"]),
            configuredBrowser == nil {
             return YtdlpError.downloadFailed("YouTube requires authentication or browser cookies. Go to Settings > Advanced > Browser Cookies to select your browser.")
         }
@@ -6155,5 +6169,11 @@ enum YtdlpUpdateError: LocalizedError {
         case .validationFailed(let reason):
             return "yt-dlp validation failed: \(reason)"
         }
+    }
+}
+
+private extension String {
+    func containsAny(_ keywords: [String]) -> Bool {
+        keywords.contains { self.contains($0) }
     }
 }
