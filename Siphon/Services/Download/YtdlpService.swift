@@ -5946,7 +5946,7 @@ enum YtdlpError: LocalizedError {
         case .protectedSiteLoginRequired:
             return "The site returned a sign-in page for the available browser sessions. Sign in to the site in your browser, then retry; Siphon will reuse that session automatically."
         case .safariCookiesFullDiskAccessRequired:
-            return "Safari cookies require Full Disk Access on macOS. Please grant Full Disk Access to Siphon in System Settings > Privacy & Security > Full Disk Access, or choose another browser in Settings > Advanced."
+            return LanguageService.s("safari_fda_required")
         case .securityViolation(let message):
             return "Security violation: \(message)"
         }
