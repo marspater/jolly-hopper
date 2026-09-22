@@ -915,7 +915,7 @@ struct PreferencesView: View {
             }
             editingPreset = nil
         } else {
-            let preset = CustomPreset(
+            let config = CustomPresetConfiguration(
                 name: newPresetName,
                 videoCodec: presetVideoCodec,
                 audioCodec: presetAudioCodec,
@@ -927,6 +927,7 @@ struct PreferencesView: View {
                 sponsorBlock: presetSponsorBlock,
                 splitChapters: presetSplitChapters
             )
+            let preset = CustomPreset(configuration: config)
             customPresets.append(preset)
         }
         

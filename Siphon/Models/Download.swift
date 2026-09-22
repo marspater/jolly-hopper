@@ -974,6 +974,43 @@ enum DownloadPreset: String, Codable, CaseIterable, Identifiable {
 }
 
 
+struct CustomPresetConfiguration: Equatable, Sendable {
+    var name: String
+    var videoCodec: VideoCodec
+    var audioCodec: AudioCodec
+    var videoResolution: VideoResolution
+    var fileType: MediaFileType
+    var downloadSubtitles: Bool = false
+    var subtitleLanguage: String = ""
+    var subtitleFormat: SubtitleFormat = .srt
+    var sponsorBlock: Bool = false
+    var splitChapters: Bool = false
+
+    init(
+        name: String,
+        videoCodec: VideoCodec,
+        audioCodec: AudioCodec,
+        videoResolution: VideoResolution,
+        fileType: MediaFileType,
+        downloadSubtitles: Bool = false,
+        subtitleLanguage: String = "",
+        subtitleFormat: SubtitleFormat = .srt,
+        sponsorBlock: Bool = false,
+        splitChapters: Bool = false
+    ) {
+        self.name = name
+        self.videoCodec = videoCodec
+        self.audioCodec = audioCodec
+        self.videoResolution = videoResolution
+        self.fileType = fileType
+        self.downloadSubtitles = downloadSubtitles
+        self.subtitleLanguage = subtitleLanguage
+        self.subtitleFormat = subtitleFormat
+        self.sponsorBlock = sponsorBlock
+        self.splitChapters = splitChapters
+    }
+}
+
 struct CustomPreset: Codable, Identifiable, Equatable {
     private static let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "com.siphon", category: "CustomPreset")
 
@@ -994,19 +1031,34 @@ struct CustomPreset: Codable, Identifiable, Equatable {
         case id, name, videoCodec, audioCodec, videoResolution, fileType, subtitleLanguage, subtitleFormat, sponsorBlock, splitChapters
         case downloadSubtitles = "embedSubtitles"
     }
+
+    init(configuration: CustomPresetConfiguration) {
+        self.id = UUID()
+        self.name = configuration.name
+        self.videoCodec = configuration.videoCodec
+        self.audioCodec = configuration.audioCodec
+        self.videoResolution = configuration.videoResolution
+        self.fileType = configuration.fileType
+        self.downloadSubtitles = configuration.downloadSubtitles
+        self.subtitleLanguage = configuration.subtitleLanguage
+        self.subtitleFormat = configuration.subtitleFormat
+        self.sponsorBlock = configuration.sponsorBlock
+        self.splitChapters = configuration.splitChapters
+    }
     
     init(name: String, videoCodec: VideoCodec, audioCodec: AudioCodec, videoResolution: VideoResolution, fileType: MediaFileType, downloadSubtitles: Bool = false, subtitleLanguage: String = "", subtitleFormat: SubtitleFormat = .srt, sponsorBlock: Bool = false, splitChapters: Bool = false) {
-        self.id = UUID()
-        self.name = name
-        self.videoCodec = videoCodec
-        self.audioCodec = audioCodec
-        self.videoResolution = videoResolution
-        self.fileType = fileType
-        self.downloadSubtitles = downloadSubtitles
-        self.subtitleLanguage = subtitleLanguage
-        self.subtitleFormat = subtitleFormat
-        self.sponsorBlock = sponsorBlock
-        self.splitChapters = splitChapters
+        self.init(configuration: CustomPresetConfiguration(
+            name: name,
+            videoCodec: videoCodec,
+            audioCodec: audioCodec,
+            videoResolution: videoResolution,
+            fileType: fileType,
+            downloadSubtitles: downloadSubtitles,
+            subtitleLanguage: subtitleLanguage,
+            subtitleFormat: subtitleFormat,
+            sponsorBlock: sponsorBlock,
+            splitChapters: splitChapters
+        ))
     }
     
     static func loadAll() -> [CustomPreset] {
