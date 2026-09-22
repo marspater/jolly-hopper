@@ -114,15 +114,20 @@ final class NotificationService: NSObject, @unchecked Sendable, UNUserNotificati
             let escapedTitle = title
                 .replacingOccurrences(of: "\\", with: "\\\\")
                 .replacingOccurrences(of: "\"", with: "\\\"")
+                .replacingOccurrences(of: "\r", with: " ")
+                .replacingOccurrences(of: "\n", with: " ")
             let escapedBody = body
                 .replacingOccurrences(of: "\\", with: "\\\\")
                 .replacingOccurrences(of: "\"", with: "\\\"")
+                .replacingOccurrences(of: "\r", with: " ")
+                .replacingOccurrences(of: "\n", with: " ")
 
             let script = "display notification \"\(escapedBody)\" with title \"\(escapedTitle)\" sound name \"default\""
             let process = Process()
             let errorPipe = Pipe()
             process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
             process.arguments = ["-e", script]
+            process.environment = YtdlpService.createSanitizedEnvironment()
             process.standardOutput = FileHandle.nullDevice
             process.standardError = errorPipe
             do {
