@@ -2146,12 +2146,12 @@ public struct DownloadURLValidator: Sendable {
     }
 
     public static func extractURLs(from text: String) -> [String] {
-        let lines = text.components(separatedBy: .newlines)
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
-
-        return lines.compactMap { line in
-            if case .valid(_, let original) = validate(line) {
+        // Bolt Performance Optimization: Use `split(whereSeparator: \.isNewline)` lazy Substring iteration
+        // to avoid allocating intermediate String arrays for line splitting, trimming, and filtering.
+        return text.split(whereSeparator: \.isNewline).compactMap { lineSlice in
+            let trimmed = lineSlice.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { return nil }
+            if case .valid(_, let original) = validate(trimmed) {
                 return original
             }
             return nil
