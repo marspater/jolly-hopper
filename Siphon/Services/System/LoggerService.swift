@@ -17,7 +17,7 @@ class LoggerService: ObservableObject {
     }()
 
     // Bolt Performance Optimization: Pre-compile regular expressions to eliminate
-    // regex compilation and allocation overhead on every log and diagnostic text call.
+    // regex compilation and allocation overhead on every log, diagnostic text, and log export call.
     nonisolated private static let urlRegex = try? NSRegularExpression(pattern: #"https?://[^\s"'<>]+"#, options: [])
     nonisolated private static let redactionRegexes: [(NSRegularExpression, String)] = [
         (#"(?i)bearer\s+[A-Za-z0-9\-_\.]+"#, "Bearer <REDACTED>"),
@@ -31,6 +31,11 @@ class LoggerService: ObservableObject {
         guard let regex = try? NSRegularExpression(pattern: pattern, options: []) else { return nil }
         return (regex, replacement)
     }
+
+    nonisolated private static let exportAuthRegex = try? NSRegularExpression(pattern: "(?i)(Authorization:\\s*(?:Bearer|Basic|Token)\\s+)[A-Za-z0-9._~+/=-]+", options: [])
+    nonisolated private static let exportCookieHeaderRegex = try? NSRegularExpression(pattern: "(?i)(Cookie:\\s*)[^\r\n]+", options: [])
+    nonisolated private static let exportSecretQueryRegex = try? NSRegularExpression(pattern: "(?i)([?&](?:token|auth|key|api_key|password|secret|sig|signature)=)[^&\\s\\r\\n]+", options: [])
+    nonisolated private static let exportHomeDirRegex = try? NSRegularExpression(pattern: "/Users/([a-zA-Z0-9._-]+)/", options: [])
     
     nonisolated static func sanitizeURLForLog(_ urlString: String) -> String {
         guard let url = URL(string: urlString) else { return urlString }
@@ -283,26 +288,22 @@ class LoggerService: ObservableObject {
         var sanitized = content
         
         // 1. Redact Bearer / Basic / Token authorization headers
-        let authRegex = try? NSRegularExpression(pattern: "(?i)(Authorization:\\s*(?:Bearer|Basic|Token)\\s+)[A-Za-z0-9._~+/=-]+", options: [])
-        if let regex = authRegex {
+        if let regex = Self.exportAuthRegex {
             sanitized = regex.stringByReplacingMatches(in: sanitized, options: [], range: NSRange(location: 0, length: sanitized.utf16.count), withTemplate: "$1<REDACTED_AUTH>")
         }
         
         // 2. Redact cookie headers or cookie parameter lines
-        let cookieHeaderRegex = try? NSRegularExpression(pattern: "(?i)(Cookie:\\s*)[^\r\n]+", options: [])
-        if let regex = cookieHeaderRegex {
+        if let regex = Self.exportCookieHeaderRegex {
             sanitized = regex.stringByReplacingMatches(in: sanitized, options: [], range: NSRange(location: 0, length: sanitized.utf16.count), withTemplate: "$1<REDACTED_COOKIES>")
         }
         
         // 3. Redact common query secrets in URLs
-        let secretQueryRegex = try? NSRegularExpression(pattern: "(?i)([?&](?:token|auth|key|api_key|password|secret|sig|signature)=)[^&\\s\\r\\n]+", options: [])
-        if let regex = secretQueryRegex {
+        if let regex = Self.exportSecretQueryRegex {
             sanitized = regex.stringByReplacingMatches(in: sanitized, options: [], range: NSRange(location: 0, length: sanitized.utf16.count), withTemplate: "$1<REDACTED>")
         }
         
         // 4. Redact username from /Users/<username>/
-        let homeDirRegex = try? NSRegularExpression(pattern: "/Users/([a-zA-Z0-9._-]+)/", options: [])
-        if let regex = homeDirRegex {
+        if let regex = Self.exportHomeDirRegex {
             sanitized = regex.stringByReplacingMatches(in: sanitized, options: [], range: NSRange(location: 0, length: sanitized.utf16.count), withTemplate: "/Users/<USER>/")
         }
         
