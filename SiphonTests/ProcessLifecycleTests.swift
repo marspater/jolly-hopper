@@ -137,6 +137,18 @@ final class ProcessLifecycleTests: XCTestCase {
         XCTAssertTrue(message.contains("HTTP Error 503"))
     }
 
+    func testDownloadFailureClassificationIgnoresWarningsWithoutErrorLine() {
+        let stderr = """
+        WARNING: [youtube] abc123: There are no subtitles for the requested languages
+        Traceback (most recent call last):
+        MemoryError
+        """
+        guard case .downloadFailed = DefaultYtdlpProcessRunner.classifyFailure(errorOutput: stderr, exitCode: 1) else {
+            XCTFail("A crash without an ERROR: line must stay a recoverable download failure")
+            return
+        }
+    }
+
     func testDownloadFailureClassificationIgnoresIncidental429() {
         let stderr = """
         WARNING: [generic] Falling back on generic information extractor for 4290ab
