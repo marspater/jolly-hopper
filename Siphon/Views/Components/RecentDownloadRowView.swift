@@ -150,7 +150,7 @@ struct RecentDownloadRowView: View {
     private var formatPillsView: some View {
         HStack(spacing: 4) {
             Text(download.options.fileType.rawValue)
-                .font(.geistMono(10, weight: .semibold))
+                .font(.siphonMicroMonoSemibold)
                 .foregroundColor(.secondary)
                 .padding(.horizontal, 6)
                 .padding(.vertical, 2)
@@ -171,7 +171,7 @@ struct RecentDownloadRowView: View {
                     }
                 }()
                 Text(resText)
-                    .font(.geistMono(10, weight: .semibold))
+                    .font(.siphonMicroMonoSemibold)
                     .foregroundColor(.secondary)
                     .padding(.horizontal, 6)
                     .padding(.vertical, 2)
@@ -192,10 +192,10 @@ struct RecentDownloadRowView: View {
                 VStack(alignment: .trailing, spacing: 3) {
                     HStack(spacing: 4) {
                         Text(languageService.s("downloading"))
-                            .font(.geist(11, weight: .medium))
+                            .font(.siphonMetadataMedium)
                             .foregroundColor(SiphonTheme.statusForeground(for: .downloading, colorScheme: colorScheme))
                         Text(percentText)
-                            .font(.geistMono(11, weight: .semibold))
+                            .font(.siphonMetadataMonoSemibold)
                             .foregroundColor(.primary)
                     }
 
@@ -211,7 +211,7 @@ struct RecentDownloadRowView: View {
                 } label: {
                     Image(systemName: "stop.circle.fill")
                         .font(.system(size: 16))
-                        .foregroundColor(SiphonTheme.statusDownloading)
+                        .foregroundColor(SiphonTheme.statusDownloadingText)
                 }
                 .buttonStyle(.plain)
                 .help(languageService.s("stop_download"))
@@ -219,7 +219,7 @@ struct RecentDownloadRowView: View {
 
             case .queued:
                 Text(languageService.s("queued"))
-                    .font(.geist(11, weight: .medium))
+                    .font(.siphonMetadataMedium)
                     .foregroundColor(SiphonTheme.statusForeground(for: .queued, colorScheme: colorScheme))
                 Image(systemName: "clock.fill")
                     .font(.system(size: 13))
@@ -228,11 +228,11 @@ struct RecentDownloadRowView: View {
             case .completed:
                 HStack(spacing: 6) {
                     Text(languageService.s("completed"))
-                        .font(.geist(11, weight: .medium))
+                        .font(.siphonMetadataMedium)
                         .foregroundColor(SiphonTheme.statusForeground(for: .completed, colorScheme: colorScheme))
                     Image(systemName: "checkmark.circle.fill")
                         .font(.system(size: 14))
-                        .foregroundColor(SiphonTheme.statusCompleted)
+                        .foregroundColor(SiphonTheme.statusCompletedText)
                 }
 
                 if let fileURL = download.primaryFilePath, FileManager.default.fileExists(atPath: fileURL.path) {
@@ -250,15 +250,15 @@ struct RecentDownloadRowView: View {
 
             case .failed:
                 Text(languageService.s("failed"))
-                    .font(.geist(11, weight: .medium))
+                    .font(.siphonMetadataMedium)
                     .foregroundColor(SiphonTheme.statusForeground(for: .failed, colorScheme: colorScheme))
                 Image(systemName: "exclamationmark.circle.fill")
                     .font(.system(size: 14))
-                    .foregroundColor(SiphonTheme.statusFailed)
+                    .foregroundColor(SiphonTheme.statusFailedText)
 
             default:
                 Text(download.status.rawValue.capitalized)
-                    .font(.geist(11, weight: .medium))
+                    .font(.siphonMetadataMedium)
                     .foregroundColor(.secondary)
             }
         }

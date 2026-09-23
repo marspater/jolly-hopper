@@ -108,11 +108,11 @@ struct HeroDropURLView: View {
 
                         VStack(alignment: .leading, spacing: 1.5) {
                             Text(languageService.s("drop_url_here"))
-                                .font(.geist(15, weight: .semibold))
+                                .font(.siphonHeadline)
                                 .foregroundColor(.primary)
 
                             Text(languageService.s("ready_to_download_subtitle"))
-                                .font(.geist(11, weight: .regular))
+                                .font(.siphonMetadata)
                                 .foregroundColor(.secondary)
                                 .lineLimit(1)
                         }
@@ -128,7 +128,7 @@ struct HeroDropURLView: View {
                             Image(systemName: "slider.horizontal.3")
                                 .font(.system(size: 11, weight: .medium))
                             Text(languageService.s("hero_options"))
-                                .font(.geist(11, weight: .medium))
+                                .font(.siphonMetadataMedium)
                         }
                         .foregroundColor(.secondary)
                         .padding(.horizontal, 10)
@@ -149,7 +149,7 @@ struct HeroDropURLView: View {
                 HStack(alignment: .center, spacing: SiphonTheme.spacing10) {
                     Image(systemName: "link")
                         .font(.system(size: 13, weight: .medium))
-                        .foregroundColor(showsFieldFocus ? SiphonTheme.accent : .secondary)
+                        .foregroundColor(showsFieldFocus ? SiphonTheme.accentText : .secondary)
                         .frame(width: 16, alignment: .center)
 
                     TextField(languageService.s("hero_enter_url"), text: $inputURL)
@@ -185,7 +185,7 @@ struct HeroDropURLView: View {
                             Image(systemName: isPasting ? "checkmark" : "doc.on.clipboard")
                                 .font(.system(size: 11, weight: .semibold))
                             Text(languageService.s("paste"))
-                                .font(.geist(11, weight: .medium))
+                                .font(.siphonMetadataMedium)
                         }
                         .foregroundColor(isPasting ? SiphonTheme.statusForeground(for: .completed, colorScheme: colorScheme) : .primary)
                         .padding(.horizontal, 8)
@@ -206,7 +206,7 @@ struct HeroDropURLView: View {
                             Image(systemName: "arrow.down.circle.fill")
                                 .font(.system(size: 12, weight: .semibold))
                             Text(languageService.s("download_btn"))
-                                .font(.geist(12, weight: .semibold))
+                                .font(.siphonSecondarySemibold)
                         }
                         .foregroundColor(.white)
                         .padding(.horizontal, 14)
@@ -236,7 +236,7 @@ struct HeroDropURLView: View {
                     if isExtracting {
                         SiphonSpinner(size: 11, color: SiphonTheme.accent, lineWidth: 1.8)
                         Text(languageService.s("hero_extracting_metadata"))
-                            .font(.geist(11, weight: .medium))
+                            .font(.siphonMetadataMedium)
                             .foregroundColor(SiphonTheme.accentForeground(for: colorScheme))
                             .lineLimit(1)
                             .truncationMode(.tail)
@@ -244,13 +244,13 @@ struct HeroDropURLView: View {
                         Image(systemName: current.icon ?? (current.isSuccess ? "checkmark.circle.fill" : "exclamationmark.circle.fill"))
                             .font(.system(size: 11, weight: .semibold))
                         Text(current.message)
-                            .font(.geist(11, weight: .medium))
+                            .font(.siphonMetadataMedium)
                             .lineLimit(1)
                             .truncationMode(.tail)
                             .help(current.message)
                     } else {
                         Text(isTargeted ? languageService.s("drop_url_here") : languageService.s("or_paste_clipboard"))
-                            .font(.geist(11, weight: .regular))
+                            .font(.siphonMetadata)
                             .foregroundColor(.secondary.opacity(0.70))
                             .lineLimit(1)
                     }

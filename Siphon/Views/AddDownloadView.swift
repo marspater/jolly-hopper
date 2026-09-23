@@ -342,7 +342,7 @@ struct AddDownloadView: View {
                     HStack(spacing: 6) {
                         Image(systemName: "list.bullet.rectangle.portrait.fill")
                             .font(.siphonStandardSemibold)
-                            .foregroundColor(SiphonTheme.accent)
+                            .foregroundColor(SiphonTheme.accentText)
                         Text(languageService.s("paste_multiple_urls"))
                             .font(.siphonPrimarySemibold)
                     }
@@ -350,11 +350,11 @@ struct AddDownloadView: View {
                     let count = extractBatchUrls(from: batchUrlsText).count
                     if count > 0 {
                         Text(String(format: languageService.s("batch_url_count"), count))
-                            .font(.geistMono(11, weight: .bold))
+                            .font(.siphonMetadataMonoSemibold)
                             .padding(.horizontal, 8)
                             .padding(.vertical, 3)
                             .background(SiphonTheme.accent.opacity(0.15))
-                            .foregroundColor(SiphonTheme.accent)
+                            .foregroundColor(SiphonTheme.accentText)
                             .clipShape(Capsule())
                     }
                 }
@@ -362,7 +362,7 @@ struct AddDownloadView: View {
                 ZStack(alignment: .topLeading) {
                     if batchUrlsText.isEmpty {
                         Text("https://example.com/video1\nhttps://example.com/video2\n...")
-                            .font(.geistMono(12))
+                            .font(.siphonSecondaryMono)
                             .foregroundColor(.secondary.opacity(0.4))
                             .padding(.horizontal, SiphonTheme.spacing10)
                             .padding(.vertical, SiphonTheme.spacing10)
@@ -370,7 +370,7 @@ struct AddDownloadView: View {
                     }
                     TextEditor(text: $batchUrlsText)
                         .focused($focusedField, equals: .batch)
-                        .font(.geistMono(12))
+                        .font(.siphonSecondaryMono)
                         .scrollContentBackground(.hidden)
                         .frame(minHeight: 120, idealHeight: 150, maxHeight: 220)
                         .padding(6)
@@ -407,7 +407,7 @@ struct AddDownloadView: View {
                     } label: {
                         Text(languageService.s("clear"))
                             .font(.siphonSecondaryMedium)
-                            .foregroundColor(batchUrlsText.isEmpty ? .secondary.opacity(0.5) : SiphonTheme.statusFailed)
+                            .foregroundColor(batchUrlsText.isEmpty ? .secondary.opacity(0.5) : SiphonTheme.statusFailedText)
                             .padding(.horizontal, 12)
                             .padding(.vertical, 5)
                             .background(batchUrlsText.isEmpty ? Color.clear : SiphonTheme.statusFailed.opacity(0.08))
@@ -454,7 +454,7 @@ struct AddDownloadView: View {
                                 .foregroundColor(.secondary)
 
                             Text(languageService.s("advanced_badge"))
-                                .font(.geistMono(9, weight: .semibold))
+                                .font(.siphonMicroMonoSemibold)
                                 .padding(.horizontal, 5)
                                 .padding(.vertical, 1.5)
                                 .background(Color.primary.opacity(0.06))
@@ -465,11 +465,11 @@ struct AddDownloadView: View {
 
                             if let selected = selectedFormatId {
                                 Text("\(languageService.s("custom_stream")): \(selected)")
-                                    .font(.geistMono(11, weight: .medium))
+                                    .font(.siphonMetadataMonoMedium)
                                     .padding(.horizontal, 6)
                                     .padding(.vertical, 2)
                                     .background(SiphonTheme.accent.opacity(0.15))
-                                    .foregroundColor(SiphonTheme.accent)
+                                    .foregroundColor(SiphonTheme.accentText)
                                     .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusSmall))
                             }
                         }
@@ -492,7 +492,7 @@ struct AddDownloadView: View {
                                 } label: {
                                     HStack(spacing: 6) {
                                         Image(systemName: selectedFormatId == nil ? "checkmark.circle.fill" : "circle")
-                                            .foregroundColor(selectedFormatId == nil ? SiphonTheme.accent : .secondary)
+                                            .foregroundColor(selectedFormatId == nil ? SiphonTheme.accentText : .secondary)
                                         Text(languageService.s("auto_recommended"))
                                             .font(.siphonSecondaryMedium)
                                     }
@@ -515,10 +515,10 @@ struct AddDownloadView: View {
                                         } label: {
                                             HStack(spacing: 8) {
                                                 Image(systemName: selectedFormatId == fmt.formatId ? "checkmark.circle.fill" : "circle")
-                                                    .foregroundColor(selectedFormatId == fmt.formatId ? SiphonTheme.accent : .secondary)
+                                                    .foregroundColor(selectedFormatId == fmt.formatId ? SiphonTheme.accentText : .secondary)
 
                                                 Text(fmt.formatId)
-                                                    .font(.geistMono(11, weight: .semibold))
+                                                    .font(.siphonMetadataMonoSemibold)
                                                     .padding(.horizontal, 6)
                                                     .padding(.vertical, 2)
                                                     .background(Color.primary.opacity(0.08))
@@ -565,7 +565,7 @@ struct AddDownloadView: View {
             HStack(spacing: 6) {
                 Image(systemName: "link")
                     .font(.siphonStandardSemibold)
-                    .foregroundColor(SiphonTheme.accent)
+                    .foregroundColor(SiphonTheme.accentText)
                 Text(languageService.s("video_url"))
                     .font(.siphonPrimarySemibold)
             }
@@ -574,7 +574,7 @@ struct AddDownloadView: View {
                 HStack(spacing: 6) {
                     TextField(languageService.s("url_hint"), text: $urlInput)
                         .focused($focusedField, equals: .url)
-                        .font(.geistMono(12, relativeTo: .body))
+                        .font(.siphonSecondaryMono)
                         .textFieldStyle(.plain)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .layoutPriority(1)
@@ -693,7 +693,7 @@ struct AddDownloadView: View {
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(info.title)
-                    .font(.geist(15, weight: .semibold))
+                    .font(.siphonHeadline)
                     .lineLimit(2)
                     .truncationMode(.tail)
                     .help(info.title)
@@ -709,10 +709,10 @@ struct AddDownloadView: View {
 
                 HStack(spacing: 12) {
                     if let duration = info.durationString {
-                        Label(duration, systemImage: "clock").font(.geistMono(11)).foregroundColor(.secondary)
+                        Label(duration, systemImage: "clock").font(.siphonMetadataMono).foregroundColor(.secondary)
                     }
                     if let views = info.viewCount {
-                        Label(formatNumber(views), systemImage: "eye").font(.geistMono(11)).foregroundColor(.secondary)
+                        Label(formatNumber(views), systemImage: "eye").font(.siphonMetadataMono).foregroundColor(.secondary)
                     }
                 }
             }
@@ -771,7 +771,7 @@ struct AddDownloadView: View {
                 Button(languageService.s("deselect_all")) { selectedPlaylistIds.removeAll() }
                     .buttonStyle(.plain).foregroundColor(SiphonTheme.accentForeground(for: colorScheme))
                 Spacer()
-                Text("\(selectedPlaylistIds.count) / \(playlistItems.count)").font(.geistMono(11, weight: .semibold)).foregroundColor(.secondary)
+                Text("\(selectedPlaylistIds.count) / \(playlistItems.count)").font(.siphonMetadataMonoSemibold).foregroundColor(.secondary)
             }
 
             ScrollView {
@@ -838,7 +838,7 @@ struct AddDownloadView: View {
                 HStack(spacing: 6) {
                     Image(systemName: "slider.horizontal.3")
                         .font(.siphonStandardSemibold)
-                        .foregroundColor(SiphonTheme.accent)
+                        .foregroundColor(SiphonTheme.accentText)
                     Text(languageService.s("format_and_quality"))
                         .font(.siphonPrimarySemibold)
                 }
@@ -905,7 +905,7 @@ struct AddDownloadView: View {
                             Text(languageService.s("quick_presets"))
                         }
                         Image(systemName: "chevron.down")
-                            .font(.geist(9, weight: .semibold))
+                            .font(.siphonMicroSemibold)
                     }
                     .font(.siphonMetadataSemibold)
                     .foregroundColor(.primary)
@@ -1030,7 +1030,7 @@ struct AddDownloadView: View {
             if isVideoTab && selectedCodec == "h264" {
                 HStack(alignment: .top, spacing: 6) {
                     Image(systemName: "info.circle.fill")
-                        .foregroundColor(SiphonTheme.accent)
+                        .foregroundColor(SiphonTheme.accentText)
                         .font(.siphonMetadata)
                     Text(languageService.s("h264_preset_info"))
                         .font(.siphonMetadata)
@@ -1109,7 +1109,7 @@ struct AddDownloadView: View {
             HStack(spacing: 6) {
                 Image(systemName: "folder.fill")
                     .font(.siphonStandardSemibold)
-                    .foregroundColor(SiphonTheme.accent)
+                    .foregroundColor(SiphonTheme.accentText)
                 Text(languageService.s("save_folder"))
                     .font(.siphonPrimarySemibold)
             }
@@ -1121,7 +1121,7 @@ struct AddDownloadView: View {
                         .font(.siphonSecondary)
                         .foregroundColor(.secondary)
                     Text(saveFolder.path)
-                        .font(.geistMono(11, weight: .medium))
+                        .font(.siphonMetadataMonoMedium)
                         .lineLimit(1)
                         .truncationMode(.middle)
                         .help(saveFolder.path)
@@ -1174,7 +1174,7 @@ struct AddDownloadView: View {
                     Image(systemName: "chevron.right")
                         .rotationEffect(.degrees(showOptionalSettings ? 90 : 0))
                         .font(.siphonMetadataSemibold)
-                        .foregroundColor(SiphonTheme.accent)
+                        .foregroundColor(SiphonTheme.accentText)
                         .frame(width: 12)
 
                     Text(languageService.s("advanced_options"))
@@ -1561,7 +1561,7 @@ struct AddDownloadView: View {
 
                 if isFDAError {
                     Text(languageService.s("safari_fda_restart_hint"))
-                        .font(.geist(10))
+                        .font(.siphonMicro)
                         .foregroundColor(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }

@@ -84,11 +84,11 @@ struct MenuBarView: View {
         HStack(spacing: SiphonTheme.spacing8) {
             Image(systemName: "link")
                 .font(.system(size: 12, weight: .medium))
-                .foregroundColor(isFieldFocused && appearsActive ? SiphonTheme.accent : .secondary)
+                .foregroundColor(isFieldFocused && appearsActive ? SiphonTheme.accentText : .secondary)
 
             TextField(languageService.s("url_hint"), text: $url)
                 .textFieldStyle(.plain)
-                .font(.geist(12))
+                .font(.siphonSecondary)
                 .focused($isFieldFocused)
                 .accessibilityLabel(languageService.s("video_url"))
                 .onSubmit {
@@ -120,7 +120,7 @@ struct MenuBarView: View {
             } label: {
                 Image(systemName: isPasted ? "checkmark" : "doc.on.clipboard")
                     .font(.system(size: 12))
-                    .foregroundColor(isPasted ? SiphonTheme.statusCompleted : .secondary)
+                    .foregroundColor(isPasted ? SiphonTheme.statusCompletedText : .secondary)
             }
             .buttonStyle(.plain)
             .help(languageService.s("paste_from_clipboard"))
@@ -149,7 +149,7 @@ struct MenuBarView: View {
                     }
                 } label: {
                     Text(languageService.s("video"))
-                        .font(.geist(11, weight: .semibold))
+                        .font(.siphonMetadataSemibold)
                         .foregroundColor(selectedType == "video" ? .white : .secondary)
                         .padding(.horizontal, 10)
                         .padding(.vertical, 4)
@@ -172,7 +172,7 @@ struct MenuBarView: View {
                     }
                 } label: {
                     Text(languageService.s("audio"))
-                        .font(.geist(11, weight: .semibold))
+                        .font(.siphonMetadataSemibold)
                         .foregroundColor(selectedType == "audio" ? .white : .secondary)
                         .padding(.horizontal, 10)
                         .padding(.vertical, 4)
@@ -238,10 +238,10 @@ struct MenuBarView: View {
                 Image(systemName: "arrow.down.circle.fill")
                     .font(.system(size: 13, weight: .semibold))
                 Text(languageService.s("download_btn"))
-                    .font(.geist(12, weight: .bold))
+                    .font(.siphonSecondarySemibold)
                 Spacer()
                 Text("⏎")
-                    .font(.geistMono(11, weight: .medium))
+                    .font(.siphonMetadataMonoMedium)
                     .opacity(url.isEmpty ? 0.4 : 0.8)
             }
             .foregroundColor(url.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? .secondary.opacity(0.6) : .white)
@@ -271,21 +271,21 @@ struct MenuBarView: View {
         VStack(alignment: .leading, spacing: 5) {
             HStack {
                 Text(languageService.s("menubar_active_downloads"))
-                    .font(.geist(10, weight: .semibold))
+                    .font(.siphonMicroSemibold)
                     .foregroundColor(.secondary)
                 Spacer()
                 Text("\(downloadManager.downloadingDownloads.count)")
-                    .font(.geistMono(10, weight: .bold))
-                    .foregroundColor(SiphonTheme.downloading)
+                    .font(.siphonMicroMonoSemibold)
+                    .foregroundColor(SiphonTheme.statusDownloadingText)
             }
             .padding(.horizontal, 2)
 
             ForEach(downloadManager.downloadingDownloads.prefix(3)) { download in
                 HStack(spacing: 7) {
-                    SiphonSpinner(size: 9, color: SiphonTheme.downloading, lineWidth: 1.6)
+                    SiphonSpinner(size: 9, color: SiphonTheme.statusDownloadingText, lineWidth: 1.6)
 
                     Text(download.displayTitle)
-                        .font(.geist(11, weight: .medium))
+                        .font(.siphonMetadataMedium)
                         .foregroundColor(.primary)
                         .lineLimit(1)
                         .truncationMode(.middle)
@@ -293,7 +293,7 @@ struct MenuBarView: View {
                     Spacer(minLength: 4)
 
                     Text(download.displayProgress)
-                        .font(.geistMono(10, weight: .medium))
+                        .font(.siphonMicroMonoMedium)
                         .foregroundColor(.secondary)
                         .lineLimit(1)
                 }
@@ -407,7 +407,7 @@ struct MenuBarView: View {
                     Image(systemName: "macwindow")
                         .font(.system(size: 11, weight: .semibold))
                     Text(languageService.s("show_main_window"))
-                        .font(.geist(11, weight: .medium))
+                        .font(.siphonMetadataMedium)
                         .lineLimit(1)
                 }
                 .lineLimit(1)
@@ -436,19 +436,19 @@ struct MenuBarView: View {
                     Image(systemName: "power")
                         .font(.system(size: 11, weight: .bold))
                     Text(languageService.s("quit"))
-                        .font(.geist(11, weight: .semibold))
+                        .font(.siphonMetadataSemibold)
                         .lineLimit(1)
                 }
                 .lineLimit(1)
                 .minimumScaleFactor(0.85)
-                .foregroundColor(SiphonTheme.failed)
+                .foregroundColor(SiphonTheme.statusFailedText)
                 .padding(.horizontal, SiphonTheme.spacing10)
                 .frame(height: 28)
-                .background(SiphonTheme.failed.opacity(0.12))
+                .background(SiphonTheme.statusFailed.opacity(0.12))
                 .clipShape(Capsule())
                 .overlay(
                     Capsule()
-                        .stroke(SiphonTheme.failed.opacity(0.25), lineWidth: 1)
+                        .stroke(SiphonTheme.statusFailed.opacity(0.25), lineWidth: 1)
                 )
             }
             .buttonStyle(.bouncy)
