@@ -1022,8 +1022,8 @@ class YtdlpService: ObservableObject {
                         acodec: "aac",
                         tbr: nil,
                         filesize: src.size > 0 ? src.size : nil,
-                        formatNote: bestCamMedia.encryptedFilename,
-                        manifestUrl: src.url
+                        formatNote: src.path.components(separatedBy: "/").last,
+                        manifestUrl: "\(src.url)/\(src.path)"
                     )
                 }
                 return MediaInfo(
@@ -1514,6 +1514,7 @@ public struct DownloadResult: Sendable {
                 customResolvedTitle = mediaInfo?.title
                 customEmbedURL = mediaInfo?.webpageUrl ?? url
                 customThumbnailURL = mediaInfo?.thumbnail
+                bestCamDecryptionKey = URL(string: streamURL)?.lastPathComponent
             } else if let bestCamMedia = await resolveBestCamMediaInfo(url: url, rawCookies: options.rawCookies, requestedFormat: options.selectedFormatId) {
                 targetURL = bestCamMedia.streamURL
                 customResolvedTitle = bestCamMedia.title
@@ -5464,8 +5465,8 @@ public struct DownloadResult: Sendable {
             if let match = regex.firstMatch(in: html, options: [], range: htmlRange),
                match.numberOfRanges > 1 {
                 let rawTitle = nsHtml.substring(with: match.range(at: 1))
-                    .replacingOccurrences(of: "(?i)\\s*(\\||&#124;)\\s*pussyspace.*", with: "", options: .regularExpression)
-                    .replacingOccurrences(of: "(?i)\\s*(straight|hd|sex|video|\\(\\d+\\s*min\\)).*", with: "", options: .regularExpression)
+                    .replacingOccurrences(of: "(?i)\\s*(\\||&#124;)\\s*pussyspace.*$", with: "", options: .regularExpression)
+                    .replacingOccurrences(of: "(?i)(\\s+\\b(hd|straight|sex|video)\\b|\\s*\\(\\d+\\s*min\\))+\\s*$", with: "", options: .regularExpression)
                     .trimmingCharacters(in: .whitespacesAndNewlines)
                     .decodingHTMLEntities()
                 if !rawTitle.isEmpty && rawTitle.lowercased() != "pussyspace" && rawTitle.lowercased() != "pussyspace.com" {
