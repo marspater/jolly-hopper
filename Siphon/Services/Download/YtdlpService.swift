@@ -5247,25 +5247,98 @@ public struct DownloadResult: Sendable {
         return html
     }
 
+    nonisolated private static func firstRegexCapture(
+        in text: String,
+        regexes: [NSRegularExpression],
+        transform: (String) -> String?
+    ) -> String? {
+        let nsText = text as NSString
+        let range = NSRange(location: 0, length: nsText.length)
+        for regex in regexes {
+            if let match = regex.firstMatch(in: text, options: [], range: range),
+               match.numberOfRanges > 1,
+               let value = transform(nsText.substring(with: match.range(at: 1))) {
+                return value
+            }
+        }
+        return nil
+    }
+
+    nonisolated private static func protectedThumbnail(
+        in text: String,
+        regexes: [NSRegularExpression]
+    ) -> String? {
+        firstRegexCapture(in: text, regexes: regexes) { raw in
+            let candidate = raw.replacingOccurrences(of: "\\/", with: "/")
+            return candidate.hasPrefix("http") ? candidate : nil
+        }
+    }
+
+    nonisolated private static func protectedDuration(
+        in text: String,
+        regexes: [NSRegularExpression]
+    ) -> Double? {
+        firstRegexCapture(in: text, regexes: regexes) { raw in
+            guard let value = Double(raw), value > 0 else { return nil }
+            return raw
+        }.flatMap(Double.init)
+    }
+
+    private func protectedPageContext(
+        url: String,
+        rawCookies: String?,
+        fallbackHost: String
+    ) async -> (targetURL: String, pageURL: URL, html: String)? {
+        let targetURL = normalizeURLForYtdlp(url)
+        guard let pageURL = URL(string: targetURL) else { return nil }
+        let html = await fetchProtectedPageHTML(
+            pageURL: pageURL,
+            targetURL: targetURL,
+            rawCookies: rawCookies,
+            fallbackHost: fallbackHost
+        )
+        guard !html.isEmpty else { return nil }
+        return (targetURL, pageURL, html)
+    }
+
     // MARK: - Starwank Extractor
 
-    struct StarwankSource: Equatable, Sendable {
+    struct ProtectedSiteSource: Equatable, Sendable {
         let label: String
         let url: String
         let height: Int
     }
 
-    struct StarwankExtractedMedia: Equatable, Sendable {
+    struct ProtectedSiteExtractedMedia: Equatable, Sendable {
         let streamURL: String
         let embedURL: String
         let title: String
         let thumbnailURL: String?
         let duration: Double?
         let quality: String?
-        let allSources: [StarwankSource]
+        let allSources: [ProtectedSiteSource]
     }
 
-    nonisolated static func isStarwankURL(_ urlOrHost: String) -> Bool {
+    typealias StarwankSource = ProtectedSiteSource
+    typealias StarwankExtractedMedia = ProtectedSiteExtractedMedia
+
+    nonisolated private static func selectProtectedSiteSource(
+        from sources: [ProtectedSiteSource],
+        requestedFormat: String?
+    ) -> ProtectedSiteSource {
+        if let requested = requestedFormat?.lowercased().trimmingCharacters(in: .whitespacesAndNewlines),
+           let matched = sources.first(where: {
+               $0.label.lowercased() == requested ||
+               "\($0.height)p" == requested ||
+               "\($0.height)" == requested ||
+               $0.label.lowercased().contains(requested)
+           }) {
+            return matched
+        }
+        return sources[0]
+    }
+
+    nonisolated static func isStarwankURL    nonisolated static func isStarwankURL(_ urlOrHost: String) -> Bool {
         let host = (URL(string: urlOrHost)?.host ?? urlOrHost).lowercased()
         return host == "starwank.com" || host.hasSuffix(".starwank.com")
     }
@@ -5278,51 +5351,23 @@ public struct DownloadResult: Sendable {
         let nsHtml = html as NSString
         let htmlRange = NSRange(location: 0, length: nsHtml.length)
 
-        // Title
-        var title = "StarWank Video"
-        for regex in starwankTitleRegexes {
-            if let match = regex.firstMatch(in: html, options: [], range: htmlRange),
-               match.numberOfRanges > 1 {
-                let rawTitle = nsHtml.substring(with: match.range(at: 1))
-                    .replacingOccurrences(of: "(?i)\\s*-\\s*starwank(\\.com)?.*", with: "", options: .regularExpression)
-                    .replacingOccurrences(of: "(?i)^starwank(\\.com)?\\s*-\\s*", with: "", options: .regularExpression)
-                    .trimmingCharacters(in: .whitespacesAndNewlines)
-                    .decodingHTMLEntities()
-                if !rawTitle.isEmpty && rawTitle.lowercased() != "starwank" && rawTitle.lowercased() != "starwank.com" {
-                    title = rawTitle
-                    break
-                }
+        let title = Self.firstRegexCapture(in: html, regexes: starwankTitleRegexes) { raw in
+            let cleaned = raw
+                .replacingOccurrences(of: "(?i)\\s*-\\s*starwank(\\.com)?.*", with: "", options: .regularExpression)
+                .replacingOccurrences(of: "(?i)^starwank(\\.com)?\\s*-\\s*", with: "", options: .regularExpression)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .decodingHTMLEntities()
+            guard !cleaned.isEmpty,
+                  cleaned.lowercased() != "starwank",
+                  cleaned.lowercased() != "starwank.com" else {
+                return nil
             }
-        }
+            return cleaned
+        } ?? "StarWank Video"
+        let thumbnailURL = Self.protectedThumbnail(in: html, regexes: starwankThumbRegexes)
+        let duration = Self.protectedDuration(in: html, regexes: starwankDurationRegexes)
 
-        // Thumbnail
-        var thumbnailURL: String? = nil
-        for regex in starwankThumbRegexes {
-            if let match = regex.firstMatch(in: html, options: [], range: htmlRange),
-               match.numberOfRanges > 1 {
-                let candidate = nsHtml.substring(with: match.range(at: 1))
-                    .replacingOccurrences(of: "\\/", with: "/")
-                if candidate.hasPrefix("http") {
-                    thumbnailURL = candidate
-                    break
-                }
-            }
-        }
-
-        // Duration
-        var duration: Double? = nil
-        for regex in starwankDurationRegexes {
-            if let match = regex.firstMatch(in: html, options: [], range: htmlRange),
-               match.numberOfRanges > 1 {
-                let durStr = nsHtml.substring(with: match.range(at: 1))
-                if let d = Double(durStr), d > 0 {
-                    duration = d
-                    break
-                }
-            }
-        }
-
-        // Embed URL
+        // Embed URL        // Embed URL
         var embedURL = targetUrl
         let targetAndHtml = targetUrl + "\n" + html
         let targetAndHtmlNs = targetAndHtml as NSString
@@ -5408,21 +5453,12 @@ public struct DownloadResult: Sendable {
         // Sort sources by height descending (e.g. 720p, then 360p)
         parsedSources.sort { $0.height > $1.height }
 
-        // Choose requested format or fallback to highest
-        let chosenSource: StarwankSource
-        if let reqFmt = requestedFormat?.lowercased().trimmingCharacters(in: .whitespacesAndNewlines),
-           let matched = parsedSources.first(where: {
-               $0.label.lowercased() == reqFmt ||
-               "\($0.height)p" == reqFmt ||
-               "\($0.height)" == reqFmt ||
-               $0.label.lowercased().contains(reqFmt)
-           }) {
-            chosenSource = matched
-        } else {
-            chosenSource = parsedSources[0]
-        }
+        let chosenSource = Self.selectProtectedSiteSource(
+            from: parsedSources,
+            requestedFormat: requestedFormat
+        )
 
-        return StarwankExtractedMedia(
+        return StarwankExtractedMedia(        return StarwankExtractedMedia(
             streamURL: chosenSource.url,
             embedURL: embedURL,
             title: title,
@@ -5434,17 +5470,13 @@ public struct DownloadResult: Sendable {
     }
 
     func resolveStarwankMediaInfo(url: String, rawCookies: String? = nil, requestedFormat: String? = nil) async -> StarwankExtractedMedia? {
-        let targetUrl = normalizeURLForYtdlp(url)
-        guard let pageURL = URL(string: targetUrl) else { return nil }
-
-        let html = await fetchProtectedPageHTML(
-            pageURL: pageURL,
-            targetURL: targetUrl,
+        guard let (targetUrl, pageURL, html) = await protectedPageContext(
+            url: url,
             rawCookies: rawCookies,
             fallbackHost: "starwank.com"
-        )
-
-        guard !html.isEmpty else { return nil }
+        ) else {
+            return nil
+        }
 
         // If this was an embed page and it points to empty_referrer_redirect, follow it to get multi-quality options
         if pageURL.pathComponents.contains("embed"),
@@ -5463,23 +5495,10 @@ public struct DownloadResult: Sendable {
 
     // MARK: - Pussyspace Extractor
 
-    struct PussyspaceSource: Equatable, Sendable {
-        let label: String
-        let url: String
-        let height: Int
-    }
+    typealias PussyspaceSource = ProtectedSiteSource
+    typealias PussyspaceExtractedMedia = ProtectedSiteExtractedMedia
 
-    struct PussyspaceExtractedMedia: Equatable, Sendable {
-        let streamURL: String
-        let embedURL: String
-        let title: String
-        let thumbnailURL: String?
-        let duration: Double?
-        let quality: String?
-        let allSources: [PussyspaceSource]
-    }
-
-    nonisolated static func isPussyspaceURL(_ urlOrHost: String) -> Bool {
+    nonisolated static func isPussyspaceURL    nonisolated static func isPussyspaceURL(_ urlOrHost: String) -> Bool {
         let host = (URL(string: urlOrHost)?.host ?? urlOrHost).lowercased()
         return host == "pussyspace.com" || host.hasSuffix(".pussyspace.com")
     }
@@ -5492,51 +5511,23 @@ public struct DownloadResult: Sendable {
         let nsHtml = html as NSString
         let htmlRange = NSRange(location: 0, length: nsHtml.length)
 
-        // Title
-        var title = "PussySpace Video"
-        for regex in pussyspaceTitleRegexes {
-            if let match = regex.firstMatch(in: html, options: [], range: htmlRange),
-               match.numberOfRanges > 1 {
-                let rawTitle = nsHtml.substring(with: match.range(at: 1))
-                    .replacingOccurrences(of: "(?i)\\s*(\\||&#124;)\\s*pussyspace.*$", with: "", options: .regularExpression)
-                    .replacingOccurrences(of: "(?i)(\\s+\\b(hd|straight|sex|video)\\b|\\s*\\(\\d+\\s*min\\))+\\s*$", with: "", options: .regularExpression)
-                    .trimmingCharacters(in: .whitespacesAndNewlines)
-                    .decodingHTMLEntities()
-                if !rawTitle.isEmpty && rawTitle.lowercased() != "pussyspace" && rawTitle.lowercased() != "pussyspace.com" {
-                    title = rawTitle
-                    break
-                }
+        let title = Self.firstRegexCapture(in: html, regexes: pussyspaceTitleRegexes) { raw in
+            let cleaned = raw
+                .replacingOccurrences(of: "(?i)\\s*(\\||&#124;)\\s*pussyspace.*$", with: "", options: .regularExpression)
+                .replacingOccurrences(of: "(?i)(\\s+\\b(hd|straight|sex|video)\\b|\\s*\\(\\d+\\s*min\\))+\\s*$", with: "", options: .regularExpression)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .decodingHTMLEntities()
+            guard !cleaned.isEmpty,
+                  cleaned.lowercased() != "pussyspace",
+                  cleaned.lowercased() != "pussyspace.com" else {
+                return nil
             }
-        }
+            return cleaned
+        } ?? "PussySpace Video"
+        var thumbnailURL = Self.protectedThumbnail(in: html, regexes: pussyspaceThumbRegexes)
+        let duration = Self.protectedDuration(in: html, regexes: pussyspaceDurationRegexes)
 
-        // Thumbnail
-        var thumbnailURL: String? = nil
-        for regex in pussyspaceThumbRegexes {
-            if let match = regex.firstMatch(in: html, options: [], range: htmlRange),
-               match.numberOfRanges > 1 {
-                let candidate = nsHtml.substring(with: match.range(at: 1))
-                    .replacingOccurrences(of: "\\/", with: "/")
-                if candidate.hasPrefix("http") {
-                    thumbnailURL = candidate
-                    break
-                }
-            }
-        }
-
-        // Duration
-        var duration: Double? = nil
-        for regex in pussyspaceDurationRegexes {
-            if let match = regex.firstMatch(in: html, options: [], range: htmlRange),
-               match.numberOfRanges > 1 {
-                let durStr = nsHtml.substring(with: match.range(at: 1))
-                if let d = Double(durStr), d > 0 {
-                    duration = d
-                    break
-                }
-            }
-        }
-
-        // Parse sources from playerHtml or html
+        // Parse sources from playerHtml or html        // Parse sources from playerHtml or html
         let streamContent = playerHtml ?? html
         var parsedSources: [PussyspaceSource] = []
         var seenUrls = Set<String>()
@@ -5544,21 +5535,11 @@ public struct DownloadResult: Sendable {
         let streamNs = streamContent as NSString
         let streamRange = NSRange(location: 0, length: streamNs.length)
 
-        // Try extracting thumbnail from player if not found yet
         if thumbnailURL == nil {
-            for regex in pussyspaceThumbRegexes {
-                if let match = regex.firstMatch(in: streamContent, options: [], range: streamRange),
-                   match.numberOfRanges > 1 {
-                    let candidate = streamNs.substring(with: match.range(at: 1)).replacingOccurrences(of: "\\/", with: "/")
-                    if candidate.hasPrefix("http") {
-                        thumbnailURL = candidate
-                        break
-                    }
-                }
-            }
+            thumbnailURL = Self.protectedThumbnail(in: streamContent, regexes: pussyspaceThumbRegexes)
         }
 
-        // Pattern 1: Playerjs file:"..." with [720p]url,[480p]url or url.m3u8 or url.mp4
+        // Pattern 1: Playerjs        // Pattern 1: Playerjs file:"..." with [720p]url,[480p]url or url.m3u8 or url.mp4
         for regex in pussyspaceFileRegexes {
             if let match = regex.firstMatch(in: streamContent, options: [], range: streamRange),
                match.numberOfRanges > 1 {
@@ -5620,20 +5601,12 @@ public struct DownloadResult: Sendable {
 
         parsedSources.sort { $0.height > $1.height }
 
-        let chosenSource: PussyspaceSource
-        if let reqFmt = requestedFormat?.lowercased().trimmingCharacters(in: .whitespacesAndNewlines),
-           let matched = parsedSources.first(where: {
-               $0.label.lowercased() == reqFmt ||
-               "\($0.height)p" == reqFmt ||
-               "\($0.height)" == reqFmt ||
-               $0.label.lowercased().contains(reqFmt)
-           }) {
-            chosenSource = matched
-        } else {
-            chosenSource = parsedSources[0]
-        }
+        let chosenSource = Self.selectProtectedSiteSource(
+            from: parsedSources,
+            requestedFormat: requestedFormat
+        )
 
-        return PussyspaceExtractedMedia(
+        return PussyspaceExtractedMedia(        return PussyspaceExtractedMedia(
             streamURL: chosenSource.url,
             embedURL: targetUrl,
             title: title,
@@ -5645,17 +5618,13 @@ public struct DownloadResult: Sendable {
     }
 
     func resolvePussyspaceMediaInfo(url: String, rawCookies: String? = nil, requestedFormat: String? = nil) async -> PussyspaceExtractedMedia? {
-        let targetUrl = normalizeURLForYtdlp(url)
-        guard let pageURL = URL(string: targetUrl) else { return nil }
-
-        let html = await fetchProtectedPageHTML(
-            pageURL: pageURL,
-            targetURL: targetUrl,
+        guard let (targetUrl, pageURL, html) = await protectedPageContext(
+            url: url,
             rawCookies: rawCookies,
             fallbackHost: "www.pussyspace.com"
-        )
-
-        guard !html.isEmpty else { return nil }
+        ) else {
+            return nil
+        }
 
         // 3. Extract player endpoint token (type and id)
         var playerHtml: String? = nil
