@@ -60,13 +60,13 @@ struct DownloadDiagnosticsView: View {
                             .resizable()
                             .aspectRatio(contentMode: .fill)
                             .frame(width: 54, height: 36)
-                            .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusSmall))
+                            .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusSmall, style: .continuous))
                             .clipped()
                     } else {
                         Rectangle()
                             .fill(Color.primary.opacity(0.06))
                             .frame(width: 54, height: 36)
-                            .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusSmall))
+                            .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusSmall, style: .continuous))
                     }
                 }
             } else {
@@ -223,9 +223,9 @@ struct DownloadDiagnosticsView: View {
                         .padding(10)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .background(Color.primary.opacity(0.04))
-                        .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusSmall))
+                        .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusSmall, style: .continuous))
                         .overlay(
-                            RoundedRectangle(cornerRadius: SiphonTheme.radiusSmall)
+                            RoundedRectangle(cornerRadius: SiphonTheme.radiusSmall, style: .continuous)
                                 .stroke(Color.primary.opacity(0.08), lineWidth: 1)
                         )
                 }
@@ -269,9 +269,9 @@ struct DownloadDiagnosticsView: View {
                 }
                 .frame(minHeight: 180, maxHeight: 240)
                 .background(Color.primary.opacity(0.03))
-                .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusSmall))
+                .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusSmall, style: .continuous))
                 .overlay(
-                    RoundedRectangle(cornerRadius: SiphonTheme.radiusSmall)
+                    RoundedRectangle(cornerRadius: SiphonTheme.radiusSmall, style: .continuous)
                         .stroke(Color.primary.opacity(0.08), lineWidth: 1)
                 )
             }
@@ -349,7 +349,7 @@ struct DownloadDiagnosticsView: View {
                 content()
             }
             .background(SiphonTheme.cardBackground(cornerRadius: SiphonTheme.radiusCard))
-            .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusCard))
+            .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusCard, style: .continuous))
             .overlay(SiphonTheme.cardBorder(cornerRadius: SiphonTheme.radiusCard))
         }
     }

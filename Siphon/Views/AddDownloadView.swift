@@ -7,12 +7,7 @@ struct AddDownloadView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.appearsActive) private var appearsActive
     @Environment(\.colorScheme) private var colorScheme
-    @Environment(\.siphonRenderingCapabilities) private var renderingCapabilities
     @FocusState private var focusedField: InputField?
-
-    private var showBorders: Bool {
-        renderingCapabilities.increaseContrast
-    }
 
     private enum InputField: Hashable {
         case url, batch, filename, arguments
@@ -78,8 +73,6 @@ struct AddDownloadView: View {
     @State private var showStreamInspector: Bool = false
     @State private var fetchTask: Task<Void, Never>? = nil
     @State private var playlistTask: Task<Void, Never>? = nil
-    @Namespace private var modeNamespace
-    @Namespace private var formatNamespace
 
     enum InputMode: String, CaseIterable, Identifiable {
         case single = "single"
@@ -276,60 +269,12 @@ struct AddDownloadView: View {
 
             Spacer()
 
-            HStack(spacing: SiphonTheme.spacing2) {
-                Button {
-                    withAnimation(SiphonAnimation.fluidSpring) {
-                        inputMode = .single
-                    }
-                } label: {
-                    Text(languageService.s("single_mode"))
-                        .font(.siphonMetadataSemibold)
-                        .foregroundColor(inputMode == .single ? .white : .secondary)
-                        .padding(.horizontal, SiphonTheme.spacing12)
-                        .padding(.vertical, 4)
-                        .background {
-                            if inputMode == .single {
-                                Capsule()
-                                    .fill(SiphonTheme.primaryGradient)
-                                    .shadow(color: SiphonTheme.accent.opacity(0.35), radius: 4, y: 1)
-                                    .matchedGeometryEffect(id: "activeModeBubble", in: modeNamespace)
-                            }
-                        }
-                }
-                .buttonStyle(.bouncy(scale: 0.97, hover: 1.015))
-                .help(languageService.s("single_mode"))
-                .accessibilityLabel(languageService.s("single_mode"))
-                .accessibilityAddTraits(inputMode == .single ? [.isButton, .isSelected] : [.isButton])
-
-                Button {
-                    withAnimation(SiphonAnimation.fluidSpring) {
-                        inputMode = .batch
-                    }
-                } label: {
-                    Text(languageService.s("batch_import"))
-                        .font(.siphonMetadataSemibold)
-                        .foregroundColor(inputMode == .batch ? .white : .secondary)
-                        .padding(.horizontal, SiphonTheme.spacing12)
-                        .padding(.vertical, 4)
-                        .background {
-                            if inputMode == .batch {
-                                Capsule()
-                                    .fill(SiphonTheme.primaryGradient)
-                                    .shadow(color: SiphonTheme.accent.opacity(0.35), radius: 4, y: 1)
-                                    .matchedGeometryEffect(id: "activeModeBubble", in: modeNamespace)
-                            }
-                        }
-                }
-                .buttonStyle(.bouncy(scale: 0.97, hover: 1.015))
-                .help(languageService.s("batch_import"))
-                .accessibilityLabel(languageService.s("batch_import"))
-                .accessibilityAddTraits(inputMode == .batch ? [.isButton, .isSelected] : [.isButton])
-            }
-            .padding(SiphonTheme.spacing2)
-            .background(SiphonTheme.pillBackground(isSelected: false))
-            .clipShape(Capsule())
-            .overlay(
-                SiphonTheme.pillBorder(isSelected: false, showBorders: showBorders)
+            SiphonSegmentedPicker(
+                selection: $inputMode,
+                options: [
+                    (.single, languageService.s("single_mode")),
+                    (.batch, languageService.s("batch_import"))
+                ]
             )
         }
         .padding()
@@ -353,7 +298,7 @@ struct AddDownloadView: View {
                             .font(.siphonMetadataMonoSemibold)
                             .padding(.horizontal, 8)
                             .padding(.vertical, 3)
-                            .background(SiphonTheme.accent.opacity(0.15))
+                            .background(SiphonTheme.accent.opacity(SiphonTheme.Opacity.tintBadge))
                             .foregroundColor(SiphonTheme.accentText)
                             .clipShape(Capsule())
                     }
@@ -363,7 +308,7 @@ struct AddDownloadView: View {
                     if batchUrlsText.isEmpty {
                         Text("https://example.com/video1\nhttps://example.com/video2\n...")
                             .font(.siphonSecondaryMono)
-                            .foregroundColor(.secondary.opacity(0.4))
+                            .foregroundColor(Color(nsColor: .placeholderTextColor))
                             .padding(.horizontal, SiphonTheme.spacing10)
                             .padding(.vertical, SiphonTheme.spacing10)
                             .allowsHitTesting(false)
@@ -395,7 +340,7 @@ struct AddDownloadView: View {
                         .padding(.horizontal, 12)
                         .padding(.vertical, 5)
                         .background(SiphonTheme.controlBackground(cornerRadius: SiphonTheme.radiusControl))
-                        .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusControl))
+                        .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusControl, style: .continuous))
                         .overlay(
                             SiphonTheme.controlBorder(cornerRadius: SiphonTheme.radiusControl)
                         )
@@ -411,7 +356,7 @@ struct AddDownloadView: View {
                             .padding(.horizontal, 12)
                             .padding(.vertical, 5)
                             .background(batchUrlsText.isEmpty ? Color.clear : SiphonTheme.statusFailed.opacity(0.08))
-                            .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusControl))
+                            .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusControl, style: .continuous))
                     }
                     .buttonStyle(.plain)
                     .disabled(batchUrlsText.isEmpty)
@@ -423,7 +368,7 @@ struct AddDownloadView: View {
             .background(
                 SiphonTheme.cardBackground(cornerRadius: SiphonTheme.radiusCard)
             )
-            .cornerRadius(SiphonTheme.radiusCard)
+            .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusCard, style: .continuous))
             .overlay(
                 SiphonTheme.cardBorder(cornerRadius: SiphonTheme.radiusCard)
             )
@@ -453,34 +398,22 @@ struct AddDownloadView: View {
                                 .font(.siphonSecondaryMedium)
                                 .foregroundColor(.secondary)
 
-                            Text(languageService.s("advanced_badge"))
-                                .font(.siphonMicroMonoSemibold)
-                                .padding(.horizontal, 5)
-                                .padding(.vertical, 1.5)
-                                .background(Color.primary.opacity(0.06))
-                                .foregroundColor(.secondary)
-                                .clipShape(Capsule())
+                            SiphonTagBadge(text: languageService.s("advanced_badge"), isMonospaced: true)
 
                             Spacer()
 
                             if let selected = selectedFormatId {
-                                Text("\(languageService.s("custom_stream")): \(selected)")
-                                    .font(.siphonMetadataMonoMedium)
-                                    .padding(.horizontal, 6)
-                                    .padding(.vertical, 2)
-                                    .background(SiphonTheme.accent.opacity(0.15))
-                                    .foregroundColor(SiphonTheme.accentText)
-                                    .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusSmall))
+                                SiphonTagBadge(
+                                    text: "\(languageService.s("custom_stream")): \(selected)",
+                                    tintColor: SiphonTheme.accentText,
+                                    isMonospaced: true
+                                )
                             }
                         }
                         .padding(.horizontal, 12)
                         .padding(.vertical, 8)
-                        .background(Color.primary.opacity(0.03))
-                        .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusControl))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: SiphonTheme.radiusControl)
-                                .stroke(Color.primary.opacity(0.06), lineWidth: 1)
-                        )
+                        .background(SiphonTheme.fieldBackground())
+                        .overlay(SiphonTheme.fieldBorder())
                     }
                     .buttonStyle(.plain)
 
@@ -498,8 +431,8 @@ struct AddDownloadView: View {
                                     }
                                     .padding(.horizontal, SiphonTheme.spacing10)
                                     .padding(.vertical, 5)
-                                    .background(selectedFormatId == nil ? SiphonTheme.accent.opacity(0.15) : Color.primary.opacity(0.08))
-                                    .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusSmall))
+                                    .background(selectedFormatId == nil ? SiphonTheme.accent.opacity(SiphonTheme.Opacity.tintBadge) : Color.primary.opacity(SiphonTheme.Opacity.fillGhostHover))
+                                    .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusSmall, style: .continuous))
                                 }
                                 .buttonStyle(.plain)
 
@@ -517,12 +450,7 @@ struct AddDownloadView: View {
                                                 Image(systemName: selectedFormatId == fmt.formatId ? "checkmark.circle.fill" : "circle")
                                                     .foregroundColor(selectedFormatId == fmt.formatId ? SiphonTheme.accentText : .secondary)
 
-                                                Text(fmt.formatId)
-                                                    .font(.siphonMetadataMonoSemibold)
-                                                    .padding(.horizontal, 6)
-                                                    .padding(.vertical, 2)
-                                                    .background(Color.primary.opacity(0.08))
-                                                    .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusSmall))
+                                                SiphonTagBadge(text: fmt.formatId, tintColor: .primary, isMonospaced: true)
 
                                                 Text(fmt.ext.uppercased())
                                                     .font(.siphonMetadataSemibold)
@@ -537,8 +465,8 @@ struct AddDownloadView: View {
                                             }
                                             .padding(.horizontal, SiphonTheme.spacing10)
                                             .padding(.vertical, 6)
-                                            .background(selectedFormatId == fmt.formatId ? SiphonTheme.accent.opacity(0.12) : Color.clear)
-                                            .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusSmall))
+                                            .background(selectedFormatId == fmt.formatId ? SiphonTheme.accent.opacity(SiphonTheme.Opacity.tintBadge) : Color.clear)
+                                            .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusSmall, style: .continuous))
                                         }
                                         .buttonStyle(.plain)
                                     }
@@ -547,12 +475,8 @@ struct AddDownloadView: View {
                             .frame(maxHeight: 180)
                         }
                         .padding(10)
-                        .background(Color.primary.opacity(0.02))
-                        .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusControl))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: SiphonTheme.radiusControl)
-                                .stroke(Color.primary.opacity(0.06), lineWidth: 1)
-                        )
+                        .background(SiphonTheme.fieldBackground())
+                        .overlay(SiphonTheme.fieldBorder())
                     }
                 }
             }
@@ -624,7 +548,7 @@ struct AddDownloadView: View {
                     .padding(.horizontal, SiphonTheme.spacing10)
                     .padding(.vertical, 7)
                     .background(SiphonTheme.controlBackground(cornerRadius: SiphonTheme.radiusControl))
-                    .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusControl))
+                    .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusControl, style: .continuous))
                     .overlay(
                         SiphonTheme.controlBorder(cornerRadius: SiphonTheme.radiusControl)
                     )
@@ -638,7 +562,7 @@ struct AddDownloadView: View {
                 } label: {
                     HStack(spacing: SiphonTheme.spacing6) {
                         if isLoading {
-                            SiphonSpinner(size: 12, color: .white, lineWidth: 2)
+                            SiphonSpinner(size: 12, color: .secondary, lineWidth: 2)
                             Text(languageService.s("fetching"))
                                 .font(.siphonSecondarySemibold)
                         } else {
@@ -649,23 +573,9 @@ struct AddDownloadView: View {
                         }
                     }
                     .frame(minWidth: 74, alignment: .center)
-                    .foregroundColor(urlInput.isEmpty ? .secondary.opacity(0.5) : .white)
-                    .padding(.horizontal, SiphonTheme.spacing12)
-                    .padding(.vertical, 7)
-                    .background(
-                        urlInput.isEmpty ?
-                        LinearGradient(colors: [Color.primary.opacity(0.06), Color.primary.opacity(0.04)], startPoint: .top, endPoint: .bottom) :
-                        SiphonTheme.primaryGradient
-                    )
-                    .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusControl))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: SiphonTheme.radiusControl)
-                            .stroke(Color.primary.opacity(urlInput.isEmpty ? 0.05 : 0.20), lineWidth: 1)
-                    )
                 }
-                .buttonStyle(.bouncy(scale: 0.97, hover: 1.015))
+                .buttonStyle(.siphonPrimary)
                 .disabled(urlInput.isEmpty || isLoading)
-                .shadow(color: urlInput.isEmpty ? .clear : SiphonTheme.accent.opacity(0.35), radius: 4, y: 1)
                 .help(languageService.s("fetch_info"))
                 .accessibilityLabel(languageService.s("fetch_info"))
             }
@@ -674,7 +584,7 @@ struct AddDownloadView: View {
         .background(
             SiphonTheme.cardBackground(cornerRadius: SiphonTheme.radiusCard)
         )
-        .cornerRadius(SiphonTheme.radiusCard)
+        .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusCard, style: .continuous))
         .overlay(
             SiphonTheme.cardBorder(cornerRadius: SiphonTheme.radiusCard)
         )
@@ -689,7 +599,7 @@ struct AddDownloadView: View {
                     .overlay { Image(systemName: "photo").font(.largeTitle).foregroundColor(.secondary) }
             }
             .frame(width: 180, height: 100)
-            .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusControl))
+            .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusControl, style: .continuous))
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(info.title)
@@ -725,7 +635,7 @@ struct AddDownloadView: View {
         .background(
             SiphonTheme.cardBackground(cornerRadius: SiphonTheme.radiusCard)
         )
-        .cornerRadius(SiphonTheme.radiusCard)
+        .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusCard, style: .continuous))
         .overlay(
             SiphonTheme.cardBorder(cornerRadius: SiphonTheme.radiusCard)
         )
@@ -745,12 +655,7 @@ struct AddDownloadView: View {
             }
         }
         .padding()
-        .background(SiphonTheme.accent.opacity(0.12))
-        .cornerRadius(SiphonTheme.radiusCard)
-        .overlay(
-            RoundedRectangle(cornerRadius: SiphonTheme.radiusCard)
-                .stroke(SiphonTheme.accent.opacity(0.25), lineWidth: 1)
-        )
+        .siphonCallout(tint: SiphonTheme.accent, cornerRadius: SiphonTheme.radiusCard)
     }
 
     private var playlistSelectorSection: some View {
@@ -791,7 +696,7 @@ struct AddDownloadView: View {
                             AsyncImage(url: item.thumbnailURL) { image in image.resizable().aspectRatio(contentMode: .fill) }
                             placeholder: { Rectangle().fill(Color.primary.opacity(0.06)) }
                             .frame(width: 50, height: 30)
-                            .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusSmall))
+                            .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusSmall, style: .continuous))
 
                             VStack(alignment: .leading, spacing: SiphonTheme.spacing2) {
                                 Text(item.title)
@@ -812,7 +717,7 @@ struct AddDownloadView: View {
                         .background(
                             SiphonTheme.controlBackground(cornerRadius: SiphonTheme.radiusControl)
                         )
-                        .cornerRadius(SiphonTheme.radiusControl)
+                        .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusControl, style: .continuous))
                         .overlay(
                             SiphonTheme.controlBorder(cornerRadius: SiphonTheme.radiusControl)
                         )
@@ -825,7 +730,7 @@ struct AddDownloadView: View {
         .background(
             SiphonTheme.cardBackground(cornerRadius: SiphonTheme.radiusCard)
         )
-        .cornerRadius(SiphonTheme.radiusCard)
+        .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusCard, style: .continuous))
         .overlay(
             SiphonTheme.cardBorder(cornerRadius: SiphonTheme.radiusCard)
         )
@@ -918,62 +823,18 @@ struct AddDownloadView: View {
                 .menuStyle(.borderlessButton)
                 
                 // Video / Audio Capsule Switcher
-                HStack(spacing: 2) {
-                    Button {
-                        withAnimation(SiphonAnimation.fluidSpring) {
-                            isVideoTab = true
-                            fileType = .mp4
+                SiphonSegmentedPicker(
+                    selection: Binding(
+                        get: { isVideoTab },
+                        set: { isVideo in
+                            isVideoTab = isVideo
+                            fileType = isVideo ? .mp4 : .mp3
                         }
-                    } label: {
-                        Text(languageService.s("video"))
-                            .font(.siphonMetadataSemibold)
-                            .foregroundColor(isVideoTab ? .white : .secondary)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 4)
-                            .background {
-                                if isVideoTab {
-                                    Capsule()
-                                        .fill(SiphonTheme.primaryGradient)
-                                        .shadow(color: SiphonTheme.accent.opacity(0.35), radius: 4, y: 1)
-                                        .matchedGeometryEffect(id: "activeFormatBubble", in: formatNamespace)
-                                }
-                            }
-                    }
-                    .buttonStyle(.bouncy(scale: 0.95, hover: 1.02))
-                    .help(languageService.s("video"))
-                    .accessibilityLabel(languageService.s("video"))
-                    .accessibilityAddTraits(isVideoTab ? [.isButton, .isSelected] : [.isButton])
-
-                    Button {
-                        withAnimation(SiphonAnimation.fluidSpring) {
-                            isVideoTab = false
-                            fileType = .mp3
-                        }
-                    } label: {
-                        Text(languageService.s("audio"))
-                            .font(.siphonMetadataSemibold)
-                            .foregroundColor(!isVideoTab ? .white : .secondary)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 4)
-                            .background {
-                                if !isVideoTab {
-                                    Capsule()
-                                        .fill(SiphonTheme.primaryGradient)
-                                        .shadow(color: SiphonTheme.accent.opacity(0.35), radius: 4, y: 1)
-                                        .matchedGeometryEffect(id: "activeFormatBubble", in: formatNamespace)
-                                }
-                            }
-                    }
-                    .buttonStyle(.bouncy(scale: 0.95, hover: 1.02))
-                    .help(languageService.s("audio"))
-                    .accessibilityLabel(languageService.s("audio"))
-                    .accessibilityAddTraits(!isVideoTab ? [.isButton, .isSelected] : [.isButton])
-                }
-                .padding(2)
-                .background(SiphonTheme.pillBackground(isSelected: false))
-                .clipShape(Capsule())
-                .overlay(
-                    SiphonTheme.pillBorder(isSelected: false, showBorders: showBorders)
+                    ),
+                    options: [
+                        (true, languageService.s("video")),
+                        (false, languageService.s("audio"))
+                    ]
                 )
             }
 
@@ -1038,15 +899,14 @@ struct AddDownloadView: View {
                 }
                 .padding(.horizontal, SiphonTheme.spacing10)
                 .padding(.vertical, 6)
-                .background(SiphonTheme.accent.opacity(0.08))
-                .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusControl))
+                .siphonCallout(tint: SiphonTheme.accent)
             }
         }
         .padding(SiphonTheme.spacing14)
         .background(
             SiphonTheme.cardBackground(cornerRadius: SiphonTheme.radiusCard)
         )
-        .cornerRadius(SiphonTheme.radiusCard)
+        .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusCard, style: .continuous))
         .overlay(
             SiphonTheme.cardBorder(cornerRadius: SiphonTheme.radiusCard)
         )
@@ -1144,7 +1004,7 @@ struct AddDownloadView: View {
                         .padding(.horizontal, 12)
                         .padding(.vertical, 5)
                         .background(SiphonTheme.controlBackground(cornerRadius: SiphonTheme.radiusControl))
-                        .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusControl))
+                        .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusControl, style: .continuous))
                         .overlay(
                             SiphonTheme.controlBorder(cornerRadius: SiphonTheme.radiusControl)
                         )
@@ -1157,7 +1017,7 @@ struct AddDownloadView: View {
         .background(
             SiphonTheme.cardBackground(cornerRadius: SiphonTheme.radiusCard)
         )
-        .cornerRadius(SiphonTheme.radiusCard)
+        .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusCard, style: .continuous))
         .overlay(
             SiphonTheme.cardBorder(cornerRadius: SiphonTheme.radiusCard)
         )
@@ -1196,7 +1056,7 @@ struct AddDownloadView: View {
                 .background(
                     SiphonTheme.cardBackground(cornerRadius: SiphonTheme.radiusControl)
                 )
-                .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusControl))
+                .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusControl, style: .continuous))
                 .overlay(
                     SiphonTheme.cardBorder(cornerRadius: SiphonTheme.radiusControl)
                 )
@@ -1356,7 +1216,7 @@ struct AddDownloadView: View {
                 .background(
                     SiphonTheme.cardBackground(cornerRadius: SiphonTheme.radiusCard)
                 )
-                .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusCard))
+                .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusCard, style: .continuous))
                 .overlay(
                     SiphonTheme.cardBorder(cornerRadius: SiphonTheme.radiusCard)
                 )
@@ -1561,7 +1421,7 @@ struct AddDownloadView: View {
 
                 if isFDAError {
                     Text(languageService.s("safari_fda_restart_hint"))
-                        .font(.siphonMicro)
+                        .font(.siphonMetadata)
                         .foregroundColor(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -1570,12 +1430,7 @@ struct AddDownloadView: View {
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(SiphonTheme.statusFailed.opacity(0.10))
-        .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusControl))
-        .overlay(
-            RoundedRectangle(cornerRadius: SiphonTheme.radiusControl)
-                .stroke(SiphonTheme.statusFailed.opacity(0.25), lineWidth: 1)
-        )
+        .siphonCallout(tint: SiphonTheme.statusFailed)
     }
 
     private var footer: some View {
@@ -1593,7 +1448,6 @@ struct AddDownloadView: View {
 
             if inputMode == .batch {
                 let count = extractBatchUrls(from: batchUrlsText).count
-                let isDisabled = count == 0
 
                 Button {
                     startDownload()
@@ -1601,8 +1455,7 @@ struct AddDownloadView: View {
                     Text(String(format: languageService.s("queue_batch"), count))
                 }
                 .buttonStyle(.siphonPrimary)
-                .disabled(isDisabled)
-                .opacity(isDisabled ? 0.55 : 1.0)
+                .disabled(count == 0)
                 .keyboardShortcut(.return)
             } else {
                 let downloadTitle = downloadMode == .playlist
@@ -1621,7 +1474,6 @@ struct AddDownloadView: View {
                 }
                 .buttonStyle(.siphonPrimary)
                 .disabled(isDisabled)
-                .opacity(isDisabled ? 0.55 : 1.0)
                 .keyboardShortcut(.return)
             }
         }
