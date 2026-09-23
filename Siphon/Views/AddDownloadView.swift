@@ -171,6 +171,7 @@ struct AddDownloadView: View {
         .siphonWindowBackground()
         .onAppear {
             focusedField = .url
+            loadPreferencesDefaults()
             let loadedPresets = CustomPreset.loadAll()
             self.customPresets = loadedPresets
 
@@ -180,6 +181,7 @@ struct AddDownloadView: View {
                let customPreset = loadedPresets.first(where: { $0.id == customPresetId }) {
 
                 fileType = customPreset.fileType
+                isVideoTab = customPreset.fileType.isVideo
                 videoResolution = customPreset.videoResolution
                 selectedCodec = customPreset.videoCodec.rawValue
                 selectedConversionCodec = "none"
@@ -1687,7 +1689,7 @@ struct AddDownloadView: View {
             rawCookies: nil,
             rawUserAgent: nil,
             browserCookieSource: nil,
-            selectedFormatId: inputMode == .single ? selectedFormatId : nil,
+            selectedFormatId: (inputMode == .single && downloadMode == .single) ? selectedFormatId : nil,
             hdrAction: isVideoTab ? (HDRAction(rawValue: selectedHDRAction) ?? .preserveHDR) : nil,
             resolutionFallbackPolicy: isVideoTab ? (ResolutionFallbackPolicy(rawValue: resolutionFallbackPolicyRaw) ?? .strictCeiling) : nil,
             additionalArguments: additionalArguments.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : additionalArguments.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1810,6 +1812,7 @@ struct AddDownloadView: View {
             }
             var itemOptions = finalOptions
             itemOptions.customFilename = nil
+            itemOptions.selectedFormatId = nil
             downloadManager.addDownloads(urls: urls, options: itemOptions)
         }
         appState.selectedNavItem = .downloading
@@ -1867,6 +1870,51 @@ struct AddDownloadView: View {
         else if number >= 1_000_000 { return "\(formatter.string(from: NSNumber(value: Double(number) / 1_000_000)) ?? "")M" }
         else if number >= 1_000 { return "\(formatter.string(from: NSNumber(value: Double(number) / 1_000)) ?? "")K" }
         return "\(number)"
+    }
+
+    private func loadPreferencesDefaults() {
+        let defaults = UserDefaults.standard
+        let defaultPath = defaults.string(forKey: UserDefaultsKeys.defaultSaveFolder) ?? ""
+        if !defaultPath.isEmpty && FileManager.default.fileExists(atPath: defaultPath) {
+            saveFolder = URL(fileURLWithPath: defaultPath)
+        }
+
+        if selectedCustomPresetIdString.isEmpty {
+            let fileTypeStr = defaults.string(forKey: UserDefaultsKeys.defaultFileType) ?? "mp4"
+            if let matched = MediaFileType.allCases.first(where: { $0.rawValue.lowercased() == fileTypeStr.lowercased() }) {
+                fileType = matched
+                isVideoTab = matched.isVideo
+            }
+
+            let resStr = defaults.string(forKey: UserDefaultsKeys.defaultVideoResolution) ?? "r1080p"
+            if let res = VideoResolution(rawValue: resStr) {
+                videoResolution = res
+            }
+
+            if let vcodec = defaults.string(forKey: UserDefaultsKeys.defaultVideoCodec) {
+                selectedCodec = vcodec
+            }
+
+            if let acodec = defaults.string(forKey: UserDefaultsKeys.defaultAudioCodec) {
+                selectedAudioCodec = acodec
+            }
+
+            if defaults.object(forKey: UserDefaultsKeys.embedThumbnail) != nil {
+                embedThumbnail = defaults.bool(forKey: UserDefaultsKeys.embedThumbnail)
+            }
+
+            if defaults.object(forKey: UserDefaultsKeys.embedMetadata) != nil {
+                embedMetadata = defaults.bool(forKey: UserDefaultsKeys.embedMetadata)
+            }
+
+            if defaults.object(forKey: UserDefaultsKeys.sponsorBlock) != nil {
+                sponsorBlock = defaults.bool(forKey: UserDefaultsKeys.sponsorBlock)
+            }
+
+            if let fallback = defaults.string(forKey: UserDefaultsKeys.resolutionFallbackPolicy) {
+                resolutionFallbackPolicyRaw = fallback
+            }
+        }
     }
 }
 
