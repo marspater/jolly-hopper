@@ -371,10 +371,10 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
             }
 
             let outputBuffer = ThreadSafeDataBuffer()
-            pipe.fileHandleForReading.readabilityHandler = { handle in
+            pipe.fileHandleForReading.readabilityHandler = { [weak process] handle in
                 let data = handle.availableData
-                if !data.isEmpty {
-                    outputBuffer.append(data)
+                if !data.isEmpty, !outputBuffer.append(data) {
+                    process?.terminate()
                 }
             }
 
@@ -387,6 +387,11 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
 
                 if !remainingData.isEmpty {
                     outputBuffer.append(remainingData)
+                }
+
+                if outputBuffer.isOverflow {
+                    safeContinuation.resume(throwing: YtdlpError.downloadFailed("Subprocess output exceeded the 32 MB safety limit."))
+                    return
                 }
 
                 let output = outputBuffer.getString()

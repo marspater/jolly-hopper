@@ -462,4 +462,28 @@ final class QueueRecoveryStoreTests: XCTestCase {
         XCTAssertEqual(restored.status, .fileExists)
     }
 
+    func testPersistFailureOnUnwritableDirectory() {
+        // Point the store at a path inside a read-only directory
+        let readOnlyDir = tempDir.appendingPathComponent("readonly", isDirectory: true)
+        try? FileManager.default.createDirectory(at: readOnlyDir, withIntermediateDirectories: true)
+        
+        let unwritableFile = readOnlyDir.appendingPathComponent("nested/recovery.json")
+        
+        // Make the directory read-only so nested dir creation fails
+        try? FileManager.default.setAttributes([.posixPermissions: 0o444], ofItemAtPath: readOnlyDir.path)
+        
+        let store = QueueRecoveryStore(fileURL: unwritableFile)
+        let dl = Download(url: "https://example.com/video", options: .default, title: "Test")
+        dl.status = .queued
+        
+        let persisted = store.persist(activeJobs: [dl])
+        XCTAssertFalse(persisted, "persist() should return false when the directory is not writable")
+        
+        let shutdown = store.markCleanShutdown()
+        XCTAssertFalse(shutdown, "markCleanShutdown() should return false when the directory is not writable")
+        
+        // Restore permissions for cleanup
+        try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: readOnlyDir.path)
+    }
+
 }

@@ -55,8 +55,11 @@ async function getLatestRelease() {
     const dmgAsset = (payload.assets || []).find((a) => a.name?.endsWith('.dmg'));
     const downloadUrl = dmgAsset ? dmgAsset.browser_download_url : (payload.html_url || 'https://github.com/marspater/jolly-hopper/releases/latest');
 
+    if (!payload.tag_name) {
+      throw new Error('GitHub API response missing tag_name');
+    }
     const cleanData = {
-      version: payload.tag_name || 'v5.3.0',
+      version: payload.tag_name,
       name: payload.name || 'Siphon',
       publishedAt: payload.published_at || new Date().toISOString(),
       downloadUrl,
@@ -75,15 +78,7 @@ async function getLatestRelease() {
       return { ...releaseCache.data, cached: true, stale: true };
     }
 
-    return {
-      version: 'v5.3.0',
-      name: 'Siphon',
-      publishedAt: new Date().toISOString(),
-      downloadUrl: 'https://github.com/marspater/jolly-hopper/releases/latest',
-      notes: 'Fallback release info (API unavailable)',
-      cached: false,
-      fallback: true
-    };
+    return null;
   } finally {
     clearTimeout(timeout);
   }
@@ -147,6 +142,10 @@ async function handleReleaseApi(req, res, pathname) {
     return false;
   }
   const releaseInfo = await getLatestRelease();
+  if (!releaseInfo) {
+    sendJson(res, 503, { error: 'Release metadata temporarily unavailable' });
+    return true;
+  }
   sendJson(res, 200, releaseInfo);
   return true;
 }

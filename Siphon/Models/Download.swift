@@ -2179,7 +2179,7 @@ public struct DownloadURLValidator: Sendable {
 
         var normalized = trimmed
         if !normalized.lowercased().hasPrefix("http://") && !normalized.lowercased().hasPrefix("https://") {
-            if normalized.contains(".") && !normalized.contains(" ") {
+            if (normalized.contains(".") || normalized.hasPrefix("[")) && !normalized.contains(" ") {
                 normalized = "https://" + normalized
             } else {
                 return .malformed
@@ -2190,7 +2190,7 @@ public struct DownloadURLValidator: Sendable {
               let scheme = url.scheme?.lowercased(),
               (scheme == "http" || scheme == "https"),
               let host = url.host,
-              host.contains(".") else {
+              host.contains(".") || host.contains(":") else {
             return .malformed
         }
 
