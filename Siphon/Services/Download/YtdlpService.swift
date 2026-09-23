@@ -956,7 +956,8 @@ class YtdlpService: ObservableObject {
                     fps: 30.0,
                     vcodec: "h264",
                     acodec: "aac",
-                    tbr: 2500
+                    tbr: 2500,
+                    manifestUrl: guywhMedia.streamURL
                 )
                 return MediaInfo(
                     id: url,
@@ -964,7 +965,11 @@ class YtdlpService: ObservableObject {
                     thumbnail: guywhMedia.thumbnailURL,
                     duration: guywhMedia.duration,
                     uploader: "Protected Site",
-                    formats: [format]
+                    formats: [format],
+                    webpageUrl: guywhMedia.embedURL,
+                    originalUrl: guywhMedia.streamURL,
+                    formatProtocol: guywhMedia.streamURL.contains(".m3u8") ? "m3u8_native" : "https",
+                    manifestUrl: guywhMedia.streamURL
                 )
         }
 
@@ -981,7 +986,8 @@ class YtdlpService: ObservableObject {
                     fps: 30.0,
                     vcodec: "h264",
                     acodec: "aac",
-                    tbr: 2500
+                    tbr: 2500,
+                    manifestUrl: gffMedia.streamURL
                 )
                 return MediaInfo(
                     id: url,
@@ -989,7 +995,11 @@ class YtdlpService: ObservableObject {
                     thumbnail: gffMedia.thumbnailURL,
                     duration: gffMedia.duration,
                     uploader: "Protected Site",
-                    formats: [format]
+                    formats: [format],
+                    webpageUrl: gffMedia.embedURL,
+                    originalUrl: gffMedia.streamURL,
+                    formatProtocol: gffMedia.streamURL.contains(".m3u8") ? "m3u8_native" : "https",
+                    manifestUrl: gffMedia.streamURL
                 )
             } else {
                 LoggerService.shared.log("Protected-site resolver could not resolve media directly. Falling back to yt-dlp native extraction...", level: .warning)
@@ -1011,7 +1021,9 @@ class YtdlpService: ObservableObject {
                         vcodec: src.codec.isEmpty ? "h264" : src.codec,
                         acodec: "aac",
                         tbr: nil,
-                        filesize: src.size > 0 ? src.size : nil
+                        filesize: src.size > 0 ? src.size : nil,
+                        formatNote: bestCamMedia.encryptedFilename,
+                        manifestUrl: src.url
                     )
                 }
                 return MediaInfo(
@@ -1020,7 +1032,11 @@ class YtdlpService: ObservableObject {
                     thumbnail: bestCamMedia.thumbnailURL,
                     duration: bestCamMedia.duration,
                     uploader: "Protected Site",
-                    formats: formats.isEmpty ? nil : formats
+                    formats: formats.isEmpty ? nil : formats,
+                    webpageUrl: bestCamMedia.embedURL,
+                    originalUrl: bestCamMedia.streamURL,
+                    formatProtocol: bestCamMedia.streamURL.contains(".m3u8") ? "m3u8_native" : "https",
+                    manifestUrl: bestCamMedia.streamURL
                 )
             } else {
                 LoggerService.shared.log("Protected-site resolver could not resolve media directly. Falling back to yt-dlp native extraction...", level: .warning)
@@ -1042,7 +1058,8 @@ class YtdlpService: ObservableObject {
                         vcodec: "h264",
                         acodec: "aac",
                         tbr: nil,
-                        filesize: nil
+                        filesize: nil,
+                        manifestUrl: src.url
                     )
                 }
                 return MediaInfo(
@@ -1051,7 +1068,11 @@ class YtdlpService: ObservableObject {
                     thumbnail: starwankMedia.thumbnailURL,
                     duration: starwankMedia.duration,
                     uploader: "StarWank",
-                    formats: formats.isEmpty ? nil : formats
+                    formats: formats.isEmpty ? nil : formats,
+                    webpageUrl: starwankMedia.embedURL,
+                    originalUrl: starwankMedia.streamURL,
+                    formatProtocol: starwankMedia.streamURL.contains(".m3u8") ? "m3u8_native" : "https",
+                    manifestUrl: starwankMedia.streamURL
                 )
             } else {
                 LoggerService.shared.log("Starwank resolver could not resolve media directly. Falling back to yt-dlp native extraction...", level: .warning)
@@ -1073,7 +1094,8 @@ class YtdlpService: ObservableObject {
                         vcodec: "h264",
                         acodec: "aac",
                         tbr: nil,
-                        filesize: nil
+                        filesize: nil,
+                        manifestUrl: src.url
                     )
                 }
                 return MediaInfo(
@@ -1082,7 +1104,11 @@ class YtdlpService: ObservableObject {
                     thumbnail: pussyMedia.thumbnailURL,
                     duration: pussyMedia.duration,
                     uploader: "PussySpace",
-                    formats: formats.isEmpty ? nil : formats
+                    formats: formats.isEmpty ? nil : formats,
+                    webpageUrl: pussyMedia.embedURL,
+                    originalUrl: pussyMedia.streamURL,
+                    formatProtocol: pussyMedia.streamURL.contains(".m3u8") ? "m3u8_native" : "https",
+                    manifestUrl: pussyMedia.streamURL
                 )
             } else {
                 LoggerService.shared.log("PussySpace resolver could not resolve media directly. Falling back to yt-dlp native extraction...", level: .warning)
@@ -1421,37 +1447,130 @@ public struct DownloadResult: Sendable {
                 customEmbedURL = btvMedia.embedURL
                 customThumbnailURL = btvMedia.thumbnailURL
             }
-        } else if isGuywhURL(url),
-                  let guywhMedia = await resolveGuywhMediaInfo(url: url, rawCookies: options.rawCookies) {
-            targetURL = guywhMedia.streamURL
-            customResolvedTitle = guywhMedia.title
-            customEmbedURL = guywhMedia.embedURL
-            customThumbnailURL = guywhMedia.thumbnailURL
-        } else if isGFFURL(url),
-                  let gffMedia = await resolveGFFMediaInfo(url: url, rawCookies: options.rawCookies) {
-            targetURL = gffMedia.streamURL
-            customResolvedTitle = gffMedia.title
-            customEmbedURL = gffMedia.embedURL
-            customThumbnailURL = gffMedia.thumbnailURL
-        } else if isBestCamURL(url),
-                  let bestCamMedia = await resolveBestCamMediaInfo(url: url, rawCookies: options.rawCookies, requestedFormat: options.selectedFormatId) {
-            targetURL = bestCamMedia.streamURL
-            customResolvedTitle = bestCamMedia.title
-            customEmbedURL = bestCamMedia.embedURL
-            customThumbnailURL = bestCamMedia.thumbnailURL
-            bestCamDecryptionKey = bestCamMedia.encryptedFilename
-        } else if isStarwankURL(url),
-                  let starwankMedia = await resolveStarwankMediaInfo(url: url, rawCookies: options.rawCookies, requestedFormat: options.selectedFormatId) {
-            targetURL = starwankMedia.streamURL
-            customResolvedTitle = starwankMedia.title
-            customEmbedURL = starwankMedia.embedURL
-            customThumbnailURL = starwankMedia.thumbnailURL
-        } else if isPussyspaceURL(url),
-                  let pussyMedia = await resolvePussyspaceMediaInfo(url: url, rawCookies: options.rawCookies, requestedFormat: options.selectedFormatId) {
-            targetURL = pussyMedia.streamURL
-            customResolvedTitle = pussyMedia.title
-            customEmbedURL = pussyMedia.embedURL
-            customThumbnailURL = pussyMedia.thumbnailURL
+        } else if isGuywhURL(url) {
+            if let selectedId = options.selectedFormatId,
+               let matched = mediaInfo?.formats?.first(where: {
+                   $0.formatId.lowercased() == selectedId.lowercased() ||
+                   $0.formatId.replacingOccurrences(of: "p", with: "").lowercased() == selectedId.replacingOccurrences(of: "p", with: "").lowercased()
+               }),
+               let stream = matched.manifestUrl, !stream.isEmpty {
+                targetURL = stream
+                customResolvedTitle = mediaInfo?.title
+                customEmbedURL = mediaInfo?.webpageUrl ?? url
+                customThumbnailURL = mediaInfo?.thumbnail
+            } else if let streamURL = mediaInfo?.manifestUrl ?? mediaInfo?.originalUrl,
+                      !streamURL.isEmpty,
+                      streamURL != normalizedURL {
+                targetURL = streamURL
+                customResolvedTitle = mediaInfo?.title
+                customEmbedURL = mediaInfo?.webpageUrl ?? url
+                customThumbnailURL = mediaInfo?.thumbnail
+            } else if let guywhMedia = await resolveGuywhMediaInfo(url: url, rawCookies: options.rawCookies) {
+                targetURL = guywhMedia.streamURL
+                customResolvedTitle = guywhMedia.title
+                customEmbedURL = guywhMedia.embedURL
+                customThumbnailURL = guywhMedia.thumbnailURL
+            }
+        } else if isGFFURL(url) {
+            if let selectedId = options.selectedFormatId,
+               let matched = mediaInfo?.formats?.first(where: {
+                   $0.formatId.lowercased() == selectedId.lowercased() ||
+                   $0.formatId.replacingOccurrences(of: "p", with: "").lowercased() == selectedId.replacingOccurrences(of: "p", with: "").lowercased()
+               }),
+               let stream = matched.manifestUrl, !stream.isEmpty {
+                targetURL = stream
+                customResolvedTitle = mediaInfo?.title
+                customEmbedURL = mediaInfo?.webpageUrl ?? url
+                customThumbnailURL = mediaInfo?.thumbnail
+            } else if let streamURL = mediaInfo?.manifestUrl ?? mediaInfo?.originalUrl,
+                      !streamURL.isEmpty,
+                      streamURL != normalizedURL {
+                targetURL = streamURL
+                customResolvedTitle = mediaInfo?.title
+                customEmbedURL = mediaInfo?.webpageUrl ?? url
+                customThumbnailURL = mediaInfo?.thumbnail
+            } else if let gffMedia = await resolveGFFMediaInfo(url: url, rawCookies: options.rawCookies) {
+                targetURL = gffMedia.streamURL
+                customResolvedTitle = gffMedia.title
+                customEmbedURL = gffMedia.embedURL
+                customThumbnailURL = gffMedia.thumbnailURL
+            }
+        } else if isBestCamURL(url) {
+            if let selectedId = options.selectedFormatId,
+               let matched = mediaInfo?.formats?.first(where: {
+                   $0.formatId.lowercased() == selectedId.lowercased() ||
+                   $0.formatId.replacingOccurrences(of: "p", with: "").lowercased() == selectedId.replacingOccurrences(of: "p", with: "").lowercased()
+               }),
+               let stream = matched.manifestUrl, !stream.isEmpty {
+                targetURL = stream
+                customResolvedTitle = mediaInfo?.title
+                customEmbedURL = mediaInfo?.webpageUrl ?? url
+                customThumbnailURL = mediaInfo?.thumbnail
+                bestCamDecryptionKey = matched.formatNote
+            } else if let streamURL = mediaInfo?.manifestUrl ?? mediaInfo?.originalUrl,
+                      !streamURL.isEmpty,
+                      streamURL != normalizedURL {
+                targetURL = streamURL
+                customResolvedTitle = mediaInfo?.title
+                customEmbedURL = mediaInfo?.webpageUrl ?? url
+                customThumbnailURL = mediaInfo?.thumbnail
+            } else if let bestCamMedia = await resolveBestCamMediaInfo(url: url, rawCookies: options.rawCookies, requestedFormat: options.selectedFormatId) {
+                targetURL = bestCamMedia.streamURL
+                customResolvedTitle = bestCamMedia.title
+                customEmbedURL = bestCamMedia.embedURL
+                customThumbnailURL = bestCamMedia.thumbnailURL
+                bestCamDecryptionKey = bestCamMedia.encryptedFilename
+            }
+        } else if isStarwankURL(url) {
+            if let selectedId = options.selectedFormatId,
+               let matched = mediaInfo?.formats?.first(where: {
+                   $0.formatId.lowercased() == selectedId.lowercased() ||
+                   $0.formatId.replacingOccurrences(of: "p", with: "").lowercased() == selectedId.replacingOccurrences(of: "p", with: "").lowercased()
+               }),
+               let stream = matched.manifestUrl, !stream.isEmpty {
+                targetURL = stream
+                customResolvedTitle = mediaInfo?.title
+                customEmbedURL = mediaInfo?.webpageUrl ?? url
+                customThumbnailURL = mediaInfo?.thumbnail
+            } else if let streamURL = mediaInfo?.manifestUrl ?? mediaInfo?.originalUrl,
+                      !streamURL.isEmpty,
+                      streamURL != normalizedURL,
+                      (streamURL.contains(".m3u8") || streamURL.contains(".mp4") || streamURL.contains("get_file")) {
+                targetURL = streamURL
+                customResolvedTitle = mediaInfo?.title
+                customEmbedURL = mediaInfo?.webpageUrl ?? url
+                customThumbnailURL = mediaInfo?.thumbnail
+            } else if let starwankMedia = await resolveStarwankMediaInfo(url: url, rawCookies: options.rawCookies, requestedFormat: options.selectedFormatId) {
+                targetURL = starwankMedia.streamURL
+                customResolvedTitle = starwankMedia.title
+                customEmbedURL = starwankMedia.embedURL
+                customThumbnailURL = starwankMedia.thumbnailURL
+            }
+        } else if isPussyspaceURL(url) {
+            if let selectedId = options.selectedFormatId,
+               let matched = mediaInfo?.formats?.first(where: {
+                   $0.formatId.lowercased() == selectedId.lowercased() ||
+                   $0.formatId.replacingOccurrences(of: "p", with: "").lowercased() == selectedId.replacingOccurrences(of: "p", with: "").lowercased()
+               }),
+               let stream = matched.manifestUrl, !stream.isEmpty {
+                targetURL = stream
+                customResolvedTitle = mediaInfo?.title
+                customEmbedURL = mediaInfo?.webpageUrl ?? url
+                customThumbnailURL = mediaInfo?.thumbnail
+            } else if let streamURL = mediaInfo?.manifestUrl ?? mediaInfo?.originalUrl,
+                      !streamURL.isEmpty,
+                      streamURL != normalizedURL,
+                      (streamURL.contains(".m3u8") || streamURL.contains(".mp4") || streamURL.contains("reversebuffer")) {
+                targetURL = streamURL
+                customResolvedTitle = mediaInfo?.title
+                customEmbedURL = mediaInfo?.webpageUrl ?? url
+                customThumbnailURL = mediaInfo?.thumbnail
+            } else if let pussyMedia = await resolvePussyspaceMediaInfo(url: url, rawCookies: options.rawCookies, requestedFormat: options.selectedFormatId) {
+                targetURL = pussyMedia.streamURL
+                customResolvedTitle = pussyMedia.title
+                customEmbedURL = pussyMedia.embedURL
+                customThumbnailURL = pussyMedia.thumbnailURL
+            }
         }
 
         var args = [path.path, "--ignore-config"]
@@ -5213,9 +5332,12 @@ public struct DownloadResult: Sendable {
 
         // Choose requested format or fallback to highest
         let chosenSource: StarwankSource
-        if let reqFmt = requestedFormat,
+        if let reqFmt = requestedFormat?.lowercased().trimmingCharacters(in: .whitespacesAndNewlines),
            let matched = parsedSources.first(where: {
-               $0.label.lowercased() == reqFmt.lowercased() || "\($0.height)p".lowercased() == reqFmt.lowercased()
+               $0.label.lowercased() == reqFmt ||
+               "\($0.height)p" == reqFmt ||
+               "\($0.height)" == reqFmt ||
+               $0.label.lowercased().contains(reqFmt)
            }) {
             chosenSource = matched
         } else {
@@ -5242,7 +5364,7 @@ public struct DownloadResult: Sendable {
         // 1. Direct URLSession fetch
         if processRunner is DefaultYtdlpProcessRunner {
             var request = URLRequest(url: pageURL)
-            request.timeoutInterval = 8.0
+            request.timeoutInterval = 15.0
             request.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36", forHTTPHeaderField: "User-Agent")
             request.setValue("text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8", forHTTPHeaderField: "Accept")
             request.setValue("en-US,en;q=0.9", forHTTPHeaderField: "Accept-Language")
@@ -5465,9 +5587,12 @@ public struct DownloadResult: Sendable {
         parsedSources.sort { $0.height > $1.height }
 
         let chosenSource: PussyspaceSource
-        if let reqFmt = requestedFormat,
+        if let reqFmt = requestedFormat?.lowercased().trimmingCharacters(in: .whitespacesAndNewlines),
            let matched = parsedSources.first(where: {
-               $0.label.lowercased() == reqFmt.lowercased() || "\($0.height)p".lowercased() == reqFmt.lowercased()
+               $0.label.lowercased() == reqFmt ||
+               "\($0.height)p" == reqFmt ||
+               "\($0.height)" == reqFmt ||
+               $0.label.lowercased().contains(reqFmt)
            }) {
             chosenSource = matched
         } else {
@@ -5494,7 +5619,7 @@ public struct DownloadResult: Sendable {
         // 1. Direct URLSession fetch for page
         if processRunner is DefaultYtdlpProcessRunner {
             var request = URLRequest(url: pageURL)
-            request.timeoutInterval = 8.0
+            request.timeoutInterval = 15.0
             request.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36", forHTTPHeaderField: "User-Agent")
             request.setValue("text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8", forHTTPHeaderField: "Accept")
             request.setValue("en-US,en;q=0.9", forHTTPHeaderField: "Accept-Language")
@@ -5564,7 +5689,7 @@ public struct DownloadResult: Sendable {
            let playerURL = URL(string: "\(pageURL.scheme ?? "https")://\(host)/get/player/\(type)/") {
             var playerReq = URLRequest(url: playerURL)
             playerReq.httpMethod = "POST"
-            playerReq.timeoutInterval = 8.0
+            playerReq.timeoutInterval = 15.0
             playerReq.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36", forHTTPHeaderField: "User-Agent")
             playerReq.setValue("application/x-www-form-urlencoded; charset=UTF-8", forHTTPHeaderField: "Content-Type")
             playerReq.setValue("XMLHttpRequest", forHTTPHeaderField: "X-Requested-With")

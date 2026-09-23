@@ -1066,7 +1066,8 @@ final class YtdlpServiceTests: XCTestCase {
             id: "https://starwank.com/videos/260540/test/",
             title: "Test Video",
             uploader: "StarWank",
-            formats: [MediaFormat(formatId: "720p", ext: "mp4", resolution: "1280x720")]
+            formats: [MediaFormat(formatId: "720p", ext: "mp4", resolution: "1280x720", manifestUrl: "https://starwank.com/get_file/1/test.mp4")],
+            manifestUrl: "https://starwank.com/get_file/1/test.mp4"
         )
 
         _ = try await service.download(
@@ -1086,6 +1087,112 @@ final class YtdlpServiceTests: XCTestCase {
         } else {
             XCTFail("Missing -f in audio download arguments")
         }
+    }
+
+    func testPussyspaceDownloadUsesStreamURLFromMediaInfo() async throws {
+        let capturedArgsBox = TestBox<[String]>([])
+        service.processRunner = MockYtdlpProcessRunner(mockDownload: { args in
+            capturedArgsBox.value = args
+            return "[download] Destination: /tmp/test_pussy.mp4\n"
+        })
+
+        let options = DownloadOptions.default
+        let streamURL = "https://www.pussyspace.com/reversebuffer?u64hash=abc&file.mp4"
+        let webpageURL = "https://www.pussyspace.com/vid-3310822-massage-rooms/"
+        let info = MediaInfo(
+            id: webpageURL,
+            title: "Test PussySpace Video",
+            uploader: "PussySpace",
+            formats: [MediaFormat(formatId: "720p", ext: "mp4", resolution: "1280x720", manifestUrl: streamURL)],
+            webpageUrl: webpageURL,
+            originalUrl: streamURL,
+            manifestUrl: streamURL
+        )
+
+        _ = try await service.download(
+            url: webpageURL,
+            options: options,
+            mediaInfo: info,
+            onProgress: { _, _, _ in },
+            onOutput: { _ in }
+        )
+
+        let args = capturedArgsBox.value
+        XCTAssertEqual(args.last, streamURL)
+        XCTAssertTrue(args.contains("Referer: https://www.pussyspace.com/"))
+        XCTAssertTrue(args.contains("Origin: https://www.pussyspace.com"))
+    }
+
+    func testStarwankDownloadUsesStreamURLFromMediaInfo() async throws {
+        let capturedArgsBox = TestBox<[String]>([])
+        service.processRunner = MockYtdlpProcessRunner(mockDownload: { args in
+            capturedArgsBox.value = args
+            return "[download] Destination: /tmp/test_starwank.mp4\n"
+        })
+
+        let options = DownloadOptions.default
+        let streamURL = "https://starwank.com/get_file/1/test_720p.mp4"
+        let webpageURL = "https://starwank.com/videos/260540/test-video/"
+        let info = MediaInfo(
+            id: webpageURL,
+            title: "Test StarWank Video",
+            uploader: "StarWank",
+            formats: [MediaFormat(formatId: "720p", ext: "mp4", resolution: "1280x720", manifestUrl: streamURL)],
+            webpageUrl: webpageURL,
+            originalUrl: streamURL,
+            manifestUrl: streamURL
+        )
+
+        _ = try await service.download(
+            url: webpageURL,
+            options: options,
+            mediaInfo: info,
+            onProgress: { _, _, _ in },
+            onOutput: { _ in }
+        )
+
+        let args = capturedArgsBox.value
+        XCTAssertEqual(args.last, streamURL)
+        XCTAssertTrue(args.contains("Referer: https://starwank.com/"))
+        XCTAssertTrue(args.contains("Origin: https://starwank.com"))
+    }
+
+    func testPussyspaceFormatSelectionUsesFormatSpecificStreamURL() async throws {
+        let capturedArgsBox = TestBox<[String]>([])
+        service.processRunner = MockYtdlpProcessRunner(mockDownload: { args in
+            capturedArgsBox.value = args
+            return "[download] Destination: /tmp/test_pussy.mp4\n"
+        })
+
+        var options = DownloadOptions.default
+        options.selectedFormatId = "480p"
+
+        let hlsStream = "https://www.pussyspace.com/reversebuffer?u64hash=hls&hls.m3u8"
+        let mp4Stream480 = "https://www.pussyspace.com/reversebuffer?u64hash=mp4480&file.mp4"
+        let webpageURL = "https://www.pussyspace.com/vid-3310822-test/"
+        let info = MediaInfo(
+            id: webpageURL,
+            title: "Test Format Selection",
+            uploader: "PussySpace",
+            formats: [
+                MediaFormat(formatId: "HLS Auto", ext: "mp4", resolution: "1920x1080", manifestUrl: hlsStream),
+                MediaFormat(formatId: "480p", ext: "mp4", resolution: "854x480", manifestUrl: mp4Stream480)
+            ],
+            webpageUrl: webpageURL,
+            originalUrl: hlsStream,
+            manifestUrl: hlsStream
+        )
+
+        _ = try await service.download(
+            url: webpageURL,
+            options: options,
+            mediaInfo: info,
+            onProgress: { _, _, _ in },
+            onOutput: { _ in }
+        )
+
+        let args = capturedArgsBox.value
+        XCTAssertEqual(args.last, mp4Stream480)
     }
 
 
