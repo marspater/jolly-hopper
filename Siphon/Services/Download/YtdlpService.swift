@@ -5325,7 +5325,8 @@ public struct DownloadResult: Sendable {
     nonisolated private static func selectProtectedSiteSource(
         from sources: [ProtectedSiteSource],
         requestedFormat: String?
-    ) -> ProtectedSiteSource {
+    ) -> ProtectedSiteSource? {
+        guard let fallback = sources.first else { return nil }
         if let requested = requestedFormat?.lowercased().trimmingCharacters(in: .whitespacesAndNewlines),
            let matched = sources.first(where: {
                $0.label.lowercased() == requested ||
@@ -5335,7 +5336,7 @@ public struct DownloadResult: Sendable {
            }) {
             return matched
         }
-        return sources[0]
+        return fallback
     }
 
     nonisolated static func isStarwankURL(_ urlOrHost: String) -> Bool {
@@ -5448,15 +5449,15 @@ public struct DownloadResult: Sendable {
             }
         }
 
-        guard !parsedSources.isEmpty else { return nil }
-
         // Sort sources by height descending (e.g. 720p, then 360p)
         parsedSources.sort { $0.height > $1.height }
 
-        let chosenSource = Self.selectProtectedSiteSource(
+        guard let chosenSource = Self.selectProtectedSiteSource(
             from: parsedSources,
             requestedFormat: requestedFormat
-        )
+        ) else {
+            return nil
+        }
 
         return StarwankExtractedMedia(
             streamURL: chosenSource.url,
@@ -5597,14 +5598,14 @@ public struct DownloadResult: Sendable {
             }
         }
 
-        guard !parsedSources.isEmpty else { return nil }
-
         parsedSources.sort { $0.height > $1.height }
 
-        let chosenSource = Self.selectProtectedSiteSource(
+        guard let chosenSource = Self.selectProtectedSiteSource(
             from: parsedSources,
             requestedFormat: requestedFormat
-        )
+        ) else {
+            return nil
+        }
 
         return PussyspaceExtractedMedia(
             streamURL: chosenSource.url,
