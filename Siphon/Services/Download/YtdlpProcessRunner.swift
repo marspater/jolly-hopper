@@ -189,11 +189,12 @@ public final class DownloadProcessController: @unchecked Sendable {
     }
 
     /// Detaches the process upon completion or cleanup.
+    /// A requested cancellation is sticky: detaching must not let a later
+    /// recovery attempt start a new process for a stopped download.
     public func detach() {
         lock.lock()
         defer { lock.unlock() }
         activeProcess = nil
-        wasCancelled = false
         switch internalLifecycle {
         case .running:
             internalLifecycle = .created
@@ -466,6 +467,29 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
         return errorOutput
     }
 
+    /// Maps a failed yt-dlp run to an error. Rate-limit and subtitle
+    /// classification looks only at the terminal `ERROR:` line: stderr also
+    /// carries warnings (for example "There are no subtitles for the requested
+    /// languages"), and matching those would hide the real failure from the
+    /// download recovery strategies, which only inspect `.downloadFailed`.
+    static func classifyFailure(errorOutput: String, exitCode: Int32) -> YtdlpError {
+        let lower = errorOutput.lowercased()
+        if errorOutput.contains("Cloudflare") || (errorOutput.contains("403") && (errorOutput.contains("anti-bot") || lower.contains("cloudflare") || lower.contains("turnstile") || lower.contains("bot"))) || lower.contains("sign in to confirm you're not a bot") || lower.contains("sign in to confirm you’re not a bot") {
+            return .cloudflareBlocked
+        }
+
+        let cleanError = extractCleanError(from: errorOutput)
+        let lowerCleanError = cleanError.lowercased()
+        if lowerCleanError.contains("http error 429") || lowerCleanError.contains("too many requests") {
+            return .tooManyRequests
+        }
+        if lowerCleanError.contains("subtitle") || lowerCleanError.contains("caption") {
+            return .subtitleError(errorOutput)
+        }
+        let trimmed = cleanError.trimmingCharacters(in: .whitespacesAndNewlines)
+        return .downloadFailed(trimmed.isEmpty ? "Process exited with code \(exitCode)" : cleanError)
+    }
+
     private func executeDownloadProcess(
         args: [String],
         saveFolder: URL,
@@ -721,17 +745,10 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
                         safeContinuation.resume(throwing: YtdlpError.downloadFailed("Download process completed, but no valid media file was verified in the target destination."))
                     }
                 } else {
-                    let lower = errorOutput.lowercased()
-                    if errorOutput.contains("Cloudflare") || (errorOutput.contains("403") && (errorOutput.contains("anti-bot") || lower.contains("cloudflare") || lower.contains("turnstile") || lower.contains("bot"))) || lower.contains("sign in to confirm you're not a bot") || lower.contains("sign in to confirm you’re not a bot") {
-                        safeContinuation.resume(throwing: YtdlpError.cloudflareBlocked)
-                    } else if errorOutput.contains("429") || errorOutput.contains("Too Many Requests") {
-                        safeContinuation.resume(throwing: YtdlpError.tooManyRequests)
-                    } else if errorOutput.contains("subtitle") || errorOutput.contains("caption") {
-                        safeContinuation.resume(throwing: YtdlpError.subtitleError(errorOutput))
-                    } else {
-                        let cleanError = Self.extractCleanError(from: errorOutput)
-                        safeContinuation.resume(throwing: YtdlpError.downloadFailed(cleanError.isEmpty ? "Process exited with code \(proc.terminationStatus)" : cleanError))
-                    }
+                    safeContinuation.resume(throwing: Self.classifyFailure(
+                        errorOutput: errorOutput,
+                        exitCode: proc.terminationStatus
+                    ))
                 }
             }
 
