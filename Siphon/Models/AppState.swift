@@ -326,18 +326,20 @@ public final class AppState: ObservableObject {
 
     func updateYtdlp(
         using ytdlpService: YtdlpService,
-        activeExecutionCount: Int
+        activeExecutionCount: Int,
+        languageService: LanguageService? = nil
     ) async {
+        let lang = languageService ?? LanguageService()
         guard activeExecutionCount == 0 else {
             ytdlpUpdateMessage = YtdlpUpdateMessage(
-                title: "yt-dlp Update Unavailable",
-                message: "Wait for active downloads to finish before updating yt-dlp."
+                title: lang.s("ytdlp_update_unavailable_title"),
+                message: lang.s("ytdlp_update_unavailable_message")
             )
             return
         }
 
         dependencyCoordinator.bind(to: ytdlpService)
-        await dependencyCoordinator.updateYtdlp(service: ytdlpService)
+        await dependencyCoordinator.updateYtdlp(service: ytdlpService, languageService: lang)
         ytdlpVersion = dependencyCoordinator.version
         ytdlpUpdateMessage = dependencyCoordinator.updateMessage
     }

@@ -74,4 +74,51 @@ final class DependencyUpdateCoordinatorTests: XCTestCase {
 
         XCTAssertFalse(DependencyInstaller.isBinarySigned(at: unsignedScript), "Unsigned script should not report as signed")
     }
+
+    func testRebindCancelsPreviousSubscriptions() {
+        let coordinator = DependencyUpdateCoordinator()
+        let service1 = YtdlpService()
+        let service2 = YtdlpService()
+
+        coordinator.bind(to: service1)
+        coordinator.bind(to: service2)
+
+        service1.isUpdating = true
+        service1.updateProgress = 0.5
+        RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+
+        // coordinator was rebound to service2, so service1 updates must be ignored
+        XCTAssertFalse(coordinator.isUpdating)
+        XCTAssertEqual(coordinator.updateProgress, 0.0)
+
+        service2.isUpdating = true
+        service2.updateProgress = 0.9
+        RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+
+        XCTAssertTrue(coordinator.isUpdating)
+        XCTAssertEqual(coordinator.updateProgress, 0.9)
+    }
+
+    func testUpdateYtdlpLocalizedMessages() async {
+        let coordinator = DependencyUpdateCoordinator()
+        let service = YtdlpService()
+        let lang = LanguageService()
+
+        service.updateYtdlpHandler = {
+            return "2026.09.24"
+        }
+
+        await coordinator.updateYtdlp(service: service, languageService: lang)
+        XCTAssertEqual(coordinator.version, "2026.09.24")
+        XCTAssertEqual(coordinator.updateMessage?.title, lang.s("ytdlp_update_success_title"))
+        XCTAssertEqual(coordinator.updateMessage?.message, String(format: lang.s("ytdlp_update_success_message"), "2026.09.24"))
+
+        service.updateYtdlpHandler = {
+            throw YtdlpError.downloadFailed("Network failure")
+        }
+
+        await coordinator.updateYtdlp(service: service, languageService: lang)
+        XCTAssertEqual(coordinator.updateMessage?.title, lang.s("ytdlp_update_failed_title"))
+        XCTAssertTrue(coordinator.updateMessage?.message.contains("Network failure") == true)
+    }
 }

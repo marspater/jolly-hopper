@@ -6,7 +6,8 @@
     "description": "__MSG_extension_description__",
     "permissions": [
         "contextMenus",
-        "tabs"
+        "tabs",
+        "sidePanel"
     ],
     "action": {
         "default_title": "__MSG_context_download__",

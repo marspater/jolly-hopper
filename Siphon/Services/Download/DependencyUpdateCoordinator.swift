@@ -30,10 +30,16 @@ final class DependencyUpdateCoordinator: ObservableObject {
         cancellables.removeAll()
         ytdlpService.$isUpdating
             .receive(on: RunLoop.main)
-            .assign(to: &$isUpdating)
+            .sink { [weak self] isUpdating in
+                self?.isUpdating = isUpdating
+            }
+            .store(in: &cancellables)
         ytdlpService.$updateProgress
             .receive(on: RunLoop.main)
-            .assign(to: &$updateProgress)
+            .sink { [weak self] progress in
+                self?.updateProgress = progress
+            }
+            .store(in: &cancellables)
     }
 
     func initialize(service: YtdlpService, skipBinarySetup: Bool = false) async {
@@ -48,21 +54,22 @@ final class DependencyUpdateCoordinator: ObservableObject {
         }
     }
 
-    func updateYtdlp(service: YtdlpService) async {
+    func updateYtdlp(service: YtdlpService, languageService: LanguageService? = nil) async {
         guard !isUpdating else { return }
         updateMessage = nil
+        let lang = languageService ?? LanguageService()
         do {
             let installedVersion = try await service.updateYtdlp()
             version = installedVersion
             updateMessage = YtdlpUpdateMessage(
-                title: "yt-dlp Updated",
-                message: "Installed yt-dlp version \(installedVersion)."
+                title: lang.s("ytdlp_update_success_title"),
+                message: String(format: lang.s("ytdlp_update_success_message"), installedVersion)
             )
             notificationService.sendYtdlpUpdateSucceeded(version: installedVersion)
         } catch {
             let reason = error.localizedDescription
             updateMessage = YtdlpUpdateMessage(
-                title: "yt-dlp Update Failed",
+                title: lang.s("ytdlp_update_failed_title"),
                 message: reason
             )
             notificationService.sendYtdlpUpdateFailed(reason: reason)

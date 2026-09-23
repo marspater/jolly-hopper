@@ -127,7 +127,8 @@ struct SiphonApp: App {
                     Task {
                         await appState.updateYtdlp(
                             using: downloadManager.ytdlpService,
-                            activeExecutionCount: downloadManager.activeExecutionCount
+                            activeExecutionCount: downloadManager.activeExecutionCount,
+                            languageService: languageService
                         )
                     }
                 }
