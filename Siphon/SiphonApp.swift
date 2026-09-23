@@ -10,10 +10,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         NotificationService.shared.setup()
     }
 
-    func applicationWillTerminate(_: Notification) {
-        guard !NotificationService.isRunningTests else { return }
+    @MainActor
+    func handleApplicationWillTerminate(bypassTestGuard: Bool = false) {
+        guard bypassTestGuard || !NotificationService.isRunningTests else { return }
         downloadManager?.stopAllDownloads(preservePaused: true, suppressNotification: true)
         downloadManager?.shutdown()
+    }
+
+    func applicationWillTerminate(_: Notification) {
+        handleApplicationWillTerminate(bypassTestGuard: false)
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {

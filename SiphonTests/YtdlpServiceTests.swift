@@ -958,6 +958,137 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertEqual(media.allSources.count, 2)
     }
 
+    func testPussyspaceURLDetectionAndNormalization() {
+        XCTAssertTrue(YtdlpService.isPussyspaceURL("https://www.pussyspace.com/vid-3520796-hot-curvy-babe-gives-great-blowjob-and-titty-fuck/"))
+        XCTAssertTrue(YtdlpService.isPussyspaceURL("https://pussyspace.com/vid-12345-title/"))
+        XCTAssertTrue(YtdlpService.isPussyspaceURL("pussyspace.com"))
+        XCTAssertFalse(YtdlpService.isPussyspaceURL("https://youtube.com/watch?v=123"))
+
+        let raw = "https://www.pussyspace.com/vid-3520796-test/?utm_source=feed&ref=promo"
+        let normalized = service.normalizeURL(raw)
+        XCTAssertEqual(normalized, "https://www.pussyspace.com/vid-3520796-test/")
+    }
+
+    func testPussyspaceParseMediaFromPlayerResponse() {
+        let pageHTML = """
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Hot Curvy Babe Gives Great Blowjob HD (12 min) Straight Sex Video &#124; PussySpace</title>
+            <meta property="og:title" content="Hot Curvy Babe Gives Great Blowjob HD (12 min) Straight Sex Video &#124; PussySpace" />
+            <meta property="og:image" content="https://fi1-ph.ypncdn.com/videos/202103/12/385028811/original/12.jpg" />
+            <meta property="video:duration" content="721" />
+        </head>
+        <body>
+            <div id="showPlayer"></div>
+        </body>
+        </html>
+        """
+
+        let playerHTML = """
+        <script>
+        var player = new Playerjs({
+            id: "PlayerPussySpace",
+            poster: "https://fi1-ph.ypncdn.com/videos/202103/12/385028811/original/12.jpg",
+            file: "[240p]https://www.pussyspace.com/reversebuffer?u64hash=abc240&qvid.mp4,[480p]https://www.pussyspace.com/reversebuffer?u64hash=def480&qvid.mp4,[720p]https://www.pussyspace.com/reversebuffer?u64hash=ghi720&qvid.mp4"
+        });
+        </script>
+        """
+
+        let media = YtdlpService.parsePussyspaceMedia(
+            html: pageHTML,
+            targetUrl: "https://www.pussyspace.com/vid-3520796-hot-curvy-babe-gives-great-blowjob-and-titty-fuck/",
+            playerHtml: playerHTML
+        )
+
+        XCTAssertNotNil(media)
+        XCTAssertEqual(media?.title, "Hot Curvy Babe Gives Great Blowjob")
+        XCTAssertEqual(media?.thumbnailURL, "https://fi1-ph.ypncdn.com/videos/202103/12/385028811/original/12.jpg")
+        XCTAssertEqual(media?.duration, 721.0)
+        XCTAssertEqual(media?.allSources.count, 3)
+        // Highest resolution chosen by default
+        XCTAssertEqual(media?.quality, "720p")
+        XCTAssertEqual(media?.streamURL, "https://www.pussyspace.com/reversebuffer?u64hash=ghi720&qvid.mp4")
+
+        // Requested 240p format
+        let media240 = YtdlpService.parsePussyspaceMedia(
+            html: pageHTML,
+            targetUrl: "https://www.pussyspace.com/vid-3520796-hot-curvy-babe-gives-great-blowjob-and-titty-fuck/",
+            requestedFormat: "240p",
+            playerHtml: playerHTML
+        )
+        XCTAssertEqual(media240?.quality, "240p")
+        XCTAssertEqual(media240?.streamURL, "https://www.pussyspace.com/reversebuffer?u64hash=abc240&qvid.mp4")
+    }
+
+    func testPussyspaceParseMediaFromHlsOrMp4Response() {
+        let pageHTML = """
+        <html>
+        <head><title>Maid Gets Paid | PussySpace</title></head>
+        <body></body>
+        </html>
+        """
+
+        let playerHTML = """
+        <script>
+        var player = new Playerjs({
+            id: "PlayerPussySpace",
+            poster: "https://thumbs.cdn.com/poster.jpg",
+            file: "https://www.pussyspace.com/reversebuffer?u64hash=hls123&hls.m3u8 or https://www.pussyspace.com/reversebuffer?u64hash=mp4456&file.mp4"
+        });
+        </script>
+        """
+
+        let media = YtdlpService.parsePussyspaceMedia(
+            html: pageHTML,
+            targetUrl: "https://www.pussyspace.com/vid-6164626-maid-gets-paid/",
+            playerHtml: playerHTML
+        )
+
+        XCTAssertNotNil(media)
+        XCTAssertEqual(media?.title, "Maid Gets Paid")
+        XCTAssertEqual(media?.allSources.count, 2)
+        XCTAssertEqual(media?.streamURL, "https://www.pussyspace.com/reversebuffer?u64hash=hls123&hls.m3u8")
+    }
+
+    func testSynthesizedDirectStreamAudioFormatArgsUseBest() async throws {
+        let capturedArgsBox = TestBox<[String]>([])
+        service.processRunner = MockYtdlpProcessRunner(mockDownload: { args in
+            capturedArgsBox.value = args
+            return "[download] Destination: /tmp/test_audio.mp3\n"
+        })
+
+        var options = DownloadOptions.default
+        options.fileType = .mp3
+        options.selectedFormatId = "720p" // Synthetic video format ID previously selected
+
+        let info = MediaInfo(
+            id: "https://starwank.com/videos/260540/test/",
+            title: "Test Video",
+            uploader: "StarWank",
+            formats: [MediaFormat(formatId: "720p", ext: "mp4", resolution: "1280x720")]
+        )
+
+        _ = try await service.download(
+            url: "https://starwank.com/videos/260540/test/",
+            options: options,
+            mediaInfo: info,
+            onProgress: { _, _, _ in },
+            onOutput: { _ in }
+        )
+
+        let args = capturedArgsBox.value
+        XCTAssertTrue(args.contains("-x"))
+        XCTAssertTrue(args.contains("--audio-format"))
+        if let fIdx = args.firstIndex(of: "-f") {
+            // Must NOT use "720p" for audio extraction from direct stream
+            XCTAssertEqual(args[fIdx + 1], "b/best")
+        } else {
+            XCTFail("Missing -f in audio download arguments")
+        }
+    }
+
+
     func testBestCamAES256CTRDecryptionFixture() throws {
         let filename = "7c9a1f00ba871cce7861afcf0dfe6.255724278.4"
         let ciphertext = Data([0xe6, 0x4a, 0xbd, 0xed, 0xbe, 0xe1, 0x91, 0x3c, 0x6f, 0xaf, 0x93, 0x9a, 0xd6, 0x93, 0x83, 0x66])
