@@ -1050,7 +1050,7 @@ class YtdlpService: ObservableObject {
                 let formats = Self.protectedSiteFormats(
                     from: starwankMedia.allSources.map { ($0.label, $0.url, $0.height) }
                 )
-                return MediaInfo(                return MediaInfo(
+                return MediaInfo(
                     id: url,
                     title: starwankMedia.title,
                     thumbnail: starwankMedia.thumbnailURL,
@@ -1074,7 +1074,7 @@ class YtdlpService: ObservableObject {
                 let formats = Self.protectedSiteFormats(
                     from: pussyMedia.allSources.map { ($0.label, $0.url, $0.height) }
                 )
-                return MediaInfo(                return MediaInfo(
+                return MediaInfo(
                     id: url,
                     title: pussyMedia.title,
                     thumbnail: pussyMedia.thumbnailURL,
@@ -1586,7 +1586,7 @@ public struct DownloadResult: Sendable {
             }
         }
 
-        var args = [path.path, "--ignore-config"]        var args = [path.path, "--ignore-config"]
+        var args = [path.path, "--ignore-config"]
         appendJsRuntimeArgs(to: &args)
         if ffmpegPath == nil || !FileManager.default.fileExists(atPath: ffmpegPath?.path ?? "") {
             await findFfmpeg()
