@@ -1540,9 +1540,7 @@ final class NotificationServiceTests: XCTestCase {
         download.status = .downloading
         manager.downloads.append(download)
 
-        appDelegate.applicationWillTerminate(Notification(name: NSApplication.willTerminateNotification))
-
-        manager.stopAllDownloads(preservePaused: true, suppressNotification: true)
+        appDelegate.handleApplicationWillTerminate(bypassTestGuard: true)
         XCTAssertEqual(download.status, .stopped)
     }
 }

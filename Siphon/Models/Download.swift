@@ -616,7 +616,7 @@ struct DownloadOptions: Codable {
             try? FileManager.default.createDirectory(at: testDir, withIntermediateDirectories: true)
             saveFolderURL = testDir
         } else {
-            saveFolderURL = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first ?? URL(fileURLWithPath: NSHomeDirectory() + "/Downloads")
+            saveFolderURL = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Downloads", isDirectory: true)
         }
 
         let fileTypeStr = userDefaults.string(forKey: UserDefaultsKeys.defaultFileType) ?? "mp4"
