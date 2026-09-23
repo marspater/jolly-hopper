@@ -32,6 +32,10 @@ async function detectBrowserSource() {
         }
     }
 
+    if (/\bArc\//i.test(ua) || brands.includes("arc") || typeof chrome.sidePanel === "undefined") {
+        return "arc";
+    }
+
     if (brands.includes("chromium") && !brands.includes("google chrome")) {
         return "chromium";
     }

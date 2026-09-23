@@ -255,7 +255,10 @@ struct MenuBarView: View {
             submitToManager(resolvedURL: resolved)
         } else if cleanURL.contains(".") && !cleanURL.contains(" ") {
             // If user typed without scheme, try prefixing https://
-            submitToManager(resolvedURL: "https://" + cleanURL)
+            let candidate = "https://" + cleanURL
+            if case .valid(_, let resolved) = DownloadURLValidator.validate(candidate) {
+                submitToManager(resolvedURL: resolved)
+            }
         }
     }
 
