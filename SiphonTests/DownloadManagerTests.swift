@@ -1528,4 +1528,21 @@ final class NotificationServiceTests: XCTestCase {
         XCTAssertEqual(loadedAfterShutdown.count, 1)
         XCTAssertEqual(loadedAfterShutdown.first?.id, interrupted.id)
     }
+
+    @MainActor
+    func testAppDelegateWillTerminateShutsDownDownloadManager() {
+        let appDelegate = AppDelegate()
+        let manager = DownloadManager()
+        appDelegate.downloadManager = manager
+        defer { manager.shutdown() }
+
+        let download = Download(url: "https://example.com/video", options: .default, title: "Active Download")
+        download.status = .downloading
+        manager.downloads.append(download)
+
+        appDelegate.applicationWillTerminate(Notification(name: NSApplication.willTerminateNotification))
+
+        manager.stopAllDownloads(preservePaused: true, suppressNotification: true)
+        XCTAssertEqual(download.status, .stopped)
+    }
 }

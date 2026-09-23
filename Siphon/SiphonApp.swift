@@ -3,9 +3,17 @@ import CryptoKit
 @preconcurrency import UserNotifications
 
 final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
+    weak var downloadManager: DownloadManager?
+
     func applicationDidFinishLaunching(_ _: Notification) {
         UNUserNotificationCenter.current().delegate = NotificationService.shared
         NotificationService.shared.setup()
+    }
+
+    func applicationWillTerminate(_: Notification) {
+        guard !NotificationService.isRunningTests else { return }
+        downloadManager?.stopAllDownloads(preservePaused: true, suppressNotification: true)
+        downloadManager?.shutdown()
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
@@ -62,6 +70,7 @@ struct SiphonApp: App {
                 .environmentObject(languageService)
                 .environmentObject(updateChecker)
                 .onAppear {
+                    appDelegate.downloadManager = downloadManager
                     SiphonTheme.applyTheme(theme)
                     setupMenuBarIfNeeded()
                     applyBackgroundModeIfNeeded()
@@ -75,7 +84,7 @@ struct SiphonApp: App {
                     guard !NotificationService.isRunningTests else { return }
                     // A normal app quit must not turn explicitly paused jobs into
                     // stopped jobs or delete the resumable scratch data they own.
-                    downloadManager.stopAllDownloads(preservePaused: true)
+                    downloadManager.stopAllDownloads(preservePaused: true, suppressNotification: true)
                     downloadManager.shutdown()
                 }
                 .onOpenURL { url in
@@ -128,6 +137,7 @@ struct SiphonApp: App {
     }
     
     private func setupMenuBarIfNeeded() {
+        appDelegate.downloadManager = downloadManager
         MenuBarManager.shared.setup(languageService: languageService, downloadManager: downloadManager)
     }
     

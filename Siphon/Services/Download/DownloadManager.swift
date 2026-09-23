@@ -64,6 +64,18 @@ class DownloadManager: ObservableObject {
                 self?.processQueue()
             }
         }
+
+        NotificationCenter.default.addObserver(
+            forName: NSApplication.willTerminateNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard !NotificationService.isRunningTests else { return }
+                self?.stopAllDownloads(preservePaused: true, suppressNotification: true)
+                self?.shutdown()
+            }
+        }
     }
 
     var downloadingDownloads: [Download] {
