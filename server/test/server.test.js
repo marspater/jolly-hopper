@@ -89,6 +89,25 @@ describe('Siphon Companion Server', () => {
     assert.equal(data2.cached, true);
   });
 
+  // When the GitHub API is unreachable and no cached data exists, the server
+  // should return 503 instead of fabricating fake release metadata.
+  // This test cannot easily simulate that scenario without mocking `fetch`,
+  // so it verifies the response shape under normal (or cached) conditions
+  // and documents the expected 503 contract.
+  test('GET /api/latest returns either valid release data or 503', async () => {
+    const res = await fetch(`${baseUrl}/api/latest`);
+    assert.ok([200, 503].includes(res.status), `expected 200 or 503, got ${res.status}`);
+    assert.equal(res.headers.get('content-type'), 'application/json');
+    const data = await res.json();
+    if (res.status === 200) {
+      assert.ok(data.version, 'version must be present');
+      assert.ok(data.downloadUrl, 'downloadUrl must be present');
+      assert.ok('cached' in data, 'cached flag must be present');
+    } else {
+      assert.equal(data.error, 'Release metadata temporarily unavailable');
+    }
+  });
+
   test('malformed Host header returns 400 without crashing the server', async () => {
     const addr = server.address();
     const result = await new Promise((resolve, reject) => {

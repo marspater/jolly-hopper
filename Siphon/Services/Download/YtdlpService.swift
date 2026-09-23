@@ -5987,11 +5987,25 @@ final class CancellationBox: @unchecked Sendable {
 final class ThreadSafeDataBuffer: @unchecked Sendable {
     private var data = Data()
     private let lock = NSLock()
+    private let maxSize: Int
+    private(set) var isOverflow = false
 
-    func append(_ newBytes: Data) {
+    init(maxSize: Int = 32 * 1024 * 1024) {
+        self.maxSize = maxSize
+    }
+
+    /// Returns `true` if the data was accepted, `false` if the buffer is full.
+    @discardableResult
+    func append(_ newBytes: Data) -> Bool {
         lock.lock()
+        defer { lock.unlock() }
+        guard !isOverflow else { return false }
+        if data.count + newBytes.count > maxSize {
+            isOverflow = true
+            return false
+        }
         data.append(newBytes)
-        lock.unlock()
+        return true
     }
 
     func getString() -> String {

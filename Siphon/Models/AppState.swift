@@ -29,8 +29,7 @@ public enum ExternalDownloadTargetPolicy {
             host.hasSuffix(".local") ||
             host.hasSuffix(".localdomain") ||
             host.hasSuffix(".internal") ||
-            host.hasSuffix(".lan") ||
-            !host.contains(".") {
+            host.hasSuffix(".lan") {
             return false
         }
 
@@ -45,11 +44,19 @@ public enum ExternalDownloadTargetPolicy {
             return isGloballyRoutableIPv4(ipv4)
         }
 
+        // Check IPv6 literals before the dot requirement so that bracket-
+        // stripped hosts like "2606:4700::" are not rejected by !contains(".").
         if host.contains(":") {
             return isGloballyRoutableIPv6(host)
         }
 
-        return true
+        // Single-label hostnames (no dot) are local/intranet names.
+        guard host.contains(".") else { return false }
+
+        // Hostname passed static checks. Resolve DNS and verify every
+        // returned address is globally routable to prevent SSRF via
+        // domains that resolve to private/reserved IP ranges.
+        return resolveAndValidateHost(host)
     }
 
     private static func looksLikeLegacyIPv4Literal(_ host: String) -> Bool {
@@ -147,6 +154,83 @@ public enum ExternalDownloadTargetPolicy {
         if bytes[0] == 0xff { return false } // ff00::/8
         if bytes[0] == 0x20, bytes[1] == 0x01, bytes[2] == 0x0d, bytes[3] == 0xb8 {
             return false // 2001:db8::/32
+        }
+
+        return true
+    }
+
+    /// Resolve all A/AAAA records for `host` and reject if **any** resolved
+    /// address falls into a private or reserved range. This guards against
+    /// DNS-based SSRF where a public hostname resolves to 127.0.0.1,
+    /// 169.254.169.254, or other non-globally-routable addresses.
+    private static func resolveAndValidateHost(_ host: String) -> Bool {
+        var hints = addrinfo()
+        hints.ai_family = AF_UNSPEC
+        hints.ai_socktype = SOCK_STREAM
+        hints.ai_flags = AI_NUMERICSERV
+
+        var result: UnsafeMutablePointer<addrinfo>?
+        let status = getaddrinfo(host, "443", &hints, &result)
+        defer { if let result { freeaddrinfo(result) } }
+
+        // Resolution failure → reject. Do not allow unresolvable hostnames
+        // through, since yt-dlp may resolve them differently.
+        guard status == 0, result != nil else { return false }
+
+        var current = result
+        var checkedAtLeastOne = false
+        while let info = current {
+            let family = info.pointee.ai_family
+            switch family {
+            case AF_INET:
+                guard let addr = info.pointee.ai_addr else { return false }
+                let sin = addr.withMemoryRebound(to: sockaddr_in.self, capacity: 1) { $0.pointee }
+                let raw = sin.sin_addr.s_addr  // network byte order
+                let b: [UInt8] = [
+                    UInt8(raw & 0xFF),
+                    UInt8((raw >> 8) & 0xFF),
+                    UInt8((raw >> 16) & 0xFF),
+                    UInt8((raw >> 24) & 0xFF)
+                ]
+                guard isGloballyRoutableIPv4(b) else { return false }
+                checkedAtLeastOne = true
+
+            case AF_INET6:
+                guard let addr = info.pointee.ai_addr else { return false }
+                let sin6 = addr.withMemoryRebound(to: sockaddr_in6.self, capacity: 1) { $0.pointee }
+                let bytes = withUnsafeBytes(of: sin6.sin6_addr) { Array($0) }
+                guard isGloballyRoutableIPv6Bytes(bytes) else { return false }
+                checkedAtLeastOne = true
+
+            default:
+                break
+            }
+            current = info.pointee.ai_next
+        }
+
+        // Reject if no address records were found at all.
+        return checkedAtLeastOne
+    }
+
+    /// Check raw IPv6 bytes (16 bytes) against private/reserved ranges.
+    /// Factored out of `isGloballyRoutableIPv6` to share with DNS resolution.
+    private static func isGloballyRoutableIPv6Bytes(_ bytes: [UInt8]) -> Bool {
+        guard bytes.count == 16 else { return false }
+
+        let firstTenZero = bytes[0..<10].allSatisfy { $0 == 0 }
+        if firstTenZero, bytes[10] == 0xff, bytes[11] == 0xff {
+            return isGloballyRoutableIPv4(Array(bytes[12..<16]))
+        }
+        if bytes[0..<12].allSatisfy({ $0 == 0 }) {
+            return isGloballyRoutableIPv4(Array(bytes[12..<16]))
+        }
+
+        if (bytes[0] & 0xfe) == 0xfc { return false }
+        if bytes[0] == 0xfe, (bytes[1] & 0xc0) == 0x80 { return false }
+        if bytes[0] == 0xfe, (bytes[1] & 0xc0) == 0xc0 { return false }
+        if bytes[0] == 0xff { return false }
+        if bytes[0] == 0x20, bytes[1] == 0x01, bytes[2] == 0x0d, bytes[3] == 0xb8 {
+            return false
         }
 
         return true

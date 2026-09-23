@@ -1877,6 +1877,29 @@ final class QueueAndErrorUXTests: XCTestCase {
         }
     }
 
+    func testExternalTargetAllowsGlobalIPv6() throws {
+        // Cloudflare's public IPv6 DNS address
+        let url = try XCTUnwrap(URL(string: "https://[2606:4700:4700::1111]/video"))
+        XCTAssertTrue(ExternalDownloadTargetPolicy.isAllowed(url), "Global IPv6 targets should be allowed")
+    }
+
+    func testIPv6URLsAreAcceptedByValidator() {
+        let res = DownloadURLValidator.validate("https://[2606:4700:4700::1111]/video")
+        if case .valid(let url, _) = res {
+            XCTAssertTrue(url.host?.contains(":") == true)
+        } else {
+            XCTFail("Valid IPv6 URL should be accepted by DownloadURLValidator")
+        }
+
+        // Bracket-notation IPv6 without scheme should auto-prepend https://
+        let resNoScheme = DownloadURLValidator.validate("[2606:4700:4700::1111]/video")
+        if case .valid(let url, _) = resNoScheme {
+            XCTAssertEqual(url.scheme, "https")
+        } else {
+            XCTFail("IPv6 URL without scheme should be auto-schemed")
+        }
+    }
+
     func testBrowserSessionCredentialsAreBoundToOriginalHost() throws {
         let state = AppState()
         let sourceURL = try XCTUnwrap(URL(string: "https://secure.example.com/video/1"))

@@ -108,7 +108,8 @@ final class QueueRecoveryStore {
         self.fileManager = fileManager
     }
 
-    func persist(activeJobs: [Download]) {
+    @discardableResult
+    func persist(activeJobs: [Download]) -> Bool {
         let records = activeJobs.map { QueueRecoveryRecord(download: $0) }
         let snapshot = QueueRecoverySnapshot(
             version: 1,
@@ -116,17 +117,30 @@ final class QueueRecoveryStore {
             isCleanShutdown: false,
             jobs: records
         )
-        save(snapshot)
+        do {
+            try save(snapshot)
+            return true
+        } catch {
+            LoggerService.shared.log("Failed to persist queue recovery state: \(error.localizedDescription)", level: .error)
+            return false
+        }
     }
 
-    func markCleanShutdown() {
+    @discardableResult
+    func markCleanShutdown() -> Bool {
         let snapshot = QueueRecoverySnapshot(
             version: 1,
             timestamp: Date(),
             isCleanShutdown: true,
             jobs: []
         )
-        save(snapshot)
+        do {
+            try save(snapshot)
+            return true
+        } catch {
+            LoggerService.shared.log("Failed to mark clean shutdown: \(error.localizedDescription)", level: .error)
+            return false
+        }
     }
 
     func loadInterruptedJobs() -> [Download] {
@@ -150,16 +164,12 @@ final class QueueRecoveryStore {
         }
     }
 
-    private func save(_ snapshot: QueueRecoverySnapshot) {
-        do {
-            let dir = fileURL.deletingLastPathComponent()
-            if !fileManager.fileExists(atPath: dir.path) {
-                try fileManager.createDirectory(at: dir, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
-            }
-            let data = try JSONEncoder().encode(snapshot)
-            try data.write(to: fileURL, options: .atomic)
-        } catch {
-            LoggerService.shared.log("Failed to persist queue recovery state: \(error.localizedDescription)", level: .error)
+    private func save(_ snapshot: QueueRecoverySnapshot) throws {
+        let dir = fileURL.deletingLastPathComponent()
+        if !fileManager.fileExists(atPath: dir.path) {
+            try fileManager.createDirectory(at: dir, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
         }
+        let data = try JSONEncoder().encode(snapshot)
+        try data.write(to: fileURL, options: .atomic)
     }
 }

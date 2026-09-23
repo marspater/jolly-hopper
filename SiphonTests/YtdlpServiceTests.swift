@@ -4445,4 +4445,22 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertNoThrow(try controller.start(validProcess))
         validProcess.waitUntilExit()
     }
+
+    func testThreadSafeDataBufferRejectsOverflow() {
+        let buffer = ThreadSafeDataBuffer(maxSize: 100)
+        let small = Data(repeating: 0x41, count: 50)
+        XCTAssertTrue(buffer.append(small))
+        XCTAssertFalse(buffer.isOverflow)
+        
+        let overflowChunk = Data(repeating: 0x42, count: 60)
+        XCTAssertFalse(buffer.append(overflowChunk))
+        XCTAssertTrue(buffer.isOverflow)
+        
+        // Subsequent appends should also fail
+        XCTAssertFalse(buffer.append(Data([0x43])))
+        
+        // getString should return only the data before overflow
+        let str = buffer.getString()
+        XCTAssertEqual(str.count, 50)
+    }
 }
