@@ -1047,22 +1047,10 @@ class YtdlpService: ObservableObject {
             LoggerService.shared.log("Initiating protected-site media info resolution for: \(LoggerService.sanitizeURLForLog(url))", level: .info)
             if let starwankMedia = await resolveStarwankMediaInfo(url: url, rawCookies: rawCookies) {
                 LoggerService.shared.log("Protected-site media successfully extracted: '\(starwankMedia.title)' with \(starwankMedia.allSources.count) format(s)", level: .info)
-                let formats: [MediaFormat] = starwankMedia.allSources.map { src in
-                    let quality = src.label
-                    let height = src.height
-                    return MediaFormat(
-                        formatId: quality,
-                        ext: "mp4",
-                        resolution: "\(Int(Double(height) * 16.0 / 9.0))x\(height)",
-                        fps: 30.0,
-                        vcodec: "h264",
-                        acodec: "aac",
-                        tbr: nil,
-                        filesize: nil,
-                        manifestUrl: src.url
-                    )
-                }
-                return MediaInfo(
+                let formats = Self.protectedSiteFormats(
+                    from: starwankMedia.allSources.map { ($0.label, $0.url, $0.height) }
+                )
+                return MediaInfo(                return MediaInfo(
                     id: url,
                     title: starwankMedia.title,
                     thumbnail: starwankMedia.thumbnailURL,
@@ -1083,22 +1071,10 @@ class YtdlpService: ObservableObject {
             LoggerService.shared.log("Initiating PussySpace media info resolution for: \(LoggerService.sanitizeURLForLog(url))", level: .info)
             if let pussyMedia = await resolvePussyspaceMediaInfo(url: url, rawCookies: rawCookies) {
                 LoggerService.shared.log("PussySpace media successfully extracted: '\(pussyMedia.title)' with \(pussyMedia.allSources.count) format(s)", level: .info)
-                let formats: [MediaFormat] = pussyMedia.allSources.map { src in
-                    let quality = src.label
-                    let height = src.height
-                    return MediaFormat(
-                        formatId: quality,
-                        ext: "mp4",
-                        resolution: "\(Int(Double(height) * 16.0 / 9.0))x\(height)",
-                        fps: 30.0,
-                        vcodec: "h264",
-                        acodec: "aac",
-                        tbr: nil,
-                        filesize: nil,
-                        manifestUrl: src.url
-                    )
-                }
-                return MediaInfo(
+                let formats = Self.protectedSiteFormats(
+                    from: pussyMedia.allSources.map { ($0.label, $0.url, $0.height) }
+                )
+                return MediaInfo(                return MediaInfo(
                     id: url,
                     title: pussyMedia.title,
                     thumbnail: pussyMedia.thumbnailURL,
@@ -1391,6 +1367,72 @@ public struct DownloadResult: Sendable {
     }
 }
 
+    private struct ReusedDirectMedia {
+        let streamURL: String
+        let title: String?
+        let embedURL: String?
+        let thumbnailURL: String?
+        let formatNote: String?
+    }
+
+    private func reusedDirectMedia(
+        mediaInfo: MediaInfo?,
+        selectedFormatId: String?,
+        normalizedURL: String,
+        fallbackEmbedURL: String,
+        fallbackIsAllowed: (String) -> Bool = { _ in true }
+    ) -> ReusedDirectMedia? {
+        if let selectedId = selectedFormatId,
+           let matched = mediaInfo?.formats?.first(where: {
+               $0.formatId.lowercased() == selectedId.lowercased() ||
+               $0.formatId.replacingOccurrences(of: "p", with: "").lowercased() ==
+                   selectedId.replacingOccurrences(of: "p", with: "").lowercased()
+           }),
+           let streamURL = matched.manifestUrl,
+           !streamURL.isEmpty {
+            return ReusedDirectMedia(
+                streamURL: streamURL,
+                title: mediaInfo?.title,
+                embedURL: mediaInfo?.webpageUrl ?? fallbackEmbedURL,
+                thumbnailURL: mediaInfo?.thumbnail,
+                formatNote: matched.formatNote
+            )
+        }
+
+        if let streamURL = mediaInfo?.manifestUrl ?? mediaInfo?.originalUrl,
+           !streamURL.isEmpty,
+           streamURL != normalizedURL,
+           fallbackIsAllowed(streamURL) {
+            return ReusedDirectMedia(
+                streamURL: streamURL,
+                title: mediaInfo?.title,
+                embedURL: mediaInfo?.webpageUrl ?? fallbackEmbedURL,
+                thumbnailURL: mediaInfo?.thumbnail,
+                formatNote: nil
+            )
+        }
+
+        return nil
+    }
+
+    private static func protectedSiteFormats(
+        from sources: [(label: String, url: String, height: Int)]
+    ) -> [MediaFormat] {
+        sources.map { source in
+            MediaFormat(
+                formatId: source.label,
+                ext: "mp4",
+                resolution: "\(Int(Double(source.height) * 16.0 / 9.0))x\(source.height)",
+                fps: 30.0,
+                vcodec: "h264",
+                acodec: "aac",
+                tbr: nil,
+                filesize: nil,
+                manifestUrl: source.url
+            )
+        }
+    }
+
     func download(
         url: String,
         options: DownloadOptions,
@@ -1448,23 +1490,14 @@ public struct DownloadResult: Sendable {
                 customThumbnailURL = btvMedia.thumbnailURL
             }
         } else if isGuywhURL(url) {
-            if let selectedId = options.selectedFormatId,
-               let matched = mediaInfo?.formats?.first(where: {
-                   $0.formatId.lowercased() == selectedId.lowercased() ||
-                   $0.formatId.replacingOccurrences(of: "p", with: "").lowercased() == selectedId.replacingOccurrences(of: "p", with: "").lowercased()
-               }),
-               let stream = matched.manifestUrl, !stream.isEmpty {
-                targetURL = stream
-                customResolvedTitle = mediaInfo?.title
-                customEmbedURL = mediaInfo?.webpageUrl ?? url
-                customThumbnailURL = mediaInfo?.thumbnail
-            } else if let streamURL = mediaInfo?.manifestUrl ?? mediaInfo?.originalUrl,
-                      !streamURL.isEmpty,
-                      streamURL != normalizedURL {
-                targetURL = streamURL
-                customResolvedTitle = mediaInfo?.title
-                customEmbedURL = mediaInfo?.webpageUrl ?? url
-                customThumbnailURL = mediaInfo?.thumbnail
+            if let reused = reusedDirectMedia(
+                mediaInfo: mediaInfo,
+                selectedFormatId: options.selectedFormatId,
+                normalizedURL: normalizedURL,
+                fallbackEmbedURL: url
+            ) {
+                (targetURL, customResolvedTitle, customEmbedURL, customThumbnailURL) =
+                    (reused.streamURL, reused.title, reused.embedURL, reused.thumbnailURL)
             } else if let guywhMedia = await resolveGuywhMediaInfo(url: url, rawCookies: options.rawCookies) {
                 targetURL = guywhMedia.streamURL
                 customResolvedTitle = guywhMedia.title
@@ -1472,23 +1505,14 @@ public struct DownloadResult: Sendable {
                 customThumbnailURL = guywhMedia.thumbnailURL
             }
         } else if isGFFURL(url) {
-            if let selectedId = options.selectedFormatId,
-               let matched = mediaInfo?.formats?.first(where: {
-                   $0.formatId.lowercased() == selectedId.lowercased() ||
-                   $0.formatId.replacingOccurrences(of: "p", with: "").lowercased() == selectedId.replacingOccurrences(of: "p", with: "").lowercased()
-               }),
-               let stream = matched.manifestUrl, !stream.isEmpty {
-                targetURL = stream
-                customResolvedTitle = mediaInfo?.title
-                customEmbedURL = mediaInfo?.webpageUrl ?? url
-                customThumbnailURL = mediaInfo?.thumbnail
-            } else if let streamURL = mediaInfo?.manifestUrl ?? mediaInfo?.originalUrl,
-                      !streamURL.isEmpty,
-                      streamURL != normalizedURL {
-                targetURL = streamURL
-                customResolvedTitle = mediaInfo?.title
-                customEmbedURL = mediaInfo?.webpageUrl ?? url
-                customThumbnailURL = mediaInfo?.thumbnail
+            if let reused = reusedDirectMedia(
+                mediaInfo: mediaInfo,
+                selectedFormatId: options.selectedFormatId,
+                normalizedURL: normalizedURL,
+                fallbackEmbedURL: url
+            ) {
+                (targetURL, customResolvedTitle, customEmbedURL, customThumbnailURL) =
+                    (reused.streamURL, reused.title, reused.embedURL, reused.thumbnailURL)
             } else if let gffMedia = await resolveGFFMediaInfo(url: url, rawCookies: options.rawCookies) {
                 targetURL = gffMedia.streamURL
                 customResolvedTitle = gffMedia.title
@@ -1496,26 +1520,20 @@ public struct DownloadResult: Sendable {
                 customThumbnailURL = gffMedia.thumbnailURL
             }
         } else if isBestCamURL(url) {
-            if let selectedId = options.selectedFormatId,
-               let matched = mediaInfo?.formats?.first(where: {
-                   $0.formatId.lowercased() == selectedId.lowercased() ||
-                   $0.formatId.replacingOccurrences(of: "p", with: "").lowercased() == selectedId.replacingOccurrences(of: "p", with: "").lowercased()
-               }),
-               let stream = matched.manifestUrl, !stream.isEmpty {
-                targetURL = stream
-                customResolvedTitle = mediaInfo?.title
-                customEmbedURL = mediaInfo?.webpageUrl ?? url
-                customThumbnailURL = mediaInfo?.thumbnail
-                bestCamDecryptionKey = matched.formatNote
-            } else if let streamURL = mediaInfo?.manifestUrl ?? mediaInfo?.originalUrl,
-                      !streamURL.isEmpty,
-                      streamURL != normalizedURL {
-                targetURL = streamURL
-                customResolvedTitle = mediaInfo?.title
-                customEmbedURL = mediaInfo?.webpageUrl ?? url
-                customThumbnailURL = mediaInfo?.thumbnail
-                bestCamDecryptionKey = URL(string: streamURL)?.lastPathComponent
-            } else if let bestCamMedia = await resolveBestCamMediaInfo(url: url, rawCookies: options.rawCookies, requestedFormat: options.selectedFormatId) {
+            if let reused = reusedDirectMedia(
+                mediaInfo: mediaInfo,
+                selectedFormatId: options.selectedFormatId,
+                normalizedURL: normalizedURL,
+                fallbackEmbedURL: url
+            ) {
+                (targetURL, customResolvedTitle, customEmbedURL, customThumbnailURL) =
+                    (reused.streamURL, reused.title, reused.embedURL, reused.thumbnailURL)
+                bestCamDecryptionKey = reused.formatNote ?? URL(string: reused.streamURL)?.lastPathComponent
+            } else if let bestCamMedia = await resolveBestCamMediaInfo(
+                url: url,
+                rawCookies: options.rawCookies,
+                requestedFormat: options.selectedFormatId
+            ) {
                 targetURL = bestCamMedia.streamURL
                 customResolvedTitle = bestCamMedia.title
                 customEmbedURL = bestCamMedia.embedURL
@@ -1523,50 +1541,44 @@ public struct DownloadResult: Sendable {
                 bestCamDecryptionKey = bestCamMedia.encryptedFilename
             }
         } else if isStarwankURL(url) {
-            if let selectedId = options.selectedFormatId,
-               let matched = mediaInfo?.formats?.first(where: {
-                   $0.formatId.lowercased() == selectedId.lowercased() ||
-                   $0.formatId.replacingOccurrences(of: "p", with: "").lowercased() == selectedId.replacingOccurrences(of: "p", with: "").lowercased()
-               }),
-               let stream = matched.manifestUrl, !stream.isEmpty {
-                targetURL = stream
-                customResolvedTitle = mediaInfo?.title
-                customEmbedURL = mediaInfo?.webpageUrl ?? url
-                customThumbnailURL = mediaInfo?.thumbnail
-            } else if let streamURL = mediaInfo?.manifestUrl ?? mediaInfo?.originalUrl,
-                      !streamURL.isEmpty,
-                      streamURL != normalizedURL,
-                      (streamURL.contains(".m3u8") || streamURL.contains(".mp4") || streamURL.contains("get_file")) {
-                targetURL = streamURL
-                customResolvedTitle = mediaInfo?.title
-                customEmbedURL = mediaInfo?.webpageUrl ?? url
-                customThumbnailURL = mediaInfo?.thumbnail
-            } else if let starwankMedia = await resolveStarwankMediaInfo(url: url, rawCookies: options.rawCookies, requestedFormat: options.selectedFormatId) {
+            if let reused = reusedDirectMedia(
+                mediaInfo: mediaInfo,
+                selectedFormatId: options.selectedFormatId,
+                normalizedURL: normalizedURL,
+                fallbackEmbedURL: url,
+                fallbackIsAllowed: { stream in
+                    stream.contains(".m3u8") || stream.contains(".mp4") || stream.contains("get_file")
+                }
+            ) {
+                (targetURL, customResolvedTitle, customEmbedURL, customThumbnailURL) =
+                    (reused.streamURL, reused.title, reused.embedURL, reused.thumbnailURL)
+            } else if let starwankMedia = await resolveStarwankMediaInfo(
+                url: url,
+                rawCookies: options.rawCookies,
+                requestedFormat: options.selectedFormatId
+            ) {
                 targetURL = starwankMedia.streamURL
                 customResolvedTitle = starwankMedia.title
                 customEmbedURL = starwankMedia.embedURL
                 customThumbnailURL = starwankMedia.thumbnailURL
             }
         } else if isPussyspaceURL(url) {
-            if let selectedId = options.selectedFormatId,
-               let matched = mediaInfo?.formats?.first(where: {
-                   $0.formatId.lowercased() == selectedId.lowercased() ||
-                   $0.formatId.replacingOccurrences(of: "p", with: "").lowercased() == selectedId.replacingOccurrences(of: "p", with: "").lowercased()
-               }),
-               let stream = matched.manifestUrl, !stream.isEmpty {
-                targetURL = stream
-                customResolvedTitle = mediaInfo?.title
-                customEmbedURL = mediaInfo?.webpageUrl ?? url
-                customThumbnailURL = mediaInfo?.thumbnail
-            } else if let streamURL = mediaInfo?.manifestUrl ?? mediaInfo?.originalUrl,
-                      !streamURL.isEmpty,
-                      streamURL != normalizedURL,
-                      (streamURL.contains(".m3u8") || streamURL.contains(".mp4") || streamURL.contains("reversebuffer")) {
-                targetURL = streamURL
-                customResolvedTitle = mediaInfo?.title
-                customEmbedURL = mediaInfo?.webpageUrl ?? url
-                customThumbnailURL = mediaInfo?.thumbnail
-            } else if let pussyMedia = await resolvePussyspaceMediaInfo(url: url, rawCookies: options.rawCookies, requestedFormat: options.selectedFormatId) {
+            if let reused = reusedDirectMedia(
+                mediaInfo: mediaInfo,
+                selectedFormatId: options.selectedFormatId,
+                normalizedURL: normalizedURL,
+                fallbackEmbedURL: url,
+                fallbackIsAllowed: { stream in
+                    stream.contains(".m3u8") || stream.contains(".mp4") || stream.contains("reversebuffer")
+                }
+            ) {
+                (targetURL, customResolvedTitle, customEmbedURL, customThumbnailURL) =
+                    (reused.streamURL, reused.title, reused.embedURL, reused.thumbnailURL)
+            } else if let pussyMedia = await resolvePussyspaceMediaInfo(
+                url: url,
+                rawCookies: options.rawCookies,
+                requestedFormat: options.selectedFormatId
+            ) {
                 targetURL = pussyMedia.streamURL
                 customResolvedTitle = pussyMedia.title
                 customEmbedURL = pussyMedia.embedURL
@@ -1574,7 +1586,7 @@ public struct DownloadResult: Sendable {
             }
         }
 
-        var args = [path.path, "--ignore-config"]
+        var args = [path.path, "--ignore-config"]        var args = [path.path, "--ignore-config"]
         appendJsRuntimeArgs(to: &args)
         if ffmpegPath == nil || !FileManager.default.fileExists(atPath: ffmpegPath?.path ?? "") {
             await findFfmpeg()
@@ -5170,6 +5182,71 @@ public struct DownloadResult: Sendable {
         )
     }
 
+    private func fetchProtectedPageHTML(
+        pageURL: URL,
+        targetURL: String,
+        rawCookies: String?,
+        fallbackHost: String
+    ) async -> String {
+        var html = ""
+
+        if processRunner is DefaultYtdlpProcessRunner {
+            var request = URLRequest(url: pageURL)
+            request.timeoutInterval = 15.0
+            request.setValue(
+                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+                forHTTPHeaderField: "User-Agent"
+            )
+            request.setValue(
+                "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                forHTTPHeaderField: "Accept"
+            )
+            request.setValue("en-US,en;q=0.9", forHTTPHeaderField: "Accept-Language")
+            let scheme = pageURL.scheme ?? "https"
+            request.setValue("\(scheme)://\(pageURL.host ?? fallbackHost)/", forHTTPHeaderField: "Referer")
+            if let rawCookies, !rawCookies.isEmpty {
+                request.setValue(rawCookies, forHTTPHeaderField: "Cookie")
+            }
+
+            if let (data, response) = try? await URLSession.shared.data(for: request),
+               let httpResponse = response as? HTTPURLResponse,
+               (200...299).contains(httpResponse.statusCode),
+               let fetched = String(data: data, encoding: .utf8) {
+                html = fetched
+            }
+        }
+
+        if html.isEmpty {
+            let appSupportYtdlp = Self.getAppSupportDirectory().appendingPathComponent("yt-dlp")
+            let bundledYtdlp = Bundle.main.url(forResource: "yt-dlp", withExtension: nil)
+            let installedYtdlp = FileManager.default.fileExists(atPath: appSupportYtdlp.path) ? appSupportYtdlp : nil
+            if let ytdlp = ytdlpPath ?? bundledYtdlp ?? installedYtdlp {
+                var dumpArgs = [ytdlp.path, "--ignore-config", "--dump-pages"]
+                appendSiteSpecificArgs(for: targetURL, to: &dumpArgs)
+                dumpArgs.append(contentsOf: ["--", targetURL])
+                if let output = try? await processRunner.runCommand(dumpArgs) {
+                    let chunks = output.split(whereSeparator: \.isNewline).compactMap { line -> String? in
+                        let trimmed = String(line).trimmingCharacters(in: .whitespaces)
+                        guard !trimmed.starts(with: "#"),
+                              !trimmed.starts(with: "["),
+                              !trimmed.starts(with: "WARNING"),
+                              !trimmed.starts(with: "ERROR"),
+                              let decodedData = Data(base64Encoded: trimmed, options: .ignoreUnknownCharacters) else {
+                            return nil
+                        }
+                        let decodedString = String(decoding: decodedData, as: UTF8.self)
+                        return decodedString.isEmpty ? nil : decodedString
+                    }
+                    if !chunks.isEmpty {
+                        html = chunks.joined()
+                    }
+                }
+            }
+        }
+
+        return html
+    }
+
     // MARK: - Starwank Extractor
 
     struct StarwankSource: Equatable, Sendable {
@@ -5360,56 +5437,12 @@ public struct DownloadResult: Sendable {
         let targetUrl = normalizeURLForYtdlp(url)
         guard let pageURL = URL(string: targetUrl) else { return nil }
 
-        var html = ""
-
-        // 1. Direct URLSession fetch
-        if processRunner is DefaultYtdlpProcessRunner {
-            var request = URLRequest(url: pageURL)
-            request.timeoutInterval = 15.0
-            request.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36", forHTTPHeaderField: "User-Agent")
-            request.setValue("text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8", forHTTPHeaderField: "Accept")
-            request.setValue("en-US,en;q=0.9", forHTTPHeaderField: "Accept-Language")
-            let baseScheme = pageURL.scheme ?? "https"
-            let refererURL = "\(baseScheme)://\(pageURL.host ?? "starwank.com")/"
-            request.setValue(refererURL, forHTTPHeaderField: "Referer")
-            if let raw = rawCookies, !raw.isEmpty {
-                request.setValue(raw, forHTTPHeaderField: "Cookie")
-            }
-
-            if let (data, response) = try? await URLSession.shared.data(for: request),
-               let httpResponse = response as? HTTPURLResponse,
-               (200...299).contains(httpResponse.statusCode),
-               let fetched = String(data: data, encoding: .utf8) {
-                html = fetched
-            }
-        }
-
-        // 2. Fallback to yt-dlp --dump-pages
-        if html.isEmpty {
-            let appSupportYtdlp = Self.getAppSupportDirectory().appendingPathComponent("yt-dlp")
-            let ytdlpBinary = ytdlpPath ?? Bundle.main.url(forResource: "yt-dlp", withExtension: nil) ?? (FileManager.default.fileExists(atPath: appSupportYtdlp.path) ? appSupportYtdlp : nil)
-            if let ytdlp = ytdlpBinary {
-                var dumpArgs = [ytdlp.path, "--ignore-config", "--dump-pages"]
-                appendSiteSpecificArgs(for: targetUrl, to: &dumpArgs)
-                dumpArgs.append("--")
-                dumpArgs.append(targetUrl)
-                if let output = try? await processRunner.runCommand(dumpArgs) {
-                    var chunks: [String] = []
-                    for line in output.split(whereSeparator: \.isNewline) {
-                        let trimmed = String(line).trimmingCharacters(in: .whitespaces)
-                        if !trimmed.starts(with: "#") && !trimmed.starts(with: "[") && !trimmed.starts(with: "WARNING") && !trimmed.starts(with: "ERROR"),
-                           let decodedData = Data(base64Encoded: trimmed, options: .ignoreUnknownCharacters),
-                           let decodedString = String(decoding: decodedData, as: UTF8.self) as String?,
-                           !decodedString.isEmpty {
-                            chunks.append(decodedString)
-                        }
-                    }
-                    if !chunks.isEmpty {
-                        html = chunks.joined()
-                    }
-                }
-            }
-        }
+        let html = await fetchProtectedPageHTML(
+            pageURL: pageURL,
+            targetURL: targetUrl,
+            rawCookies: rawCookies,
+            fallbackHost: "starwank.com"
+        )
 
         guard !html.isEmpty else { return nil }
 
@@ -5615,56 +5648,12 @@ public struct DownloadResult: Sendable {
         let targetUrl = normalizeURLForYtdlp(url)
         guard let pageURL = URL(string: targetUrl) else { return nil }
 
-        var html = ""
-
-        // 1. Direct URLSession fetch for page
-        if processRunner is DefaultYtdlpProcessRunner {
-            var request = URLRequest(url: pageURL)
-            request.timeoutInterval = 15.0
-            request.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36", forHTTPHeaderField: "User-Agent")
-            request.setValue("text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8", forHTTPHeaderField: "Accept")
-            request.setValue("en-US,en;q=0.9", forHTTPHeaderField: "Accept-Language")
-            let baseScheme = pageURL.scheme ?? "https"
-            let refererURL = "\(baseScheme)://\(pageURL.host ?? "www.pussyspace.com")/"
-            request.setValue(refererURL, forHTTPHeaderField: "Referer")
-            if let raw = rawCookies, !raw.isEmpty {
-                request.setValue(raw, forHTTPHeaderField: "Cookie")
-            }
-
-            if let (data, response) = try? await URLSession.shared.data(for: request),
-               let httpResponse = response as? HTTPURLResponse,
-               (200...299).contains(httpResponse.statusCode),
-               let fetched = String(data: data, encoding: .utf8) {
-                html = fetched
-            }
-        }
-
-        // 2. Fallback to yt-dlp --dump-pages
-        if html.isEmpty {
-            let appSupportYtdlp = Self.getAppSupportDirectory().appendingPathComponent("yt-dlp")
-            let ytdlpBinary = ytdlpPath ?? Bundle.main.url(forResource: "yt-dlp", withExtension: nil) ?? (FileManager.default.fileExists(atPath: appSupportYtdlp.path) ? appSupportYtdlp : nil)
-            if let ytdlp = ytdlpBinary {
-                var dumpArgs = [ytdlp.path, "--ignore-config", "--dump-pages"]
-                appendSiteSpecificArgs(for: targetUrl, to: &dumpArgs)
-                dumpArgs.append("--")
-                dumpArgs.append(targetUrl)
-                if let output = try? await processRunner.runCommand(dumpArgs) {
-                    var chunks: [String] = []
-                    for line in output.split(whereSeparator: \.isNewline) {
-                        let trimmed = String(line).trimmingCharacters(in: .whitespaces)
-                        if !trimmed.starts(with: "#") && !trimmed.starts(with: "[") && !trimmed.starts(with: "WARNING") && !trimmed.starts(with: "ERROR"),
-                           let decodedData = Data(base64Encoded: trimmed, options: .ignoreUnknownCharacters),
-                           let decodedString = String(decoding: decodedData, as: UTF8.self) as String?,
-                           !decodedString.isEmpty {
-                            chunks.append(decodedString)
-                        }
-                    }
-                    if !chunks.isEmpty {
-                        html = chunks.joined()
-                    }
-                }
-            }
-        }
+        let html = await fetchProtectedPageHTML(
+            pageURL: pageURL,
+            targetURL: targetUrl,
+            rawCookies: rawCookies,
+            fallbackHost: "www.pussyspace.com"
+        )
 
         guard !html.isEmpty else { return nil }
 
