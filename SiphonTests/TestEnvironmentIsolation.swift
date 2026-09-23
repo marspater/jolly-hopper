@@ -27,6 +27,11 @@ final class TestEnvironmentIsolation: NSObject, XCTestObservation {
     // thread when the bundle finishes and again from the process exit hook.
     nonisolated(unsafe) private static var snapshot: Snapshot?
 
+    /// On-disk copy of the user's state, so a crashed or force-stopped run
+    /// (no didFinish or atexit) can be repaired by the next run.
+    private static let backupURL = FileManager.default.temporaryDirectory
+        .appendingPathComponent("SiphonTestsStateBackup.plist")
+
     override init() {
         super.init()
         XCTestObservationCenter.shared.addTestObserver(self)
@@ -38,11 +43,29 @@ final class TestEnvironmentIsolation: NSObject, XCTestObservation {
         // XCTest delivers observation callbacks on the main thread.
         let recoveryURL = MainActor.assumeIsolated { QueueRecoveryStore.defaultFileURL }
 
+        // A backup left by an interrupted run holds the user's real state;
+        // the live state is that run's test data, so prefer the backup.
+        var backup: [String: Any]
+        if let data = try? Data(contentsOf: Self.backupURL),
+           let saved = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any] {
+            backup = saved
+        } else {
+            backup = [:]
+            backup["defaultsDomain"] = domainName.flatMap { defaults.persistentDomain(forName: $0) }
+            backup["recoveryFile"] = try? Data(contentsOf: recoveryURL)
+            do {
+                let data = try PropertyListSerialization.data(fromPropertyList: backup, format: .binary, options: 0)
+                try data.write(to: Self.backupURL, options: .atomic)
+            } catch {
+                NSLog("SiphonTests: failed to write app state backup: \(error.localizedDescription)")
+            }
+        }
+
         Self.snapshot = Snapshot(
             defaultsDomainName: domainName,
-            defaultsDomain: domainName.flatMap { defaults.persistentDomain(forName: $0) },
+            defaultsDomain: backup["defaultsDomain"] as? [String: Any],
             recoveryFileURL: recoveryURL,
-            recoveryFile: try? Data(contentsOf: recoveryURL)
+            recoveryFile: backup["recoveryFile"] as? Data
         )
 
         if let domainName {
@@ -84,10 +107,13 @@ final class TestEnvironmentIsolation: NSObject, XCTestObservation {
             do {
                 try data.write(to: snapshot.recoveryFileURL, options: .atomic)
             } catch {
+                // Keep the on-disk backup so the next run can retry the restore.
                 NSLog("SiphonTests: failed to restore queue recovery file: \(error.localizedDescription)")
+                return
             }
         } else {
             try? FileManager.default.removeItem(at: snapshot.recoveryFileURL)
         }
+        try? FileManager.default.removeItem(at: backupURL)
     }
 }
