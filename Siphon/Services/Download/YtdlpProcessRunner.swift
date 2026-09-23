@@ -479,12 +479,16 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
         }
 
         let cleanError = extractCleanError(from: errorOutput)
-        let lowerCleanError = cleanError.lowercased()
-        if lowerCleanError.contains("http error 429") || lowerCleanError.contains("too many requests") {
-            return .tooManyRequests
-        }
-        if lowerCleanError.contains("subtitle") || lowerCleanError.contains("caption") {
-            return .subtitleError(errorOutput)
+        // Without an ERROR: line (traceback, crash, signal) cleanError is the
+        // whole stderr, warnings included, so it must not drive classification.
+        if errorOutput.contains("ERROR:") {
+            let lowerCleanError = cleanError.lowercased()
+            if lowerCleanError.contains("http error 429") || lowerCleanError.contains("too many requests") {
+                return .tooManyRequests
+            }
+            if lowerCleanError.contains("subtitle") || lowerCleanError.contains("caption") {
+                return .subtitleError(errorOutput)
+            }
         }
         let trimmed = cleanError.trimmingCharacters(in: .whitespacesAndNewlines)
         return .downloadFailed(trimmed.isEmpty ? "Process exited with code \(exitCode)" : cleanError)
