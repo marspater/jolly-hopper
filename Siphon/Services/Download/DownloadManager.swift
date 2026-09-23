@@ -22,7 +22,7 @@ class DownloadManager: ObservableObject {
     let recoveryStore: QueueRecoveryStore
     @Published var showQueueRecoveryAlert: Bool = false
     @Published var recoverableJobsCount: Int = 0
-    private var pendingRecoveryJobs: [Download] = []
+    var pendingRecoveryJobs: [Download] = []
     private var executor: DownloadExecutor!
     private var cancellables = Set<AnyCancellable>()
     private var isShuttingDown = false
@@ -199,13 +199,18 @@ class DownloadManager: ObservableObject {
 
     func persistQueueRecoveryState() {
         guard !isShuttingDown else { return }
-        let activeJobs = downloads.filter { download in
+        var activeJobs = downloads.filter { download in
             switch download.status {
             case .queued, .fetching, .downloading, .processing:
                 return true
             default:
                 return false
             }
+        }
+        if !pendingRecoveryJobs.isEmpty {
+            let activeIDs = Set(activeJobs.map(\.id))
+            let remainingPending = pendingRecoveryJobs.filter { !activeIDs.contains($0.id) }
+            activeJobs.append(contentsOf: remainingPending)
         }
         recoveryStore.persist(activeJobs: activeJobs)
     }
@@ -385,6 +390,7 @@ class DownloadManager: ObservableObject {
         download.progress = 0
         download.errorMessage = nil
         download.log = ""
+        download.mediaInfo = nil
         updateStatus(for: download, to: .queued)
         objectWillChange.send()
 
@@ -462,7 +468,11 @@ class DownloadManager: ObservableObject {
         // while executor-owned teardown is still unwinding.
         queue.clearReservedSlots()
         queue.clearReservedOutputPaths()
-        recoveryStore.markCleanShutdown()
+        if pendingRecoveryJobs.isEmpty {
+            recoveryStore.markCleanShutdown()
+        } else {
+            recoveryStore.persist(activeJobs: pendingRecoveryJobs)
+        }
     }
 
     func planUniqueOutputPath(for download: Download, forceIncrement: Bool = false) -> (resolvedBaseName: String, candidatePath: String) {
@@ -486,12 +496,12 @@ class DownloadManager: ObservableObject {
         queue.unreserveOutputPath(path)
     }
     
-    func stopAllDownloads(preservePaused: Bool = false) {
+    func stopAllDownloads(preservePaused: Bool = false, suppressNotification: Bool = false) {
         let queuedToStop = downloads.filter {
             $0.status == .queued || (!preservePaused && $0.status == .paused)
         }
         for download in downloadingDownloads + queuedToStop {
-            stopDownload(download, suppressNotification: false, skipSaveAndBroadcast: true)
+            stopDownload(download, suppressNotification: suppressNotification, skipSaveAndBroadcast: true)
         }
         if preservePaused {
             for download in downloads where download.status == .paused {
