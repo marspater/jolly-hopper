@@ -5338,7 +5338,7 @@ public struct DownloadResult: Sendable {
         return sources[0]
     }
 
-    nonisolated static func isStarwankURL    nonisolated static func isStarwankURL(_ urlOrHost: String) -> Bool {
+    nonisolated static func isStarwankURL(_ urlOrHost: String) -> Bool {
         let host = (URL(string: urlOrHost)?.host ?? urlOrHost).lowercased()
         return host == "starwank.com" || host.hasSuffix(".starwank.com")
     }
@@ -5458,7 +5458,7 @@ public struct DownloadResult: Sendable {
             requestedFormat: requestedFormat
         )
 
-        return StarwankExtractedMedia(        return StarwankExtractedMedia(
+        return StarwankExtractedMedia(
             streamURL: chosenSource.url,
             embedURL: embedURL,
             title: title,
@@ -5498,7 +5498,7 @@ public struct DownloadResult: Sendable {
     typealias PussyspaceSource = ProtectedSiteSource
     typealias PussyspaceExtractedMedia = ProtectedSiteExtractedMedia
 
-    nonisolated static func isPussyspaceURL    nonisolated static func isPussyspaceURL(_ urlOrHost: String) -> Bool {
+    nonisolated static func isPussyspaceURL(_ urlOrHost: String) -> Bool {
         let host = (URL(string: urlOrHost)?.host ?? urlOrHost).lowercased()
         return host == "pussyspace.com" || host.hasSuffix(".pussyspace.com")
     }
@@ -5527,7 +5527,7 @@ public struct DownloadResult: Sendable {
         var thumbnailURL = Self.protectedThumbnail(in: html, regexes: pussyspaceThumbRegexes)
         let duration = Self.protectedDuration(in: html, regexes: pussyspaceDurationRegexes)
 
-        // Parse sources from playerHtml or html        // Parse sources from playerHtml or html
+        // Parse sources from playerHtml or html
         let streamContent = playerHtml ?? html
         var parsedSources: [PussyspaceSource] = []
         var seenUrls = Set<String>()
@@ -5539,7 +5539,7 @@ public struct DownloadResult: Sendable {
             thumbnailURL = Self.protectedThumbnail(in: streamContent, regexes: pussyspaceThumbRegexes)
         }
 
-        // Pattern 1: Playerjs        // Pattern 1: Playerjs file:"..." with [720p]url,[480p]url or url.m3u8 or url.mp4
+        // Pattern 1: Playerjs file:"..." with [720p]url,[480p]url or url.m3u8 or url.mp4
         for regex in pussyspaceFileRegexes {
             if let match = regex.firstMatch(in: streamContent, options: [], range: streamRange),
                match.numberOfRanges > 1 {
@@ -5606,7 +5606,7 @@ public struct DownloadResult: Sendable {
             requestedFormat: requestedFormat
         )
 
-        return PussyspaceExtractedMedia(        return PussyspaceExtractedMedia(
+        return PussyspaceExtractedMedia(
             streamURL: chosenSource.url,
             embedURL: targetUrl,
             title: title,
