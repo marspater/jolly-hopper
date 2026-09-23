@@ -487,6 +487,19 @@ final class YtdlpServiceTests: XCTestCase {
         }
     }
 
+    func testChromiumCookieReaderPrepareBypassesChromiumAndInterceptsArc() throws {
+        // "chromium" is natively supported by yt-dlp, so prepare must not intercept it
+        let chromiumArgs = ["yt-dlp", "--cookies-from-browser", "chromium", "https://example.com/video"]
+        let (prepChromium, cookieFileChromium) = try ChromiumCookieReader.prepare(chromiumArgs)
+        XCTAssertNil(cookieFileChromium)
+        XCTAssertEqual(prepChromium, chromiumArgs)
+
+        // Non-existent target for arc should throw missing target or fail gracefully,
+        // but it must attempt to intercept when format is valid
+        let nonHttpArgs = ["yt-dlp", "--cookies-from-browser", "arc", "ftp://example.com/video"]
+        XCTAssertThrowsError(try ChromiumCookieReader.prepare(nonHttpArgs))
+    }
+
     func testMetadataAndPlaylistUseExplicitBrowserSourceWithoutCookiePayload() async throws {
         service.ytdlpPath = URL(fileURLWithPath: "/usr/local/bin/yt-dlp")
         UserDefaults.standard.set("none", forKey: UserDefaultsKeys.browserForCookies)
