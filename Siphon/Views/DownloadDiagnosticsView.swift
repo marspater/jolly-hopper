@@ -24,6 +24,7 @@ struct DownloadDiagnosticsView: View {
             .pickerStyle(.segmented)
             .padding(.horizontal, SiphonTheme.spacing20)
             .padding(.vertical, SiphonTheme.spacing12)
+            .accessibilityLabel(languageService.s("view_diagnostics"))
             
             ScrollView {
                 VStack(spacing: SiphonTheme.spacing16) {

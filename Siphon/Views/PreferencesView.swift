@@ -354,6 +354,7 @@ struct PreferencesView: View {
                 .pickerStyle(.segmented)
                 .frame(width: 220)
                 .tint(SiphonTheme.accent)
+                .accessibilityLabel(languageService.s("theme"))
             }
         }
     }
@@ -553,6 +554,7 @@ struct PreferencesView: View {
             }
             .pickerStyle(.radioGroup)
             .labelsHidden()
+            .accessibilityLabel(languageService.s("download_presets"))
             .onChange(of: selectedPreset) { _, newValue in
                 if let preset = DownloadPreset(rawValue: newValue) {
                     selectedCustomPresetIdString = ""
@@ -1038,6 +1040,7 @@ struct PreferencesView: View {
                     }
                 }
                 .labelsHidden()
+                .accessibilityLabel(languageService.s("browser_cookies"))
                 
                 Text(languageService.s("browser_hint"))
                     .font(.geist(11))
