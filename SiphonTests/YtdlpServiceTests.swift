@@ -1406,6 +1406,10 @@ final class YtdlpServiceTests: XCTestCase {
             "--video-password", "secret_vid_pass",
             "--token", "secret_token_abc",
             "--api-key", "secret_key_xyz",
+            "-b", "chrome",
+            "--2factor", "123456",
+            "-2", "654321",
+            "--client-certificate-password", "cert_pass_999",
             "--proxy", "http://user:pass@127.0.0.1:8080",
             "https://site.example/video?auth=SECRET"
         ]
@@ -1416,6 +1420,10 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertTrue(sanitized.contains("--video-password \"<PASSWORD>\""))
         XCTAssertTrue(sanitized.contains("--token \"<TOKEN>\""))
         XCTAssertTrue(sanitized.contains("--api-key \"<API_KEY>\""))
+        XCTAssertTrue(sanitized.contains("-b \"<BROWSER>\""))
+        XCTAssertTrue(sanitized.contains("--2factor \"<2FACTOR>\""))
+        XCTAssertTrue(sanitized.contains("-2 \"<2FACTOR>\""))
+        XCTAssertTrue(sanitized.contains("--client-certificate-password \"<PASSWORD>\""))
         XCTAssertTrue(sanitized.contains("--proxy \"<PROXY_REDACTED>\""))
         XCTAssertTrue(sanitized.contains("https://site.example/video"))
         XCTAssertFalse(sanitized.contains("secret_user@example.com"))
@@ -1423,6 +1431,9 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertFalse(sanitized.contains("secret_vid_pass"))
         XCTAssertFalse(sanitized.contains("secret_token_abc"))
         XCTAssertFalse(sanitized.contains("secret_key_xyz"))
+        XCTAssertFalse(sanitized.contains("123456"))
+        XCTAssertFalse(sanitized.contains("654321"))
+        XCTAssertFalse(sanitized.contains("cert_pass_999"))
         XCTAssertFalse(sanitized.contains("auth=SECRET"))
     }
 
