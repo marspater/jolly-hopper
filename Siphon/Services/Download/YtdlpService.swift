@@ -1521,10 +1521,6 @@ public struct DownloadResult: Sendable {
             args.append("--force-overwrites")
         }
 
-        if options.hdrAction == .convertToSDR {
-            args.append(contentsOf: ["--postprocessor-args", "ffmpeg:-vf tonemap=hable:desat=0,zscale=t=bt709:m=bt709:r=tv,format=yuv420p"])
-        }
-
         let speedLimit = UserDefaults.standard.integer(forKey: UserDefaultsKeys.downloadSpeedLimit)
         if speedLimit > 0 {
             args.append(contentsOf: ["--limit-rate", "\(speedLimit)K"])
@@ -1972,12 +1968,29 @@ public struct DownloadResult: Sendable {
                                         (url.map(isBestCamURL) ?? false) ||
                                         (url.map(isStarwankURL) ?? false)
 
-        // 1. Explicit user-specified format ID
+        // 1. Audio downloads: return early with audio extraction and quality options
+        if options.fileType.isAudio {
+            let formatId: String
+            if let customFormatId = options.selectedFormatId, !customFormatId.isEmpty, Self.isSafeFormatId(customFormatId) {
+                formatId = customFormatId
+            } else if let info = mediaInfo, let firstAudio = info.resolveSelectedFormats(options: options).first {
+                formatId = firstAudio.formatId
+            } else {
+                formatId = "bestaudio/best"
+            }
+            args.append(contentsOf: ["-x", "--audio-format", options.fileType.fileExtension, "-f", formatId])
+            if let quality = options.audioQuality {
+                args.append(contentsOf: ["--audio-quality", quality.ytdlpValue])
+            }
+            return args
+        }
+
+        // 2. Video format selection
         if let customFormatId = options.selectedFormatId, !customFormatId.isEmpty, Self.isSafeFormatId(customFormatId) {
             let formatId: String
             if isSynthesizedDirectStream {
                 formatId = "b/best"
-            } else if options.fileType.isVideo && !customFormatId.contains("+") {
+            } else if !customFormatId.contains("+") {
                 // If the selected format is video-only, automatically append best audio (+ba/b)
                 if let info = mediaInfo,
                    let matchedFmt = info.formats?.first(where: { $0.formatId == customFormatId }),
@@ -1990,84 +2003,51 @@ public struct DownloadResult: Sendable {
                 formatId = customFormatId
             }
             args.append(contentsOf: ["-f", formatId])
-            if options.fileType.isVideo {
-                if let mergeFormat = Self.compatibleMergeOutputFormat(for: options) {
-                    args.append(contentsOf: ["--merge-output-format", mergeFormat])
-                }
-            } else {
-                args.append(contentsOf: ["-x", "--audio-format", options.fileType.fileExtension])
-                if let quality = options.audioQuality {
-                    args.append(contentsOf: ["--audio-quality", quality.ytdlpValue])
-                }
-            }
-            return args
-        }
-
-        // 2. Metadata-driven concrete format selection (eliminates silent fallback downgrades)
-        if let info = mediaInfo {
+        } else if let info = mediaInfo, !info.resolveSelectedFormats(options: options).isEmpty {
             let resolved = info.resolveSelectedFormats(options: options)
-            if !resolved.isEmpty {
-                let formatId: String
-                if isSynthesizedDirectStream {
-                    formatId = "b/best"
-                } else if resolved.count == 2 {
-                    formatId = "\(resolved[0].formatId)+\(resolved[1].formatId)"
-                } else {
-                    formatId = resolved[0].formatId
-                }
-                args.append(contentsOf: ["-f", formatId])
-                if options.fileType.isVideo {
-                    if let mergeFormat = Self.compatibleMergeOutputFormat(for: options) {
-                        args.append(contentsOf: ["--merge-output-format", mergeFormat])
-                    }
-                } else {
-                    args.append(contentsOf: ["-x", "--audio-format", options.fileType.fileExtension])
-                    if let quality = options.audioQuality {
-                        args.append(contentsOf: ["--audio-quality", quality.ytdlpValue])
-                    }
-                }
-                return args
-            }
-        }
-
-        // 3. Fallback when mediaInfo metadata is absent
-        if options.fileType.isAudio {
-            args.append(contentsOf: ["-x", "--audio-format", options.fileType.fileExtension, "-f", "bestaudio/best"])
-            if let quality = options.audioQuality {
-                args.append(contentsOf: ["--audio-quality", quality.ytdlpValue])
-            }
-            return args
-        }
-
-        let maxH = options.videoResolution?.maxHeight
-        let selector: String
-        if isSynthesizedDirectStream {
-            selector = "b/best"
-        } else if let h = maxH {
-            if options.resolutionFallbackPolicy == .allowHigher {
-                selector = "bestvideo[height<=\(h)]+bestaudio/best[height<=\(h)]/bestvideo[height>\(h)]+bestaudio/best[height>\(h)]/best"
+            let formatId: String
+            if isSynthesizedDirectStream {
+                formatId = "b/best"
+            } else if resolved.count == 2 {
+                formatId = "\(resolved[0].formatId)+\(resolved[1].formatId)"
             } else {
-                // Strict ceiling: Best available ≤ requested height (e.g. 720p requested -> best <= 720p)
-                selector = "bestvideo[height<=\(h)]+bestaudio/best[height<=\(h)]"
+                formatId = resolved[0].formatId
             }
+            args.append(contentsOf: ["-f", formatId])
         } else {
-            selector = "bestvideo+bestaudio/best"
+            let maxH = options.videoResolution?.maxHeight
+            let selector: String
+            if isSynthesizedDirectStream {
+                selector = "b/best"
+            } else if let h = maxH {
+                if options.resolutionFallbackPolicy == .allowHigher {
+                    selector = "bestvideo[height<=\(h)]+bestaudio/best[height<=\(h)]/bestvideo[height>\(h)]+bestaudio/best[height>\(h)]/best"
+                } else {
+                    // Strict ceiling: Best available ≤ requested height (e.g. 720p requested -> best <= 720p)
+                    selector = "bestvideo[height<=\(h)]+bestaudio/best[height<=\(h)]"
+                }
+            } else {
+                selector = "bestvideo+bestaudio/best"
+            }
+
+            args.append(contentsOf: ["-f", selector])
+            if let h = maxH {
+                args.append(contentsOf: ["-S", "res:\(h),lang,quality,fps,hdr:12,vbr,abr,filesize"])
+            } else {
+                args.append(contentsOf: ["-S", "lang,quality,res,height,fps,hdr:12,vbr,abr,filesize"])
+            }
         }
 
-        args.append(contentsOf: ["-f", selector])
-        if let h = maxH {
-            args.append(contentsOf: ["-S", "res:\(h),lang,quality,fps,hdr:12,vbr,abr,filesize"])
-        } else {
-            args.append(contentsOf: ["-S", "lang,quality,res,height,fps,hdr:12,vbr,abr,filesize"])
-        }
-
+        // 3. Common video postprocessing: container selection, codec conversion, and tone mapping
         var finalMergeFormat = Self.compatibleMergeOutputFormat(for: options)
+        let conversionCodec = options.conversionCodec ?? .none
+        let isConvertToSDR = options.hdrAction == .convertToSDR
 
-        if let conversionCodec = options.conversionCodec, conversionCodec != .none {
-            var targetExt = options.fileType.fileExtension
-            if conversionCodec == .av1 || conversionCodec == .vp9 {
-                targetExt = "mkv"
-            }
+        var targetExt = options.fileType.fileExtension
+        if conversionCodec == .av1 || conversionCodec == .vp9 {
+            targetExt = "mkv"
+        }
+        if conversionCodec != .none {
             finalMergeFormat = targetExt
         }
 
@@ -2075,32 +2055,38 @@ public struct DownloadResult: Sendable {
             args.append(contentsOf: ["--merge-output-format", mergeOutputFormat])
         }
 
-        if let conversionCodec = options.conversionCodec, conversionCodec != .none {
-            var targetExt = options.fileType.fileExtension
-            if conversionCodec == .av1 || conversionCodec == .vp9 {
-                targetExt = "mkv"
+        let needsRecode = (conversionCodec != .none) || isConvertToSDR
+        if needsRecode {
+            var videoConvertorArgs: [String] = ["-y"]
+            if isConvertToSDR {
+                videoConvertorArgs.append(contentsOf: ["-vf", "tonemap=hable:desat=0,zscale=t=bt709:m=bt709:r=tv,format=yuv420p"])
             }
-            
+
             switch conversionCodec {
             case .av1:
-                args.append(contentsOf: ["--recode-video", targetExt, "--postprocessor-args", "VideoConvertor:-y -c:v libsvtav1 -preset 8 -crf 28 -strict experimental"])
+                videoConvertorArgs.append(contentsOf: ["-c:v", "libsvtav1", "-preset", "8", "-crf", "28", "-strict", "experimental"])
             case .h265:
                 #if arch(arm64)
-                args.append(contentsOf: ["--recode-video", targetExt, "--postprocessor-args", "VideoConvertor:-y -c:v hevc_videotoolbox -strict experimental"])
+                videoConvertorArgs.append(contentsOf: ["-c:v", "hevc_videotoolbox", "-strict", "experimental"])
                 #else
-                args.append(contentsOf: ["--recode-video", targetExt, "--postprocessor-args", "VideoConvertor:-y -c:v libx265 -strict experimental"])
+                videoConvertorArgs.append(contentsOf: ["-c:v", "libx265", "-strict", "experimental"])
                 #endif
             case .vp9:
-                args.append(contentsOf: ["--recode-video", targetExt, "--postprocessor-args", "VideoConvertor:-y -c:v libvpx-vp9 -strict experimental"])
+                videoConvertorArgs.append(contentsOf: ["-c:v", "libvpx-vp9", "-strict", "experimental"])
             case .h264:
                 #if arch(arm64)
-                args.append(contentsOf: ["--recode-video", targetExt, "--postprocessor-args", "VideoConvertor:-y -c:v h264_videotoolbox -strict experimental"])
+                videoConvertorArgs.append(contentsOf: ["-c:v", "h264_videotoolbox", "-strict", "experimental"])
                 #else
-                args.append(contentsOf: ["--recode-video", targetExt, "--postprocessor-args", "VideoConvertor:-y -c:v libx264 -strict experimental"])
+                videoConvertorArgs.append(contentsOf: ["-c:v", "libx264", "-strict", "experimental"])
                 #endif
             case .none:
                 break
             }
+
+            args.append(contentsOf: [
+                "--recode-video", targetExt,
+                "--postprocessor-args", "VideoConvertor:" + videoConvertorArgs.joined(separator: " ")
+            ])
         }
 
         return args
