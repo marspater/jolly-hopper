@@ -208,17 +208,10 @@ struct HeroDropURLView: View {
                             Text(languageService.s("download_btn"))
                                 .font(.siphonSecondarySemibold)
                         }
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 6)
-                        .background(SiphonTheme.primaryGradient)
-                        .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusControl, style: .continuous))
-                        .shadow(color: SiphonTheme.accent.opacity(0.30), radius: 4, y: 1)
                     }
-                    .buttonStyle(.bouncy(scale: 0.96, hover: 1.02))
+                    .buttonStyle(.siphonPrimary)
                     .fixedSize(horizontal: true, vertical: false)
                     .disabled(isExtracting || inputURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                    .opacity(inputURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 0.58 : 1.0)
                     .accessibilityLabel(languageService.s("download_btn"))
                 }
                 .padding(.horizontal, SiphonTheme.spacing12)
@@ -251,7 +244,7 @@ struct HeroDropURLView: View {
                     } else {
                         Text(isTargeted ? languageService.s("drop_url_here") : languageService.s("or_paste_clipboard"))
                             .font(.siphonMetadata)
-                            .foregroundColor(.secondary.opacity(0.70))
+                            .foregroundColor(.secondary)
                             .lineLimit(1)
                     }
                     Spacer()

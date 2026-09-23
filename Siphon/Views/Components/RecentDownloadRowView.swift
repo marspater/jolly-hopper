@@ -154,7 +154,7 @@ struct RecentDownloadRowView: View {
                 .foregroundColor(.secondary)
                 .padding(.horizontal, 6)
                 .padding(.vertical, 2)
-                .background(Capsule().fill(Color.primary.opacity(0.06)))
+                .background(Capsule().fill(Color.primary.opacity(SiphonTheme.Opacity.fillPill)))
 
             if let res = download.options.videoResolution {
                 let resText: String = {
@@ -175,7 +175,7 @@ struct RecentDownloadRowView: View {
                     .foregroundColor(.secondary)
                     .padding(.horizontal, 6)
                     .padding(.vertical, 2)
-                    .background(Capsule().fill(Color.primary.opacity(0.06)))
+                    .background(Capsule().fill(Color.primary.opacity(SiphonTheme.Opacity.fillPill)))
             }
         }
     }
