@@ -375,10 +375,16 @@ final class DownloadExecutor: ObservableObject {
                         return
                     }
                     if let progress {
-                        download.progress = progress
-                        download.speed = speed
-                        download.eta = eta
-                        if let speed, !speed.isEmpty {
+                        if download.progress != progress {
+                            download.progress = progress
+                        }
+                        if download.speed != speed {
+                            download.speed = speed
+                        }
+                        if download.eta != eta {
+                            download.eta = eta
+                        }
+                        if let speed, !speed.isEmpty, download.diagnostics.peakSpeed != speed {
                             download.diagnostics.peakSpeed = speed
                         }
                         self.persistRecoveryProgressIfNeeded(for: download)
