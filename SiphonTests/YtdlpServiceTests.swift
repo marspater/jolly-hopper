@@ -3968,11 +3968,56 @@ final class YtdlpServiceTests: XCTestCase {
             onOutput: { _ in /* Output ignored in test */ }
         )
 
-        XCTAssertTrue(capturedArgsBox.value.contains("--postprocessor-args"))
+        // Must trigger video recoding
+        XCTAssertTrue(capturedArgsBox.value.contains("--recode-video"))
+        // Must target VideoConvertor, NEVER general ffmpeg (which breaks streamcopy steps)
+        XCTAssertFalse(capturedArgsBox.value.contains(where: { $0.hasPrefix("ffmpeg:") }))
+        XCTAssertTrue(capturedArgsBox.value.contains(where: { $0.contains("VideoConvertor:") && $0.contains("tonemap=hable") }))
         if let idx = capturedArgsBox.value.firstIndex(of: "--postprocessor-args") {
             XCTAssertTrue(capturedArgsBox.value[idx + 1].contains("tonemap=hable"))
             XCTAssertTrue(capturedArgsBox.value[idx + 1].contains("zscale=t=bt709"))
+            XCTAssertFalse(capturedArgsBox.value[idx + 1].hasPrefix("ffmpeg:"))
         }
+    }
+
+    func testCodecConversionRunsWithMediaInfo() async throws {
+        let capturedArgsBox = TestBox<[String]>([])
+        service.processRunner = MockYtdlpProcessRunner(mockDownload: { args in
+            capturedArgsBox.value = args
+            return "[download] Destination: /tmp/test_codec.mp4\n"
+        })
+
+        var options = DownloadOptions.default
+        options.conversionCodec = .h264
+
+        let sampleFormat = MediaFormat(
+            formatId: "137",
+            ext: "mp4",
+            resolution: "1920x1080",
+            fps: 30,
+            vcodec: "avc1",
+            acodec: "mp4a",
+            abr: 128,
+            vbr: 3000,
+            filesize: 1024,
+            filesizeApprox: nil,
+            formatNote: nil,
+            formatProtocol: "https",
+            manifestUrl: nil
+        )
+        let mediaInfo = MediaInfo(id: "sample_vid", title: "Sample Video", formats: [sampleFormat])
+
+        _ = try await service.download(
+            url: "https://example.com/test-codec",
+            options: options,
+            mediaInfo: mediaInfo,
+            onProgress: { _, _, _ in },
+            onOutput: { _ in }
+        )
+
+        XCTAssertTrue(capturedArgsBox.value.contains("--recode-video"))
+        XCTAssertTrue(capturedArgsBox.value.contains("mp4"))
+        XCTAssertTrue(capturedArgsBox.value.contains(where: { $0.contains("VideoConvertor:") }))
     }
 
     @MainActor
