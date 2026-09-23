@@ -1465,4 +1465,67 @@ final class NotificationServiceTests: XCTestCase {
         defaults.set(true, forKey: UserDefaultsKeys.showNotifications)
         NotificationService.shared.sendDownloadCompleted(filename: "enabled_test.mp4")
     }
+
+    @MainActor
+    func testRetryDownloadClearsMediaInfo() {
+        let manager = DownloadManager()
+        defer { manager.shutdown() }
+
+        let sampleFormat = MediaFormat(
+            formatId: "18",
+            ext: "mp4",
+            resolution: "360p",
+            fps: 30,
+            vcodec: "avc1",
+            acodec: "mp4a",
+            abr: 96,
+            vbr: 500,
+            filesize: 1000,
+            filesizeApprox: nil,
+            formatNote: nil,
+            formatProtocol: "https",
+            manifestUrl: nil
+        )
+        let info = MediaInfo(id: "test", title: "Test Video", formats: [sampleFormat])
+
+        let download = Download(url: "https://example.com/video", options: .default, title: "Test Video")
+        download.status = .failed
+        download.mediaInfo = info
+        manager.downloads.append(download)
+
+        XCTAssertNotNil(download.mediaInfo)
+        manager.retryDownload(download)
+
+        // mediaInfo must be cleared so the retry re-fetches fresh signed links
+        XCTAssertNil(download.mediaInfo)
+        XCTAssertEqual(download.status, .queued)
+    }
+
+    @MainActor
+    func testPendingRecoveryJobsPreservedOnPersistAndShutdown() {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let storeURL = root.appendingPathComponent("recovery.json")
+        let store = QueueRecoveryStore(fileURL: storeURL)
+        let manager = DownloadManager(recoveryFileURL: storeURL)
+
+        let interrupted = Download(url: "https://example.com/interrupted", options: .default, title: "Interrupted Job")
+        interrupted.status = .downloading
+        manager.pendingRecoveryJobs = [interrupted]
+        manager.recoverableJobsCount = 1
+
+        // Calling persistQueueRecoveryState (e.g. when adding another download) must not wipe the pending jobs
+        manager.persistQueueRecoveryState()
+        let loadedAfterPersist = store.loadInterruptedJobs()
+        XCTAssertEqual(loadedAfterPersist.count, 1)
+        XCTAssertEqual(loadedAfterPersist.first?.id, interrupted.id)
+
+        // Shutting down without resolving the recovery prompt must keep them
+        manager.shutdown()
+        let loadedAfterShutdown = store.loadInterruptedJobs()
+        XCTAssertEqual(loadedAfterShutdown.count, 1)
+        XCTAssertEqual(loadedAfterShutdown.first?.id, interrupted.id)
+    }
 }

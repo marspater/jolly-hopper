@@ -312,23 +312,15 @@ final class DownloadExecutor: ObservableObject {
 
             Self.populateDiagnostics(for: download, info: info, ytdlpVersion: ytdlpVersion)
 
-            let (resolvedBaseName, candidateKey) = queue.planUniqueOutputPath(for: download)
             let rawBaseName = download.options.customFilename ?? download.title
             let sanitizedBaseName = YtdlpService.sanitizeFilename(rawBaseName)
-            if resolvedBaseName != sanitizedBaseName {
-                download.options.customFilename = resolvedBaseName
-            }
-            queue.reserveOutputPath(candidateKey)
-            defer {
-                queue.unreserveOutputPath(candidateKey)
-            }
-
             let folderPath = download.options.saveFolder
+
             let fileExists = await Task.detached {
                 if let contents = try? FileManager.default.contentsOfDirectory(at: folderPath, includingPropertiesForKeys: nil) {
                     let matches = contents.filter { file in
                         let nameWithoutExt = file.deletingPathExtension().lastPathComponent
-                        let isExactMatch = nameWithoutExt == resolvedBaseName
+                        let isExactMatch = nameWithoutExt == sanitizedBaseName
                         let isPart = file.lastPathComponent.hasSuffix(".part") || file.lastPathComponent.hasSuffix(".ytdl")
                         let isMedia = YtdlpService.isMediaFilePath(file.path)
                         return isExactMatch && !isPart && isMedia
@@ -349,6 +341,15 @@ final class DownloadExecutor: ObservableObject {
                 // active snapshot so a crash does not make the job disappear.
                 delegate?.executorDidRequestAddToHistory(download, skipSave: false)
                 return
+            }
+
+            let (resolvedBaseName, candidateKey) = queue.planUniqueOutputPath(for: download)
+            if resolvedBaseName != sanitizedBaseName {
+                download.options.customFilename = resolvedBaseName
+            }
+            queue.reserveOutputPath(candidateKey)
+            defer {
+                queue.unreserveOutputPath(candidateKey)
             }
 
             if download.scratchDirectory == nil {
@@ -534,7 +535,7 @@ final class DownloadExecutor: ObservableObject {
     func stopDownload(
         _ download: Download,
         queue: DownloadQueue,
-        languageService: LanguageService?,
+        languageService: LanguageService? = nil,
         suppressNotification: Bool = false,
         skipSaveAndBroadcast: Bool = false
     ) {
@@ -564,8 +565,11 @@ final class DownloadExecutor: ObservableObject {
 
         if !suppressNotification {
             let lang = languageService ?? LanguageService()
+            let rawTitle = download.title.trimmingCharacters(in: .whitespacesAndNewlines)
+            let isPlaceholder = rawTitle.isEmpty || rawTitle == Download.fetchingPlaceholder
+            let filename = isPlaceholder ? LoggerService.sanitizeURLForLog(download.url) : rawTitle
             notificationService.sendDownloadStopped(
-                filename: download.title.isEmpty ? LoggerService.sanitizeURLForLog(download.url) : download.title,
+                filename: filename,
                 languageService: lang
             )
         }
@@ -667,7 +671,7 @@ final class DownloadExecutor: ObservableObject {
             case .cloudflareBlocked:
                 return lang.s("cloudflare_blocked")
             case .protectedSiteNeedsBrowserCookies:
-                return "This site requires signed-in browser cookies. Open Settings > Advanced > Browser Cookies, choose your browser, then try again."
+                return lang.s("browser_cookies_required")
             case .protectedSiteLoginRequired:
                 return lang.s("login_required")
             case .notFound:
@@ -677,18 +681,18 @@ final class DownloadExecutor: ObservableObject {
             case .ffmpegInstallationFailed:
                 return lang.s("ffmpeg_error")
             case .securityViolation(let message):
-                return "Security violation: \(message)"
+                return String(format: lang.s("security_violation"), message)
             case .subtitleError(let details):
                 return String(format: lang.s("subtitle_download_failed"), details)
             case .downloadFailed(let reason), .commandFailed(let reason):
                 let lower = reason.lowercased()
-                if lower.contains("cloudflare") || lower.contains("403") || lower.contains("anti-bot") || lower.contains("captcha") {
+                if lower.contains("cloudflare") || lower.contains("cf-chl-") || lower.contains("anti-bot") || lower.contains("captcha") || lower.contains("turnstile") || lower.contains("just a moment...") {
                     return lang.s("cloudflare_blocked")
-                } else if lower.contains("sign in") || lower.contains("private video") || lower.contains("login") || lower.contains("members-only") {
+                } else if lower.contains("sign in") || lower.contains("private video") || lower.contains("login") || lower.contains("members-only") || lower.contains("403 forbidden") || lower.contains("http error 403") {
                     return lang.s("login_required")
-                } else if lower.contains("drm") || lower.contains("encrypted") || lower.contains("protected") {
+                } else if lower.contains("drm") || lower.contains("widevine") || lower.contains("playready") || lower.contains("fairplay") || lower.contains("encrypted media") || lower.contains("drm protected") || lower.contains("drm-protected") {
                     return lang.s("drm_protected")
-                } else if lower.contains("unavailable") || lower.contains("removed") || lower.contains("404") {
+                } else if lower.contains("unavailable") || lower.contains("removed") || lower.contains("404 not found") || lower.contains("http error 404") {
                     return lang.s("video_unavailable")
                 } else if lower.contains("no space left") || lower.contains("disk full") {
                     return lang.s("disk_full")

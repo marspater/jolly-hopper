@@ -409,4 +409,79 @@ final class DownloadExecutorTests: XCTestCase {
         XCTAssertTrue(download.log.contains("[ERROR]"), "Log should contain error line")
         XCTAssertTrue(download.log.contains("Cloudflare"), "Log should contain diagnostic output")
     }
+
+    func testErrorMessageDoesNotMisclassifySubstrings() {
+        let lang = LanguageService()
+
+        // Bare number 403 in an ID or port should NOT match Cloudflare
+        let errId403 = YtdlpError.downloadFailed("ERROR: Video 40392 could not be loaded")
+        XCTAssertNotEqual(DownloadExecutor.errorMessage(for: errId403, languageService: lang), lang.s("cloudflare_blocked"))
+
+        // Bare "protected" in site resolver should NOT match DRM
+        let errProtectedSite = YtdlpError.downloadFailed("ERROR: Protected Site resolver failed")
+        XCTAssertNotEqual(DownloadExecutor.errorMessage(for: errProtectedSite, languageService: lang), lang.s("drm_protected"))
+
+        // Bare "404" in an offset or id should NOT match unavailable
+        let errByte404 = YtdlpError.downloadFailed("ERROR: stream read failed at byte 4048")
+        XCTAssertNotEqual(DownloadExecutor.errorMessage(for: errByte404, languageService: lang), lang.s("video_unavailable"))
+    }
+    private final class TestExecutorDelegate: DownloadExecutorDelegate {
+        func executorDidUpdateStatus(for download: Download, to status: DownloadStatus) {
+            download.status = status
+        }
+        func executorDidRequestAddToHistory(_ download: Download, skipSave: Bool) {}
+        func executorDidFinishDownload() {}
+        func executorDidRequestBroadcast() {}
+    }
+
+    func testFileExistsDetectedBeforeIncrement() async throws {
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let existingVideo = tempDir.appendingPathComponent("SampleVideo.mp4")
+        try Data("dummy".utf8).write(to: existingVideo)
+
+        let runner = MockYtdlpProcessRunner(mockCommand: { _ in
+            #"{"id":"sample_id","title":"SampleVideo"}"#
+        })
+        let service = YtdlpService(processRunner: runner)
+        service.ytdlpPath = URL(fileURLWithPath: "/usr/local/bin/yt-dlp")
+        let delegate = TestExecutorDelegate()
+        let executor = DownloadExecutor(ytdlpService: service, delegate: delegate)
+        let queue = DownloadQueue()
+
+        var options = DownloadOptions.default
+        options.saveFolder = tempDir
+        options.forceOverwrite = false
+        let download = Download(url: "https://example.com/video", options: options, title: "SampleVideo")
+
+        await executor.executeDownload(
+            download,
+            queue: queue,
+            ytdlpVersion: "2026.09.01",
+            languageService: LanguageService()
+        )
+
+        // Status must be .fileExists
+        XCTAssertEqual(download.status, .fileExists)
+        // customFilename must NOT have been prematurely renamed to "SampleVideo (1)"
+        XCTAssertNotEqual(download.options.customFilename, "SampleVideo (1)")
+    }
+
+    func testStopDownloadWithFetchingPlaceholderUsesSanitizedURL() {
+        var options = DownloadOptions.default
+        let download = Download(
+            url: "https://example.com/watch?v=xyz",
+            options: options,
+            title: Download.fetchingPlaceholder
+        )
+        let delegate = TestExecutorDelegate()
+        let service = YtdlpService(processRunner: MockYtdlpProcessRunner())
+        let executor = DownloadExecutor(ytdlpService: service, delegate: delegate)
+
+        // Stopping this download must not crash or output ___FETCHING___
+        executor.stopDownload(download, queue: DownloadQueue(), suppressNotification: false)
+        XCTAssertEqual(download.status, .stopped)
+    }
 }
