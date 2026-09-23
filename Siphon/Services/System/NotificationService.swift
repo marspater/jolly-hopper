@@ -216,11 +216,12 @@ final class NotificationService: NSObject, @unchecked Sendable, UNUserNotificati
         self.sendNotification(content: content, logName: "Completed: \(cleanFilename)")
     }
 
-    func sendEncodingCompleted(filename: String, codec: String, languageService _: LanguageService? = nil) {
+    func sendEncodingCompleted(filename: String, codec: String, languageService: LanguageService? = nil) {
         let cleanFilename = filename.decodingHTMLEntities()
+        let lang = languageService ?? LanguageService()
         let content = UNMutableNotificationContent()
-        content.title = "⚡ Video Conversion Complete"
-        content.body = "\(cleanFilename) was successfully converted to \(codec) codec."
+        content.title = lang.s("conversion_completed_title")
+        content.body = String(format: lang.s("conversion_completed_body"), cleanFilename, codec)
         content.sound = .default
         sendNotification(content: content, logName: "Conversion: \(cleanFilename)")
     }

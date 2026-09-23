@@ -19,7 +19,6 @@ struct MenuBarView: View {
     
     @State private var customPresets: [CustomPreset] = []
     @State private var isPasted: Bool = false
-    @Namespace private var menuBarFormatNamespace
 
     var body: some View {
         VStack(spacing: SiphonTheme.spacing12) {
@@ -142,62 +141,13 @@ struct MenuBarView: View {
     private var formatAndPresetRow: some View {
         HStack(spacing: SiphonTheme.spacing8) {
             // Segmented format toggle (Video / Audio)
-            HStack(spacing: 2) {
-                Button {
-                    withAnimation(SiphonAnimation.snappySpring) {
-                        selectedType = "video"
-                    }
-                } label: {
-                    Text(languageService.s("video"))
-                        .font(.siphonMetadataSemibold)
-                        .foregroundColor(selectedType == "video" ? .white : .secondary)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 4)
-                        .background {
-                            if selectedType == "video" {
-                                Capsule()
-                                    .fill(SiphonTheme.primaryGradient)
-                                    .shadow(color: SiphonTheme.accent.opacity(0.30), radius: 3, y: 1)
-                                    .matchedGeometryEffect(id: "activeMenuBarFormatBubble", in: menuBarFormatNamespace)
-                            }
-                        }
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(languageService.s("video"))
-                .accessibilityAddTraits(selectedType == "video" ? [.isButton, .isSelected] : [.isButton])
-
-                Button {
-                    withAnimation(SiphonAnimation.snappySpring) {
-                        selectedType = "audio"
-                    }
-                } label: {
-                    Text(languageService.s("audio"))
-                        .font(.siphonMetadataSemibold)
-                        .foregroundColor(selectedType == "audio" ? .white : .secondary)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 4)
-                        .background {
-                            if selectedType == "audio" {
-                                Capsule()
-                                    .fill(SiphonTheme.primaryGradient)
-                                    .shadow(color: SiphonTheme.accent.opacity(0.30), radius: 3, y: 1)
-                                    .matchedGeometryEffect(id: "activeMenuBarFormatBubble", in: menuBarFormatNamespace)
-                            }
-                        }
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(languageService.s("audio"))
-                .accessibilityAddTraits(selectedType == "audio" ? [.isButton, .isSelected] : [.isButton])
-            }
-            .padding(2)
-            .background(
-                Capsule()
-                    .fill(Color.primary.opacity(0.05))
-            )
-            .clipShape(Capsule())
-            .overlay(
-                Capsule()
-                    .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+            SiphonSegmentedPicker(
+                selection: $selectedType,
+                options: [
+                    ("video", languageService.s("video")),
+                    ("audio", languageService.s("audio"))
+                ],
+                horizontalPadding: SiphonTheme.spacing10
             )
 
             Spacer()
@@ -242,27 +192,14 @@ struct MenuBarView: View {
                 Spacer()
                 Text("⏎")
                     .font(.siphonMetadataMonoMedium)
-                    .opacity(url.isEmpty ? 0.4 : 0.8)
+                    .opacity(0.8)
+                    .accessibilityHidden(true)
             }
-            .foregroundColor(url.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? .secondary.opacity(0.6) : .white)
-            .padding(.horizontal, 12)
             .frame(maxWidth: .infinity)
-            .frame(height: 30)
-            .background(
-                url.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?
-                LinearGradient(colors: [Color.primary.opacity(0.08), Color.primary.opacity(0.04)], startPoint: .top, endPoint: .bottom) :
-                SiphonTheme.primaryGradient
-            )
-            .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusControl, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: SiphonTheme.radiusControl, style: .continuous)
-                    .stroke(Color.primary.opacity(url.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 0.05 : 0.20), lineWidth: 1)
-            )
         }
-        .buttonStyle(.bouncy(scale: 0.97, hover: 1.01))
+        .buttonStyle(.siphonPrimary)
         .disabled(url.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         .accessibilityLabel(languageService.s("download_btn"))
-        .shadow(color: url.isEmpty ? .clear : SiphonTheme.accent.opacity(0.25), radius: 5, y: 1.5)
     }
 
     // MARK: - Active Downloads Concise List
@@ -444,11 +381,11 @@ struct MenuBarView: View {
                 .foregroundColor(SiphonTheme.statusFailedText)
                 .padding(.horizontal, SiphonTheme.spacing10)
                 .frame(height: 28)
-                .background(SiphonTheme.statusFailed.opacity(0.12))
+                .background(SiphonTheme.statusFailed.opacity(SiphonTheme.Opacity.tintBadge))
                 .clipShape(Capsule())
                 .overlay(
                     Capsule()
-                        .stroke(SiphonTheme.statusFailed.opacity(0.25), lineWidth: 1)
+                        .stroke(SiphonTheme.statusFailed.opacity(SiphonTheme.Opacity.borderCallout), lineWidth: 1)
                 )
             }
             .buttonStyle(.bouncy)

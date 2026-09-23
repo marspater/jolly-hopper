@@ -111,6 +111,11 @@ truth only when the value is genuinely reused or has semantic meaning.
 - Inset fields use `SiphonTheme.fieldBackground` and `fieldBorder`.
 - Controls use the shared Siphon button styles or the native macOS bordered
   styles when they better express platform behavior.
+- Tinted inline notices (permission hints, errors, info banners) use
+  `siphonCallout(tint:)` with a saturated status or accent tint.
+- Two-option capsule switches (Single/Batch, Video/Audio) use
+  `SiphonSegmentedPicker`; do not hand-roll gradient bubbles.
+- All corners are `.continuous`; do not use the deprecated `.cornerRadius(_:)`.
 - Keep the hierarchy shallow: root surface → card → inset field/control. Avoid
   stacking multiple opaque fills, dark scrims, or unrelated blurs.
 
@@ -146,6 +151,8 @@ truth only when the value is genuinely reused or has semantic meaning.
 - Keep accessibility labels action-oriented and do not expose decorative liquid
   effects as elements.
 - Preserve keyboard focus, menu/toolbar paths, and sensible disabled states.
+  The Siphon button styles render disabled themselves (Primary drops to a
+  neutral well, the others dim to 45%); never add manual `.opacity` for it.
 - Custom chrome follows the key window's active/inactive appearance through
   `appearsActive`; inactive emphasis should become quieter, not disappear.
 - Honor Increase Contrast / Show Borders by strengthening custom interactive
