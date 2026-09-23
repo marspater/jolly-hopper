@@ -52,6 +52,9 @@ struct ContentView: View {
                     }
                 }
                 .task {
+                    // When Siphon only hosts the unit tests, do not load or persist
+                    // the user's history, install binaries, or query GitHub.
+                    guard !NotificationService.isRunningTests else { return }
                     downloadManager.initialize(languageService: languageService)
                     await appState.initializeApplicationServices(
                         ytdlpService: downloadManager.ytdlpService,
