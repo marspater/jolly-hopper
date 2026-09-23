@@ -4,7 +4,7 @@
 
 This repository is used by two distinct agent modes:
 
-- **Antigravity:** interactive local development assistant. It works in the user's real workspace and must preserve uncommitted work unless the user explicitly authorizes a destructive operation.
+- **Interactive local** (Antigravity, Claude Code, or any assistant running in the user's checkout): works in the user's real workspace and must preserve uncommitted work unless the user explicitly authorizes a destructive operation.
 - **Jules:** autonomous, headless, disposable batch runner. Its environment may be reset between tasks under `.jules/AGENTS.md`.
 
 These modes must not be treated as interchangeable.
@@ -26,7 +26,27 @@ A clean or disposable environment must **not** be inferred from the presence of 
 
 ## Repository baseline
 
-This is a native macOS application written in Swift and built with Xcode. `origin/main` is the canonical remote source of truth.
+Siphon is a native macOS 15+ yt-dlp/FFmpeg downloader written in Swift 6 (strict concurrency) with SwiftUI/AppKit and built with Xcode. `origin/main` is the canonical remote source of truth.
+
+Read before touching the matching area: `ARCHITECTURE.md` (runtime ownership, cancellation, recovery, update exclusion, URL ingress), `DESIGN_LANGUAGE.md` (UI tokens, motion, glass, accessibility), `PRODUCTION_QA.md` (visual QA matrix).
+
+Where things live:
+
+- `Siphon/SiphonApp.swift`: app entry, commands, `siphon://`/`luma://` URL ingress.
+- `Siphon/Models/`: `AppState` (app-level state, `ExternalDownloadTargetPolicy`), `Download.swift` (`Download`, `DownloadOptions`, `MediaInfo`, format ranking, history/validator types).
+- `Siphon/Services/Download/`: `DownloadManager` (queue admission, history, recovery) → `DownloadExecutor` (sole owner of active tasks/process controllers) → `YtdlpService` (large facade: binaries, extraction, site-specific handlers, argument building) → `YtdlpProcessRunner` (process launch, output parsing, process-tree termination). Plus `DownloadQueue`, `QueueRecoveryStore`, `DownloadHistoryStore`, `DependencyUpdateCoordinator`.
+- `Siphon/Services/{Update,Cookies,System,Windows}/`: app self-update, browser cookie handling, logging/localization/notifications/menu bar, auxiliary windows.
+- `Siphon/Helpers/siphon-pgrp.c`: process-group helper compiled by a build phase into `Contents/Helpers/`.
+- `Siphon/Extensions/View+Compatibility.swift`: `SiphonTheme`/`SiphonAnimation` design tokens.
+- `SiphonTests/`: XCTest suite. `SiphonExtension_{Chrome,Firefox,Safari}/`: browser extensions. `server/`: self-contained Node companion service (keep it isolated; no root `package.json`).
+
+Repository-specific guardrails:
+
+- User-facing strings go through `LanguageService.s("key")`; add keys to its translation table.
+- Dependency binaries are pinned by URL and SHA-256 in `DependencyChecksums` (`YtdlpService.swift`). Bumping yt-dlp/FFmpeg means updating URL and digest together; never bypass verification.
+- Browser extensions must never put cookies or other credentials in deep links, and the Chrome manifest must not request `cookies`/`host_permissions`. External targets must pass `ExternalDownloadTargetPolicy`. CI enforces both.
+- Do not add `allow-unsigned-executable-memory` or `disable-library-validation` to `Siphon/Siphon.entitlements` (CI-enforced).
+- Release version bumps touch `Siphon/Info.plist`, every `MARKETING_VERSION`/`CURRENT_PROJECT_VERSION` in `project.pbxproj` (checked by `scripts/verify_bundle.sh`), the `AppState.appVersion` fallback, the `whats_new_message` string, `README.md` badge, and `CHANGELOG.md`. `Casks/siphon.rb` is updated by the release workflow.
 
 For non-destructive freshness checks:
 
@@ -65,6 +85,8 @@ xcodebuild test \
   CODE_SIGNING_ALLOWED=NO
 ```
 
+CI (`.github/workflows/swift.yml`) also runs the same suite with `-configuration Release ENABLE_TESTABILITY=YES`; run it for changes that may behave differently under optimization. For extension, server, or script changes, mirror `.github/workflows/scripts.yml`: `node --check` on the extension/server JS, `npm test --prefix server`, and `python3 -m py_compile scripts/update-supported-sites.py`.
+
 Run relevant build/tests for the change and report validation honestly. Add regression coverage when practical, especially for lifecycle, concurrency, persistence, cancellation, and security fixes. Never weaken tests to make CI green.
 
 ## Change discipline
@@ -76,7 +98,7 @@ Before finalizing locally:
 ```bash
 git status --short
 git diff --stat
-git grep -n '<<<<<<<\\|=======\\|>>>>>>>'
+git grep -nE '^(<<<<<<<|=======|>>>>>>>)( |$)'
 ```
 
 Use concise Conventional Commit messages when committing.
@@ -87,4 +109,4 @@ Because the repository changes frequently, re-check `origin/main` before major i
 
 ## Scope
 
-This file contains only compact repository-wide rules that are safe and useful for both agent modes. Jules-only bootstrap, specialist orchestration, PR workflow, and journals belong in `.jules/AGENTS.md` and `.jules/*.md`. Antigravity-specific workspace guidance belongs in `.agents/rules/`.
+This file contains only compact repository-wide rules that are safe and useful for both agent modes. Jules-only bootstrap, specialist orchestration, PR workflow, and journals belong in `.jules/AGENTS.md` and `.jules/*.md`. Interactive-local workspace guidance belongs in `.agents/rules/`.
