@@ -806,6 +806,145 @@ final class YtdlpServiceTests: XCTestCase {
         }
     }
 
+    func testStarwankURLDetectionAndNormalization() {
+        XCTAssertTrue(YtdlpService.isStarwankURL("https://starwank.com/videos/260540/private-czech-garden-party/"))
+        XCTAssertTrue(YtdlpService.isStarwankURL("https://www.starwank.com/embed/260540"))
+        XCTAssertTrue(YtdlpService.isStarwankURL("starwank.com"))
+        XCTAssertFalse(YtdlpService.isStarwankURL("https://youtube.com/watch?v=123"))
+
+        let raw = "https://starwank.com/videos/260540/private-czech-garden-party/?utm_source=feed&ref=promo"
+        let normalized = service.normalizeURL(raw)
+        XCTAssertEqual(normalized, "https://starwank.com/videos/260540/private-czech-garden-party/")
+    }
+
+    func testStarwankHeadersAndFormatSelection() async throws {
+        let capturedArgsBox = TestBox<[String]>([])
+        service.processRunner = MockYtdlpProcessRunner(mockDownload: { args in
+            capturedArgsBox.value = args
+            return "[download] Destination: /tmp/test_starwank.mp4\n"
+        })
+
+        var options = DownloadOptions.default
+        options.videoResolution = .r1080p
+
+        _ = try await service.download(
+            url: "https://starwank.com/videos/260540/private-czech-garden-party/",
+            options: options,
+            onProgress: { _, _, _ in },
+            onOutput: { _ in }
+        )
+
+        XCTAssertTrue(capturedArgsBox.value.contains("Referer: https://starwank.com/"))
+        XCTAssertTrue(capturedArgsBox.value.contains("Origin: https://starwank.com"))
+        if let fIdx = capturedArgsBox.value.firstIndex(of: "-f") {
+            XCTAssertEqual(capturedArgsBox.value[fIdx + 1], "b/best")
+        }
+    }
+
+    func testStarwankParseMediaFromVideoPageHTML() {
+        let sampleHTML = """
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Private Czech Garden Party - StarWank.com</title>
+            <meta property="og:title" content="Private Czech Garden Party - StarWank" />
+            <meta property="og:image" content="https://starwank.com/contents/videos_screenshots/260000/260540/preview.jpg" />
+            <meta property="video:duration" content="362" />
+        </head>
+        <body>
+            <iframe width="1920" height="1080" src="https://starwank.com/embed/260540" frameborder="0"></iframe>
+            <video id="pll"></video>
+            <script>
+            (()=>{
+                var o;
+                let pll=document.getElementById('pll');
+                o = document.createElement('source');
+                o.setAttribute('src', "https:\\/\\/www.fapnado.com\\/get_file\\/1\\/3cf363262cda74c638ec4841dea579b3\\/9000\\/9770\\/9770_360p.mp4\\/");
+                o.setAttribute("type","video/mp4");
+                o.setAttribute('title',"360p");
+                pll.appendChild(o);
+                o = document.createElement('source');
+                o.setAttribute('src', "https:\\/\\/www.fapnado.com\\/get_file\\/1\\/df7c6ef3e93cf4d597a7830d4658cf50\\/9000\\/9770\\/9770.mp4\\/");
+                o.setAttribute("type","video/mp4");
+                o.setAttribute('title',"720p");
+                pll.appendChild(o);
+            })();
+            </script>
+        </body>
+        </html>
+        """
+
+        let media = YtdlpService.parseStarwankMedia(
+            html: sampleHTML,
+            targetUrl: "https://starwank.com/videos/260540/private-czech-garden-party/"
+        )
+
+        XCTAssertNotNil(media)
+        XCTAssertEqual(media?.title, "Private Czech Garden Party")
+        XCTAssertEqual(media?.thumbnailURL, "https://starwank.com/contents/videos_screenshots/260000/260540/preview.jpg")
+        XCTAssertEqual(media?.duration, 362.0)
+        XCTAssertEqual(media?.embedURL, "https://starwank.com/embed/260540")
+        XCTAssertEqual(media?.allSources.count, 2)
+        // Highest quality by default
+        XCTAssertEqual(media?.quality, "720p")
+        XCTAssertEqual(media?.streamURL, "https://www.fapnado.com/get_file/1/df7c6ef3e93cf4d597a7830d4658cf50/9000/9770/9770.mp4/")
+
+        // Requested 360p format
+        let media360 = YtdlpService.parseStarwankMedia(
+            html: sampleHTML,
+            targetUrl: "https://starwank.com/videos/260540/private-czech-garden-party/",
+            requestedFormat: "360p"
+        )
+        XCTAssertEqual(media360?.quality, "360p")
+        XCTAssertEqual(media360?.streamURL, "https://www.fapnado.com/get_file/1/3cf363262cda74c638ec4841dea579b3/9000/9770/9770_360p.mp4/")
+    }
+
+    func testStarwankParseMediaFromEmbedPageHTML() {
+        let sampleHTML = """
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>StarWank</title>
+        </head>
+        <body>
+            <script>
+            var tc67a9ca8d0 = {
+                embed_mode: '1',
+                video_id: '260540',
+                video_title: 'Private Czech Garden Party',
+                license_code: '$525802717347152',
+                video_url: 'https://www.fapnado.com/get_file/1/df7c6ef3e93cf4d597a7830d4658cf50/9000/9770/9770.mp4/',
+                preview_url: 'https://starwank.com/contents/videos_screenshots/260000/260540/preview.jpg',
+                empty_referrer_redirect: 'https://starwank.com/videos/260540/private-czech-garden-party/'
+            };
+            </script>
+        </body>
+        </html>
+        """
+
+        let media = YtdlpService.parseStarwankMedia(
+            html: sampleHTML,
+            targetUrl: "https://starwank.com/embed/260540"
+        )
+
+        XCTAssertNotNil(media)
+        XCTAssertEqual(media?.title, "Private Czech Garden Party")
+        XCTAssertEqual(media?.thumbnailURL, "https://starwank.com/contents/videos_screenshots/260000/260540/preview.jpg")
+        XCTAssertEqual(media?.streamURL, "https://www.fapnado.com/get_file/1/df7c6ef3e93cf4d597a7830d4658cf50/9000/9770/9770.mp4/")
+        XCTAssertEqual(media?.allSources.first?.label, "720p")
+    }
+
+    func testLiveStarwankResolution() async throws {
+        let media = await service.resolveStarwankMediaInfo(url: "https://starwank.com/videos/260540/private-czech-garden-party/")
+        guard let media else {
+            throw XCTSkip("Network unavailable for live Starwank resolution")
+        }
+        XCTAssertEqual(media.title, "Private Czech Garden Party")
+        XCTAssertEqual(media.quality, "720p")
+        XCTAssertTrue(media.streamURL.contains("fapnado.com"))
+        XCTAssertEqual(media.allSources.count, 2)
+    }
+
     func testBestCamAES256CTRDecryptionFixture() throws {
         let filename = "7c9a1f00ba871cce7861afcf0dfe6.255724278.4"
         let ciphertext = Data([0xe6, 0x4a, 0xbd, 0xed, 0xbe, 0xe1, 0x91, 0x3c, 0x6f, 0xaf, 0x93, 0x9a, 0xd6, 0x93, 0x83, 0x66])
