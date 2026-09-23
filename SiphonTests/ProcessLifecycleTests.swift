@@ -102,6 +102,110 @@ final class ProcessLifecycleTests: XCTestCase {
         }
     }
 
+    func testCancellationBetweenRecoveryAttemptsSurvivesDetach() {
+        // A previous recovery attempt already finished; the user stops the job
+        // before the next attempt launches.
+        let controller = DownloadProcessController()
+        controller.transitionToTerminated(exitCode: 1, reason: .exit)
+        controller.cancel()
+        XCTAssertTrue(controller.isCancelled)
+
+        // The runner detaches after a rejected start. That must not clear the
+        // stop request and let a later attempt launch a new process.
+        let rejected = Process()
+        rejected.executableURL = URL(fileURLWithPath: "/usr/bin/true")
+        XCTAssertThrowsError(try controller.start(rejected))
+        controller.detach()
+        XCTAssertTrue(controller.isCancelled, "detach() must not clear a requested cancellation")
+
+        let nextAttempt = Process()
+        nextAttempt.executableURL = URL(fileURLWithPath: "/usr/bin/true")
+        XCTAssertThrowsError(try controller.start(nextAttempt))
+        XCTAssertFalse(nextAttempt.isRunning)
+    }
+
+    func testDownloadFailureClassificationIgnoresSubtitleWarnings() {
+        let stderr = """
+        WARNING: [youtube] abc123: There are no subtitles for the requested languages
+        WARNING: [youtube] abc123: Some automatic captions are missing
+        ERROR: unable to download video data: HTTP Error 503: Service Unavailable
+        """
+        guard case .downloadFailed(let message) = DefaultYtdlpProcessRunner.classifyFailure(errorOutput: stderr, exitCode: 1) else {
+            XCTFail("A network failure must stay recoverable, not become a subtitle error")
+            return
+        }
+        XCTAssertTrue(message.contains("HTTP Error 503"))
+    }
+
+    func testDownloadFailureClassificationIgnoresWarningsWithoutErrorLine() {
+        let stderr = """
+        WARNING: [youtube] abc123: There are no subtitles for the requested languages
+        Traceback (most recent call last):
+        MemoryError
+        """
+        guard case .downloadFailed = DefaultYtdlpProcessRunner.classifyFailure(errorOutput: stderr, exitCode: 1) else {
+            XCTFail("A crash without an ERROR: line must stay a recoverable download failure")
+            return
+        }
+    }
+
+    func testDownloadFailureClassificationIgnoresIncidental429() {
+        let stderr = """
+        WARNING: [generic] Falling back on generic information extractor for 4290ab
+        ERROR: Unsupported URL: https://example.com/watch/4290ab
+        """
+        guard case .downloadFailed(let message) = DefaultYtdlpProcessRunner.classifyFailure(errorOutput: stderr, exitCode: 1) else {
+            XCTFail("A '429' substring outside the error line must not be treated as rate limiting")
+            return
+        }
+        XCTAssertTrue(message.hasPrefix("Unsupported URL"))
+    }
+
+    func testDownloadFailureClassificationKeepsRealRateLimitAndSubtitleErrors() {
+        guard case .tooManyRequests = DefaultYtdlpProcessRunner.classifyFailure(
+            errorOutput: "ERROR: [youtube] abc123: HTTP Error 429: Too Many Requests",
+            exitCode: 1
+        ) else {
+            XCTFail("An HTTP 429 error line must map to tooManyRequests")
+            return
+        }
+        guard case .subtitleError = DefaultYtdlpProcessRunner.classifyFailure(
+            errorOutput: "ERROR: Unable to download video subtitles for 'en': HTTP Error 404: Not Found",
+            exitCode: 1
+        ) else {
+            XCTFail("A subtitle error line must map to subtitleError")
+            return
+        }
+        guard case .downloadFailed(let message) = DefaultYtdlpProcessRunner.classifyFailure(errorOutput: "", exitCode: 2) else {
+            XCTFail("Empty stderr must still produce a download failure")
+            return
+        }
+        XCTAssertEqual(message, "Process exited with code 2")
+    }
+
+    func testRunnerSurfacesRealErrorWhenStderrHasSubtitleWarnings() async {
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent("classify_\(UUID().uuidString)")
+        try? FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let script = "echo 'WARNING: There are no subtitles for the requested languages' >&2; " +
+            "echo 'ERROR: unable to download video data: HTTP Error 503: Service Unavailable' >&2; exit 1"
+        do {
+            _ = try await DefaultYtdlpProcessRunner().runDownloadProcess(
+                args: ["/bin/sh", "-c", script],
+                saveFolder: tempDir,
+                processController: DownloadProcessController(),
+                onProgress: { _, _, _ in /* Progress ignored in test */ },
+                onOutput: { _ in /* Output ignored in test */ }
+            )
+            XCTFail("A failing process must throw")
+        } catch YtdlpError.downloadFailed(let message) {
+            XCTAssertTrue(message.contains("HTTP Error 503"))
+        } catch {
+            XCTFail("Expected downloadFailed so recovery strategies can run, got \(error)")
+        }
+    }
+
     func testCancelBeforeStartTransitionsToCancelling() {
         let controller = DownloadProcessController()
         controller.cancel()

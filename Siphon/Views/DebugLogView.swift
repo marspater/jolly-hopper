@@ -13,10 +13,10 @@ struct DebugLogView: View {
             HStack(spacing: SiphonTheme.spacing12) {
                 Image(systemName: "terminal.fill")
                     .font(.system(size: 15, weight: .semibold))
-                    .foregroundColor(SiphonTheme.accent)
+                    .foregroundColor(SiphonTheme.accentText)
 
                 Text(languageService.s("debug_logs"))
-                    .font(.geist(15, weight: .bold))
+                    .font(.siphonHeadline)
 
                 SiphonTagBadge(
                     text: "\(logger.logs.count) \(languageService.s("entries"))",
@@ -76,9 +76,9 @@ struct DebugLogView: View {
                         Image(systemName: isCopied ? "checkmark" : "doc.on.doc")
                             .font(.system(size: 11, weight: .semibold))
                         Text(isCopied ? languageService.s("copied") : languageService.s("copy_log"))
-                            .font(.geist(12, weight: .medium))
+                            .font(.siphonSecondaryMedium)
                     }
-                    .foregroundColor(isCopied ? SiphonTheme.statusCompleted : .primary)
+                    .foregroundColor(isCopied ? SiphonTheme.statusCompletedText : .primary)
                     .opacity(logger.logs.isEmpty ? 0.5 : 1.0)
                 }
                 .buttonStyle(.siphonSecondary)
@@ -93,7 +93,7 @@ struct DebugLogView: View {
                         Image(systemName: "trash")
                             .font(.system(size: 11, weight: .semibold))
                         Text(languageService.s("clear"))
-                            .font(.geist(12, weight: .medium))
+                            .font(.siphonSecondaryMedium)
                     }
                     .foregroundColor(.secondary)
                     .opacity(logger.logs.isEmpty ? 0.5 : 1.0)
@@ -116,7 +116,7 @@ struct DebugLogView: View {
                         Image(systemName: "folder")
                             .font(.system(size: 11, weight: .semibold))
                         Text(languageService.s("reveal_in_finder"))
-                            .font(.geist(12, weight: .medium))
+                            .font(.siphonSecondaryMedium)
                     }
                     .foregroundColor(.secondary)
                 }
