@@ -2269,13 +2269,8 @@ public struct DownloadResult: Sendable {
     nonisolated static func recuPlaylistURL(from apiResponse: String) -> String? {
         let decoded = apiResponse.decodingHTMLEntities()
             .replacingOccurrences(of: "\\/", with: "/")
-        let patterns = [
-            #"<source[^>]+src\s*=\s*["']([^"']+\.m3u8[^"']*)["']"#,
-            #"(https?://[^\s"'<>]+\.m3u8[^\s"'<>]*)"#
-        ]
-        for pattern in patterns {
-            guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]),
-                  let match = regex.firstMatch(in: decoded, range: NSRange(decoded.startIndex..., in: decoded)),
+        for regex in recuPlaylistRegexes {
+            guard let match = regex.firstMatch(in: decoded, range: NSRange(decoded.startIndex..., in: decoded)),
                   match.numberOfRanges > 1,
                   let range = Range(match.range(at: 1), in: decoded) else {
                 continue
@@ -3472,6 +3467,11 @@ public struct DownloadResult: Sendable {
     }
 
     // Bolt Performance Optimization: Pre-compile static NSRegularExpression patterns as `nonisolated private static let` constants to eliminate compilation and allocation overhead during high-frequency parsing.
+    nonisolated private static let recuPlaylistRegexes: [NSRegularExpression] = [
+        #"<source[^>]+src\s*=\s*["']([^"']+\.m3u8[^"']*)["']"#,
+        #"(https?://[^\s"'<>]+\.m3u8[^\s"'<>]*)"#
+    ].compactMap { try? NSRegularExpression(pattern: $0, options: [.caseInsensitive]) }
+
     nonisolated private static let boyfriendEmbedRegexes: [NSRegularExpression] = [
         #""embedUrl"\s*:\s*"([^"]+)""#,
         #"<iframe[^>]+(?:data-src|src)\s*=\s*["']([^"']+)["']"#
