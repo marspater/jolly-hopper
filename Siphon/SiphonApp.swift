@@ -70,6 +70,9 @@ struct SiphonApp: App {
                     SiphonTheme.applyTheme(newTheme)
                 }
                 .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in
+                    // A test host never loaded the user's history, so it must not
+                    // write its empty state over it on exit.
+                    guard !NotificationService.isRunningTests else { return }
                     // A normal app quit must not turn explicitly paused jobs into
                     // stopped jobs or delete the resumable scratch data they own.
                     downloadManager.stopAllDownloads(preservePaused: true)
@@ -167,20 +170,50 @@ struct SiphonApp: App {
         let rawUserAgent = queryItems?.first(where: { $0.name == "ua" })?.value
         let rawBrowserSource = queryItems?.first(where: { $0.name == "browser" })?.value
         
+        let rejectTarget = {
+            LoggerService.shared.log(
+                "Rejected external download target outside the public network boundary: \(LoggerService.sanitizeURLForLog(videoUrl ?? "<missing>"))",
+                level: .warning
+            )
+        }
+
         guard let rawVideoUrl = videoUrl?.trimmingCharacters(in: .whitespacesAndNewlines),
               !rawVideoUrl.isEmpty,
               !rawVideoUrl.contains("\r") && !rawVideoUrl.contains("\n") && !rawVideoUrl.contains("\0"),
               let targetURL = URL(string: rawVideoUrl),
               let host = targetURL.host, !host.isEmpty,
-              targetURL.scheme == "http" || targetURL.scheme == "https",
-              ExternalDownloadTargetPolicy.isAllowed(targetURL) else {
-            LoggerService.shared.log(
-                "Rejected external download target outside the public network boundary: \(LoggerService.sanitizeURLForLog(videoUrl ?? "<missing>"))",
-                level: .warning
-            )
+              targetURL.scheme == "http" || targetURL.scheme == "https" else {
+            rejectTarget()
             return
         }
-        
+
+        // The target policy resolves DNS, which can block for seconds on a slow
+        // or unreachable resolver. Keep that off the main actor.
+        Task { @MainActor in
+            let isAllowed = await Task.detached(priority: .userInitiated) {
+                ExternalDownloadTargetPolicy.isAllowed(targetURL)
+            }.value
+            guard isAllowed else {
+                rejectTarget()
+                return
+            }
+            acceptExternalDownload(
+                rawVideoUrl: rawVideoUrl,
+                targetURL: targetURL,
+                isFastDownload: url.host == "fast-download",
+                rawUserAgent: rawUserAgent,
+                rawBrowserSource: rawBrowserSource
+            )
+        }
+    }
+
+    private func acceptExternalDownload(
+        rawVideoUrl: String,
+        targetURL: URL,
+        isFastDownload: Bool,
+        rawUserAgent: String?,
+        rawBrowserSource: String?
+    ) {
         // Never accept browser credential values through a custom URL. The extension
         // sends only a browser identifier; Siphon asks yt-dlp to read that browser's
         // cookie store directly, preserving the browser's original cookie metadata.
@@ -202,7 +235,7 @@ struct SiphonApp: App {
             browserCookieSource: sanitizedBrowserSource
         )
 
-        if url.host == "fast-download" {
+        if isFastDownload {
             let session = appState.consumeBrowserSession(for: rawVideoUrl)
             downloadManager.quickDownload(
                 url: rawVideoUrl,

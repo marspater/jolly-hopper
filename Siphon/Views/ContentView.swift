@@ -52,6 +52,9 @@ struct ContentView: View {
                     }
                 }
                 .task {
+                    // When Siphon only hosts the unit tests, do not load or persist
+                    // the user's history, install binaries, or query GitHub.
+                    guard !NotificationService.isRunningTests else { return }
                     downloadManager.initialize(languageService: languageService)
                     await appState.initializeApplicationServices(
                         ytdlpService: downloadManager.ytdlpService,
@@ -182,13 +185,13 @@ struct SidebarView: View {
                 sidebarButton(item: .home)
                 
                 Section(languageService.s("downloading")) {
-                    sidebarButton(item: .downloading, badgeCount: downloadManager.downloadingCount, badgeColor: SiphonTheme.statusDownloading)
-                    sidebarButton(item: .queued, badgeCount: downloadManager.queuedCount, badgeColor: SiphonTheme.statusQueued)
+                    sidebarButton(item: .downloading, badgeCount: downloadManager.downloadingCount, badgeColor: SiphonTheme.statusDownloadingText)
+                    sidebarButton(item: .queued, badgeCount: downloadManager.queuedCount, badgeColor: SiphonTheme.statusQueuedText)
                 }
                 
                 Section(languageService.s("history")) {
-                    sidebarButton(item: .completed, badgeCount: downloadManager.completedCount, badgeColor: SiphonTheme.statusCompleted)
-                    sidebarButton(item: .failed, badgeCount: downloadManager.failedCount, badgeColor: SiphonTheme.statusFailed)
+                    sidebarButton(item: .completed, badgeCount: downloadManager.completedCount, badgeColor: SiphonTheme.statusCompletedText)
+                    sidebarButton(item: .failed, badgeCount: downloadManager.failedCount, badgeColor: SiphonTheme.statusFailedText)
                 }
             }
             .listStyle(.sidebar)
@@ -219,11 +222,11 @@ struct SidebarView: View {
                             .font(.system(size: 13, weight: .medium))
                             .foregroundColor(.secondary)
                         Text(languageService.s("settings"))
-                            .font(.geist(13, weight: .medium))
+                            .font(.siphonStandardMedium)
                             .foregroundColor(.primary)
                         Spacer()
                         Text("⌘,")
-                            .font(.geistMono(10, weight: .medium))
+                            .font(.siphonMicroMonoMedium)
                             .foregroundColor(.secondary)
                     }
                     .padding(.horizontal, SiphonTheme.spacing12)
@@ -244,10 +247,10 @@ struct SidebarView: View {
 
             VStack(alignment: .leading, spacing: 1) {
                 Text("Siphon")
-                    .font(.geist(15, weight: .bold))
+                    .font(.siphonHeadline)
                     .foregroundColor(.primary)
                 Text(languageService.s("video_downloader"))
-                    .font(.geist(11, weight: .regular))
+                    .font(.siphonMetadata)
                     .foregroundColor(.secondary)
             }
 
@@ -267,9 +270,9 @@ struct SidebarView: View {
                 Image(systemName: item.icon)
                     .font(.system(size: 13, weight: .medium))
                     .frame(width: 18, alignment: .center)
-                    .foregroundColor(isSelected ? SiphonTheme.accent : .secondary)
+                    .foregroundColor(isSelected ? SiphonTheme.accentText : .secondary)
                 Text(item.title(lang: languageService))
-                    .font(.geist(13, weight: isSelected ? .semibold : .medium))
+                    .font((isSelected ? .siphonStandardSemibold : .siphonStandardMedium))
                     .foregroundColor(isSelected ? .primary : .secondary)
                 Spacer()
                 if badgeCount > 0 {
@@ -286,7 +289,7 @@ struct SidebarView: View {
         .listRowInsets(EdgeInsets(top: 2, leading: 6, bottom: 2, trailing: 6))
         .listRowBackground(
             RoundedRectangle(cornerRadius: SiphonTheme.radiusControl)
-                .fill(isSelected ? SiphonTheme.accent.opacity(0.18) : Color.clear)
+                .fill(isSelected ? SiphonTheme.accent.opacity(SiphonTheme.Opacity.tintSidebarSelected) : Color.clear)
                 .padding(.horizontal, 2)
         )
     }
@@ -337,11 +340,11 @@ struct HomeView: View {
                 HStack(alignment: .top) {
                     VStack(alignment: .leading, spacing: 6) {
                         Text(languageService.s("ready_to_download"))
-                            .font(.geist(26, weight: .bold))
+                            .font(.siphonHomeTitle)
                             .foregroundColor(.primary)
                         
                         Text(languageService.s("ready_to_download_subtitle"))
-                            .font(.geist(13, weight: .regular))
+                            .font(.siphonStandard)
                             .foregroundColor(.secondary)
                     }
                     
@@ -353,7 +356,7 @@ struct HomeView: View {
                             .frame(width: 28, height: 1.5)
                         
                         Text(languageService.s("more_videos_calmer_internet"))
-                            .font(.geist(11, weight: .medium))
+                            .font(.siphonMetadataMedium)
                             .foregroundColor(.secondary)
                             .multilineTextAlignment(.trailing)
                             .lineSpacing(2)
@@ -383,7 +386,7 @@ struct HomeView: View {
                             Image(systemName: "terminal.fill")
                                 .font(.system(size: 10, weight: .medium))
                             Text("yt-dlp \(version)")
-                                .font(.geistMono(11, weight: .medium))
+                                .font(.siphonMetadataMonoMedium)
                         }
                         .foregroundColor(.secondary.opacity(0.8))
                     }
@@ -396,7 +399,7 @@ struct HomeView: View {
                             .foregroundColor(.secondary.opacity(0.7))
                         Image(systemName: "heart.fill")
                             .font(.system(size: 9))
-                            .foregroundColor(colorScheme == .light ? SiphonTheme.accent : Color.white.opacity(0.85))
+                            .foregroundColor(colorScheme == .light ? SiphonTheme.accentText : Color.white.opacity(0.85))
                     }
                 }
                 .padding(.horizontal, SiphonTheme.spacing24)
@@ -429,7 +432,7 @@ struct HomeView: View {
         VStack(spacing: SiphonTheme.spacing10) {
             HStack {
                 Text(languageService.s("recent_downloads"))
-                    .font(.geist(14, weight: .semibold))
+                    .font(.siphonPrimarySemibold)
                     .foregroundColor(.primary)
                 
                 Spacer()
@@ -439,7 +442,7 @@ struct HomeView: View {
                 } label: {
                     HStack(spacing: 4) {
                         Text(languageService.s("see_all"))
-                            .font(.geist(12, weight: .medium))
+                            .font(.siphonSecondaryMedium)
                         Image(systemName: "chevron.right")
                             .font(.system(size: 10, weight: .semibold))
                     }
@@ -455,10 +458,10 @@ struct HomeView: View {
                         .font(.system(size: 24, weight: .light))
                         .foregroundColor(.secondary.opacity(0.7))
                     Text(languageService.s("no_recent_downloads"))
-                        .font(.geist(13, weight: .medium))
+                        .font(.siphonStandardMedium)
                         .foregroundColor(.primary.opacity(0.8))
                     Text(languageService.s("no_recent_downloads_sub"))
-                        .font(.geist(11))
+                        .font(.siphonMetadata)
                         .foregroundColor(.secondary)
                 }
                 .frame(maxWidth: .infinity)
@@ -687,10 +690,10 @@ struct SponsorView: View {
         } label: {
             HStack(spacing: SiphonTheme.spacing8) {
                 Image(systemName: "star.fill")
-                    .foregroundColor(SiphonTheme.statusQueued)
+                    .foregroundColor(SiphonTheme.statusQueuedText)
                     .font(.system(size: 11, weight: .semibold))
                 Text(languageService.s("star_github"))
-                    .font(.geist(12, weight: .medium))
+                    .font(.siphonSecondaryMedium)
                     .foregroundColor(.primary)
                 Spacer()
                 Image(systemName: "arrow.up.right")
@@ -731,9 +734,9 @@ struct WhatsNewSheetView: View {
             VStack(spacing: 8) {
                 HStack(spacing: 8) {
                     Text(languageService.s("whats_new_badge"))
-                        .font(.geist(10, weight: .bold))
+                        .font(.siphonMicroSemibold)
                         .tracking(1.2)
-                        .foregroundColor(SiphonTheme.accent)
+                        .foregroundColor(SiphonTheme.accentText)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 3)
                         .background(SiphonTheme.accent.opacity(0.12))
@@ -747,11 +750,11 @@ struct WhatsNewSheetView: View {
                 }
 
                 Text(languageService.s("whats_new_title"))
-                    .font(.geist(22, weight: .bold))
+                    .font(.siphonSheetTitle)
                     .foregroundColor(.primary)
 
                 Text(languageService.s("whats_new_subtitle"))
-                    .font(.geist(13))
+                    .font(.siphonStandard)
                     .foregroundColor(.secondary)
                     .multilineTextAlignment(.center)
             }
@@ -788,7 +791,7 @@ struct WhatsNewSheetView: View {
                         Image(systemName: "arrow.up.right.square")
                             .font(.system(size: 12))
                         Text(languageService.s("view_on_github"))
-                            .font(.geist(12, weight: .medium))
+                            .font(.siphonSecondaryMedium)
                     }
                 }
                 .buttonStyle(.siphonSecondary)
@@ -801,7 +804,7 @@ struct WhatsNewSheetView: View {
                     dismiss()
                 } label: {
                     Text(languageService.s("continue"))
-                        .font(.geist(13, weight: .semibold))
+                        .font(.siphonStandardSemibold)
                         .frame(minWidth: 100)
                 }
                 .buttonStyle(.siphonPrimary)
@@ -846,11 +849,11 @@ private struct FeatureCardRow: View {
             // Title & Description
             VStack(alignment: .leading, spacing: 3) {
                 Text(feature.title)
-                    .font(.geist(13, weight: .semibold))
+                    .font(.siphonStandardSemibold)
                     .foregroundColor(.primary)
 
                 Text(feature.description)
-                    .font(.geist(12))
+                    .font(.siphonSecondary)
                     .foregroundColor(.secondary)
                     .lineSpacing(2)
                     .fixedSize(horizontal: false, vertical: true)

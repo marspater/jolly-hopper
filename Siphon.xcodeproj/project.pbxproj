@@ -82,6 +82,7 @@
 		E00010AB /* UpdateVerifierTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E00000AB /* UpdateVerifierTests.swift */; };
 		E00010B0 /* QueueRecoveryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = E00000B0 /* QueueRecoveryStore.swift */; };
 		E00010B1 /* QueueRecoveryStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E00000B1 /* QueueRecoveryStoreTests.swift */; };
+		E00010B2 /* TestEnvironmentIsolation.swift in Sources */ = {isa = PBXBuildFile; fileRef = E00000B2 /* TestEnvironmentIsolation.swift */; };
 		E00010AC /* LiquidWaterWaveView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E00000AC /* LiquidWaterWaveView.swift */; };
 		E00010AD /* HeroDropURLView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E00000AD /* HeroDropURLView.swift */; };
 		E00010AE /* RecentDownloadRowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E00000AE /* RecentDownloadRowView.swift */; };
@@ -171,6 +172,7 @@
 		E00000AF /* RadiantSiphonLogoView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RadiantSiphonLogoView.swift; sourceTree = "<group>"; };
 		E00000B0 /* QueueRecoveryStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QueueRecoveryStore.swift; sourceTree = "<group>"; };
 		E00000B1 /* QueueRecoveryStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QueueRecoveryStoreTests.swift; sourceTree = "<group>"; };
+		E00000B2 /* TestEnvironmentIsolation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TestEnvironmentIsolation.swift; sourceTree = "<group>"; };
 		E0000043 /* SiphonTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SiphonTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -252,6 +254,7 @@
 				E00000AA /* LogSanitizationTests.swift */,
 				E00000AB /* UpdateVerifierTests.swift */,
 				E00000B1 /* QueueRecoveryStoreTests.swift */,
+				E00000B2 /* TestEnvironmentIsolation.swift */,
 			);
 			path = SiphonTests;
 			sourceTree = "<group>";
@@ -610,6 +613,7 @@
 				E00010AA /* LogSanitizationTests.swift in Sources */,
 				E00010AB /* UpdateVerifierTests.swift in Sources */,
 				E00010B1 /* QueueRecoveryStoreTests.swift in Sources */,
+				E00010B2 /* TestEnvironmentIsolation.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -851,6 +855,7 @@
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 55;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSPrincipalClass = SiphonTestEnvironmentIsolation;
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
 				MARKETING_VERSION = 5.4.5;
 				PRODUCT_BUNDLE_IDENTIFIER = com.marspater.siphon.SiphonTests;
@@ -869,6 +874,7 @@
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 55;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSPrincipalClass = SiphonTestEnvironmentIsolation;
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
 				MARKETING_VERSION = 5.4.5;
 				PRODUCT_BUNDLE_IDENTIFIER = com.marspater.siphon.SiphonTests;

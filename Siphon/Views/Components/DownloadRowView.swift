@@ -97,7 +97,7 @@ struct DownloadRowView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     // Line 1: Title
                     Text(download.status == .fetching ? languageService.s("fetching") : download.displayTitle)
-                        .font(.geist(14, weight: .semibold))
+                        .font(.siphonPrimarySemibold)
                         .lineLimit(2)
                         .truncationMode(.tail)
                         .fixedSize(horizontal: false, vertical: true)
@@ -106,7 +106,7 @@ struct DownloadRowView: View {
                     
                     // Line 2: Subtitle (Domain • Quality • Format • Duration)
                     Text(download.formatSubtitle(lang: languageService))
-                        .font(.geist(12, weight: .medium))
+                        .font(.siphonSecondaryMedium)
                         .foregroundColor(.secondary)
                         .lineLimit(1)
                         .truncationMode(.tail)
@@ -125,14 +125,14 @@ struct DownloadRowView: View {
                                         return Int(max(0.0, min(1.0, download.progress)) * 100)
                                     }()
                                     Text("\(safePercent)%")
-                                        .font(.geistMono(12, weight: .bold))
-                                        .foregroundColor(SiphonTheme.accent)
+                                        .font(.siphonSecondaryMonoSemibold)
+                                        .foregroundColor(SiphonTheme.accentText)
                                     
                                     if let speed = download.speed, !speed.isEmpty {
                                         Text("•")
                                             .foregroundColor(.secondary.opacity(0.4))
                                         Text(speed)
-                                            .font(.geistMono(11, weight: .medium))
+                                            .font(.siphonMetadataMonoMedium)
                                             .foregroundColor(.secondary)
                                     }
                                     
@@ -140,7 +140,7 @@ struct DownloadRowView: View {
                                         Text("•")
                                             .foregroundColor(.secondary.opacity(0.4))
                                         Text("~\(eta)")
-                                            .font(.geistMono(11, weight: .medium))
+                                            .font(.siphonMetadataMonoMedium)
                                             .foregroundColor(.secondary)
                                     }
                                 }
@@ -154,7 +154,7 @@ struct DownloadRowView: View {
                             
                             if download.status == .paused && download.progress > 0 {
                                 Text("\(Int(download.progress * 100))%")
-                                    .font(.geistMono(11, weight: .semibold))
+                                    .font(.siphonMetadataMonoSemibold)
                                     .foregroundColor(SiphonTheme.statusForeground(for: .paused, colorScheme: colorScheme))
                             }
                         }
@@ -210,10 +210,10 @@ struct DownloadRowView: View {
                 VStack(alignment: .leading, spacing: 6) {
                     HStack(alignment: .firstTextBaseline, spacing: 6) {
                         Image(systemName: "exclamationmark.triangle.fill")
-                            .font(.geist(12))
+                            .font(.siphonSecondary)
                             .foregroundColor(SiphonTheme.statusForeground(for: .failed, colorScheme: colorScheme))
                         Text(info.headline)
-                            .font(.geist(13, weight: .bold))
+                            .font(.siphonStandardSemibold)
                             .foregroundColor(SiphonTheme.statusForeground(for: .failed, colorScheme: colorScheme))
                             .lineLimit(1)
                         
@@ -221,7 +221,7 @@ struct DownloadRowView: View {
                             .foregroundColor(SiphonTheme.statusForeground(for: .failed, colorScheme: colorScheme).opacity(0.55))
                         
                         Text(info.description)
-                            .font(.geist(12))
+                            .font(.siphonSecondary)
                             .foregroundColor(.secondary)
                             .lineLimit(2)
                             .truncationMode(.tail)
@@ -241,7 +241,7 @@ struct DownloadRowView: View {
                                 )
                             } label: {
                                 Text(languageService.s("fix_signin_error"))
-                                    .font(.geist(11, weight: .semibold))
+                                    .font(.siphonMetadataSemibold)
                             }
                             .buttonStyle(.borderedProminent)
                             .tint(SiphonTheme.accent)
@@ -252,7 +252,7 @@ struct DownloadRowView: View {
                                 downloadManager.retryDownload(download)
                             } label: {
                                 Text(languageService.s("retry"))
-                                    .font(.geist(11, weight: .semibold))
+                                    .font(.siphonMetadataSemibold)
                             }
                             .buttonStyle(.bordered)
                             .controlSize(.small)
@@ -267,7 +267,7 @@ struct DownloadRowView: View {
                                 )
                             } label: {
                                 Text(languageService.s("change_folder"))
-                                    .font(.geist(11, weight: .semibold))
+                                    .font(.siphonMetadataSemibold)
                             }
                             .buttonStyle(.bordered)
                             .controlSize(.small)
@@ -283,9 +283,9 @@ struct DownloadRowView: View {
                         } label: {
                             HStack(spacing: 3) {
                                 Text(showRawError ? languageService.s("hide_details") : languageService.s("details"))
-                                    .font(.geist(11, weight: .medium))
+                                    .font(.siphonMetadataMedium)
                                 Image(systemName: showRawError ? "chevron.up" : "chevron.down")
-                                    .font(.geist(9))
+                                    .font(.siphonMicro)
                             }
                             .foregroundColor(.secondary)
                         }
@@ -295,7 +295,7 @@ struct DownloadRowView: View {
                     if showRawError {
                         VStack(alignment: .leading, spacing: 4) {
                             Text(info.rawError)
-                                .font(.geistMono(10))
+                                .font(.siphonMicroMono)
                                 .foregroundColor(.secondary)
                                 .lineLimit(6)
                                 .padding(8)
@@ -320,13 +320,13 @@ struct DownloadRowView: View {
                                 } label: {
                                     HStack(spacing: 3) {
                                         Image(systemName: isCopiedError ? "checkmark" : "doc.on.doc")
-                                            .font(.geist(9))
+                                            .font(.siphonMicro)
                                         Text(isCopiedError ? languageService.s("copied") : languageService.s("copy_error"))
-                                            .font(.geist(10, weight: .medium))
+                                            .font(.siphonMicroMedium)
                                     }
                                 }
                                 .buttonStyle(.plain)
-                                .foregroundColor(isCopiedError ? SiphonTheme.statusCompleted : SiphonTheme.accent)
+                                .foregroundColor(isCopiedError ? SiphonTheme.statusCompletedText : SiphonTheme.accentText)
                                 .help(languageService.s("copy_error"))
                                 .accessibilityLabel(isCopiedError ? languageService.s("copied") : languageService.s("copy_error"))
                                 
@@ -337,9 +337,9 @@ struct DownloadRowView: View {
                                 } label: {
                                     HStack(spacing: 3) {
                                         Image(systemName: "doc.text")
-                                            .font(.geist(9))
+                                            .font(.siphonMicro)
                                         Text(languageService.s("download_log"))
-                                            .font(.geist(10, weight: .medium))
+                                            .font(.siphonMicroMedium)
                                     }
                                 }
                                 .buttonStyle(.plain)
@@ -545,7 +545,7 @@ struct FileThumbnailView: View {
                             .font(.system(size: 18, weight: .semibold))
                     }
                     .buttonStyle(.siphonIcon(size: 28))
-                    .foregroundColor(SiphonTheme.accent)
+                    .foregroundColor(SiphonTheme.accentText)
                     .help(languageService.s("play"))
                     .accessibilityLabel(languageService.s("play"))
                 }
@@ -762,7 +762,7 @@ struct FileThumbnailView: View {
                         .font(.system(size: 18, weight: .semibold))
                 }
                 .buttonStyle(.siphonIcon(size: 28))
-                .foregroundColor(SiphonTheme.accent)
+                .foregroundColor(SiphonTheme.accentText)
                 .help(languageService.s("resume"))
                 .accessibilityLabel(languageService.s("resume"))
                 
@@ -866,7 +866,7 @@ struct FileThumbnailView: View {
                         Image(systemName: "square.and.arrow.down.on.square.fill")
                             .font(.system(size: 13))
                         Text(languageService.s("overwrite"))
-                            .font(.geist(11, weight: .medium))
+                            .font(.siphonMetadataMedium)
                     }
                     .foregroundColor(SiphonTheme.statusForeground(for: .queued, colorScheme: colorScheme))
                 }
@@ -881,9 +881,9 @@ struct FileThumbnailView: View {
                         Image(systemName: "plus.square.on.square.fill")
                             .font(.system(size: 13))
                         Text(languageService.s("download_new_name"))
-                            .font(.geist(11, weight: .medium))
+                            .font(.siphonMetadataMedium)
                     }
-                    .foregroundColor(SiphonTheme.accent)
+                    .foregroundColor(SiphonTheme.accentText)
                 }
                 .buttonStyle(.siphonGhost)
                 .help(languageService.s("download_new_name"))
@@ -1072,10 +1072,10 @@ struct FileThumbnailView: View {
             HStack(spacing: SiphonTheme.spacing12) {
                 Image(systemName: "terminal.fill")
                     .font(.system(size: 15, weight: .semibold))
-                    .foregroundColor(SiphonTheme.accent)
+                    .foregroundColor(SiphonTheme.accentText)
 
                 Text(languageService.s("download_log"))
-                    .font(.geist(15, weight: .bold))
+                    .font(.siphonHeadline)
 
                 if !download.log.isEmpty {
                     SiphonTagBadge(
@@ -1137,9 +1137,9 @@ struct FileThumbnailView: View {
                         Image(systemName: isCopiedLog ? "checkmark" : "doc.on.doc")
                             .font(.system(size: 11, weight: .semibold))
                         Text(isCopiedLog ? languageService.s("copied") : languageService.s("copy_log"))
-                            .font(.geist(12, weight: .medium))
+                            .font(.siphonSecondaryMedium)
                     }
-                    .foregroundColor(isCopiedLog ? SiphonTheme.statusCompleted : .primary)
+                    .foregroundColor(isCopiedLog ? SiphonTheme.statusCompletedText : .primary)
                     .opacity(download.log.isEmpty ? 0.5 : 1.0)
                 }
                 .buttonStyle(.siphonSecondary)
