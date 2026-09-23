@@ -296,6 +296,8 @@ class LanguageService: ObservableObject {
         "download_completed_body": "%@ downloaded successfully.",
         "download_failed_title": "Download Error",
         "download_failed_body": "An error occurred while downloading %@.",
+        "conversion_completed_title": "Video Conversion Complete",
+        "conversion_completed_body": "%@ was converted to %@.",
         "launch_at_login": "Launch at login",
         "start_in_background": "Start in background",
         "start_in_background_desc": "On login, only the menu bar icon will be shown, not in Dock",

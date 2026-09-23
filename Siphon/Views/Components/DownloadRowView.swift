@@ -176,7 +176,7 @@ struct DownloadRowView: View {
         .background(
             SiphonTheme.cardBackground(cornerRadius: SiphonTheme.radiusCard, isHovered: isHovering)
         )
-        .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusCard))
+        .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusCard, style: .continuous))
         .overlay(
             SiphonTheme.cardBorder(cornerRadius: SiphonTheme.radiusCard, isHovered: isHovering)
         )
@@ -303,7 +303,7 @@ struct DownloadRowView: View {
                                 .background(
                                     SiphonTheme.controlBackground(cornerRadius: SiphonTheme.radiusSmall)
                                 )
-                                .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusSmall))
+                                .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusSmall, style: .continuous))
                                 .overlay(
                                     SiphonTheme.controlBorder(cornerRadius: SiphonTheme.radiusSmall)
                                 )
@@ -374,7 +374,7 @@ struct DownloadRowView: View {
         }
         .frame(width: 120, height: 68)
         .overlay(
-            RoundedRectangle(cornerRadius: SiphonTheme.radiusControl)
+            RoundedRectangle(cornerRadius: SiphonTheme.radiusControl, style: .continuous)
                 .stroke(Color.primary.opacity(0.08), lineWidth: 1)
         )
         .help(canPreviewMedia ? languageService.s("click_to_quick_look") : "")
@@ -427,7 +427,7 @@ struct DownloadRowView: View {
             .frame(width: 120, height: 68)
             .contentShape(Rectangle())
             .clipped()
-            .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusControl))
+            .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusControl, style: .continuous))
 
             // Hover play/quicklook overlay for completed files
             if canPreviewMedia, isHovering {
@@ -1140,7 +1140,6 @@ struct FileThumbnailView: View {
                             .font(.siphonSecondaryMedium)
                     }
                     .foregroundColor(isCopiedLog ? SiphonTheme.statusCompletedText : .primary)
-                    .opacity(download.log.isEmpty ? 0.5 : 1.0)
                 }
                 .buttonStyle(.siphonSecondary)
                 .disabled(download.log.isEmpty)

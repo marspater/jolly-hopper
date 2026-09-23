@@ -288,7 +288,7 @@ struct SidebarView: View {
         .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : [.isButton])
         .listRowInsets(EdgeInsets(top: 2, leading: 6, bottom: 2, trailing: 6))
         .listRowBackground(
-            RoundedRectangle(cornerRadius: SiphonTheme.radiusControl)
+            RoundedRectangle(cornerRadius: SiphonTheme.radiusControl, style: .continuous)
                 .fill(isSelected ? SiphonTheme.accent.opacity(SiphonTheme.Opacity.tintSidebarSelected) : Color.clear)
                 .padding(.horizontal, 2)
         )
@@ -388,7 +388,7 @@ struct HomeView: View {
                             Text("yt-dlp \(version)")
                                 .font(.siphonMetadataMonoMedium)
                         }
-                        .foregroundColor(.secondary.opacity(0.8))
+                        .foregroundColor(.secondary)
                     }
                     
                     Spacer()
@@ -396,10 +396,10 @@ struct HomeView: View {
                     HStack(spacing: 4) {
                         Text(languageService.s("built_for_open_internet"))
                             .font(.siphonMetadata)
-                            .foregroundColor(.secondary.opacity(0.7))
+                            .foregroundColor(.secondary)
                         Image(systemName: "heart.fill")
                             .font(.system(size: 9))
-                            .foregroundColor(colorScheme == .light ? SiphonTheme.accentText : Color.white.opacity(0.85))
+                            .foregroundColor(SiphonTheme.accentText)
                     }
                 }
                 .padding(.horizontal, SiphonTheme.spacing24)
@@ -459,7 +459,7 @@ struct HomeView: View {
                         .foregroundColor(.secondary.opacity(0.7))
                     Text(languageService.s("no_recent_downloads"))
                         .font(.siphonStandardMedium)
-                        .foregroundColor(.primary.opacity(0.8))
+                        .foregroundColor(.primary)
                     Text(languageService.s("no_recent_downloads_sub"))
                         .font(.siphonMetadata)
                         .foregroundColor(.secondary)
@@ -545,6 +545,7 @@ struct StatusBarView: View {
             }
             .buttonStyle(.plain)
             .help(languageService.s("see_all"))
+            .accessibilityLabel(languageService.s("see_all"))
         }
         .frame(maxWidth: .infinity)
         .frame(height: 48)
@@ -705,7 +706,7 @@ struct SponsorView: View {
             .background(
                 SiphonTheme.controlBackground(cornerRadius: SiphonTheme.radiusControl, isHovered: isHovered)
             )
-            .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusControl))
+            .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusControl, style: .continuous))
             .overlay(
                 SiphonTheme.controlBorder(cornerRadius: SiphonTheme.radiusControl, isHovered: isHovered)
             )
@@ -739,7 +740,7 @@ struct WhatsNewSheetView: View {
                         .foregroundColor(SiphonTheme.accentText)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 3)
-                        .background(SiphonTheme.accent.opacity(0.12))
+                        .background(SiphonTheme.accent.opacity(SiphonTheme.Opacity.tintBadge))
                         .clipShape(Capsule())
 
                     SiphonTagBadge(
@@ -833,11 +834,11 @@ private struct FeatureCardRow: View {
         HStack(alignment: .top, spacing: 14) {
             // Category Icon Squircle
             ZStack {
-                RoundedRectangle(cornerRadius: SiphonTheme.radiusControl)
+                RoundedRectangle(cornerRadius: SiphonTheme.radiusControl, style: .continuous)
                     .fill(feature.iconColor.opacity(isHovered ? 0.18 : 0.12))
                     .frame(width: 36, height: 36)
                     .overlay(
-                        RoundedRectangle(cornerRadius: SiphonTheme.radiusControl)
+                        RoundedRectangle(cornerRadius: SiphonTheme.radiusControl, style: .continuous)
                             .stroke(feature.iconColor.opacity(isHovered ? 0.35 : 0.20), lineWidth: 1)
                     )
 
@@ -863,7 +864,7 @@ private struct FeatureCardRow: View {
         }
         .padding(12)
         .background(
-            RoundedRectangle(cornerRadius: SiphonTheme.radiusControl)
+            RoundedRectangle(cornerRadius: SiphonTheme.radiusControl, style: .continuous)
                 .fill(Color.primary.opacity(isHovered ? 0.055 : 0.035))
         )
         .overlay(

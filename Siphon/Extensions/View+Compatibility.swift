@@ -532,6 +532,8 @@ public enum SiphonTheme {
         public static let borderRest: Double = 0.15
         public static let borderHover: Double = 0.26
         public static let borderIncreaseContrast: Double = 0.42
+        public static let tintCallout: Double = 0.10
+        public static let borderCallout: Double = 0.25
     }
     
     // Elevated Card & Tile Backgrounds (Unified macOS Translucent Glass)
@@ -1051,13 +1053,16 @@ extension ButtonStyle where Self == BouncyButtonStyle {
 public struct SiphonPrimaryButtonStyle: ButtonStyle {
     public var cornerRadius: CGFloat = SiphonTheme.radiusControl
     @State private var isHovered = false
+    @Environment(\.isEnabled) private var isEnabled
     
     public init(cornerRadius: CGFloat = SiphonTheme.radiusControl) {
         self.cornerRadius = cornerRadius
     }
     
     private func buttonScale(isPressed: Bool) -> CGFloat {
-        if isPressed {
+        if !isEnabled {
+            return 1.0
+        } else if isPressed {
             return 0.965
         } else if isHovered {
             return 1.02
@@ -1069,17 +1074,25 @@ public struct SiphonPrimaryButtonStyle: ButtonStyle {
     public func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.siphonStandardSemibold)
-            .foregroundColor(.white)
+            .foregroundColor(isEnabled ? .white : .secondary)
             .frame(minHeight: 18, alignment: .center)
             .padding(.horizontal, SiphonTheme.spacing16)
             .padding(.vertical, 6)
-            .background(SiphonTheme.primaryGradient)
-            .clipShape(RoundedRectangle(cornerRadius: cornerRadius))
+            .background {
+                // Disabled primary actions drop to a neutral well so the
+                // gradient only ever advertises an action that can succeed.
+                if isEnabled {
+                    SiphonTheme.primaryGradient
+                } else {
+                    Color.primary.opacity(SiphonTheme.Opacity.fillGhostHover)
+                }
+            }
+            .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
             .overlay(
-                RoundedRectangle(cornerRadius: cornerRadius)
-                    .stroke(Color.white.opacity(0.25), lineWidth: 1)
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .stroke(isEnabled ? Color.white.opacity(0.25) : Color.primary.opacity(SiphonTheme.Opacity.fillGhostHover), lineWidth: 1)
             )
-            .shadow(color: SiphonTheme.accent.opacity(isHovered ? 0.35 : 0.20), radius: isHovered ? 8 : 4, y: 2)
+            .shadow(color: isEnabled ? SiphonTheme.accent.opacity(isHovered ? 0.35 : 0.20) : .clear, radius: isHovered ? 8 : 4, y: 2)
             .scaleEffect(buttonScale(isPressed: configuration.isPressed))
             .animation(SiphonAnimation.buttonPressSpring, value: configuration.isPressed)
             .animation(SiphonAnimation.buttonHoverSpring, value: isHovered)
@@ -1090,6 +1103,7 @@ public struct SiphonPrimaryButtonStyle: ButtonStyle {
 public struct SiphonSecondaryButtonStyle: ButtonStyle {
     public var cornerRadius: CGFloat = SiphonTheme.radiusControl
     @State private var isHovered = false
+    @Environment(\.isEnabled) private var isEnabled
     
     public init(cornerRadius: CGFloat = SiphonTheme.radiusControl) {
         self.cornerRadius = cornerRadius
@@ -1113,13 +1127,14 @@ public struct SiphonSecondaryButtonStyle: ButtonStyle {
             .padding(.horizontal, SiphonTheme.spacing14)
             .padding(.vertical, 6)
             .background(SiphonTheme.controlBackground(cornerRadius: cornerRadius, isHovered: isHovered))
-            .clipShape(RoundedRectangle(cornerRadius: cornerRadius))
+            .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
             .overlay(
                 SiphonTheme.controlBorder(cornerRadius: cornerRadius, isHovered: isHovered)
             )
             .scaleEffect(buttonScale(isPressed: configuration.isPressed))
             .animation(SiphonAnimation.buttonPressSpring, value: configuration.isPressed)
             .animation(SiphonAnimation.buttonHoverSpring, value: isHovered)
+            .opacity(isEnabled ? 1.0 : 0.45)
             .onHover { isHovered = $0 }
     }
 }
@@ -1127,6 +1142,7 @@ public struct SiphonSecondaryButtonStyle: ButtonStyle {
 public struct SiphonGhostButtonStyle: ButtonStyle {
     public var cornerRadius: CGFloat = SiphonTheme.radiusControl
     @State private var isHovered = false
+    @Environment(\.isEnabled) private var isEnabled
     @Environment(\.siphonRenderingCapabilities) private var renderingCapabilities
     
     public init(cornerRadius: CGFloat = SiphonTheme.radiusControl) {
@@ -1142,16 +1158,17 @@ public struct SiphonGhostButtonStyle: ButtonStyle {
             .padding(.horizontal, SiphonTheme.spacing10)
             .padding(.vertical, 5)
             .background(
-                RoundedRectangle(cornerRadius: cornerRadius)
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                     .fill(Color.primary.opacity(isHovered ? SiphonTheme.Opacity.fillGhostHover : 0.0))
             )
             .overlay(
-                RoundedRectangle(cornerRadius: cornerRadius)
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                     .stroke(Color.secondary.opacity(showBorders ? 0.65 : 0.0), lineWidth: 1)
             )
             .scaleEffect(configuration.isPressed ? 0.97 : 1.0)
             .animation(SiphonAnimation.buttonPressSpring, value: configuration.isPressed)
             .animation(SiphonAnimation.buttonHoverSpring, value: isHovered)
+            .opacity(isEnabled ? 1.0 : 0.45)
             .onHover { isHovered = $0 }
     }
 }
@@ -1159,6 +1176,7 @@ public struct SiphonGhostButtonStyle: ButtonStyle {
 public struct SiphonIconButtonStyle: ButtonStyle {
     public var size: CGFloat = 26
     @State private var isHovered = false
+    @Environment(\.isEnabled) private var isEnabled
     @Environment(\.siphonRenderingCapabilities) private var renderingCapabilities
     
     public init(size: CGFloat = 26) {
@@ -1190,6 +1208,7 @@ public struct SiphonIconButtonStyle: ButtonStyle {
             .scaleEffect(buttonScale(isPressed: configuration.isPressed))
             .animation(SiphonAnimation.buttonPressSpring, value: configuration.isPressed)
             .animation(SiphonAnimation.buttonHoverSpring, value: isHovered)
+            .opacity(isEnabled ? 1.0 : 0.45)
             .onHover { isHovered = $0 }
     }
 }
@@ -1243,6 +1262,53 @@ public struct SiphonCardHoverModifier: ViewModifier {
 extension View {
     public func siphonCardHover(isHovered: Bool, tint: Color = SiphonTheme.accent) -> some View {
         modifier(SiphonCardHoverModifier(isHovered: isHovered, tint: tint))
+    }
+}
+
+// MARK: - Segmented Capsule Picker
+/// Two-to-few option capsule switch. The selected option rides a
+/// primary-gradient bubble that slides between segments.
+struct SiphonSegmentedPicker<Value: Hashable>: View {
+    @Binding var selection: Value
+    let options: [(value: Value, title: String)]
+    var horizontalPadding: CGFloat = SiphonTheme.spacing12
+
+    @Namespace private var bubble
+    @Environment(\.siphonRenderingCapabilities) private var renderingCapabilities
+
+    var body: some View {
+        HStack(spacing: SiphonTheme.spacing2) {
+            ForEach(options.indices, id: \.self) { index in
+                let option = options[index]
+                let isSelected = option.value == selection
+                Button {
+                    withAnimation(SiphonAnimation.fluidSpring) {
+                        selection = option.value
+                    }
+                } label: {
+                    Text(option.title)
+                        .font(.siphonMetadataSemibold)
+                        .foregroundColor(isSelected ? .white : .secondary)
+                        .padding(.horizontal, horizontalPadding)
+                        .padding(.vertical, SiphonTheme.spacing4)
+                        .background {
+                            if isSelected {
+                                Capsule()
+                                    .fill(SiphonTheme.primaryGradient)
+                                    .shadow(color: SiphonTheme.accent.opacity(0.30), radius: 3, y: 1)
+                                    .matchedGeometryEffect(id: "bubble", in: bubble)
+                            }
+                        }
+                        .contentShape(Capsule())
+                }
+                .buttonStyle(.bouncy)
+                .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : [.isButton])
+            }
+        }
+        .padding(SiphonTheme.spacing2)
+        .background(SiphonTheme.pillBackground(isSelected: false))
+        .clipShape(Capsule())
+        .overlay(SiphonTheme.pillBorder(isSelected: false, showBorders: renderingCapabilities.increaseContrast))
     }
 }
 
@@ -1359,9 +1425,9 @@ public struct SiphonTagBadge: View {
                 tintColor.opacity(SiphonTheme.Opacity.tintBadge)
             }
         }
-        .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusSmall))
+        .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusSmall, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: SiphonTheme.radiusSmall)
+            RoundedRectangle(cornerRadius: SiphonTheme.radiusSmall, style: .continuous)
                 .strokeBorder(
                     isHdr ? Color.white.opacity(0.3) : tintColor.opacity(0.22),
                     lineWidth: 0.5
@@ -1443,6 +1509,17 @@ extension View {
     /// adaptive material treatment as a fallback.
     public func siphonGlassSurface(cornerRadius: CGFloat = SiphonTheme.radiusCard) -> some View {
         modifier(SiphonGlassSurfaceModifier(cornerRadius: cornerRadius))
+    }
+}
+
+extension View {
+    /// Tinted inline notice (permission hints, errors, playlist banners).
+    /// `tint` is the saturated status or accent colour, never a `*Text` token.
+    public func siphonCallout(tint: Color, cornerRadius: CGFloat = SiphonTheme.radiusControl) -> some View {
+        let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+        return self
+            .background(tint.opacity(SiphonTheme.Opacity.tintCallout), in: shape)
+            .overlay(shape.stroke(tint.opacity(SiphonTheme.Opacity.borderCallout), lineWidth: 1))
     }
 }
 

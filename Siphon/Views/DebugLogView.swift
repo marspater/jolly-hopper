@@ -79,7 +79,6 @@ struct DebugLogView: View {
                             .font(.siphonSecondaryMedium)
                     }
                     .foregroundColor(isCopied ? SiphonTheme.statusCompletedText : .primary)
-                    .opacity(logger.logs.isEmpty ? 0.5 : 1.0)
                 }
                 .buttonStyle(.siphonSecondary)
                 .disabled(logger.logs.isEmpty)
@@ -96,7 +95,6 @@ struct DebugLogView: View {
                             .font(.siphonSecondaryMedium)
                     }
                     .foregroundColor(.secondary)
-                    .opacity(logger.logs.isEmpty ? 0.5 : 1.0)
                 }
                 .buttonStyle(.siphonSecondary)
                 .disabled(logger.logs.isEmpty)
@@ -131,7 +129,7 @@ struct DebugLogView: View {
         .siphonAdaptiveRendering()
         .siphonWindowBackground()
         .overlay(
-            RoundedRectangle(cornerRadius: SiphonTheme.radiusSheet)
+            RoundedRectangle(cornerRadius: SiphonTheme.radiusSheet, style: .continuous)
                 .stroke(Color.primary.opacity(0.08), lineWidth: 1)
                 .ignoresSafeArea()
         )

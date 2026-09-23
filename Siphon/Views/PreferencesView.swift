@@ -409,22 +409,9 @@ struct PreferencesView: View {
                         Image(systemName: "folder.badge.plus")
                         Text(languageService.s("choose_folder"))
                     }
-                    .font(.siphonSecondarySemibold)
-                    .foregroundColor(.white)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 6)
-                    .background(
-                        SiphonTheme.primaryGradient
-                    )
-                    .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusControl))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: SiphonTheme.radiusControl)
-                            .stroke(Color.white.opacity(0.25), lineWidth: 1)
-                    )
                 }
-                .buttonStyle(.bouncy(scale: 0.95, hover: 1.025))
+                .buttonStyle(.siphonSecondary)
                 .fixedSize(horizontal: true, vertical: false)
-                .shadow(color: SiphonTheme.accent.opacity(0.25), radius: 6, y: 2)
             }
             .padding(.vertical, 2)
         }
@@ -444,13 +431,13 @@ struct PreferencesView: View {
                             .foregroundColor(.secondary)
                             .padding(.horizontal, 6)
                             .padding(.vertical, 2)
-                            .background(Capsule().fill(Color.primary.opacity(0.06)))
+                            .background(Capsule().fill(Color.primary.opacity(SiphonTheme.Opacity.fillPill)))
                     }
 
                     if let latestVersion = updateChecker.latestVersion, updateChecker.hasUpdate {
                         Text("\(languageService.s("latest")): v\(latestVersion)")
                             .font(.siphonMetadataMonoSemibold)
-                            .foregroundColor(.orange)
+                            .foregroundColor(SiphonTheme.statusQueuedText)
                     }
                 }
                 Spacer()
@@ -462,7 +449,7 @@ struct PreferencesView: View {
                 } else if updateChecker.showUpToDateMessage {
                     Text(languageService.s("app_up_to_date"))
                         .font(.siphonMetadataMedium)
-                        .foregroundColor(.green)
+                        .foregroundColor(SiphonTheme.statusCompletedText)
                 } else {
                     Button {
                         Task {
@@ -497,12 +484,12 @@ struct PreferencesView: View {
                         .controlSize(.small)
                     Text(languageService.s("installing_update"))
                         .font(.siphonMetadata)
-                        .foregroundColor(.orange)
+                        .foregroundColor(SiphonTheme.statusQueuedText)
                 }
             } else if updateChecker.needsRestart {
-                Text("✅ \(languageService.s("update_ready_title"))")
+                Label(languageService.s("update_ready_title"), systemImage: "checkmark.circle.fill")
                     .font(.siphonMetadata)
-                    .foregroundColor(.green)
+                    .foregroundColor(SiphonTheme.statusCompletedText)
             } else {
                 Button(languageService.s("update_now")) {
                     Task {
@@ -602,7 +589,7 @@ struct PreferencesView: View {
                             .lineLimit(1)
                             .truncationMode(.tail)
                             .help(preset.name)
-                        Text("\(preset.videoCodec.title(lang: languageService)) + \(preset.audioCodec.title(lang: languageService)) • \(preset.videoResolution.title(lang: languageService))\(preset.downloadSubtitles == true ? " • CC: \(preset.subtitleLanguage ?? "")" : "")\(preset.splitChapters == true ? " • 📑" : "")\(preset.sponsorBlock == true ? " • 🚫" : "")")
+                        Text("\(preset.videoCodec.title(lang: languageService)) + \(preset.audioCodec.title(lang: languageService)) • \(preset.videoResolution.title(lang: languageService))\(preset.downloadSubtitles == true ? " • CC: \(preset.subtitleLanguage ?? "")" : "")\(preset.splitChapters == true ? " • \(languageService.s("split_chapters"))" : "")\(preset.sponsorBlock == true ? " • \(languageService.s("sponsorblock"))" : "")")
                             .font(.siphonMetadata)
                             .foregroundColor(.secondary)
                             .lineLimit(1)
@@ -1071,12 +1058,7 @@ struct PreferencesView: View {
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
-        .background(SiphonTheme.accent.opacity(0.08))
-        .cornerRadius(SiphonTheme.radiusControl)
-        .overlay(
-            RoundedRectangle(cornerRadius: SiphonTheme.radiusControl)
-                .stroke(SiphonTheme.accent.opacity(0.20), lineWidth: 1)
-        )
+        .siphonCallout(tint: SiphonTheme.accent)
     }
 
     private var safariWarningView: some View {
@@ -1092,12 +1074,7 @@ struct PreferencesView: View {
                 }
                 .padding(.horizontal, 10)
                 .padding(.vertical, 6)
-                .background(SiphonTheme.statusCompleted.opacity(0.10))
-                .cornerRadius(SiphonTheme.radiusControl)
-                .overlay(
-                    RoundedRectangle(cornerRadius: SiphonTheme.radiusControl)
-                        .stroke(SiphonTheme.statusCompleted.opacity(0.25), lineWidth: 1)
-                )
+                .siphonCallout(tint: SiphonTheme.statusCompleted)
             } else {
                 Text(languageService.s("safari_warning"))
                     .font(.siphonMetadata)
@@ -1140,7 +1117,7 @@ struct PreferencesView: View {
                 permissionFeedbackView
 
                 Text(languageService.s("safari_fda_restart_hint"))
-                    .font(.siphonMicro)
+                    .font(.siphonMetadata)
                     .foregroundColor(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -1174,21 +1151,16 @@ struct PreferencesView: View {
         let statusColor: Color = hasFullDiskAccess ? SiphonTheme.statusCompleted : SiphonTheme.statusQueued
         HStack(alignment: .top, spacing: 6) {
             Image(systemName: hasFullDiskAccess ? "checkmark.circle.fill" : "exclamationmark.circle.fill")
-                .foregroundColor(statusColor)
+                .foregroundColor(hasFullDiskAccess ? SiphonTheme.statusCompletedText : SiphonTheme.statusQueuedText)
                 .font(.siphonMetadata)
             Text(message)
-                .font(.siphonMicro)
+                .font(.siphonMetadata)
                 .foregroundColor(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
         .padding(8)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(statusColor.opacity(0.10))
-        .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusControl))
-        .overlay(
-            RoundedRectangle(cornerRadius: SiphonTheme.radiusControl)
-                .stroke(statusColor.opacity(0.25), lineWidth: 1)
-        )
+        .siphonCallout(tint: statusColor)
     }
     
 
@@ -1268,7 +1240,7 @@ struct PreferencesView: View {
 
                         HStack {
                             Text(languageService.s("license_desc"))
-                                .font(.siphonMicro)
+                                .font(.siphonMetadata)
                                 .foregroundColor(.secondary)
                             Spacer()
                             Link(languageService.s("view_license"), destination: URL(string: "https://www.gnu.org/licenses/gpl-3.0.html") ?? URL(fileURLWithPath: "/"))
@@ -1318,7 +1290,7 @@ struct PreferencesView: View {
 
                 Text("© 2026 marspater")
                     .font(.siphonMetadata)
-                    .foregroundColor(.secondary.opacity(0.75))
+                    .foregroundColor(.secondary)
                     .frame(maxWidth: .infinity, alignment: .center)
             }
             .frame(maxWidth: .infinity, alignment: .center)
