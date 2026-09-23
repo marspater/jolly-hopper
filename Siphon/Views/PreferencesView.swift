@@ -220,7 +220,7 @@ struct PreferencesView: View {
                 Image(systemName: icon)
                     .font(.system(size: 11, weight: .semibold))
                 Text(title)
-                    .font(.geist(12, weight: .semibold))
+                    .font(.siphonSecondarySemibold)
                     .lineLimit(1)
                     .minimumScaleFactor(0.82)
             }
@@ -270,7 +270,7 @@ struct PreferencesView: View {
             HStack {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(languageService.s("launch_at_login"))
-                        .font(.geist(13, weight: .medium))
+                        .font(.siphonStandardMedium)
                 }
                 Spacer()
                 Toggle("", isOn: Binding(
@@ -286,9 +286,9 @@ struct PreferencesView: View {
                 HStack {
                     VStack(alignment: .leading, spacing: 3) {
                         Text(languageService.s("start_in_background"))
-                            .font(.geist(13, weight: .medium))
+                            .font(.siphonStandardMedium)
                         Text(languageService.s("start_in_background_desc"))
-                            .font(.geist(11))
+                            .font(.siphonMetadata)
                             .foregroundColor(.secondary)
                     }
                     Spacer()
@@ -303,7 +303,7 @@ struct PreferencesView: View {
             HStack {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(languageService.s("notifications"))
-                        .font(.geist(13, weight: .medium))
+                        .font(.siphonStandardMedium)
                 }
                 Spacer()
                 if showNotifications {
@@ -311,8 +311,8 @@ struct PreferencesView: View {
                         NotificationService.shared.sendDownloadCompleted(filename: "Siphon Test", languageService: languageService)
                     }
                     .buttonStyle(.plain)
-                    .font(.geist(11, weight: .medium))
-                    .foregroundColor(SiphonTheme.accent)
+                    .font(.siphonMetadataMedium)
+                    .foregroundColor(SiphonTheme.accentText)
                     .padding(.trailing, 8)
                 }
                 Toggle("", isOn: $showNotifications)
@@ -324,7 +324,7 @@ struct PreferencesView: View {
             HStack {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(languageService.s("show_menubar_icon"))
-                        .font(.geist(13, weight: .medium))
+                        .font(.siphonStandardMedium)
                 }
                 Spacer()
                 Toggle("", isOn: $showMenuBarIcon)
@@ -340,7 +340,7 @@ struct PreferencesView: View {
         Section(languageService.s("appearance")) {
             HStack {
                 Text(languageService.s("theme"))
-                    .font(.geist(13, weight: .medium))
+                    .font(.siphonStandardMedium)
                     .foregroundColor(.primary)
 
                 Spacer()
@@ -364,11 +364,11 @@ struct PreferencesView: View {
             HStack(spacing: 12) {
                 HStack(spacing: 8) {
                     Image(systemName: "folder.fill")
-                        .foregroundColor(SiphonTheme.accent)
-                        .font(.geist(14))
+                        .foregroundColor(SiphonTheme.accentText)
+                        .font(.siphonPrimary)
 
                     Text(defaultSaveFolder.isEmpty ? "~/Downloads" : defaultSaveFolder)
-                        .font(.geistMono(12, weight: .medium))
+                        .font(.siphonSecondaryMonoMedium)
                         .foregroundColor(.primary)
                         .lineLimit(1)
                         .truncationMode(.middle)
@@ -382,7 +382,7 @@ struct PreferencesView: View {
                             defaultSaveFolder = ""
                         } label: {
                             Image(systemName: "xmark.circle.fill")
-                                .font(.geist(14))
+                                .font(.siphonPrimary)
                                 .foregroundColor(.secondary)
                         }
                         .buttonStyle(.plain)
@@ -409,7 +409,7 @@ struct PreferencesView: View {
                         Image(systemName: "folder.badge.plus")
                         Text(languageService.s("choose_folder"))
                     }
-                    .font(.geist(12, weight: .semibold))
+                    .font(.siphonSecondarySemibold)
                     .foregroundColor(.white)
                     .padding(.horizontal, 14)
                     .padding(.vertical, 6)
@@ -436,11 +436,11 @@ struct PreferencesView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(spacing: 8) {
                         Text(languageService.s("app_updates"))
-                            .font(.geist(13, weight: .medium))
+                            .font(.siphonStandardMedium)
                             .foregroundColor(.primary)
 
                         Text("v\(updateChecker.currentVersion)")
-                            .font(.geistMono(11, weight: .semibold))
+                            .font(.siphonMetadataMonoSemibold)
                             .foregroundColor(.secondary)
                             .padding(.horizontal, 6)
                             .padding(.vertical, 2)
@@ -449,7 +449,7 @@ struct PreferencesView: View {
 
                     if let latestVersion = updateChecker.latestVersion, updateChecker.hasUpdate {
                         Text("\(languageService.s("latest")): v\(latestVersion)")
-                            .font(.geistMono(11, weight: .semibold))
+                            .font(.siphonMetadataMonoSemibold)
                             .foregroundColor(.orange)
                     }
                 }
@@ -461,7 +461,7 @@ struct PreferencesView: View {
                     updateAvailableView
                 } else if updateChecker.showUpToDateMessage {
                     Text(languageService.s("app_up_to_date"))
-                        .font(.geist(11, weight: .medium))
+                        .font(.siphonMetadataMedium)
                         .foregroundColor(.green)
                 } else {
                     Button {
@@ -470,7 +470,7 @@ struct PreferencesView: View {
                         }
                     } label: {
                         Text(languageService.s("check_updates"))
-                            .font(.geist(12, weight: .medium))
+                            .font(.siphonSecondaryMedium)
                             .padding(.horizontal, 10)
                             .padding(.vertical, 4)
                             .siphonInteractiveGlass(cornerRadius: SiphonTheme.radiusControl)
@@ -488,7 +488,7 @@ struct PreferencesView: View {
                     ProgressView(value: max(0, min(1, updateChecker.updateProgress)))
                         .controlSize(.small)
                     Text(languageService.s("downloading_update"))
-                        .font(.geist(11))
+                        .font(.siphonMetadata)
                 }
                 .frame(width: 200)
             } else if updateChecker.isInstalling {
@@ -496,12 +496,12 @@ struct PreferencesView: View {
                     ProgressView()
                         .controlSize(.small)
                     Text(languageService.s("installing_update"))
-                        .font(.geist(11))
+                        .font(.siphonMetadata)
                         .foregroundColor(.orange)
                 }
             } else if updateChecker.needsRestart {
                 Text("✅ \(languageService.s("update_ready_title"))")
-                    .font(.geist(11))
+                    .font(.siphonMetadata)
                     .foregroundColor(.green)
             } else {
                 Button(languageService.s("update_now")) {
@@ -542,7 +542,7 @@ struct PreferencesView: View {
                                 .lineLimit(1)
                                 .truncationMode(.tail)
                             Text(preset.description(lang: languageService))
-                                .font(.geist(11))
+                                .font(.siphonMetadata)
                                 .foregroundColor(.secondary)
                                 .lineLimit(2)
                                 .truncationMode(.tail)
@@ -569,7 +569,7 @@ struct PreferencesView: View {
             if customPresets.isEmpty {
                 Text(languageService.s("no_custom_presets"))
                     .foregroundColor(.secondary)
-                    .font(.geist(11))
+                    .font(.siphonMetadata)
             } else {
                 ForEach(customPresets) { preset in
                     customPresetRow(preset)
@@ -594,7 +594,7 @@ struct PreferencesView: View {
             } label: {
                 HStack {
                     Image(systemName: selectedCustomPresetIdString == preset.id.uuidString ? "largecircle.fill.circle" : "circle")
-                        .foregroundColor(selectedCustomPresetIdString == preset.id.uuidString ? SiphonTheme.accent : .secondary)
+                        .foregroundColor(selectedCustomPresetIdString == preset.id.uuidString ? SiphonTheme.accentText : .secondary)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(preset.name)
                             .fontWeight(.medium)
@@ -603,7 +603,7 @@ struct PreferencesView: View {
                             .truncationMode(.tail)
                             .help(preset.name)
                         Text("\(preset.videoCodec.title(lang: languageService)) + \(preset.audioCodec.title(lang: languageService)) • \(preset.videoResolution.title(lang: languageService))\(preset.downloadSubtitles == true ? " • CC: \(preset.subtitleLanguage ?? "")" : "")\(preset.splitChapters == true ? " • 📑" : "")\(preset.sponsorBlock == true ? " • 🚫" : "")")
-                            .font(.geist(11))
+                            .font(.siphonMetadata)
                             .foregroundColor(.secondary)
                             .lineLimit(1)
                             .truncationMode(.tail)
@@ -623,7 +623,7 @@ struct PreferencesView: View {
                     startEditingPreset(preset)
                 } label: {
                     Image(systemName: "pencil")
-                        .foregroundColor(SiphonTheme.accent)
+                        .foregroundColor(SiphonTheme.accentText)
                 }
                 .buttonStyle(.borderless)
                 .help(languageService.s("edit_preset"))
@@ -633,7 +633,7 @@ struct PreferencesView: View {
                     deleteCustomPreset(preset)
                 } label: {
                     Image(systemName: "trash")
-                        .foregroundColor(SiphonTheme.statusFailed)
+                        .foregroundColor(SiphonTheme.statusFailedText)
                 }
                 .buttonStyle(.borderless)
                 .help(languageService.s("delete_preset"))
@@ -694,7 +694,7 @@ struct PreferencesView: View {
             }
             
             Text(languageService.s("codec_fallback_note"))
-                .font(.geist(11))
+                .font(.siphonMetadata)
                 .foregroundColor(.secondary)
         }
     }
@@ -724,7 +724,7 @@ struct PreferencesView: View {
                 Text("50 MB/s (51200 KB/s)").tag(51200)
             }
             Text(languageService.s("speed_limiter_desc"))
-                .font(.geist(11))
+                .font(.siphonMetadata)
                 .foregroundColor(.secondary)
         }
     }
@@ -732,7 +732,7 @@ struct PreferencesView: View {
     private var createPresetSheet: some View {
         VStack(spacing: 16) {
             Text(editingPreset == nil ? languageService.s("create_preset") : languageService.s("edit_preset"))
-                .font(.geist(15, weight: .bold))
+                .font(.siphonHeadline)
             
             TextField(languageService.s("preset_name"), text: $newPresetName)
                 .textFieldStyle(.roundedBorder)
@@ -802,9 +802,9 @@ struct PreferencesView: View {
             if presetVideoCodec == .h264 {
                 HStack {
                     Image(systemName: "info.circle.fill")
-                        .foregroundColor(SiphonTheme.accent)
+                        .foregroundColor(SiphonTheme.accentText)
                     Text(languageService.s("h264_preset_info"))
-                        .font(.geist(11))
+                        .font(.siphonMetadata)
                         .foregroundColor(.secondary)
                 }
             }
@@ -830,7 +830,7 @@ struct PreferencesView: View {
                 
                 VStack(alignment: .leading, spacing: 4) {
                     Text(languageService.s("languages"))
-                        .font(.geist(11))
+                        .font(.siphonMetadata)
                         .foregroundColor(.secondary)
                     
                     TextField(languageService.s("subtitle_lang_hint"), text: Binding(
@@ -979,7 +979,7 @@ struct PreferencesView: View {
                     Text("Application & Download Logs")
                         .fontWeight(.medium)
                     Text("View or export debug logs to report issues.")
-                        .font(.geist(11))
+                        .font(.siphonMetadata)
                         .foregroundColor(.secondary)
                 }
                 Spacer()
@@ -998,7 +998,7 @@ struct PreferencesView: View {
                         .fontWeight(.medium)
                     if let version = appState.ytdlpVersion {
                         Text("\(languageService.s("version")): \(version)")
-                            .font(.geistMono(11, weight: .medium))
+                            .font(.siphonMetadataMonoMedium)
                             .foregroundColor(.secondary)
                     }
                 }
@@ -1008,17 +1008,17 @@ struct PreferencesView: View {
                         ProgressView(value: max(0, min(1, appState.ytdlpUpdateProgress)))
                             .frame(width: 120)
                         Text("\(Int(appState.ytdlpUpdateProgress * 100))%")
-                            .font(.geistMono(10, weight: .semibold))
+                            .font(.siphonMicroMonoSemibold)
                             .foregroundColor(.secondary)
                     }
                 } else if downloadManager.activeExecutionCount > 0 {
                     Text("Finish active downloads before updating yt-dlp.")
-                        .font(.geist(11))
+                        .font(.siphonMetadata)
                         .foregroundColor(.secondary)
                         .lineLimit(2)
                 } else if let message = appState.ytdlpUpdateMessage?.message {
                     Text(message)
-                        .font(.geist(11))
+                        .font(.siphonMetadata)
                         .foregroundColor(.secondary)
                         .lineLimit(2)
                 } else {
@@ -1043,7 +1043,7 @@ struct PreferencesView: View {
                 .accessibilityLabel(languageService.s("browser_cookies"))
                 
                 Text(languageService.s("browser_hint"))
-                    .font(.geist(11))
+                    .font(.siphonMetadata)
                     .foregroundColor(.secondary)
                 
                 if browserForCookies == "safari" {
@@ -1059,14 +1059,14 @@ struct PreferencesView: View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 8) {
                 Image(systemName: "puzzlepiece.extension.fill")
-                    .foregroundColor(SiphonTheme.accent)
-                    .font(.geist(13))
+                    .foregroundColor(SiphonTheme.accentText)
+                    .font(.siphonStandard)
                 Text(languageService.s("chromium_extension_supported"))
-                    .font(.geist(11, weight: .semibold))
-                    .foregroundColor(SiphonTheme.accent)
+                    .font(.siphonMetadataSemibold)
+                    .foregroundColor(SiphonTheme.accentText)
             }
             Text(languageService.s("chromium_hint"))
-                .font(.geist(11))
+                .font(.siphonMetadata)
                 .foregroundColor(.secondary)
         }
         .padding(.horizontal, 10)
@@ -1084,11 +1084,11 @@ struct PreferencesView: View {
             if hasFullDiskAccess {
                 HStack(spacing: 8) {
                     Image(systemName: "checkmark.seal.fill")
-                        .foregroundColor(SiphonTheme.statusCompleted)
-                        .font(.geist(13))
+                        .foregroundColor(SiphonTheme.statusCompletedText)
+                        .font(.siphonStandard)
                     Text(languageService.s("safari_fda_granted_feedback"))
-                        .font(.geist(11, weight: .semibold))
-                        .foregroundColor(SiphonTheme.statusCompleted)
+                        .font(.siphonMetadataSemibold)
+                        .foregroundColor(SiphonTheme.statusCompletedText)
                 }
                 .padding(.horizontal, 10)
                 .padding(.vertical, 6)
@@ -1100,8 +1100,8 @@ struct PreferencesView: View {
                 )
             } else {
                 Text(languageService.s("safari_warning"))
-                    .font(.geist(11))
-                    .foregroundColor(SiphonTheme.statusQueued)
+                    .font(.siphonMetadata)
+                    .foregroundColor(SiphonTheme.statusQueuedText)
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 
@@ -1140,7 +1140,7 @@ struct PreferencesView: View {
                 permissionFeedbackView
 
                 Text(languageService.s("safari_fda_restart_hint"))
-                    .font(.geist(10))
+                    .font(.siphonMicro)
                     .foregroundColor(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -1175,9 +1175,9 @@ struct PreferencesView: View {
         HStack(alignment: .top, spacing: 6) {
             Image(systemName: hasFullDiskAccess ? "checkmark.circle.fill" : "exclamationmark.circle.fill")
                 .foregroundColor(statusColor)
-                .font(.geist(11))
+                .font(.siphonMetadata)
             Text(message)
-                .font(.geist(10))
+                .font(.siphonMicro)
                 .foregroundColor(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -1201,7 +1201,7 @@ struct PreferencesView: View {
 
                 VStack(spacing: SiphonTheme.spacing4) {
                     Text("Siphon")
-                        .font(.geist(20, weight: .bold))
+                        .font(.siphonSheetTitle)
 
                     SiphonTagBadge(
                         text: "v\(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "5.4.5")",
@@ -1211,7 +1211,7 @@ struct PreferencesView: View {
                 }
 
                 Text(languageService.s("app_desc"))
-                    .font(.geist(12))
+                    .font(.siphonSecondary)
                     .foregroundColor(.secondary)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, SiphonTheme.spacing20)
@@ -1224,19 +1224,19 @@ struct PreferencesView: View {
                 Section(languageService.s("credits")) {
                     HStack {
                         Text(languageService.s("maintainer"))
-                            .font(.geist(13, weight: .medium))
+                            .font(.siphonStandardMedium)
                         Spacer()
                         Text("marspater")
-                            .font(.geist(12, weight: .medium))
+                            .font(.siphonSecondaryMedium)
                             .foregroundColor(.secondary)
                     }
 
                     HStack {
                         Text(languageService.s("video_downloading"))
-                            .font(.geist(13, weight: .medium))
+                            .font(.siphonStandardMedium)
                         Spacer()
                         Link("yt-dlp", destination: URL(string: "https://github.com/yt-dlp/yt-dlp") ?? URL(fileURLWithPath: "/"))
-                            .font(.geist(12, weight: .semibold))
+                            .font(.siphonSecondarySemibold)
                             .foregroundColor(SiphonTheme.accentForeground(for: colorScheme))
                     }
                 }
@@ -1244,12 +1244,12 @@ struct PreferencesView: View {
                 Section(languageService.s("legal_disclaimer_title")) {
                     HStack(alignment: .top, spacing: 8) {
                         Image(systemName: "exclamationmark.shield.fill")
-                            .foregroundColor(SiphonTheme.statusQueued)
-                            .font(.geist(13))
+                            .foregroundColor(SiphonTheme.statusQueuedText)
+                            .font(.siphonStandard)
                             .padding(.top, 1)
 
                         Text(languageService.s("legal_disclaimer_message"))
-                            .font(.geist(11))
+                            .font(.siphonMetadata)
                             .foregroundColor(.secondary)
                             .lineSpacing(2)
                             .fixedSize(horizontal: false, vertical: true)
@@ -1259,21 +1259,21 @@ struct PreferencesView: View {
                     VStack(alignment: .leading, spacing: 4) {
                         HStack {
                             Text(languageService.s("license"))
-                                .font(.geist(13, weight: .medium))
+                                .font(.siphonStandardMedium)
                             Spacer()
                             Text("GNU GPL v3.0")
-                                .font(.geist(12, weight: .medium))
+                                .font(.siphonSecondaryMedium)
                                 .foregroundColor(.secondary)
                         }
 
                         HStack {
                             Text(languageService.s("license_desc"))
-                                .font(.geist(10))
+                                .font(.siphonMicro)
                                 .foregroundColor(.secondary)
                             Spacer()
                             Link(languageService.s("view_license"), destination: URL(string: "https://www.gnu.org/licenses/gpl-3.0.html") ?? URL(fileURLWithPath: "/"))
-                                .font(.geist(11, weight: .medium))
-                                .foregroundColor(SiphonTheme.accent)
+                                .font(.siphonMetadataMedium)
+                                .foregroundColor(SiphonTheme.accentText)
                         }
                     }
                     .padding(.vertical, 2)
@@ -1286,8 +1286,8 @@ struct PreferencesView: View {
                 HStack(spacing: SiphonTheme.spacing10) {
                     Link(destination: URL(string: "https://github.com/marspater/jolly-hopper") ?? URL(fileURLWithPath: "/")) {
                         Label("GitHub", systemImage: "link")
-                            .font(.geist(11, weight: .semibold))
-                            .foregroundColor(SiphonTheme.accent)
+                            .font(.siphonMetadataSemibold)
+                            .foregroundColor(SiphonTheme.accentText)
                             .padding(.horizontal, SiphonTheme.spacing12)
                             .padding(.vertical, 6)
                             .siphonInteractiveGlass(cornerRadius: SiphonTheme.radiusControl)
@@ -1296,8 +1296,8 @@ struct PreferencesView: View {
 
                     Link(destination: URL(string: "https://github.com/marspater/jolly-hopper/blob/main/README.md") ?? URL(fileURLWithPath: "/")) {
                         Label("README", systemImage: "doc.text")
-                            .font(.geist(11, weight: .semibold))
-                            .foregroundColor(SiphonTheme.accent)
+                            .font(.siphonMetadataSemibold)
+                            .foregroundColor(SiphonTheme.accentText)
                             .padding(.horizontal, SiphonTheme.spacing12)
                             .padding(.vertical, 6)
                             .siphonInteractiveGlass(cornerRadius: SiphonTheme.radiusControl)
@@ -1306,8 +1306,8 @@ struct PreferencesView: View {
 
                     Link(destination: URL(string: "https://github.com/marspater/jolly-hopper/blob/main/SUPPORTED_SITES.md") ?? URL(fileURLWithPath: "/")) {
                         Label(languageService.s("supported_sites"), systemImage: "globe")
-                            .font(.geist(11, weight: .semibold))
-                            .foregroundColor(SiphonTheme.accent)
+                            .font(.siphonMetadataSemibold)
+                            .foregroundColor(SiphonTheme.accentText)
                             .padding(.horizontal, SiphonTheme.spacing12)
                             .padding(.vertical, 6)
                             .siphonInteractiveGlass(cornerRadius: SiphonTheme.radiusControl)
@@ -1317,7 +1317,7 @@ struct PreferencesView: View {
                 .frame(maxWidth: .infinity, alignment: .center)
 
                 Text("© 2026 marspater")
-                    .font(.geist(11, weight: .regular))
+                    .font(.siphonMetadata)
                     .foregroundColor(.secondary.opacity(0.75))
                     .frame(maxWidth: .infinity, alignment: .center)
             }

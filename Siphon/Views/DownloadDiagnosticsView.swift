@@ -72,14 +72,14 @@ struct DownloadDiagnosticsView: View {
             } else {
                 Image(systemName: "cpu")
                     .font(.system(size: 24))
-                    .foregroundColor(SiphonTheme.accent)
+                    .foregroundColor(SiphonTheme.accentText)
                     .frame(width: 54, height: 36)
             }
             
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 8) {
                     Text(download.displayTitle)
-                        .font(.geist(14, weight: .bold))
+                        .font(.siphonPrimarySemibold)
                         .lineLimit(1)
                     
                     if let hdr = download.diagnostics.hdrSummary ?? download.mediaInfo?.formats?.first(where: { $0.isHDR })?.hdrSummary {
@@ -89,21 +89,21 @@ struct DownloadDiagnosticsView: View {
                 
                 HStack(spacing: SiphonTheme.spacing6) {
                     Text(download.status.title(lang: languageService))
-                        .font(.geist(11, weight: .medium))
+                        .font(.siphonMetadataMedium)
                         .foregroundColor(statusColor(for: download.status))
                     
                     Text("•")
                         .foregroundColor(.secondary)
-                        .font(.geist(11))
+                        .font(.siphonMetadata)
                     
                     Text(download.sourceDomain)
-                        .font(.geist(11))
+                        .font(.siphonMetadata)
                         .foregroundColor(.secondary)
                     
                     if let pid = download.diagnostics.pid, pid > 0 {
                         Text("•")
                             .foregroundColor(.secondary)
-                            .font(.geist(11))
+                            .font(.siphonMetadata)
                         SiphonTagBadge(text: "PID: \(pid)", tintColor: .secondary, isMonospaced: true)
                     }
                 }
@@ -199,7 +199,7 @@ struct DownloadDiagnosticsView: View {
                 VStack(alignment: .leading, spacing: 6) {
                     HStack {
                         Text(languageService.s("executed_command"))
-                            .font(.geist(12, weight: .bold))
+                            .font(.siphonSecondarySemibold)
                             .foregroundColor(.primary)
                         
                         Spacer()
@@ -211,14 +211,14 @@ struct DownloadDiagnosticsView: View {
                                 Image(systemName: "doc.on.doc")
                                 Text(languageService.s("copy_command"))
                             }
-                            .font(.geist(11))
+                            .font(.siphonMetadata)
                         }
                         .buttonStyle(.plain)
-                        .foregroundColor(SiphonTheme.accent)
+                        .foregroundColor(SiphonTheme.accentText)
                     }
                     
                     Text(cmd)
-                        .font(.geistMono(11))
+                        .font(.siphonMetadataMono)
                         .foregroundColor(.primary.opacity(0.85))
                         .padding(10)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -234,7 +234,7 @@ struct DownloadDiagnosticsView: View {
             VStack(alignment: .leading, spacing: 6) {
                 HStack {
                     Text(languageService.s("execution_log_output"))
-                        .font(.geist(12, weight: .bold))
+                        .font(.siphonSecondarySemibold)
                         .foregroundColor(.primary)
                     
                     Spacer()
@@ -246,15 +246,15 @@ struct DownloadDiagnosticsView: View {
                             Image(systemName: "doc.on.doc")
                             Text(languageService.s("copy_log"))
                         }
-                        .font(.geist(11))
+                        .font(.siphonMetadata)
                     }
                     .buttonStyle(.plain)
-                    .foregroundColor(SiphonTheme.accent)
+                    .foregroundColor(SiphonTheme.accentText)
                 }
                 
                 TextField(languageService.s("search_logs"), text: $logSearchText)
                     .textFieldStyle(.plain)
-                    .font(.geist(11))
+                    .font(.siphonMetadata)
                     .padding(.horizontal, SiphonTheme.spacing8)
                     .padding(.vertical, 6)
                     .background(SiphonTheme.cardBackground(cornerRadius: SiphonTheme.radiusControl))
@@ -262,7 +262,7 @@ struct DownloadDiagnosticsView: View {
                 
                 ScrollView {
                     Text(filteredLogs)
-                        .font(.geistMono(10))
+                        .font(.siphonMicroMono)
                         .foregroundColor(.primary.opacity(0.85))
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(10)
@@ -285,9 +285,9 @@ struct DownloadDiagnosticsView: View {
             if let notice = copiedNotice {
                 HStack(spacing: 4) {
                     Image(systemName: "checkmark.circle.fill")
-                        .foregroundColor(SiphonTheme.statusCompleted)
+                        .foregroundColor(SiphonTheme.statusCompletedText)
                     Text(notice)
-                        .font(.geist(11))
+                        .font(.siphonMetadata)
                         .foregroundColor(.secondary)
                 }
                 .transition(.opacity)
@@ -302,7 +302,7 @@ struct DownloadDiagnosticsView: View {
                     Image(systemName: "doc.on.clipboard")
                         .font(.system(size: 12))
                     Text(languageService.s("copy_report"))
-                        .font(.geist(12, weight: .medium))
+                        .font(.siphonSecondaryMedium)
                 }
             }
             .buttonStyle(.siphonSecondary)
@@ -316,7 +316,7 @@ struct DownloadDiagnosticsView: View {
                         Image(systemName: "folder")
                             .font(.system(size: 12))
                         Text(languageService.s("show_in_finder"))
-                            .font(.geist(12, weight: .medium))
+                            .font(.siphonSecondaryMedium)
                     }
                 }
                 .buttonStyle(.siphonSecondary)
@@ -326,7 +326,7 @@ struct DownloadDiagnosticsView: View {
                 dismiss()
             } label: {
                 Text(languageService.s("done"))
-                    .font(.geist(12, weight: .semibold))
+                    .font(.siphonSecondarySemibold)
             }
             .buttonStyle(.siphonPrimary)
             .keyboardShortcut(.defaultAction)
@@ -341,7 +341,7 @@ struct DownloadDiagnosticsView: View {
     private func diagnosticSection<Content: View>(title: String, @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: SiphonTheme.spacing8) {
             Text(title)
-                .font(.geist(12, weight: .bold))
+                .font(.siphonSecondarySemibold)
                 .foregroundColor(.secondary)
                 .textCase(.uppercase)
             
@@ -358,14 +358,14 @@ struct DownloadDiagnosticsView: View {
     private func diagnosticRow(label: String, value: String, isMonospace: Bool = false) -> some View {
         HStack(alignment: .top) {
             Text(label)
-                .font(.geist(12))
+                .font(.siphonSecondary)
                 .foregroundColor(.secondary)
                 .frame(minWidth: 150, idealWidth: 170, maxWidth: 220, alignment: .leading)
             
             Spacer()
             
             Text(value)
-                .font(isMonospace ? .geistMono(11) : .geist(12, weight: .medium))
+                .font(isMonospace ? .siphonMetadataMono : .siphonSecondaryMedium)
                 .foregroundColor(.primary)
                 .multilineTextAlignment(.trailing)
                 .textSelection(.enabled)
@@ -389,10 +389,10 @@ struct DownloadDiagnosticsView: View {
     
     private func statusColor(for status: DownloadStatus) -> Color {
         switch status {
-        case .downloading, .fetching: return SiphonTheme.statusDownloading
-        case .queued: return SiphonTheme.statusQueued
-        case .completed: return SiphonTheme.statusCompleted
-        case .failed: return SiphonTheme.statusFailed
+        case .downloading, .fetching: return SiphonTheme.statusDownloadingText
+        case .queued: return SiphonTheme.statusQueuedText
+        case .completed: return SiphonTheme.statusCompletedText
+        case .failed: return SiphonTheme.statusFailedText
         case .stopped, .paused: return .secondary
         case .processing: return .purple
         case .fileExists: return .orange

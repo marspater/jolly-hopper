@@ -6,7 +6,7 @@ extension Font {
     private static let geistSansFontNames: [Font.Weight: String] = [
         .black: "Geist-Black",
         .bold: "Geist-Bold",
-        .heavy: "Geist-SemiBold",
+        .heavy: "Geist-Bold",
         .semibold: "Geist-SemiBold",
         .medium: "Geist-Medium"
     ]
@@ -32,29 +32,50 @@ extension Font {
     }
 
     // MARK: - Standardized Semantic Typography Scale
-    // UI Scale
+    // Every UI text size in Siphon is one of these roles. Sizes step
+    // 10 · 11 · 12 · 13 · 14 · 15 · 18 · 22 · 26; small sizes use regular,
+    // medium or semibold only, and bold is reserved for the display sizes.
+
+    // Micro (10pt): dense chips, counts and badges only, never sentences.
+    public static var siphonMicro: Font { .geist(10, weight: .regular, relativeTo: .caption2) }
+    public static var siphonMicroMedium: Font { .geist(10, weight: .medium, relativeTo: .caption2) }
+    public static var siphonMicroSemibold: Font { .geist(10, weight: .semibold, relativeTo: .caption2) }
+    public static var siphonMicroMono: Font { .geistMono(10, weight: .regular, relativeTo: .caption2) }
+    public static var siphonMicroMonoMedium: Font { .geistMono(10, weight: .medium, relativeTo: .caption2) }
+    public static var siphonMicroMonoSemibold: Font { .geistMono(10, weight: .semibold, relativeTo: .caption2) }
+
+    // Metadata (11pt)
     public static var siphonMetadata: Font { .geist(11, weight: .regular, relativeTo: .caption) }
     public static var siphonMetadataMedium: Font { .geist(11, weight: .medium, relativeTo: .caption) }
     public static var siphonMetadataSemibold: Font { .geist(11, weight: .semibold, relativeTo: .caption) }
     public static var siphonMetadataMono: Font { .geistMono(11, weight: .regular, relativeTo: .caption) }
+    public static var siphonMetadataMonoMedium: Font { .geistMono(11, weight: .medium, relativeTo: .caption) }
     public static var siphonMetadataMonoSemibold: Font { .geistMono(11, weight: .semibold, relativeTo: .caption) }
 
+    // Secondary (12pt)
     public static var siphonSecondary: Font { .geist(12, weight: .regular, relativeTo: .subheadline) }
     public static var siphonSecondaryMedium: Font { .geist(12, weight: .medium, relativeTo: .subheadline) }
     public static var siphonSecondarySemibold: Font { .geist(12, weight: .semibold, relativeTo: .subheadline) }
+    public static var siphonSecondaryMono: Font { .geistMono(12, weight: .regular, relativeTo: .subheadline) }
+    public static var siphonSecondaryMonoMedium: Font { .geistMono(12, weight: .medium, relativeTo: .subheadline) }
+    public static var siphonSecondaryMonoSemibold: Font { .geistMono(12, weight: .semibold, relativeTo: .subheadline) }
 
+    // Standard (13pt) — body
     public static var siphonStandard: Font { .geist(13, weight: .regular, relativeTo: .body) }
     public static var siphonStandardMedium: Font { .geist(13, weight: .medium, relativeTo: .body) }
     public static var siphonStandardSemibold: Font { .geist(13, weight: .semibold, relativeTo: .body) }
 
+    // Primary (14pt)
     public static var siphonPrimary: Font { .geist(14, weight: .medium, relativeTo: .headline) }
     public static var siphonPrimarySemibold: Font { .geist(14, weight: .semibold, relativeTo: .headline) }
 
-    public static var siphonWindowTitle: Font { .geist(18, weight: .semibold, relativeTo: .title3) }
+    // Headline (15pt): card, section and empty-state titles
+    public static var siphonHeadline: Font { .geist(15, weight: .semibold, relativeTo: .title3) }
 
-    // Display Scale
-    public static var siphonKPI: Font { .geist(32, weight: .bold, relativeTo: .largeTitle) }
-    public static var siphonHomeTitle: Font { .geist(30, weight: .bold, relativeTo: .largeTitle) }
+    // Titles & display
+    public static var siphonWindowTitle: Font { .geist(18, weight: .semibold, relativeTo: .title3) }
+    public static var siphonSheetTitle: Font { .geist(22, weight: .bold, relativeTo: .title2) }
+    public static var siphonHomeTitle: Font { .geist(26, weight: .bold, relativeTo: .largeTitle) }
 }
 
 public struct GeistFontRegistrar {

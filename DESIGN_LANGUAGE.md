@@ -41,6 +41,12 @@ truth only when the value is genuinely reused or has semantic meaning.
   system states.
 - Use `SiphonTheme.accent` and `SiphonTheme.primaryGradient` for the primary
   action and focused input states.
+- Use `SiphonTheme.accentText` and the `status*Text` colors for text and small
+  icons. The saturated `accent` and `status*` values are for fills, rings,
+  tints and motion; as text they fall below 4.5:1 on light surfaces or dark
+  glass.
+- The primary gradient runs `accentDeep` → `accentInk` so white labels stay at
+  or above 4.5:1 across the whole button.
 - Use semantic status colors only for status meaning:
   - downloading: blue
   - queued: amber
@@ -48,7 +54,9 @@ truth only when the value is genuinely reused or has semantic meaning.
   - failed/stopped: red
 - Accent color is not a general-purpose decoration. If every icon is tinted,
   nothing communicates priority.
-- Preserve readable contrast in Light and Dark appearances. Increase Contrast
+- Preserve readable contrast in Light and Dark appearances: text at least
+  4.5:1 against `surfaceElevated`, and icons, borders and focus rings at least
+  3:1. Increase Contrast
   strengthens borders and interactive separation without replacing glass.
 
 ### Color gamut and dynamic range
@@ -68,9 +76,13 @@ truth only when the value is genuinely reused or has semantic meaning.
 
 - Geist is the default UI face; Geist Mono is reserved for counts, URLs, paths,
   versions, commands, and other machine-readable values.
-- Prefer the semantic `Font.siphon*` roles when a role exists. Use
-  `Font.geist(_:weight:relativeTo:)` for a new role or a deliberately distinct
-  display treatment.
+- Always use a semantic `Font.siphon*` role. Sizes step 10 · 11 · 12 · 13 · 14
+  · 15 · 18 · 22 · 26 (Micro, Metadata, Secondary, Standard, Primary, Headline,
+  WindowTitle, SheetTitle, HomeTitle). Micro (10pt) is only for dense chips,
+  counts and badges. Small sizes use regular, medium or semibold only; bold is
+  for the display titles.
+- Call `Font.geist(_:weight:relativeTo:)` directly only when adding a new role
+  to `Font+Geist.swift`.
 - Keep hierarchy compact: one strong title, one supporting line, and metadata
   only where it helps a decision.
 - Custom fonts must remain Dynamic Type-aware through `relativeTo`.
@@ -78,8 +90,12 @@ truth only when the value is genuinely reused or has semantic meaning.
 ### Layout and spacing
 
 - Use the 4/8pt rhythm represented by `SiphonTheme.spacing*`.
-- Use `radiusControl` for controls and inputs, `radiusCard` for content cards,
-  and `radiusSheet` for modal/sheet containers.
+- Use `radiusSmall` for tags and code, `radiusControl` for controls and inputs,
+  `radiusCard` for content cards and list rows, `radiusStatusGroup` for the
+  status bar, `radiusSheet` for modal/sheet containers and `radiusHero` for the
+  URL hero card.
+- Use the `SiphonTheme.Opacity` steps for primary-color fills, tints and
+  borders instead of literal opacities.
 - Prefer adaptive proposed-size layout and `maxWidth: .infinity` over screen
   coordinates or fixed geometry calculations.
 - Keep primary actions in the content and toolbar; do not hide essential actions
@@ -162,7 +178,8 @@ Before merging a UI change, verify:
       HDR media.
 - [ ] P3-owned colors, inactive-window state, and increased-contrast borders were
       preserved.
-- [ ] No new hardcoded palette, spacing, radius, blur, or spring values were
-      added without a documented reason.
+- [ ] No new hardcoded palette, font size, spacing, radius, opacity, blur, or
+      spring values were added without a documented reason.
+- [ ] Text uses `accentText` / `status*Text`, never the saturated fills.
 - [ ] Native macOS structure was preferred before custom glass or AppKit code.
 - [ ] The affected flow was visually checked at compact and normal window sizes.

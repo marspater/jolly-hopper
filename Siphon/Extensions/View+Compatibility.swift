@@ -378,8 +378,10 @@ public final class TransientFeedbackState: ObservableObject {
 public enum SiphonTheme {
     // Primary Accent & Gradients with Display P3 wide color gamut support
     public static let accent = Color(.displayP3, red: 0.10, green: 0.48, blue: 1.0, opacity: 1.0)
-    public static let accentHighlight = Color(.displayP3, red: 0.18, green: 0.52, blue: 1.0, opacity: 1.0)
     public static let accentDeep = Color(.displayP3, red: 0.06, green: 0.40, blue: 0.94, opacity: 1.0)
+    /// Darkest accent stop. Keeps white primary-button labels at or above 4.5:1
+    /// across the whole gradient.
+    public static let accentInk = Color(.displayP3, red: 0.04, green: 0.32, blue: 0.82, opacity: 1.0)
     public static let accentSecondary = Color(.displayP3, red: 0.10, green: 0.76, blue: 0.98, opacity: 1.0)
     public static let accentViolet = Color(.displayP3, red: 0.38, green: 0.24, blue: 0.82, opacity: 1.0)
     public static let backdropBlue = Color(.displayP3, red: 0.10, green: 0.38, blue: 0.90, opacity: 1.0)
@@ -388,57 +390,60 @@ public enum SiphonTheme {
     public static let sourceYouTube = Color(.displayP3, red: 0.96, green: 0.08, blue: 0.08, opacity: 1.0)
     public static let primaryGradient = LinearGradient(
         colors: [
-            accentHighlight,
-            accentDeep
+            accentDeep,
+            accentInk
         ],
         startPoint: .topLeading,
         endPoint: .bottomTrailing
     )
     
-    // Semantic Status Colors (Display P3 with graceful sRGB fallback)
+    // Semantic Status Colors (Display P3 with graceful sRGB fallback).
+    // Use these saturated values for fills, rings, tints and motion only.
     public static let statusDownloading = Color(.displayP3, red: 0.08, green: 0.48, blue: 0.98, opacity: 1.0)
     public static let statusQueued = Color(.displayP3, red: 0.96, green: 0.55, blue: 0.10, opacity: 1.0)
     public static let statusCompleted = Color(.displayP3, red: 0.18, green: 0.72, blue: 0.38, opacity: 1.0)
     public static let statusFailed = Color(.displayP3, red: 0.94, green: 0.26, blue: 0.30, opacity: 1.0)
     public static let statusHdr = Color(.displayP3, red: 0.98, green: 0.65, blue: 0.15, opacity: 1.0)
     public static let statusHdrSecondary = Color(.displayP3, red: 1.0, green: 0.46, blue: 0.08, opacity: 1.0)
+    /// Label on the HDR gradient. White on amber reads under 2:1; this deep brown reads above 8:1.
+    public static let hdrLabel = Color(.displayP3, red: 0.20, green: 0.09, blue: 0.0, opacity: 1.0)
 
-    // Small status text/icons need more luminance contrast on Aqua than the
-    // saturated accent colors used for glow, fills, and motion.
-    private static let statusDownloadingLight = Color(.displayP3, red: 0.02, green: 0.34, blue: 0.76, opacity: 1.0)
-    private static let statusQueuedLight = Color(.displayP3, red: 0.66, green: 0.32, blue: 0.02, opacity: 1.0)
-    private static let statusCompletedLight = Color(.displayP3, red: 0.06, green: 0.43, blue: 0.19, opacity: 1.0)
-    private static let statusFailedLight = Color(.displayP3, red: 0.76, green: 0.10, blue: 0.16, opacity: 1.0)
+    // MARK: - Readable Text Colors
+    // Text and small icons need at least 4.5:1 against the window surface in
+    // both appearances, which the saturated fills above do not reach.
+    private static let accentTextLight = Color(.displayP3, red: 0.02, green: 0.34, blue: 0.76, opacity: 1.0)
+    private static let accentTextDark = Color(.displayP3, red: 0.36, green: 0.62, blue: 1.0, opacity: 1.0)
+    private static let statusQueuedTextLight = Color(.displayP3, red: 0.62, green: 0.30, blue: 0.0, opacity: 1.0)
+    private static let statusCompletedTextLight = Color(.displayP3, red: 0.06, green: 0.43, blue: 0.19, opacity: 1.0)
+    private static let statusFailedTextLight = Color(.displayP3, red: 0.76, green: 0.10, blue: 0.16, opacity: 1.0)
+    private static let statusFailedTextDark = Color(.displayP3, red: 1.0, green: 0.42, blue: 0.44, opacity: 1.0)
+
+    private static func adaptive(light: Color, dark: Color) -> Color {
+        Color(nsColor: NSColor(name: nil) { appearance in
+            appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? NSColor(dark) : NSColor(light)
+        })
+    }
+
+    /// Accent-colored text, links and small icons.
+    public static let accentText = adaptive(light: accentTextLight, dark: accentTextDark)
+    public static let statusDownloadingText = adaptive(light: accentTextLight, dark: accentTextDark)
+    public static let statusQueuedText = adaptive(light: statusQueuedTextLight, dark: statusQueued)
+    public static let statusCompletedText = adaptive(light: statusCompletedTextLight, dark: statusCompleted)
+    public static let statusFailedText = adaptive(light: statusFailedTextLight, dark: statusFailedTextDark)
 
     static func statusForeground(for status: DownloadStatus, colorScheme: ColorScheme) -> Color {
-        if colorScheme == .dark {
-            switch status {
-            case .downloading, .fetching, .processing: return statusDownloading
-            case .queued, .paused, .fileExists: return statusQueued
-            case .completed: return statusCompleted
-            case .failed, .stopped: return statusFailed
-            }
-        }
-
+        let isDark = colorScheme == .dark
         switch status {
-        case .downloading, .fetching, .processing: return statusDownloadingLight
-        case .queued, .paused, .fileExists: return statusQueuedLight
-        case .completed: return statusCompletedLight
-        case .failed, .stopped: return statusFailedLight
+        case .downloading, .fetching, .processing: return isDark ? accentTextDark : accentTextLight
+        case .queued, .paused, .fileExists: return isDark ? statusQueued : statusQueuedTextLight
+        case .completed: return isDark ? statusCompleted : statusCompletedTextLight
+        case .failed, .stopped: return isDark ? statusFailedTextDark : statusFailedTextLight
         }
     }
 
     public static func accentForeground(for colorScheme: ColorScheme) -> Color {
-        colorScheme == .dark
-            ? accentHighlight
-            : Color(.displayP3, red: 0.02, green: 0.34, blue: 0.76, opacity: 1.0)
+        colorScheme == .dark ? accentTextDark : accentTextLight
     }
-    
-    public static let downloading = statusDownloading
-    public static let queued = statusQueued
-    public static let completed = statusCompleted
-    public static let failed = statusFailed
-    public static let hdr = statusHdr
     
     // MARK: - AppKit Theme Synchronization
     @MainActor
@@ -499,23 +504,35 @@ public enum SiphonTheme {
         statusFailed.opacity(0.12)
     }
 
-    // Semantic Radii Tokens:
-    // 6 = compact metadata / code blocks
-    // 8 = buttons, inputs, controls
-    // 12 = cards / list rows
-    // 16 = modal/sheet container
-    // Capsule = status / segmented / compact selection
+    // Semantic Radii Tokens (continuous corners):
+    // 6 = tags, compact metadata, code blocks
+    // 8 = buttons, inputs, controls, selected sidebar rows
+    // 12 = cards, list rows, glass surfaces
+    // 14 = home status bar group
+    // 16 = modal/sheet containers
+    // 18 = URL hero card
+    // Capsule = status badges, pills, compact selection
     public static let radiusSmall: CGFloat = 6
-    public static let radiusMetadata: CGFloat = 6
     public static let radiusControl: CGFloat = 8
-    public static let radiusButton: CGFloat = 8
-    public static let radiusInput: CGFloat = 8
     public static let radiusCard: CGFloat = 12
-    public static let radiusRow: CGFloat = 12
     public static let radiusStatusGroup: CGFloat = 14
     public static let radiusSheet: CGFloat = 16
     public static let radiusHero: CGFloat = 18
-    public static let radiusModal: CGFloat = 16
+
+    // Shared translucency steps. Pair each with Color.primary or a tint.
+    public enum Opacity {
+        public static let fillCard: Double = 0.03
+        public static let fillCardHover: Double = 0.065
+        public static let fillPill: Double = 0.045
+        public static let fillPillHover: Double = 0.09
+        public static let fillGhostHover: Double = 0.08
+        public static let tintBadge: Double = 0.12
+        public static let tintFieldFocus: Double = 0.10
+        public static let tintSidebarSelected: Double = 0.18
+        public static let borderRest: Double = 0.15
+        public static let borderHover: Double = 0.26
+        public static let borderIncreaseContrast: Double = 0.42
+    }
     
     // Elevated Card & Tile Backgrounds (Unified macOS Translucent Glass)
     @ViewBuilder
@@ -524,7 +541,7 @@ public enum SiphonTheme {
             RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                 .fill(.ultraThinMaterial)
             RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                .fill(Color.primary.opacity(isHovered ? 0.065 : 0.03))
+                .fill(Color.primary.opacity(isHovered ? Opacity.fillCardHover : Opacity.fillCard))
         }
     }
     
@@ -583,7 +600,7 @@ public enum SiphonTheme {
                 .strokeBorder(
                     LinearGradient(
                         colors: [
-                            Color.primary.opacity(isHovered ? 0.26 : 0.15),
+                            Color.primary.opacity(isHovered ? Opacity.borderHover : Opacity.borderRest),
                             Color.primary.opacity(isHovered ? 0.10 : 0.05),
                             Color.clear
                         ],
@@ -604,7 +621,7 @@ public enum SiphonTheme {
                 .shadow(color: accent.opacity(0.30), radius: 6, y: 2)
         } else {
             Capsule()
-                .fill(Color.primary.opacity(isHovered ? 0.09 : 0.045))
+                .fill(Color.primary.opacity(isHovered ? Opacity.fillPillHover : Opacity.fillPill))
                 .background(
                     Capsule()
                         .fill(.thinMaterial)
@@ -615,7 +632,7 @@ public enum SiphonTheme {
     @ViewBuilder
     public static func tintedPillBackground(
         tint: Color,
-        opacity: Double = 0.12
+        opacity: Double = Opacity.tintBadge
     ) -> some View {
         Capsule()
             .fill(tint.opacity(opacity))
@@ -627,7 +644,7 @@ public enum SiphonTheme {
 
     private static func pillBorderOpacity(showBorders: Bool, isHovered: Bool) -> Double {
         if showBorders {
-            return 0.42
+            return Opacity.borderIncreaseContrast
         } else if isHovered {
             return 0.12
         } else {
@@ -723,7 +740,7 @@ public enum SiphonTheme {
 
             if isFocused {
                 RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    .fill(accent.opacity(0.10))
+                    .fill(accent.opacity(Opacity.tintFieldFocus))
             }
         }
     }
@@ -859,7 +876,7 @@ public struct SiphonInteractiveGlassBackground: View {
         } else if isHovered {
             return effectiveTint.opacity(0.19)
         } else {
-            return Color.primary.opacity(0.045)
+            return Color.primary.opacity(SiphonTheme.Opacity.fillPill)
         }
     }
 
@@ -1051,7 +1068,7 @@ public struct SiphonPrimaryButtonStyle: ButtonStyle {
 
     public func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.geist(13, weight: .semibold))
+            .font(.siphonStandardSemibold)
             .foregroundColor(.white)
             .frame(minHeight: 18, alignment: .center)
             .padding(.horizontal, SiphonTheme.spacing16)
@@ -1090,7 +1107,7 @@ public struct SiphonSecondaryButtonStyle: ButtonStyle {
 
     public func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.geist(13, weight: .medium))
+            .font(.siphonStandardMedium)
             .foregroundColor(.primary)
             .frame(minHeight: 18, alignment: .center)
             .padding(.horizontal, SiphonTheme.spacing14)
@@ -1119,14 +1136,14 @@ public struct SiphonGhostButtonStyle: ButtonStyle {
     public func makeBody(configuration: Configuration) -> some View {
         let showBorders = renderingCapabilities.increaseContrast
         configuration.label
-            .font(.geist(12, weight: .medium))
+            .font(.siphonSecondaryMedium)
             .foregroundColor(isHovered ? .primary : .secondary)
             .frame(minHeight: 16, alignment: .center)
             .padding(.horizontal, SiphonTheme.spacing10)
             .padding(.vertical, 5)
             .background(
                 RoundedRectangle(cornerRadius: cornerRadius)
-                    .fill(Color.primary.opacity(isHovered ? 0.08 : 0.0))
+                    .fill(Color.primary.opacity(isHovered ? SiphonTheme.Opacity.fillGhostHover : 0.0))
             )
             .overlay(
                 RoundedRectangle(cornerRadius: cornerRadius)
@@ -1164,7 +1181,7 @@ public struct SiphonIconButtonStyle: ButtonStyle {
             .frame(width: size, height: size)
             .background(
                 Circle()
-                    .fill(Color.primary.opacity(isHovered ? 0.08 : 0.0))
+                    .fill(Color.primary.opacity(isHovered ? SiphonTheme.Opacity.fillGhostHover : 0.0))
             )
             .overlay(
                 Circle()
@@ -1267,7 +1284,7 @@ struct SiphonStatusBadge: View {
             }
             
             Text(title)
-                .font(.geist(11, weight: .semibold))
+                .font(.siphonMetadataSemibold)
         }
         .padding(.horizontal, 9)
         .padding(.vertical, 3.5)
@@ -1275,7 +1292,7 @@ struct SiphonStatusBadge: View {
         .background(
             SiphonTheme.tintedPillBackground(
                 tint: foregroundColor,
-                opacity: 0.12
+                opacity: SiphonTheme.Opacity.tintBadge
             )
         )
         .clipShape(Capsule())
@@ -1326,11 +1343,11 @@ public struct SiphonTagBadge: View {
             }
             
             Text(text)
-                .font(isMonospaced ? .geistMono(10, weight: .semibold) : .geist(10, weight: .semibold))
+                .font(isMonospaced ? .siphonMicroMonoSemibold : .siphonMicroSemibold)
         }
         .padding(.horizontal, 6)
         .padding(.vertical, 2.5)
-        .foregroundColor(isHdr ? .white : tintColor)
+        .foregroundColor(isHdr ? SiphonTheme.hdrLabel : tintColor)
         .background {
             if isHdr {
                 LinearGradient(
@@ -1339,7 +1356,7 @@ public struct SiphonTagBadge: View {
                     endPoint: .bottomTrailing
                 )
             } else {
-                tintColor.opacity(0.12)
+                tintColor.opacity(SiphonTheme.Opacity.tintBadge)
             }
         }
         .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusSmall))
@@ -1388,10 +1405,10 @@ public struct SiphonEmptyStateView: View {
             
             VStack(spacing: SiphonTheme.spacing6) {
                 Text(title)
-                    .font(.geist(16, weight: .semibold))
+                    .font(.siphonHeadline)
                     .foregroundColor(.primary)
                 Text(message)
-                    .font(.geist(13))
+                    .font(.siphonStandard)
                     .foregroundColor(.secondary)
                     .multilineTextAlignment(.center)
                     .frame(maxWidth: 320)
@@ -1403,7 +1420,7 @@ public struct SiphonEmptyStateView: View {
                         Image(systemName: "plus.circle.fill")
                             .font(.system(size: 13, weight: .semibold))
                         Text(actionTitle)
-                            .font(.geist(13, weight: .semibold))
+                            .font(.siphonStandardSemibold)
                     }
                 }
                 .buttonStyle(.siphonPrimary(cornerRadius: SiphonTheme.radiusControl))
@@ -1415,7 +1432,7 @@ public struct SiphonEmptyStateView: View {
     }
 }
 
-// MARK: - Standardized Input View Modifier
+// MARK: - Window & Glass Surface Modifiers
 extension View {
     /// Uses the app's glass surface while respecting Reduce Transparency.
     public func siphonWindowBackground() -> some View {
@@ -1426,18 +1443,6 @@ extension View {
     /// adaptive material treatment as a fallback.
     public func siphonGlassSurface(cornerRadius: CGFloat = SiphonTheme.radiusCard) -> some View {
         modifier(SiphonGlassSurfaceModifier(cornerRadius: cornerRadius))
-    }
-
-    @ViewBuilder
-    public func siphonInputStyle(cornerRadius: CGFloat = SiphonTheme.radiusControl) -> some View {
-        self.padding(.horizontal, SiphonTheme.spacing10)
-            .padding(.vertical, 7)
-            .background(Color.primary.opacity(0.04))
-            .clipShape(RoundedRectangle(cornerRadius: cornerRadius))
-            .overlay(
-                RoundedRectangle(cornerRadius: cornerRadius)
-                    .stroke(Color.primary.opacity(0.08), lineWidth: 1)
-            )
     }
 }
 
