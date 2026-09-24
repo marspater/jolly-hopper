@@ -188,26 +188,41 @@ enum ChromiumCookieReader {
     static func export(
         for target: URL,
         root: URL = defaultHeliumRoot,
-        password: () throws -> Data = { try keychainPassword() }
+        password: (() throws -> Data)? = nil
     ) throws -> SecureCookieFile {
         guard let host = target.host else { throw failure("Missing target host.") }
 
         // If default root does not exist, look across known Chromium browser installations
-        var candidateRoots: [URL] = [root]
+        var candidateRoots: [(root: URL, target: ChromiumBrowserTarget?)] = []
         if root == defaultHeliumRoot {
+            candidateRoots.append((defaultHeliumRoot, knownChromiumBrowsers.first))
             let home = FileManager.default.homeDirectoryForCurrentUser
             for browser in knownChromiumBrowsers {
                 let candidateURL = home.appendingPathComponent(browser.relativePath)
                 if candidateURL != root && FileManager.default.fileExists(atPath: candidateURL.path) {
-                    candidateRoots.append(candidateURL)
+                    candidateRoots.append((candidateURL, browser))
                 }
             }
+        } else {
+            let matched = knownChromiumBrowsers.first {
+                root.path.hasSuffix($0.relativePath)
+            }
+            candidateRoots.append((root, matched))
         }
 
         var lastError: Error?
-        for candidateRoot in candidateRoots {
+        for candidate in candidateRoots {
             do {
-                return try exportFromProfile(targetHost: host, root: candidateRoot, password: password)
+                let candidatePassword: () throws -> Data = {
+                    if let password {
+                        return try password()
+                    }
+                    if let target = candidate.target {
+                        return try keychainPassword(service: target.keychainService, account: target.keychainAccount)
+                    }
+                    return try keychainPassword()
+                }
+                return try exportFromProfile(targetHost: host, root: candidate.root, password: candidatePassword)
             } catch {
                 lastError = error
             }
@@ -302,13 +317,19 @@ enum ChromiumCookieReader {
             return (args, nil)
         }
         let browserArg = args[index + 1].lowercased()
-        guard browserArg == "helium" || browserArg == "chromium-based" || browserArg == "chromium" else {
+        guard browserArg == "helium" || browserArg == "chromium-based" || browserArg == "arc" else {
             return (args, nil)
         }
         guard let target = args.last.flatMap(URL.init(string:)), ["http", "https"].contains(target.scheme) else {
             throw failure("Missing HTTP target for cookie extraction.")
         }
-        let file = try export(for: target)
+        let root: URL
+        if browserArg == "arc", let arcBrowser = knownChromiumBrowsers.first(where: { $0.name == "Arc" }) {
+            root = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(arcBrowser.relativePath)
+        } else {
+            root = defaultHeliumRoot
+        }
+        let file = try export(for: target, root: root)
         var prepared = args
         prepared.replaceSubrange(index...index + 1, with: ["--cookies", file.path])
         return (prepared, file)

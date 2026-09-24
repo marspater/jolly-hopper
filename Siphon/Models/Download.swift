@@ -605,6 +605,67 @@ struct DownloadOptions: Codable {
     static var `default`: DownloadOptions {
         defaultOptions
     }
+
+    static func defaultFromPreferences(userDefaults: UserDefaults = .standard) -> DownloadOptions {
+        let saveFolderURL: URL
+        let defaultPath = userDefaults.string(forKey: UserDefaultsKeys.defaultSaveFolder) ?? ""
+        if !defaultPath.isEmpty && FileManager.default.fileExists(atPath: defaultPath) {
+            saveFolderURL = URL(fileURLWithPath: defaultPath)
+        } else if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil || NSClassFromString("XCTestCase") != nil {
+            let testDir = FileManager.default.temporaryDirectory.appendingPathComponent("SiphonTestDownloads", isDirectory: true)
+            try? FileManager.default.createDirectory(at: testDir, withIntermediateDirectories: true)
+            saveFolderURL = testDir
+        } else {
+            saveFolderURL = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Downloads", isDirectory: true)
+        }
+
+        let fileTypeStr = userDefaults.string(forKey: UserDefaultsKeys.defaultFileType) ?? "mp4"
+        let fileType = MediaFileType.allCases.first(where: { $0.rawValue.lowercased() == fileTypeStr.lowercased() }) ?? .mp4
+
+        let resStr = userDefaults.string(forKey: UserDefaultsKeys.defaultVideoResolution) ?? "r1080p"
+        let resolution = VideoResolution(rawValue: resStr) ?? .r1080p
+
+        let vcodecStr = userDefaults.string(forKey: UserDefaultsKeys.defaultVideoCodec) ?? "auto"
+        let videoCodec = VideoCodec(rawValue: vcodecStr)
+
+        let acodecStr = userDefaults.string(forKey: UserDefaultsKeys.defaultAudioCodec) ?? "auto"
+        let audioCodec = AudioCodec(rawValue: acodecStr)
+
+        let embedThumb = userDefaults.object(forKey: UserDefaultsKeys.embedThumbnail) != nil ? userDefaults.bool(forKey: UserDefaultsKeys.embedThumbnail) : true
+        let embedMeta = userDefaults.object(forKey: UserDefaultsKeys.embedMetadata) != nil ? userDefaults.bool(forKey: UserDefaultsKeys.embedMetadata) : true
+        let sponsorBlock = userDefaults.bool(forKey: UserDefaultsKeys.sponsorBlock)
+        let extraArgs = userDefaults.string(forKey: UserDefaultsKeys.defaultAdditionalArguments)?.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        let fallbackPolicyStr = userDefaults.string(forKey: UserDefaultsKeys.resolutionFallbackPolicy) ?? ResolutionFallbackPolicy.strictCeiling.rawValue
+        let fallbackPolicy = ResolutionFallbackPolicy(rawValue: fallbackPolicyStr) ?? .strictCeiling
+
+        return DownloadOptions(
+            saveFolder: saveFolderURL,
+            fileType: fileType,
+            videoResolution: fileType.isVideo ? resolution : nil,
+            audioQuality: fileType.isAudio ? .best : nil,
+            downloadSubtitles: false,
+            subtitleLanguages: ["en"],
+            subtitleFormat: .srt,
+            embedSubtitles: false,
+            downloadThumbnail: false,
+            embedThumbnail: embedThumb,
+            embedMetadata: embedMeta,
+            splitChapters: false,
+            sponsorBlock: sponsorBlock,
+            videoCodec: videoCodec,
+            audioCodec: audioCodec,
+            conversionCodec: .none,
+            forceOverwrite: false,
+            rawCookies: nil,
+            rawUserAgent: nil,
+            browserCookieSource: nil,
+            selectedFormatId: nil,
+            hdrAction: .preserveHDR,
+            resolutionFallbackPolicy: fallbackPolicy,
+            additionalArguments: (extraArgs?.isEmpty ?? true) ? nil : extraArgs
+        )
+    }
 }
 
 

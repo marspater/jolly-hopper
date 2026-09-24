@@ -487,6 +487,19 @@ final class YtdlpServiceTests: XCTestCase {
         }
     }
 
+    func testChromiumCookieReaderPrepareBypassesChromiumAndInterceptsArc() throws {
+        // "chromium" is natively supported by yt-dlp, so prepare must not intercept it
+        let chromiumArgs = ["yt-dlp", "--cookies-from-browser", "chromium", "https://example.com/video"]
+        let (prepChromium, cookieFileChromium) = try ChromiumCookieReader.prepare(chromiumArgs)
+        XCTAssertNil(cookieFileChromium)
+        XCTAssertEqual(prepChromium, chromiumArgs)
+
+        // Non-existent target for arc should throw missing target or fail gracefully,
+        // but it must attempt to intercept when format is valid
+        let nonHttpArgs = ["yt-dlp", "--cookies-from-browser", "arc", "ftp://example.com/video"]
+        XCTAssertThrowsError(try ChromiumCookieReader.prepare(nonHttpArgs))
+    }
+
     func testMetadataAndPlaylistUseExplicitBrowserSourceWithoutCookiePayload() async throws {
         service.ytdlpPath = URL(fileURLWithPath: "/usr/local/bin/yt-dlp")
         UserDefaults.standard.set("none", forKey: UserDefaultsKeys.browserForCookies)
@@ -805,6 +818,383 @@ final class YtdlpServiceTests: XCTestCase {
             XCTAssertEqual(capturedArgsBox.value[fIdx + 1], "b/best")
         }
     }
+
+    func testStarwankURLDetectionAndNormalization() {
+        XCTAssertTrue(YtdlpService.isStarwankURL("https://starwank.com/videos/260540/private-czech-garden-party/"))
+        XCTAssertTrue(YtdlpService.isStarwankURL("https://www.starwank.com/embed/260540"))
+        XCTAssertTrue(YtdlpService.isStarwankURL("starwank.com"))
+        XCTAssertFalse(YtdlpService.isStarwankURL("https://youtube.com/watch?v=123"))
+
+        let raw = "https://starwank.com/videos/260540/private-czech-garden-party/?utm_source=feed&ref=promo"
+        let normalized = service.normalizeURL(raw)
+        XCTAssertEqual(normalized, "https://starwank.com/videos/260540/private-czech-garden-party/")
+    }
+
+    func testStarwankHeadersAndFormatSelection() async throws {
+        let capturedArgsBox = TestBox<[String]>([])
+        service.processRunner = MockYtdlpProcessRunner(mockDownload: { args in
+            capturedArgsBox.value = args
+            return "[download] Destination: /tmp/test_starwank.mp4\n"
+        })
+
+        var options = DownloadOptions.default
+        options.videoResolution = .r1080p
+
+        _ = try await service.download(
+            url: "https://starwank.com/videos/260540/private-czech-garden-party/",
+            options: options,
+            onProgress: { _, _, _ in },
+            onOutput: { _ in }
+        )
+
+        XCTAssertTrue(capturedArgsBox.value.contains("Referer: https://starwank.com/"))
+        XCTAssertTrue(capturedArgsBox.value.contains("Origin: https://starwank.com"))
+        if let fIdx = capturedArgsBox.value.firstIndex(of: "-f") {
+            XCTAssertEqual(capturedArgsBox.value[fIdx + 1], "b/best")
+        }
+    }
+
+    func testStarwankParseMediaFromVideoPageHTML() {
+        let sampleHTML = """
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Private Czech Garden Party - StarWank.com</title>
+            <meta property="og:title" content="Private Czech Garden Party - StarWank" />
+            <meta property="og:image" content="https://starwank.com/contents/videos_screenshots/260000/260540/preview.jpg" />
+            <meta property="video:duration" content="362" />
+        </head>
+        <body>
+            <iframe width="1920" height="1080" src="https://starwank.com/embed/260540" frameborder="0"></iframe>
+            <video id="pll"></video>
+            <script>
+            (()=>{
+                var o;
+                let pll=document.getElementById('pll');
+                o = document.createElement('source');
+                o.setAttribute('src', "https:\\/\\/www.fapnado.com\\/get_file\\/1\\/3cf363262cda74c638ec4841dea579b3\\/9000\\/9770\\/9770_360p.mp4\\/");
+                o.setAttribute("type","video/mp4");
+                o.setAttribute('title',"360p");
+                pll.appendChild(o);
+                o = document.createElement('source');
+                o.setAttribute('src', "https:\\/\\/www.fapnado.com\\/get_file\\/1\\/df7c6ef3e93cf4d597a7830d4658cf50\\/9000\\/9770\\/9770.mp4\\/");
+                o.setAttribute("type","video/mp4");
+                o.setAttribute('title',"720p");
+                pll.appendChild(o);
+            })();
+            </script>
+        </body>
+        </html>
+        """
+
+        let media = YtdlpService.parseStarwankMedia(
+            html: sampleHTML,
+            targetUrl: "https://starwank.com/videos/260540/private-czech-garden-party/"
+        )
+
+        XCTAssertNotNil(media)
+        XCTAssertEqual(media?.title, "Private Czech Garden Party")
+        XCTAssertEqual(media?.thumbnailURL, "https://starwank.com/contents/videos_screenshots/260000/260540/preview.jpg")
+        XCTAssertEqual(media?.duration, 362.0)
+        XCTAssertEqual(media?.embedURL, "https://starwank.com/embed/260540")
+        XCTAssertEqual(media?.allSources.count, 2)
+        // Highest quality by default
+        XCTAssertEqual(media?.quality, "720p")
+        XCTAssertEqual(media?.streamURL, "https://www.fapnado.com/get_file/1/df7c6ef3e93cf4d597a7830d4658cf50/9000/9770/9770.mp4/")
+
+        // Requested 360p format
+        let media360 = YtdlpService.parseStarwankMedia(
+            html: sampleHTML,
+            targetUrl: "https://starwank.com/videos/260540/private-czech-garden-party/",
+            requestedFormat: "360p"
+        )
+        XCTAssertEqual(media360?.quality, "360p")
+        XCTAssertEqual(media360?.streamURL, "https://www.fapnado.com/get_file/1/3cf363262cda74c638ec4841dea579b3/9000/9770/9770_360p.mp4/")
+    }
+
+    func testStarwankParseMediaFromEmbedPageHTML() {
+        let sampleHTML = """
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>StarWank</title>
+        </head>
+        <body>
+            <script>
+            var tc67a9ca8d0 = {
+                embed_mode: '1',
+                video_id: '260540',
+                video_title: 'Private Czech Garden Party',
+                license_code: '$525802717347152',
+                video_url: 'https://www.fapnado.com/get_file/1/df7c6ef3e93cf4d597a7830d4658cf50/9000/9770/9770.mp4/',
+                preview_url: 'https://starwank.com/contents/videos_screenshots/260000/260540/preview.jpg',
+                empty_referrer_redirect: 'https://starwank.com/videos/260540/private-czech-garden-party/'
+            };
+            </script>
+        </body>
+        </html>
+        """
+
+        let media = YtdlpService.parseStarwankMedia(
+            html: sampleHTML,
+            targetUrl: "https://starwank.com/embed/260540"
+        )
+
+        XCTAssertNotNil(media)
+        XCTAssertEqual(media?.title, "Private Czech Garden Party")
+        XCTAssertEqual(media?.thumbnailURL, "https://starwank.com/contents/videos_screenshots/260000/260540/preview.jpg")
+        XCTAssertEqual(media?.streamURL, "https://www.fapnado.com/get_file/1/df7c6ef3e93cf4d597a7830d4658cf50/9000/9770/9770.mp4/")
+        XCTAssertEqual(media?.allSources.first?.label, "720p")
+    }
+
+    func testLiveStarwankResolution() async throws {
+        let media = await service.resolveStarwankMediaInfo(url: "https://starwank.com/videos/260540/private-czech-garden-party/")
+        guard let media else {
+            throw XCTSkip("Network unavailable for live Starwank resolution")
+        }
+        XCTAssertEqual(media.title, "Private Czech Garden Party")
+        XCTAssertEqual(media.quality, "720p")
+        XCTAssertTrue(media.streamURL.contains("fapnado.com"))
+        XCTAssertEqual(media.allSources.count, 2)
+    }
+
+    func testPussyspaceURLDetectionAndNormalization() {
+        XCTAssertTrue(YtdlpService.isPussyspaceURL("https://www.pussyspace.com/vid-3520796-hot-curvy-babe-gives-great-blowjob-and-titty-fuck/"))
+        XCTAssertTrue(YtdlpService.isPussyspaceURL("https://pussyspace.com/vid-12345-title/"))
+        XCTAssertTrue(YtdlpService.isPussyspaceURL("pussyspace.com"))
+        XCTAssertFalse(YtdlpService.isPussyspaceURL("https://youtube.com/watch?v=123"))
+
+        let raw = "https://www.pussyspace.com/vid-3520796-test/?utm_source=feed&ref=promo"
+        let normalized = service.normalizeURL(raw)
+        XCTAssertEqual(normalized, "https://www.pussyspace.com/vid-3520796-test/")
+    }
+
+    func testPussyspaceParseMediaFromPlayerResponse() {
+        let pageHTML = """
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Hot Curvy Babe Gives Great Blowjob HD (12 min) Straight Sex Video &#124; PussySpace</title>
+            <meta property="og:title" content="Hot Curvy Babe Gives Great Blowjob HD (12 min) Straight Sex Video &#124; PussySpace" />
+            <meta property="og:image" content="https://fi1-ph.ypncdn.com/videos/202103/12/385028811/original/12.jpg" />
+            <meta property="video:duration" content="721" />
+        </head>
+        <body>
+            <div id="showPlayer"></div>
+        </body>
+        </html>
+        """
+
+        let playerHTML = """
+        <script>
+        var player = new Playerjs({
+            id: "PlayerPussySpace",
+            poster: "https://fi1-ph.ypncdn.com/videos/202103/12/385028811/original/12.jpg",
+            file: "[240p]https://www.pussyspace.com/reversebuffer?u64hash=abc240&qvid.mp4,[480p]https://www.pussyspace.com/reversebuffer?u64hash=def480&qvid.mp4,[720p]https://www.pussyspace.com/reversebuffer?u64hash=ghi720&qvid.mp4"
+        });
+        </script>
+        """
+
+        let media = YtdlpService.parsePussyspaceMedia(
+            html: pageHTML,
+            targetUrl: "https://www.pussyspace.com/vid-3520796-hot-curvy-babe-gives-great-blowjob-and-titty-fuck/",
+            playerHtml: playerHTML
+        )
+
+        XCTAssertNotNil(media)
+        XCTAssertEqual(media?.title, "Hot Curvy Babe Gives Great Blowjob")
+        XCTAssertEqual(media?.thumbnailURL, "https://fi1-ph.ypncdn.com/videos/202103/12/385028811/original/12.jpg")
+        XCTAssertEqual(media?.duration, 721.0)
+        XCTAssertEqual(media?.allSources.count, 3)
+        // Highest resolution chosen by default
+        XCTAssertEqual(media?.quality, "720p")
+        XCTAssertEqual(media?.streamURL, "https://www.pussyspace.com/reversebuffer?u64hash=ghi720&qvid.mp4")
+
+        // Requested 240p format
+        let media240 = YtdlpService.parsePussyspaceMedia(
+            html: pageHTML,
+            targetUrl: "https://www.pussyspace.com/vid-3520796-hot-curvy-babe-gives-great-blowjob-and-titty-fuck/",
+            requestedFormat: "240p",
+            playerHtml: playerHTML
+        )
+        XCTAssertEqual(media240?.quality, "240p")
+        XCTAssertEqual(media240?.streamURL, "https://www.pussyspace.com/reversebuffer?u64hash=abc240&qvid.mp4")
+    }
+
+    func testPussyspaceParseMediaFromHlsOrMp4Response() {
+        let pageHTML = """
+        <html>
+        <head><title>Maid Gets Paid | PussySpace</title></head>
+        <body></body>
+        </html>
+        """
+
+        let playerHTML = """
+        <script>
+        var player = new Playerjs({
+            id: "PlayerPussySpace",
+            poster: "https://thumbs.cdn.com/poster.jpg",
+            file: "https://www.pussyspace.com/reversebuffer?u64hash=hls123&hls.m3u8 or https://www.pussyspace.com/reversebuffer?u64hash=mp4456&file.mp4"
+        });
+        </script>
+        """
+
+        let media = YtdlpService.parsePussyspaceMedia(
+            html: pageHTML,
+            targetUrl: "https://www.pussyspace.com/vid-6164626-maid-gets-paid/",
+            playerHtml: playerHTML
+        )
+
+        XCTAssertNotNil(media)
+        XCTAssertEqual(media?.title, "Maid Gets Paid")
+        XCTAssertEqual(media?.allSources.count, 2)
+        XCTAssertEqual(media?.streamURL, "https://www.pussyspace.com/reversebuffer?u64hash=hls123&hls.m3u8")
+    }
+
+    func testSynthesizedDirectStreamAudioFormatArgsUseBest() async throws {
+        let capturedArgsBox = TestBox<[String]>([])
+        service.processRunner = MockYtdlpProcessRunner(mockDownload: { args in
+            capturedArgsBox.value = args
+            return "[download] Destination: /tmp/test_audio.mp3\n"
+        })
+
+        var options = DownloadOptions.default
+        options.fileType = .mp3
+        options.selectedFormatId = "720p" // Synthetic video format ID previously selected
+
+        let info = MediaInfo(
+            id: "https://starwank.com/videos/260540/test/",
+            title: "Test Video",
+            uploader: "StarWank",
+            formats: [MediaFormat(formatId: "720p", ext: "mp4", resolution: "1280x720", manifestUrl: "https://starwank.com/get_file/1/test.mp4")],
+            manifestUrl: "https://starwank.com/get_file/1/test.mp4"
+        )
+
+        _ = try await service.download(
+            url: "https://starwank.com/videos/260540/test/",
+            options: options,
+            mediaInfo: info,
+            onProgress: { _, _, _ in },
+            onOutput: { _ in }
+        )
+
+        let args = capturedArgsBox.value
+        XCTAssertTrue(args.contains("-x"))
+        XCTAssertTrue(args.contains("--audio-format"))
+        if let fIdx = args.firstIndex(of: "-f") {
+            // Must NOT use "720p" for audio extraction from direct stream
+            XCTAssertEqual(args[fIdx + 1], "b/best")
+        } else {
+            XCTFail("Missing -f in audio download arguments")
+        }
+    }
+
+    func testPussyspaceDownloadUsesStreamURLFromMediaInfo() async throws {
+        let capturedArgsBox = TestBox<[String]>([])
+        service.processRunner = MockYtdlpProcessRunner(mockDownload: { args in
+            capturedArgsBox.value = args
+            return "[download] Destination: /tmp/test_pussy.mp4\n"
+        })
+
+        let options = DownloadOptions.default
+        let streamURL = "https://www.pussyspace.com/reversebuffer?u64hash=abc&file.mp4"
+        let webpageURL = "https://www.pussyspace.com/vid-3310822-massage-rooms/"
+        let info = MediaInfo(
+            id: webpageURL,
+            title: "Test PussySpace Video",
+            uploader: "PussySpace",
+            formats: [MediaFormat(formatId: "720p", ext: "mp4", resolution: "1280x720", manifestUrl: streamURL)],
+            webpageUrl: webpageURL,
+            originalUrl: streamURL,
+            manifestUrl: streamURL
+        )
+
+        _ = try await service.download(
+            url: webpageURL,
+            options: options,
+            mediaInfo: info,
+            onProgress: { _, _, _ in },
+            onOutput: { _ in }
+        )
+
+        let args = capturedArgsBox.value
+        XCTAssertEqual(args.last, streamURL)
+        XCTAssertTrue(args.contains("Referer: https://www.pussyspace.com/"))
+        XCTAssertTrue(args.contains("Origin: https://www.pussyspace.com"))
+    }
+
+    func testStarwankDownloadUsesStreamURLFromMediaInfo() async throws {
+        let capturedArgsBox = TestBox<[String]>([])
+        service.processRunner = MockYtdlpProcessRunner(mockDownload: { args in
+            capturedArgsBox.value = args
+            return "[download] Destination: /tmp/test_starwank.mp4\n"
+        })
+
+        let options = DownloadOptions.default
+        let streamURL = "https://starwank.com/get_file/1/test_720p.mp4"
+        let webpageURL = "https://starwank.com/videos/260540/test-video/"
+        let info = MediaInfo(
+            id: webpageURL,
+            title: "Test StarWank Video",
+            uploader: "StarWank",
+            formats: [MediaFormat(formatId: "720p", ext: "mp4", resolution: "1280x720", manifestUrl: streamURL)],
+            webpageUrl: webpageURL,
+            originalUrl: streamURL,
+            manifestUrl: streamURL
+        )
+
+        _ = try await service.download(
+            url: webpageURL,
+            options: options,
+            mediaInfo: info,
+            onProgress: { _, _, _ in },
+            onOutput: { _ in }
+        )
+
+        let args = capturedArgsBox.value
+        XCTAssertEqual(args.last, streamURL)
+        XCTAssertTrue(args.contains("Referer: https://starwank.com/"))
+        XCTAssertTrue(args.contains("Origin: https://starwank.com"))
+    }
+
+    func testPussyspaceFormatSelectionUsesFormatSpecificStreamURL() async throws {
+        let capturedArgsBox = TestBox<[String]>([])
+        service.processRunner = MockYtdlpProcessRunner(mockDownload: { args in
+            capturedArgsBox.value = args
+            return "[download] Destination: /tmp/test_pussy.mp4\n"
+        })
+
+        var options = DownloadOptions.default
+        options.selectedFormatId = "480p"
+
+        let hlsStream = "https://www.pussyspace.com/reversebuffer?u64hash=hls&hls.m3u8"
+        let mp4Stream480 = "https://www.pussyspace.com/reversebuffer?u64hash=mp4480&file.mp4"
+        let webpageURL = "https://www.pussyspace.com/vid-3310822-test/"
+        let info = MediaInfo(
+            id: webpageURL,
+            title: "Test Format Selection",
+            uploader: "PussySpace",
+            formats: [
+                MediaFormat(formatId: "HLS Auto", ext: "mp4", resolution: "1920x1080", manifestUrl: hlsStream),
+                MediaFormat(formatId: "480p", ext: "mp4", resolution: "854x480", manifestUrl: mp4Stream480)
+            ],
+            webpageUrl: webpageURL,
+            originalUrl: hlsStream,
+            manifestUrl: hlsStream
+        )
+
+        _ = try await service.download(
+            url: webpageURL,
+            options: options,
+            mediaInfo: info,
+            onProgress: { _, _, _ in },
+            onOutput: { _ in }
+        )
+
+        let args = capturedArgsBox.value
+        XCTAssertEqual(args.last, mp4Stream480)
+    }
+
 
     func testBestCamAES256CTRDecryptionFixture() throws {
         let filename = "7c9a1f00ba871cce7861afcf0dfe6.255724278.4"
@@ -3829,11 +4219,56 @@ final class YtdlpServiceTests: XCTestCase {
             onOutput: { _ in /* Output ignored in test */ }
         )
 
-        XCTAssertTrue(capturedArgsBox.value.contains("--postprocessor-args"))
+        // Must trigger video recoding
+        XCTAssertTrue(capturedArgsBox.value.contains("--recode-video"))
+        // Must target VideoConvertor, NEVER general ffmpeg (which breaks streamcopy steps)
+        XCTAssertFalse(capturedArgsBox.value.contains(where: { $0.hasPrefix("ffmpeg:") }))
+        XCTAssertTrue(capturedArgsBox.value.contains(where: { $0.contains("VideoConvertor:") && $0.contains("tonemap=hable") }))
         if let idx = capturedArgsBox.value.firstIndex(of: "--postprocessor-args") {
             XCTAssertTrue(capturedArgsBox.value[idx + 1].contains("tonemap=hable"))
             XCTAssertTrue(capturedArgsBox.value[idx + 1].contains("zscale=t=bt709"))
+            XCTAssertFalse(capturedArgsBox.value[idx + 1].hasPrefix("ffmpeg:"))
         }
+    }
+
+    func testCodecConversionRunsWithMediaInfo() async throws {
+        let capturedArgsBox = TestBox<[String]>([])
+        service.processRunner = MockYtdlpProcessRunner(mockDownload: { args in
+            capturedArgsBox.value = args
+            return "[download] Destination: /tmp/test_codec.mp4\n"
+        })
+
+        var options = DownloadOptions.default
+        options.conversionCodec = .h264
+
+        let sampleFormat = MediaFormat(
+            formatId: "137",
+            ext: "mp4",
+            resolution: "1920x1080",
+            fps: 30,
+            vcodec: "avc1",
+            acodec: "mp4a",
+            abr: 128,
+            vbr: 3000,
+            filesize: 1024,
+            filesizeApprox: nil,
+            formatNote: nil,
+            formatProtocol: "https",
+            manifestUrl: nil
+        )
+        let mediaInfo = MediaInfo(id: "sample_vid", title: "Sample Video", formats: [sampleFormat])
+
+        _ = try await service.download(
+            url: "https://example.com/test-codec",
+            options: options,
+            mediaInfo: mediaInfo,
+            onProgress: { _, _, _ in },
+            onOutput: { _ in }
+        )
+
+        XCTAssertTrue(capturedArgsBox.value.contains("--recode-video"))
+        XCTAssertTrue(capturedArgsBox.value.contains("mp4"))
+        XCTAssertTrue(capturedArgsBox.value.contains(where: { $0.contains("VideoConvertor:") }))
     }
 
     @MainActor
