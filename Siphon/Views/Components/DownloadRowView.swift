@@ -259,12 +259,17 @@ struct DownloadRowView: View {
                             
                         case .changeFolder:
                             Button {
-                                PreferencesWindowManager.shared.showPreferencesWindow(
-                                    languageService: languageService,
-                                    updateChecker: updateChecker,
-                                    downloadManager: downloadManager,
-                                    appState: appState
-                                )
+                                // Retry keeps the job's own folder, so changing the
+                                // default folder in Settings would not help this job.
+                                let panel = NSOpenPanel()
+                                panel.canChooseDirectories = true
+                                panel.canChooseFiles = false
+                                panel.canCreateDirectories = true
+                                panel.directoryURL = download.options.saveFolder
+                                if panel.runModal() == .OK, let folder = panel.url {
+                                    download.options.saveFolder = folder
+                                    downloadManager.retryDownload(download)
+                                }
                             } label: {
                                 Text(languageService.s("change_folder"))
                                     .font(.siphonMetadataSemibold)

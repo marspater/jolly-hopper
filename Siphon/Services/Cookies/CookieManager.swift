@@ -86,7 +86,7 @@ public actor CookieManager {
             guard let files = try? fileManager.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil) else { continue }
             for file in files {
                 let name = file.lastPathComponent
-                if name.hasPrefix("siphon_consolidated_cookies_") || name.hasPrefix("siphon_cookies_") {
+                if name.hasPrefix("siphon_consolidated_cookies_") || name.hasPrefix("siphon_cookies_") || name.hasPrefix("siphon_header_cookies_") {
                     do {
                         try fileManager.removeItem(at: file)
                     } catch {

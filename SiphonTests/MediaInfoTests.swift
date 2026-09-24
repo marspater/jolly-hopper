@@ -472,6 +472,41 @@ final class MediaInfoTests: XCTestCase {
         XCTAssertEqual(resolved[0].formatId, "140-23", "Audio-only download should pick original track over dubbed track")
     }
 
+    // Field values mirror yt-dlp 2026.08.19 output for a single-language YouTube video.
+    private func youTubeFormats(includingHLSAudio: Bool) -> [MediaFormat] {
+        var formats = [
+            MediaFormat(formatId: "sb2", ext: "mhtml", resolution: "48x27", vcodec: "none", acodec: "none", abr: 0, formatNote: "storyboard", formatProtocol: "mhtml"),
+            MediaFormat(formatId: "140-drc", ext: "m4a", vcodec: "none", acodec: "mp4a.40.2", abr: 129.757, formatNote: "medium, DRC", formatProtocol: "https", languagePreference: -1, sourcePreference: -1, quality: 2.5),
+            MediaFormat(formatId: "140", ext: "m4a", vcodec: "none", acodec: "mp4a.40.2", abr: 129.478, formatNote: "medium", formatProtocol: "https", languagePreference: -1, sourcePreference: -1, quality: 3),
+            MediaFormat(formatId: "251", ext: "webm", vcodec: "none", acodec: "opus", abr: 129.575, formatNote: "medium", formatProtocol: "https", languagePreference: -1, sourcePreference: -1, quality: 3),
+            MediaFormat(formatId: "137", ext: "mp4", resolution: "1920x1080", vcodec: "avc1.640028", acodec: "none", tbr: 2612.555, formatNote: "1080p", formatProtocol: "https", languagePreference: -1, sourcePreference: -1, quality: 9)
+        ]
+        if includingHLSAudio {
+            formats.insert(MediaFormat(formatId: "234", ext: "mp4", vcodec: "none", acodec: nil, formatNote: "Default, high", formatProtocol: "m3u8_native", sourcePreference: 1, quality: -1), at: 1)
+        }
+        return formats
+    }
+
+    func testResolveSelectedFormats_YouTubeSingleLanguagePicksRealAudioNotStoryboardOrHLSFallback() {
+        for includingHLS in [true, false] {
+            let info = MediaInfo(id: "Vh4O04Bpovw", title: "Fixture", formats: youTubeFormats(includingHLSAudio: includingHLS))
+
+            var video = DownloadOptions.default
+            video.videoResolution = .r1080p
+            XCTAssertEqual(info.resolveSelectedFormats(options: video).map(\.formatId), ["137", "140"],
+                           "A storyboard as audio makes yt-dlp silently drop the audio track (HLS: \(includingHLS))")
+
+            var m4a = DownloadOptions.default
+            m4a.fileType = .m4a
+            XCTAssertEqual(info.resolveSelectedFormats(options: m4a).map(\.formatId), ["140"])
+
+            var mp3 = DownloadOptions.default
+            mp3.fileType = .mp3
+            let mp3Pick = info.resolveSelectedFormats(options: mp3).map(\.formatId)
+            XCTAssertTrue(mp3Pick == ["140"] || mp3Pick == ["251"], "Got \(mp3Pick) (HLS: \(includingHLS))")
+        }
+    }
+
     // MARK: - MediaFormat.audioQualityScore Tests
 
     func testAudioQualityScore_VideoFormat_ReturnsZero() {
