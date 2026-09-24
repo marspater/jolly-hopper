@@ -117,6 +117,8 @@ final class NotificationService: NSObject, @unchecked Sendable, UNUserNotificati
                 "-e", "on run argv",
                 "-e", "display notification (item 2 of argv) with title (item 1 of argv) sound name \"default\"",
                 "-e", "end run",
+                // Without "--", a title starting with "-" would be parsed as an osascript option.
+                "--",
                 title,
                 body
             ]
