@@ -6,7 +6,7 @@ class LoggerService: ObservableObject {
     static let shared = LoggerService()
     
     @Published var logs: [String] = []
-    private let logFileURL: URL
+    let logFileURL: URL
     private let maxLogEntries = 1000
     private let fileQueue = DispatchQueue(label: "com.siphon.loggerQueue", qos: .utility)
     
@@ -128,11 +128,15 @@ class LoggerService: ObservableObject {
     }
 
     private init() {
-        let appSupport = (FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first ?? URL(fileURLWithPath: NSHomeDirectory() + "/Library/Application Support"))
-            .appendingPathComponent("Siphon")
-        
-        try? FileManager.default.createDirectory(at: appSupport, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
-        self.logFileURL = appSupport.appendingPathComponent("siphon_debug.log")
+        // The unit tests run inside Siphon.app, so keep their fixture output
+        // out of the user's real debug log.
+        let logDirectory = NotificationService.isRunningTests
+            ? FileManager.default.temporaryDirectory.appendingPathComponent("SiphonTestLogs", isDirectory: true)
+            : (FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first ?? URL(fileURLWithPath: NSHomeDirectory() + "/Library/Application Support"))
+                .appendingPathComponent("Siphon")
+
+        try? FileManager.default.createDirectory(at: logDirectory, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+        self.logFileURL = logDirectory.appendingPathComponent("siphon_debug.log")
         if FileManager.default.fileExists(atPath: logFileURL.path) {
             try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: logFileURL.path)
         }
