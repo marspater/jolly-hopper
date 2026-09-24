@@ -76,10 +76,12 @@ Current production targets:
 
 - Card hover: 1.012 scale, 2 pt lift, status-tinted 14 pt shadow.
 - Hero drag target: 1.012 scale with the stronger dashed accent/glow treatment.
-- Status liquid: internal state visibility controls opacity directly; there is
-  no second parent opacity pass attenuating the effect.
-- Ambient fluid motion continues while Siphon is active and uses the display's
-  60/120 Hz sampling policy without changing animation physics.
+- Status segments (Downloading → Completed → Failed): only the Downloading
+  segment animates, as a liquid fill tracking aggregate progress; it stops when
+  nothing downloads, while Siphon is inactive, or with Reduce Motion. Other
+  segments use a static tint and stay inside the group's rounded corners.
+- The progress fill uses the display's 60/120 Hz sampling policy without
+  changing animation physics.
 
 Watch specifically for clipping while cards scale, shadow cut-off near scroll
 container edges, sudden wave phase resets, and controls that move instead of
