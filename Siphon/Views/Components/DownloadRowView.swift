@@ -450,9 +450,8 @@ struct DownloadRowView: View {
             if let hdr = download.diagnostics.hdrSummary ?? download.mediaInfo?.firstHDRSummary {
                 VStack {
                     HStack {
-                        // Bolt Performance Optimization: Use Substring lazy splitting instead of `components(separatedBy:)` to avoid intermediate `[String]` array allocations during frequent view redraws
-                        let tagText = hdr.split(separator: "•").first?.trimmingCharacters(in: .whitespaces)
-                        SiphonTagBadge(text: (tagText?.isEmpty == false ? tagText! : "HDR"), isHdr: true)
+                        let tagText = hdr.range(of: " • ").map { String(hdr[..<$0.lowerBound]) } ?? hdr
+                        SiphonTagBadge(text: tagText.isEmpty ? "HDR" : tagText, isHdr: true)
                             .padding(SiphonTheme.spacing4)
                         Spacer()
                     }
