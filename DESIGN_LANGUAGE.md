@@ -26,8 +26,10 @@ decoration for its own sake.
   - `siphonWindowBackground()`: translucent root surface shared by all app windows.
 - `Siphon/Extensions/Font+Geist.swift`: Geist and Geist Mono registrations plus
   semantic typography roles.
-- `Siphon/Views/Components/LiquidWaterWaveView.swift`: the restrained organic
-  ambient motion used in status controls.
+- `Siphon/Views/Components/LiquidWaterWaveView.swift`: `StatusSegmentFill`, the
+  Home status segment background. Idle segments are flat, segments with items
+  get a static tint, and only live download progress animates (a liquid fill
+  whose width follows progress).
 
 Do not introduce a second palette, spacing scale, radius scale, animation scale,
 or glass implementation in a feature view. Add a token to the shared source of
