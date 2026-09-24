@@ -263,34 +263,34 @@ struct MenuBarView: View {
     }
 
     private func submitToManager(resolvedURL: String) {
-        if selectedPreset.hasPrefix("custom_") {
-            let idString = String(selectedPreset.dropFirst(7))
-            if let preset = customPresets.first(where: { $0.id.uuidString == idString }) {
-                downloadManager.addDownload(url: resolvedURL, options: DownloadOptions(
-                    saveFolder: getSaveFolder(),
-                    fileType: preset.fileType,
-                    videoFormat: nil,
-                    audioFormat: nil,
-                    videoResolution: preset.videoResolution,
-                    audioQuality: .best,
-                    downloadSubtitles: preset.downloadSubtitles ?? false,
-                    subtitleLanguages: [(preset.subtitleLanguage ?? "en").replacingOccurrences(of: "embed:", with: "")],
-                    subtitleFormat: preset.subtitleFormat ?? .srt,
-                    embedSubtitles: preset.downloadSubtitles ?? false,
-                    downloadThumbnail: false,
-                    embedThumbnail: true,
-                    embedMetadata: true,
-                    splitChapters: preset.splitChapters ?? false,
-                    sponsorBlock: preset.sponsorBlock ?? false,
-                    timeFrameStart: nil,
-                    timeFrameEnd: nil,
-                    customFilename: nil,
-                    videoCodec: preset.videoCodec,
-                    audioCodec: preset.audioCodec,
-                    forceOverwrite: false
-                ))
-            }
-        } else if let preset = DownloadPreset(rawValue: selectedPreset) {
+        // A deleted custom preset falls back to the standard preset instead of dropping the URL.
+        if selectedPreset.hasPrefix("custom_"),
+           let preset = customPresets.first(where: { $0.id.uuidString == String(selectedPreset.dropFirst(7)) }) {
+            downloadManager.addDownload(url: resolvedURL, options: DownloadOptions(
+                saveFolder: getSaveFolder(),
+                fileType: preset.fileType,
+                videoFormat: nil,
+                audioFormat: nil,
+                videoResolution: preset.videoResolution,
+                audioQuality: .best,
+                downloadSubtitles: preset.downloadSubtitles ?? false,
+                subtitleLanguages: [(preset.subtitleLanguage ?? "en").replacingOccurrences(of: "embed:", with: "")],
+                subtitleFormat: preset.subtitleFormat ?? .srt,
+                embedSubtitles: preset.downloadSubtitles ?? false,
+                downloadThumbnail: false,
+                embedThumbnail: true,
+                embedMetadata: true,
+                splitChapters: preset.splitChapters ?? false,
+                sponsorBlock: preset.sponsorBlock ?? false,
+                timeFrameStart: nil,
+                timeFrameEnd: nil,
+                customFilename: nil,
+                videoCodec: preset.videoCodec,
+                audioCodec: preset.audioCodec,
+                forceOverwrite: false
+            ))
+        } else {
+            let preset = DownloadPreset(rawValue: selectedPreset) ?? (selectedType == "audio" ? .audioOnly : .bestQuality)
             downloadManager.addDownload(url: resolvedURL, options: DownloadOptions(
                 saveFolder: getSaveFolder(),
                 fileType: preset.fileType,

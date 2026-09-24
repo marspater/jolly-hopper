@@ -410,6 +410,51 @@ final class DownloadExecutorTests: XCTestCase {
         XCTAssertTrue(download.log.contains("Cloudflare"), "Log should contain diagnostic output")
     }
 
+    func testFinalOutputLinesReachJobLogOnSuccessAndFailure() async {
+        final class MockDelegate: DownloadExecutorDelegate {
+            func executorDidUpdateStatus(for download: Download, to status: DownloadStatus) {
+                download.status = status
+            }
+            func executorDidRequestAddToHistory(_ download: Download, skipSave: Bool) {}
+            func executorDidFinishDownload() {}
+            func executorDidRequestBroadcast() {}
+        }
+        // Emits its last lines within the coalescer's 200 ms window, then ends.
+        struct TailRunner: YtdlpProcessRunning {
+            let fails: Bool
+            func runCommand(_ args: [String]) async throws -> String {
+                #"{"id":"tail","title":"Tail Fixture"}"#
+            }
+            func runDownloadProcess(
+                args: [String],
+                saveFolder: URL,
+                processController: DownloadProcessController?,
+                onProgress: @escaping @Sendable (Double, String?, String?) -> Void,
+                onOutput: @escaping @Sendable (String) -> Void
+            ) async throws -> DownloadProcessResult {
+                onOutput("[Merger] Merging formats into \"Tail Fixture.mp4\"")
+                onOutput("TAIL-MARKER final line")
+                if fails { throw YtdlpError.downloadFailed("boom") }
+                return DownloadProcessResult(primaryPath: "/tmp/Tail Fixture.mp4")
+            }
+        }
+
+        let delegate = MockDelegate() // the executor holds its delegate weakly
+        for fails in [false, true] {
+            let service = YtdlpService(processRunner: TailRunner(fails: fails))
+            service.ytdlpPath = URL(fileURLWithPath: "/usr/local/bin/yt-dlp")
+            let executor = DownloadExecutor(ytdlpService: service, delegate: delegate)
+            var options = DownloadOptions.default
+            options.embedThumbnail = false
+            let download = Download(url: "https://example.com/tail-\(fails)", options: options)
+
+            await executor.executeDownload(download, queue: DownloadQueue(), ytdlpVersion: "test", languageService: LanguageService())
+
+            XCTAssertEqual(download.status, fails ? .failed : .completed)
+            XCTAssertTrue(download.log.contains("TAIL-MARKER"), "Last output lines were dropped (fails: \(fails))")
+        }
+    }
+
     func testErrorMessageDoesNotMisclassifySubstrings() {
         let lang = LanguageService()
 
@@ -470,7 +515,7 @@ final class DownloadExecutorTests: XCTestCase {
     }
 
     func testStopDownloadWithFetchingPlaceholderUsesSanitizedURL() {
-        var options = DownloadOptions.default
+        let options = DownloadOptions.default
         let download = Download(
             url: "https://example.com/watch?v=xyz",
             options: options,

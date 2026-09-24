@@ -205,6 +205,14 @@ final class DownloadTests: XCTestCase {
         XCTAssertEqual(info?.actionType, .changeFolder)
         XCTAssertEqual(info?.description, lang.s("disk_full_desc"))
 
+        // 4b. The executor stores localized messages; these must classify too.
+        download.errorMessage = lang.s("disk_full")
+        info = download.errorUXInfo(lang: lang)
+        XCTAssertEqual(info?.actionType, .changeFolder)
+        download.errorMessage = lang.s("ytdlp_not_found")
+        info = download.errorUXInfo(lang: lang)
+        XCTAssertEqual(info?.actionType, .fixInSettings, "A missing yt-dlp is not an unavailable video")
+
         // 5. Permission denied
         download.errorMessage = "Permission denied writing to folder"
         info = download.errorUXInfo(lang: lang)

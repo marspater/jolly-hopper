@@ -695,6 +695,24 @@ final class DownloadManagerTests: XCTestCase {
         XCTAssertEqual(dl.status, .queued)
     }
 
+    func testFileExistsResumeRefetchesMetadata() {
+        let manager = DownloadManager()
+        manager.ytdlpService.isUpdating = true // hold jobs in the queue
+        // .fileExists stores pruned info (no formats). Reusing it would send a
+        // video-only selectedFormatId without "+ba", producing a silent file.
+        let pruned = MediaInfo(id: "vid", title: "My Video").prunedForCompletion()
+        for resume in [manager.resumeWithOverwrite, manager.resumeWithNewName] {
+            var options = DownloadOptions.default
+            options.selectedFormatId = "137"
+            let dl = Download(url: "https://example.com/vid", options: options, title: "My Video")
+            dl.status = .fileExists
+            dl.mediaInfo = pruned
+            resume(dl)
+            XCTAssertNil(dl.mediaInfo)
+            XCTAssertEqual(dl.status, .queued)
+        }
+    }
+
     func testDownloadProcessControllerAtomicStartupAndCancellation() {
         let controller = DownloadProcessController()
         XCTAssertFalse(controller.isCancelled)
@@ -807,51 +825,6 @@ final class DownloadManagerTests: XCTestCase {
             )
         )
     }
-
-    func testMenuDownloadVideo() {
-        let manager = DownloadManager()
-        let testUrl = "https://example.com/video_menu"
-        let initialCount = manager.downloads.count
-
-        manager.menuDownload(url: testUrl, type: "video", quality: "1080")
-
-        XCTAssertEqual(manager.downloads.count, initialCount + 1)
-        guard let download = manager.downloads.last else {
-            XCTFail("Failed to find added download")
-            return
-        }
-
-        XCTAssertEqual(download.url, testUrl)
-        XCTAssertEqual(download.options.fileType, .mp4)
-        XCTAssertEqual(download.options.videoResolution, .r1080p)
-        XCTAssertEqual(download.options.videoCodec, .auto)
-        XCTAssertEqual(download.options.audioCodec, .auto)
-        XCTAssertTrue(download.options.sponsorBlock)
-        XCTAssertTrue(download.options.embedThumbnail)
-        XCTAssertTrue(download.options.embedMetadata)
-    }
-
-    func testMenuDownloadAudio() {
-        let manager = DownloadManager()
-        let testUrl = "https://example.com/audio_menu"
-        let initialCount = manager.downloads.count
-
-        manager.menuDownload(url: testUrl, type: "audio", quality: "best")
-
-        XCTAssertEqual(manager.downloads.count, initialCount + 1)
-        guard let download = manager.downloads.last else {
-            XCTFail("Failed to find added download")
-            return
-        }
-
-        XCTAssertEqual(download.url, testUrl)
-        XCTAssertEqual(download.options.fileType, .m4a)
-        XCTAssertEqual(download.options.videoCodec, .none)
-        XCTAssertEqual(download.options.audioCodec, .auto)
-        XCTAssertEqual(download.options.audioQuality, .best)
-    }
-
-    // MARK: - Initialize Tests
 
     func testInitializeVersionFetchingAndAssignment() async {
         let manager = DownloadManager()
@@ -1348,7 +1321,7 @@ final class DownloadManagerTests: XCTestCase {
         XCTAssertEqual(manager.queuedDownloads.count, 1, "Queued downloads must be preserved when clearing failed")
     }
 
-    func testQuickAndMenuDownloadDefaultLanguagesOnlyEnglish() {
+    func testQuickDownloadDefaultsLanguageAndHonorsPreferences() {
         let manager = DownloadManager()
         manager.quickDownload(
             url: "https://example.com/quick",
@@ -1364,13 +1337,14 @@ final class DownloadManagerTests: XCTestCase {
         XCTAssertNil(quickItem.options.rawCookies)
         XCTAssertEqual(quickItem.options.rawUserAgent, "FixtureBrowser/1.0")
         XCTAssertEqual(quickItem.options.browserCookieSource, "chrome")
+        // Fast download must honor Preferences instead of downloading unbounded
+        // "best" (for example 4K VP9 muxed into an .mp4).
+        let preferred = DownloadOptions.defaultFromPreferences()
+        XCTAssertEqual(quickItem.options.fileType, preferred.fileType)
+        XCTAssertEqual(quickItem.options.videoResolution, preferred.videoResolution)
+        XCTAssertEqual(quickItem.options.videoCodec, preferred.videoCodec)
+        XCTAssertNotNil(quickItem.options.videoResolution)
 
-        manager.menuDownload(url: "https://example.com/menu", type: "video", quality: "1080")
-        guard let menuItem = manager.downloads.last else {
-            XCTFail("Menu download was not added")
-            return
-        }
-        XCTAssertEqual(menuItem.options.subtitleLanguages, ["en"], "Menu download must default to English only")
     }
 }
 
