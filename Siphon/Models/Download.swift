@@ -212,6 +212,15 @@ class Download: ObservableObject, Identifiable {
         let isYouTube = url.lowercased().contains("youtube.com") || url.lowercased().contains("youtu.be")
         let isYouTubeSignIn = isYouTube && lower.contains("sign in to confirm")
         
+        // Missing dependency, not an unavailable video (its text says "not found").
+        if lower.contains("yt-dlp executable not found") {
+            return ErrorUXInfo(
+                headline: lang.s("couldnt_download"),
+                description: error,
+                actionType: .fixInSettings,
+                rawError: rawError
+            )
+        }
         if lower.contains("cloudflare") || lower.contains("anti-bot") || lower.contains("captcha") || lower.contains("challenge") || isYouTubeSignIn {
             return ErrorUXInfo(
                 headline: lang.s("couldnt_download"),
@@ -241,7 +250,7 @@ class Download: ObservableObject, Identifiable {
                 actionType: .retry,
                 rawError: rawError
             )
-        } else if lower.contains("no space left") || lower.contains("disk full") {
+        } else if lower.contains("no space left") || lower.contains("disk full") || lower.contains("disk space") {
             return ErrorUXInfo(
                 headline: lang.s("couldnt_download"),
                 description: lang.s("disk_full_desc"),
@@ -655,7 +664,7 @@ struct DownloadOptions: Codable {
             sponsorBlock: sponsorBlock,
             videoCodec: videoCodec,
             audioCodec: audioCodec,
-            conversionCodec: .none,
+            conversionCodec: ConversionCodec.none,
             forceOverwrite: false,
             rawCookies: nil,
             rawUserAgent: nil,
@@ -1176,6 +1185,11 @@ struct MediaInfo: Codable {
     let maxFormatHeight: Int?
     let firstHDRSummary: String?
 
+    // In-memory only (not in CodingKeys): the exact yt-dlp JSON this info was
+    // decoded from, so the download can skip a second extraction.
+    var rawJSON: Data?
+    var fetchedAt: Date?
+
     enum CodingKeys: String, CodingKey {
         case id
         case title
@@ -1394,7 +1408,10 @@ struct MediaInfo: Codable {
             if let cached = cachedBestAudio {
                 return cached
             }
-            let audioFormats = formats.filter { $0.isAudioOnly || ($0.vcodec == "none" || $0.vcodec == nil) }
+            // acodec "none" excludes storyboards (vcodec and acodec both "none"), which carry no audio.
+            let audioFormats = formats.filter {
+                ($0.isAudioOnly || $0.vcodec == "none" || $0.vcodec == nil) && $0.acodec != "none"
+            }
             let sorted = audioFormats.sorted { MediaFormat.compareAudioFormats($0, $1, options: options) }
             let best = sorted.first
             cachedBestAudio = best
@@ -1601,6 +1618,7 @@ struct MediaFormat: Codable, Identifiable, Hashable {
     let dynamicRange: String?
     let colorSpace: String?
     let bitDepth: Int?
+    let quality: Double?
 
     enum CodingKeys: String, CodingKey {
         case formatId = "format_id"
@@ -1618,6 +1636,7 @@ struct MediaFormat: Codable, Identifiable, Hashable {
         case dynamicRange = "dynamic_range"
         case colorSpace = "color_space"
         case bitDepth = "bit_depth"
+        case quality
     }
 
     init(
@@ -1643,7 +1662,8 @@ struct MediaFormat: Codable, Identifiable, Hashable {
         audioChannels: Int? = nil,
         dynamicRange: String? = nil,
         colorSpace: String? = nil,
-        bitDepth: Int? = nil
+        bitDepth: Int? = nil,
+        quality: Double? = nil
     ) {
         self.formatId = formatId
         self.ext = ext
@@ -1668,6 +1688,7 @@ struct MediaFormat: Codable, Identifiable, Hashable {
         self.dynamicRange = dynamicRange
         self.colorSpace = colorSpace
         self.bitDepth = bitDepth
+        self.quality = quality
     }
 
     var isHDR: Bool {
@@ -1771,67 +1792,78 @@ struct MediaFormat: Codable, Identifiable, Hashable {
     // MARK: - Deterministic Format Ranking & Selection
     
     struct AudioRank {
-        let isOriginal: Bool
-        let matchesCodec: Bool
         let langPref: Int
+        let matchesCodec: Bool
+        let quality: Double
+        let isAAC: Bool
         let preference: Int
         let tested: Bool
         let bitrate: Double
         let channels: Int
     }
-    
+
     func audioRank(options: DownloadOptions) -> AudioRank {
-        let isOrig = isOriginalOrPrimaryAudio
         let matchesCodec: Bool = {
             guard let req = options.audioCodec, req != .auto else { return true }
             guard let ac = acodec?.lowercased() else { return false }
             return ac.contains(req.rawValue.lowercased())
         }()
-        let lPref = languagePreference ?? (isOrig ? 0 : -1)
+        // yt-dlp treats a missing language_preference as -1 (neutral). YouTube reports -1 for every
+        // track of a single-language video and a higher value only for the original track, so the
+        // value is meaningful only relative to other tracks.
+        let isDubbedByNote = (formatNote ?? "").lowercased().contains("dubbed")
+        let lPref = languagePreference ?? (isDubbedByNote ? -10 : -1)
         let pref = preference ?? (sourcePreference ?? 0)
         let br = abr ?? (tbr ?? 0.0)
         let ch = audioChannels ?? 2
         let isTested = (needsTesting != true)
+        let ac = acodec?.lowercased() ?? ""
         return AudioRank(
-            isOriginal: isOrig,
-            matchesCodec: matchesCodec,
             langPref: lPref,
+            matchesCodec: matchesCodec,
+            quality: quality ?? -1,
+            isAAC: ac.hasPrefix("mp4a") || ac == "aac",
             preference: pref,
             tested: isTested,
             bitrate: br,
             channels: ch
         )
     }
-    
+
     static func compareAudioFormats(_ a: MediaFormat, _ b: MediaFormat, options: DownloadOptions) -> Bool {
         let ra = a.audioRank(options: options)
         let rb = b.audioRank(options: options)
-        
-        // 1. Original / Primary audio track outranks foreign dubbed tracks
-        if ra.isOriginal != rb.isOriginal {
-            return ra.isOriginal
+
+        // 1. Language preference: the original track outranks dubbed or descriptive tracks
+        if ra.langPref != rb.langPref {
+            return ra.langPref > rb.langPref
         }
         // 2. Matching requested codec outranks non-matching
         if ra.matchesCodec != rb.matchesCodec {
             return ra.matchesCodec
         }
-        // 3. Language preference (extractor declared)
-        if ra.langPref != rb.langPref {
-            return ra.langPref > rb.langPref
+        // 3. Extractor quality, as in yt-dlp's default sort (demotes DRC and HLS fallback audio)
+        if ra.quality != rb.quality {
+            return ra.quality > rb.quality
         }
-        // 4. Extractor preference
+        // 4. MP4/M4A under auto codec: prefer AAC, which the container carries without re-encoding
+        if (options.fileType == .mp4 || options.fileType == .m4a) && (options.audioCodec == nil || options.audioCodec == .auto),
+           ra.isAAC != rb.isAAC {
+            return ra.isAAC
+        }
+        // 5. Extractor preference
         if ra.preference != rb.preference {
             return ra.preference > rb.preference
         }
-        // 5. Tested status (tested stream preferred over untested for same specs)
+        // 6. Tested status (tested stream preferred over untested for same specs)
         if ra.tested != rb.tested {
             return ra.tested
         }
-        // 6. Bitrate
+        // 7. Bitrate
         if abs(ra.bitrate - rb.bitrate) > 0.5 {
             return ra.bitrate > rb.bitrate
         }
-        // 7. Channels
+        // 8. Channels
         return ra.channels > rb.channels
     }
     
