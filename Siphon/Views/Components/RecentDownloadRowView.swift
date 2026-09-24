@@ -210,10 +210,10 @@ struct RecentDownloadRowView: View {
                     downloadManager.stopDownload(download)
                 } label: {
                     Image(systemName: "stop.circle.fill")
-                        .font(.system(size: 16))
+                        .font(.system(size: 14))
                         .foregroundColor(SiphonTheme.statusDownloadingText)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.siphonIcon(size: 24))
                 .help(languageService.s("stop_download"))
                 .accessibilityLabel(languageService.s("stop_download"))
 
@@ -240,10 +240,10 @@ struct RecentDownloadRowView: View {
                         NSWorkspace.shared.activateFileViewerSelecting([fileURL])
                     } label: {
                         Image(systemName: "folder")
-                            .font(.system(size: 12))
+                            .font(.system(size: 13))
                             .foregroundColor(.secondary)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.siphonIcon(size: 24))
                     .help(languageService.s("reveal_in_finder"))
                     .accessibilityLabel(languageService.s("reveal_in_finder"))
                 }
