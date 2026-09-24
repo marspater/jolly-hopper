@@ -2646,6 +2646,16 @@ public struct DownloadResult: Sendable {
         }
     }
 
+    /// A real close, unlike `isVisible`, which is also false while Siphon is hidden (Cmd-H).
+    @MainActor
+    final class RecuWindowDelegate: NSObject, NSWindowDelegate {
+        private(set) var didClose = false
+
+        func windowWillClose(_ _: Notification) {
+            didClose = true
+        }
+    }
+
     private func recuPageState(_ webView: WKWebView, videoID: String) async -> RecuPageState? {
         let script = """
         const button = document.querySelector('#play_button[data-token]');
@@ -2705,8 +2715,10 @@ public struct DownloadResult: Sendable {
         webView.load(URLRequest(url: pageURL))
 
         var window: NSWindow?
+        let windowDelegate = RecuWindowDelegate()
         defer {
             _ = navigationDelegate
+            _ = windowDelegate
             webView.stopLoading()
             window?.close()
         }
@@ -2725,6 +2737,7 @@ public struct DownloadResult: Sendable {
                 defer: false
             )
             newWindow.isReleasedWhenClosed = false
+            newWindow.delegate = windowDelegate
             newWindow.title = LanguageService.s("recu_verification_title")
             newWindow.contentView = webView
             newWindow.center()
@@ -2739,7 +2752,7 @@ public struct DownloadResult: Sendable {
             try await Task.sleep(nanoseconds: 500_000_000)
             try Task.checkCancellation()
 
-            if let window, !window.isVisible, !window.isMiniaturized {
+            if windowDelegate.didClose {
                 throw YtdlpError.downloadFailed("The recu.me window was closed before verification or sign-in finished.")
             }
             if Date() > deadline {
