@@ -511,19 +511,6 @@ struct StatusBarView: View {
                 .frame(width: 1, height: 26)
 
             StatusSegmentButton(
-                item: .queued,
-                title: languageService.s("stat_queued"),
-                count: downloadManager.queuedCount,
-                color: SiphonTheme.statusQueued,
-                ringProgress: 0.0,
-                isActive: downloadManager.queuedCount > 0
-            )
-
-            Rectangle()
-                .fill(SiphonTheme.separator)
-                .frame(width: 1, height: 26)
-
-            StatusSegmentButton(
                 item: .completed,
                 title: languageService.s("stat_completed"),
                 count: downloadManager.completedCount,
@@ -532,7 +519,18 @@ struct StatusBarView: View {
                 isActive: downloadManager.completedCount > 0
             )
 
-            Spacer(minLength: 0)
+            Rectangle()
+                .fill(SiphonTheme.separator)
+                .frame(width: 1, height: 26)
+
+            StatusSegmentButton(
+                item: .failed,
+                title: languageService.s("stat_failed"),
+                count: downloadManager.failedCount,
+                color: SiphonTheme.statusFailed,
+                ringProgress: 0.0,
+                isActive: downloadManager.failedCount > 0
+            )
 
             Button {
                 appState.selectedNavItem = downloadManager.mostRelevantNavigationItem
@@ -549,6 +547,8 @@ struct StatusBarView: View {
         }
         .frame(maxWidth: .infinity)
         .frame(height: 48)
+        // Glass on macOS 26 does not clip; keep segment fills inside the corners.
+        .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusStatusGroup, style: .continuous))
         .siphonGlassSurface(cornerRadius: SiphonTheme.radiusStatusGroup)
     }
 }
@@ -566,19 +566,6 @@ struct StatusSegmentButton: View {
 
     @State private var isHovered = false
     @ObservedObject private var renderingEnvironment = AdaptiveRenderingEnvironment.shared
-
-    private var segmentSeed: Double {
-        switch item {
-        case .downloading:
-            return 1.414
-        case .queued:
-            return 4.718
-        case .completed:
-            return 8.291
-        default:
-            return 0.0
-        }
-    }
 
     @ViewBuilder
     private var statusIndicator: some View {
@@ -609,6 +596,12 @@ struct StatusSegmentButton: View {
                 .foregroundColor(readableColor)
                 .frame(width: 16, height: 16)
 
+        case .failed:
+            Image(systemName: "exclamationmark.circle.fill")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundColor(readableColor)
+                .frame(width: 16, height: 16)
+
         default:
             Circle()
                 .fill(color)
@@ -618,6 +611,8 @@ struct StatusSegmentButton: View {
     }
 
     private var readableColor: Color {
+        // An empty segment stays neutral: a red icon beside "0 Failed" reads as an error.
+        guard isActive else { return .secondary }
         switch item {
         case .downloading:
             return SiphonTheme.statusForeground(for: .downloading, colorScheme: colorScheme)
@@ -625,6 +620,8 @@ struct StatusSegmentButton: View {
             return SiphonTheme.statusForeground(for: .queued, colorScheme: colorScheme)
         case .completed:
             return SiphonTheme.statusForeground(for: .completed, colorScheme: colorScheme)
+        case .failed:
+            return SiphonTheme.statusForeground(for: .failed, colorScheme: colorScheme)
         default:
             return color
         }
@@ -635,11 +632,13 @@ struct StatusSegmentButton: View {
             appState.selectedNavItem = item
         } label: {
             ZStack {
-                // Liquid water wave animation in accent color (ambient in background)
-                LiquidWaterWaveView(color: color, isHovered: isHovered, isActive: isActive, seed: segmentSeed)
-                    .animation(SiphonAnimation.hoverSpring, value: isHovered)
-                    .animation(SiphonAnimation.fluidSpring, value: isActive)
-                    .zIndex(0)
+                StatusSegmentFill(
+                    color: color,
+                    progress: item == .downloading ? ringProgress : nil,
+                    isHovered: isHovered,
+                    isActive: isActive
+                )
+                .zIndex(0)
 
                 HStack(spacing: SiphonTheme.spacing8) {
                     statusIndicator
@@ -647,6 +646,8 @@ struct StatusSegmentButton: View {
                     Text("\(count)")
                         .font(.siphonStandardSemibold)
                         .monospacedDigit()
+                        .contentTransition(.numericText(value: Double(count)))
+                        .animation(SiphonAnimation.fluidSpring, value: count)
                         .foregroundColor((count > 0 || isHovered) ? .primary : .secondary)
                         .frame(minWidth: 20, alignment: .trailing)
 
@@ -657,9 +658,11 @@ struct StatusSegmentButton: View {
                         .truncationMode(.tail)
                 }
                 .padding(.horizontal, 16)
+                .animation(SiphonAnimation.fluidSpring, value: isActive)
                 .zIndex(1)
             }
-            .frame(maxHeight: .infinity)
+            // Equal widths in every state, so the strip never reflows when a count changes.
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
