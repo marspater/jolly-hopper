@@ -417,5 +417,42 @@ final class DownloadTests: XCTestCase {
         XCTAssertNotEqual(historic.title, "___FETCHING___")
         XCTAssertEqual(historic.title, "Summer Fun")
     }
+
+    func testDownloadOptionsDefaultFromPreferences() {
+        let suiteName = "testDefaults_\(UUID().uuidString)"
+        guard let testDefaults = UserDefaults(suiteName: suiteName) else {
+            XCTFail("Failed to create isolated UserDefaults")
+            return
+        }
+        defer { testDefaults.removePersistentDomain(forName: suiteName) }
+
+        let customDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try? FileManager.default.createDirectory(at: customDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: customDir) }
+
+        testDefaults.set(customDir.path, forKey: UserDefaultsKeys.defaultSaveFolder)
+        testDefaults.set("mkv", forKey: UserDefaultsKeys.defaultFileType)
+        testDefaults.set("r720p", forKey: UserDefaultsKeys.defaultVideoResolution)
+        testDefaults.set("h265", forKey: UserDefaultsKeys.defaultVideoCodec)
+        testDefaults.set("opus", forKey: UserDefaultsKeys.defaultAudioCodec)
+        testDefaults.set(false, forKey: UserDefaultsKeys.embedThumbnail)
+        testDefaults.set(false, forKey: UserDefaultsKeys.embedMetadata)
+        testDefaults.set(true, forKey: UserDefaultsKeys.sponsorBlock)
+        testDefaults.set("--geo-bypass", forKey: UserDefaultsKeys.defaultAdditionalArguments)
+        testDefaults.set(ResolutionFallbackPolicy.allowHigher.rawValue, forKey: UserDefaultsKeys.resolutionFallbackPolicy)
+
+        let options = DownloadOptions.defaultFromPreferences(userDefaults: testDefaults)
+
+        XCTAssertEqual(options.saveFolder.path, customDir.path)
+        XCTAssertEqual(options.fileType, .mkv)
+        XCTAssertEqual(options.videoResolution, .r720p)
+        XCTAssertEqual(options.videoCodec, .h265)
+        XCTAssertEqual(options.audioCodec, .opus)
+        XCTAssertFalse(options.embedThumbnail)
+        XCTAssertFalse(options.embedMetadata)
+        XCTAssertTrue(options.sponsorBlock)
+        XCTAssertEqual(options.additionalArguments, "--geo-bypass")
+        XCTAssertEqual(options.resolutionFallbackPolicy, .allowHigher)
+    }
 }
 

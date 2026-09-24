@@ -419,7 +419,7 @@ struct HeroDropURLView: View {
     }
 
     private func startDownloads(urls: [String]) {
-        let options = DownloadOptions.default
+        let options = DownloadOptions.defaultFromPreferences()
         if urls.count == 1 {
             downloadManager.addDownload(url: urls[0], options: options)
         } else {

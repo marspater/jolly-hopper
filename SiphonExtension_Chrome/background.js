@@ -13,23 +13,22 @@ chrome.runtime.onInstalled.addListener(() => {
 });
 
 async function detectBrowserSource() {
-    const ua = typeof navigator !== "undefined" ? (navigator.userAgent || "") : "";
-    const brands = typeof navigator !== "undefined" && navigator.userAgentData?.brands
-        ? navigator.userAgentData.brands.map((item) => item.brand.toLowerCase()).join(" ")
-        : "";
+    const nav = typeof navigator !== "undefined" ? navigator : null;
+    const ua = nav?.userAgent || "";
+    const brands = nav?.userAgentData?.brands?.map((item) => item.brand.toLowerCase()).join(" ") || "";
 
     if (/\bEdg\//.test(ua)) return "edge";
     if (/\bOPR\//.test(ua)) return "opera";
     if (/\bVivaldi\//i.test(ua) || brands.includes("vivaldi")) return "vivaldi";
     if (/\bHelium\//i.test(ua) || brands.includes("helium")) return "helium";
+    if (/\bArc\//i.test(ua) || brands.includes("arc")) return "arc";
 
-    if (typeof navigator !== "undefined" &&
-        typeof navigator.brave?.isBrave === "function") {
-        try {
-            if (await navigator.brave.isBrave()) return "brave";
-        } catch {
-            // Fall through to Chromium/Chrome detection.
+    try {
+        if (typeof nav?.brave?.isBrave === "function" && await nav.brave.isBrave()) {
+            return "brave";
         }
+    } catch {
+        // Fall through to Chromium/Chrome detection.
     }
 
     if (brands.includes("chromium") && !brands.includes("google chrome")) {

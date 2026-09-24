@@ -956,7 +956,8 @@ class YtdlpService: ObservableObject {
                     fps: 30.0,
                     vcodec: "h264",
                     acodec: "aac",
-                    tbr: 2500
+                    tbr: 2500,
+                    manifestUrl: guywhMedia.streamURL
                 )
                 return MediaInfo(
                     id: url,
@@ -964,7 +965,11 @@ class YtdlpService: ObservableObject {
                     thumbnail: guywhMedia.thumbnailURL,
                     duration: guywhMedia.duration,
                     uploader: "Protected Site",
-                    formats: [format]
+                    formats: [format],
+                    webpageUrl: guywhMedia.embedURL,
+                    originalUrl: guywhMedia.streamURL,
+                    formatProtocol: guywhMedia.streamURL.contains(".m3u8") ? "m3u8_native" : "https",
+                    manifestUrl: guywhMedia.streamURL
                 )
         }
 
@@ -981,7 +986,8 @@ class YtdlpService: ObservableObject {
                     fps: 30.0,
                     vcodec: "h264",
                     acodec: "aac",
-                    tbr: 2500
+                    tbr: 2500,
+                    manifestUrl: gffMedia.streamURL
                 )
                 return MediaInfo(
                     id: url,
@@ -989,7 +995,11 @@ class YtdlpService: ObservableObject {
                     thumbnail: gffMedia.thumbnailURL,
                     duration: gffMedia.duration,
                     uploader: "Protected Site",
-                    formats: [format]
+                    formats: [format],
+                    webpageUrl: gffMedia.embedURL,
+                    originalUrl: gffMedia.streamURL,
+                    formatProtocol: gffMedia.streamURL.contains(".m3u8") ? "m3u8_native" : "https",
+                    manifestUrl: gffMedia.streamURL
                 )
             } else {
                 LoggerService.shared.log("Protected-site resolver could not resolve media directly. Falling back to yt-dlp native extraction...", level: .warning)
@@ -1011,7 +1021,9 @@ class YtdlpService: ObservableObject {
                         vcodec: src.codec.isEmpty ? "h264" : src.codec,
                         acodec: "aac",
                         tbr: nil,
-                        filesize: src.size > 0 ? src.size : nil
+                        filesize: src.size > 0 ? src.size : nil,
+                        formatNote: src.path.components(separatedBy: "/").last,
+                        manifestUrl: "\(src.url)/\(src.path)"
                     )
                 }
                 return MediaInfo(
@@ -1020,10 +1032,62 @@ class YtdlpService: ObservableObject {
                     thumbnail: bestCamMedia.thumbnailURL,
                     duration: bestCamMedia.duration,
                     uploader: "Protected Site",
-                    formats: formats.isEmpty ? nil : formats
+                    formats: formats.isEmpty ? nil : formats,
+                    webpageUrl: bestCamMedia.embedURL,
+                    originalUrl: bestCamMedia.streamURL,
+                    formatProtocol: bestCamMedia.streamURL.contains(".m3u8") ? "m3u8_native" : "https",
+                    manifestUrl: bestCamMedia.streamURL
                 )
             } else {
                 LoggerService.shared.log("Protected-site resolver could not resolve media directly. Falling back to yt-dlp native extraction...", level: .warning)
+            }
+        }
+
+        if isStarwankURL(url) {
+            LoggerService.shared.log("Initiating protected-site media info resolution for: \(LoggerService.sanitizeURLForLog(url))", level: .info)
+            if let starwankMedia = await resolveStarwankMediaInfo(url: url, rawCookies: rawCookies) {
+                LoggerService.shared.log("Protected-site media successfully extracted: '\(starwankMedia.title)' with \(starwankMedia.allSources.count) format(s)", level: .info)
+                let formats = Self.protectedSiteFormats(
+                    from: starwankMedia.allSources.map { ($0.label, $0.url, $0.height) }
+                )
+                return MediaInfo(
+                    id: url,
+                    title: starwankMedia.title,
+                    thumbnail: starwankMedia.thumbnailURL,
+                    duration: starwankMedia.duration,
+                    uploader: "StarWank",
+                    formats: formats.isEmpty ? nil : formats,
+                    webpageUrl: starwankMedia.embedURL,
+                    originalUrl: starwankMedia.streamURL,
+                    formatProtocol: starwankMedia.streamURL.contains(".m3u8") ? "m3u8_native" : "https",
+                    manifestUrl: starwankMedia.streamURL
+                )
+            } else {
+                LoggerService.shared.log("Starwank resolver could not resolve media directly. Falling back to yt-dlp native extraction...", level: .warning)
+            }
+        }
+
+        if isPussyspaceURL(url) {
+            LoggerService.shared.log("Initiating PussySpace media info resolution for: \(LoggerService.sanitizeURLForLog(url))", level: .info)
+            if let pussyMedia = await resolvePussyspaceMediaInfo(url: url, rawCookies: rawCookies) {
+                LoggerService.shared.log("PussySpace media successfully extracted: '\(pussyMedia.title)' with \(pussyMedia.allSources.count) format(s)", level: .info)
+                let formats = Self.protectedSiteFormats(
+                    from: pussyMedia.allSources.map { ($0.label, $0.url, $0.height) }
+                )
+                return MediaInfo(
+                    id: url,
+                    title: pussyMedia.title,
+                    thumbnail: pussyMedia.thumbnailURL,
+                    duration: pussyMedia.duration,
+                    uploader: "PussySpace",
+                    formats: formats.isEmpty ? nil : formats,
+                    webpageUrl: pussyMedia.embedURL,
+                    originalUrl: pussyMedia.streamURL,
+                    formatProtocol: pussyMedia.streamURL.contains(".m3u8") ? "m3u8_native" : "https",
+                    manifestUrl: pussyMedia.streamURL
+                )
+            } else {
+                LoggerService.shared.log("PussySpace resolver could not resolve media directly. Falling back to yt-dlp native extraction...", level: .warning)
             }
         }
 
@@ -1303,6 +1367,72 @@ public struct DownloadResult: Sendable {
     }
 }
 
+    private struct ReusedDirectMedia {
+        let streamURL: String
+        let title: String?
+        let embedURL: String?
+        let thumbnailURL: String?
+        let formatNote: String?
+    }
+
+    private func reusedDirectMedia(
+        mediaInfo: MediaInfo?,
+        selectedFormatId: String?,
+        normalizedURL: String,
+        fallbackEmbedURL: String,
+        fallbackIsAllowed: (String) -> Bool = { _ in true }
+    ) -> ReusedDirectMedia? {
+        if let selectedId = selectedFormatId,
+           let matched = mediaInfo?.formats?.first(where: {
+               $0.formatId.lowercased() == selectedId.lowercased() ||
+               $0.formatId.replacingOccurrences(of: "p", with: "").lowercased() ==
+                   selectedId.replacingOccurrences(of: "p", with: "").lowercased()
+           }),
+           let streamURL = matched.manifestUrl,
+           !streamURL.isEmpty {
+            return ReusedDirectMedia(
+                streamURL: streamURL,
+                title: mediaInfo?.title,
+                embedURL: mediaInfo?.webpageUrl ?? fallbackEmbedURL,
+                thumbnailURL: mediaInfo?.thumbnail,
+                formatNote: matched.formatNote
+            )
+        }
+
+        if let streamURL = mediaInfo?.manifestUrl ?? mediaInfo?.originalUrl,
+           !streamURL.isEmpty,
+           streamURL != normalizedURL,
+           fallbackIsAllowed(streamURL) {
+            return ReusedDirectMedia(
+                streamURL: streamURL,
+                title: mediaInfo?.title,
+                embedURL: mediaInfo?.webpageUrl ?? fallbackEmbedURL,
+                thumbnailURL: mediaInfo?.thumbnail,
+                formatNote: nil
+            )
+        }
+
+        return nil
+    }
+
+    private static func protectedSiteFormats(
+        from sources: [(label: String, url: String, height: Int)]
+    ) -> [MediaFormat] {
+        sources.map { source in
+            MediaFormat(
+                formatId: source.label,
+                ext: "mp4",
+                resolution: "\(Int(Double(source.height) * 16.0 / 9.0))x\(source.height)",
+                fps: 30.0,
+                vcodec: "h264",
+                acodec: "aac",
+                tbr: nil,
+                filesize: nil,
+                manifestUrl: source.url
+            )
+        }
+    }
+
     func download(
         url: String,
         options: DownloadOptions,
@@ -1359,25 +1489,101 @@ public struct DownloadResult: Sendable {
                 customEmbedURL = btvMedia.embedURL
                 customThumbnailURL = btvMedia.thumbnailURL
             }
-        } else if isGuywhURL(url),
-                  let guywhMedia = await resolveGuywhMediaInfo(url: url, rawCookies: options.rawCookies) {
-            targetURL = guywhMedia.streamURL
-            customResolvedTitle = guywhMedia.title
-            customEmbedURL = guywhMedia.embedURL
-            customThumbnailURL = guywhMedia.thumbnailURL
-        } else if isGFFURL(url),
-                  let gffMedia = await resolveGFFMediaInfo(url: url, rawCookies: options.rawCookies) {
-            targetURL = gffMedia.streamURL
-            customResolvedTitle = gffMedia.title
-            customEmbedURL = gffMedia.embedURL
-            customThumbnailURL = gffMedia.thumbnailURL
-        } else if isBestCamURL(url),
-                  let bestCamMedia = await resolveBestCamMediaInfo(url: url, rawCookies: options.rawCookies, requestedFormat: options.selectedFormatId) {
-            targetURL = bestCamMedia.streamURL
-            customResolvedTitle = bestCamMedia.title
-            customEmbedURL = bestCamMedia.embedURL
-            customThumbnailURL = bestCamMedia.thumbnailURL
-            bestCamDecryptionKey = bestCamMedia.encryptedFilename
+        } else if isGuywhURL(url) {
+            if let reused = reusedDirectMedia(
+                mediaInfo: mediaInfo,
+                selectedFormatId: options.selectedFormatId,
+                normalizedURL: normalizedURL,
+                fallbackEmbedURL: url
+            ) {
+                (targetURL, customResolvedTitle, customEmbedURL, customThumbnailURL) =
+                    (reused.streamURL, reused.title, reused.embedURL, reused.thumbnailURL)
+            } else if let guywhMedia = await resolveGuywhMediaInfo(url: url, rawCookies: options.rawCookies) {
+                targetURL = guywhMedia.streamURL
+                customResolvedTitle = guywhMedia.title
+                customEmbedURL = guywhMedia.embedURL
+                customThumbnailURL = guywhMedia.thumbnailURL
+            }
+        } else if isGFFURL(url) {
+            if let reused = reusedDirectMedia(
+                mediaInfo: mediaInfo,
+                selectedFormatId: options.selectedFormatId,
+                normalizedURL: normalizedURL,
+                fallbackEmbedURL: url
+            ) {
+                (targetURL, customResolvedTitle, customEmbedURL, customThumbnailURL) =
+                    (reused.streamURL, reused.title, reused.embedURL, reused.thumbnailURL)
+            } else if let gffMedia = await resolveGFFMediaInfo(url: url, rawCookies: options.rawCookies) {
+                targetURL = gffMedia.streamURL
+                customResolvedTitle = gffMedia.title
+                customEmbedURL = gffMedia.embedURL
+                customThumbnailURL = gffMedia.thumbnailURL
+            }
+        } else if isBestCamURL(url) {
+            if let reused = reusedDirectMedia(
+                mediaInfo: mediaInfo,
+                selectedFormatId: options.selectedFormatId,
+                normalizedURL: normalizedURL,
+                fallbackEmbedURL: url
+            ) {
+                (targetURL, customResolvedTitle, customEmbedURL, customThumbnailURL) =
+                    (reused.streamURL, reused.title, reused.embedURL, reused.thumbnailURL)
+                bestCamDecryptionKey = reused.formatNote ?? URL(string: reused.streamURL)?.lastPathComponent
+            } else if let bestCamMedia = await resolveBestCamMediaInfo(
+                url: url,
+                rawCookies: options.rawCookies,
+                requestedFormat: options.selectedFormatId
+            ) {
+                targetURL = bestCamMedia.streamURL
+                customResolvedTitle = bestCamMedia.title
+                customEmbedURL = bestCamMedia.embedURL
+                customThumbnailURL = bestCamMedia.thumbnailURL
+                bestCamDecryptionKey = bestCamMedia.encryptedFilename
+            }
+        } else if isStarwankURL(url) {
+            if let reused = reusedDirectMedia(
+                mediaInfo: mediaInfo,
+                selectedFormatId: options.selectedFormatId,
+                normalizedURL: normalizedURL,
+                fallbackEmbedURL: url,
+                fallbackIsAllowed: { stream in
+                    stream.contains(".m3u8") || stream.contains(".mp4") || stream.contains("get_file")
+                }
+            ) {
+                (targetURL, customResolvedTitle, customEmbedURL, customThumbnailURL) =
+                    (reused.streamURL, reused.title, reused.embedURL, reused.thumbnailURL)
+            } else if let starwankMedia = await resolveStarwankMediaInfo(
+                url: url,
+                rawCookies: options.rawCookies,
+                requestedFormat: options.selectedFormatId
+            ) {
+                targetURL = starwankMedia.streamURL
+                customResolvedTitle = starwankMedia.title
+                customEmbedURL = starwankMedia.embedURL
+                customThumbnailURL = starwankMedia.thumbnailURL
+            }
+        } else if isPussyspaceURL(url) {
+            if let reused = reusedDirectMedia(
+                mediaInfo: mediaInfo,
+                selectedFormatId: options.selectedFormatId,
+                normalizedURL: normalizedURL,
+                fallbackEmbedURL: url,
+                fallbackIsAllowed: { stream in
+                    stream.contains(".m3u8") || stream.contains(".mp4") || stream.contains("reversebuffer")
+                }
+            ) {
+                (targetURL, customResolvedTitle, customEmbedURL, customThumbnailURL) =
+                    (reused.streamURL, reused.title, reused.embedURL, reused.thumbnailURL)
+            } else if let pussyMedia = await resolvePussyspaceMediaInfo(
+                url: url,
+                rawCookies: options.rawCookies,
+                requestedFormat: options.selectedFormatId
+            ) {
+                targetURL = pussyMedia.streamURL
+                customResolvedTitle = pussyMedia.title
+                customEmbedURL = pussyMedia.embedURL
+                customThumbnailURL = pussyMedia.thumbnailURL
+            }
         }
 
         var args = [path.path, "--ignore-config"]
@@ -1482,10 +1688,6 @@ public struct DownloadResult: Sendable {
 
         if options.forceOverwrite == true {
             args.append("--force-overwrites")
-        }
-
-        if options.hdrAction == .convertToSDR {
-            args.append(contentsOf: ["--postprocessor-args", "ffmpeg:-vf tonemap=hable:desat=0,zscale=t=bt709:m=bt709:r=tv,format=yuv420p"])
         }
 
         let speedLimit = UserDefaults.standard.integer(forKey: UserDefaultsKeys.downloadSpeedLimit)
@@ -1923,21 +2125,46 @@ public struct DownloadResult: Sendable {
         var args: [String] = []
 
         let isSynthesizedDirectStream = mediaInfo?.uploader == "Protected Site" ||
+                                        mediaInfo?.uploader == "StarWank" ||
+                                        mediaInfo?.uploader == "PussySpace" ||
                                         isGuywhURL(mediaInfo?.id ?? "") ||
                                         isGFFURL(mediaInfo?.id ?? "") ||
                                         isBoyfriendTVURL(mediaInfo?.id ?? "") ||
                                         isBestCamURL(mediaInfo?.id ?? "") ||
+                                        isStarwankURL(mediaInfo?.id ?? "") ||
+                                        isPussyspaceURL(mediaInfo?.id ?? "") ||
                                         (url.map(isGuywhURL) ?? false) ||
                                         (url.map(isGFFURL) ?? false) ||
                                         (url.map(isBoyfriendTVURL) ?? false) ||
-                                        (url.map(isBestCamURL) ?? false)
+                                        (url.map(isBestCamURL) ?? false) ||
+                                        (url.map(isStarwankURL) ?? false) ||
+                                        (url.map(isPussyspaceURL) ?? false)
 
-        // 1. Explicit user-specified format ID
+        // 1. Audio downloads: return early with audio extraction and quality options
+        if options.fileType.isAudio {
+            let formatId: String
+            if isSynthesizedDirectStream {
+                formatId = "b/best"
+            } else if let customFormatId = options.selectedFormatId, !customFormatId.isEmpty, Self.isSafeFormatId(customFormatId) {
+                formatId = customFormatId
+            } else if let info = mediaInfo, let firstAudio = info.resolveSelectedFormats(options: options).first {
+                formatId = firstAudio.formatId
+            } else {
+                formatId = "bestaudio/best"
+            }
+            args.append(contentsOf: ["-x", "--audio-format", options.fileType.fileExtension, "-f", formatId])
+            if let quality = options.audioQuality {
+                args.append(contentsOf: ["--audio-quality", quality.ytdlpValue])
+            }
+            return args
+        }
+
+        // 2. Video format selection
         if let customFormatId = options.selectedFormatId, !customFormatId.isEmpty, Self.isSafeFormatId(customFormatId) {
             let formatId: String
             if isSynthesizedDirectStream {
                 formatId = "b/best"
-            } else if options.fileType.isVideo && !customFormatId.contains("+") {
+            } else if !customFormatId.contains("+") {
                 // If the selected format is video-only, automatically append best audio (+ba/b)
                 if let info = mediaInfo,
                    let matchedFmt = info.formats?.first(where: { $0.formatId == customFormatId }),
@@ -1950,84 +2177,51 @@ public struct DownloadResult: Sendable {
                 formatId = customFormatId
             }
             args.append(contentsOf: ["-f", formatId])
-            if options.fileType.isVideo {
-                if let mergeFormat = Self.compatibleMergeOutputFormat(for: options) {
-                    args.append(contentsOf: ["--merge-output-format", mergeFormat])
-                }
-            } else {
-                args.append(contentsOf: ["-x", "--audio-format", options.fileType.fileExtension])
-                if let quality = options.audioQuality {
-                    args.append(contentsOf: ["--audio-quality", quality.ytdlpValue])
-                }
-            }
-            return args
-        }
-
-        // 2. Metadata-driven concrete format selection (eliminates silent fallback downgrades)
-        if let info = mediaInfo {
+        } else if let info = mediaInfo, !info.resolveSelectedFormats(options: options).isEmpty {
             let resolved = info.resolveSelectedFormats(options: options)
-            if !resolved.isEmpty {
-                let formatId: String
-                if isSynthesizedDirectStream {
-                    formatId = "b/best"
-                } else if resolved.count == 2 {
-                    formatId = "\(resolved[0].formatId)+\(resolved[1].formatId)"
-                } else {
-                    formatId = resolved[0].formatId
-                }
-                args.append(contentsOf: ["-f", formatId])
-                if options.fileType.isVideo {
-                    if let mergeFormat = Self.compatibleMergeOutputFormat(for: options) {
-                        args.append(contentsOf: ["--merge-output-format", mergeFormat])
-                    }
-                } else {
-                    args.append(contentsOf: ["-x", "--audio-format", options.fileType.fileExtension])
-                    if let quality = options.audioQuality {
-                        args.append(contentsOf: ["--audio-quality", quality.ytdlpValue])
-                    }
-                }
-                return args
-            }
-        }
-
-        // 3. Fallback when mediaInfo metadata is absent
-        if options.fileType.isAudio {
-            args.append(contentsOf: ["-x", "--audio-format", options.fileType.fileExtension, "-f", "bestaudio/best"])
-            if let quality = options.audioQuality {
-                args.append(contentsOf: ["--audio-quality", quality.ytdlpValue])
-            }
-            return args
-        }
-
-        let maxH = options.videoResolution?.maxHeight
-        let selector: String
-        if isSynthesizedDirectStream {
-            selector = "b/best"
-        } else if let h = maxH {
-            if options.resolutionFallbackPolicy == .allowHigher {
-                selector = "bestvideo[height<=\(h)]+bestaudio/best[height<=\(h)]/bestvideo[height>\(h)]+bestaudio/best[height>\(h)]/best"
+            let formatId: String
+            if isSynthesizedDirectStream {
+                formatId = "b/best"
+            } else if resolved.count == 2 {
+                formatId = "\(resolved[0].formatId)+\(resolved[1].formatId)"
             } else {
-                // Strict ceiling: Best available ≤ requested height (e.g. 720p requested -> best <= 720p)
-                selector = "bestvideo[height<=\(h)]+bestaudio/best[height<=\(h)]"
+                formatId = resolved[0].formatId
             }
+            args.append(contentsOf: ["-f", formatId])
         } else {
-            selector = "bestvideo+bestaudio/best"
+            let maxH = options.videoResolution?.maxHeight
+            let selector: String
+            if isSynthesizedDirectStream {
+                selector = "b/best"
+            } else if let h = maxH {
+                if options.resolutionFallbackPolicy == .allowHigher {
+                    selector = "bestvideo[height<=\(h)]+bestaudio/best[height<=\(h)]/bestvideo[height>\(h)]+bestaudio/best[height>\(h)]/best"
+                } else {
+                    // Strict ceiling: Best available ≤ requested height (e.g. 720p requested -> best <= 720p)
+                    selector = "bestvideo[height<=\(h)]+bestaudio/best[height<=\(h)]"
+                }
+            } else {
+                selector = "bestvideo+bestaudio/best"
+            }
+
+            args.append(contentsOf: ["-f", selector])
+            if let h = maxH {
+                args.append(contentsOf: ["-S", "res:\(h),lang,quality,fps,hdr:12,vbr,abr,filesize"])
+            } else {
+                args.append(contentsOf: ["-S", "lang,quality,res,height,fps,hdr:12,vbr,abr,filesize"])
+            }
         }
 
-        args.append(contentsOf: ["-f", selector])
-        if let h = maxH {
-            args.append(contentsOf: ["-S", "res:\(h),lang,quality,fps,hdr:12,vbr,abr,filesize"])
-        } else {
-            args.append(contentsOf: ["-S", "lang,quality,res,height,fps,hdr:12,vbr,abr,filesize"])
-        }
-
+        // 3. Common video postprocessing: container selection, codec conversion, and tone mapping
         var finalMergeFormat = Self.compatibleMergeOutputFormat(for: options)
+        let conversionCodec = options.conversionCodec ?? .none
+        let isConvertToSDR = options.hdrAction == .convertToSDR
 
-        if let conversionCodec = options.conversionCodec, conversionCodec != .none {
-            var targetExt = options.fileType.fileExtension
-            if conversionCodec == .av1 || conversionCodec == .vp9 {
-                targetExt = "mkv"
-            }
+        var targetExt = options.fileType.fileExtension
+        if conversionCodec == .av1 || conversionCodec == .vp9 {
+            targetExt = "mkv"
+        }
+        if conversionCodec != .none {
             finalMergeFormat = targetExt
         }
 
@@ -2035,32 +2229,38 @@ public struct DownloadResult: Sendable {
             args.append(contentsOf: ["--merge-output-format", mergeOutputFormat])
         }
 
-        if let conversionCodec = options.conversionCodec, conversionCodec != .none {
-            var targetExt = options.fileType.fileExtension
-            if conversionCodec == .av1 || conversionCodec == .vp9 {
-                targetExt = "mkv"
+        let needsRecode = (conversionCodec != .none) || isConvertToSDR
+        if needsRecode {
+            var videoConvertorArgs: [String] = ["-y"]
+            if isConvertToSDR {
+                videoConvertorArgs.append(contentsOf: ["-vf", "tonemap=hable:desat=0,zscale=t=bt709:m=bt709:r=tv,format=yuv420p"])
             }
-            
+
             switch conversionCodec {
             case .av1:
-                args.append(contentsOf: ["--recode-video", targetExt, "--postprocessor-args", "VideoConvertor:-y -c:v libsvtav1 -preset 8 -crf 28 -strict experimental"])
+                videoConvertorArgs.append(contentsOf: ["-c:v", "libsvtav1", "-preset", "8", "-crf", "28", "-strict", "experimental"])
             case .h265:
                 #if arch(arm64)
-                args.append(contentsOf: ["--recode-video", targetExt, "--postprocessor-args", "VideoConvertor:-y -c:v hevc_videotoolbox -strict experimental"])
+                videoConvertorArgs.append(contentsOf: ["-c:v", "hevc_videotoolbox", "-strict", "experimental"])
                 #else
-                args.append(contentsOf: ["--recode-video", targetExt, "--postprocessor-args", "VideoConvertor:-y -c:v libx265 -strict experimental"])
+                videoConvertorArgs.append(contentsOf: ["-c:v", "libx265", "-strict", "experimental"])
                 #endif
             case .vp9:
-                args.append(contentsOf: ["--recode-video", targetExt, "--postprocessor-args", "VideoConvertor:-y -c:v libvpx-vp9 -strict experimental"])
+                videoConvertorArgs.append(contentsOf: ["-c:v", "libvpx-vp9", "-strict", "experimental"])
             case .h264:
                 #if arch(arm64)
-                args.append(contentsOf: ["--recode-video", targetExt, "--postprocessor-args", "VideoConvertor:-y -c:v h264_videotoolbox -strict experimental"])
+                videoConvertorArgs.append(contentsOf: ["-c:v", "h264_videotoolbox", "-strict", "experimental"])
                 #else
-                args.append(contentsOf: ["--recode-video", targetExt, "--postprocessor-args", "VideoConvertor:-y -c:v libx264 -strict experimental"])
+                videoConvertorArgs.append(contentsOf: ["-c:v", "libx264", "-strict", "experimental"])
                 #endif
             case .none:
                 break
             }
+
+            args.append(contentsOf: [
+                "--recode-video", targetExt,
+                "--postprocessor-args", "VideoConvertor:" + videoConvertorArgs.joined(separator: " ")
+            ])
         }
 
         return args
@@ -3577,6 +3777,63 @@ public struct DownloadResult: Sendable {
         "/embed/(\\d+)"
     ].compactMap { try? NSRegularExpression(pattern: $0, options: [.caseInsensitive]) }
 
+    nonisolated private static let starwankTitleRegexes: [NSRegularExpression] = [
+        "property=[\"']og:title[\"']\\s+content=[\"']([^\"']+)[\"']",
+        "video_title\\s*:\\s*['\"]([^'\"]+)['\"]",
+        "<title>(.*?)</title>",
+        "<h1[^>]*>([^<]+)</h1>"
+    ].compactMap { try? NSRegularExpression(pattern: $0, options: .caseInsensitive) }
+
+    nonisolated private static let starwankThumbRegexes: [NSRegularExpression] = [
+        "property=[\"']og:image[\"']\\s+content=[\"'](https?://[^\"']+)[\"']",
+        "posterImage\\s*:\\s*['\"](https?://[^\"']+)[\"']",
+        "preview_url\\s*:\\s*['\"](https?://[^\"']+)[\"']",
+        "poster=[\"'](https?://[^\"']+)[\"']"
+    ].compactMap { try? NSRegularExpression(pattern: $0, options: .caseInsensitive) }
+
+    nonisolated private static let starwankDurationRegexes: [NSRegularExpression] = [
+        "property=[\"']video:duration[\"']\\s+content=[\"'](\\d+)[\"']",
+        "property=[\"']og:duration[\"']\\s+content=[\"'](\\d+)[\"']",
+        "duration\\s*:\\s*['\"]?(\\d+)['\"]?"
+    ].compactMap { try? NSRegularExpression(pattern: $0, options: .caseInsensitive) }
+
+    nonisolated private static let starwankVideoIdRegexes: [NSRegularExpression] = [
+        "(?:^|/)videos/(\\d+)",
+        "video_id\\s*:\\s*['\"](\\d+)['\"]",
+        "(?:^|/)embed/(\\d+)"
+    ].compactMap { try? NSRegularExpression(pattern: $0, options: .caseInsensitive) }
+
+    nonisolated private static let starwankEmptyReferrerRegex: NSRegularExpression? = {
+        try? NSRegularExpression(pattern: "empty_referrer_redirect\\s*:\\s*['\"](https?://[^'\"]+)['\"]", options: .caseInsensitive)
+    }()
+
+    nonisolated private static let pussyspaceTitleRegexes: [NSRegularExpression] = [
+        "property=[\"']og:title[\"']\\s+content=[\"']([^\"']+)[\"']",
+        "<title>([^<]+)</title>"
+    ].compactMap { try? NSRegularExpression(pattern: $0, options: .caseInsensitive) }
+
+    nonisolated private static let pussyspaceThumbRegexes: [NSRegularExpression] = [
+        "property=[\"']og:image[\"']\\s+content=[\"']([^\"']+)[\"']",
+        "poster:\\s*[\"'](https?:[^\"']+)[\"']",
+        "poster=[\"'](https?:[^\"']+)[\"']"
+    ].compactMap { try? NSRegularExpression(pattern: $0, options: .caseInsensitive) }
+
+    nonisolated private static let pussyspaceDurationRegexes: [NSRegularExpression] = [
+        "property=[\"']video:duration[\"']\\s+content=[\"'](\\d+)[\"']",
+        "property=[\"']og:duration[\"']\\s+content=[\"'](\\d+)[\"']"
+    ].compactMap { try? NSRegularExpression(pattern: $0, options: .caseInsensitive) }
+
+    nonisolated private static let pussyspacePlayerTokenRegexes: [NSRegularExpression] = [
+        "\\|([a-zA-Z0-9_-]{2,10})\\|([a-zA-Z0-9_-]{20,80})\\|multiShowPlayer\\|",
+        "multiShowPlayer\\(['\"]([^'\"]+)['\"],\\s*['\"]([^'\"]+)['\"]\\)"
+    ].compactMap { try? NSRegularExpression(pattern: $0, options: .caseInsensitive) }
+
+    nonisolated private static let pussyspaceFileRegexes: [NSRegularExpression] = [
+        "file:\\s*[\"']([^\"']+)[\"']",
+        "<video[^>]+src=[\"']([^\"']+)[\"']",
+        "<source[^>]+src=[\"']([^\"']+)[\"']"
+    ].compactMap { try? NSRegularExpression(pattern: $0, options: .caseInsensitive) }
+
     private func validatedBoyfriendTVStreamURL(_ rawValue: String) -> String? {
         var rawValue = rawValue
             .replacingOccurrences(of: "\\/", with: "/")
@@ -4925,6 +5182,494 @@ public struct DownloadResult: Sendable {
         )
     }
 
+    private func fetchProtectedPageHTML(
+        pageURL: URL,
+        targetURL: String,
+        rawCookies: String?,
+        fallbackHost: String
+    ) async -> String {
+        var html = ""
+
+        if processRunner is DefaultYtdlpProcessRunner {
+            var request = URLRequest(url: pageURL)
+            request.timeoutInterval = 15.0
+            request.setValue(
+                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+                forHTTPHeaderField: "User-Agent"
+            )
+            request.setValue(
+                "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                forHTTPHeaderField: "Accept"
+            )
+            request.setValue("en-US,en;q=0.9", forHTTPHeaderField: "Accept-Language")
+            let scheme = pageURL.scheme ?? "https"
+            request.setValue("\(scheme)://\(pageURL.host ?? fallbackHost)/", forHTTPHeaderField: "Referer")
+            if let rawCookies, !rawCookies.isEmpty {
+                request.setValue(rawCookies, forHTTPHeaderField: "Cookie")
+            }
+
+            if let (data, response) = try? await URLSession.shared.data(for: request),
+               let httpResponse = response as? HTTPURLResponse,
+               (200...299).contains(httpResponse.statusCode),
+               let fetched = String(data: data, encoding: .utf8) {
+                html = fetched
+            }
+        }
+
+        if html.isEmpty {
+            let appSupportYtdlp = Self.getAppSupportDirectory().appendingPathComponent("yt-dlp")
+            let bundledYtdlp = Bundle.main.url(forResource: "yt-dlp", withExtension: nil)
+            let installedYtdlp = FileManager.default.fileExists(atPath: appSupportYtdlp.path) ? appSupportYtdlp : nil
+            if let ytdlp = ytdlpPath ?? bundledYtdlp ?? installedYtdlp {
+                var dumpArgs = [ytdlp.path, "--ignore-config", "--dump-pages"]
+                appendSiteSpecificArgs(for: targetURL, to: &dumpArgs)
+                dumpArgs.append(contentsOf: ["--", targetURL])
+                if let output = try? await processRunner.runCommand(dumpArgs) {
+                    let chunks = output.split(whereSeparator: \.isNewline).compactMap { line -> String? in
+                        let trimmed = String(line).trimmingCharacters(in: .whitespaces)
+                        guard !trimmed.starts(with: "#"),
+                              !trimmed.starts(with: "["),
+                              !trimmed.starts(with: "WARNING"),
+                              !trimmed.starts(with: "ERROR"),
+                              let decodedData = Data(base64Encoded: trimmed, options: .ignoreUnknownCharacters) else {
+                            return nil
+                        }
+                        let decodedString = String(decoding: decodedData, as: UTF8.self)
+                        return decodedString.isEmpty ? nil : decodedString
+                    }
+                    if !chunks.isEmpty {
+                        html = chunks.joined()
+                    }
+                }
+            }
+        }
+
+        return html
+    }
+
+    nonisolated private static func firstRegexCapture(
+        in text: String,
+        regexes: [NSRegularExpression],
+        transform: (String) -> String?
+    ) -> String? {
+        let nsText = text as NSString
+        let range = NSRange(location: 0, length: nsText.length)
+        for regex in regexes {
+            if let match = regex.firstMatch(in: text, options: [], range: range),
+               match.numberOfRanges > 1,
+               let value = transform(nsText.substring(with: match.range(at: 1))) {
+                return value
+            }
+        }
+        return nil
+    }
+
+    nonisolated private static func protectedThumbnail(
+        in text: String,
+        regexes: [NSRegularExpression]
+    ) -> String? {
+        firstRegexCapture(in: text, regexes: regexes) { raw in
+            let candidate = raw.replacingOccurrences(of: "\\/", with: "/")
+            return candidate.hasPrefix("http") ? candidate : nil
+        }
+    }
+
+    nonisolated private static func protectedDuration(
+        in text: String,
+        regexes: [NSRegularExpression]
+    ) -> Double? {
+        firstRegexCapture(in: text, regexes: regexes) { raw in
+            guard let value = Double(raw), value > 0 else { return nil }
+            return raw
+        }.flatMap(Double.init)
+    }
+
+    private func protectedPageContext(
+        url: String,
+        rawCookies: String?,
+        fallbackHost: String
+    ) async -> (targetURL: String, pageURL: URL, html: String)? {
+        let targetURL = normalizeURLForYtdlp(url)
+        guard let pageURL = URL(string: targetURL) else { return nil }
+        let html = await fetchProtectedPageHTML(
+            pageURL: pageURL,
+            targetURL: targetURL,
+            rawCookies: rawCookies,
+            fallbackHost: fallbackHost
+        )
+        guard !html.isEmpty else { return nil }
+        return (targetURL, pageURL, html)
+    }
+
+    // MARK: - Starwank Extractor
+
+    struct ProtectedSiteSource: Equatable, Sendable {
+        let label: String
+        let url: String
+        let height: Int
+    }
+
+    struct ProtectedSiteExtractedMedia: Equatable, Sendable {
+        let streamURL: String
+        let embedURL: String
+        let title: String
+        let thumbnailURL: String?
+        let duration: Double?
+        let quality: String?
+        let allSources: [ProtectedSiteSource]
+    }
+
+    typealias StarwankSource = ProtectedSiteSource
+    typealias StarwankExtractedMedia = ProtectedSiteExtractedMedia
+
+    nonisolated private static func selectProtectedSiteSource(
+        from sources: [ProtectedSiteSource],
+        requestedFormat: String?
+    ) -> ProtectedSiteSource? {
+        guard let fallback = sources.first else { return nil }
+        if let requested = requestedFormat?.lowercased().trimmingCharacters(in: .whitespacesAndNewlines),
+           let matched = sources.first(where: {
+               $0.label.lowercased() == requested ||
+               "\($0.height)p" == requested ||
+               "\($0.height)" == requested ||
+               $0.label.lowercased().contains(requested)
+           }) {
+            return matched
+        }
+        return fallback
+    }
+
+    nonisolated static func isStarwankURL(_ urlOrHost: String) -> Bool {
+        let host = (URL(string: urlOrHost)?.host ?? urlOrHost).lowercased()
+        return host == "starwank.com" || host.hasSuffix(".starwank.com")
+    }
+
+    private func isStarwankURL(_ urlOrHost: String) -> Bool {
+        Self.isStarwankURL(urlOrHost)
+    }
+
+    nonisolated static func parseStarwankMedia(html: String, targetUrl: String, requestedFormat: String? = nil) -> StarwankExtractedMedia? {
+        let nsHtml = html as NSString
+        let htmlRange = NSRange(location: 0, length: nsHtml.length)
+
+        let title = Self.firstRegexCapture(in: html, regexes: starwankTitleRegexes) { raw in
+            let cleaned = raw
+                .replacingOccurrences(of: "(?i)\\s*-\\s*starwank(\\.com)?.*", with: "", options: .regularExpression)
+                .replacingOccurrences(of: "(?i)^starwank(\\.com)?\\s*-\\s*", with: "", options: .regularExpression)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .decodingHTMLEntities()
+            guard !cleaned.isEmpty,
+                  cleaned.lowercased() != "starwank",
+                  cleaned.lowercased() != "starwank.com" else {
+                return nil
+            }
+            return cleaned
+        } ?? "StarWank Video"
+        let thumbnailURL = Self.protectedThumbnail(in: html, regexes: starwankThumbRegexes)
+        let duration = Self.protectedDuration(in: html, regexes: starwankDurationRegexes)
+
+        // Embed URL
+        var embedURL = targetUrl
+        let targetAndHtml = targetUrl + "\n" + html
+        let targetAndHtmlNs = targetAndHtml as NSString
+        let targetAndHtmlRange = NSRange(location: 0, length: targetAndHtmlNs.length)
+        for regex in starwankVideoIdRegexes {
+            if let match = regex.firstMatch(in: targetAndHtml, options: [], range: targetAndHtmlRange),
+               match.numberOfRanges > 1 {
+                let vidId = targetAndHtmlNs.substring(with: match.range(at: 1))
+                embedURL = "https://starwank.com/embed/\(vidId)"
+                break
+            }
+        }
+
+        // Parse sources
+        var parsedSources: [StarwankSource] = []
+        var seenUrls = Set<String>()
+
+        // Pattern 1: Script block with setAttribute('src', ...) and setAttribute('title', ...)
+        let sourceBlockPattern = try? NSRegularExpression(
+            pattern: "setAttribute\\(['\"]src['\"],\\s*['\"]([^'\"]+)['\"]\\)(?:(?!setAttribute\\(['\"]src).)*?setAttribute\\(['\"]title['\"],\\s*['\"]([^'\"]+)['\"]\\)",
+            options: [.dotMatchesLineSeparators, .caseInsensitive]
+        )
+        if let blockRegex = sourceBlockPattern {
+            let matches = blockRegex.matches(in: html, options: [], range: htmlRange)
+            for m in matches where m.numberOfRanges > 2 {
+                let rawSrc = nsHtml.substring(with: m.range(at: 1)).replacingOccurrences(of: "\\/", with: "/")
+                let rawTitle = nsHtml.substring(with: m.range(at: 2)).trimmingCharacters(in: .whitespacesAndNewlines)
+                guard rawSrc.hasPrefix("http"), seenUrls.insert(rawSrc).inserted else { continue }
+                let height = Int(rawTitle.replacingOccurrences(of: "p", with: "", options: .caseInsensitive)) ?? 720
+                let label = rawTitle.isEmpty ? "\(height)p" : rawTitle
+                parsedSources.append(StarwankSource(label: label, url: rawSrc, height: height))
+            }
+        }
+
+        // Pattern 2: Standalone setAttribute('src', ...) in JS if no block matched
+        if parsedSources.isEmpty {
+            let standalonePattern = try? NSRegularExpression(
+                pattern: "setAttribute\\(['\"]src['\"],\\s*['\"](https?:[^'\"]+)['\"]\\)",
+                options: .caseInsensitive
+            )
+            if let standaloneRegex = standalonePattern {
+                let matches = standaloneRegex.matches(in: html, options: [], range: htmlRange)
+                for m in matches where m.numberOfRanges > 1 {
+                    let rawSrc = nsHtml.substring(with: m.range(at: 1)).replacingOccurrences(of: "\\/", with: "/")
+                    guard seenUrls.insert(rawSrc).inserted else { continue }
+                    let height: Int
+                    if rawSrc.contains("1080") {
+                        height = 1080
+                    } else if rawSrc.contains("360") {
+                        height = 360
+                    } else if rawSrc.contains("480") {
+                        height = 480
+                    } else {
+                        height = 720
+                    }
+                    parsedSources.append(StarwankSource(label: "\(height)p", url: rawSrc, height: height))
+                }
+            }
+
+            // Pattern 3: KVS player config (video_url, video_alt_url, etc.)
+            if parsedSources.isEmpty {
+                let kvsPatterns: [(String, Int)] = [
+                    ("video_url_fhd\\s*:\\s*['\"](https?:[^'\"]+)['\"]", 1080),
+                    ("video_url\\s*:\\s*['\"](https?:[^'\"]+)['\"]", 720),
+                    ("video_alt_url2\\s*:\\s*['\"](https?:[^'\"]+)['\"]", 480),
+                    ("video_alt_url\\s*:\\s*['\"](https?:[^'\"]+)['\"]", 360)
+                ]
+                for (pattern, defaultHeight) in kvsPatterns {
+                    if let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive),
+                       let match = regex.firstMatch(in: html, options: [], range: htmlRange),
+                       match.numberOfRanges > 1 {
+                        let rawSrc = nsHtml.substring(with: match.range(at: 1)).replacingOccurrences(of: "\\/", with: "/")
+                        if seenUrls.insert(rawSrc).inserted {
+                            parsedSources.append(StarwankSource(label: "\(defaultHeight)p", url: rawSrc, height: defaultHeight))
+                        }
+                    }
+                }
+            }
+        }
+
+        // Sort sources by height descending (e.g. 720p, then 360p)
+        parsedSources.sort { $0.height > $1.height }
+
+        guard let chosenSource = Self.selectProtectedSiteSource(
+            from: parsedSources,
+            requestedFormat: requestedFormat
+        ) else {
+            return nil
+        }
+
+        return StarwankExtractedMedia(
+            streamURL: chosenSource.url,
+            embedURL: embedURL,
+            title: title,
+            thumbnailURL: thumbnailURL,
+            duration: duration,
+            quality: chosenSource.label,
+            allSources: parsedSources
+        )
+    }
+
+    func resolveStarwankMediaInfo(url: String, rawCookies: String? = nil, requestedFormat: String? = nil) async -> StarwankExtractedMedia? {
+        guard let (targetUrl, pageURL, html) = await protectedPageContext(
+            url: url,
+            rawCookies: rawCookies,
+            fallbackHost: "starwank.com"
+        ) else {
+            return nil
+        }
+
+        // If this was an embed page and it points to empty_referrer_redirect, follow it to get multi-quality options
+        if pageURL.pathComponents.contains("embed"),
+           let redirectMatch = Self.starwankEmptyReferrerRegex?.firstMatch(in: html, options: [], range: NSRange(location: 0, length: (html as NSString).length)),
+           redirectMatch.numberOfRanges > 1 {
+            let redirectURL = (html as NSString).substring(with: redirectMatch.range(at: 1))
+            if Self.isStarwankURL(redirectURL),
+               !redirectURL.contains("embed/"),
+               let fullMedia = await resolveStarwankMediaInfo(url: redirectURL, rawCookies: rawCookies, requestedFormat: requestedFormat) {
+                return fullMedia
+            }
+        }
+
+        return Self.parseStarwankMedia(html: html, targetUrl: targetUrl, requestedFormat: requestedFormat)
+    }
+
+    // MARK: - Pussyspace Extractor
+
+    typealias PussyspaceSource = ProtectedSiteSource
+    typealias PussyspaceExtractedMedia = ProtectedSiteExtractedMedia
+
+    nonisolated static func isPussyspaceURL(_ urlOrHost: String) -> Bool {
+        let host = (URL(string: urlOrHost)?.host ?? urlOrHost).lowercased()
+        return host == "pussyspace.com" || host.hasSuffix(".pussyspace.com")
+    }
+
+    private func isPussyspaceURL(_ urlOrHost: String) -> Bool {
+        Self.isPussyspaceURL(urlOrHost)
+    }
+
+    nonisolated static func parsePussyspaceMedia(html: String, targetUrl: String, requestedFormat: String? = nil, playerHtml: String? = nil) -> PussyspaceExtractedMedia? {
+        let nsHtml = html as NSString
+        let htmlRange = NSRange(location: 0, length: nsHtml.length)
+
+        let title = Self.firstRegexCapture(in: html, regexes: pussyspaceTitleRegexes) { raw in
+            let cleaned = raw
+                .replacingOccurrences(of: "(?i)\\s*(\\||&#124;)\\s*pussyspace.*$", with: "", options: .regularExpression)
+                .replacingOccurrences(of: "(?i)(\\s+\\b(hd|straight|sex|video)\\b|\\s*\\(\\d+\\s*min\\))+\\s*$", with: "", options: .regularExpression)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .decodingHTMLEntities()
+            guard !cleaned.isEmpty,
+                  cleaned.lowercased() != "pussyspace",
+                  cleaned.lowercased() != "pussyspace.com" else {
+                return nil
+            }
+            return cleaned
+        } ?? "PussySpace Video"
+        var thumbnailURL = Self.protectedThumbnail(in: html, regexes: pussyspaceThumbRegexes)
+        let duration = Self.protectedDuration(in: html, regexes: pussyspaceDurationRegexes)
+
+        // Parse sources from playerHtml or html
+        let streamContent = playerHtml ?? html
+        var parsedSources: [PussyspaceSource] = []
+        var seenUrls = Set<String>()
+
+        let streamNs = streamContent as NSString
+        let streamRange = NSRange(location: 0, length: streamNs.length)
+
+        if thumbnailURL == nil {
+            thumbnailURL = Self.protectedThumbnail(in: streamContent, regexes: pussyspaceThumbRegexes)
+        }
+
+        // Pattern 1: Playerjs file:"..." with [720p]url,[480p]url or url.m3u8 or url.mp4
+        for regex in pussyspaceFileRegexes {
+            if let match = regex.firstMatch(in: streamContent, options: [], range: streamRange),
+               match.numberOfRanges > 1 {
+                let fileRaw = streamNs.substring(with: match.range(at: 1))
+                    .replacingOccurrences(of: "\\/", with: "/")
+
+                if fileRaw.contains("[") && fileRaw.contains("p]") {
+                    // Split qualities like [240p]url,[480p]url,[720p]url
+                    let qualityPattern = try? NSRegularExpression(pattern: "\\[(\\d+)p\\]([^,\\[\\]]+)", options: .caseInsensitive)
+                    if let qRegex = qualityPattern {
+                        let qMatches = qRegex.matches(in: fileRaw, options: [], range: NSRange(location: 0, length: (fileRaw as NSString).length))
+                        for qm in qMatches where qm.numberOfRanges > 2 {
+                            let hStr = (fileRaw as NSString).substring(with: qm.range(at: 1))
+                            let rawUrl = (fileRaw as NSString).substring(with: qm.range(at: 2)).trimmingCharacters(in: .whitespacesAndNewlines)
+                            let height = Int(hStr) ?? 720
+                            if rawUrl.hasPrefix("http"), seenUrls.insert(rawUrl).inserted {
+                                parsedSources.append(PussyspaceSource(label: "\(height)p", url: rawUrl, height: height))
+                            }
+                        }
+                    }
+                } else if fileRaw.contains(" or ") {
+                    // Split urls like "url1.m3u8 or url2.mp4"
+                    let parts = fileRaw.components(separatedBy: " or ")
+                    for part in parts {
+                        let trimmed = part.trimmingCharacters(in: .whitespacesAndNewlines)
+                        guard trimmed.hasPrefix("http"), seenUrls.insert(trimmed).inserted else { continue }
+                        let isHls = trimmed.contains(".m3u8") || trimmed.contains("hls")
+                        let height = isHls ? 1080 : 720
+                        let label = isHls ? "HLS Auto" : "\(height)p"
+                        parsedSources.append(PussyspaceSource(label: label, url: trimmed, height: height))
+                    }
+                } else if fileRaw.hasPrefix("http") && seenUrls.insert(fileRaw).inserted {
+                    let isHls = fileRaw.contains(".m3u8") || fileRaw.contains("hls")
+                    let height = isHls ? 1080 : 720
+                    let label = isHls ? "HLS Auto" : "\(height)p"
+                    parsedSources.append(PussyspaceSource(label: label, url: fileRaw, height: height))
+                }
+                if !parsedSources.isEmpty { break }
+            }
+        }
+
+        // Pattern 2: reversebuffer URLs directly in HTML/JS
+        if parsedSources.isEmpty {
+            let bufferPattern = try? NSRegularExpression(pattern: "(https?:[^\"'\\s<>]+reversebuffer[^\"'\\s<>]+)", options: .caseInsensitive)
+            if let bufRegex = bufferPattern {
+                let matches = bufRegex.matches(in: streamContent, options: [], range: streamRange)
+                for m in matches where m.numberOfRanges > 1 {
+                    let rawUrl = streamNs.substring(with: m.range(at: 1)).replacingOccurrences(of: "\\/", with: "/")
+                    guard seenUrls.insert(rawUrl).inserted else { continue }
+                    let isHls = rawUrl.contains(".m3u8") || rawUrl.contains("hls")
+                    let height = isHls ? 1080 : 720
+                    let label = isHls ? "HLS Auto" : "\(height)p"
+                    parsedSources.append(PussyspaceSource(label: label, url: rawUrl, height: height))
+                }
+            }
+        }
+
+        parsedSources.sort { $0.height > $1.height }
+
+        guard let chosenSource = Self.selectProtectedSiteSource(
+            from: parsedSources,
+            requestedFormat: requestedFormat
+        ) else {
+            return nil
+        }
+
+        return PussyspaceExtractedMedia(
+            streamURL: chosenSource.url,
+            embedURL: targetUrl,
+            title: title,
+            thumbnailURL: thumbnailURL,
+            duration: duration,
+            quality: chosenSource.label,
+            allSources: parsedSources
+        )
+    }
+
+    func resolvePussyspaceMediaInfo(url: String, rawCookies: String? = nil, requestedFormat: String? = nil) async -> PussyspaceExtractedMedia? {
+        guard let (targetUrl, pageURL, html) = await protectedPageContext(
+            url: url,
+            rawCookies: rawCookies,
+            fallbackHost: "www.pussyspace.com"
+        ) else {
+            return nil
+        }
+
+        // 3. Extract player endpoint token (type and id)
+        var playerHtml: String? = nil
+        let nsHtml = html as NSString
+        let htmlRange = NSRange(location: 0, length: nsHtml.length)
+        var playerType: String? = nil
+        var playerId: String? = nil
+
+        for regex in Self.pussyspacePlayerTokenRegexes {
+            if let match = regex.firstMatch(in: html, options: [], range: htmlRange),
+               match.numberOfRanges > 2 {
+                playerType = nsHtml.substring(with: match.range(at: 1))
+                playerId = nsHtml.substring(with: match.range(at: 2))
+                break
+            }
+        }
+
+        // 4. Fetch player payload via POST /get/player/{playerType}/
+        if let type = playerType, let id = playerId,
+           let host = pageURL.host,
+           let playerURL = URL(string: "\(pageURL.scheme ?? "https")://\(host)/get/player/\(type)/") {
+            var playerReq = URLRequest(url: playerURL)
+            playerReq.httpMethod = "POST"
+            playerReq.timeoutInterval = 15.0
+            playerReq.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36", forHTTPHeaderField: "User-Agent")
+            playerReq.setValue("application/x-www-form-urlencoded; charset=UTF-8", forHTTPHeaderField: "Content-Type")
+            playerReq.setValue("XMLHttpRequest", forHTTPHeaderField: "X-Requested-With")
+            playerReq.setValue(targetUrl, forHTTPHeaderField: "Referer")
+            if let raw = rawCookies, !raw.isEmpty {
+                playerReq.setValue(raw, forHTTPHeaderField: "Cookie")
+            }
+            playerReq.httpBody = "id=\(id)".data(using: .utf8)
+
+            if let (data, response) = try? await URLSession.shared.data(for: playerReq),
+               let httpResponse = response as? HTTPURLResponse,
+               (200...299).contains(httpResponse.statusCode),
+               let fetchedPlayer = String(data: data, encoding: .utf8) {
+                playerHtml = fetchedPlayer
+            }
+        }
+
+        return Self.parsePussyspaceMedia(html: html, targetUrl: targetUrl, requestedFormat: requestedFormat, playerHtml: playerHtml)
+    }
+
     private func normalizeURLForYtdlp(_ urlString: String, depth: Int = 0) -> String {
         guard depth < 3 else { return urlString }
         guard var components = URLComponents(string: urlString) else { return urlString }
@@ -5046,7 +5791,37 @@ public struct DownloadResult: Sendable {
             return components.url?.absoluteString ?? components.string ?? urlString
         }
 
+        // 8. Starwank normalization
+        if isStarwankURL(host) {
+            components.scheme = "https"
+            let trackingPrefixes = ["utm_"]
+            let trackingNames = Set(["from", "promo", "ref", "source", "reftag"])
+            components.queryItems = components.queryItems?.filter { item in
+                let name = item.name.lowercased()
+                return !trackingNames.contains(name) && !trackingPrefixes.contains { name.hasPrefix($0) }
+            }
+            if components.queryItems?.isEmpty == true { components.queryItems = nil }
+            return components.url?.absoluteString ?? components.string ?? urlString
+        }
+
+        // 9. Pussyspace normalization
+        if isPussyspaceURL(host) {
+            components.scheme = "https"
+            let trackingPrefixes = ["utm_"]
+            let trackingNames = Set(["from", "promo", "ref", "source", "reftag"])
+            components.queryItems = components.queryItems?.filter { item in
+                let name = item.name.lowercased()
+                return !trackingNames.contains(name) && !trackingPrefixes.contains { name.hasPrefix($0) }
+            }
+            if components.queryItems?.isEmpty == true { components.queryItems = nil }
+            return components.url?.absoluteString ?? components.string ?? urlString
+        }
+
         return components.string ?? urlString
+    }
+
+    func normalizeURL(_ urlString: String) -> String {
+        normalizeURLForYtdlp(urlString)
     }
 
     private func isEpornerURL(_ urlOrHost: String) -> Bool {
@@ -5179,6 +5954,30 @@ public struct DownloadResult: Sendable {
                 return YtdlpError.downloadFailed("This video is unavailable, private, or has been removed.")
             }
             return error
+        }
+
+        if isStarwankURL(url) {
+            if lowerErr.containsAny(Self.cloudflareErrorKeywords) {
+                return YtdlpError.cloudflareBlocked
+            }
+            if lowerErr.contains("unsupported url") {
+                return YtdlpError.downloadFailed("Could not resolve this Starwank video. Verify the video link and retry.")
+            }
+            if lowerErr.containsAny(Self.accessDeniedErrorKeywords) {
+                return YtdlpError.downloadFailed("Starwank denied access (HTTP 403). The video may require browser verification or an active session.")
+            }
+        }
+
+        if isPussyspaceURL(url) {
+            if lowerErr.containsAny(Self.cloudflareErrorKeywords) {
+                return YtdlpError.cloudflareBlocked
+            }
+            if lowerErr.contains("unsupported url") {
+                return YtdlpError.downloadFailed("Could not resolve this PussySpace video. Verify the video link and retry.")
+            }
+            if lowerErr.containsAny(Self.accessDeniedErrorKeywords) {
+                return YtdlpError.downloadFailed("PussySpace denied access (HTTP 403). The video may require browser verification or an active session.")
+            }
         }
 
         let parsedHost = (URL(string: url)?.host ?? url).lowercased()
@@ -5408,6 +6207,28 @@ public struct DownloadResult: Sendable {
             }
             args.append(contentsOf: ["--add-header", "Referer: https://abyssplayer.com/"])
             args.append(contentsOf: ["--add-header", "Origin: https://abyssplayer.com"])
+            args.append(contentsOf: ["--add-header", "Accept: */*"])
+        } else if isStarwankURL(parsedHost) || isStarwankURL(url) || parsedHost.contains("starwank") || parsedHost.contains("fapnado") {
+            if !isSafari {
+                if let uaIdx = args.firstIndex(of: "--user-agent") {
+                    args[uaIdx + 1] = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+                } else {
+                    args.append(contentsOf: ["--user-agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"])
+                }
+            }
+            args.append(contentsOf: ["--add-header", "Referer: https://starwank.com/"])
+            args.append(contentsOf: ["--add-header", "Origin: https://starwank.com"])
+            args.append(contentsOf: ["--add-header", "Accept: */*"])
+        } else if isPussyspaceURL(parsedHost) || isPussyspaceURL(url) || parsedHost.contains("pussyspace") {
+            if !isSafari {
+                if let uaIdx = args.firstIndex(of: "--user-agent") {
+                    args[uaIdx + 1] = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+                } else {
+                    args.append(contentsOf: ["--user-agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"])
+                }
+            }
+            args.append(contentsOf: ["--add-header", "Referer: https://www.pussyspace.com/"])
+            args.append(contentsOf: ["--add-header", "Origin: https://www.pussyspace.com"])
             args.append(contentsOf: ["--add-header", "Accept: */*"])
         } else if parsedHost == "single-stream video site.com" || parsedHost.hasSuffix(".single-stream video site.com") {
             args.append(contentsOf: ["--add-header", "Referer:https://single-stream video site.com/"])
