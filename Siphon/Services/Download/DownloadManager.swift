@@ -26,6 +26,7 @@ class DownloadManager: ObservableObject {
     private var executor: DownloadExecutor!
     private var cancellables = Set<AnyCancellable>()
     private var isShuttingDown = false
+    private var isInitialized = false
     private let userDefaults = UserDefaults.standard
 
     var activeExecutionCount: Int {
@@ -147,6 +148,11 @@ class DownloadManager: ObservableObject {
 
 
     func initialize(languageService: LanguageService) {
+        // Each new main window runs this again. While the app is running, the
+        // recovery snapshot lists live jobs, so a second pass would offer to
+        // "recover" (or discard) downloads that are still executing.
+        guard !isInitialized else { return }
+        isInitialized = true
         self.languageService = languageService
         loadHistory()
         checkQueueRecovery()
@@ -247,81 +253,15 @@ class DownloadManager: ObservableObject {
         processQueue()
     }
 
-    func menuDownload(url: String, type: String, quality: String) {
-        // Get default save folder
-        let defaultPath = userDefaults.string(forKey: UserDefaultsKeys.defaultSaveFolder) ?? ""
-        let folder = defaultPath.isEmpty ?
-            (FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Downloads")) :
-            URL(fileURLWithPath: defaultPath)
-
-        let resolution: VideoResolution
-        if type != "video" {
-            resolution = .worst
-        } else if quality == "best" {
-            resolution = .best
-        } else if quality == "1080" {
-            resolution = .r1080p
-        } else {
-            resolution = .r720p
-        }
-
-        let options = DownloadOptions(
-            saveFolder: folder,
-            fileType: type == "video" ? .mp4 : .m4a,
-            videoFormat: nil,
-            audioFormat: nil,
-            videoResolution: resolution,
-            audioQuality: .best,
-            downloadSubtitles: false,
-            subtitleLanguages: ["en"],
-            subtitleFormat: .srt,
-            embedSubtitles: false,
-            downloadThumbnail: false,
-            embedThumbnail: true,
-            embedMetadata: true,
-            splitChapters: false,
-            sponsorBlock: true,
-            timeFrameStart: nil,
-            timeFrameEnd: nil,
-            customFilename: nil,
-            videoCodec: type == "video" ? .auto : .none,
-            audioCodec: .auto,
-            forceOverwrite: false
-        )
-        addDownload(url: url, options: options)
-    }
-
     func quickDownload(
         url: String,
         rawCookies: String? = nil,
         rawUserAgent: String? = nil,
         browserCookieSource: String? = nil
     ) {
-        let preset = DownloadPreset.maxCompatibility
-
-        // Get default save folder from AppStorage
-        let defaultPath = userDefaults.string(forKey: UserDefaultsKeys.defaultSaveFolder) ?? ""
-        let saveFolderURL: URL
-        if !defaultPath.isEmpty {
-            saveFolderURL = URL(fileURLWithPath: defaultPath)
-        } else {
-            saveFolderURL = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Downloads")
-        }
-
-        var options = DownloadOptions(
-            saveFolder: saveFolderURL,
-            fileType: preset.fileType,
-            downloadSubtitles: false,
-            subtitleLanguages: ["en"],
-            subtitleFormat: .srt,
-            embedSubtitles: false,
-            downloadThumbnail: false,
-            embedThumbnail: true,
-            embedMetadata: true,
-            splitChapters: false,
-            sponsorBlock: false,
-            forceOverwrite: false
-        )
+        // Same defaults as the Add sheet and the Home drop target: the selected
+        // preset writes its codec/resolution/file type into these preferences.
+        var options = DownloadOptions.defaultFromPreferences(userDefaults: userDefaults)
         options.rawCookies = rawCookies
         options.rawUserAgent = rawUserAgent
         options.browserCookieSource = AppState.normalizedBrowserCookieSource(browserCookieSource)
@@ -458,6 +398,9 @@ class DownloadManager: ObservableObject {
 
     func resumeWithOverwrite(_ download: Download) {
         download.options.forceOverwrite = true
+        // .fileExists pruned the formats. Reusing that copy turns a video-only
+        // selectedFormatId into a silent download and keeps stale signed URLs.
+        download.mediaInfo = nil
         updateStatus(for: download, to: .queued)
         objectWillChange.send()
         processQueue()
@@ -467,6 +410,7 @@ class DownloadManager: ObservableObject {
         let (candidateName, _) = planUniqueOutputPath(for: download, forceIncrement: true)
         download.options.customFilename = candidateName
         download.options.forceOverwrite = false
+        download.mediaInfo = nil
         updateStatus(for: download, to: .queued)
         objectWillChange.send()
         processQueue()
@@ -480,6 +424,11 @@ class DownloadManager: ObservableObject {
         // while executor-owned teardown is still unwinding.
         queue.clearReservedSlots()
         queue.clearReservedOutputPaths()
+        // Cancelled tasks never reach their cleanup once the app exits, and no
+        // one else owns these directories. Paused/queued jobs keep theirs.
+        for download in downloads where DownloadExecutor.shouldCleanupTemporaryFiles(for: download.status) {
+            DownloadExecutor.cleanupTemporaryFiles(for: download)
+        }
         if pendingRecoveryJobs.isEmpty {
             recoveryStore.markCleanShutdown()
         } else {
@@ -632,11 +581,6 @@ class DownloadManager: ObservableObject {
         objectWillChange.send()
     }
 
-    func removeFromHistory(_ download: HistoricDownload) {
-        historyStore.removeFromHistory(id: download.id, history: &history)
-        downloads.removeAll { $0.id == download.id }
-        objectWillChange.send()
-    }
 
 
 

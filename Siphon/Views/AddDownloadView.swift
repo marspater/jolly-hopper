@@ -56,6 +56,7 @@ struct AddDownloadView: View {
     @State private var sponsorBlock: Bool = false
 
     @State private var showFileExistsAlert: Bool = false
+    @State private var isCheckingExistingFile: Bool = false
     @State private var pendingDownloadOptions: DownloadOptions? = nil
     @State private var existingFilePath: String = ""
 
@@ -179,15 +180,8 @@ struct AddDownloadView: View {
             if !selectedCustomPresetIdString.isEmpty,
                let customPresetId = UUID(uuidString: selectedCustomPresetIdString),
                let customPreset = loadedPresets.first(where: { $0.id == customPresetId }) {
-
-                fileType = customPreset.fileType
-                isVideoTab = customPreset.fileType.isVideo
-                videoResolution = customPreset.videoResolution
-                selectedCodec = customPreset.videoCodec.rawValue
-                selectedConversionCodec = "none"
-                downloadSubtitles = false
-                embedSubtitles = false
-                presetSubtitleLanguage = ""
+                applyCustomPreset(customPreset)
+                selectedPresetName = customPreset.name
             }
 
             // Handle External URLs passed via AppState
@@ -202,6 +196,11 @@ struct AddDownloadView: View {
         }
         .onChange(of: urlInput) { _, newValue in
             fetchTask?.cancel()
+            // A playlist load for the previous URL must not land on the new one.
+            playlistTask?.cancel()
+            isLoadingPlaylist = false
+            showPlaylistSelector = false
+            downloadMode = .single
             mediaInfo = nil
             customFilename = ""
             selectedFormatId = nil
@@ -920,11 +919,8 @@ struct AddDownloadView: View {
         return availableCodecIDs.contains(codec.rawValue) ? "\(title) • Detected" : "\(title) • Fallback if unavailable"
     }
 
-    private func applyPreset(_ preset: DownloadPreset, preserveSelectedCodec: Bool = true) {
-        let currentCodec = selectedCodec
-        let currentConversion = selectedConversionCodec
-        selectedCodec = preserveSelectedCodec ? currentCodec : preset.videoCodec.rawValue
-        selectedConversionCodec = preserveSelectedCodec ? currentConversion : "none"
+    private func applyPreset(_ preset: DownloadPreset) {
+        selectedCodec = preset.videoCodec.rawValue
         selectedAudioCodec = preset.audioCodec.rawValue
         videoResolution = preset.videoResolution
         fileType = preset.fileType
@@ -936,11 +932,8 @@ struct AddDownloadView: View {
         presetSubtitleLanguage = ""
     }
 
-    private func applyCustomPreset(_ preset: CustomPreset, preserveSelectedCodec: Bool = true) {
-        let currentCodec = selectedCodec
-        let currentConversion = selectedConversionCodec
-        selectedCodec = preserveSelectedCodec ? currentCodec : preset.videoCodec.rawValue
-        selectedConversionCodec = preserveSelectedCodec ? currentConversion : "none"
+    private func applyCustomPreset(_ preset: CustomPreset) {
+        selectedCodec = preset.videoCodec.rawValue
         selectedAudioCodec = preset.audioCodec.rawValue
         videoResolution = preset.videoResolution
         fileType = preset.fileType
@@ -1710,7 +1703,11 @@ struct AddDownloadView: View {
                 let pathString = potentialPath.path
 
                 let folder = saveFolder
+                // The check is async; a second click meanwhile would queue the job twice.
+                guard !isCheckingExistingFile else { return }
+                isCheckingExistingFile = true
                 Task {
+                    defer { isCheckingExistingFile = false }
                     let fileExists = await Task.detached { [folder] in
                         if let contents = try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil) {
                             return contents.contains { file in
@@ -1879,6 +1876,17 @@ struct AddDownloadView: View {
             saveFolder = URL(fileURLWithPath: defaultPath)
         }
 
+        // Custom presets do not define these; the preset (applied later) may override sponsorBlock.
+        if defaults.object(forKey: UserDefaultsKeys.embedThumbnail) != nil {
+            embedThumbnail = defaults.bool(forKey: UserDefaultsKeys.embedThumbnail)
+        }
+        if defaults.object(forKey: UserDefaultsKeys.embedMetadata) != nil {
+            embedMetadata = defaults.bool(forKey: UserDefaultsKeys.embedMetadata)
+        }
+        if defaults.object(forKey: UserDefaultsKeys.sponsorBlock) != nil {
+            sponsorBlock = defaults.bool(forKey: UserDefaultsKeys.sponsorBlock)
+        }
+
         if selectedCustomPresetIdString.isEmpty {
             let fileTypeStr = defaults.string(forKey: UserDefaultsKeys.defaultFileType) ?? "mp4"
             if let matched = MediaFileType.allCases.first(where: { $0.rawValue.lowercased() == fileTypeStr.lowercased() }) {
@@ -1897,18 +1905,6 @@ struct AddDownloadView: View {
 
             if let acodec = defaults.string(forKey: UserDefaultsKeys.defaultAudioCodec) {
                 selectedAudioCodec = acodec
-            }
-
-            if defaults.object(forKey: UserDefaultsKeys.embedThumbnail) != nil {
-                embedThumbnail = defaults.bool(forKey: UserDefaultsKeys.embedThumbnail)
-            }
-
-            if defaults.object(forKey: UserDefaultsKeys.embedMetadata) != nil {
-                embedMetadata = defaults.bool(forKey: UserDefaultsKeys.embedMetadata)
-            }
-
-            if defaults.object(forKey: UserDefaultsKeys.sponsorBlock) != nil {
-                sponsorBlock = defaults.bool(forKey: UserDefaultsKeys.sponsorBlock)
             }
 
             if let fallback = defaults.string(forKey: UserDefaultsKeys.resolutionFallbackPolicy) {

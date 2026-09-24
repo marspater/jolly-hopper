@@ -109,6 +109,8 @@ final class YtdlpServiceTests: XCTestCase {
             XCTAssertTrue(args.contains("home:\(destination.path)"))
             XCTAssertTrue(args.contains("temp:\(scratch.path)"))
             XCTAssertTrue(args.contains("thumbnail:\(destination.path)"), "Requested thumbnail is a permanent output")
+            // --print implies --quiet: without --no-quiet yt-dlp emits no progress or log lines.
+            XCTAssertTrue(args.contains("--print") && args.contains("--no-quiet"))
             try Data("partial".utf8).write(to: scratch.appendingPathComponent("fixture.mp4.part"))
             throw CancellationError()
         })
@@ -117,6 +119,120 @@ final class YtdlpServiceTests: XCTestCase {
             XCTFail("Expected cancellation")
         } catch is CancellationError {}
         XCTAssertEqual(try String(contentsOf: scratch.appendingPathComponent("fixture.mp4.part"), encoding: .utf8), "partial")
+    }
+
+    func testProtectedSiteDownloadHonorsResolutionCeilingWithoutExplicitFormat() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        var options = DownloadOptions.default
+        options.saveFolder = root
+        options.videoResolution = .r720p
+        let hd = "https://cdn.starwank.com/get_file/1080.mp4"
+        let sd = "https://cdn.starwank.com/get_file/720.mp4"
+        // The resolver's default source (first, highest) is what fetch stored as manifestUrl.
+        let info = MediaInfo(
+            id: "https://starwank.com/video/1",
+            title: "Fixture",
+            uploader: "StarWank",
+            formats: [
+                MediaFormat(formatId: "1080p", ext: "mp4", resolution: "1920x1080", vcodec: "h264", acodec: "aac", manifestUrl: hd),
+                MediaFormat(formatId: "720p", ext: "mp4", resolution: "1280x720", vcodec: "h264", acodec: "aac", manifestUrl: sd)
+            ],
+            webpageUrl: "https://starwank.com/video/1",
+            originalUrl: hd,
+            manifestUrl: hd
+        )
+        service.processRunner = MockYtdlpProcessRunner(mockDownload: { args in
+            XCTAssertEqual(args.last, sd, "720p ceiling must pick the 720p source, not the resolver default")
+            throw CancellationError()
+        })
+        do {
+            _ = try await service.download(url: "https://starwank.com/video/1", options: options, mediaInfo: info, temporaryDirectory: root.appendingPathComponent("scratch"), onProgress: { _, _, _ in }, onOutput: { _ in })
+            XCTFail("Expected cancellation")
+        } catch is CancellationError {}
+    }
+
+    func testEncryptedBestCamStreamSkipsYtdlpPostprocessors() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        var options = DownloadOptions.default
+        options.saveFolder = root
+        options.embedThumbnail = true
+        options.embedMetadata = true
+        let info = MediaInfo(
+            id: "https://bestcam.tv/video/1",
+            title: "Fixture",
+            uploader: "Protected Site",
+            formats: [MediaFormat(formatId: "720p", ext: "mp4", resolution: "1280x720", vcodec: "h264", acodec: "aac", formatNote: "encrypted-name", manifestUrl: "https://cdn.sssrr.org/v/encrypted-name")],
+            webpageUrl: "https://bestcam.tv/video/1"
+        )
+        service.processRunner = MockYtdlpProcessRunner(mockDownload: { args in
+            // FFmpeg cannot read the file before Siphon decrypts it.
+            for flag in ["--embed-metadata", "--embed-thumbnail", "--embed-chapters"] {
+                XCTAssertFalse(args.contains(flag), "\(flag) would fail on the encrypted file")
+            }
+            throw CancellationError()
+        })
+        do {
+            _ = try await service.download(url: "https://bestcam.tv/video/1", options: options, mediaInfo: info, temporaryDirectory: root.appendingPathComponent("scratch"), onProgress: { _, _, _ in }, onOutput: { _ in })
+            XCTFail("Expected cancellation")
+        } catch is CancellationError {}
+    }
+
+    func testDownloadReusesFreshMetadataAndFallsBackToFreshExtraction() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let scratch = root.appendingPathComponent("scratch")
+        var options = DownloadOptions.default
+        options.saveFolder = root
+        options.embedThumbnail = false
+        let raw = Data(#"{"id":"jNQXAC9IVRw","title":"Fixture"}"#.utf8)
+        var info = MediaInfo(id: "jNQXAC9IVRw", title: "Fixture")
+        info.rawJSON = raw
+        info.fetchedAt = Date()
+
+        final class Calls: @unchecked Sendable { var args: [[String]] = [] }
+        let calls = Calls()
+        service.processRunner = MockYtdlpProcessRunner(mockDownload: { args in
+            calls.args.append(args)
+            if let index = args.firstIndex(of: "--load-info-json") {
+                XCTAssertEqual(try Data(contentsOf: URL(fileURLWithPath: args[index + 1])), raw)
+                throw YtdlpError.downloadFailed("HTTP Error 403: Forbidden") // e.g. an expired stream URL
+            }
+            return "/tmp/fixture.mp4"
+        })
+        _ = try await service.download(url: "https://www.youtube.com/watch?v=jNQXAC9IVRw", options: options, mediaInfo: info, temporaryDirectory: scratch, onProgress: { _, _, _ in }, onOutput: { _ in })
+
+        XCTAssertEqual(calls.args.count, 2)
+        XCTAssertTrue(calls.args[0].contains("--load-info-json"), "Fresh metadata must be reused")
+        XCTAssertFalse(calls.args[1].contains("--load-info-json"), "A failed reuse must retry with fresh extraction")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: scratch.appendingPathComponent("siphon_info.json").path))
+
+        // Stale metadata may carry expired signed URLs: extract again instead.
+        info.fetchedAt = Date().addingTimeInterval(-(YtdlpService.reusableInfoMaxAge + 1))
+        calls.args.removeAll()
+        _ = try await service.download(url: "https://www.youtube.com/watch?v=jNQXAC9IVRw", options: options, mediaInfo: info, temporaryDirectory: scratch, onProgress: { _, _, _ in }, onOutput: { _ in })
+        XCTAssertEqual(calls.args.count, 1)
+        XCTAssertFalse(calls.args[0].contains("--load-info-json"))
+    }
+
+    func testPlaylistDownloadKeepsPerEntryFilenames() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        var options = DownloadOptions.default
+        options.saveFolder = root
+        options.customFilename = "Playlist Title" // the Add sheet pre-fills the playlist's title
+        let summary = MediaInfo(id: "PLfixture", title: "Playlist Title", playlist: "PLfixture")
+        service.processRunner = MockYtdlpProcessRunner(mockDownload: { args in
+            let index = try XCTUnwrap(args.firstIndex(of: "-o"))
+            XCTAssertEqual(args[index + 1], "%(title)s.%(ext)s",
+                           "One fixed name makes yt-dlp skip every entry after the first")
+            throw CancellationError()
+        })
+        do {
+            _ = try await service.download(url: "https://www.youtube.com/playlist?list=PLfixture", options: options, mediaInfo: summary, temporaryDirectory: root.appendingPathComponent("scratch"), onProgress: { _, _, _ in }, onOutput: { _ in })
+            XCTFail("Expected cancellation")
+        } catch is CancellationError {}
     }
 
     override func setUp() async throws {
@@ -158,10 +274,12 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertEqual(mediaInfo.uploader, "Test Uploader")
     }
 
-    func testFetchInfoPlaylistFallback() async throws {
-        // 🎯 What: Test that if single video fetch fails but the URL contains /playlist, it falls back to fetchPlaylistSummaryInfo.
+    func testFetchInfoSummarizesPlaylistWithoutPerEntryExtraction() async throws {
+        // A playlist URL goes straight to the flat summary: --dump-json would fully
+        // extract every entry before failing to decode (minutes for large playlists).
         let validPlaylistJSON = """
         {
+            "_type": "playlist",
             "id": "test_playlist_id",
             "title": "Test Playlist",
             "uploader": "Playlist Uploader",
@@ -182,11 +300,23 @@ final class YtdlpServiceTests: XCTestCase {
 
         let mediaInfo = try await service.fetchInfo(url: "https://www.youtube.com/playlist?list=test_playlist_id")
 
-        XCTAssertGreaterThanOrEqual(callCountBox.value, 2, "Expected mock to be called at least twice: once for single video, once for playlist fallback")
+        XCTAssertEqual(callCountBox.value, 1, "Only the flat summary may run for a playlist URL")
         XCTAssertEqual(mediaInfo.id, "test_playlist_id")
         XCTAssertEqual(mediaInfo.title, "Test Playlist")
         XCTAssertEqual(mediaInfo.playlistCount, 5)
         XCTAssertEqual(mediaInfo.playlist, "test_playlist_id", "Playlist ID should be mapped to playlist property")
+    }
+
+    func testPlaylistLookingURLThatResolvesToSingleVideoFetchesFullMetadata() async throws {
+        service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
+            if args.contains("--flat-playlist") {
+                return #"{"_type":"video","id":"post","title":"Post Video"}"#
+            }
+            return #"{"id":"post","title":"Post Video","formats":[{"format_id":"hd","ext":"mp4"}]}"#
+        })
+        let info = try await service.fetchInfo(url: "https://blog.example.com/?p=123")
+        XCTAssertNil(info.playlist)
+        XCTAssertEqual(info.formats?.map(\.formatId), ["hd"])
     }
 
     func testFetchInfoParseError() async throws {
@@ -288,6 +418,11 @@ final class YtdlpServiceTests: XCTestCase {
         let staleCookieFile = tempDir.appendingPathComponent("siphon_cookies_test_purge.txt")
         let staleHeaderCookieFile = tempDir.appendingPathComponent("siphon_header_cookies_test_purge.txt")
         let regularFile = tempDir.appendingPathComponent("siphon_regular_file.txt")
+        // The test host shares the user's TMPDIR with the installed app, so the
+        // purge must never touch job scratch data (paused downloads resume from it).
+        let scratchDir = ScratchDirectoryPolicy.makeURL()
+        try FileManager.default.createDirectory(at: scratchDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: scratchDir) }
 
         let subDirCookieFile = secureCookiesDir?.appendingPathComponent("siphon_cookies_subdir_test.txt")
         let subDirHeaderCookieFile = secureCookiesDir?.appendingPathComponent("siphon_header_cookies_subdir_test.txt")
@@ -302,11 +437,12 @@ final class YtdlpServiceTests: XCTestCase {
             try "test".write(to: subDirHeaderCookieFile, atomically: true, encoding: .utf8)
         }
 
-        YtdlpService.purgeOrphanedTempCookieFiles()
+        CookieManager.purgeOrphanedTempCookieFiles()
 
         XCTAssertFalse(FileManager.default.fileExists(atPath: staleCookieFile.path))
         XCTAssertFalse(FileManager.default.fileExists(atPath: staleHeaderCookieFile.path))
         XCTAssertTrue(FileManager.default.fileExists(atPath: regularFile.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: scratchDir.path))
         if let subDirCookieFile = subDirCookieFile {
             XCTAssertFalse(FileManager.default.fileExists(atPath: subDirCookieFile.path))
         }
@@ -394,10 +530,10 @@ final class YtdlpServiceTests: XCTestCase {
         INSERT INTO cookies VALUES('.example.com','expired','excluded',X'','/',11644473601000000,1,1,1);
         """
         XCTAssertEqual(sqlite3_exec(db, sql, nil, nil, nil), SQLITE_OK)
-        let file = try HeliumCookieReader.export(for: URL(string: "https://example.com/account/video")!, root: root, password: {
+        let file = try XCTUnwrap(HeliumCookieReader.export(for: URL(string: "https://example.com/account/video")!, root: root, password: {
             XCTFail("Plaintext cookies must not access Keychain")
             return Data()
-        })
+        }))
         defer { file.cleanup() }
         let contents = try String(contentsOf: file.fileURL, encoding: .utf8)
         XCTAssertTrue(contents.contains("#HttpOnly_.example.com\tTRUE\t/account\tTRUE\t0\tsession\tfixture"))
@@ -459,7 +595,7 @@ final class YtdlpServiceTests: XCTestCase {
         _ = try await service.fetchInfo(url: "https://example.com/video", rawCookies: "session=fixture", rawUserAgent: exactUA)
     }
 
-    func testHeliumExportFailsWhenNoCookiesMatchTargetHost() throws {
+    func testHeliumProceedsWithoutCookiesWhenNoneMatchTargetHost() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }
         let profile = root.appendingPathComponent("Default")
@@ -476,15 +612,19 @@ final class YtdlpServiceTests: XCTestCase {
         """
         XCTAssertEqual(sqlite3_exec(db, sql, nil, nil, nil), SQLITE_OK)
 
-        XCTAssertThrowsError(
-            try HeliumCookieReader.export(
-                for: URL(string: "https://example.com/video")!,
-                root: root,
-                password: { Data("unused".utf8) }
-            )
-        ) { error in
-            XCTAssertTrue(error.localizedDescription.contains("No matching cookies"))
-        }
+        XCTAssertNil(try HeliumCookieReader.export(
+            for: URL(string: "https://example.com/video")!,
+            root: root,
+            password: { Data("unused".utf8) }
+        ))
+
+        // yt-dlp's native browser readers continue anonymously when a host has no
+        // cookies (for example a CDN stream host). The Chromium reader must too,
+        // instead of failing the whole metadata fetch or download.
+        let args = ["yt-dlp", "--cookies-from-browser", "chromium-based", "--", "https://cdn.example.com/stream.m3u8"]
+        let (prepared, cookieFile) = try ChromiumCookieReader.prepare(args, rootOverride: root)
+        XCTAssertNil(cookieFile)
+        XCTAssertEqual(prepared, ["yt-dlp", "--", "https://cdn.example.com/stream.m3u8"])
     }
 
     func testChromiumCookieReaderPrepareBypassesChromiumAndInterceptsArc() throws {

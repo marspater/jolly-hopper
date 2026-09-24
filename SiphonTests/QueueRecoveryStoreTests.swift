@@ -134,6 +134,49 @@ final class QueueRecoveryStoreTests: XCTestCase {
         XCTAssertEqual(rePersisted.first?.status, .queued)
     }
 
+    func testReopenedWindowDoesNotOfferLiveJobsForRecovery() throws {
+        let manager = DownloadManager(recoveryFileURL: recoveryFileURL)
+        defer { manager.shutdown() }
+        manager.ytdlpService.isUpdating = true // hold the job in the queue
+        manager.initialize(languageService: LanguageService())
+
+        manager.addDownload(url: "https://example.com/live", options: .default)
+        let live = try XCTUnwrap(manager.downloads.first)
+
+        // Every new main window runs ContentView's .task, which calls initialize
+        // again. The live snapshot on disk must not be treated as interrupted.
+        manager.initialize(languageService: LanguageService())
+
+        XCTAssertFalse(manager.showQueueRecoveryAlert)
+        XCTAssertTrue(manager.pendingRecoveryJobs.isEmpty)
+        XCTAssertEqual(manager.downloads.first?.id, live.id)
+        XCTAssertEqual(manager.downloads.first?.status, .queued)
+    }
+
+    func testQuitRemovesScratchOfStoppedJobsButKeepsPausedScratch() throws {
+        let manager = DownloadManager(recoveryFileURL: recoveryFileURL)
+        let active = Download(url: "https://example.com/active", options: .default, title: "Active")
+        active.status = .downloading
+        active.scratchDirectory = ScratchDirectoryPolicy.makeURL()
+        let paused = Download(url: "https://example.com/paused", options: .default, title: "Paused")
+        paused.status = .paused
+        paused.scratchDirectory = ScratchDirectoryPolicy.makeURL()
+        for dir in [active.scratchDirectory!, paused.scratchDirectory!] {
+            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        }
+        let activeScratch = active.scratchDirectory!
+        let pausedScratch = paused.scratchDirectory!
+        defer { try? FileManager.default.removeItem(at: pausedScratch) }
+        manager.downloads = [active, paused]
+
+        // The same sequence as applicationWillTerminate.
+        manager.stopAllDownloads(preservePaused: true, suppressNotification: true)
+        manager.shutdown()
+
+        XCTAssertFalse(FileManager.default.fileExists(atPath: activeScratch.path), "Stopped partial data would be orphaned in TMPDIR")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: pausedScratch.path), "Paused jobs resume from their scratch")
+    }
+
     func testDownloadManagerDiscardRecovery() async throws {
         let store = QueueRecoveryStore(fileURL: recoveryFileURL)
         let dl = Download(url: "https://example.com/discard", options: .default, title: "Discard Download")

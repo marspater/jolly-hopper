@@ -294,6 +294,7 @@ final class DownloadExecutor: ObservableObject {
             Self.appendToLog(for: download, text: "\n" + startMsg)
         }
 
+        var eventCoalescer: DownloadEventCoalescer?
         do {
             let info: MediaInfo
             if let existing = download.mediaInfo {
@@ -370,7 +371,7 @@ final class DownloadExecutor: ObservableObject {
             LoggerService.shared.log("Starting download for URL: \(LoggerService.sanitizeURLForLog(download.url))", level: .info)
 
             let coalescer = DownloadEventCoalescer { [weak self, weak download] progress, speed, eta, lines in
-                DispatchQueue.main.async { [weak self, weak download] in
+                let apply: @MainActor @Sendable () -> Void = { [weak self, weak download] in
                     guard let self, let download else { return }
                     guard download.status == .downloading || download.status == .fetching || download.status == .processing else {
                         return
@@ -404,7 +405,16 @@ final class DownloadExecutor: ObservableObject {
                         }
                     }
                 }
+                // The final flush runs on the main actor right before the status
+                // leaves .downloading. Applied asynchronously it would land after
+                // that change and be dropped, losing the job's last log lines.
+                if Thread.isMainThread {
+                    MainActor.assumeIsolated { apply() }
+                } else {
+                    DispatchQueue.main.async { apply() }
+                }
             }
+            eventCoalescer = coalescer
 
             let downloadResult = try await ytdlpService.download(
                 url: download.url,
@@ -464,6 +474,7 @@ final class DownloadExecutor: ObservableObject {
             )
 
         } catch let error as YtdlpError {
+            eventCoalescer?.flushRemaining()
             if download.status == .stopped || download.status == .paused || Task.isCancelled {
                 LoggerService.shared.log("Download stopped or paused by user (\(LoggerService.sanitizeURLForLog(download.url)))", level: .info)
                 download.diagnostics.exitStatus = "Stopped by user"
@@ -502,6 +513,7 @@ final class DownloadExecutor: ObservableObject {
             notificationService.sendDownloadFailed(filename: download.displayTitle.isEmpty ? LoggerService.sanitizeURLForLog(download.url) : download.displayTitle, languageService: lang)
             delegate?.executorDidRequestAddToHistory(download, skipSave: false)
         } catch {
+            eventCoalescer?.flushRemaining()
             if download.status == .stopped || download.status == .paused || Task.isCancelled {
                 LoggerService.shared.log("Download stopped or paused by user (\(LoggerService.sanitizeURLForLog(download.url)))", level: .info)
                 if download.status == .stopped {

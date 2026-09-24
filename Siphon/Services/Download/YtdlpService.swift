@@ -369,6 +369,18 @@ class YtdlpService: ObservableObject {
         return hashString.caseInsensitiveCompare(expectedHash) == .orderedSame
     }
 
+    /// Hashes off the main actor: the three pinned binaries are ~130 MB, which
+    /// stalled the UI for ~0.3 s at launch when verified inline.
+    nonisolated static func verifySHA256Detached(fileURL: URL, expectedHash: String) async -> Bool {
+        await Task.detached(priority: .userInitiated) {
+            verifySHA256(fileURL: fileURL, expectedHash: expectedHash)
+        }.value
+    }
+
+    /// Signed stream URLs in reused metadata must still be valid when the
+    /// download starts; YouTube's last hours, other CDNs much less.
+    static let reusableInfoMaxAge: TimeInterval = 10 * 60
+
     nonisolated static func isPathContained(targetURL: URL, inside parentDirectoryURL: URL) -> Bool {
         let root = parentDirectoryURL.standardizedFileURL.resolvingSymlinksInPath()
         let candidate = targetURL.standardizedFileURL.resolvingSymlinksInPath()
@@ -470,9 +482,9 @@ class YtdlpService: ObservableObject {
     }
 
     private func repairAppSupportFfmpegPair(ffmpeg: URL, ffprobe: URL) async {
-        if !isExecutableBinary(at: ffmpeg) || !isExecutableBinary(at: ffprobe) ||
-           !Self.verifySHA256(fileURL: ffmpeg, expectedHash: DependencyChecksums.ffmpegExecutableSHA256) ||
-           !Self.verifySHA256(fileURL: ffprobe, expectedHash: DependencyChecksums.ffprobeExecutableSHA256) {
+        let ffmpegValid = await Self.verifySHA256Detached(fileURL: ffmpeg, expectedHash: DependencyChecksums.ffmpegExecutableSHA256)
+        let ffprobeValid = await Self.verifySHA256Detached(fileURL: ffprobe, expectedHash: DependencyChecksums.ffprobeExecutableSHA256)
+        if !isExecutableBinary(at: ffmpeg) || !isExecutableBinary(at: ffprobe) || !ffmpegValid || !ffprobeValid {
             LoggerService.shared.log("Downloading atomic FFmpeg and FFprobe bundle in \(ffmpeg.deletingLastPathComponent().path)", level: .info)
             await downloadFfmpegAndFfprobeBundle()
         }
@@ -545,7 +557,7 @@ class YtdlpService: ObservableObject {
         let invalidBackup = appSupport.appendingPathComponent("yt-dlp.invalid-backup")
 
         if let bundledPath = Bundle.main.url(forResource: "yt-dlp", withExtension: nil),
-           Self.verifySHA256(fileURL: bundledPath, expectedHash: DependencyChecksums.ytdlpExecutableSHA256) {
+           await Self.verifySHA256Detached(fileURL: bundledPath, expectedHash: DependencyChecksums.ytdlpExecutableSHA256) {
             ytdlpPath = bundledPath
             isAvailable = true
             try? FileManager.default.removeItem(at: invalidBackup)
@@ -555,7 +567,7 @@ class YtdlpService: ObservableObject {
         let ytdlpInSupport = appSupport.appendingPathComponent("yt-dlp")
 
         if FileManager.default.fileExists(atPath: ytdlpInSupport.path) {
-            if Self.verifySHA256(fileURL: ytdlpInSupport, expectedHash: DependencyChecksums.ytdlpExecutableSHA256) {
+            if await Self.verifySHA256Detached(fileURL: ytdlpInSupport, expectedHash: DependencyChecksums.ytdlpExecutableSHA256) {
                 ytdlpPath = ytdlpInSupport
                 try? DependencyInstaller.adHocSignBinary(at: ytdlpInSupport)
                 isAvailable = true
@@ -625,7 +637,7 @@ class YtdlpService: ObservableObject {
             return false
         }
 
-        guard Self.verifySHA256(fileURL: url, expectedHash: expectedSHA256) else {
+        guard await Self.verifySHA256Detached(fileURL: url, expectedHash: expectedSHA256) else {
             LoggerService.shared.log("\(name) at \(url.path) failed SHA-256 checksum verification for \(context). Expected: \(expectedSHA256)", level: .error)
             return false
         }
@@ -778,6 +790,23 @@ class YtdlpService: ObservableObject {
         }
         
         let normalizedURL = normalizeURLForYtdlp(url)
+        // Try the flat summary first: --dump-json on a playlist URL fully extracts
+        // every entry (about 1.4 s per YouTube video) before failing to decode.
+        if isPlaylistURL(normalizedURL) {
+            do {
+                return try await fetchPlaylistSummaryInfo(
+                    path: path.path,
+                    url: normalizedURL,
+                    rawCookies: rawCookies,
+                    rawUserAgent: rawUserAgent,
+                    browserCookieSource: browserCookieSource
+                )
+            } catch {
+                if error is CancellationError { throw error }
+                try Task.checkCancellation()
+                LoggerService.shared.log("Playlist summary unavailable for \(hostForLog(normalizedURL)) (\(error.localizedDescription)); trying single-video metadata", level: .info)
+            }
+        }
         do {
              return try await fetchSingleVideoInfo(
                 path: path.path,
@@ -787,23 +816,6 @@ class YtdlpService: ObservableObject {
                 browserCookieSource: browserCookieSource
              )
         } catch {
-            if isPlaylistURL(normalizedURL) {
-                do {
-                    return try await fetchPlaylistSummaryInfo(
-                        path: path.path,
-                        url: normalizedURL,
-                        rawCookies: rawCookies,
-                        rawUserAgent: rawUserAgent,
-                        browserCookieSource: browserCookieSource
-                    )
-                } catch {
-                    throw mapSiteSpecificError(
-                        error,
-                        url: normalizedURL,
-                        browserCookieSource: browserCookieSource
-                    )
-                }
-            }
             throw mapSiteSpecificError(
                 error,
                 url: normalizedURL,
@@ -1141,7 +1153,10 @@ class YtdlpService: ObservableObject {
             let output = try await runCommand(args)
             guard let data = output.data(using: .utf8) else { throw YtdlpError.parseError }
             do {
-                return try JSONDecoder().decode(MediaInfo.self, from: data)
+                var info = try JSONDecoder().decode(MediaInfo.self, from: data)
+                info.rawJSON = data
+                info.fetchedAt = Date()
+                return info
             } catch {
                 LoggerService.shared.log("Failed to decode MediaInfo JSON: \(error)", level: .error)
                 throw YtdlpError.parseError
@@ -1236,7 +1251,12 @@ class YtdlpService: ObservableObject {
         guard let data = output.data(using: .utf8) else { throw YtdlpError.parseError }
 
         let decoder = JSONDecoder()
-
+        // A playlist-looking URL (for example a "?p=" post link) can resolve to a
+        // single video; only a real playlist may be summarized without formats.
+        struct ResultKind: Decodable { let _type: String? }
+        guard (try? decoder.decode(ResultKind.self, from: data))?._type == "playlist" else {
+            throw YtdlpError.parseError
+        }
         let info = try decoder.decode(MediaInfo.self, from: data)
 
         return MediaInfo(
@@ -1451,6 +1471,11 @@ public struct DownloadResult: Sendable {
         var customEmbedURL: String? = nil
         var customThumbnailURL: String? = nil
         var bestCamDecryptionKey: String? = nil
+        // Protected-site resolvers default to their first source. Without an
+        // explicit pick, reuse the source the selection logic chose so the
+        // resolution ceiling applies to the stream actually downloaded.
+        let protectedFormatId = options.selectedFormatId
+            ?? mediaInfo?.resolveSelectedFormats(options: options).first(where: { !$0.isAudioOnly })?.formatId
 
         if isRecuURL(url) {
             if let streamURL = mediaInfo?.manifestUrl ?? mediaInfo?.originalUrl,
@@ -1492,7 +1517,7 @@ public struct DownloadResult: Sendable {
         } else if isGuywhURL(url) {
             if let reused = reusedDirectMedia(
                 mediaInfo: mediaInfo,
-                selectedFormatId: options.selectedFormatId,
+                selectedFormatId: protectedFormatId,
                 normalizedURL: normalizedURL,
                 fallbackEmbedURL: url
             ) {
@@ -1507,7 +1532,7 @@ public struct DownloadResult: Sendable {
         } else if isGFFURL(url) {
             if let reused = reusedDirectMedia(
                 mediaInfo: mediaInfo,
-                selectedFormatId: options.selectedFormatId,
+                selectedFormatId: protectedFormatId,
                 normalizedURL: normalizedURL,
                 fallbackEmbedURL: url
             ) {
@@ -1522,7 +1547,7 @@ public struct DownloadResult: Sendable {
         } else if isBestCamURL(url) {
             if let reused = reusedDirectMedia(
                 mediaInfo: mediaInfo,
-                selectedFormatId: options.selectedFormatId,
+                selectedFormatId: protectedFormatId,
                 normalizedURL: normalizedURL,
                 fallbackEmbedURL: url
             ) {
@@ -1532,7 +1557,7 @@ public struct DownloadResult: Sendable {
             } else if let bestCamMedia = await resolveBestCamMediaInfo(
                 url: url,
                 rawCookies: options.rawCookies,
-                requestedFormat: options.selectedFormatId
+                requestedFormat: protectedFormatId
             ) {
                 targetURL = bestCamMedia.streamURL
                 customResolvedTitle = bestCamMedia.title
@@ -1543,7 +1568,7 @@ public struct DownloadResult: Sendable {
         } else if isStarwankURL(url) {
             if let reused = reusedDirectMedia(
                 mediaInfo: mediaInfo,
-                selectedFormatId: options.selectedFormatId,
+                selectedFormatId: protectedFormatId,
                 normalizedURL: normalizedURL,
                 fallbackEmbedURL: url,
                 fallbackIsAllowed: { stream in
@@ -1555,7 +1580,7 @@ public struct DownloadResult: Sendable {
             } else if let starwankMedia = await resolveStarwankMediaInfo(
                 url: url,
                 rawCookies: options.rawCookies,
-                requestedFormat: options.selectedFormatId
+                requestedFormat: protectedFormatId
             ) {
                 targetURL = starwankMedia.streamURL
                 customResolvedTitle = starwankMedia.title
@@ -1565,7 +1590,7 @@ public struct DownloadResult: Sendable {
         } else if isPussyspaceURL(url) {
             if let reused = reusedDirectMedia(
                 mediaInfo: mediaInfo,
-                selectedFormatId: options.selectedFormatId,
+                selectedFormatId: protectedFormatId,
                 normalizedURL: normalizedURL,
                 fallbackEmbedURL: url,
                 fallbackIsAllowed: { stream in
@@ -1577,7 +1602,7 @@ public struct DownloadResult: Sendable {
             } else if let pussyMedia = await resolvePussyspaceMediaInfo(
                 url: url,
                 rawCookies: options.rawCookies,
-                requestedFormat: options.selectedFormatId
+                requestedFormat: protectedFormatId
             ) {
                 targetURL = pussyMedia.streamURL
                 customResolvedTitle = pussyMedia.title
@@ -1616,7 +1641,11 @@ public struct DownloadResult: Sendable {
         args.append("--no-playlist")
 
         let outputTemplate: String
-        if let customFilename = options.customFilename ?? customResolvedTitle, !customFilename.isEmpty {
+        // A playlist URL expands to many entries (--no-playlist does not apply to
+        // it). One fixed name would make yt-dlp skip every entry after the first
+        // as "already downloaded", so each entry keeps its own title.
+        let isPlaylist = mediaInfo?.playlist != nil
+        if !isPlaylist, let customFilename = options.customFilename ?? customResolvedTitle, !customFilename.isEmpty {
             let safeName = Self.sanitizeFilename(customFilename)
             outputTemplate = "\(safeName).%(ext)s"
         } else {
@@ -1626,6 +1655,9 @@ public struct DownloadResult: Sendable {
         args.append("--continue")
         args.append(contentsOf: ["-o", outputTemplate])
         args.append(contentsOf: ["--print", "after_move:SIPHON_FINAL_PATH:%(filepath)s"])
+        // --print implies --quiet, which silences progress and every log line
+        // the runner parses. --no-quiet keeps the normal output alongside it.
+        args.append("--no-quiet")
 
         // Metadata-first HLS detection: configure FFmpeg downloader up-front for standalone .m3u8 streams
         // (YouTube and DASH formats must ALWAYS use yt-dlp's native downloader)
@@ -1663,21 +1695,25 @@ public struct DownloadResult: Sendable {
         if options.downloadThumbnail {
             args.append("--write-thumbnail")
         }
-        if options.embedThumbnail {
+        // An encrypted stream stays unreadable until Siphon decrypts it after
+        // yt-dlp exits, so FFmpeg postprocessors would fail on it. The cover is
+        // embedded by the post-decryption fallback below instead.
+        let isEncryptedStream = bestCamDecryptionKey != nil
+        if options.embedThumbnail && !isEncryptedStream {
             args.append("--embed-thumbnail")
             args.append(contentsOf: ["--convert-thumbnails", "jpg"])
         }
 
-        if options.embedMetadata {
+        if options.embedMetadata && !isEncryptedStream {
             args.append("--embed-metadata")
             args.append("--embed-chapters")
         }
 
-        if options.splitChapters {
+        if options.splitChapters && !isEncryptedStream {
             args.append("--split-chapters")
         }
 
-        if options.sponsorBlock {
+        if options.sponsorBlock && !isEncryptedStream {
             args.append(contentsOf: ["--sponsorblock-remove", "all"])
         }
 
@@ -1700,10 +1736,29 @@ public struct DownloadResult: Sendable {
             args.append(contentsOf: extraArgs)
         }
 
+        // Reuse the metadata fetched moments ago instead of extracting again
+        // (saves a round of site requests and ~1-2 s). Only for the URL it was
+        // fetched from, only while its signed stream URLs are surely fresh.
+        var infoJSONFile: URL?
+        if targetURL == normalizedURL,
+           mediaInfo?.playlist == nil,
+           let raw = mediaInfo?.rawJSON,
+           let fetchedAt = mediaInfo?.fetchedAt,
+           Date().timeIntervalSince(fetchedAt) < Self.reusableInfoMaxAge {
+            let file = scratchDirectory.appendingPathComponent("siphon_info.json")
+            if FileManager.default.createFile(atPath: file.path, contents: raw, attributes: [.posixPermissions: 0o600]) {
+                infoJSONFile = file
+                args.append(contentsOf: ["--load-info-json", file.path])
+            }
+        }
+
         var secureCookieFiles: [SecureCookieFile] = []
         defer {
             for file in secureCookieFiles {
                 file.cleanup()
+            }
+            if let infoJSONFile {
+                try? FileManager.default.removeItem(at: infoJSONFile)
             }
             // Executor-owned directories survive a pause and are cleaned at job teardown.
             if temporaryDirectory == nil {
@@ -1771,6 +1826,7 @@ public struct DownloadResult: Sendable {
         
         // Structured bounded recovery state machine
         enum DownloadRecoveryStrategy: Hashable {
+            case freshExtraction
             case stripCookies
             case disableRangeChunking
             case useFfmpegHls
@@ -1781,6 +1837,13 @@ public struct DownloadResult: Sendable {
 
         var triedStrategies = Set<DownloadRecoveryStrategy>()
         var currentArgs = args
+        // The URL stays in the arguments (cookie export and the fresh-extraction
+        // fallback need it), so yt-dlp's expected notice about it is not job output.
+        let reusesInfo = infoJSONFile != nil
+        let processOutput: @Sendable (String) -> Void = { line in
+            if reusesInfo, line.contains("URLs are ignored due to --load-info-json") { return }
+            onOutput(line)
+        }
         var processResult: DownloadProcessResult? = nil
 
         while processResult == nil {
@@ -1792,7 +1855,7 @@ public struct DownloadResult: Sendable {
                     saveFolder: options.saveFolder,
                     processController: processController,
                     onProgress: onProgress,
-                    onOutput: onOutput
+                    onOutput: processOutput
                 )
             } catch let error as YtdlpError {
                 let errText: String
@@ -1801,6 +1864,17 @@ public struct DownloadResult: Sendable {
                     errText = msg
                 default:
                     errText = ""
+                }
+
+                // Strategy 0: Reused metadata failed (for example an expired stream URL)
+                // -> extract again. yt-dlp ignores the trailing URL while --load-info-json is set.
+                if let index = currentArgs.firstIndex(of: "--load-info-json"), index + 1 < currentArgs.count,
+                   !triedStrategies.contains(.freshExtraction) {
+                    triedStrategies.insert(.freshExtraction)
+                    LoggerService.shared.log("Download with reused metadata failed; retrying with fresh extraction", level: .info)
+                    onOutput("[Siphon Info] Refreshing video information and retrying...\n")
+                    currentArgs.removeSubrange(index...index + 1)
+                    continue
                 }
 
                 // Strategy 1: Cookie failure -> try alternate browser or strip browser cookies
@@ -2177,8 +2251,7 @@ public struct DownloadResult: Sendable {
                 formatId = customFormatId
             }
             args.append(contentsOf: ["-f", formatId])
-        } else if let info = mediaInfo, !info.resolveSelectedFormats(options: options).isEmpty {
-            let resolved = info.resolveSelectedFormats(options: options)
+        } else if let resolved = mediaInfo?.resolveSelectedFormats(options: options), !resolved.isEmpty {
             let formatId: String
             if isSynthesizedDirectStream {
                 formatId = "b/best"
@@ -5509,9 +5582,6 @@ public struct DownloadResult: Sendable {
     }
 
     nonisolated static func parsePussyspaceMedia(html: String, targetUrl: String, requestedFormat: String? = nil, playerHtml: String? = nil) -> PussyspaceExtractedMedia? {
-        let nsHtml = html as NSString
-        let htmlRange = NSRange(location: 0, length: nsHtml.length)
-
         let title = Self.firstRegexCapture(in: html, regexes: pussyspaceTitleRegexes) { raw in
             let cleaned = raw
                 .replacingOccurrences(of: "(?i)\\s*(\\||&#124;)\\s*pussyspace.*$", with: "", options: .regularExpression)
@@ -6719,26 +6789,6 @@ public struct DownloadResult: Sendable {
             additionalNetscapeLines: additionalNetscapeLines
         ) else { return nil }
         return secureFile.detach()
-    }
-
-    static func purgeOrphanedTempCookieFiles() {
-        let fileManager = FileManager.default
-        let tempDirsToClean: [URL] = [
-            FileManager.default.temporaryDirectory,
-            getSecureTempCookiesDirectory()
-        ].compactMap { $0 }
-
-        for dir in tempDirsToClean {
-            guard let files = try? fileManager.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil) else { continue }
-            for file in files {
-                let name = file.lastPathComponent
-                if (name.hasPrefix("siphon_cookies_") || name.hasPrefix("siphon_header_cookies_") || name.hasPrefix("siphon_consolidated_cookies_")) && name.hasSuffix(".txt") {
-                    try? fileManager.removeItem(at: file)
-                } else if name.hasPrefix("siphon_scratch_") || name.hasPrefix("Siphon_Staging_") || name.hasPrefix("Siphon_Update_Package_") {
-                    try? fileManager.removeItem(at: file)
-                }
-            }
-        }
     }
 }
 

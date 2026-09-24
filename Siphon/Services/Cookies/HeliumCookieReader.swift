@@ -185,11 +185,13 @@ enum ChromiumCookieReader {
         return value
     }
 
+    /// Returns nil when the first readable profile has no cookies for the target host.
+    /// Other browsers' profiles are not probed in that case.
     static func export(
         for target: URL,
         root: URL = defaultHeliumRoot,
         password: (() throws -> Data)? = nil
-    ) throws -> SecureCookieFile {
+    ) throws -> SecureCookieFile? {
         guard let host = target.host else { throw failure("Missing target host.") }
 
         // If default root does not exist, look across known Chromium browser installations
@@ -238,7 +240,7 @@ enum ChromiumCookieReader {
         targetHost host: String,
         root: URL,
         password: () throws -> Data
-    ) throws -> SecureCookieFile {
+    ) throws -> SecureCookieFile? {
         let profile = try profileDirectory(root: root)
         let candidates = [profile.appendingPathComponent("Network/Cookies"), profile.appendingPathComponent("Cookies")]
         guard let database = candidates.first(where: { FileManager.default.fileExists(atPath: $0.path) }) else {
@@ -297,9 +299,9 @@ enum ChromiumCookieReader {
             let secure = sqlite3_column_int(statement, 6) != 0 ? "TRUE" : "FALSE"
             lines.append("\(httpOnly)\(domain)\t\(subdomains)\t\(path)\t\(secure)\t\(expiry)\t\(name)\t\(value)")
         }
-        guard lines.count > 1 else {
-            throw failure("No matching cookies for \(host). Open the target page in your browser and sign in first.")
-        }
+        // No cookies for this host is not an error: yt-dlp's own browser readers
+        // also continue anonymously, and CDN hosts never carry site cookies.
+        guard lines.count > 1 else { return nil }
         guard let directory = CookieManager.getSecureTempCookiesDirectory() else {
             throw failure("Could not prepare temporary cookie storage.")
         }
@@ -312,7 +314,7 @@ enum ChromiumCookieReader {
         return file
     }
 
-    static func prepare(_ args: [String]) throws -> (args: [String], cookieFile: SecureCookieFile?) {
+    static func prepare(_ args: [String], rootOverride: URL? = nil) throws -> (args: [String], cookieFile: SecureCookieFile?) {
         guard let index = args.firstIndex(of: "--cookies-from-browser"), index + 1 < args.count else {
             return (args, nil)
         }
@@ -324,13 +326,22 @@ enum ChromiumCookieReader {
             throw failure("Missing HTTP target for cookie extraction.")
         }
         let root: URL
-        if browserArg == "arc", let arcBrowser = knownChromiumBrowsers.first(where: { $0.name == "Arc" }) {
+        if let rootOverride {
+            root = rootOverride
+        } else if browserArg == "arc", let arcBrowser = knownChromiumBrowsers.first(where: { $0.name == "Arc" }) {
             root = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(arcBrowser.relativePath)
         } else {
             root = defaultHeliumRoot
         }
-        let file = try export(for: target, root: root)
         var prepared = args
+        guard let file = try export(for: target, root: root) else {
+            let host = target.host ?? "target"
+            Task { @MainActor in
+                LoggerService.shared.log("No \(browserArg) cookies for \(host); continuing without browser cookies.", level: .info)
+            }
+            prepared.removeSubrange(index...index + 1)
+            return (prepared, nil)
+        }
         prepared.replaceSubrange(index...index + 1, with: ["--cookies", file.path])
         return (prepared, file)
     }
