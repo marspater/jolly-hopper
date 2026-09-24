@@ -347,6 +347,12 @@ class YtdlpService: ObservableObject {
     var boyfriendTVRenderedStreamLoader: ((URL) async throws -> String?)?
     // Test seam for installed browser candidate discovery.
     var installedBrowsersProvider: (() async -> [String])?
+    // Persistent, so the user's recu.me clearance and sign-in survive relaunches.
+    private lazy var recuWebDataStore = WKWebsiteDataStore(
+        forIdentifier: UUID(uuidString: "6F1E2B7C-3A4D-4E5F-9A8B-7C6D5E4F3A2B")!
+    )
+    // Test seam for the recu.me WebKit session. Production uses WKWebView.
+    var recuBrowserSessionLoader: ((URL, String) async throws -> RecuBrowserSession)?
 
     init(processRunner: YtdlpProcessRunning = DefaultYtdlpProcessRunner()) {
         self.processRunner = processRunner
@@ -833,12 +839,7 @@ class YtdlpService: ObservableObject {
         browserCookieSource: String? = nil
     ) async throws -> MediaInfo {
         if isRecuURL(url) {
-            let recuMedia = try await resolveRecuMediaInfo(
-                url: url,
-                rawCookies: rawCookies,
-                rawUserAgent: rawUserAgent,
-                browserCookieSource: browserCookieSource
-            )
+            let recuMedia = try await resolveRecuMediaInfo(url: url)
             var parsedInfo: MediaInfo?
             var probeArgs = [
                 path,
@@ -1477,26 +1478,22 @@ public struct DownloadResult: Sendable {
         let protectedFormatId = options.selectedFormatId
             ?? mediaInfo?.resolveSelectedFormats(options: options).first(where: { !$0.isAudioOnly })?.formatId
 
+        var recuUserAgent: String?
         if isRecuURL(url) {
-            if let streamURL = mediaInfo?.manifestUrl ?? mediaInfo?.originalUrl,
-               !streamURL.isEmpty,
-               streamURL.lowercased().contains(".m3u8") {
-                targetURL = streamURL
-                customResolvedTitle = mediaInfo?.title
-                customEmbedURL = mediaInfo?.webpageUrl ?? normalizedURL
-                customThumbnailURL = mediaInfo?.thumbnail
-            } else {
-                let recuMedia = try await resolveRecuMediaInfo(
-                    url: normalizedURL,
-                    rawCookies: options.rawCookies,
-                    rawUserAgent: options.rawUserAgent,
-                    browserCookieSource: options.browserCookieSource
-                )
-                targetURL = recuMedia.playlistURL
-                customResolvedTitle = recuMedia.title
-                customEmbedURL = recuMedia.pageURL
-                customThumbnailURL = recuMedia.thumbnailURL
+            // Time ranges download through ffmpeg, which cannot add the segment `check`
+            // parameter below, so every segment would fail with 422.
+            if let start = options.timeFrameStart, let end = options.timeFrameEnd,
+               Self.isValidTimeFrame(start), Self.isValidTimeFrame(end) {
+                throw YtdlpError.downloadFailed("Recu.me recordings can't be trimmed yet. Clear the time range to download the full recording.")
             }
+            // Recu signs the playlist for the user-agent of the session that resolved
+            // it (any other agent gets 404), so resolve fresh and download with it.
+            let recuMedia = try await resolveRecuMediaInfo(url: normalizedURL)
+            targetURL = recuMedia.playlistURL
+            customResolvedTitle = recuMedia.title
+            customEmbedURL = recuMedia.pageURL
+            customThumbnailURL = recuMedia.thumbnailURL
+            recuUserAgent = recuMedia.userAgent
         } else if isBoyfriendTVURL(url) {
             if let streamURL = mediaInfo?.manifestUrl ?? mediaInfo?.originalUrl, !streamURL.isEmpty, streamURL.contains("boyfriend") {
                 targetURL = resolveBoyfriendTVStreamURLForDownload(streamURL: streamURL, options: options)
@@ -1809,7 +1806,10 @@ public struct DownloadResult: Sendable {
             _ = await downloadThumbnailLocally(from: thumbStr, to: scratchThumbnailURL)
         }
 
-        appendSiteSpecificArgs(for: customEmbedURL ?? targetURL, options: options, mediaInfo: mediaInfo, to: &args)
+        appendSiteSpecificArgs(for: customEmbedURL ?? targetURL, options: options, mediaInfo: mediaInfo, rawUserAgent: recuUserAgent, to: &args)
+        if isRecuURL(url), let check = Self.recuSegmentCheck(for: targetURL) {
+            args.append(contentsOf: ["--extractor-args", "generic:fragment_query=check=\(check)"])
+        }
 
         args.append("--no-color")
         args.append("--newline")
@@ -2519,26 +2519,6 @@ public struct DownloadResult: Sendable {
         return (model: parts[0], videoID: parts[2])
     }
 
-    nonisolated static func recuToken(from html: String, videoID: String) -> String? {
-        let escapedID = NSRegularExpression.escapedPattern(for: videoID)
-        let patterns = [
-            #"(?:id|data-id)\s*=\s*["']?"# + escapedID + #"["']?[^>]{0,800}?data-token\s*=\s*["']([^"']+)["']"#,
-            escapedID + #"["']\s*[^>\n]{0,300}?data-token\s*=\s*["']([^"']+)["']"#,
-            #"data-token\s*=\s*["']([^"']+)["'][^>]{0,800}?(?:id|data-id)\s*=\s*["']?"# + escapedID + #"["']?"#
-        ]
-        for pattern in patterns {
-            guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive, .dotMatchesLineSeparators]),
-                  let match = regex.firstMatch(in: html, range: NSRange(html.startIndex..., in: html)),
-                  match.numberOfRanges > 1,
-                  let range = Range(match.range(at: 1), in: html) else {
-                continue
-            }
-            let token = String(html[range]).decodingHTMLEntities()
-            if !token.isEmpty { return token }
-        }
-        return nil
-    }
-
     nonisolated static func recuPlaylistURL(from apiResponse: String) -> String? {
         let decoded = apiResponse.decodingHTMLEntities()
             .replacingOccurrences(of: "\\/", with: "/")
@@ -2576,196 +2556,241 @@ public struct DownloadResult: Sendable {
         }
     }
 
-    private func decodedDumpPagesBody(_ output: String) -> String {
-        var decodedPages: [String] = []
-        for line in output.split(whereSeparator: \.isNewline) {
-            let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !trimmed.isEmpty,
-                  let data = Data(base64Encoded: trimmed),
-                  let decoded = String(data: data, encoding: .utf8),
-                  !decoded.isEmpty else {
-                continue
-            }
-            decodedPages.append(decoded)
-        }
-        // yt-dlp can dump redirect/challenge pages before the final response.
-        // Recu's API states are exact strings, so the final decoded body is authoritative.
-        return decodedPages.last ?? ""
+    /// Recu's player appends the page token verbatim. The token carries its own
+    /// `&`-separated parameters, so percent-encoding it as one value makes the API
+    /// answer `wrong_token`.
+    nonisolated static func recuAPIURL(videoID: String, token: String) -> String {
+        "https://recu.me/api/video/\(videoID)?token=\(token)"
     }
 
-    private func recuDumpPage(
-        _ targetURL: String,
-        referer: String?,
-        rawCookies: String?,
-        rawUserAgent: String?,
-        browserCookieSource: String?,
-        stage: String
-    ) async throws -> String {
-        guard let ytdlp = ytdlpPath else { throw YtdlpError.notFound }
+    /// Recu's player adds `check` to every segment request (`window.__hlsCheck`);
+    /// the CDN answers 422 without it. The value derives from the signed playlist query.
+    nonisolated static func recuSegmentCheck(for playlistURL: String) -> String? {
+        guard let items = URLComponents(string: playlistURL)?.queryItems else { return nil }
+        func value(_ name: String) -> String { items.first { $0.name == name }?.value ?? "" }
+        let check = String(value("request_id").prefix(4))
+            + String(value("uid").dropFirst(2).prefix(4))
+            + String(value("expires").suffix(4))
+        // Keep it a single safe token inside yt-dlp's `--extractor-args` syntax.
+        guard !check.isEmpty, check.allSatisfy({ $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "-" || $0 == "_") }) else {
+            return nil
+        }
+        return check
+    }
 
-        var cookieFile: URL?
-        defer {
-            if let cookieFile {
-                try? FileManager.default.removeItem(at: cookieFile)
+    /// Mirrors Recu's own sign-in redirect, which returns to the video afterwards.
+    nonisolated static func recuSignInURL(for pageURL: URL) -> URL? {
+        URL(string: "https://recu.me/account/signin?url=\(Data(pageURL.path.utf8).base64EncodedString())")
+    }
+
+    enum RecuAPIOutcome: Equatable {
+        case stream(String)
+        case signInRequired
+        case staleToken
+        case denied(String)
+    }
+
+    /// Maps the exact state strings that Recu's own player handles.
+    nonisolated static func recuAPIOutcome(from response: String) -> RecuAPIOutcome {
+        switch response.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+        case "shall_signin":
+            return .signInRequired
+        case "wrong_token":
+            return .staleToken
+        case "shall_subscribe":
+            return .denied("Recu.me refused playback for this account: its daily view limit is reached or the recording needs a membership.")
+        case "shall_confirm_email":
+            return .denied("Recu.me requires a confirmed email address for this account. Confirm it on recu.me, then retry.")
+        case "views_restricted":
+            return .denied("Recu.me has temporarily restricted playback of this recording.")
+        default:
+            if let playlistURL = recuPlaylistURL(from: response) {
+                return .stream(playlistURL)
+            }
+            return .denied("Recu.me did not return a playable HLS stream for this recording.")
+        }
+    }
+
+    struct RecuBrowserSession: Sendable {
+        let pageHTML: String
+        let playlistURL: String
+        let userAgent: String?
+    }
+
+    private struct RecuPageState: Decodable {
+        let challenge: Bool
+        let token: String?
+        let html: String?
+        let userAgent: String?
+    }
+
+    final class RecuNavigationDelegate: NSObject, WKNavigationDelegate {
+        func webView(
+            _ _: WKWebView,
+            decidePolicyFor navigationAction: WKNavigationAction,
+            decisionHandler: @escaping @MainActor (WKNavigationActionPolicy) -> Void
+        ) {
+            guard let targetFrame = navigationAction.targetFrame else {
+                decisionHandler(.cancel)
+                return
+            }
+            // Cloudflare's check runs in a subframe; only the page itself stays on Recu.
+            guard targetFrame.isMainFrame else {
+                decisionHandler(.allow)
+                return
+            }
+            let url = navigationAction.request.url
+            let host = url?.host?.lowercased() ?? ""
+            let isRecu = url?.scheme?.lowercased() == "https" && (host == "recu.me" || host.hasSuffix(".recu.me"))
+            decisionHandler(isRecu ? .allow : .cancel)
+        }
+    }
+
+    private func recuPageState(_ webView: WKWebView, videoID: String) async -> RecuPageState? {
+        let script = """
+        const button = document.querySelector('#play_button[data-token]');
+        const matches = !!button && button.getAttribute('data-video-id') === videoID;
+        return JSON.stringify({
+            challenge: !!document.getElementById('challenge-error-text') || /^just a moment/i.test(document.title),
+            token: matches ? button.getAttribute('data-token') : null,
+            html: matches ? document.documentElement.outerHTML : null,
+            userAgent: navigator.userAgent
+        });
+        """
+        let json: String? = await withCheckedContinuation { continuation in
+            webView.callAsyncJavaScript(script, arguments: ["videoID": videoID], in: nil, in: .defaultClient) { result in
+                continuation.resume(returning: (try? result.get()) as? String)
             }
         }
+        guard let data = json?.data(using: .utf8) else { return nil }
+        return try? JSONDecoder().decode(RecuPageState.self, from: data)
+    }
 
-        var args = [
-            ytdlp.path,
-            "--ignore-config",
-            "--dump-pages",
-            "--skip-download",
-            "--no-playlist",
-            "--socket-timeout", "20",
-            "--retries", "2"
-        ]
-
-        if let rawCookies, !rawCookies.isEmpty {
-            cookieFile = createConsolidatedCookiesFile(url: targetURL, rawCookies: rawCookies)
-            if let cookieFile {
-                args.append(contentsOf: ["--cookies", cookieFile.path])
+    private func recuAPIResponse(_ webView: WKWebView, url: String) async throws -> String {
+        let script = """
+        const response = await fetch(apiURL, { credentials: 'same-origin', headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+        return await response.text();
+        """
+        let response: String? = await withCheckedContinuation { continuation in
+            webView.callAsyncJavaScript(script, arguments: ["apiURL": url], in: nil, in: .defaultClient) { result in
+                continuation.resume(returning: (try? result.get()) as? String)
             }
-        } else {
-            _ = appendCookieArgs(
-                for: targetURL,
-                to: &args,
-                browserOverride: browserCookieSource
-            )
         }
+        guard let response else {
+            LoggerService.shared.log("[ProtectedSite] stage=api result=request-failed", level: .debug)
+            throw YtdlpError.downloadFailed("Recu.me did not answer the video request. Check the connection, then retry.")
+        }
+        return response
+    }
 
-        let userAgent = rawUserAgent?.trimmingCharacters(in: .whitespacesAndNewlines)
-        if let userAgent, !userAgent.isEmpty {
-            args.append(contentsOf: ["--user-agent", userAgent])
+    /// Recu sits behind a Cloudflare managed challenge and plays only for signed-in
+    /// accounts, which a plain HTTP client cannot satisfy. Siphon resolves it in its own
+    /// WebKit session: hidden while that session's clearance and sign-in are valid, and
+    /// shown in a window only when the user must complete Cloudflare's check or sign in.
+    /// Siphon never completes either step itself.
+    private func loadRecuBrowserSession(pageURL: URL, videoID: String) async throws -> RecuBrowserSession {
+        if let loader = recuBrowserSessionLoader {
+            return try await loader(pageURL, videoID)
         }
-        args.append(contentsOf: [
-            "--extractor-args",
-            "generic:impersonate=\(recuImpersonationTarget(rawUserAgent: userAgent, browserCookieSource: browserCookieSource))"
-        ])
-        args.append(contentsOf: ["--add-header", "Accept-Language:en-US,en;q=0.9"])
-        args.append(contentsOf: ["--add-header", "Origin:https://recu.me"])
-        if let referer, !referer.isEmpty {
-            args.append(contentsOf: ["--add-header", "Referer:\(referer)"])
-            args.append(contentsOf: ["--add-header", "X-Requested-With:XMLHttpRequest"])
-        } else {
-            args.append(contentsOf: ["--add-header", "Referer:https://recu.me/"])
-        }
-        args.append("--")
-        args.append(targetURL)
-
-        let output: String
-        do {
-            output = try await processRunner.runCommand(args)
-        } catch is CancellationError {
-            throw CancellationError()
-        } catch let error as YtdlpError {
-            guard case .commandFailed(let failure) = error else { throw error }
-            output = failure
-        }
-
-        try Task.checkCancellation()
-        if isSafariPermissionError(output) {
-            throw YtdlpError.safariCookiesFullDiskAccessRequired
-        }
-        let body = decodedDumpPagesBody(output)
-        let lower = (body + "\n" + output).lowercased()
-        if lower.contains("cf-chl-") ||
-            lower.contains("/cdn-cgi/challenge-platform/") ||
-            lower.contains("<title>just a moment") ||
-            lower.contains("cloudflare") && lower.contains("403") {
-            LoggerService.shared.log("[ProtectedSite] stage=\(stage) result=anti-bot-challenge", level: .debug)
+        guard processRunner is DefaultYtdlpProcessRunner else {
             throw YtdlpError.cloudflareBlocked
         }
-        guard !body.isEmpty else {
-            let classification = lower.contains("403") ? "http-403" : "no-body"
-            LoggerService.shared.log("[ProtectedSite] stage=\(stage) result=\(classification)", level: .debug)
-            if lower.contains("403") {
-                throw YtdlpError.cloudflareBlocked
-            }
-            throw YtdlpError.downloadFailed("The protected site returned no usable page content.")
-        }
-        LoggerService.shared.log("[ProtectedSite] stage=\(stage) result=ok", level: .debug)
-        return body
-    }
 
-    private func resolveRecuMediaInfo(
-        url: String,
-        rawCookies: String?,
-        rawUserAgent: String?,
-        browserCookieSource: String?
-    ) async throws -> RecuExtractedMedia {
-        guard let identity = Self.recuVideoIdentity(from: url) else {
-            throw YtdlpError.downloadFailed("Unsupported protected-site URL. Expected /<model>/video/<id>/play.")
+        let configuration = WKWebViewConfiguration()
+        configuration.websiteDataStore = recuWebDataStore
+        configuration.mediaTypesRequiringUserActionForPlayback = .all
+        let webView = WKWebView(frame: NSRect(x: 0, y: 0, width: 1000, height: 760), configuration: configuration)
+        let navigationDelegate = RecuNavigationDelegate()
+        webView.navigationDelegate = navigationDelegate
+        webView.load(URLRequest(url: pageURL))
+
+        var window: NSWindow?
+        defer {
+            _ = navigationDelegate
+            webView.stopLoading()
+            window?.close()
         }
 
-        let pageURL = "https://recu.me/\(identity.model)/video/\(identity.videoID)/play"
-        var lastPageHTML = ""
-        var lastToken = ""
-        var apiResponse = ""
+        var deadline = Date().addingTimeInterval(15)
+        var lastToken: String?
+        var reloadedStaleToken = false
 
-        // Recu tokens can be invalidated when the browser verification/session rotates.
-        // Refresh the page and token once before surfacing a hard failure.
-        for attempt in 0..<2 {
-            lastPageHTML = try await recuDumpPage(
-                pageURL,
-                referer: nil,
-                rawCookies: rawCookies,
-                rawUserAgent: rawUserAgent,
-                browserCookieSource: browserCookieSource,
-                stage: attempt == 0 ? "page" : "page-refresh"
+        func presentWindow(reason: String) {
+            guard window == nil else { return }
+            LoggerService.shared.log("[ProtectedSite] stage=browser-session result=\(reason); waiting for the user", level: .info)
+            let newWindow = NSWindow(
+                contentRect: webView.frame,
+                styleMask: [.titled, .closable, .miniaturizable, .resizable],
+                backing: .buffered,
+                defer: false
             )
-            guard let token = Self.recuToken(from: lastPageHTML, videoID: identity.videoID) else {
-                throw YtdlpError.downloadFailed(
-                    "Recu.me loaded, but Siphon could not find the video token. The page format may have changed."
-                )
-            }
-            lastToken = token
+            newWindow.isReleasedWhenClosed = false
+            newWindow.title = LanguageService.s("recu_verification_title")
+            newWindow.contentView = webView
+            newWindow.center()
+            newWindow.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            window = newWindow
+            deadline = Date().addingTimeInterval(300)
+        }
 
-            guard var components = URLComponents(string: "https://recu.me/api/video/\(identity.videoID)") else {
-                throw YtdlpError.parseError
+        while true {
+            try Task.checkCancellation()
+            try await Task.sleep(nanoseconds: 500_000_000)
+            try Task.checkCancellation()
+
+            if let window, !window.isVisible, !window.isMiniaturized {
+                throw YtdlpError.downloadFailed("The recu.me window was closed before verification or sign-in finished.")
             }
-            components.queryItems = [URLQueryItem(name: "token", value: token)]
-            guard let apiURL = components.url?.absoluteString else {
-                throw YtdlpError.parseError
+            if Date() > deadline {
+                guard window != nil else {
+                    presentWindow(reason: "page-timeout")
+                    continue
+                }
+                throw YtdlpError.downloadFailed("Recu.me verification or sign-in did not finish within 5 minutes.")
             }
 
-            apiResponse = try await recuDumpPage(
-                apiURL,
-                referer: pageURL,
-                rawCookies: rawCookies,
-                rawUserAgent: rawUserAgent,
-                browserCookieSource: browserCookieSource,
-                stage: attempt == 0 ? "api" : "api-refresh"
-            )
-
-            let state = apiResponse.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-            if state == "wrong_token" && attempt == 0 {
-                LoggerService.shared.log("[ProtectedSite] API rejected a stale token; refreshing once", level: .info)
+            guard let state = await recuPageState(webView, videoID: videoID) else { continue }
+            if state.challenge {
+                presentWindow(reason: "challenge")
                 continue
             }
-            if state == "shall_signin" {
-                throw YtdlpError.downloadFailed(
-                    "Recu.me requires a signed-in browser session. Open the video in your browser, sign in, then use the Siphon extension or configure Browser Cookies."
-                )
-            }
-            if state == "shall_subscribe" {
-                throw YtdlpError.downloadFailed(
-                    "Recu.me did not grant access to this recording for the current account/session."
-                )
-            }
-            if state == "wrong_token" {
-                throw YtdlpError.downloadFailed(
-                    "Recu.me rejected the refreshed video token. Re-open the video in your browser and retry so Siphon can use a fresh session."
-                )
-            }
-            break
-        }
+            // A token is single-use for this loop: navigation leaves the old page
+            // readable until the next one commits.
+            guard let token = state.token, let html = state.html, token != lastToken else { continue }
+            lastToken = token
 
-        guard !lastToken.isEmpty,
-              let playlistURL = Self.recuPlaylistURL(from: apiResponse) else {
-            throw YtdlpError.downloadFailed(
-                "Recu.me did not return a playable HLS stream for this recording."
-            )
+            let response = try await recuAPIResponse(webView, url: Self.recuAPIURL(videoID: videoID, token: token))
+            switch Self.recuAPIOutcome(from: response) {
+            case .stream(let playlistURL):
+                LoggerService.shared.log("[ProtectedSite] stage=api result=stream-found", level: .debug)
+                return RecuBrowserSession(pageHTML: html, playlistURL: playlistURL, userAgent: state.userAgent)
+            case .signInRequired:
+                presentWindow(reason: "sign-in-required")
+                if let signInURL = Self.recuSignInURL(for: pageURL) {
+                    webView.load(URLRequest(url: signInURL))
+                }
+            case .staleToken:
+                guard !reloadedStaleToken else {
+                    throw YtdlpError.downloadFailed("Recu.me rejected the refreshed video token. Retry in a moment.")
+                }
+                reloadedStaleToken = true
+                LoggerService.shared.log("[ProtectedSite] stage=api result=stale-token; reloading once", level: .info)
+                webView.reload()
+            case .denied(let message):
+                LoggerService.shared.log("[ProtectedSite] stage=api result=denied bytes=\(response.utf8.count)", level: .debug)
+                throw YtdlpError.downloadFailed(message)
+            }
         }
+    }
+
+    private func resolveRecuMediaInfo(url: String) async throws -> RecuExtractedMedia {
+        guard let identity = Self.recuVideoIdentity(from: url),
+              let pageURL = URL(string: "https://recu.me/\(identity.model)/video/\(identity.videoID)/play") else {
+            throw YtdlpError.downloadFailed("Unsupported protected-site URL. Expected /<model>/video/<id>/play.")
+        }
+        let session = try await loadRecuBrowserSession(pageURL: pageURL, videoID: identity.videoID)
+        let lastPageHTML = session.pageHTML
 
         let title: String = {
             let patterns = [
@@ -2813,11 +2838,11 @@ public struct DownloadResult: Sendable {
         return RecuExtractedMedia(
             videoID: identity.videoID,
             model: identity.model,
-            playlistURL: playlistURL,
-            pageURL: pageURL,
+            playlistURL: session.playlistURL,
+            pageURL: pageURL.absoluteString,
             title: title,
             thumbnailURL: thumbnail,
-            userAgent: rawUserAgent
+            userAgent: session.userAgent
         )
     }
 
@@ -6212,8 +6237,10 @@ public struct DownloadResult: Sendable {
             args.append(contentsOf: ["--add-header", "Origin:https://recu.me"])
             args.append(contentsOf: ["--add-header", "Referer:\(url)"])
             args.append(contentsOf: ["--add-header", "Accept:*/*"])
+            // Recu's CDN serves about one segment per second per client and answers
+            // parallel requests with 429, so extra fragment workers only add retries.
             if let index = args.firstIndex(of: "--concurrent-fragments"), index + 1 < args.count {
-                args[index + 1] = "4"
+                args[index + 1] = "1"
             }
         } else if isGayPornTubeURL(url) {
             args.append(contentsOf: ["--add-header", "Referer:\(url)"])
