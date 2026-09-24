@@ -532,8 +532,6 @@ struct StatusBarView: View {
                 isActive: downloadManager.failedCount > 0
             )
 
-            Spacer(minLength: 0)
-
             Button {
                 appState.selectedNavItem = downloadManager.mostRelevantNavigationItem
             } label: {
