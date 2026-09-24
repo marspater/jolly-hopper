@@ -132,8 +132,7 @@ class LoggerService: ObservableObject {
         // out of the user's real debug log.
         let logDirectory = NotificationService.isRunningTests
             ? FileManager.default.temporaryDirectory.appendingPathComponent("SiphonTestLogs", isDirectory: true)
-            : (FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first ?? URL(fileURLWithPath: NSHomeDirectory() + "/Library/Application Support"))
-                .appendingPathComponent("Siphon")
+            : URL.applicationSupportDirectory.appendingPathComponent("Siphon")
 
         try? FileManager.default.createDirectory(at: logDirectory, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
         self.logFileURL = logDirectory.appendingPathComponent("siphon_debug.log")
