@@ -556,30 +556,6 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertThrowsError(try HeliumCookieReader.decrypt(Data("v20unsupported".utf8), key: key, domain: ".example.com", version: 24))
     }
 
-    func testSafariPreflightDoesNotBlockRecuAndActualDenialIsReported() async throws {
-        let originalBrowser = UserDefaults.standard.string(forKey: UserDefaultsKeys.browserForCookies)
-        let originalAccess = YtdlpService.hasFullDiskAccessOverride
-        defer {
-            UserDefaults.standard.set(originalBrowser, forKey: UserDefaultsKeys.browserForCookies)
-            YtdlpService.hasFullDiskAccessOverride = originalAccess
-        }
-        UserDefaults.standard.set("safari", forKey: UserDefaultsKeys.browserForCookies)
-        YtdlpService.hasFullDiskAccessOverride = false
-        let calls = TestBox(0)
-        service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
-            calls.value += 1
-            XCTAssertTrue(args.contains("--cookies-from-browser"))
-            XCTAssertTrue(args.contains("safari"))
-            throw YtdlpError.commandFailed("Safari Cookies.binarycookies: Operation not permitted")
-        })
-        do {
-            _ = try await service.fetchInfo(url: "https://recu.me/model/video/123/play")
-            XCTFail("Expected actual cookie read failure")
-        } catch YtdlpError.safariCookiesFullDiskAccessRequired {
-            XCTAssertEqual(calls.value, 1, "Permission probes must not prevent the real request")
-        }
-    }
-
     func testGenericMetadataPreservesHeliumExtensionIdentityWithSafariConfigured() async throws {
         let originalBrowser = UserDefaults.standard.string(forKey: UserDefaultsKeys.browserForCookies)
         defer { UserDefaults.standard.set(originalBrowser, forKey: UserDefaultsKeys.browserForCookies) }
@@ -2753,7 +2729,7 @@ final class YtdlpServiceTests: XCTestCase {
         }
     }
 
-    func testRecuParsesVideoIdentityTokenAndPlaylistURL() throws {
+    func testRecuParsesVideoIdentityAndPlaylistURL() throws {
         let identity = try XCTUnwrap(
             YtdlpService.recuVideoIdentity(
                 from: "https://recu.me/polarny05/video/112873588/play"
@@ -2770,15 +2746,6 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertEqual(identityWithoutPlay.model, "polarny05")
         XCTAssertEqual(identityWithoutPlay.videoID, "112873588")
 
-        let html = """
-        <div class="recording" id="112873588"
-             data-token="abc&amp;xyz=="></div>
-        """
-        XCTAssertEqual(
-            YtdlpService.recuToken(from: html, videoID: "112873588"),
-            "abc&xyz=="
-        )
-
         let api = """
         <video><source src="https://cdn.example.test/master.m3u8?token=a&amp;expires=123"></video>
         """
@@ -2788,146 +2755,105 @@ final class YtdlpServiceTests: XCTestCase {
         )
     }
 
-    func testRecuMetadataUsesBrowserSourceWithoutCookieURLPayload() async throws {
-        let pageURL = "https://recu.me/polarny05/video/112873588/play"
-        let stream = "https://cdn.example.test/browser-session.m3u8"
-        UserDefaults.standard.set("safari", forKey: UserDefaultsKeys.browserForCookies)
-        defer { UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.browserForCookies) }
-
-        service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
-            let target = args.last ?? ""
-            if args.contains("--dump-pages") {
-                XCTAssertFalse(args.contains("--cookies"))
-                let browserIndex = try XCTUnwrap(args.firstIndex(of: "--cookies-from-browser"))
-                XCTAssertEqual(args[browserIndex + 1], "firefox")
-                XCTAssertTrue(args.contains("generic:impersonate=firefox:macos"))
-                XCTAssertFalse(args.contains("--user-agent"))
-
-                if target.contains("/api/video/112873588") {
-                    return Data("<source src=\"\(stream)\">".utf8).base64EncodedString()
-                }
-                return Data("<html><head><title>Recu browser source</title></head><body><div id=\"112873588\" data-token=\"fixture-token\"></div></body></html>".utf8).base64EncodedString()
-            }
-            if args.contains("--dump-json") {
-                throw YtdlpError.commandFailed("probe unavailable in unit test")
-            }
-            return "{}"
-        })
-
-        let info = try await service.fetchInfo(
-            url: pageURL,
-            browserCookieSource: "firefox"
+    func testRecuAPIURLKeepsTokenParametersAndMapsPlayerStates() throws {
+        // The live token carries `&`-separated parameters; percent-encoding it as one
+        // value makes recu.me answer wrong_token.
+        XCTAssertEqual(
+            YtdlpService.recuAPIURL(videoID: "112873588", token: "abc-1&expires=123&sig=x-9"),
+            "https://recu.me/api/video/112873588?token=abc-1&expires=123&sig=x-9"
+        )
+        XCTAssertEqual(
+            YtdlpService.recuSignInURL(
+                for: try XCTUnwrap(URL(string: "https://recu.me/stupidmove/video/129896229/play"))
+            )?.absoluteString,
+            "https://recu.me/account/signin?url=L3N0dXBpZG1vdmUvdmlkZW8vMTI5ODk2MjI5L3BsYXk="
         )
 
-        XCTAssertEqual(info.manifestUrl, stream)
-        XCTAssertEqual(info.title, "Recu browser source")
+        XCTAssertEqual(YtdlpService.recuAPIOutcome(from: "shall_signin\n"), .signInRequired)
+        XCTAssertEqual(YtdlpService.recuAPIOutcome(from: "wrong_token"), .staleToken)
+        for refusal in ["shall_subscribe", "shall_confirm_email", "views_restricted", "<html>Just a moment...</html>"] {
+            guard case .denied(let reason) = YtdlpService.recuAPIOutcome(from: refusal) else {
+                return XCTFail("\(refusal) must fail with a reason")
+            }
+            XCTAssertFalse(reason.isEmpty)
+        }
+        XCTAssertEqual(
+            YtdlpService.recuAPIOutcome(
+                from: #"<video class="video-player"><source src="https://cdn.example.test/master.m3u8?token=a&amp;expires=1"></video>"#
+            ),
+            .stream("https://cdn.example.test/master.m3u8?token=a&expires=1")
+        )
+        XCTAssertEqual(
+            YtdlpService.recuSegmentCheck(for: "https://cdn.example.test/index.m3u8?uid=ab1234cd&request_id=f00dbeef&expires=1790000321"),
+            "f00d1234" + "0321"
+        )
+        XCTAssertNil(YtdlpService.recuSegmentCheck(for: "https://cdn.example.test/index.m3u8"))
+        XCTAssertNil(YtdlpService.recuSegmentCheck(for: "https://cdn.example.test/index.m3u8?uid=ab12;3,4&request_id=a&expires=1"))
     }
 
-    func testRecuMetadataUsesExtensionCookiesAndExactUserAgent() async throws {
+    func testRecuMetadataResolvesThroughBrowserSessionWithoutBrowserCookies() async throws {
         let pageURL = "https://recu.me/polarny05/video/112873588/play"
-        let exactUA = "Mozilla/5.0 TestBrowser/128.0"
         let stream = "https://cdn.example.test/master.m3u8?token=signed&expires=123"
-        let calls = TestBox<[[String]]>([])
+        let originalBrowser = UserDefaults.standard.string(forKey: UserDefaultsKeys.browserForCookies)
+        let originalAccess = YtdlpService.hasFullDiskAccessOverride
+        defer {
+            UserDefaults.standard.set(originalBrowser, forKey: UserDefaultsKeys.browserForCookies)
+            YtdlpService.hasFullDiskAccessOverride = originalAccess
+        }
+        // Safari cookies without Full Disk Access must not matter: recu uses its own session.
+        UserDefaults.standard.set("safari", forKey: UserDefaultsKeys.browserForCookies)
+        YtdlpService.hasFullDiskAccessOverride = false
 
+        let sessionRequests = TestBox<[String]>([])
+        service.recuBrowserSessionLoader = { url, videoID in
+            sessionRequests.value.append("\(url.absoluteString)#\(videoID)")
+            return YtdlpService.RecuBrowserSession(
+                pageHTML: """
+                <html><head>
+                <meta property="og:title" content="Polarny &amp; Friends">
+                <meta property="og:image" content="https://recu.me/thumb.jpg">
+                </head><body></body></html>
+                """,
+                playlistURL: stream,
+                userAgent: "Mozilla/5.0 WebKitFixture"
+            )
+        }
+        let calls = TestBox<[[String]]>([])
         service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
             calls.value.append(args)
-            let target = args.last ?? ""
-
-            if args.contains("--dump-pages") {
-                XCTAssertTrue(args.contains("--cookies"))
-                if let uaIndex = args.firstIndex(of: "--user-agent") {
-                    XCTAssertEqual(args[uaIndex + 1], exactUA)
-                } else {
-                    XCTFail("Recu page/API requests must preserve the extension user-agent")
-                }
-
-                if target.contains("/api/video/112873588") {
-                    XCTAssertTrue(args.contains("X-Requested-With:XMLHttpRequest"))
-                    XCTAssertTrue(args.contains("Referer:\(pageURL)"))
-                    XCTAssertTrue(target.contains("token=abc%26xyz"))
-                    let api = "<video><source src=\"\(stream.replacingOccurrences(of: "&", with: "&amp;"))\"></video>"
-                    return Data(api.utf8).base64EncodedString()
-                }
-
-                let html = """
-                <html><head>
-                <meta property="og:title" content="Polarny Recording">
-                <meta property="og:image" content="https://recu.me/thumb.jpg">
-                </head><body>
-                <div id="112873588" data-token="abc&amp;xyz"></div>
-                </body></html>
-                """
-                return Data(html.utf8).base64EncodedString()
-            }
-
-            if args.contains("--dump-json") {
-                throw YtdlpError.commandFailed("probe unavailable in unit test")
-            }
-            return "{}"
+            throw YtdlpError.commandFailed("probe unavailable in unit test")
         })
 
-        let info = try await service.fetchInfo(
-            url: pageURL,
-            rawCookies: "session_id=abc; cf_clearance=clear",
-            rawUserAgent: exactUA
-        )
+        let info = try await service.fetchInfo(url: "https://recu.me/polarny05/video/112873588")
 
+        XCTAssertEqual(sessionRequests.value, ["\(pageURL)#112873588"])
         XCTAssertEqual(info.id, "112873588")
-        XCTAssertEqual(info.title, "Polarny Recording")
+        XCTAssertEqual(info.title, "Polarny & Friends")
         XCTAssertEqual(info.uploader, "polarny05")
+        XCTAssertEqual(info.thumbnail, "https://recu.me/thumb.jpg")
         XCTAssertEqual(info.manifestUrl, stream)
-        XCTAssertEqual(info.originalUrl, stream)
         XCTAssertEqual(info.webpageUrl, pageURL)
         XCTAssertEqual(info.formats?.first?.formatId, "hls")
-        XCTAssertGreaterThanOrEqual(calls.value.count, 3)
+        // Only the playlist probe runs through yt-dlp, and it never reads browser cookies.
+        XCTAssertEqual(calls.value.count, 1)
+        let probe = try XCTUnwrap(calls.value.first)
+        XCTAssertEqual(probe.last, stream)
+        XCTAssertFalse(probe.contains("--cookies"))
+        XCTAssertFalse(probe.contains("--cookies-from-browser"))
+        let uaIndex = try XCTUnwrap(probe.firstIndex(of: "--user-agent"))
+        XCTAssertEqual(probe[uaIndex + 1], "Mozilla/5.0 WebKitFixture")
     }
 
-    func testRecuRefreshesRejectedTokenOnce() async throws {
+    func testRecuDownloadUsesFreshSessionStreamAndItsUserAgentWithoutCookies() async throws {
         let pageURL = "https://recu.me/polarny05/video/112873588/play"
-        let stream = "https://cdn.example.test/refreshed.m3u8"
-        let pageCalls = TestBox(0)
-        let apiCalls = TestBox(0)
-
-        service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
-            let target = args.last ?? ""
-            if args.contains("--dump-pages") {
-                if target.contains("/api/video/112873588") {
-                    apiCalls.value += 1
-                    if apiCalls.value == 1 {
-                        return Data("wrong_token".utf8).base64EncodedString()
-                    }
-                    XCTAssertTrue(target.contains("token=fresh-token"))
-                    return Data("<source src=\"\(stream)\">".utf8).base64EncodedString()
-                }
-
-                pageCalls.value += 1
-                let token = pageCalls.value == 1 ? "stale-token" : "fresh-token"
-                let html = "<html><head><title>Recu test</title></head><body><div id=\"112873588\" data-token=\"\(token)\"></div></body></html>"
-                return Data(html.utf8).base64EncodedString()
-            }
-            if args.contains("--dump-json") {
-                throw YtdlpError.commandFailed("probe unavailable in unit test")
-            }
-            return "{}"
-        })
-
-        let info = try await service.fetchInfo(
-            url: pageURL,
-            rawCookies: "session=1",
-            rawUserAgent: "Mozilla/5.0 Chrome/128.0"
-        )
-
-        XCTAssertEqual(pageCalls.value, 2)
-        XCTAssertEqual(apiCalls.value, 2)
-        XCTAssertEqual(info.manifestUrl, stream)
-    }
-
-    func testRecuDownloadDoesNotForwardAccountCookiesToCDN() async throws {
-        let pageURL = "https://recu.me/polarny05/video/112873588/play"
-        let stream = "https://cdn.example.test/master.m3u8?token=signed"
-        let exactUA = "Mozilla/5.0 TestBrowser/128.0"
+        let staleStream = "https://cdn.example.test/master.m3u8?token=stale"
+        let freshStream = "https://cdn.example.test/master.m3u8?uid=ab1234cd&request_id=f00dbeef&expires=1790000321&md5=x"
+        let sessionUA = "Mozilla/5.0 WebKitFixture"
         let capturedArgs = TestBox<[String]>([])
 
+        service.recuBrowserSessionLoader = { _, _ in
+            YtdlpService.RecuBrowserSession(pageHTML: "<html></html>", playlistURL: freshStream, userAgent: sessionUA)
+        }
         service.processRunner = MockYtdlpProcessRunner(mockDownload: { args in
             capturedArgs.value = args
             return "/tmp/recu-test.mp4"
@@ -2935,7 +2861,7 @@ final class YtdlpServiceTests: XCTestCase {
 
         var options = DownloadOptions.default
         options.rawCookies = "session_id=secret; cf_clearance=secret"
-        options.rawUserAgent = exactUA
+        options.rawUserAgent = "Mozilla/5.0 ExtensionBrowser/128.0"
         options.embedThumbnail = false
         options.embedMetadata = false
 
@@ -2944,9 +2870,9 @@ final class YtdlpServiceTests: XCTestCase {
             title: "Polarny Recording",
             uploader: "polarny05",
             webpageUrl: pageURL,
-            originalUrl: stream,
+            originalUrl: staleStream,
             formatProtocol: "m3u8_native",
-            manifestUrl: stream
+            manifestUrl: staleStream
         )
 
         _ = try await service.download(
@@ -2957,15 +2883,44 @@ final class YtdlpServiceTests: XCTestCase {
             onOutput: { _ in }
         )
 
-        XCTAssertEqual(capturedArgs.value.last, stream)
+        // The signed playlist only answers the user-agent that resolved it.
+        XCTAssertEqual(capturedArgs.value.last, freshStream)
+        let uaIndex = try XCTUnwrap(capturedArgs.value.firstIndex(of: "--user-agent"))
+        XCTAssertEqual(capturedArgs.value[uaIndex + 1], sessionUA)
         XCTAssertFalse(capturedArgs.value.contains("--cookies"))
         XCTAssertFalse(capturedArgs.value.contains("--cookies-from-browser"))
         XCTAssertTrue(capturedArgs.value.contains("Origin:https://recu.me"))
         XCTAssertTrue(capturedArgs.value.contains("Referer:\(pageURL)"))
-        if let uaIndex = capturedArgs.value.firstIndex(of: "--user-agent") {
-            XCTAssertEqual(capturedArgs.value[uaIndex + 1], exactUA)
-        } else {
-            XCTFail("Recu CDN download must preserve the browser user-agent")
+        // Segments need the player's check value: request_id[0..<4] + uid[2..<6] + expires.suffix(4).
+        XCTAssertTrue(capturedArgs.value.contains("generic:fragment_query=check=f00d12340321"))
+        if let index = capturedArgs.value.firstIndex(of: "--concurrent-fragments") {
+            XCTAssertEqual(capturedArgs.value[index + 1], "1", "Recu's CDN answers parallel segment requests with 429")
+        }
+    }
+
+    func testRecuTrimmedDownloadFailsFastInsteadOfFetchingUncheckedSegments() async throws {
+        service.recuBrowserSessionLoader = { _, _ in
+            XCTFail("A trimmed recu download must fail before resolving a session")
+            return YtdlpService.RecuBrowserSession(pageHTML: "", playlistURL: "https://cdn.example.test/a.m3u8", userAgent: nil)
+        }
+        service.processRunner = MockYtdlpProcessRunner(mockDownload: { _ in
+            XCTFail("A trimmed recu download must not start yt-dlp")
+            return "/tmp/recu-test.mp4"
+        })
+        var options = DownloadOptions.default
+        options.timeFrameStart = "0:10"
+        options.timeFrameEnd = "0:20"
+
+        do {
+            _ = try await service.download(
+                url: "https://recu.me/polarny05/video/112873588/play",
+                options: options,
+                onProgress: { _, _, _ in },
+                onOutput: { _ in }
+            )
+            XCTFail("Expected the trim guard to fail")
+        } catch YtdlpError.downloadFailed(let reason) {
+            XCTAssertTrue(reason.contains("trimmed"))
         }
     }
 
