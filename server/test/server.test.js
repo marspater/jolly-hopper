@@ -32,6 +32,14 @@ describe('Siphon Companion Server', () => {
     assert.ok(data.timestamp);
   });
 
+  test('responses include standard security headers', async () => {
+    const res = await fetch(`${baseUrl}/health`);
+    assert.equal(res.status, 200);
+    assert.equal(res.headers.get('x-content-type-options'), 'nosniff');
+    assert.equal(res.headers.get('x-frame-options'), 'DENY');
+    assert.equal(res.headers.get('referrer-policy'), 'no-referrer');
+  });
+
   test('GET /health returns 200 with status ok', async () => {
     const res = await fetch(`${baseUrl}/health`);
     assert.equal(res.status, 200);

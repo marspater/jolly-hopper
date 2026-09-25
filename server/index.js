@@ -85,7 +85,13 @@ async function getLatestRelease() {
 }
 
 function sendResponse(res, statusCode, headers, body) {
-  res.writeHead(statusCode, headers);
+  const mergedHeaders = {
+    'X-Content-Type-Options': 'nosniff',
+    'X-Frame-Options': 'DENY',
+    'Referrer-Policy': 'no-referrer',
+    ...headers
+  };
+  res.writeHead(statusCode, mergedHeaders);
   res.end(body);
 }
 
