@@ -450,7 +450,8 @@ struct DownloadRowView: View {
             if let hdr = download.diagnostics.hdrSummary ?? download.mediaInfo?.firstHDRSummary {
                 VStack {
                     HStack {
-                        SiphonTagBadge(text: hdr.components(separatedBy: " • ").first ?? "HDR", isHdr: true)
+                        let tagText = hdr.range(of: " • ").map { String(hdr[..<$0.lowerBound]) } ?? hdr
+                        SiphonTagBadge(text: tagText.isEmpty ? "HDR" : tagText, isHdr: true)
                             .padding(SiphonTheme.spacing4)
                         Spacer()
                     }
