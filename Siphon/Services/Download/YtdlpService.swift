@@ -2433,8 +2433,7 @@ public struct DownloadResult: Sendable {
         let browser = raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         if browser == "none" || browser.isEmpty { return nil }
         if browser == "helium" { return "chromium-based" }
-        let allowed = Set(SupportedBrowser.allCases.map(\.rawValue))
-        return allowed.contains(browser) ? browser : nil
+        return SupportedBrowser.allowedRawValues.contains(browser) ? browser : nil
     }
 
     private func configuredBrowserCookieSource() -> String? {
@@ -5753,11 +5752,9 @@ public struct DownloadResult: Sendable {
         // 1. BoyfriendTV normalization
         if isBoyfriendTVURL(host) {
             components.scheme = "https"
-            let trackingPrefixes = ["utm_"]
-            let trackingNames = Set(["fbclid", "gclid", "dclid", "msclkid", "igshid", "mc_cid", "mc_eid", "ref", "source"])
             components.queryItems = components.queryItems?.filter { item in
                 let name = item.name.lowercased()
-                return !trackingNames.contains(name) && !trackingPrefixes.contains { name.hasPrefix($0) }
+                return !Self.trackingNamesGroupA.contains(name) && !Self.trackingPrefixes.contains { name.hasPrefix($0) }
             }
             if components.queryItems?.isEmpty == true { components.queryItems = nil }
             
@@ -5812,11 +5809,9 @@ public struct DownloadResult: Sendable {
         // 3. xHamster normalization
         if isXHamsterURL(host) {
             components.scheme = "https"
-            let trackingPrefixes = ["utm_"]
-            let trackingNames = Set(["from", "promo", "ref", "source", "reftag"])
             components.queryItems = components.queryItems?.filter { item in
                 let name = item.name.lowercased()
-                return !trackingNames.contains(name) && !trackingPrefixes.contains { name.hasPrefix($0) }
+                return !Self.trackingNamesGroupB.contains(name) && !Self.trackingPrefixes.contains { name.hasPrefix($0) }
             }
             if components.queryItems?.isEmpty == true { components.queryItems = nil }
 
@@ -5842,11 +5837,9 @@ public struct DownloadResult: Sendable {
         // 6. GayForFans normalization
         if isGFFURL(host) {
             components.scheme = "https"
-            let trackingPrefixes = ["utm_"]
-            let trackingNames = Set(["fbclid", "gclid", "dclid", "msclkid", "igshid", "mc_cid", "mc_eid", "ref", "source"])
             components.queryItems = components.queryItems?.filter { item in
                 let name = item.name.lowercased()
-                return !trackingNames.contains(name) && !trackingPrefixes.contains { name.hasPrefix($0) }
+                return !Self.trackingNamesGroupA.contains(name) && !Self.trackingPrefixes.contains { name.hasPrefix($0) }
             }
             if components.queryItems?.isEmpty == true { components.queryItems = nil }
             if components.path.hasPrefix("/video/") {
@@ -5864,11 +5857,9 @@ public struct DownloadResult: Sendable {
         // 8. Starwank normalization
         if isStarwankURL(host) {
             components.scheme = "https"
-            let trackingPrefixes = ["utm_"]
-            let trackingNames = Set(["from", "promo", "ref", "source", "reftag"])
             components.queryItems = components.queryItems?.filter { item in
                 let name = item.name.lowercased()
-                return !trackingNames.contains(name) && !trackingPrefixes.contains { name.hasPrefix($0) }
+                return !Self.trackingNamesGroupB.contains(name) && !Self.trackingPrefixes.contains { name.hasPrefix($0) }
             }
             if components.queryItems?.isEmpty == true { components.queryItems = nil }
             return components.url?.absoluteString ?? components.string ?? urlString
@@ -5877,11 +5868,9 @@ public struct DownloadResult: Sendable {
         // 9. Pussyspace normalization
         if isPussyspaceURL(host) {
             components.scheme = "https"
-            let trackingPrefixes = ["utm_"]
-            let trackingNames = Set(["from", "promo", "ref", "source", "reftag"])
             components.queryItems = components.queryItems?.filter { item in
                 let name = item.name.lowercased()
-                return !trackingNames.contains(name) && !trackingPrefixes.contains { name.hasPrefix($0) }
+                return !Self.trackingNamesGroupB.contains(name) && !Self.trackingPrefixes.contains { name.hasPrefix($0) }
             }
             if components.queryItems?.isEmpty == true { components.queryItems = nil }
             return components.url?.absoluteString ?? components.string ?? urlString
@@ -6586,6 +6575,11 @@ public struct DownloadResult: Sendable {
         }
         return nil
     }
+
+    // Bolt Performance Optimization: Pre-compile tracking query parameter sets and prefixes to eliminate heap allocations on every URL normalization call.
+    nonisolated private static let trackingPrefixes = ["utm_"]
+    nonisolated private static let trackingNamesGroupA: Set<String> = ["fbclid", "gclid", "dclid", "msclkid", "igshid", "mc_cid", "mc_eid", "ref", "source"]
+    nonisolated private static let trackingNamesGroupB: Set<String> = ["from", "promo", "ref", "source", "reftag"]
 
     // Bolt Performance Optimization: Pre-compile static NSRegularExpression patterns to eliminate repeated pattern compilation and heap allocations on every Sucuri Cloudproxy cookie resolution call.
     nonisolated private static let sucuriAssignmentRegex = try? NSRegularExpression(pattern: "S\\s*=\\s*'([^']+)'", options: [])
