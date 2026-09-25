@@ -88,7 +88,7 @@ struct RecentDownloadRowView: View {
     @ViewBuilder
     private var thumbnailView: some View {
         ZStack {
-            RoundedRectangle(cornerRadius: 6, style: .continuous)
+            RoundedRectangle(cornerRadius: SiphonTheme.radiusSmall, style: .continuous)
                 .fill(Color.primary.opacity(0.08))
                 .frame(width: 54, height: 36)
 
@@ -110,11 +110,12 @@ struct RecentDownloadRowView: View {
                     .foregroundColor(.secondary)
             }
         }
-        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusSmall, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 6, style: .continuous)
+            RoundedRectangle(cornerRadius: SiphonTheme.radiusSmall, style: .continuous)
                 .stroke(Color.primary.opacity(0.12), lineWidth: 0.5)
         )
+        .accessibilityHidden(true)
     }
 
     @ViewBuilder
@@ -133,6 +134,7 @@ struct RecentDownloadRowView: View {
                     Circle()
                         .fill(SiphonTheme.sourceYouTube)
                         .frame(width: 6, height: 6)
+                        .accessibilityHidden(true)
                 }
                 Text(download.sourceDomain)
                     .font(.siphonMetadata)
