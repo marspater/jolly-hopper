@@ -2768,35 +2768,25 @@ public struct DownloadResult: Sendable {
         }
 
         let title: String = {
-            let patterns = [
-                #"<meta[^>]+property\s*=\s*["']og:title["'][^>]+content\s*=\s*["']([^"']+)["']"#,
-                #"<meta[^>]+content\s*=\s*["']([^"']+)["'][^>]+property\s*=\s*["']og:title["']"#,
-                #"<title[^>]*>(.*?)</title>"#
-            ]
-            for pattern in patterns {
-                guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive, .dotMatchesLineSeparators]),
-                      let match = regex.firstMatch(in: lastPageHTML, range: NSRange(lastPageHTML.startIndex..., in: lastPageHTML)),
+            for regex in Self.ogTitleRegexes {
+                guard let match = regex.firstMatch(in: lastPageHTML, range: NSRange(lastPageHTML.startIndex..., in: lastPageHTML)),
                       match.numberOfRanges > 1,
                       let range = Range(match.range(at: 1), in: lastPageHTML) else {
                     continue
                 }
-                let value = String(lastPageHTML[range])
-                    .replacingOccurrences(of: #"<[^>]+>"#, with: "", options: .regularExpression)
-                    .decodingHTMLEntities()
-                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                var value = String(lastPageHTML[range])
+                if let stripRegex = Self.htmlTagStripRegex {
+                    value = stripRegex.stringByReplacingMatches(in: value, options: [], range: NSRange(location: 0, length: (value as NSString).length), withTemplate: "")
+                }
+                value = value.decodingHTMLEntities().trimmingCharacters(in: .whitespacesAndNewlines)
                 if !value.isEmpty { return value }
             }
             return "\(identity.model) - \(identity.videoID)"
         }()
 
         let thumbnail: String? = {
-            let patterns = [
-                #"<meta[^>]+property\s*=\s*["']og:image["'][^>]+content\s*=\s*["']([^"']+)["']"#,
-                #"<meta[^>]+content\s*=\s*["']([^"']+)["'][^>]+property\s*=\s*["']og:image["']"#
-            ]
-            for pattern in patterns {
-                guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]),
-                      let match = regex.firstMatch(in: lastPageHTML, range: NSRange(lastPageHTML.startIndex..., in: lastPageHTML)),
+            for regex in Self.ogImageRegexes {
+                guard let match = regex.firstMatch(in: lastPageHTML, range: NSRange(lastPageHTML.startIndex..., in: lastPageHTML)),
                       match.numberOfRanges > 1,
                       let range = Range(match.range(at: 1), in: lastPageHTML) else {
                     continue
@@ -3906,6 +3896,50 @@ public struct DownloadResult: Sendable {
         "<video[^>]+src=[\"']([^\"']+)[\"']",
         "<source[^>]+src=[\"']([^\"']+)[\"']"
     ].compactMap { try? NSRegularExpression(pattern: $0, options: .caseInsensitive) }
+
+    // Bolt Performance Optimization: Pre-compile static NSRegularExpression patterns to eliminate dynamic regex compilation and heap allocations during HTML metadata extraction and media stream resolution.
+    nonisolated private static let ogTitleRegexes: [NSRegularExpression] = [
+        #"<meta[^>]+property\s*=\s*["']og:title["'][^>]+content\s*=\s*["']([^"']+)["']"#,
+        #"<meta[^>]+content\s*=\s*["']([^"']+)["'][^>]+property\s*=\s*["']og:title["']"#,
+        #"<title[^>]*>(.*?)</title>"#
+    ].compactMap { try? NSRegularExpression(pattern: $0, options: [.caseInsensitive, .dotMatchesLineSeparators]) }
+
+    nonisolated private static let ogImageRegexes: [NSRegularExpression] = [
+        #"<meta[^>]+property\s*=\s*["']og:image["'][^>]+content\s*=\s*["']([^"']+)["']"#,
+        #"<meta[^>]+content\s*=\s*["']([^"']+)["'][^>]+property\s*=\s*["']og:image["']"#
+    ].compactMap { try? NSRegularExpression(pattern: $0, options: .caseInsensitive) }
+
+    nonisolated private static let htmlTagStripRegex = try? NSRegularExpression(pattern: #"<[^>]+>"#, options: [])
+
+    nonisolated private static let starwankSourceBlockRegex = try? NSRegularExpression(
+        pattern: "setAttribute\\(['\"]src['\"],\\s*['\"]([^'\"]+)['\"]\\)(?:(?!setAttribute\\(['\"]src).)*?setAttribute\\(['\"]title['\"],\\s*['\"]([^'\"]+)['\"]\\)",
+        options: [.dotMatchesLineSeparators, .caseInsensitive]
+    )
+
+    nonisolated private static let starwankStandaloneRegex = try? NSRegularExpression(
+        pattern: "setAttribute\\(['\"]src['\"],\\s*['\"](https?:[^'\"]+)['\"]\\)",
+        options: .caseInsensitive
+    )
+
+    nonisolated private static let starwankKvsRegexes: [(regex: NSRegularExpression, defaultHeight: Int)] = [
+        ("video_url_fhd\\s*:\\s*['\"](https?:[^'\"]+)['\"]", 1080),
+        ("video_url\\s*:\\s*['\"](https?:[^'\"]+)['\"]", 720),
+        ("video_alt_url2\\s*:\\s*['\"](https?:[^'\"]+)['\"]", 480),
+        ("video_alt_url\\s*:\\s*['\"](https?:[^'\"]+)['\"]", 360)
+    ].compactMap { pattern, height in
+        guard let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive) else { return nil }
+        return (regex, height)
+    }
+
+    nonisolated private static let pussyspaceQualityRegex = try? NSRegularExpression(
+        pattern: "\\[(\\d+)p\\]([^,\\[\\]]+)",
+        options: .caseInsensitive
+    )
+
+    nonisolated private static let pussyspaceBufferRegex = try? NSRegularExpression(
+        pattern: "(https?:[^\"'\\s<>]+reversebuffer[^\"'\\s<>]+)",
+        options: .caseInsensitive
+    )
 
     private func validatedBoyfriendTVStreamURL(_ rawValue: String) -> String? {
         var rawValue = rawValue
@@ -5460,11 +5494,7 @@ public struct DownloadResult: Sendable {
         var seenUrls = Set<String>()
 
         // Pattern 1: Script block with setAttribute('src', ...) and setAttribute('title', ...)
-        let sourceBlockPattern = try? NSRegularExpression(
-            pattern: "setAttribute\\(['\"]src['\"],\\s*['\"]([^'\"]+)['\"]\\)(?:(?!setAttribute\\(['\"]src).)*?setAttribute\\(['\"]title['\"],\\s*['\"]([^'\"]+)['\"]\\)",
-            options: [.dotMatchesLineSeparators, .caseInsensitive]
-        )
-        if let blockRegex = sourceBlockPattern {
+        if let blockRegex = Self.starwankSourceBlockRegex {
             let matches = blockRegex.matches(in: html, options: [], range: htmlRange)
             for m in matches where m.numberOfRanges > 2 {
                 let rawSrc = nsHtml.substring(with: m.range(at: 1)).replacingOccurrences(of: "\\/", with: "/")
@@ -5478,11 +5508,7 @@ public struct DownloadResult: Sendable {
 
         // Pattern 2: Standalone setAttribute('src', ...) in JS if no block matched
         if parsedSources.isEmpty {
-            let standalonePattern = try? NSRegularExpression(
-                pattern: "setAttribute\\(['\"]src['\"],\\s*['\"](https?:[^'\"]+)['\"]\\)",
-                options: .caseInsensitive
-            )
-            if let standaloneRegex = standalonePattern {
+            if let standaloneRegex = Self.starwankStandaloneRegex {
                 let matches = standaloneRegex.matches(in: html, options: [], range: htmlRange)
                 for m in matches where m.numberOfRanges > 1 {
                     let rawSrc = nsHtml.substring(with: m.range(at: 1)).replacingOccurrences(of: "\\/", with: "/")
@@ -5503,15 +5529,8 @@ public struct DownloadResult: Sendable {
 
             // Pattern 3: KVS player config (video_url, video_alt_url, etc.)
             if parsedSources.isEmpty {
-                let kvsPatterns: [(String, Int)] = [
-                    ("video_url_fhd\\s*:\\s*['\"](https?:[^'\"]+)['\"]", 1080),
-                    ("video_url\\s*:\\s*['\"](https?:[^'\"]+)['\"]", 720),
-                    ("video_alt_url2\\s*:\\s*['\"](https?:[^'\"]+)['\"]", 480),
-                    ("video_alt_url\\s*:\\s*['\"](https?:[^'\"]+)['\"]", 360)
-                ]
-                for (pattern, defaultHeight) in kvsPatterns {
-                    if let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive),
-                       let match = regex.firstMatch(in: html, options: [], range: htmlRange),
+                for (regex, defaultHeight) in Self.starwankKvsRegexes {
+                    if let match = regex.firstMatch(in: html, options: [], range: htmlRange),
                        match.numberOfRanges > 1 {
                         let rawSrc = nsHtml.substring(with: match.range(at: 1)).replacingOccurrences(of: "\\/", with: "/")
                         if seenUrls.insert(rawSrc).inserted {
@@ -5619,8 +5638,7 @@ public struct DownloadResult: Sendable {
 
                 if fileRaw.contains("[") && fileRaw.contains("p]") {
                     // Split qualities like [240p]url,[480p]url,[720p]url
-                    let qualityPattern = try? NSRegularExpression(pattern: "\\[(\\d+)p\\]([^,\\[\\]]+)", options: .caseInsensitive)
-                    if let qRegex = qualityPattern {
+                    if let qRegex = Self.pussyspaceQualityRegex {
                         let qMatches = qRegex.matches(in: fileRaw, options: [], range: NSRange(location: 0, length: (fileRaw as NSString).length))
                         for qm in qMatches where qm.numberOfRanges > 2 {
                             let hStr = (fileRaw as NSString).substring(with: qm.range(at: 1))
@@ -5654,8 +5672,7 @@ public struct DownloadResult: Sendable {
 
         // Pattern 2: reversebuffer URLs directly in HTML/JS
         if parsedSources.isEmpty {
-            let bufferPattern = try? NSRegularExpression(pattern: "(https?:[^\"'\\s<>]+reversebuffer[^\"'\\s<>]+)", options: .caseInsensitive)
-            if let bufRegex = bufferPattern {
+            if let bufRegex = Self.pussyspaceBufferRegex {
                 let matches = bufRegex.matches(in: streamContent, options: [], range: streamRange)
                 for m in matches where m.numberOfRanges > 1 {
                     let rawUrl = streamNs.substring(with: m.range(at: 1)).replacingOccurrences(of: "\\/", with: "/")
