@@ -88,7 +88,7 @@ struct RecentDownloadRowView: View {
     @ViewBuilder
     private var thumbnailView: some View {
         ZStack {
-            RoundedRectangle(cornerRadius: 6, style: .continuous)
+            RoundedRectangle(cornerRadius: SiphonTheme.radiusSmall, style: .continuous)
                 .fill(Color.primary.opacity(0.08))
                 .frame(width: 54, height: 36)
 
@@ -110,11 +110,13 @@ struct RecentDownloadRowView: View {
                     .foregroundColor(.secondary)
             }
         }
-        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusSmall, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 6, style: .continuous)
+            RoundedRectangle(cornerRadius: SiphonTheme.radiusSmall, style: .continuous)
                 .stroke(Color.primary.opacity(0.12), lineWidth: 0.5)
         )
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(download.displayTitle.isEmpty ? "Media thumbnail" : "\(download.displayTitle) thumbnail")
     }
 
     @ViewBuilder
@@ -149,12 +151,7 @@ struct RecentDownloadRowView: View {
     @ViewBuilder
     private var formatPillsView: some View {
         HStack(spacing: 4) {
-            Text(download.options.fileType.rawValue)
-                .font(.siphonMicroMonoSemibold)
-                .foregroundColor(.secondary)
-                .padding(.horizontal, 6)
-                .padding(.vertical, 2)
-                .background(Capsule().fill(Color.primary.opacity(SiphonTheme.Opacity.fillPill)))
+            SiphonTagBadge(text: download.options.fileType.rawValue.uppercased(), isMonospaced: true)
 
             if let res = download.options.videoResolution {
                 let resText: String = {
@@ -170,12 +167,7 @@ struct RecentDownloadRowView: View {
                     case .worst: return "Worst"
                     }
                 }()
-                Text(resText)
-                    .font(.siphonMicroMonoSemibold)
-                    .foregroundColor(.secondary)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 2)
-                    .background(Capsule().fill(Color.primary.opacity(SiphonTheme.Opacity.fillPill)))
+                SiphonTagBadge(text: resText, isMonospaced: true)
             }
         }
     }
