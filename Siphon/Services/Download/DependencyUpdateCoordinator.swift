@@ -57,7 +57,7 @@ final class DependencyUpdateCoordinator: ObservableObject {
     func updateYtdlp(service: YtdlpService, languageService: LanguageService? = nil) async {
         guard !isUpdating else { return }
         updateMessage = nil
-        let lang = languageService ?? LanguageService()
+        let lang = languageService ?? .shared
         do {
             let installedVersion = try await service.updateYtdlp()
             version = installedVersion

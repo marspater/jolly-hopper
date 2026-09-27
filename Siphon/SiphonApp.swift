@@ -13,8 +13,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     @MainActor
     func handleApplicationWillTerminate(bypassTestGuard: Bool = false) {
         guard bypassTestGuard || !NotificationService.isRunningTests else { return }
-        downloadManager?.stopAllDownloads(preservePaused: true, suppressNotification: true)
-        downloadManager?.shutdown()
+        downloadManager?.handleAppTermination()
     }
 
     func applicationWillTerminate(_: Notification) {
@@ -82,15 +81,6 @@ struct SiphonApp: App {
                 }
                 .onChange(of: theme) { _, newTheme in
                     SiphonTheme.applyTheme(newTheme)
-                }
-                .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in
-                    // A test host never loaded the user's history, so it must not
-                    // write its empty state over it on exit.
-                    guard !NotificationService.isRunningTests else { return }
-                    // A normal app quit must not turn explicitly paused jobs into
-                    // stopped jobs or delete the resumable scratch data they own.
-                    downloadManager.stopAllDownloads(preservePaused: true, suppressNotification: true)
-                    downloadManager.shutdown()
                 }
                 .onOpenURL { url in
                     handleIncomingURL(url)

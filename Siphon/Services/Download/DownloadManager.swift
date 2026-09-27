@@ -56,27 +56,32 @@ class DownloadManager: ObservableObject {
             }
             .store(in: &cancellables)
 
-        NotificationCenter.default.addObserver(
-            forName: UserDefaults.didChangeNotification,
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
-            MainActor.assumeIsolated {
+        // Stored in cancellables so the subscriptions end with this manager;
+        // block-based observers stay registered until removed explicitly.
+        NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
                 self?.processQueue()
             }
-        }
+            .store(in: &cancellables)
 
-        NotificationCenter.default.addObserver(
-            forName: NSApplication.willTerminateNotification,
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
-            MainActor.assumeIsolated {
-                guard !NotificationService.isRunningTests else { return }
-                self?.stopAllDownloads(preservePaused: true, suppressNotification: true)
-                self?.shutdown()
+        NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)
+            .sink { [weak self] _ in
+                MainActor.assumeIsolated {
+                    guard !NotificationService.isRunningTests else { return }
+                    self?.handleAppTermination()
+                }
             }
-        }
+            .store(in: &cancellables)
+    }
+
+    /// App-quit entry point. Both AppKit's delegate and this manager observe
+    /// termination; only the first call may write history and recovery state.
+    /// A quit keeps paused jobs paused, with their resumable scratch data.
+    func handleAppTermination() {
+        guard !isShuttingDown else { return }
+        stopAllDownloads(preservePaused: true, suppressNotification: true)
+        shutdown()
     }
 
     var downloadingDownloads: [Download] {
@@ -589,7 +594,10 @@ class DownloadManager: ObservableObject {
             LoggerService.shared.log("Refusing to open non-media file via NSWorkspace: \(path.path)", level: .warning)
             return
         }
-        NSWorkspace.shared.open(path)
+        if !NSWorkspace.shared.open(path) {
+            LoggerService.shared.log("Could not open \(path.lastPathComponent); it may have been moved or deleted.", level: .warning)
+            NSSound.beep()
+        }
     }
 
     func showInFinder(_ path: URL) {
@@ -598,8 +606,17 @@ class DownloadManager: ObservableObject {
 
     func showInFinder(_ paths: [URL]) {
         let validPaths = paths.filter { FileManager.default.fileExists(atPath: $0.path) }
-        guard !validPaths.isEmpty else { return }
-        NSWorkspace.shared.activateFileViewerSelecting(validPaths)
+        if !validPaths.isEmpty {
+            NSWorkspace.shared.activateFileViewerSelecting(validPaths)
+        } else if let folder = paths.first?.deletingLastPathComponent(),
+                  FileManager.default.fileExists(atPath: folder.path) {
+            // The files were moved or deleted since the download; their folder
+            // is still the most useful place to look.
+            NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: folder.path)
+        } else {
+            LoggerService.shared.log("Could not reveal the download in Finder; its folder no longer exists.", level: .warning)
+            NSSound.beep()
+        }
     }
 
     private func updateStatus(for download: Download, to status: DownloadStatus) {

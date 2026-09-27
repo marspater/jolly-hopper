@@ -157,12 +157,15 @@ class LoggerService: ObservableObject {
             let readSize = min(fileSize, 256 * 1024)
             let seekPos = fileSize - readSize
             try? handle.seek(toOffset: seekPos)
-            let data = handle.readData(ofLength: Int(readSize))
-            guard !data.isEmpty else { return }
+            guard let data = try? handle.read(upToCount: Int(readSize)), !data.isEmpty else { return }
 
             let initialLogs = Self.extractTailLines(from: data, maxEntries: maxEntries)
             await MainActor.run {
-                self.logs = initialLogs
+                // Entries logged during launch are already in the file tail;
+                // replacing them would only keep what was on disk at read time.
+                let persisted = Set(initialLogs)
+                let merged = initialLogs + self.logs.filter { !persisted.contains($0) }
+                self.logs = Array(merged.suffix(maxEntries))
             }
         }
     }
@@ -244,10 +247,16 @@ class LoggerService: ObservableObject {
                let size = attrs[.size] as? Int64, size > 2 * 1024 * 1024 {
                 trimLogFile(at: logFileURL, maxEntries: maxEntries)
             }
+            // The throwing APIs matter here: the legacy write(_:) raises an
+            // Objective-C exception on a full disk, which terminates the app.
             if let fileHandle = try? FileHandle(forWritingTo: logFileURL) {
-                fileHandle.seekToEndOfFile()
-                fileHandle.write(data)
-                try? fileHandle.close()
+                defer { try? fileHandle.close() }
+                do {
+                    try fileHandle.seekToEnd()
+                    try fileHandle.write(contentsOf: data)
+                } catch {
+                    NSLog("Siphon could not write its debug log: %@", error.localizedDescription)
+                }
             }
         } else {
             if !FileManager.default.createFile(atPath: logFileURL.path, contents: data, attributes: [.posixPermissions: 0o600]) {
@@ -268,8 +277,7 @@ class LoggerService: ObservableObject {
             let readSize = min(fileSize, 256 * 1024)
             let seekPos = fileSize - readSize
             try? handle.seek(toOffset: seekPos)
-            let data = handle.readData(ofLength: Int(readSize))
-            guard !data.isEmpty else { return }
+            guard let data = try? handle.read(upToCount: Int(readSize)), !data.isEmpty else { return }
 
             let lines = extractTailLines(from: data, maxEntries: maxEntries)
             guard !lines.isEmpty else { return }

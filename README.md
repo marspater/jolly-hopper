@@ -74,7 +74,7 @@ Integrate Siphon directly into your favorite web browser for 1-click video downl
 
 - **Language**: Swift 6.0 (Strict Concurrency & Sendable thread safety), SwiftUI, AppKit
 - **Extraction Engine**: Custom `yt-dlp` process coordinator
-- **Media Transcoder**: Native `FFmpeg` & `FFprobe` 6.0 (`arm64` / `x86_64`)
+- **Media Transcoder**: Native `FFmpeg` & `FFprobe` 6.1.1 (`arm64` / `x86_64`)
 - **Logging & Diagnostics**: Centralized structured `LoggerService` & os_log tracing
 - **Target OS**: macOS 15.0 (Sequoia) through macOS 27+
 
