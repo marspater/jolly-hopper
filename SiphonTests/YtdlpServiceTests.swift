@@ -59,6 +59,24 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertTrue(delegate.responds(to: selector), "WebKit must invoke the host restriction callback")
     }
 
+    func testBrowserNavigationPolicyAllowsBothBoyfriendTVDomainsAndChallengeFrame() {
+        typealias Policy = YtdlpService.BoyfriendTVNavigationDelegate
+        func allows(_ url: String, mainFrame: Bool?) -> Bool {
+            Policy.allowsNavigation(to: URL(string: url), isMainFrame: mainFrame)
+        }
+        XCTAssertTrue(allows("https://www.boyfriend.tv/es/videos/1655629/x/", mainFrame: true))
+        XCTAssertTrue(allows("https://www.boyfriendtv.com/embed/1655629/", mainFrame: true))
+        XCTAssertTrue(allows("https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/g/turnstile/if/ov2/", mainFrame: false))
+        XCTAssertTrue(allows("about:blank", mainFrame: false))
+        XCTAssertFalse(allows("about:blank", mainFrame: true))
+
+        XCTAssertFalse(allows("https://challenges.cloudflare.com/", mainFrame: true), "The challenge widget may not replace the page")
+        XCTAssertFalse(allows("https://ads.example.com/frame", mainFrame: false))
+        XCTAssertFalse(allows("https://evilboyfriend.tv/", mainFrame: true))
+        XCTAssertFalse(allows("https://www.boyfriend.tv/popup", mainFrame: nil), "New windows are refused")
+        XCTAssertFalse(allows("file:///etc/passwd", mainFrame: true))
+    }
+
     func testThumbnailFallbackUsesRunnerAndReplacesMediaOnlyAfterSuccess() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
@@ -2609,7 +2627,9 @@ final class YtdlpServiceTests: XCTestCase {
         })
         service.boyfriendTVRenderedPageLoader = { url in
             renderedLoads.value.append(url)
-            return "<html><head><title>Rendered challenge test | BoyFriendTV</title></head><body><div id='player'></div></body></html>"
+            // Cloudflare injects its bot-detection script into the real page too.
+            return "<html><head><title>Rendered challenge test | BoyFriendTV</title></head><body><div id='player'></div>" +
+                "<script src='/cdn-cgi/challenge-platform/scripts/jsd/main.js'></script></body></html>"
         }
         service.boyfriendTVRenderedStreamLoader = { url in
             url.path.contains("/videos/1710869") ? stream : nil
