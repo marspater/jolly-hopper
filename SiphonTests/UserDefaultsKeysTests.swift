@@ -1,7 +1,23 @@
 import XCTest
+import Combine
 @testable import Siphon
 
 final class UserDefaultsKeysTests: XCTestCase {
+    func testConcurrencyLimitIsObservableUnderItsKey() throws {
+        let suiteName = "SiphonKVO_\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        var seen: [Int] = []
+        let subscription = defaults.publisher(for: \.maxConcurrentDownloads).sink { seen.append($0) }
+
+        defaults.set(5, forKey: UserDefaultsKeys.maxConcurrentDownloads)
+        defaults.set("dark", forKey: UserDefaultsKeys.theme)
+        subscription.cancel()
+
+        // The initial value, then only the concurrency change; other keys stay silent.
+        XCTAssertEqual(seen, [0, 5])
+    }
+
     func testUserDefaultsKeysValues() {
         XCTAssertEqual(UserDefaultsKeys.showMenuBarIcon, "showMenuBarIcon")
         XCTAssertEqual(UserDefaultsKeys.showNotifications, "showNotifications")

@@ -25,3 +25,11 @@ enum UserDefaultsKeys {
     static let downloadSpeedLimit = "downloadSpeedLimit"
     static let resolutionFallbackPolicy = "resolutionFallbackPolicy"
 }
+
+extension UserDefaults {
+    /// Observable mirror of `UserDefaultsKeys.maxConcurrentDownloads`. KVO
+    /// matches the property name to the key, so the two must stay equal.
+    @objc dynamic var maxConcurrentDownloads: Int {
+        integer(forKey: UserDefaultsKeys.maxConcurrentDownloads)
+    }
+}

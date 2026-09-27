@@ -40,6 +40,11 @@ class Download: ObservableObject, Identifiable {
     var primaryFilePath: URL? {
         filePaths.first
     }
+    /// Reads the disk. Rows cache the result instead of calling this from
+    /// `body`, which reruns on every progress tick of any download.
+    var primaryFileExistsOnDisk: Bool? {
+        primaryFilePath.map { FileManager.default.fileExists(atPath: $0.path) }
+    }
     var filePathStrings: [String] {
         if filePaths.isEmpty { return [] }
         if filePaths.count == 1 { return [filePaths[0].path] }

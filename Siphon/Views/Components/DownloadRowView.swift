@@ -87,6 +87,8 @@ struct DownloadRowView: View {
     @State private var isCopiedLog = false
     @State private var isCopiedError = false
     @State private var showRawError = false
+    /// nil until checked; unknown counts as present so actions don't flicker.
+    @State private var primaryFileIsPresent: Bool?
     
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -156,6 +158,13 @@ struct DownloadRowView: View {
                                     .font(.siphonMetadataMonoSemibold)
                                     .foregroundColor(SiphonTheme.statusForeground(for: .paused, colorScheme: colorScheme))
                             }
+
+                            if download.status == .completed && primaryFileIsPresent == false {
+                                Label(languageService.s("file_missing"), systemImage: "questionmark.folder")
+                                    .font(.siphonMetadataMedium)
+                                    .foregroundColor(.secondary)
+                                    .help(languageService.s("file_missing_help"))
+                            }
                         }
                     }
                 }
@@ -200,6 +209,13 @@ struct DownloadRowView: View {
         .sheet(isPresented: $showDiagnostics) {
             DownloadDiagnosticsView(download: download)
                 .environmentObject(languageService)
+        }
+        .task(id: download.primaryFilePath) {
+            primaryFileIsPresent = download.primaryFileExistsOnDisk
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            // Files are usually moved or deleted in Finder, while Siphon is inactive.
+            primaryFileIsPresent = download.primaryFileExistsOnDisk
         }
     }
     
@@ -384,8 +400,7 @@ struct DownloadRowView: View {
     }
 
     private var canPreviewMedia: Bool {
-        guard download.status == .completed, let path = download.primaryFilePath else { return false }
-        return FileManager.default.fileExists(atPath: path.path)
+        download.status == .completed && download.primaryFilePath != nil && primaryFileIsPresent != false
     }
 
     private var thumbnailAccessibilityLabel: String {
@@ -541,7 +556,7 @@ struct FileThumbnailView: View {
         HStack(spacing: SiphonTheme.spacing6) {
             // Completed state: one visible contextual action + exhaustive More menu
             if download.status == .completed {
-                if let path = download.primaryFilePath, FileManager.default.fileExists(atPath: path.path) {
+                if let path = download.primaryFilePath, primaryFileIsPresent != false {
                     Button {
                         downloadManager.openFile(path)
                     } label: {
@@ -575,7 +590,7 @@ struct FileThumbnailView: View {
                         } label: {
                             Label(languageService.s("play_chapters"), systemImage: "play.fill")
                         }
-                    } else if let path = download.primaryFilePath, FileManager.default.fileExists(atPath: path.path) {
+                    } else if let path = download.primaryFilePath, primaryFileIsPresent != false {
                         Button {
                             QuickLookPreviewHelper.shared.preview(url: path)
                         } label: {
@@ -919,7 +934,7 @@ struct FileThumbnailView: View {
                 } label: {
                     Label(languageService.s("play_chapters"), systemImage: "play.fill")
                 }
-            } else if let path = download.primaryFilePath, FileManager.default.fileExists(atPath: path.path) {
+            } else if let path = download.primaryFilePath, primaryFileIsPresent != false {
                 Button {
                     QuickLookPreviewHelper.shared.preview(url: path)
                 } label: {
