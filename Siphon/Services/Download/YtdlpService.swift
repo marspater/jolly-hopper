@@ -720,6 +720,16 @@ class YtdlpService: ObservableObject {
             return installedVersion
         }
 
+        // The pin is the newest yt-dlp Siphon has verified. When that build is
+        // already installed, downloading it again cannot produce a newer one.
+        if let currentPath = ytdlpPath,
+           await Self.verifySHA256Detached(fileURL: currentPath, expectedHash: DependencyChecksums.ytdlpExecutableSHA256) {
+            if version == nil {
+                await getVersion()
+            }
+            return version ?? DependencyChecksums.ytdlpVersion
+        }
+
         let downloadURL = DependencyChecksums.ytdlpURL
         let appSupport = Self.getAppSupportDirectory()
         let destination = appSupport.appendingPathComponent("yt-dlp")
@@ -811,14 +821,15 @@ class YtdlpService: ObservableObject {
                 LoggerService.shared.log("Playlist summary unavailable for \(hostForLog(normalizedURL)) (\(error.localizedDescription)); trying single-video metadata", level: .info)
             }
         }
+        let info: MediaInfo
         do {
-             return try await fetchSingleVideoInfo(
+            info = try await fetchSingleVideoInfo(
                 path: path.path,
                 url: normalizedURL,
                 rawCookies: rawCookies,
                 rawUserAgent: rawUserAgent,
                 browserCookieSource: browserCookieSource
-             )
+            )
         } catch {
             throw mapSiteSpecificError(
                 error,
@@ -826,6 +837,25 @@ class YtdlpService: ObservableObject {
                 browserCookieSource: browserCookieSource
             )
         }
+        if let json = info.rawJSON, Self.isTwinkabooPromo(pageURL: normalizedURL, infoJSON: json) {
+            LoggerService.shared.log("[ProtectedSite] twinkaboo returned only its sponsored promo; not saving it as the video", level: .warning)
+            throw YtdlpError.downloadFailed("Twinkaboo plays this video through an encrypted player that Siphon doesn't support. The only other video on the page is the site's sponsored promo, so Siphon didn't download anything.")
+        }
+        return info
+    }
+
+    /// Twinkaboo's player loads the scene from an encrypted playlist. yt-dlp's
+    /// generic extractor then falls through to the only plain <video> on the
+    /// page: a sponsored promo served from the site's asset host.
+    nonisolated static func isTwinkabooPromo(pageURL: String, infoJSON: Data) -> Bool {
+        guard let host = URL(string: pageURL)?.host?.lowercased(),
+              host == "twinkaboo.com" || host.hasSuffix(".twinkaboo.com"),
+              let json = try? JSONSerialization.jsonObject(with: infoJSON) as? [String: Any] else {
+            return false
+        }
+        let formats = (json["formats"] as? [[String: Any]]) ?? [json]
+        let mediaHosts = formats.compactMap { ($0["url"] as? String).flatMap { URL(string: $0)?.host?.lowercased() } }
+        return !mediaHosts.isEmpty && mediaHosts.allSatisfy { $0 == "assets.twinkaboo.com" }
     }
 
     private func fetchSingleVideoInfo(

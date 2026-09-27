@@ -58,9 +58,17 @@ final class DependencyUpdateCoordinator: ObservableObject {
         guard !isUpdating else { return }
         updateMessage = nil
         let lang = languageService ?? .shared
+        let previousVersion = service.version
         do {
             let installedVersion = try await service.updateYtdlp()
             version = installedVersion
+            if installedVersion == previousVersion {
+                updateMessage = YtdlpUpdateMessage(
+                    title: lang.s("ytdlp_up_to_date_title"),
+                    message: String(format: lang.s("ytdlp_up_to_date_message"), installedVersion)
+                )
+                return
+            }
             updateMessage = YtdlpUpdateMessage(
                 title: lang.s("ytdlp_update_success_title"),
                 message: String(format: lang.s("ytdlp_update_success_message"), installedVersion)

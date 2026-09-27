@@ -593,6 +593,9 @@ final class DownloadExecutor: ObservableObject {
         for (_, controller) in activeControllers {
             controller.cancel()
         }
+        // Shutdown precedes app exit, and yt-dlp runs in its own process group,
+        // so the app's exit would not take it down.
+        DownloadProcessController.waitForPendingTerminations()
         // Do not clear ownership eagerly. Active tasks remove themselves from
         // activeTasks/activeControllers only after process teardown completes.
     }

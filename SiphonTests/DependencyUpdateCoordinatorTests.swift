@@ -99,6 +99,19 @@ final class DependencyUpdateCoordinatorTests: XCTestCase {
         XCTAssertEqual(coordinator.updateProgress, 0.9)
     }
 
+    func testUpdateYtdlpReportsUpToDateWithoutClaimingAnUpdate() async {
+        let coordinator = DependencyUpdateCoordinator()
+        let service = YtdlpService()
+        let lang = LanguageService()
+        service.version = "2026.08.19"
+        service.updateYtdlpHandler = { "2026.08.19" }
+
+        await coordinator.updateYtdlp(service: service, languageService: lang)
+
+        XCTAssertEqual(coordinator.updateMessage?.title, lang.s("ytdlp_up_to_date_title"))
+        XCTAssertEqual(coordinator.updateMessage?.message, String(format: lang.s("ytdlp_up_to_date_message"), "2026.08.19"))
+    }
+
     func testUpdateYtdlpLocalizedMessages() async {
         let coordinator = DependencyUpdateCoordinator()
         let service = YtdlpService()
