@@ -25,3 +25,5 @@ exclude_paths:
   - "SiphonTests/**"
   - "scripts/**"
   - "Casks/**"
+  # Binary media fixtures; Codacy reads segment0.ts as TypeScript and crashes.
+  - "server/fixtures/**"
