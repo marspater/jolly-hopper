@@ -49,6 +49,9 @@ public enum SupportedBrowser: String, CaseIterable, Identifiable, Sendable {
     public static var helium: SupportedBrowser {
         .chromiumBased
     }
+
+    /// Pre-compiled set of all supported browser raw values to eliminate heap allocation during validation passes.
+    nonisolated public static let allowedRawValues: Set<String> = Set(allCases.map(\.rawValue))
 }
 
 public actor BrowserUtils {

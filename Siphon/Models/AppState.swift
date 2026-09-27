@@ -348,8 +348,7 @@ public final class AppState: ObservableObject {
         guard let raw else { return nil }
         let browser = raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         if browser == "helium" { return "chromium-based" }
-        let allowed = Set(SupportedBrowser.allCases.map(\.rawValue))
-        return allowed.contains(browser) ? browser : nil
+        return SupportedBrowser.allowedRawValues.contains(browser) ? browser : nil
     }
 
     private static func normalizedOrigin(for urlString: String) -> (scheme: String, host: String)? {
