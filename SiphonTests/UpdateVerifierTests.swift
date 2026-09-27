@@ -120,7 +120,11 @@ final class UpdateVerifierTests: XCTestCase {
         let currentBundle = Bundle.main.bundleURL
         // The current test host or app bundle exists
         if FileManager.default.fileExists(atPath: currentBundle.path) {
-            let bundleID = Bundle.main.bundleIdentifier ?? "com.marspater.Siphon"
+            let bundleID = Bundle.main.bundleIdentifier ?? "com.marspater.siphon"
+            // The default expectation must accept the shipped app itself.
+            XCTAssertNoThrow(
+                try UpdateVerifier.verifyAppBundle(bundleURL: currentBundle, expectedTeamID: nil, allowAdHoc: true)
+            )
             XCTAssertNoThrow(
                 try UpdateVerifier.verifyAppBundle(
                     bundleURL: currentBundle,
@@ -245,6 +249,32 @@ final class UpdateVerifierTests: XCTestCase {
 
         let installer = UpdateInstaller()
         XCTAssertNil(installer.locateAppBundle(in: root), "Updater must not follow symlinked app bundles out of staging")
+    }
+
+    func testLocateAppBundleSelectsSiphonByBundleIdentifier() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("update_locate_id_\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        func makeApp(_ name: String, bundleID: String) throws -> URL {
+            let app = root.appendingPathComponent(name)
+            let contents = app.appendingPathComponent("Contents")
+            try FileManager.default.createDirectory(at: contents, withIntermediateDirectories: true)
+            let plist = try PropertyListSerialization.data(
+                fromPropertyList: ["CFBundleIdentifier": bundleID],
+                format: .xml,
+                options: 0
+            )
+            try plist.write(to: contents.appendingPathComponent("Info.plist"))
+            return app
+        }
+        // Can be enumerated before Siphon.app, so a first-.app search may pick it.
+        _ = try makeApp("Aaa Uninstaller.app", bundleID: "com.example.Uninstaller")
+        // The identifier Siphon actually ships with (PRODUCT_BUNDLE_IDENTIFIER).
+        let siphon = try makeApp("Siphon.app", bundleID: "com.marspater.siphon")
+
+        let installer = UpdateInstaller()
+        XCTAssertEqual(installer.locateAppBundle(in: root)?.lastPathComponent, siphon.lastPathComponent)
+        XCTAssertNil(installer.locateAppBundle(in: root, bundleID: "com.example.Missing"))
     }
 
     func testUpdateDownloaderRejectsConcurrentCalls() async throws {

@@ -405,7 +405,7 @@ struct DownloadRowView: View {
         ZStack(alignment: .bottomTrailing) {
             Group {
                 if let url = download.thumbnailURL, let scheme = url.scheme?.lowercased(), (scheme == "http" || scheme == "https") {
-                    AsyncImage(url: url) { phase in
+                    ThumbnailImage(url: url) { phase in
                         switch phase {
                         case .success(let image):
                             image
@@ -1205,5 +1205,48 @@ struct LinearProgressBar: View {
         }
         .frame(height: 5)
         .clipShape(Capsule())
+    }
+}
+
+/// `AsyncImage` for thumbnail URLs from site metadata. Loads through
+/// `DownloadExecutor.fetchThumbnailData`, so target, body size and pixel
+/// dimensions are checked before anything is decoded.
+struct ThumbnailImage<Content: View>: View {
+    let url: URL?
+    let content: (AsyncImagePhase) -> Content
+    @State private var phase: AsyncImagePhase = .empty
+
+    init(url: URL?, @ViewBuilder content: @escaping (AsyncImagePhase) -> Content) {
+        self.url = url
+        self.content = content
+    }
+
+    init<I: View, P: View>(
+        url: URL?,
+        @ViewBuilder content: @escaping (Image) -> I,
+        @ViewBuilder placeholder: @escaping () -> P
+    ) where Content == _ConditionalContent<I, P> {
+        self.init(url: url) { phase in
+            if let image = phase.image {
+                content(image)
+            } else {
+                placeholder()
+            }
+        }
+    }
+
+    var body: some View {
+        content(phase)
+            .task(id: url) {
+                phase = .empty
+                guard let url else { return }
+                let data = await DownloadExecutor.fetchThumbnailData(from: url)
+                guard !Task.isCancelled else { return }
+                if let data, let image = NSImage(data: data) {
+                    phase = .success(Image(nsImage: image))
+                } else {
+                    phase = .failure(URLError(.cannotDecodeContentData))
+                }
+            }
     }
 }
