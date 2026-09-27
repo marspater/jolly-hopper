@@ -70,7 +70,7 @@ Executor task/controller ownership is still released by executor teardown rather
 
 ### External URL ingress
 
-Browser extensions enter through `SiphonApp.handleIncomingURL`. The custom URL is accepted only for supported Siphon schemes and download hosts, then the target URL is validated by `ExternalDownloadTargetPolicy` before it reaches download code.
+Browser extensions enter through `SiphonApp.handleIncomingURL`. The custom URL is accepted only for supported Siphon schemes and download hosts, then the target URL is validated by `ExternalDownloadTargetPolicy` before it reaches download code. The policy is an admission check on the submitted URL only: yt-dlp re-resolves DNS and follows redirects itself, so it does not stop DNS rebinding or redirects into private networks. Siphon's own fetches of metadata-supplied URLs (Finder icon thumbnails) re-apply the policy on every redirect.
 
 Raw cookies are never accepted through the custom URL. Browser source identifiers and user agents are sanitized, browser-session state is scoped to the validated target origin, and that state is consumed before the fast-download path reaches `DownloadManager`.
 

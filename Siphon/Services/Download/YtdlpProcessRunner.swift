@@ -240,6 +240,39 @@ public final class DownloadProcessController: @unchecked Sendable {
     }
 }
 
+/// Runs a completion once every output stream of a process has reached EOF,
+/// without blocking a thread and without DispatchGroup's crash when a group is
+/// released with outstanding entries (a process that never launched).
+final class StreamDrainBarrier: @unchecked Sendable {
+    private let lock = NSLock()
+    private var pendingStreams: Int
+    private var onDrained: (@Sendable () -> Void)?
+
+    init(streams: Int) {
+        pendingStreams = streams
+    }
+
+    func streamFinished() {
+        let action: (@Sendable () -> Void)? = lock.withLock {
+            pendingStreams -= 1
+            guard pendingStreams == 0 else { return nil }
+            defer { onDrained = nil }
+            return onDrained
+        }
+        action?()
+    }
+
+    /// Runs `action` after the last stream finishes, or now if all already have.
+    func whenDrained(_ action: @escaping @Sendable () -> Void) {
+        let runNow: Bool = lock.withLock {
+            guard pendingStreams > 0 else { return true }
+            onDrained = action
+            return false
+        }
+        if runNow { action() }
+    }
+}
+
 public struct DownloadProcessResult: Sendable {
     public let primaryPath: String
     public let allPaths: [String]
@@ -296,12 +329,8 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
         if FileManager.default.isExecutableFile(atPath: helperInBundle.path) {
             return helperInBundle
         }
-        // 3. In built products / test bundle directory
-        let testDir = Bundle(for: DownloadProcessController.self).bundleURL.deletingLastPathComponent()
-        let inBuiltProducts = testDir.appendingPathComponent("siphon-pgrp")
-        if FileManager.default.isExecutableFile(atPath: inBuiltProducts.path) {
-            return inBuiltProducts
-        }
+        // Tests are hosted in Siphon.app, so the helper never needs to come from
+        // outside the app bundle. The bundle's parent (e.g. /Applications) is untrusted.
         return nil
     }
 
@@ -311,11 +340,7 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
 
     public static func configureProcessCommand(_ process: Process, args: [String]) {
         if let helperURL = ensureProcessGroupHelper() {
-            let appBundleURL = Bundle.main.bundleURL
-            let testBundleURL = Bundle(for: DownloadProcessController.self).bundleURL.deletingLastPathComponent()
-            let isSafe = YtdlpService.isPathContained(targetURL: helperURL, inside: appBundleURL) ||
-                         YtdlpService.isPathContained(targetURL: helperURL, inside: testBundleURL)
-            if isSafe {
+            if YtdlpService.isPathContained(targetURL: helperURL, inside: Bundle.main.bundleURL) {
                 process.executableURL = helperURL
                 process.arguments = args
                 return
@@ -372,38 +397,43 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
             }
 
             let outputBuffer = ThreadSafeDataBuffer()
+            // Finished once the reader sees EOF. Clearing the handler on exit instead
+            // would race an invocation that already took the last chunk.
+            let outputDrained = StreamDrainBarrier(streams: 1)
             pipe.fileHandleForReading.readabilityHandler = { [weak process] handle in
                 let data = handle.availableData
-                if !data.isEmpty, !outputBuffer.append(data) {
+                guard !data.isEmpty else {
+                    handle.readabilityHandler = nil
+                    outputDrained.streamFinished()
+                    return
+                }
+                if !outputBuffer.append(data) {
                     process?.terminate()
                 }
             }
 
             process.terminationHandler = { proc in
-                pipe.fileHandleForReading.readabilityHandler = nil
-
-                let remainingData = pipe.fileHandleForReading.readDataToEndOfFile()
-                try? pipe.fileHandleForReading.close()
                 proc.terminationHandler = nil
+                let exitCode = proc.terminationStatus
+                let reason = proc.terminationReason
+                outputDrained.whenDrained {
+                    try? pipe.fileHandleForReading.close()
 
-                if !remainingData.isEmpty {
-                    outputBuffer.append(remainingData)
-                }
+                    if outputBuffer.isOverflow {
+                        safeContinuation.resume(throwing: YtdlpError.downloadFailed("Subprocess output exceeded the 32 MB safety limit."))
+                        return
+                    }
 
-                if outputBuffer.isOverflow {
-                    safeContinuation.resume(throwing: YtdlpError.downloadFailed("Subprocess output exceeded the 32 MB safety limit."))
-                    return
-                }
+                    let output = outputBuffer.getString()
+                    controller.transitionToTerminated(exitCode: exitCode, reason: reason)
 
-                let output = outputBuffer.getString()
-                controller.transitionToTerminated(exitCode: proc.terminationStatus, reason: proc.terminationReason)
-
-                if Task.isCancelled || controller.isCancelled || proc.terminationReason == .uncaughtSignal {
-                    safeContinuation.resume(throwing: YtdlpError.downloadFailed("Command was cancelled."))
-                } else if proc.terminationStatus == 0 {
-                    safeContinuation.resume(returning: output)
-                } else {
-                    safeContinuation.resume(throwing: YtdlpError.commandFailed(output))
+                    if Task.isCancelled || controller.isCancelled || reason == .uncaughtSignal {
+                        safeContinuation.resume(throwing: YtdlpError.downloadFailed("Command was cancelled."))
+                    } else if exitCode == 0 {
+                        safeContinuation.resume(returning: output)
+                    } else {
+                        safeContinuation.resume(throwing: YtdlpError.commandFailed(output))
+                    }
                 }
             }
 
@@ -650,9 +680,21 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
                 DispatchQueue.main.async { onOutput("[ERROR] \(line)") }
             }
 
+            // Finished once each reader sees EOF. Clearing the handlers on exit
+            // instead would race an invocation that already took the last bytes
+            // (the final path or the real ERROR: line) from the pipe.
+            let streamsDrained = StreamDrainBarrier(streams: 2)
+
             outputPipe.fileHandleForReading.readabilityHandler = { handle in
                 let data = handle.availableData
-                guard !data.isEmpty else { return }
+                guard !data.isEmpty else {
+                    handle.readabilityHandler = nil
+                    for line in outputBuffer.flush() {
+                        processOutputLine(line)
+                    }
+                    streamsDrained.streamFinished()
+                    return
+                }
                 for line in outputBuffer.appendAndExtractLines(data) {
                     processOutputLine(line)
                 }
@@ -660,7 +702,14 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
 
             errorPipe.fileHandleForReading.readabilityHandler = { handle in
                 let data = handle.availableData
-                guard !data.isEmpty else { return }
+                guard !data.isEmpty else {
+                    handle.readabilityHandler = nil
+                    for line in errorBuffer.flush() {
+                        postErrorLine(line)
+                    }
+                    streamsDrained.streamFinished()
+                    return
+                }
                 for line in errorBuffer.appendAndExtractLines(data) {
                     postErrorLine(line)
                 }
@@ -668,91 +717,72 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
 
             process.terminationHandler = { proc in
                 controller.transitionToTerminated(exitCode: proc.terminationStatus, reason: proc.terminationReason)
-                outputPipe.fileHandleForReading.readabilityHandler = nil
-                errorPipe.fileHandleForReading.readabilityHandler = nil
-
-                let remainingOutput = outputPipe.fileHandleForReading.readDataToEndOfFile()
-                if !remainingOutput.isEmpty {
-                    for line in outputBuffer.appendAndExtractLines(remainingOutput) {
-                        processOutputLine(line)
-                    }
-                }
-                for line in outputBuffer.flush() {
-                    processOutputLine(line)
-                }
-
-                let remainingError = errorPipe.fileHandleForReading.readDataToEndOfFile()
-                try? outputPipe.fileHandleForReading.close()
-                try? errorPipe.fileHandleForReading.close()
                 proc.terminationHandler = nil
+                let exitCode = proc.terminationStatus
+                let reason = proc.terminationReason
+                streamsDrained.whenDrained {
+                    try? outputPipe.fileHandleForReading.close()
+                    try? errorPipe.fileHandleForReading.close()
 
-                if !remainingError.isEmpty {
-                    for line in errorBuffer.appendAndExtractLines(remainingError) {
-                        postErrorLine(line)
+                    // If user requested cancellation or process was terminated via signal, resume with appropriate error
+                    if Task.isCancelled || controller.isCancelled {
+                        safeContinuation.resume(throwing: YtdlpError.downloadFailed("Download was stopped."))
+                        return
                     }
-                }
-                for line in errorBuffer.flush() {
-                    postErrorLine(line)
-                }
-
-                // If user requested cancellation or process was terminated via signal, resume with appropriate error
-                if Task.isCancelled || controller.isCancelled {
-                    safeContinuation.resume(throwing: YtdlpError.downloadFailed("Download was stopped."))
-                    return
-                }
-                if proc.terminationReason == .uncaughtSignal {
-                    safeContinuation.resume(throwing: YtdlpError.downloadFailed("Process terminated unexpectedly with signal (exit code \(proc.terminationStatus))."))
-                    return
-                }
-
-                let fm = FileManager.default
-                var verifiedFinalPaths: [String] = []
-
-                // 1. Check deterministic final path(s) emitted by yt-dlp
-                for directPath in outputState.getFinalPaths() {
-                    let rawURL = directPath.hasPrefix("/") ? URL(fileURLWithPath: directPath) : saveFolder.appendingPathComponent(directPath)
-                    let resolved = rawURL.standardizedFileURL.resolvingSymlinksInPath()
-                    if fm.fileExists(atPath: resolved.path),
-                       let values = try? resolved.resourceValues(forKeys: [.isRegularFileKey]),
-                       values.isRegularFile == true,
-                       YtdlpService.isMediaFilePath(resolved.path),
-                       YtdlpService.isPathContained(targetURL: resolved, inside: saveFolder),
-                       !verifiedFinalPaths.contains(resolved.path) {
-                        verifiedFinalPaths.append(resolved.path)
+                    if reason == .uncaughtSignal {
+                        safeContinuation.resume(throwing: YtdlpError.downloadFailed("Process terminated unexpectedly with signal (exit code \(exitCode))."))
+                        return
                     }
-                }
 
-                // 2. Fallback to candidate paths parsed from output if no direct final paths verified
-                if verifiedFinalPaths.isEmpty {
-                    let candidates = outputState.getCandidatePaths()
-                    for candidate in candidates.reversed() {
-                        let rawURL = candidate.hasPrefix("/") ? URL(fileURLWithPath: candidate) : saveFolder.appendingPathComponent(candidate)
+                    let fm = FileManager.default
+                    var verifiedFinalPaths: [String] = []
+
+                    // 1. Check deterministic final path(s) emitted by yt-dlp
+                    for directPath in outputState.getFinalPaths() {
+                        let rawURL = directPath.hasPrefix("/") ? URL(fileURLWithPath: directPath) : saveFolder.appendingPathComponent(directPath)
                         let resolved = rawURL.standardizedFileURL.resolvingSymlinksInPath()
-
                         if fm.fileExists(atPath: resolved.path),
                            let values = try? resolved.resourceValues(forKeys: [.isRegularFileKey]),
                            values.isRegularFile == true,
                            YtdlpService.isMediaFilePath(resolved.path),
-                           YtdlpService.isPathContained(targetURL: resolved, inside: saveFolder) {
+                           YtdlpService.isPathContained(targetURL: resolved, inside: saveFolder),
+                           !verifiedFinalPaths.contains(resolved.path) {
                             verifiedFinalPaths.append(resolved.path)
-                            break
                         }
                     }
-                }
 
-                let errorOutput = outputState.getErrorText()
+                    // 2. Fallback to candidate paths parsed from output if no direct final paths verified
+                    if verifiedFinalPaths.isEmpty {
+                        let candidates = outputState.getCandidatePaths()
+                        for candidate in candidates.reversed() {
+                            let rawURL = candidate.hasPrefix("/") ? URL(fileURLWithPath: candidate) : saveFolder.appendingPathComponent(candidate)
+                            let resolved = rawURL.standardizedFileURL.resolvingSymlinksInPath()
 
-                if proc.terminationStatus == 0 {
-                    if let primary = verifiedFinalPaths.first {
-                        safeContinuation.resume(returning: DownloadProcessResult(primaryPath: primary, allPaths: verifiedFinalPaths))
-                    } else {
-                        safeContinuation.resume(throwing: YtdlpError.downloadFailed("Download process completed, but no valid media file was verified in the target destination."))
+                            if fm.fileExists(atPath: resolved.path),
+                               let values = try? resolved.resourceValues(forKeys: [.isRegularFileKey]),
+                               values.isRegularFile == true,
+                               YtdlpService.isMediaFilePath(resolved.path),
+                               YtdlpService.isPathContained(targetURL: resolved, inside: saveFolder) {
+                                verifiedFinalPaths.append(resolved.path)
+                                break
+                            }
+                        }
                     }
-                } else {
-                    safeContinuation.resume(throwing: Self.classifyFailure(
-                        errorOutput: errorOutput,
-                        exitCode: proc.terminationStatus
-                    ))
+
+                    let errorOutput = outputState.getErrorText()
+
+                    if exitCode == 0 {
+                        if let primary = verifiedFinalPaths.first {
+                            safeContinuation.resume(returning: DownloadProcessResult(primaryPath: primary, allPaths: verifiedFinalPaths))
+                        } else {
+                            safeContinuation.resume(throwing: YtdlpError.downloadFailed("Download process completed, but no valid media file was verified in the target destination."))
+                        }
+                    } else {
+                        safeContinuation.resume(throwing: Self.classifyFailure(
+                            errorOutput: errorOutput,
+                            exitCode: exitCode
+                        ))
+                    }
                 }
             }
 
