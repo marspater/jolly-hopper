@@ -151,12 +151,7 @@ struct RecentDownloadRowView: View {
     @ViewBuilder
     private var formatPillsView: some View {
         HStack(spacing: 4) {
-            Text(download.options.fileType.rawValue)
-                .font(.siphonMicroMonoSemibold)
-                .foregroundColor(.secondary)
-                .padding(.horizontal, 6)
-                .padding(.vertical, 2)
-                .background(Capsule().fill(Color.primary.opacity(SiphonTheme.Opacity.fillPill)))
+            SiphonTagBadge(text: download.options.fileType.rawValue, isMonospaced: true)
 
             if let res = download.options.videoResolution {
                 let resText: String = {
@@ -172,12 +167,7 @@ struct RecentDownloadRowView: View {
                     case .worst: return "Worst"
                     }
                 }()
-                Text(resText)
-                    .font(.siphonMicroMonoSemibold)
-                    .foregroundColor(.secondary)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 2)
-                    .background(Capsule().fill(Color.primary.opacity(SiphonTheme.Opacity.fillPill)))
+                SiphonTagBadge(text: resText, isMonospaced: true)
             }
         }
     }
