@@ -110,22 +110,18 @@ final class NotificationService: NSObject, @unchecked Sendable, UNUserNotificati
     private func fallbackDisplayNotification(title: String, body: String) {
         guard !Self.isRunningTests else { return }
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            let escapedTitle = title
-                .replacingOccurrences(of: "\\", with: "\\\\")
-                .replacingOccurrences(of: "\"", with: "\\\"")
-                .replacingOccurrences(of: "\r", with: " ")
-                .replacingOccurrences(of: "\n", with: " ")
-            let escapedBody = body
-                .replacingOccurrences(of: "\\", with: "\\\\")
-                .replacingOccurrences(of: "\"", with: "\\\"")
-                .replacingOccurrences(of: "\r", with: " ")
-                .replacingOccurrences(of: "\n", with: " ")
-
-            let script = "display notification \"\(escapedBody)\" with title \"\(escapedTitle)\" sound name \"default\""
             let process = Process()
             let errorPipe = Pipe()
             process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
-            process.arguments = ["-e", script]
+            process.arguments = [
+                "-e", "on run argv",
+                "-e", "display notification (item 2 of argv) with title (item 1 of argv) sound name \"default\"",
+                "-e", "end run",
+                // Without "--", a title starting with "-" would be parsed as an osascript option.
+                "--",
+                title,
+                body
+            ]
             process.environment = YtdlpService.createSanitizedEnvironment()
             process.standardOutput = FileHandle.nullDevice
             process.standardError = errorPipe
