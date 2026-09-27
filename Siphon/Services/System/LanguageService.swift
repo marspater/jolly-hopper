@@ -98,6 +98,7 @@ class LanguageService: ObservableObject {
         "ytdlp_not_found": "yt-dlp executable not found. Please download dependencies in Settings > Advanced.",
         "parse_error": "Failed to parse video information. The website structure may have changed.",
         "cloudflare_blocked": "Blocked by anti-bot protection. Siphon could not complete the browser challenge automatically.",
+        "recu_verification_title": "recu.me — complete the check or sign in; Siphon continues automatically",
         "browser_cookies_required": "Browser cookies required to download from this site. Enable cookie import in Preferences.",
         "security_violation": "Security violation: %@",
         "ytdlp_update_success_title": "yt-dlp Updated",
