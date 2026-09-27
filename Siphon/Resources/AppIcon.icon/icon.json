@@ -1,0 +1,171 @@
+{
+  "color-space-for-untagged-svg-colors": "display-p3",
+  "fill-specializations": [
+    {
+      "value": {
+        "linear-gradient": [
+          "display-p3:0.09000,0.44000,0.95000,1.00000",
+          "display-p3:0.07000,0.13000,0.70000,1.00000"
+        ]
+      }
+    },
+    {
+      "appearance": "dark",
+      "value": {
+        "linear-gradient": [
+          "display-p3:0.12000,0.14000,0.23000,1.00000",
+          "display-p3:0.03000,0.04000,0.09000,1.00000"
+        ]
+      }
+    }
+  ],
+  "groups": [
+    {
+      "layers": [
+        {
+          "fill-specializations": [
+            {
+              "value": {
+                "solid": "display-p3:1.00000,1.00000,1.00000,1.00000"
+              }
+            },
+            {
+              "appearance": "dark",
+              "value": {
+                "solid": "display-p3:0.86000,0.94000,1.00000,1.00000"
+              }
+            },
+            {
+              "appearance": "tinted",
+              "value": {
+                "solid": "gray:1.00000,1.00000"
+              }
+            }
+          ],
+          "glass": true,
+          "image-name": "4-Arrow-Core.svg",
+          "name": "Arrow Core"
+        }
+      ],
+      "lighting": "individual",
+      "name": "Arrow",
+      "shadow": {
+        "kind": "layer-color",
+        "opacity": 0.5
+      },
+      "specular": true,
+      "translucency": {
+        "enabled": false,
+        "value": 0
+      }
+    },
+    {
+      "layers": [
+        {
+          "fill-specializations": [
+            {
+              "value": {
+                "solid": "display-p3:0.70000,0.90000,1.00000,1.00000"
+              }
+            },
+            {
+              "appearance": "dark",
+              "value": {
+                "solid": "display-p3:0.42000,0.72000,1.00000,1.00000"
+              }
+            },
+            {
+              "appearance": "tinted",
+              "value": {
+                "solid": "gray:0.74000,1.00000"
+              }
+            }
+          ],
+          "glass": true,
+          "image-name": "3-Arrow-Middle.svg",
+          "name": "Arrow Middle"
+        },
+        {
+          "fill-specializations": [
+            {
+              "value": {
+                "solid": "display-p3:0.44000,0.76000,1.00000,1.00000"
+              }
+            },
+            {
+              "appearance": "dark",
+              "value": {
+                "solid": "display-p3:0.20000,0.47000,0.98000,1.00000"
+              }
+            },
+            {
+              "appearance": "tinted",
+              "value": {
+                "solid": "gray:0.52000,1.00000"
+              }
+            }
+          ],
+          "glass": true,
+          "image-name": "3-Arrow-Outer.svg",
+          "name": "Arrow Outer"
+        }
+      ],
+      "lighting": "individual",
+      "name": "Halo",
+      "shadow": {
+        "kind": "layer-color",
+        "opacity": 0.45
+      },
+      "specular": true,
+      "translucency": {
+        "enabled": true,
+        "value": 0.25
+      }
+    },
+    {
+      "layers": [
+        {
+          "fill-specializations": [
+            {
+              "value": {
+                "solid": "display-p3:0.62000,0.88000,1.00000,1.00000"
+              }
+            },
+            {
+              "appearance": "dark",
+              "value": {
+                "solid": "display-p3:0.15000,0.72000,0.96000,1.00000"
+              }
+            },
+            {
+              "appearance": "tinted",
+              "value": {
+                "solid": "gray:0.42000,1.00000"
+              }
+            }
+          ],
+          "glass": true,
+          "image-name": "2-Funnel.svg",
+          "name": "Funnel",
+          "opacity": 0.75
+        }
+      ],
+      "lighting": "individual",
+      "name": "Funnel",
+      "shadow": {
+        "kind": "layer-color",
+        "opacity": 0.35
+      },
+      "specular": true,
+      "translucency": {
+        "enabled": true,
+        "value": 0.5
+      }
+    }
+  ],
+  "supported-platforms": {
+    "squares": [
+      "macOS"
+    ]
+  }
+}
