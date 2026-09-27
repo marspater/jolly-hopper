@@ -119,47 +119,66 @@ struct ContentView: View {
     private var mainLayout: some View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
             SidebarView()
+                // The system toggle lives in the sidebar's toolbar section, which
+                // starts near zero width while the sidebar animates open. At narrow
+                // window sizes AppKit briefly moves it into the "»" overflow menu.
+                .toolbar(removing: .sidebarToggle)
         } detail: {
             DetailView()
+                .toolbar { detailToolbar }
         }
         .navigationSplitViewStyle(.balanced)
         .siphonWindowBackground()
-        .toolbar {
-            ToolbarItemGroup(placement: .primaryAction) {
-                if (appState.selectedNavItem == .downloading || appState.selectedNavItem == .queued || appState.selectedNavItem == .home) &&
-                    (downloadManager.downloadingCount > 0 || downloadManager.queuedCount > 0) {
-                    Button {
-                        downloadManager.stopAllDownloads()
-                    } label: {
-                        Label(languageService.s("stop_all"), systemImage: "stop.circle")
-                    }
-                    .help(languageService.s("stop_all"))
-                    .accessibilityLabel(languageService.s("stop_all"))
-                } else if appState.selectedNavItem == .completed && !downloadManager.completedDownloads.isEmpty {
-                    Button {
-                        downloadManager.clearCompletedDownloads()
-                    } label: {
-                        Label(languageService.s("clear_history"), systemImage: "trash")
-                    }
-                    .help(languageService.s("clear_history_help"))
-                    .accessibilityLabel(languageService.s("clear_history"))
-                } else if appState.selectedNavItem == .failed && !downloadManager.failedDownloads.isEmpty {
-                    Button {
-                        downloadManager.clearFailedDownloads()
-                    } label: {
-                        Label(languageService.s("clear_history"), systemImage: "trash")
-                    }
-                    .help(languageService.s("clear_history_help"))
-                    .accessibilityLabel(languageService.s("clear_history"))
+    }
+
+    @ToolbarContentBuilder
+    private var detailToolbar: some ToolbarContent {
+        ToolbarItem(placement: .navigation) {
+            Button {
+                withAnimation {
+                    columnVisibility = columnVisibility == .detailOnly ? .all : .detailOnly
                 }
-                
+            } label: {
+                Label(languageService.s("toggle_sidebar"), systemImage: "sidebar.leading")
+            }
+            .help(languageService.s("toggle_sidebar"))
+            .accessibilityLabel(languageService.s("toggle_sidebar"))
+        }
+
+        ToolbarItemGroup(placement: .primaryAction) {
+            if (appState.selectedNavItem == .downloading || appState.selectedNavItem == .queued || appState.selectedNavItem == .home) &&
+                (downloadManager.downloadingCount > 0 || downloadManager.queuedCount > 0) {
                 Button {
-                    appState.showAddDownloadSheet = true
+                    downloadManager.stopAllDownloads()
                 } label: {
-                    Label(languageService.s("new_download"), systemImage: "plus")
-                        .help(languageService.s("new_download"))
-                        .accessibilityLabel(languageService.s("new_download"))
+                    Label(languageService.s("stop_all"), systemImage: "stop.circle")
                 }
+                .help(languageService.s("stop_all"))
+                .accessibilityLabel(languageService.s("stop_all"))
+            } else if appState.selectedNavItem == .completed && !downloadManager.completedDownloads.isEmpty {
+                Button {
+                    downloadManager.clearCompletedDownloads()
+                } label: {
+                    Label(languageService.s("clear_history"), systemImage: "trash")
+                }
+                .help(languageService.s("clear_history_help"))
+                .accessibilityLabel(languageService.s("clear_history"))
+            } else if appState.selectedNavItem == .failed && !downloadManager.failedDownloads.isEmpty {
+                Button {
+                    downloadManager.clearFailedDownloads()
+                } label: {
+                    Label(languageService.s("clear_history"), systemImage: "trash")
+                }
+                .help(languageService.s("clear_history_help"))
+                .accessibilityLabel(languageService.s("clear_history"))
+            }
+            
+            Button {
+                appState.showAddDownloadSheet = true
+            } label: {
+                Label(languageService.s("new_download"), systemImage: "plus")
+                    .help(languageService.s("new_download"))
+                    .accessibilityLabel(languageService.s("new_download"))
             }
         }
     }
