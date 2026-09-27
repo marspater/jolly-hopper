@@ -4937,6 +4937,20 @@ public struct DownloadResult: Sendable {
         return decryptedData.prefix(dataOutMoved)
     }
 
+    /// Runs one chunk through the cipher, growing `buffer` as needed.
+    private nonisolated static func cryptorUpdate(_ cryptor: CCCryptorRef, _ input: Data, into buffer: inout Data) -> Data? {
+        if buffer.count < input.count {
+            buffer = Data(count: input.count)
+        }
+        var dataOutMoved = 0
+        let status = input.withUnsafeBytes { inBytes in
+            buffer.withUnsafeMutableBytes { outBytes in
+                CCCryptorUpdate(cryptor, inBytes.baseAddress, input.count, outBytes.baseAddress, input.count, &dataOutMoved)
+            }
+        }
+        return status == kCCSuccess ? buffer.prefix(dataOutMoved) : nil
+    }
+
     /// Streams the file through the cipher off the main actor. Each chunk is
     /// released per iteration, so memory stays flat for multi-GB videos.
     nonisolated static func decryptBestCamFile(at fileURL: URL, filename: String) throws {
@@ -4992,28 +5006,10 @@ public struct DownloadResult: Sendable {
             while hasMoreData {
                 hasMoreData = try autoreleasepool {
                     guard let chunk = try readHandle.read(upToCount: chunkSize), !chunk.isEmpty else { return false }
-
-                    let capacity = chunk.count
-                    if buffer.count < capacity {
-                        buffer = Data(count: capacity)
-                    }
-                    var dataOutMoved = 0
-                    let updateStatus = chunk.withUnsafeBytes { inBytes in
-                        buffer.withUnsafeMutableBytes { outBytes in
-                            CCCryptorUpdate(
-                                ref,
-                                inBytes.baseAddress,
-                                capacity,
-                                outBytes.baseAddress,
-                                capacity,
-                                &dataOutMoved
-                            )
-                        }
-                    }
-                    guard updateStatus == kCCSuccess else {
+                    guard let decrypted = cryptorUpdate(ref, chunk, into: &buffer) else {
                         throw YtdlpError.downloadFailed("Stream decryption update failed")
                     }
-                    try writeHandle.write(contentsOf: buffer.prefix(dataOutMoved))
+                    try writeHandle.write(contentsOf: decrypted)
                     return true
                 }
             }
