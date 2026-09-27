@@ -56,9 +56,11 @@ class DownloadManager: ObservableObject {
             }
             .store(in: &cancellables)
 
-        // Stored in cancellables so the subscriptions end with this manager;
-        // block-based observers stay registered until removed explicitly.
-        NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification)
+        // Only the concurrency limit changes what the queue may start. Observing
+        // every defaults write rescanned the queue on each history save too.
+        userDefaults.publisher(for: \.maxConcurrentDownloads)
+            .dropFirst()
+            .removeDuplicates()
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
                 self?.processQueue()

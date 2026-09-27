@@ -1384,6 +1384,22 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: destination.path))
     }
 
+    func testTwinkabooSponsoredPromoIsNotTreatedAsTheVideo() throws {
+        let page = "https://twinkaboo.com/videos/example-33006ba0"
+        // Shape of yt-dlp's html5 result on the page, which picks the ad <video>.
+        let promo = try JSONSerialization.data(withJSONObject: [
+            "extractor": "html5",
+            "formats": [["format_id": "0", "url": "https://assets.twinkaboo.com/twink-generator-1.mp4"]]
+        ])
+        let scene = try JSONSerialization.data(withJSONObject: [
+            "formats": [["format_id": "hls", "url": "https://1.video-tunnel.com/media/33/00/example/video.m3u8"]]
+        ])
+
+        XCTAssertTrue(YtdlpService.isTwinkabooPromo(pageURL: page, infoJSON: promo))
+        XCTAssertFalse(YtdlpService.isTwinkabooPromo(pageURL: page, infoJSON: scene))
+        XCTAssertFalse(YtdlpService.isTwinkabooPromo(pageURL: "https://example.com/v", infoJSON: promo))
+    }
+
     func testBestCamSourceParsingFromFristDatasSchema() throws {
         let json: [String: Any] = [
             "mp4": [

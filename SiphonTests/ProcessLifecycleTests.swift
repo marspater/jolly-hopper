@@ -290,6 +290,23 @@ final class ProcessLifecycleTests: XCTestCase {
         XCTAssertLessThan(Date().timeIntervalSince(commandStarted), 10)
     }
 
+    func testCancelDoesNotWaitOutTheTerminationGracePeriods() throws {
+        let controller = DownloadProcessController()
+        let proc = Process()
+        proc.executableURL = URL(fileURLWithPath: "/bin/sh")
+        // Ignoring SIGTERM forces the slowest path: sweeps, then SIGKILL (~100 ms).
+        proc.arguments = ["-c", "trap '' TERM; sleep 30"]
+        try controller.start(proc)
+
+        let started = Date()
+        controller.cancel()
+        XCTAssertLessThan(Date().timeIntervalSince(started), 0.05, "cancel() runs on the main actor for Stop All")
+
+        DownloadProcessController.waitForPendingTerminations()
+        proc.waitUntilExit()
+        XCTAssertEqual(proc.terminationReason, .uncaughtSignal)
+    }
+
     func testCancelBeforeStartTransitionsToCancelling() {
         let controller = DownloadProcessController()
         controller.cancel()
