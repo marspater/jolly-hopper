@@ -3187,11 +3187,14 @@ public struct DownloadResult: Sendable {
             decidePolicyFor navigationAction: WKNavigationAction,
             decisionHandler: @escaping @MainActor (WKNavigationActionPolicy) -> Void
         ) {
-            let allowed = Self.allowsNavigation(
+            guard Self.allowsNavigation(
                 to: navigationAction.request.url,
                 isMainFrame: navigationAction.targetFrame?.isMainFrame
-            )
-            decisionHandler(allowed ? .allow : .cancel)
+            ) else {
+                decisionHandler(.cancel)
+                return
+            }
+            decisionHandler(.allow)
         }
     }
 
