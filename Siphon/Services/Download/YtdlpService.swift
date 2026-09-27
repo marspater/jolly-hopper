@@ -1640,9 +1640,13 @@ public struct DownloadResult: Sendable {
         let outputTemplate: String
         // A playlist URL expands to many entries (--no-playlist does not apply to
         // it). One fixed name would make yt-dlp skip every entry after the first
-        // as "already downloaded", so each entry keeps its own title.
+        // as "already downloaded". The queue reserves one path per job, so it
+        // cannot protect the entries: the video id keeps distinct entries from
+        // colliding with each other or with another job's output.
         let isPlaylist = mediaInfo?.playlist != nil
-        if !isPlaylist, let customFilename = options.customFilename ?? customResolvedTitle, !customFilename.isEmpty {
+        if isPlaylist {
+            outputTemplate = "%(title)s [%(id)s].%(ext)s"
+        } else if let customFilename = options.customFilename ?? customResolvedTitle, !customFilename.isEmpty {
             let safeName = Self.sanitizeFilename(customFilename)
             outputTemplate = "\(safeName).%(ext)s"
         } else {

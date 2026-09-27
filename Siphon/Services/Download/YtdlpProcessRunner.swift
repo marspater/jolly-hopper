@@ -296,12 +296,8 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
         if FileManager.default.isExecutableFile(atPath: helperInBundle.path) {
             return helperInBundle
         }
-        // 3. In built products / test bundle directory
-        let testDir = Bundle(for: DownloadProcessController.self).bundleURL.deletingLastPathComponent()
-        let inBuiltProducts = testDir.appendingPathComponent("siphon-pgrp")
-        if FileManager.default.isExecutableFile(atPath: inBuiltProducts.path) {
-            return inBuiltProducts
-        }
+        // Tests are hosted in Siphon.app, so the helper never needs to come from
+        // outside the app bundle. The bundle's parent (e.g. /Applications) is untrusted.
         return nil
     }
 
@@ -311,11 +307,7 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
 
     public static func configureProcessCommand(_ process: Process, args: [String]) {
         if let helperURL = ensureProcessGroupHelper() {
-            let appBundleURL = Bundle.main.bundleURL
-            let testBundleURL = Bundle(for: DownloadProcessController.self).bundleURL.deletingLastPathComponent()
-            let isSafe = YtdlpService.isPathContained(targetURL: helperURL, inside: appBundleURL) ||
-                         YtdlpService.isPathContained(targetURL: helperURL, inside: testBundleURL)
-            if isSafe {
+            if YtdlpService.isPathContained(targetURL: helperURL, inside: Bundle.main.bundleURL) {
                 process.executableURL = helperURL
                 process.arguments = args
                 return

@@ -225,8 +225,8 @@ final class YtdlpServiceTests: XCTestCase {
         let summary = MediaInfo(id: "PLfixture", title: "Playlist Title", playlist: "PLfixture")
         service.processRunner = MockYtdlpProcessRunner(mockDownload: { args in
             let index = try XCTUnwrap(args.firstIndex(of: "-o"))
-            XCTAssertEqual(args[index + 1], "%(title)s.%(ext)s",
-                           "One fixed name makes yt-dlp skip every entry after the first")
+            XCTAssertEqual(args[index + 1], "%(title)s [%(id)s].%(ext)s",
+                           "One fixed name makes yt-dlp skip every entry after the first; the id keeps same-titled entries apart")
             throw CancellationError()
         })
         do {

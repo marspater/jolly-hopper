@@ -96,10 +96,12 @@ final class UpdateVerifierTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: sampleFile) }
 
         let wrongChecksum = "0000000000000000000000000000000000000000000000000000000000000000"
-        XCTAssertThrowsError(try UpdateVerifier.verifySHA256(fileURL: sampleFile, expectedChecksum: wrongChecksum)) { error in
-            guard case UpdateVerificationError.checksumMismatch = error else {
-                XCTFail("Expected checksumMismatch error, got \(error)")
-                return
+        for checksum in [wrongChecksum, "", "   ", "not-a-digest"] {
+            XCTAssertThrowsError(try UpdateVerifier.verifySHA256(fileURL: sampleFile, expectedChecksum: checksum)) { error in
+                guard case UpdateVerificationError.checksumMismatch = error else {
+                    XCTFail("Expected checksumMismatch error, got \(error)")
+                    return
+                }
             }
         }
     }

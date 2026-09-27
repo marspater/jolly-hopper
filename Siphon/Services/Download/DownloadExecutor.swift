@@ -5,6 +5,7 @@
 
 import Foundation
 import AppKit
+import ImageIO
 
 @MainActor
 protocol DownloadExecutorDelegate: AnyObject {
@@ -26,6 +27,12 @@ enum DownloadExecutionState: Equatable {
 }
 
 /// Thread-safe coalescer that batches high-frequency progress and log updates to minimize MainActor thread churn.
+///
+/// Background producers only append to the pending buffer. Pending events are
+/// delivered exclusively by `flushRemaining()`, which the coalescer schedules on
+/// the main queue. The executor's final `flushRemaining()` also runs on the main
+/// actor, so no delivery can still be in flight after it returns and land after
+/// the download has left its active status.
 final class DownloadEventCoalescer: @unchecked Sendable {
     private let lock = NSLock()
     private var pendingProgress: (progress: Double, speed: String?, eta: String?)?
@@ -34,75 +41,27 @@ final class DownloadEventCoalescer: @unchecked Sendable {
     private let maxPendingLines = 500
     private let maxPendingBytes = 1_048_576 // 1MB
 
-    private var lastProgressFlush = Date()
-    private var lastLogFlush = Date()
-    private var scheduledFlushWorkItem: DispatchWorkItem?
+    private var drainScheduled = false
     private let onFlush: @Sendable (Double?, String?, String?, [String]) -> Void
 
     init(onFlush: @escaping @Sendable (Double?, String?, String?, [String]) -> Void) {
         self.onFlush = onFlush
     }
 
-    deinit {
-        scheduledFlushWorkItem?.cancel()
-    }
-
-    private func scheduleFlushIfNeeded() {
-        if scheduledFlushWorkItem != nil { return }
-        let workItem = DispatchWorkItem { [weak self] in
-            self?.performTimerFlush()
-        }
-        scheduledFlushWorkItem = workItem
-        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 0.150, execute: workItem)
-    }
-
-    private func performTimerFlush() {
-        lock.lock()
-        scheduledFlushWorkItem = nil
-        let now = Date()
-        var progressToFlush: (progress: Double, speed: String?, eta: String?)? = nil
-        if pendingProgress != nil && now.timeIntervalSince(lastProgressFlush) >= 0.100 {
-            lastProgressFlush = now
-            progressToFlush = pendingProgress
-            pendingProgress = nil
-        }
-
-        var linesToFlush: [String] = []
-        if !pendingLogLines.isEmpty && now.timeIntervalSince(lastLogFlush) >= 0.200 {
-            lastLogFlush = now
-            linesToFlush = pendingLogLines
-            pendingLogLines.removeAll(keepingCapacity: true)
-            pendingLogBytes = 0
-        }
-
-        if pendingProgress != nil || !pendingLogLines.isEmpty {
-            scheduleFlushIfNeeded()
-        }
-        lock.unlock()
-
-        if progressToFlush != nil || !linesToFlush.isEmpty {
-            onFlush(progressToFlush?.progress, progressToFlush?.speed, progressToFlush?.eta, linesToFlush)
+    /// Caller must hold `lock`.
+    private func scheduleDrainIfNeeded() {
+        if drainScheduled { return }
+        drainScheduled = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.100) { [weak self] in
+            self?.flushRemaining()
         }
     }
 
     func recordProgress(progress: Double, speed: String?, eta: String?) {
         lock.lock()
         pendingProgress = (progress, speed, eta)
-        let now = Date()
-        let shouldFlush = now.timeIntervalSince(lastProgressFlush) >= 0.100 // 100ms
-        var toFlush: (progress: Double, speed: String?, eta: String?)? = nil
-        if shouldFlush {
-            lastProgressFlush = now
-            toFlush = pendingProgress
-            pendingProgress = nil
-        } else {
-            scheduleFlushIfNeeded()
-        }
+        scheduleDrainIfNeeded()
         lock.unlock()
-
-        if let p = toFlush {
-            onFlush(p.progress, p.speed, p.eta, [])
-        }
     }
 
     func recordLogLine(_ line: String) {
@@ -120,28 +79,15 @@ final class DownloadEventCoalescer: @unchecked Sendable {
             }
         }
 
-        let now = Date()
-        let shouldFlush = now.timeIntervalSince(lastLogFlush) >= 0.200 // 200ms
-        var linesToFlush: [String] = []
-        if shouldFlush {
-            lastLogFlush = now
-            linesToFlush = pendingLogLines
-            pendingLogLines.removeAll(keepingCapacity: true)
-            pendingLogBytes = 0
-        } else {
-            scheduleFlushIfNeeded()
-        }
+        scheduleDrainIfNeeded()
         lock.unlock()
-
-        if !linesToFlush.isEmpty {
-            onFlush(nil, nil, nil, linesToFlush)
-        }
     }
 
+    /// Delivers everything pending. Call on the main thread in production so
+    /// delivery stays ordered with the executor's status transitions.
     func flushRemaining() {
         lock.lock()
-        scheduledFlushWorkItem?.cancel()
-        scheduledFlushWorkItem = nil
+        drainScheduled = false
         let p = pendingProgress
         let lines = pendingLogLines
         pendingProgress = nil
@@ -152,6 +98,19 @@ final class DownloadEventCoalescer: @unchecked Sendable {
         if p != nil || !lines.isEmpty {
             onFlush(p?.progress, p?.speed, p?.eta, lines)
         }
+    }
+}
+
+/// Refuses redirects that leave the public network boundary.
+private final class PublicRedirectPolicy: NSObject, URLSessionTaskDelegate, Sendable {
+    func urlSession(
+        _ session: URLSession,
+        task: URLSessionTask,
+        willPerformHTTPRedirection response: HTTPURLResponse,
+        newRequest request: URLRequest
+    ) async -> URLRequest? {
+        guard let url = request.url, ExternalDownloadTargetPolicy.isAllowed(url) else { return nil }
+        return request
     }
 }
 
@@ -663,13 +622,49 @@ final class DownloadExecutor: ObservableObject {
 
     static func attachFinderIcon(from thumbURL: URL, to fileURL: URL) {
         Task.detached(priority: .utility) {
-            if let (data, _) = try? await URLSession.shared.data(from: thumbURL), let img = NSImage(data: data) {
+            if let data = await fetchThumbnailData(from: thumbURL), let img = NSImage(data: data) {
                 let squareIcon = YtdlpService.createAspectFitIcon(from: img)
                 await MainActor.run {
                     _ = NSWorkspace.shared.setIcon(squareIcon, forFile: fileURL.path, options: [])
                 }
             }
         }
+    }
+
+    nonisolated static let maxThumbnailBytes = 5 * 1024 * 1024
+    nonisolated static let maxThumbnailPixelDimension = 4096
+
+    /// Thumbnail URLs come from untrusted site metadata. Only fetch public
+    /// targets (re-checked on every redirect), bound the body size, and refuse
+    /// images whose pixel dimensions would make decoding expensive.
+    nonisolated static func fetchThumbnailData(from url: URL, session: URLSession = .shared) async -> Data? {
+        guard ExternalDownloadTargetPolicy.isAllowed(url) else { return nil }
+        let request = URLRequest(url: url, timeoutInterval: 15)
+        guard let (bytes, response) = try? await session.bytes(for: request, delegate: PublicRedirectPolicy()),
+              (response as? HTTPURLResponse)?.statusCode == 200,
+              response.expectedContentLength <= maxThumbnailBytes else {
+            return nil
+        }
+
+        var data = Data()
+        do {
+            for try await byte in bytes {
+                data.append(byte)
+                if data.count > maxThumbnailBytes { return nil }
+            }
+        } catch {
+            return nil
+        }
+
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil),
+              let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+              let width = properties[kCGImagePropertyPixelWidth] as? Int,
+              let height = properties[kCGImagePropertyPixelHeight] as? Int,
+              width <= maxThumbnailPixelDimension,
+              height <= maxThumbnailPixelDimension else {
+            return nil
+        }
+        return data
     }
 
     static func errorMessage(for error: Error, languageService: LanguageService?) -> String {

@@ -23,5 +23,8 @@ When setting up this service on Render:
 
 ### Test Fixtures
 - `GET /mock/subtitles.vtt`: Valid WebVTT subtitle stream for subtitle parser verification.
-- `GET /mock/playlist.m3u8`: Valid HLS streaming playlist manifest.
-- `GET /mock/video.mp4`: Minimal valid ISO MP4 binary video stream.
+- `GET /mock/playlist.m3u8`: HLS playlist referencing one 1-second MPEG-TS segment.
+- `GET /mock/segment0.ts`: The playlist's H.264/AAC MPEG-TS segment.
+- `GET /mock/video.mp4`: 1-second 16x16 H.264/AAC MP4 that decodes with FFmpeg.
+
+Fixture binaries live in `fixtures/`.
