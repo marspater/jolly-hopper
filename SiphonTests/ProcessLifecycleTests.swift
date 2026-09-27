@@ -206,6 +206,35 @@ final class ProcessLifecycleTests: XCTestCase {
         }
     }
 
+    func testStreamDrainBarrierRunsOnceAfterEveryStreamFinishes() {
+        final class Counter: @unchecked Sendable {
+            let lock = NSLock()
+            var runs = 0
+            func hit() { lock.withLock { runs += 1 } }
+            var value: Int { lock.withLock { runs } }
+        }
+
+        // Completion registered before the streams finish (process exit first).
+        let early = StreamDrainBarrier(streams: 2)
+        let earlyRuns = Counter()
+        early.whenDrained { earlyRuns.hit() }
+        early.streamFinished()
+        XCTAssertEqual(earlyRuns.value, 0, "One open stream may still hold the last bytes")
+        early.streamFinished()
+        XCTAssertEqual(earlyRuns.value, 1)
+
+        // Completion registered after both streams already hit EOF.
+        let late = StreamDrainBarrier(streams: 2)
+        let lateRuns = Counter()
+        late.streamFinished()
+        late.streamFinished()
+        late.whenDrained { lateRuns.hit() }
+        XCTAssertEqual(lateRuns.value, 1)
+
+        // A process that never launched leaves the barrier pending; releasing it must be safe.
+        _ = StreamDrainBarrier(streams: 2)
+    }
+
     func testCancelBeforeStartTransitionsToCancelling() {
         let controller = DownloadProcessController()
         controller.cancel()
