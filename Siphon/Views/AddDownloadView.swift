@@ -596,7 +596,7 @@ struct AddDownloadView: View {
             AsyncImage(url: info.thumbnailURL) { image in
                 image.resizable().aspectRatio(contentMode: .fill)
             } placeholder: {
-                Rectangle().fill(Color.primary.opacity(0.06))
+                Rectangle().fill(Color.primary.opacity(SiphonTheme.Opacity.fillPlaceholder))
                     .overlay { Image(systemName: "photo").font(.largeTitle).foregroundColor(.secondary) }
             }
             .frame(width: 180, height: 100)
@@ -695,7 +695,7 @@ struct AddDownloadView: View {
                             .accessibilityLabel(item.title)
 
                             AsyncImage(url: item.thumbnailURL) { image in image.resizable().aspectRatio(contentMode: .fill) }
-                            placeholder: { Rectangle().fill(Color.primary.opacity(0.06)) }
+                            placeholder: { Rectangle().fill(Color.primary.opacity(SiphonTheme.Opacity.fillPlaceholder)) }
                             .frame(width: 50, height: 30)
                             .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusSmall, style: .continuous))
 
@@ -1107,7 +1107,6 @@ struct AddDownloadView: View {
 
                             Toggle(languageService.s("download_subtitles"), isOn: $downloadSubtitles)
                                 .disabled(availableSubtitles.isEmpty)
-                                .tint(SiphonTheme.accent)
 
                             if availableSubtitles.isEmpty && mediaInfo != nil {
                                 Text(languageService.s("no_subtitles"))
@@ -1184,7 +1183,6 @@ struct AddDownloadView: View {
                                 }
 
                                 Toggle(languageService.s("embed_video"), isOn: $embedSubtitles)
-                                    .tint(SiphonTheme.accent)
                             }
                         }
                     }
@@ -1197,10 +1195,8 @@ struct AddDownloadView: View {
                             .foregroundColor(.secondary)
 
                         Toggle(languageService.s("embed_thumbnail"), isOn: $embedThumbnail)
-                            .tint(SiphonTheme.accent)
 
                         Toggle(languageService.s("metadata_desc"), isOn: $embedMetadata)
-                            .tint(SiphonTheme.accent)
                     }
 
                     SiphonTheme.subtleDivider
@@ -1323,10 +1319,8 @@ struct AddDownloadView: View {
                     .foregroundColor(.secondary)
 
                 Toggle(languageService.s("split_chapters"), isOn: $splitChapters)
-                    .tint(SiphonTheme.accent)
 
                 Toggle(languageService.s("sponsorblock_hint"), isOn: $sponsorBlock)
-                    .tint(SiphonTheme.accent)
             }
         }
     }
@@ -1378,7 +1372,6 @@ struct AddDownloadView: View {
                                 .font(.siphonMetadataSemibold)
                         }
                         .buttonStyle(.borderedProminent)
-                        .tint(SiphonTheme.accent)
                         .controlSize(.small)
 
                         Button {
@@ -1409,7 +1402,6 @@ struct AddDownloadView: View {
                                 .font(.siphonMetadataSemibold)
                         }
                         .buttonStyle(.borderedProminent)
-                        .tint(SiphonTheme.accent)
                         .controlSize(.small)
                     }
                 }
