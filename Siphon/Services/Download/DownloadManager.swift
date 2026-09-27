@@ -657,24 +657,3 @@ extension DownloadManager: DownloadExecutorDelegate {
         objectWillChange.send()
     }
 }
-
-
-
-final class ThreadSafePathCollector: @unchecked Sendable {
-    private var paths: [URL] = []
-    private let lock = NSLock()
-
-    func add(_ url: URL) {
-        lock.lock()
-        if !paths.contains(url) {
-            paths.append(url)
-        }
-        lock.unlock()
-    }
-
-    func getPaths() -> [URL] {
-        lock.lock()
-        defer { lock.unlock() }
-        return Array(paths)
-    }
-}

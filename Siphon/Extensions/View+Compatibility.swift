@@ -1,26 +1,6 @@
 import SwiftUI
 #if os(macOS)
 import AppKit
-
-struct VisualEffectView: NSViewRepresentable {
-    var material: NSVisualEffectView.Material = .hudWindow
-    var blendingMode: NSVisualEffectView.BlendingMode = .behindWindow
-    var state: NSVisualEffectView.State = .active
-
-    func makeNSView(context _: Context) -> NSVisualEffectView {
-        let nsView = NSVisualEffectView()
-        nsView.material = material
-        nsView.blendingMode = blendingMode
-        nsView.state = state
-        return nsView
-    }
-
-    func updateNSView(_ nsView: NSVisualEffectView, context _: Context) {
-        nsView.material = material
-        nsView.blendingMode = blendingMode
-        nsView.state = state
-    }
-}
 #endif
 
 extension View {
@@ -72,30 +52,12 @@ public struct RenderingCapabilities: Sendable, Equatable {
     }
 }
 
-public enum MaterialMode: Sendable, Equatable {
-    case glass      // Standard liquid glass with restrained translucency
-    case opaque     // Accessibility Reduce Transparency fallback
-}
-
-public enum ColorGamut: Sendable, Equatable {
-    case p3         // Wide Display P3 color gamut
-    case sRGB       // Standard sRGB color fallback
-}
-
 @MainActor
 public final class AdaptiveRenderingEnvironment: ObservableObject {
     public static let shared = AdaptiveRenderingEnvironment()
     
     @Published public private(set) var capabilities: RenderingCapabilities
     
-    public var materialMode: MaterialMode {
-        .glass
-    }
-    
-    public var colorGamut: ColorGamut {
-        capabilities.supportsP3 ? .p3 : .sRGB
-    }
-
     public var reduceMotion: Bool {
         capabilities.reduceMotion
     }
