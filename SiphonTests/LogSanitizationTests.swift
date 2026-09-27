@@ -40,6 +40,15 @@ final class LogSanitizationTests: XCTestCase {
     }
 
     @MainActor
+    func testLoggerWritesOutsideRealAppSupportUnderXCTest() throws {
+        // Tests run inside Siphon.app; writing here would append fixture lines
+        // to the user's real debug log.
+        let appSupport = try XCTUnwrap(FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first)
+        let logPath = LoggerService.shared.logFileURL.resolvingSymlinksInPath().path
+        XCTAssertFalse(logPath.hasPrefix(appSupport.resolvingSymlinksInPath().path), "Test runs must not write to \(logPath)")
+    }
+
+    @MainActor
     func testExportLogsProducesSanitizedTemporaryFileWithSecurePermissions() async throws {
         let logger = LoggerService.shared
         logger.log("Testing export with /Users/developer_test/file.txt and token=abc12345secret", level: .info)
