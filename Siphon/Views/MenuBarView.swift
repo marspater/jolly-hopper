@@ -238,7 +238,7 @@ struct MenuBarView: View {
                 .padding(.vertical, 5)
                 .background(
                     RoundedRectangle(cornerRadius: SiphonTheme.radiusSmall, style: .continuous)
-                        .fill(Color.primary.opacity(0.04))
+                        .fill(Color.primary.opacity(SiphonTheme.Opacity.fillPill))
                 )
                 .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusSmall, style: .continuous))
             }

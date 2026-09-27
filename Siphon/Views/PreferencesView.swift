@@ -154,10 +154,8 @@ struct PreferencesView: View {
         .padding(.bottom, SiphonTheme.spacing16)
         .frame(minWidth: 500, idealWidth: 520, maxWidth: 620, minHeight: 646, idealHeight: 662, maxHeight: 780)
         .siphonAdaptiveRendering()
-        .accentColor(SiphonTheme.accent)
         .background(PreferencesWindowConfigurator())
         .siphonWindowBackground()
-        .siphonEnvironmentalBackdrop()
         .onChange(of: languageService.selectedLanguage) { _, newValue in
             if previousLanguage != nil && previousLanguage != newValue {
                 showLanguageChangeAlert = true
@@ -333,7 +331,6 @@ struct PreferencesView: View {
                     .accessibilityLabel(languageService.s("show_menubar_icon"))
             }
         }
-        .tint(SiphonTheme.accent)
     }
 
     private var themeSection: some View {
@@ -353,7 +350,6 @@ struct PreferencesView: View {
                 .labelsHidden()
                 .pickerStyle(.segmented)
                 .frame(width: 220)
-                .tint(SiphonTheme.accent)
                 .accessibilityLabel(languageService.s("theme"))
             }
         }
@@ -691,7 +687,6 @@ struct PreferencesView: View {
             Toggle(languageService.s("embed_thumbnail"), isOn: $embedThumbnail)
             Toggle(languageService.s("embed_metadata"), isOn: $embedMetadata)
         }
-        .tint(SiphonTheme.accent)
     }
 
     private var concurrentDownloadsSection: some View {
@@ -949,7 +944,6 @@ struct PreferencesView: View {
             Section("SponsorBlock") {
                 Toggle(languageService.s("sponsorblock_desc"), isOn: $sponsorBlock)
             }
-            .tint(SiphonTheme.accent)
             
             ytdlpUpdateSection
             browserCookiesSection
@@ -1089,7 +1083,6 @@ struct PreferencesView: View {
                         }
                     }
                     .buttonStyle(.borderedProminent)
-                    .tint(SiphonTheme.accent)
                     .controlSize(.small)
 
                     Button {

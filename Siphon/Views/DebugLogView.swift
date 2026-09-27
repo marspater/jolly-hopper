@@ -130,7 +130,7 @@ struct DebugLogView: View {
         .siphonWindowBackground()
         .overlay(
             RoundedRectangle(cornerRadius: SiphonTheme.radiusSheet, style: .continuous)
-                .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+                .stroke(Color.primary.opacity(SiphonTheme.Opacity.borderHairline), lineWidth: 1)
                 .ignoresSafeArea()
         )
         .preferredColorScheme(activeColorScheme)
