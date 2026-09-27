@@ -239,16 +239,17 @@ public final class UpdateInstaller: Sendable {
 
         let pipe = Pipe()
         process.standardOutput = pipe
-        process.standardError = Pipe()
+        process.standardError = FileHandle.nullDevice
 
         try process.run()
+        // Read before waiting: a child blocked on a full pipe never exits.
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
         process.waitUntilExit()
 
         guard process.terminationStatus == 0 else {
             throw UpdateInstallError.mountFailed("hdiutil attach exited with status \(process.terminationStatus)")
         }
 
-        let data = pipe.fileHandleForReading.readDataToEndOfFile()
         if let plist = try? PropertyListSerialization.propertyList(from: data, options: [], format: nil) as? [String: Any],
            let entities = plist["system-entities"] as? [[String: Any]] {
             for entity in entities {
@@ -276,15 +277,15 @@ public final class UpdateInstaller: Sendable {
         process.executableURL = URL(fileURLWithPath: "/usr/bin/hdiutil")
         process.arguments = ["detach", mountPoint, "-force"]
         process.environment = YtdlpService.createSanitizedEnvironment()
-        process.standardOutput = Pipe()
+        process.standardOutput = FileHandle.nullDevice
         let errorPipe = Pipe()
         process.standardError = errorPipe
 
         try process.run()
+        let data = errorPipe.fileHandleForReading.readDataToEndOfFile()
         process.waitUntilExit()
 
         guard process.terminationStatus == 0 else {
-            let data = errorPipe.fileHandleForReading.readDataToEndOfFile()
             let details = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines)
             if let details, !details.isEmpty {
                 throw UpdateInstallError.unmountFailed(details)
@@ -298,8 +299,8 @@ public final class UpdateInstaller: Sendable {
         process.executableURL = URL(fileURLWithPath: "/usr/bin/ditto")
         process.arguments = ["-xk", zipURL.path, destinationDir.path]
         process.environment = YtdlpService.createSanitizedEnvironment()
-        process.standardOutput = Pipe()
-        process.standardError = Pipe()
+        process.standardOutput = FileHandle.nullDevice
+        process.standardError = FileHandle.nullDevice
 
         try process.run()
         process.waitUntilExit()
@@ -309,12 +310,19 @@ public final class UpdateInstaller: Sendable {
         }
     }
 
-    public func locateAppBundle(in directory: URL) -> URL? {
+    /// Finds the Siphon bundle by identifier, not the first `.app`: a package may
+    /// also carry other apps (an uninstaller, a helper).
+    public func locateAppBundle(in directory: URL, bundleID: String = UpdateVerifier.siphonBundleID) -> URL? {
         var visited = Set<String>()
-        return locateAppBundle(in: directory, depth: 0, visited: &visited)
+        return locateAppBundle(in: directory, bundleID: bundleID, depth: 0, visited: &visited)
     }
 
-    private func locateAppBundle(in directory: URL, depth: Int, visited: inout Set<String>) -> URL? {
+    private static func isApp(_ app: URL, withBundleID bundleID: String) -> Bool {
+        let plist = NSDictionary(contentsOf: app.appendingPathComponent("Contents/Info.plist"))
+        return UpdateVerifier.bundleIDsMatch(plist?["CFBundleIdentifier"] as? String, bundleID)
+    }
+
+    private func locateAppBundle(in directory: URL, bundleID: String, depth: Int, visited: inout Set<String>) -> URL? {
         guard depth <= 8 else { return nil }
 
         let candidate = directory.standardizedFileURL
@@ -326,7 +334,7 @@ public final class UpdateInstaller: Sendable {
         }
 
         if candidate.pathExtension.lowercased() == "app" {
-            return candidate
+            return Self.isApp(candidate, withBundleID: bundleID) ? candidate : nil
         }
 
         guard let contents = try? FileManager.default.contentsOfDirectory(
@@ -340,7 +348,8 @@ public final class UpdateInstaller: Sendable {
         for item in contents where item.pathExtension.lowercased() == "app" {
             if let itemValues = try? item.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey]),
                itemValues.isDirectory == true,
-               itemValues.isSymbolicLink != true {
+               itemValues.isSymbolicLink != true,
+               Self.isApp(item, withBundleID: bundleID) {
                 return item.standardizedFileURL
             }
         }
@@ -351,7 +360,7 @@ public final class UpdateInstaller: Sendable {
                   itemValues.isSymbolicLink != true else {
                 continue
             }
-            if let nested = locateAppBundle(in: item, depth: depth + 1, visited: &visited) {
+            if let nested = locateAppBundle(in: item, bundleID: bundleID, depth: depth + 1, visited: &visited) {
                 return nested
             }
         }

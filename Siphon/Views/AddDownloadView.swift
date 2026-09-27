@@ -593,7 +593,7 @@ struct AddDownloadView: View {
 
     private func mediaInfoSection(_ info: MediaInfo) -> some View {
         HStack(spacing: 16) {
-            AsyncImage(url: info.thumbnailURL) { image in
+            ThumbnailImage(url: info.thumbnailURL) { image in
                 image.resizable().aspectRatio(contentMode: .fill)
             } placeholder: {
                 Rectangle().fill(Color.primary.opacity(SiphonTheme.Opacity.fillPlaceholder))
@@ -694,7 +694,7 @@ struct AddDownloadView: View {
                             .toggleStyle(.checkbox)
                             .accessibilityLabel(item.title)
 
-                            AsyncImage(url: item.thumbnailURL) { image in image.resizable().aspectRatio(contentMode: .fill) }
+                            ThumbnailImage(url: item.thumbnailURL) { image in image.resizable().aspectRatio(contentMode: .fill) }
                             placeholder: { Rectangle().fill(Color.primary.opacity(SiphonTheme.Opacity.fillPlaceholder)) }
                             .frame(width: 50, height: 30)
                             .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusSmall, style: .continuous))

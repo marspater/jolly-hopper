@@ -40,6 +40,14 @@ public enum UpdateVerificationError: LocalizedError, Sendable {
 }
 
 public struct UpdateVerifier: Sendable {
+    /// The running app's identifier (`com.marspater.siphon`); an update must carry the same one.
+    public static let siphonBundleID = Bundle.main.bundleIdentifier ?? "com.marspater.siphon"
+
+    /// Bundle identifiers are case-insensitive to Launch Services.
+    public static func bundleIDsMatch(_ actual: String?, _ expected: String) -> Bool {
+        actual?.caseInsensitiveCompare(expected) == .orderedSame
+    }
+
     public init() {
         // Intentionally empty initializer for struct instantiation (swift:S1186)
     }
@@ -93,7 +101,7 @@ public struct UpdateVerifier: Sendable {
     ///    - Code signature checked if present, but ad-hoc or unsigned builds are permitted if `allowAdHoc` is true.
     public static func verifyAppBundle(
         bundleURL: URL,
-        expectedBundleID: String = "com.marspater.Siphon",
+        expectedBundleID: String = siphonBundleID,
         expectedTeamID: String? = nil,
         allowAdHoc: Bool = true
     ) throws {
@@ -106,7 +114,7 @@ public struct UpdateVerifier: Sendable {
             throw UpdateVerificationError.bundleNotFound(bundleURL)
         }
         let actualBundleID = bundle.bundleIdentifier
-        guard actualBundleID == expectedBundleID else {
+        guard bundleIDsMatch(actualBundleID, expectedBundleID) else {
             throw UpdateVerificationError.invalidBundleIdentifier(expected: expectedBundleID, actual: actualBundleID)
         }
 

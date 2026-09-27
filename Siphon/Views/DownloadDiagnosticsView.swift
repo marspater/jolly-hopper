@@ -54,7 +54,7 @@ struct DownloadDiagnosticsView: View {
     private var headerView: some View {
         HStack(spacing: 14) {
             if let thumb = download.thumbnailURL {
-                AsyncImage(url: thumb) { phase in
+                ThumbnailImage(url: thumb) { phase in
                     if let image = phase.image {
                         image
                             .resizable()

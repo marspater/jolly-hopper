@@ -2028,7 +2028,7 @@ public struct DownloadResult: Sendable {
                 }
             }
             for thumbURL in possibleThumbnailURLs {
-                if let img = NSImage(contentsOf: thumbURL) {
+                if let img = DownloadExecutor.loadThumbnailImage(at: thumbURL) {
                     let squareIcon = Self.createAspectFitIcon(from: img)
                     let setSuccess = NSWorkspace.shared.setIcon(squareIcon, forFile: finalFileURL.path, options: [])
                     if setSuccess {
@@ -2052,25 +2052,14 @@ public struct DownloadResult: Sendable {
 
     private func downloadThumbnailLocally(from urlString: String, to destinationURL: URL) async -> Bool {
         guard let url = URL(string: urlString) else { return false }
-        var request = URLRequest(url: url)
+        var request = URLRequest(url: url, timeoutInterval: 15)
         request.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36", forHTTPHeaderField: "User-Agent")
         if let referer = Self.boyfriendTVThumbnailReferer(for: urlString) {
             request.setValue(referer, forHTTPHeaderField: "Referer")
         }
-        
-        do {
-            let (tempLocal, response) = try await URLSession.shared.download(for: request)
-            guard let httpResponse = response as? HTTPURLResponse, (200...299).contains(httpResponse.statusCode) else {
-                return false
-            }
-            if FileManager.default.fileExists(atPath: destinationURL.path) {
-                try? FileManager.default.removeItem(at: destinationURL)
-            }
-            try FileManager.default.moveItem(at: tempLocal, to: destinationURL)
-            return true
-        } catch {
-            return false
-        }
+
+        guard let data = await DownloadExecutor.fetchThumbnailData(for: request) else { return false }
+        return (try? data.write(to: destinationURL, options: .atomic)) != nil
     }
 
     func embedThumbnailWithFfmpeg(imageFile: URL, mediaFile: URL, ffmpegDir: String, processController: DownloadProcessController? = nil) async throws -> Bool {
@@ -3404,7 +3393,7 @@ public struct DownloadResult: Sendable {
         func fetchPage(_ request: URLRequest, stage: String) async throws -> String? {
             try Task.checkCancellation()
             do {
-                let (data, response) = try await URLSession.shared.data(for: request)
+                let (data, response) = try await URLSession.shared.boundedData(for: request)
                 try Task.checkCancellation()
                 guard let http = response as? HTTPURLResponse else { return nil }
                 sawForbidden = sawForbidden || http.statusCode == 403
@@ -4181,7 +4170,7 @@ public struct DownloadResult: Sendable {
                 request.setValue(raw, forHTTPHeaderField: "Cookie")
             }
             
-            if let (data, response) = try? await URLSession.shared.data(for: request),
+            if let (data, response) = try? await URLSession.shared.boundedData(for: request),
                let httpResponse = response as? HTTPURLResponse,
                (200...299).contains(httpResponse.statusCode),
                let fetched = String(data: data, encoding: .utf8) {
@@ -4298,7 +4287,7 @@ public struct DownloadResult: Sendable {
             embedReq.timeoutInterval = 5.0
             embedReq.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36", forHTTPHeaderField: "User-Agent")
             embedReq.setValue("https://guywh.com/", forHTTPHeaderField: "Referer")
-            if let (data, response) = try? await URLSession.shared.data(for: embedReq),
+            if let (data, response) = try? await URLSession.shared.boundedData(for: embedReq),
                let httpResponse = response as? HTTPURLResponse,
                (200...299).contains(httpResponse.statusCode),
                let embedHtml = String(data: data, encoding: .utf8) {
@@ -4518,7 +4507,7 @@ public struct DownloadResult: Sendable {
                 request.setValue(raw, forHTTPHeaderField: "Cookie")
             }
             
-            if let (data, response) = try? await URLSession.shared.data(for: request),
+            if let (data, response) = try? await URLSession.shared.boundedData(for: request),
                let httpResponse = response as? HTTPURLResponse,
                (200...299).contains(httpResponse.statusCode),
                let fetched = String(data: data, encoding: .utf8) {
@@ -4700,7 +4689,7 @@ public struct DownloadResult: Sendable {
                     embedReq.timeoutInterval = 5.0
                     embedReq.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36", forHTTPHeaderField: "User-Agent")
                     embedReq.setValue("https://gayforfans.com/", forHTTPHeaderField: "Referer")
-                    if let (data, response) = try? await URLSession.shared.data(for: embedReq),
+                    if let (data, response) = try? await URLSession.shared.boundedData(for: embedReq),
                        let httpResponse = response as? HTTPURLResponse,
                        (200...299).contains(httpResponse.statusCode),
                        let text = String(data: data, encoding: .utf8) {
@@ -5138,7 +5127,7 @@ public struct DownloadResult: Sendable {
                 if let raw = rawCookies, !raw.isEmpty {
                     request.setValue(raw, forHTTPHeaderField: "Cookie")
                 }
-                if let (data, response) = try? await URLSession.shared.data(for: request),
+                if let (data, response) = try? await URLSession.shared.boundedData(for: request),
                    let httpResponse = response as? HTTPURLResponse,
                    (200...299).contains(httpResponse.statusCode),
                    let fetched = String(data: data, encoding: .utf8) {
@@ -5225,7 +5214,7 @@ public struct DownloadResult: Sendable {
         abyssReq.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36", forHTTPHeaderField: "User-Agent")
         abyssReq.setValue("https://bestcam.tv/", forHTTPHeaderField: "Referer")
 
-        if let (data, response) = try? await URLSession.shared.data(for: abyssReq),
+        if let (data, response) = try? await URLSession.shared.boundedData(for: abyssReq),
            let httpResponse = response as? HTTPURLResponse,
            (200...299).contains(httpResponse.statusCode),
            let pageHtml = String(data: data, encoding: .utf8),
@@ -5242,7 +5231,7 @@ public struct DownloadResult: Sendable {
             infoReq.setValue("https://bestcam.tv/", forHTTPHeaderField: "Referer")
             infoReq.setValue("https://bestcam.tv/", forHTTPHeaderField: "x-referer")
             infoReq.setValue("1920x1080", forHTTPHeaderField: "x-client-screen")
-            if let (data, response) = try? await URLSession.shared.data(for: infoReq),
+            if let (data, response) = try? await URLSession.shared.boundedData(for: infoReq),
                let httpResponse = response as? HTTPURLResponse,
                (200...299).contains(httpResponse.statusCode),
                let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
@@ -5359,7 +5348,7 @@ public struct DownloadResult: Sendable {
                 request.setValue(rawCookies, forHTTPHeaderField: "Cookie")
             }
 
-            if let (data, response) = try? await URLSession.shared.data(for: request),
+            if let (data, response) = try? await URLSession.shared.boundedData(for: request),
                let httpResponse = response as? HTTPURLResponse,
                (200...299).contains(httpResponse.statusCode),
                let fetched = String(data: data, encoding: .utf8) {
@@ -5790,7 +5779,7 @@ public struct DownloadResult: Sendable {
             }
             playerReq.httpBody = "id=\(id)".data(using: .utf8)
 
-            if let (data, response) = try? await URLSession.shared.data(for: playerReq),
+            if let (data, response) = try? await URLSession.shared.boundedData(for: playerReq),
                let httpResponse = response as? HTTPURLResponse,
                (200...299).contains(httpResponse.statusCode),
                let fetchedPlayer = String(data: data, encoding: .utf8) {
@@ -6159,7 +6148,7 @@ public struct DownloadResult: Sendable {
                             parsedHost == "cdn.boyfriend.tv" || parsedHost.hasSuffix(".boyfriend.tv") ||
                             parsedHost == "cdn.boyfriendtv.com" || parsedHost.hasSuffix(".boyfriendtv.com")
         let isRecu = isRecuURL(parsedHost)
-        let isEporner = isEpornerURL(parsedHost) || lowerUrl.contains("eporner.com")
+        let isEporner = isEpornerURL(parsedHost)
 
         // Retries, socket timeouts & performance optimization flags
         args.append(contentsOf: ["--retries", "10"])
@@ -6594,7 +6583,7 @@ public struct DownloadResult: Sendable {
         request.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36", forHTTPHeaderField: "User-Agent")
 
         do {
-            let (data, _) = try await URLSession.shared.data(for: request)
+            let (data, _) = try await URLSession.shared.boundedData(for: request)
             guard let htmlText = String(data: data, encoding: .utf8) else { return nil }
 
             if htmlText.contains("sucuri_cloudproxy_js"), let regex = Self.sucuriAssignmentRegex {

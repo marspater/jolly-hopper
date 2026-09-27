@@ -235,6 +235,61 @@ final class ProcessLifecycleTests: XCTestCase {
         _ = StreamDrainBarrier(streams: 2)
     }
 
+    func testRunnerDeliversFinalStderrLineBeforeReturning() async {
+        final class Lines: @unchecked Sendable {
+            let lock = NSLock()
+            var all: [String] = []
+            func append(_ line: String) { lock.withLock { all.append(line) } }
+            var value: [String] { lock.withLock { all } }
+        }
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent("stderr_tail_\(UUID().uuidString)")
+        try? FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let lines = Lines()
+        _ = try? await DefaultYtdlpProcessRunner().runDownloadProcess(
+            args: ["/bin/sh", "-c", "echo 'ERROR: final stderr line' >&2; exit 1"],
+            saveFolder: tempDir,
+            processController: DownloadProcessController(),
+            onProgress: { _, _, _ in /* Progress ignored in test */ },
+            onOutput: { lines.append($0) }
+        )
+        XCTAssertTrue(
+            lines.value.contains("[ERROR] ERROR: final stderr line"),
+            "The last stderr line must reach the caller before the final log flush"
+        )
+    }
+
+    func testRunnerStopsWaitingWhenDescendantHoldsOutputOpen() async {
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent("drain_timeout_\(UUID().uuidString)")
+        try? FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        // The background sleep inherits stdout/stderr, so EOF never arrives on its own.
+        let runner = DefaultYtdlpProcessRunner(streamDrainTimeout: 0.5)
+        let started = Date()
+        do {
+            _ = try await runner.runDownloadProcess(
+                args: ["/bin/sh", "-c", "sleep 30 & echo 'ERROR: parent failed' >&2; exit 1"],
+                saveFolder: tempDir,
+                processController: DownloadProcessController(),
+                onProgress: { _, _, _ in /* Progress ignored in test */ },
+                onOutput: { _ in /* Output ignored in test */ }
+            )
+            XCTFail("A failing process must throw")
+        } catch YtdlpError.downloadFailed(let message) {
+            XCTAssertTrue(message.contains("parent failed"))
+        } catch {
+            XCTFail("Expected downloadFailed, got \(error)")
+        }
+        XCTAssertLessThan(Date().timeIntervalSince(started), 10)
+
+        let commandStarted = Date()
+        let output = try? await runner.runCommand(["/bin/sh", "-c", "sleep 30 & echo done"])
+        XCTAssertEqual(output?.trimmingCharacters(in: .whitespacesAndNewlines), "done")
+        XCTAssertLessThan(Date().timeIntervalSince(commandStarted), 10)
+    }
+
     func testCancelBeforeStartTransitionsToCancelling() {
         let controller = DownloadProcessController()
         controller.cancel()
