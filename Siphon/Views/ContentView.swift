@@ -124,7 +124,6 @@ struct ContentView: View {
         }
         .navigationSplitViewStyle(.balanced)
         .siphonWindowBackground()
-        .siphonEnvironmentalBackdrop()
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
                 if (appState.selectedNavItem == .downloading || appState.selectedNavItem == .queued || appState.selectedNavItem == .home) &&
@@ -199,14 +198,6 @@ struct SidebarView: View {
         .siphonSidebarWidth()
         .safeAreaInset(edge: .bottom) {
             VStack(spacing: SiphonTheme.spacing10) {
-                // Catchy Slogan
-                Text(languageService.s("play_videos_your_way"))
-                    .font(.siphonStandardMedium)
-                    .foregroundColor(.secondary)
-                    .lineSpacing(2)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 14)
-
                 SponsorView()
                 
                 Button {
@@ -336,32 +327,17 @@ struct HomeView: View {
     var body: some View {
         ScrollView {
             VStack(spacing: SiphonTheme.spacing20) {
-                // Top Header: Ready to download + More videos. A calmer internet.
-                HStack(alignment: .top) {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text(languageService.s("ready_to_download"))
-                            .font(.siphonHomeTitle)
-                            .foregroundColor(.primary)
-                        
-                        Text(languageService.s("ready_to_download_subtitle"))
-                            .font(.siphonStandard)
-                            .foregroundColor(.secondary)
-                    }
+                // Top Header
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(languageService.s("ready_to_download"))
+                        .font(.siphonHomeTitle)
+                        .foregroundColor(.primary)
                     
-                    Spacer(minLength: 20)
-                    
-                    VStack(alignment: .trailing, spacing: 5) {
-                        Rectangle()
-                            .fill(Color.secondary.opacity(0.35))
-                            .frame(width: 28, height: 1.5)
-                        
-                        Text(languageService.s("more_videos_calmer_internet"))
-                            .font(.siphonMetadataMedium)
-                            .foregroundColor(.secondary)
-                            .multilineTextAlignment(.trailing)
-                            .lineSpacing(2)
-                    }
+                    Text(languageService.s("ready_to_download_subtitle"))
+                        .font(.siphonStandard)
+                        .foregroundColor(.secondary)
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, SiphonTheme.spacing24)
                 .padding(.top, SiphonTheme.spacing16)
                 
@@ -394,7 +370,7 @@ struct HomeView: View {
                     Spacer()
                     
                     HStack(spacing: 4) {
-                        Text(languageService.s("built_for_open_internet"))
+                        Text(languageService.s("play_videos_your_way"))
                             .font(.siphonMetadata)
                             .foregroundColor(.secondary)
                         Image(systemName: "heart.fill")

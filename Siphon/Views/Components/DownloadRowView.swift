@@ -58,7 +58,6 @@ struct DownloadListView: View {
                 }
             }
         }
-        .siphonWindowBackground()
     }
     
     private var emptyState: some View {
@@ -244,7 +243,6 @@ struct DownloadRowView: View {
                                     .font(.siphonMetadataSemibold)
                             }
                             .buttonStyle(.borderedProminent)
-                            .tint(SiphonTheme.accent)
                             .controlSize(.small)
                             
                         case .retry:
@@ -380,7 +378,7 @@ struct DownloadRowView: View {
         .frame(width: 120, height: 68)
         .overlay(
             RoundedRectangle(cornerRadius: SiphonTheme.radiusControl, style: .continuous)
-                .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+                .stroke(Color.primary.opacity(SiphonTheme.Opacity.borderHairline), lineWidth: 1)
         )
         .help(canPreviewMedia ? languageService.s("click_to_quick_look") : "")
     }
@@ -463,7 +461,7 @@ struct DownloadRowView: View {
     
     private var thumbnailPlaceholder: some View {
         Rectangle()
-            .fill(Color.primary.opacity(0.06))
+            .fill(Color.primary.opacity(SiphonTheme.Opacity.fillPlaceholder))
             .overlay {
                 Image(systemName: "play.rectangle.fill")
                     .font(.system(size: 24))
@@ -482,7 +480,7 @@ struct FileThumbnailView: View {
                 thumbnail(image)
             } else {
                 Rectangle()
-                    .fill(Color.primary.opacity(0.06))
+                    .fill(Color.primary.opacity(SiphonTheme.Opacity.fillPlaceholder))
                     .overlay {
                         Image(systemName: "play.rectangle.fill")
                             .font(.system(size: 24))

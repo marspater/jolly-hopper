@@ -376,17 +376,20 @@ public final class TransientFeedbackState: ObservableObject {
 
 // MARK: - Standardized Siphon Design System & Theme
 public enum SiphonTheme {
-    // Primary Accent & Gradients with Display P3 wide color gamut support
-    public static let accent = Color(.displayP3, red: 0.10, green: 0.48, blue: 1.0, opacity: 1.0)
-    public static let accentDeep = Color(.displayP3, red: 0.06, green: 0.40, blue: 0.94, opacity: 1.0)
-    /// Darkest accent stop. Keeps white primary-button labels at or above 4.5:1
-    /// across the whole gradient.
-    public static let accentInk = Color(.displayP3, red: 0.04, green: 0.32, blue: 0.82, opacity: 1.0)
-    public static let accentSecondary = Color(.displayP3, red: 0.10, green: 0.76, blue: 0.98, opacity: 1.0)
-    public static let accentViolet = Color(.displayP3, red: 0.38, green: 0.24, blue: 0.82, opacity: 1.0)
-    public static let backdropBlue = Color(.displayP3, red: 0.10, green: 0.38, blue: 0.90, opacity: 1.0)
-    public static let backdropViolet = Color(.displayP3, red: 0.32, green: 0.16, blue: 0.70, opacity: 1.0)
-    public static let backdropCyan = Color(.displayP3, red: 0.06, green: 0.55, blue: 0.85, opacity: 1.0)
+    // Palette: every Siphon-owned color is authored in Display P3 from one
+    // OKLCH system. Each semantic hue keeps a single hue angle for its fill and
+    // text tones; fills sit at ~95% of the P3 chroma limit for their lightness,
+    // text tones are solved for >= 5:1 against the window surface.
+    // Brand hues: cyan 222 · blue 258 · indigo 266 · violet 292.
+
+    // Brand blue ramp (hue 258): accentText(dark) .73 · accent .60 · accentDeep .54 · accentInk .48
+    public static let accent = Color(.displayP3, red: 0.198, green: 0.462, blue: 0.976, opacity: 1.0)      // oklch(0.60 0.224 258)
+    public static let accentDeep = Color(.displayP3, red: 0.064, green: 0.373, blue: 0.929, opacity: 1.0)  // oklch(0.54 0.241 258)
+    /// Darkest accent stop, leaning indigo. Keeps white primary-button labels at
+    /// or above 4.5:1 across the whole gradient.
+    public static let accentInk = Color(.displayP3, red: 0.122, green: 0.194, blue: 0.936, opacity: 1.0)   // oklch(0.48 0.282 266)
+    public static let accentSecondary = Color(.displayP3, red: 0.150, green: 0.767, blue: 0.982, opacity: 1.0) // oklch(0.76 0.177 222)
+    public static let accentViolet = Color(.displayP3, red: 0.431, green: 0.107, blue: 0.939, opacity: 1.0)    // oklch(0.52 0.284 292)
     public static let sourceYouTube = Color(.displayP3, red: 0.96, green: 0.08, blue: 0.08, opacity: 1.0)
     public static let primaryGradient = LinearGradient(
         colors: [
@@ -399,24 +402,25 @@ public enum SiphonTheme {
     
     // Semantic Status Colors (Display P3 with graceful sRGB fallback).
     // Use these saturated values for fills, rings, tints and motion only.
-    public static let statusDownloading = Color(.displayP3, red: 0.08, green: 0.48, blue: 0.98, opacity: 1.0)
-    public static let statusQueued = Color(.displayP3, red: 0.96, green: 0.55, blue: 0.10, opacity: 1.0)
-    public static let statusCompleted = Color(.displayP3, red: 0.18, green: 0.72, blue: 0.38, opacity: 1.0)
-    public static let statusFailed = Color(.displayP3, red: 0.94, green: 0.26, blue: 0.30, opacity: 1.0)
-    public static let statusHdr = Color(.displayP3, red: 0.98, green: 0.65, blue: 0.15, opacity: 1.0)
-    public static let statusHdrSecondary = Color(.displayP3, red: 1.0, green: 0.46, blue: 0.08, opacity: 1.0)
+    public static let statusDownloading = accent
+    public static let statusQueued = Color(.displayP3, red: 0.973, green: 0.595, blue: 0.129, opacity: 1.0)    // oklch(0.77 0.192 62)
+    public static let statusCompleted = Color(.displayP3, red: 0.132, green: 0.762, blue: 0.292, opacity: 1.0) // oklch(0.70 0.255 150)
+    public static let statusFailed = Color(.displayP3, red: 0.960, green: 0.131, blue: 0.191, opacity: 1.0)    // oklch(0.64 0.278 25)
+    public static let statusHdr = Color(.displayP3, red: 0.990, green: 0.722, blue: 0.161, opacity: 1.0)       // oklch(0.83 0.187 78)
+    public static let statusHdrSecondary = Color(.displayP3, red: 0.965, green: 0.472, blue: 0.114, opacity: 1.0) // oklch(0.72 0.212 48)
     /// Label on the HDR gradient. White on amber reads under 2:1; this deep brown reads above 8:1.
     public static let hdrLabel = Color(.displayP3, red: 0.20, green: 0.09, blue: 0.0, opacity: 1.0)
 
     // MARK: - Readable Text Colors
     // Text and small icons need at least 4.5:1 against the window surface in
-    // both appearances, which the saturated fills above do not reach.
-    private static let accentTextLight = Color(.displayP3, red: 0.02, green: 0.34, blue: 0.76, opacity: 1.0)
-    private static let accentTextDark = Color(.displayP3, red: 0.36, green: 0.62, blue: 1.0, opacity: 1.0)
-    private static let statusQueuedTextLight = Color(.displayP3, red: 0.62, green: 0.30, blue: 0.0, opacity: 1.0)
-    private static let statusCompletedTextLight = Color(.displayP3, red: 0.06, green: 0.43, blue: 0.19, opacity: 1.0)
-    private static let statusFailedTextLight = Color(.displayP3, red: 0.76, green: 0.10, blue: 0.16, opacity: 1.0)
-    private static let statusFailedTextDark = Color(.displayP3, red: 1.0, green: 0.42, blue: 0.44, opacity: 1.0)
+    // both appearances, which the saturated fills above do not reach. Each tone
+    // shares its fill's hue; amber and green fills already clear 5:1 in Dark.
+    private static let accentTextLight = accentDeep
+    private static let accentTextDark = Color(.displayP3, red: 0.472, green: 0.653, blue: 0.990, opacity: 1.0)          // oklch(0.73 0.148 258)
+    private static let statusQueuedTextLight = Color(.displayP3, red: 0.578, green: 0.341, blue: 0.036, opacity: 1.0)   // oklch(0.52 0.133 62)
+    private static let statusCompletedTextLight = Color(.displayP3, red: 0.044, green: 0.483, blue: 0.166, opacity: 1.0) // oklch(0.50 0.186 150)
+    private static let statusFailedTextLight = Color(.displayP3, red: 0.791, green: 0.070, blue: 0.139, opacity: 1.0)   // oklch(0.55 0.244 25)
+    private static let statusFailedTextDark = Color(.displayP3, red: 0.992, green: 0.498, blue: 0.459, opacity: 1.0)    // oklch(0.75 0.187 25)
 
     private static func adaptive(light: Color, dark: Color) -> Color {
         Color(nsColor: NSColor(name: nil) { appearance in
@@ -426,7 +430,7 @@ public enum SiphonTheme {
 
     /// Accent-colored text, links and small icons.
     public static let accentText = adaptive(light: accentTextLight, dark: accentTextDark)
-    public static let statusDownloadingText = adaptive(light: accentTextLight, dark: accentTextDark)
+    public static let statusDownloadingText = accentText
     public static let statusQueuedText = adaptive(light: statusQueuedTextLight, dark: statusQueued)
     public static let statusCompletedText = adaptive(light: statusCompletedTextLight, dark: statusCompleted)
     public static let statusFailedText = adaptive(light: statusFailedTextLight, dark: statusFailedTextDark)
@@ -526,9 +530,11 @@ public enum SiphonTheme {
         public static let fillPill: Double = 0.045
         public static let fillPillHover: Double = 0.09
         public static let fillGhostHover: Double = 0.08
+        public static let fillPlaceholder: Double = 0.06
         public static let tintBadge: Double = 0.12
         public static let tintFieldFocus: Double = 0.10
         public static let tintSidebarSelected: Double = 0.18
+        public static let borderHairline: Double = 0.08
         public static let borderRest: Double = 0.15
         public static let borderHover: Double = 0.26
         public static let borderIncreaseContrast: Double = 0.42
@@ -783,7 +789,28 @@ public struct SiphonWindowBackgroundModifier: ViewModifier {
     }
 
     public func body(content: Content) -> some View {
-        content.background(.ultraThinMaterial)
+        content
+            .tint(SiphonTheme.accent)
+            .background(.ultraThinMaterial)
+            .background {
+                // Faint brand wash behind the material, shared by every window.
+                ZStack {
+                    RadialGradient(
+                        colors: [SiphonTheme.accentDeep.opacity(0.06), SiphonTheme.accentViolet.opacity(0.025), .clear],
+                        center: .topLeading,
+                        startRadius: 40,
+                        endRadius: 650
+                    )
+                    RadialGradient(
+                        colors: [SiphonTheme.accentSecondary.opacity(0.035), .clear],
+                        center: .bottomTrailing,
+                        startRadius: 60,
+                        endRadius: 550
+                    )
+                }
+                .ignoresSafeArea()
+                .allowsHitTesting(false)
+            }
     }
 }
 
@@ -1547,36 +1574,6 @@ extension View {
                 isSelected: isSelected,
                 tintColor: tintColor
             )
-        )
-    }
-    
-    @ViewBuilder
-    public func siphonEnvironmentalBackdrop() -> some View {
-        self.background(
-            ZStack {
-                RadialGradient(
-                    gradient: Gradient(colors: [
-                        SiphonTheme.backdropBlue.opacity(0.06),
-                        SiphonTheme.backdropViolet.opacity(0.025),
-                        Color.clear
-                    ]),
-                    center: .topLeading,
-                    startRadius: 40,
-                    endRadius: 650
-                )
-                
-                RadialGradient(
-                    gradient: Gradient(colors: [
-                        SiphonTheme.backdropCyan.opacity(0.035),
-                        Color.clear
-                    ]),
-                    center: .bottomTrailing,
-                    startRadius: 60,
-                    endRadius: 550
-                )
-            }
-            .ignoresSafeArea()
-            .allowsHitTesting(false)
         )
     }
 }

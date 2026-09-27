@@ -1,6 +1,7 @@
 import XCTest
 @testable import Siphon
 import CryptoKit
+import SwiftUI
 
 @MainActor
 final class QueueAndErrorUXTests: XCTestCase {
@@ -1622,6 +1623,52 @@ final class QueueAndErrorUXTests: XCTestCase {
         XCTAssertEqual(SiphonTheme.radiusControl, 8)
         XCTAssertEqual(SiphonTheme.radiusCard, 12)
         XCTAssertEqual(SiphonTheme.radiusSheet, 16)
+    }
+
+    func testPaletteContrastAndWideGamut() {
+        func components(_ color: Color, _ appearance: NSAppearance.Name) -> [CGFloat] {
+            var rgb: [CGFloat] = []
+            NSAppearance(named: appearance)!.performAsCurrentDrawingAppearance {
+                let c = NSColor(color).usingColorSpace(.extendedSRGB)!
+                rgb = [c.redComponent, c.greenComponent, c.blueComponent]
+            }
+            return rgb
+        }
+        func luminance(_ rgb: [CGFloat]) -> CGFloat {
+            let lin = rgb.map { c -> CGFloat in
+                let a = abs(c)
+                let l = a <= 0.04045 ? a / 12.92 : pow((a + 0.055) / 1.055, 2.4)
+                return c < 0 ? -l : l
+            }
+            return 0.2126 * lin[0] + 0.7152 * lin[1] + 0.0722 * lin[2]
+        }
+        func contrast(_ a: CGFloat, _ b: CGFloat) -> CGFloat {
+            (max(a, b) + 0.05) / (min(a, b) + 0.05)
+        }
+        // Window surface, plus the lighter dark glass seen over the desktop.
+        let lightSurface = luminance([0.965, 0.965, 0.965])
+        let darkSurface = luminance([0.2, 0.2, 0.2])
+
+        let textTokens: [(String, Color)] = [
+            ("accentText", SiphonTheme.accentText),
+            ("statusQueuedText", SiphonTheme.statusQueuedText),
+            ("statusCompletedText", SiphonTheme.statusCompletedText),
+            ("statusFailedText", SiphonTheme.statusFailedText),
+        ]
+        for (name, color) in textTokens {
+            XCTAssertGreaterThanOrEqual(contrast(luminance(components(color, .aqua)), lightSurface), 4.5, "\(name) light")
+            XCTAssertGreaterThanOrEqual(contrast(luminance(components(color, .darkAqua)), darkSurface), 4.5, "\(name) dark")
+        }
+
+        // White primary-button labels stay readable across the gradient.
+        for stop in [SiphonTheme.accentDeep, SiphonTheme.accentInk] {
+            XCTAssertGreaterThanOrEqual(contrast(luminance(components(stop, .aqua)), 1.0), 4.5)
+        }
+
+        // Saturated fills reach beyond sRGB on P3 displays.
+        for fill in [SiphonTheme.accent, SiphonTheme.statusQueued, SiphonTheme.statusCompleted, SiphonTheme.statusFailed] {
+            XCTAssertTrue(components(fill, .aqua).contains { $0 < -0.001 || $0 > 1.001 })
+        }
     }
 
     func testTransientFeedbackLifecycle() {
