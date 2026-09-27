@@ -11,6 +11,7 @@ struct RecentDownloadRowView: View {
     @EnvironmentObject var languageService: LanguageService
     @Environment(\.colorScheme) private var colorScheme
     @State private var isHovered: Bool = false
+    @State private var primaryFileIsPresent: Bool?
 
     init(download: Download) {
         self.download = download
@@ -60,6 +61,12 @@ struct RecentDownloadRowView: View {
             )
         )
         .siphonCardHover(isHovered: isHovered, tint: statusTint)
+        .task(id: download.primaryFilePath) {
+            primaryFileIsPresent = download.primaryFileExistsOnDisk
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            primaryFileIsPresent = download.primaryFileExistsOnDisk
+        }
         .onHover { hovering in
             withAnimation(SiphonAnimation.hoverSpring) {
                 isHovered = hovering
@@ -227,7 +234,7 @@ struct RecentDownloadRowView: View {
                         .foregroundColor(SiphonTheme.statusCompletedText)
                 }
 
-                if let fileURL = download.primaryFilePath, FileManager.default.fileExists(atPath: fileURL.path) {
+                if let fileURL = download.primaryFilePath, primaryFileIsPresent != false {
                     Button {
                         NSWorkspace.shared.activateFileViewerSelecting([fileURL])
                     } label: {

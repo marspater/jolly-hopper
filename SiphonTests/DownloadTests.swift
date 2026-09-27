@@ -3,6 +3,19 @@ import XCTest
 
 @MainActor
 final class DownloadTests: XCTestCase {
+    func testPrimaryFileExistsOnDiskReflectsTheFileSystem() throws {
+        let download = Download(url: "https://example.com/v", options: .default, title: "V")
+        XCTAssertNil(download.primaryFileExistsOnDisk)
+
+        let file = FileManager.default.temporaryDirectory.appendingPathComponent("presence_\(UUID().uuidString).mp4")
+        download.filePaths = [file]
+        XCTAssertEqual(download.primaryFileExistsOnDisk, false)
+
+        try Data([0]).write(to: file)
+        defer { try? FileManager.default.removeItem(at: file) }
+        XCTAssertEqual(download.primaryFileExistsOnDisk, true)
+    }
+
 
     // MARK: - Initialization & Core Properties
 

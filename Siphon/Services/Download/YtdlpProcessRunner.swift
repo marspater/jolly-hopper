@@ -229,8 +229,23 @@ public final class DownloadProcessController: @unchecked Sendable {
         lock.unlock()
 
         if let proc = procToKill, proc.isRunning || pidToKill > 0 {
-            Self.terminateProcessTree(proc, pid: pidToKill)
+            // Tree termination sleeps through up to ~100 ms of grace periods. Callers
+            // are often the main actor (Stop, Pause, Stop All), so it runs elsewhere.
+            Self.pendingTerminations.enter()
+            DispatchQueue.global(qos: .userInitiated).async {
+                Self.terminateProcessTree(proc, pid: pidToKill)
+                Self.pendingTerminations.leave()
+            }
         }
+    }
+
+    private static let pendingTerminations = DispatchGroup()
+
+    /// Blocks until requested terminations finish. Quit calls this so no
+    /// yt-dlp process group outlives the app; the groups run concurrently,
+    /// so the wait stays near one grace period regardless of the job count.
+    public static func waitForPendingTerminations(timeout: TimeInterval = 2) {
+        _ = pendingTerminations.wait(timeout: .now() + timeout)
     }
 
     public var isCancelled: Bool {

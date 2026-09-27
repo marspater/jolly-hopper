@@ -1,0 +1,133 @@
+name: Bump yt-dlp
+
+# Siphon pins yt-dlp by URL and SHA-256, so the in-app update can only
+# reinstall the pinned build. Run this job by hand to propose a pin for the
+# latest yt-dlp release, after it checks the release's signed digests.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: bump-ytdlp
+  cancel-in-progress: false
+
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      PINS_FILE: Siphon/Services/Download/YtdlpService.swift
+      # yt-dlp's release signing key. A release signed by any other key fails the job.
+      YTDLP_SIGNING_KEY: AC0CBBE6848D6A873464AF4E57CF65933B5A7581
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+
+      - name: Find the latest yt-dlp release
+        id: release
+        run: |
+          set -euo pipefail
+          latest=$(gh api repos/yt-dlp/yt-dlp/releases/latest --jq .tag_name)
+          if [[ ! "$latest" =~ ^[0-9]{4}\.[0-9]{2}\.[0-9]{2}(\.[0-9]+)?$ ]]; then
+            echo "Unexpected yt-dlp release tag: $latest" >&2
+            exit 1
+          fi
+          current=$(sed -n 's/.*static let ytdlpVersion = "\([^"]*\)".*/\1/p' "$PINS_FILE")
+          branch="chore/ytdlp-$latest"
+          {
+            echo "latest=$latest"
+            echo "current=$current"
+            echo "branch=$branch"
+          } >> "$GITHUB_OUTPUT"
+          if [[ "$latest" == "$current" ]]; then
+            echo "yt-dlp $current is already pinned."
+            echo "update=false" >> "$GITHUB_OUTPUT"
+          elif git ls-remote --exit-code --heads origin "$branch" > /dev/null; then
+            echo "A bump to $latest is already proposed on $branch."
+            echo "update=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "update=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Verify the release signature and the binary digest
+        id: digest
+        if: steps.release.outputs.update == 'true'
+        env:
+          TAG: ${{ steps.release.outputs.latest }}
+        run: |
+          set -euo pipefail
+          work=$(mktemp -d)
+          fetch() {
+            curl --fail --silent --show-error --location \
+              --proto '=https' --proto-redir '=https' \
+              --retry 4 --retry-delay 3 --retry-all-errors \
+              -o "$work/$1" "$2"
+          }
+          base="https://github.com/yt-dlp/yt-dlp/releases/download/$TAG"
+          fetch SHA2-256SUMS "$base/SHA2-256SUMS"
+          fetch SHA2-256SUMS.sig "$base/SHA2-256SUMS.sig"
+          fetch yt-dlp_macos "$base/yt-dlp_macos"
+          fetch public.key "https://raw.githubusercontent.com/yt-dlp/yt-dlp/$TAG/public.key"
+
+          gpg --dearmor < "$work/public.key" > "$work/yt-dlp.gpg"
+          gpgv --status-fd 1 --keyring "$work/yt-dlp.gpg" \
+            "$work/SHA2-256SUMS.sig" "$work/SHA2-256SUMS" > "$work/gpg-status"
+          if ! grep -q "^\[GNUPG:\] VALIDSIG $YTDLP_SIGNING_KEY " "$work/gpg-status"; then
+            echo "SHA2-256SUMS is not signed by the pinned yt-dlp key." >&2
+            exit 1
+          fi
+
+          expected=$(awk '$2 == "yt-dlp_macos" { print $1 }' "$work/SHA2-256SUMS")
+          actual=$(sha256sum "$work/yt-dlp_macos" | cut -d' ' -f1)
+          if [[ ! "$expected" =~ ^[0-9a-f]{64}$ || "$expected" != "$actual" ]]; then
+            echo "yt-dlp_macos does not match the signed SHA-256 ($actual vs '$expected')." >&2
+            exit 1
+          fi
+          echo "sha256=$actual" >> "$GITHUB_OUTPUT"
+
+      - name: Update the pin
+        if: steps.release.outputs.update == 'true'
+        env:
+          OLD: ${{ steps.release.outputs.current }}
+          NEW: ${{ steps.release.outputs.latest }}
+          SHA256: ${{ steps.digest.outputs.sha256 }}
+        run: |
+          set -euo pipefail
+          old_re=${OLD//./\\.}
+          sed -i "s/static let ytdlpVersion = \"$old_re\"/static let ytdlpVersion = \"$NEW\"/" "$PINS_FILE"
+          sed -i "s#releases/download/$old_re/yt-dlp_macos#releases/download/$NEW/yt-dlp_macos#" "$PINS_FILE"
+          sed -i "s/static let ytdlpExecutableSHA256 = \"[0-9a-f]*\"/static let ytdlpExecutableSHA256 = \"$SHA256\"/" "$PINS_FILE"
+          # The version, URL and digest must change together.
+          changed=$(git diff --numstat -- "$PINS_FILE" | cut -f1)
+          if [[ "$changed" != 3 ]]; then
+            git diff -- "$PINS_FILE"
+            echo "Expected exactly 3 changed lines in $PINS_FILE, got '$changed'." >&2
+            exit 1
+          fi
+
+      - name: Open a pull request
+        if: steps.release.outputs.update == 'true'
+        env:
+          OLD: ${{ steps.release.outputs.current }}
+          NEW: ${{ steps.release.outputs.latest }}
+          BRANCH: ${{ steps.release.outputs.branch }}
+        run: |
+          set -euo pipefail
+          git config user.name "GitHub Actions Bot"
+          git config user.email "actions@github.com"
+          git switch -c "$BRANCH"
+          git commit -am "chore(deps): bump yt-dlp to $NEW"
+          git push origin "$BRANCH"
+          gh pr create --base main --head "$BRANCH" \
+            --title "chore(deps): bump yt-dlp to $NEW" \
+            --body "Bumps the pinned yt-dlp from $OLD to $NEW ([release notes](https://github.com/yt-dlp/yt-dlp/releases/tag/$NEW)).
+
+          The workflow checked that \`SHA2-256SUMS\` is signed by the yt-dlp release key \`$YTDLP_SIGNING_KEY\` and that \`yt-dlp_macos\` matches the signed digest. It then updated the version, URL and SHA-256 together.
+
+          Pull requests opened with the workflow token do not start CI. Close and reopen this PR to run the checks."
