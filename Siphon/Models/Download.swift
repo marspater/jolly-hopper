@@ -405,7 +405,6 @@ public struct DownloadDiagnostics: Codable, Hashable {
     public var httpRetries: Int = 0
     public var peakSpeed: String?
     public var duration: String?
-    public var postProcessingSteps: [String] = []
     public var exitStatus: String?
     public var commandLine: String?
     public var timestamp: Date = Date()

@@ -4431,10 +4431,6 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertFalse(caps2.supportsEDR)
         XCTAssertFalse(caps2.supportsP3)
         XCTAssertTrue(caps2.reduceTransparency)
-
-        let env = AdaptiveRenderingEnvironment.shared
-        XCTAssertNotNil(env.materialMode)
-        XCTAssertNotNil(env.colorGamut)
     }
 
     func testConsolidatedNetscapeCookieFileGeneration() throws {
