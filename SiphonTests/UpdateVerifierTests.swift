@@ -120,7 +120,11 @@ final class UpdateVerifierTests: XCTestCase {
         let currentBundle = Bundle.main.bundleURL
         // The current test host or app bundle exists
         if FileManager.default.fileExists(atPath: currentBundle.path) {
-            let bundleID = Bundle.main.bundleIdentifier ?? "com.marspater.Siphon"
+            let bundleID = Bundle.main.bundleIdentifier ?? "com.marspater.siphon"
+            // The default expectation must accept the shipped app itself.
+            XCTAssertNoThrow(
+                try UpdateVerifier.verifyAppBundle(bundleURL: currentBundle, expectedTeamID: nil, allowAdHoc: true)
+            )
             XCTAssertNoThrow(
                 try UpdateVerifier.verifyAppBundle(
                     bundleURL: currentBundle,
@@ -265,7 +269,8 @@ final class UpdateVerifierTests: XCTestCase {
         }
         // Can be enumerated before Siphon.app, so a first-.app search may pick it.
         _ = try makeApp("Aaa Uninstaller.app", bundleID: "com.example.Uninstaller")
-        let siphon = try makeApp("Siphon.app", bundleID: "com.marspater.Siphon")
+        // The identifier Siphon actually ships with (PRODUCT_BUNDLE_IDENTIFIER).
+        let siphon = try makeApp("Siphon.app", bundleID: "com.marspater.siphon")
 
         let installer = UpdateInstaller()
         XCTAssertEqual(installer.locateAppBundle(in: root)?.lastPathComponent, siphon.lastPathComponent)

@@ -312,14 +312,14 @@ public final class UpdateInstaller: Sendable {
 
     /// Finds the Siphon bundle by identifier, not the first `.app`: a package may
     /// also carry other apps (an uninstaller, a helper).
-    public func locateAppBundle(in directory: URL, bundleID: String = "com.marspater.Siphon") -> URL? {
+    public func locateAppBundle(in directory: URL, bundleID: String = UpdateVerifier.siphonBundleID) -> URL? {
         var visited = Set<String>()
         return locateAppBundle(in: directory, bundleID: bundleID, depth: 0, visited: &visited)
     }
 
-    private static func bundleIdentifier(of app: URL) -> String? {
+    private static func isApp(_ app: URL, withBundleID bundleID: String) -> Bool {
         let plist = NSDictionary(contentsOf: app.appendingPathComponent("Contents/Info.plist"))
-        return plist?["CFBundleIdentifier"] as? String
+        return UpdateVerifier.bundleIDsMatch(plist?["CFBundleIdentifier"] as? String, bundleID)
     }
 
     private func locateAppBundle(in directory: URL, bundleID: String, depth: Int, visited: inout Set<String>) -> URL? {
@@ -334,7 +334,7 @@ public final class UpdateInstaller: Sendable {
         }
 
         if candidate.pathExtension.lowercased() == "app" {
-            return Self.bundleIdentifier(of: candidate) == bundleID ? candidate : nil
+            return Self.isApp(candidate, withBundleID: bundleID) ? candidate : nil
         }
 
         guard let contents = try? FileManager.default.contentsOfDirectory(
@@ -349,7 +349,7 @@ public final class UpdateInstaller: Sendable {
             if let itemValues = try? item.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey]),
                itemValues.isDirectory == true,
                itemValues.isSymbolicLink != true,
-               Self.bundleIdentifier(of: item) == bundleID {
+               Self.isApp(item, withBundleID: bundleID) {
                 return item.standardizedFileURL
             }
         }
