@@ -68,6 +68,7 @@ class LanguageService: ObservableObject {
         "keyring": "Keyring",
         "settings": "Settings",
         "new_download": "Add New Download",
+        "toggle_sidebar": "Toggle Sidebar",
         "url_placeholder": "Download video from YouTube and thousands of sites",
         "stat_downloading": "Downloading",
         "stat_queued": "Queued",
