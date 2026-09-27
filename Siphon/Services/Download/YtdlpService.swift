@@ -2417,6 +2417,9 @@ public struct DownloadResult: Sendable {
         force: Bool = false,
         browserOverride: String? = nil
     ) -> Bool {
+        // Eporner videos are public, and its video API rejects a browser's
+        // PHPSESSID with "Authorization failed. Try to reload page."
+        if isEpornerURL(url) { return false }
         let browser: String?
         if browserOverride != nil {
             browser = Self.validatedBrowserCookieSource(browserOverride)
