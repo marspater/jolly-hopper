@@ -19,7 +19,6 @@ struct AddDownloadView: View {
     @AppStorage("selectedPreset") private var selectedPreset: String = "best_quality"
     @AppStorage("selectedCustomPresetId") private var selectedCustomPresetIdString: String = ""
     @AppStorage("defaultAdditionalArguments") private var defaultAdditionalArguments: String = ""
-    @AppStorage(UserDefaultsKeys.theme) private var selectedTheme: String = "system"
 
     @State private var urlInput: String = ""
     @State private var isLoading: Bool = false

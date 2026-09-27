@@ -692,19 +692,6 @@ class YtdlpService: ObservableObject {
         }
     }
 
-    func downloadFfmpeg() async {
-        await downloadFfmpegAndFfprobeBundle()
-    }
-
-    func downloadFfprobe() async {
-        await downloadFfmpegAndFfprobeBundle()
-    }
-
-    func updateAllDependencies() async {
-        await downloadYtdlp()
-        await downloadFfmpegAndFfprobeBundle()
-    }
-
     func updateYtdlp() async throws -> String {
         guard !isUpdating else {
             throw YtdlpUpdateError.alreadyInProgress
@@ -6002,11 +5989,6 @@ public struct DownloadResult: Sendable {
         "cloudflare", "anti-bot", "captcha", "challenge", "turnstile"
     ]
 
-    nonisolated private static let videoUnavailableErrorKeywords = [
-        "video is unavailable", "video unavailable", "video has been removed",
-        "video removed", "404 not found", "page not found", "http error 404"
-    ]
-
     nonisolated private static let loginRequiredErrorKeywords = [
         "sign in", "private video", "login", "members-only", "http error 401"
     ]
@@ -6578,47 +6560,6 @@ public struct DownloadResult: Sendable {
         try? FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: siphonDir.path)
 
         return siphonDir
-    }
-
-    private func extractBrowserCookiesToTempFile(url _: String, browser _: String) async -> URL? {
-        // Not used explicitly here but kept for architecture
-        return nil
-    }
-
-    private func fetchHTMLWithBrowserCookies(url: String, browser: String) async -> String? {
-        guard let path = ytdlpPath?.path else { return nil }
-        guard let cookiesDir = YtdlpService.getSecureTempCookiesDirectory() else { return nil }
-        let cookieURL = cookiesDir.appendingPathComponent("siphon_cookies_\(UUID().uuidString).txt")
-        let cookiePath = cookieURL.path
-        guard FileManager.default.createFile(atPath: cookiePath, contents: nil, attributes: [.posixPermissions: 0o600]) else { return nil }
-        defer {
-            try? FileManager.default.removeItem(atPath: cookiePath)
-        }
-
-        let cookieArg = Self.cookiesFromBrowserArgument(for: browser)
-        let ytdlpArgs = [path, "--ignore-config", "--cookies-from-browser", cookieArg, "--cookies", cookiePath, "--skip-download", "--", url]
-        
-        // This will create the cookies file, even if it eventually fails with "Unsupported URL"
-        _ = try? await runCommand(ytdlpArgs)
-        
-        guard FileManager.default.fileExists(atPath: cookiePath) else { return nil }
-        try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: cookiePath)
-        
-        let curlArgs = [
-            "/usr/bin/curl",
-            "-sL",
-            "--cookie", cookiePath,
-            "-A", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15",
-            "--",
-            url
-        ]
-        
-        do {
-            let output = try await runCommand(curlArgs)
-            return output
-        } catch {
-            return nil
-        }
     }
 
     private func resolveSucuriCookie(for url: String) async -> (name: String, value: String)? {

@@ -197,20 +197,20 @@ describe('GET /api/latest', () => {
     assert.equal(calls.length, 1);
   });
 
-  for (const [label, outcome] of [
+  [
     ['rate limiting', { status: 403, body: { message: 'API rate limit exceeded' } }],
     ['a server error', { status: 502, body: 'Bad Gateway' }],
     ['a network failure', new Error('getaddrinfo ENOTFOUND api.github.com')],
     ['malformed JSON', { status: 200, body: '{not json' }],
     ['a payload without tag_name', { status: 200, body: { assets: [] } }]
-  ]) {
+  ].forEach(([label, outcome]) => {
     test(`returns 503 without cached data on ${label}`, async () => {
       const { baseUrl } = await start([outcome]);
       const res = await fetch(`${baseUrl}/api/latest`);
       assert.equal(res.status, 503);
       assert.deepEqual(await res.json(), { error: 'Release metadata temporarily unavailable' });
     });
-  }
+  });
 
   test('falls back to stale cached data when a refresh fails', async () => {
     const { baseUrl } = await start(

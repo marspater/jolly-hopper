@@ -76,11 +76,6 @@ final class DownloadHistoryStore {
         }
     }
 
-    func removeFromHistory(id: UUID, history: inout [HistoricDownload]) {
-        history.removeAll { $0.id == id }
-        saveHistory(history)
-    }
-
     func clearHistory(history: inout [HistoricDownload]) {
         history.removeAll()
         saveHistory(history)
