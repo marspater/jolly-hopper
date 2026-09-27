@@ -64,9 +64,8 @@ public struct UpdateVerifier: Sendable {
         let bufferSize = 64 * 1024
         var hasMoreData = true
         while hasMoreData {
-            hasMoreData = autoreleasepool {
-                let data = handle.readData(ofLength: bufferSize)
-                guard !data.isEmpty else { return false }
+            hasMoreData = try autoreleasepool {
+                guard let data = try handle.read(upToCount: bufferSize), !data.isEmpty else { return false }
                 hasher.update(data: data)
                 return true
             }

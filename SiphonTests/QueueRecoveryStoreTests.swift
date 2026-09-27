@@ -59,6 +59,16 @@ final class QueueRecoveryStoreTests: XCTestCase {
         XCTAssertEqual(recoverable[1].progress, 0.42)
     }
 
+    func testRecoveryRecordKeepsOnlyTheLogTail() {
+        let download = Download(url: "https://example.com/long-log", options: .default, title: "Long Log")
+        download.log = String(repeating: "a", count: 40_000) + "last line"
+
+        let record = QueueRecoveryRecord(download: download)
+
+        XCTAssertEqual(record.log.count, QueueRecoveryRecord.maxLogCharacters)
+        XCTAssertTrue(record.log.hasSuffix("last line"))
+    }
+
     func testCleanShutdownPreventsCrashRecoveryPrompt() {
         let store = QueueRecoveryStore(fileURL: recoveryFileURL)
 
