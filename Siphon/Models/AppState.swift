@@ -344,12 +344,14 @@ public final class AppState: ObservableObject {
         ytdlpUpdateMessage = dependencyCoordinator.updateMessage
     }
 
+    // Bolt Performance Optimization: Pre-compile static browser name set to avoid re-creating Set on every normalization call.
+    private static let allowedBrowserNames = Set(SupportedBrowser.allCases.lazy.map(\.rawValue))
+
     public static func normalizedBrowserCookieSource(_ raw: String?) -> String? {
         guard let raw else { return nil }
         let browser = raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         if browser == "helium" { return "chromium-based" }
-        let allowed = Set(SupportedBrowser.allCases.map(\.rawValue))
-        return allowed.contains(browser) ? browser : nil
+        return allowedBrowserNames.contains(browser) ? browser : nil
     }
 
     private static func normalizedOrigin(for urlString: String) -> (scheme: String, host: String)? {
