@@ -448,7 +448,7 @@ final class DownloadExecutor: ObservableObject {
 
             delegate?.executorDidRequestAddToHistory(download, skipSave: false)
 
-            let lang = languageService ?? LanguageService()
+            let lang = languageService ?? .shared
             notificationService.sendDownloadCompleted(
                 filename: download.displayTitle.isEmpty ? LoggerService.sanitizeURLForLog(download.url) : download.displayTitle,
                 languageService: lang
@@ -490,7 +490,7 @@ final class DownloadExecutor: ObservableObject {
             }
             Self.appendToLog(for: download, text: failureLog)
             LoggerService.shared.log("Download failed (\(LoggerService.sanitizeURLForLog(download.url))): \(errorMsg)", level: .error)
-            let lang = languageService ?? LanguageService()
+            let lang = languageService ?? .shared
             notificationService.sendDownloadFailed(filename: download.displayTitle.isEmpty ? LoggerService.sanitizeURLForLog(download.url) : download.displayTitle, languageService: lang)
             delegate?.executorDidRequestAddToHistory(download, skipSave: false)
         } catch {
@@ -517,7 +517,7 @@ final class DownloadExecutor: ObservableObject {
             let failureLog = "[\(Self.logTimestamp())] [ERROR] \(errorMsg)\n[\(Self.logTimestamp())] [DETAILS] \(error.localizedDescription)\n"
             Self.appendToLog(for: download, text: failureLog)
             LoggerService.shared.log("Download failed with error (\(LoggerService.sanitizeURLForLog(download.url))): \(error.localizedDescription)", level: .error)
-            let lang = languageService ?? LanguageService()
+            let lang = languageService ?? .shared
             notificationService.sendDownloadFailed(filename: download.displayTitle.isEmpty ? LoggerService.sanitizeURLForLog(download.url) : download.displayTitle, languageService: lang)
             delegate?.executorDidRequestAddToHistory(download, skipSave: false)
         }
@@ -557,7 +557,7 @@ final class DownloadExecutor: ObservableObject {
         }
 
         if !suppressNotification {
-            let lang = languageService ?? LanguageService()
+            let lang = languageService ?? .shared
             let rawTitle = download.title.trimmingCharacters(in: .whitespacesAndNewlines)
             let isPlaceholder = rawTitle.isEmpty || rawTitle == Download.fetchingPlaceholder
             let filename = isPlaceholder ? LoggerService.sanitizeURLForLog(download.url) : rawTitle
@@ -634,7 +634,7 @@ final class DownloadExecutor: ObservableObject {
         let ceilingCheck = info.formatResolutionExceedsCeiling(options: download.options)
         if ceilingCheck.exceeded, let req = ceilingCheck.requestedHeight, let act = ceilingCheck.actualHeight {
             let warnMsg = "[Siphon Warning] Requested \(req)p was unavailable. Downloading \(act)p instead.\n"
-            download.log.append(warnMsg)
+            appendToLog(for: download, text: warnMsg)
             LoggerService.shared.log("Requested \(req)p format unavailable for '\(download.title)'; downloading \(act)p instead.", level: .warning)
             download.diagnostics.resolution = "\(act)p (requested \(req)p unavailable)"
         } else {
@@ -701,7 +701,7 @@ final class DownloadExecutor: ObservableObject {
     }
 
     static func errorMessage(for error: Error, languageService: LanguageService?) -> String {
-        let lang = languageService ?? LanguageService()
+        let lang = languageService ?? .shared
         if let ytdlpError = error as? YtdlpError {
             switch ytdlpError {
             case .safariCookiesFullDiskAccessRequired:

@@ -1517,4 +1517,19 @@ final class NotificationServiceTests: XCTestCase {
         appDelegate.handleApplicationWillTerminate(bypassTestGuard: true)
         XCTAssertEqual(download.status, .stopped)
     }
+
+    @MainActor
+    func testAppTerminationRunsOnceAcrossObservers() {
+        let manager = DownloadManager()
+        defer { manager.shutdown() }
+
+        manager.handleAppTermination()
+        let lateDownload = Download(url: "https://example.com/late", options: .default, title: "Late")
+        lateDownload.status = .downloading
+        manager.downloads.append(lateDownload)
+
+        // AppKit's delegate and the manager's own observer both deliver quit.
+        manager.handleAppTermination()
+        XCTAssertEqual(lateDownload.status, .downloading)
+    }
 }

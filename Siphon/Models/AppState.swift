@@ -332,7 +332,7 @@ public final class AppState: ObservableObject {
         activeExecutionCount: Int,
         languageService: LanguageService? = nil
     ) async {
-        let lang = languageService ?? LanguageService()
+        let lang = languageService ?? .shared
         guard activeExecutionCount == 0 else {
             ytdlpUpdateMessage = YtdlpUpdateMessage(
                 title: lang.s("ytdlp_update_unavailable_title"),
