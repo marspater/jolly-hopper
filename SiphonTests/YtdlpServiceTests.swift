@@ -1539,6 +1539,40 @@ final class YtdlpServiceTests: XCTestCase {
         }
     }
 
+    func testEpornerNeverUsesBrowserCookies() async throws {
+        UserDefaults.standard.set("safari", forKey: UserDefaultsKeys.browserForCookies)
+        YtdlpService.hasFullDiskAccessOverride = true
+        defer {
+            UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.browserForCookies)
+            YtdlpService.hasFullDiskAccessOverride = nil
+        }
+
+        let capturedArgsBox = TestBox<[[String]]>([])
+        service.processRunner = MockYtdlpProcessRunner(
+            mockCommand: { args in
+                capturedArgsBox.value.append(args)
+                return #"{"id": "12345", "title": "Sample", "formats": []}"#
+            },
+            mockDownload: { args in
+                capturedArgsBox.value.append(args)
+                return "[download] Destination: /tmp/test.mp4\n"
+            }
+        )
+
+        _ = try await service.fetchInfo(url: "https://pl.eporner.com/video-12345/sample-video/")
+        _ = try await service.download(
+            url: "https://www.eporner.com/video-12345/sample-video/",
+            options: .default,
+            onProgress: { _, _, _ in /* Progress ignored in test */ },
+            onOutput: { _ in /* Output ignored in test */ }
+        )
+
+        XCTAssertGreaterThanOrEqual(capturedArgsBox.value.count, 2)
+        for args in capturedArgsBox.value {
+            XCTAssertFalse(args.contains("--cookies-from-browser"), "Eporner rejects browser session cookies: \(args)")
+        }
+    }
+
     func testHasFullDiskAccessCheckDoesNotCrash() {
         let hasAccess = YtdlpService.hasFullDiskAccess
         XCTAssertTrue(hasAccess == true || hasAccess == false)
@@ -3455,9 +3489,9 @@ final class YtdlpServiceTests: XCTestCase {
         let jsonManifestOutput = """
         {
             "id": "12345",
-            "title": "Eporner Sample Video",
+            "title": "Sample Video",
             "duration": 360,
-            "thumbnail": "https://cdn.eporner.com/thumb.jpg",
+            "thumbnail": "https://example.com/thumb.jpg",
             "formats": [
                 {"format_id": "720p", "width": 1280, "height": 720, "ext": "mp4", "protocol": "https"}
             ]
@@ -3474,8 +3508,8 @@ final class YtdlpServiceTests: XCTestCase {
             return "{}"
         })
 
-        let info = try await service.fetchInfo(url: "https://www.eporner.com/video-12345/sample-video/")
-        XCTAssertEqual(info.title, "Eporner Sample Video")
+        let info = try await service.fetchInfo(url: "https://example.com/videos/sample-video")
+        XCTAssertEqual(info.title, "Sample Video")
     }
 
     func testSafariCookieFailureFallsBackToUnauthenticatedDownloadForPublicVideos() async throws {
@@ -3503,7 +3537,7 @@ final class YtdlpServiceTests: XCTestCase {
         options.videoResolution = .r1080p
 
         _ = try await service.download(
-            url: "https://www.eporner.com/video-12345/sample-video/",
+            url: "https://example.com/videos/sample-video",
             options: options,
             onProgress: { _, _, _ in /* Progress ignored in test */ },
             onOutput: { _ in /* Output ignored in test */ }
