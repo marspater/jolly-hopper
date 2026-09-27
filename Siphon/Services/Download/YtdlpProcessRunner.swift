@@ -473,20 +473,25 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
     /// languages"), and matching those would hide the real failure from the
     /// download recovery strategies, which only inspect `.downloadFailed`.
     static func classifyFailure(errorOutput: String, exitCode: Int32) -> YtdlpError {
-        let lower = errorOutput.lowercased()
-        if errorOutput.contains("Cloudflare") || (errorOutput.contains("403") && (errorOutput.contains("anti-bot") || lower.contains("cloudflare") || lower.contains("turnstile") || lower.contains("bot"))) || lower.contains("sign in to confirm you're not a bot") || lower.contains("sign in to confirm you’re not a bot") {
+        let cleanError = extractCleanError(from: errorOutput)
+        // Without an ERROR: line (traceback, crash, signal) cleanError is the
+        // whole stderr, warnings included, so targetText uses cleanError when
+        // an ERROR: line exists to avoid misclassifying warnings as Cloudflare or subtitle errors.
+        let targetText = errorOutput.contains("ERROR:") ? cleanError : errorOutput
+        let lower = targetText.lowercased()
+
+        if targetText.contains("Cloudflare") ||
+           (targetText.contains("403") && (targetText.contains("anti-bot") || lower.contains("cloudflare") || lower.contains("turnstile") || lower.contains("bot"))) ||
+           lower.contains("sign in to confirm you're not a bot") ||
+           lower.contains("sign in to confirm you’re not a bot") {
             return .cloudflareBlocked
         }
 
-        let cleanError = extractCleanError(from: errorOutput)
-        // Without an ERROR: line (traceback, crash, signal) cleanError is the
-        // whole stderr, warnings included, so it must not drive classification.
         if errorOutput.contains("ERROR:") {
-            let lowerCleanError = cleanError.lowercased()
-            if lowerCleanError.contains("http error 429") || lowerCleanError.contains("too many requests") {
+            if lower.contains("http error 429") || lower.contains("too many requests") {
                 return .tooManyRequests
             }
-            if lowerCleanError.contains("subtitle") || lowerCleanError.contains("caption") {
+            if lower.contains("subtitle") || lower.contains("caption") {
                 return .subtitleError(errorOutput)
             }
         }
