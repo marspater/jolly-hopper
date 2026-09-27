@@ -160,9 +160,12 @@ public enum ExternalDownloadTargetPolicy {
     }
 
     /// Resolve all A/AAAA records for `host` and reject if **any** resolved
-    /// address falls into a private or reserved range. This guards against
-    /// DNS-based SSRF where a public hostname resolves to 127.0.0.1,
-    /// 169.254.169.254, or other non-globally-routable addresses.
+    /// address falls into a private or reserved range, such as a public
+    /// hostname that resolves to 127.0.0.1 or 169.254.169.254.
+    ///
+    /// This is an admission check, not a connection-time boundary: yt-dlp
+    /// resolves the host again and follows redirects on its own, so DNS
+    /// rebinding or a redirect to a private address is not prevented here.
     private static func resolveAndValidateHost(_ host: String) -> Bool {
         var hints = addrinfo()
         hints.ai_family = AF_UNSPEC

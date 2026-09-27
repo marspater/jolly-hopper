@@ -127,6 +127,75 @@ final class DownloadExecutorTests: XCTestCase {
         XCTAssertEqual(box.lines, ["line 1", "line 2"])
     }
 
+    func testCoalescerNeverDeliversAfterFinalMainThreadFlush() async throws {
+        final class DeliveryBox: @unchecked Sendable {
+            let lock = NSLock()
+            var deliveries: [(lines: [String], onMain: Bool)] = []
+        }
+        let box = DeliveryBox()
+        let coalescer = DownloadEventCoalescer { _, _, _, lines in
+            box.lock.lock()
+            box.deliveries.append((lines, Thread.isMainThread))
+            box.lock.unlock()
+        }
+
+        // Past every throttle window, a background producer used to hand its
+        // batch to the main queue itself, racing the executor's final flush.
+        try await Task.sleep(nanoseconds: 250_000_000)
+        await Task.detached {
+            coalescer.recordLogLine("last line")
+        }.value
+        coalescer.flushRemaining()
+        try await Task.sleep(nanoseconds: 250_000_000)
+
+        let deliveries = box.lock.withLock { box.deliveries }
+        XCTAssertEqual(deliveries.count, 1)
+        XCTAssertEqual(deliveries.first?.lines, ["last line"])
+        XCTAssertEqual(deliveries.first?.onMain, true)
+    }
+
+    private func thumbnailSession(body: Data) -> URLSession {
+        MockURLProtocol.requestHandler = { request in
+            let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            return (response, body)
+        }
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [MockURLProtocol.self]
+        return URLSession(configuration: configuration)
+    }
+
+    private func pngData(width: Int, height: Int) throws -> Data {
+        let rep = try XCTUnwrap(NSBitmapImageRep(
+            bitmapDataPlanes: nil, pixelsWide: width, pixelsHigh: height,
+            bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+            colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0
+        ))
+        return try XCTUnwrap(rep.representation(using: .png, properties: [:]))
+    }
+
+    func testThumbnailFetchRejectsPrivateOversizedAndHugeImages() async throws {
+        defer { MockURLProtocol.requestHandler = nil }
+        let publicURL = try XCTUnwrap(URL(string: "http://93.184.215.14/thumb.png"))
+        let small = try pngData(width: 8, height: 8)
+
+        let fetched = await DownloadExecutor.fetchThumbnailData(from: publicURL, session: thumbnailSession(body: small))
+        XCTAssertEqual(fetched, small)
+
+        for privateTarget in ["http://127.0.0.1/thumb.png", "http://169.254.169.254/latest", "http://192.168.1.1/thumb.png"] {
+            let url = try XCTUnwrap(URL(string: privateTarget))
+            let result = await DownloadExecutor.fetchThumbnailData(from: url, session: thumbnailSession(body: small))
+            XCTAssertNil(result, "\(privateTarget) must not be fetched")
+        }
+
+        let oversized = Data(count: DownloadExecutor.maxThumbnailBytes + 1)
+        let oversizedResult = await DownloadExecutor.fetchThumbnailData(from: publicURL, session: thumbnailSession(body: oversized))
+        XCTAssertNil(oversizedResult)
+
+        let huge = try pngData(width: DownloadExecutor.maxThumbnailPixelDimension + 1, height: 1)
+        let hugeResult = await DownloadExecutor.fetchThumbnailData(from: publicURL, session: thumbnailSession(body: huge))
+        XCTAssertNil(hugeResult)
+    }
+
     func testOwnedScratchSurvivesPauseAndIsCleanedOnStopOrCompletion() throws {
         let unrelatedRoot = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: unrelatedRoot, withIntermediateDirectories: true)

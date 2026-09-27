@@ -1,7 +1,11 @@
+const fs = require('node:fs');
 const http = require('node:http');
+const path = require('node:path');
 
-// Pre-computed minimal valid ISO MP4 header buffer (36 bytes)
-const SAMPLE_MP4 = Buffer.from('AAAAHGZ0eXBpc29tAAACAGlzb21pc28ybXA0MQAAAAhtZGF0', 'base64');
+// 1 s, 16x16 H.264 + AAC fixtures generated with the pinned FFmpeg; both
+// decode cleanly with ffprobe.
+const SAMPLE_MP4 = fs.readFileSync(path.join(__dirname, 'fixtures', 'video.mp4'));
+const SAMPLE_TS_SEGMENT = fs.readFileSync(path.join(__dirname, 'fixtures', 'segment0.ts'));
 
 const SAMPLE_VTT = `WEBVTT
 
@@ -16,72 +20,77 @@ Testing subtitle extraction and language mapping.
 
 const SAMPLE_M3U8 = `#EXTM3U
 #EXT-X-VERSION:3
-#EXT-X-TARGETDURATION:4
+#EXT-X-TARGETDURATION:1
 #EXT-X-MEDIA-SEQUENCE:0
-#EXTINF:4.000000,
+#EXTINF:1.000000,
 segment0.ts
 #EXT-X-ENDLIST
 `;
 
-// In-memory release cache with 15-minute TTL
-let releaseCache = {
-  data: null,
-  expiresAt: 0
-};
+const RELEASE_CACHE_TTL_MS = 15 * 60 * 1000;
 
-async function getLatestRelease() {
-  const now = Date.now();
-  if (releaseCache.data && now < releaseCache.expiresAt) {
-    return { ...releaseCache.data, cached: true };
-  }
+// Returns a release lookup with its own in-memory cache. `fetchImpl` is
+// injectable so tests never depend on the live GitHub API.
+function createReleaseFetcher(fetchImpl, cacheTtlMs) {
+  let releaseCache = {
+    data: null,
+    expiresAt: 0
+  };
 
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 10000);
+  return async function getLatestRelease() {
+    const now = Date.now();
+    if (releaseCache.data && now < releaseCache.expiresAt) {
+      return { ...releaseCache.data, cached: true };
+    }
 
-  try {
-    const res = await fetch('https://api.github.com/repos/marspater/jolly-hopper/releases/latest', {
-      signal: controller.signal,
-      headers: {
-        'User-Agent': 'Siphon-Companion-Service',
-        'Accept': 'application/vnd.github.v3+json'
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10000);
+
+    try {
+      const res = await fetchImpl('https://api.github.com/repos/marspater/jolly-hopper/releases/latest', {
+        signal: controller.signal,
+        headers: {
+          'User-Agent': 'Siphon-Companion-Service',
+          'Accept': 'application/vnd.github.v3+json'
+        }
+      });
+
+      if (!res.ok) {
+        throw new Error(`GitHub API returned status ${res.status}`);
       }
-    });
 
-    if (!res.ok) {
-      throw new Error(`GitHub API returned status ${res.status}`);
+      const payload = await res.json();
+      const dmgAsset = (payload.assets || []).find((a) => a.name?.endsWith('.dmg'));
+      const downloadUrl = dmgAsset ? dmgAsset.browser_download_url : (payload.html_url || 'https://github.com/marspater/jolly-hopper/releases/latest');
+
+      if (!payload.tag_name) {
+        throw new Error('GitHub API response missing tag_name');
+      }
+      const cleanData = {
+        version: payload.tag_name,
+        name: payload.name || 'Siphon',
+        publishedAt: payload.published_at || new Date().toISOString(),
+        downloadUrl,
+        notes: payload.body || ''
+      };
+
+      releaseCache = {
+        data: cleanData,
+        expiresAt: now + cacheTtlMs
+      };
+
+      return { ...cleanData, cached: false };
+    } catch (error) {
+      console.error('Failed to refresh release metadata:', error instanceof Error ? error.message : String(error));
+      if (releaseCache.data) {
+        return { ...releaseCache.data, cached: true, stale: true };
+      }
+
+      return null;
+    } finally {
+      clearTimeout(timeout);
     }
-
-    const payload = await res.json();
-    const dmgAsset = (payload.assets || []).find((a) => a.name?.endsWith('.dmg'));
-    const downloadUrl = dmgAsset ? dmgAsset.browser_download_url : (payload.html_url || 'https://github.com/marspater/jolly-hopper/releases/latest');
-
-    if (!payload.tag_name) {
-      throw new Error('GitHub API response missing tag_name');
-    }
-    const cleanData = {
-      version: payload.tag_name,
-      name: payload.name || 'Siphon',
-      publishedAt: payload.published_at || new Date().toISOString(),
-      downloadUrl,
-      notes: payload.body || ''
-    };
-
-    releaseCache = {
-      data: cleanData,
-      expiresAt: now + 15 * 60 * 1000
-    };
-
-    return { ...cleanData, cached: false };
-  } catch (error) {
-    console.error('Failed to refresh release metadata:', error instanceof Error ? error.message : String(error));
-    if (releaseCache.data) {
-      return { ...releaseCache.data, cached: true, stale: true };
-    }
-
-    return null;
-  } finally {
-    clearTimeout(timeout);
-  }
+  };
 }
 
 function sendResponse(res, statusCode, headers, body) {
@@ -133,6 +142,13 @@ function handleMockFixtures(req, res, pathname) {
     }, SAMPLE_M3U8);
     return true;
   }
+  if (pathname === '/mock/segment0.ts') {
+    sendResponse(res, 200, {
+      'Content-Type': 'video/mp2t',
+      'Content-Length': SAMPLE_TS_SEGMENT.length
+    }, SAMPLE_TS_SEGMENT);
+    return true;
+  }
   if (pathname === '/mock/video.mp4') {
     sendResponse(res, 200, {
       'Content-Type': 'video/mp4',
@@ -143,7 +159,7 @@ function handleMockFixtures(req, res, pathname) {
   return false;
 }
 
-async function handleReleaseApi(req, res, pathname) {
+async function handleReleaseApi(req, res, pathname, getLatestRelease) {
   if (req.method !== 'GET' || pathname !== '/api/latest') {
     return false;
   }
@@ -156,7 +172,8 @@ async function handleReleaseApi(req, res, pathname) {
   return true;
 }
 
-function createServer() {
+function createServer({ fetchImpl = globalThis.fetch, cacheTtlMs = RELEASE_CACHE_TTL_MS } = {}) {
+  const getLatestRelease = createReleaseFetcher(fetchImpl, cacheTtlMs);
   return http.createServer(async (req, res) => {
     try {
       let url;
@@ -170,7 +187,7 @@ function createServer() {
       const pathname = url.pathname;
       if (handleHealthCheck(req, res, pathname)) return;
       if (handleMockFixtures(req, res, pathname)) return;
-      if (await handleReleaseApi(req, res, pathname)) return;
+      if (await handleReleaseApi(req, res, pathname, getLatestRelease)) return;
 
       sendJson(res, 404, { error: 'Not Found' });
     } catch (error) {
@@ -200,6 +217,12 @@ if (require.main === module) {
       console.log('Server closed successfully.');
       process.exit(0);
     });
+    // Node 18 keeps idle keep-alive sockets open, which would stall close().
+    server.closeIdleConnections?.();
+    setTimeout(() => {
+      server.closeAllConnections?.();
+      process.exit(0);
+    }, 10_000).unref();
   };
 
   process.on('SIGTERM', shutdown);
