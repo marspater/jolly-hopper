@@ -2643,12 +2643,36 @@ public struct DownloadResult: Sendable {
 
     /// A real close, unlike `isVisible`, which is also false while Siphon is hidden (Cmd-H).
     @MainActor
-    final class RecuWindowDelegate: NSObject, NSWindowDelegate {
+    final class BrowserSessionWindowDelegate: NSObject, NSWindowDelegate {
         private(set) var didClose = false
 
         func windowWillClose(_ _: Notification) {
             didClose = true
         }
+    }
+
+    /// Shows a WebKit session so the user can complete a site's check or sign-in.
+    /// A hidden, windowless WKWebView reports `document.visibilityState == "hidden"`,
+    /// and Cloudflare's managed challenge never completes there.
+    private func presentBrowserSessionWindow(
+        _ webView: WKWebView,
+        title: String,
+        delegate: BrowserSessionWindowDelegate
+    ) -> NSWindow {
+        let window = NSWindow(
+            contentRect: webView.frame,
+            styleMask: [.titled, .closable, .miniaturizable, .resizable],
+            backing: .buffered,
+            defer: false
+        )
+        window.isReleasedWhenClosed = false
+        window.delegate = delegate
+        window.title = title
+        window.contentView = webView
+        window.center()
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+        return window
     }
 
     private func recuPageState(_ webView: WKWebView, videoID: String) async -> RecuPageState? {
@@ -2710,7 +2734,7 @@ public struct DownloadResult: Sendable {
         webView.load(URLRequest(url: pageURL))
 
         var window: NSWindow?
-        let windowDelegate = RecuWindowDelegate()
+        let windowDelegate = BrowserSessionWindowDelegate()
         defer {
             _ = navigationDelegate
             _ = windowDelegate
@@ -2725,20 +2749,11 @@ public struct DownloadResult: Sendable {
         func presentWindow(reason: String) {
             guard window == nil else { return }
             LoggerService.shared.log("[ProtectedSite] stage=browser-session result=\(reason); waiting for the user", level: .info)
-            let newWindow = NSWindow(
-                contentRect: webView.frame,
-                styleMask: [.titled, .closable, .miniaturizable, .resizable],
-                backing: .buffered,
-                defer: false
+            window = presentBrowserSessionWindow(
+                webView,
+                title: LanguageService.s("recu_verification_title"),
+                delegate: windowDelegate
             )
-            newWindow.isReleasedWhenClosed = false
-            newWindow.delegate = windowDelegate
-            newWindow.title = LanguageService.s("recu_verification_title")
-            newWindow.contentView = webView
-            newWindow.center()
-            newWindow.makeKeyAndOrderFront(nil)
-            NSApp.activate(ignoringOtherApps: true)
-            window = newWindow
             deadline = Date().addingTimeInterval(300)
         }
 
@@ -2995,10 +3010,13 @@ public struct DownloadResult: Sendable {
         let thumbnailURL: String?
     }
 
+    /// Markers of Cloudflare's challenge page itself. Not `/cdn-cgi/challenge-platform/`:
+    /// Cloudflare also injects that bot-detection script into the real, playable page.
     private func isBoyfriendTVChallengeHTML(_ html: String) -> Bool {
         let lower = html.lowercased()
         return lower.contains("cf-chl-") ||
-               lower.contains("/cdn-cgi/challenge-platform/") ||
+               lower.contains("_cf_chl_opt") ||
+               lower.contains("challenge-error-text") ||
                lower.contains("<title>just a moment") ||
                lower.contains("cf-turnstile")
     }
@@ -3150,17 +3168,30 @@ public struct DownloadResult: Sendable {
     }
 
     final class BoyfriendTVNavigationDelegate: NSObject, WKNavigationDelegate {
+        /// The page may only navigate within BoyfriendTV (both domains). Frames may
+        /// also load Cloudflare's challenge widget, which the challenge cannot
+        /// complete without, and script-built `about:` frames, which fetch nothing.
+        /// Popups and every other target are refused.
+        nonisolated static func allowsNavigation(to url: URL?, isMainFrame: Bool?) -> Bool {
+            guard let isMainFrame, let scheme = url?.scheme?.lowercased() else { return false }
+            if !isMainFrame && scheme == "about" { return true }
+            guard scheme == "https" || scheme == "http", let host = url?.host?.lowercased() else {
+                return false
+            }
+            let isBoyfriendTV = ["boyfriend.tv", "boyfriendtv.com"].contains { host == $0 || host.hasSuffix("." + $0) }
+            return isBoyfriendTV || (!isMainFrame && host == "challenges.cloudflare.com")
+        }
+
         func webView(
             _ _: WKWebView,
             decidePolicyFor navigationAction: WKNavigationAction,
             decisionHandler: @escaping @MainActor (WKNavigationActionPolicy) -> Void
         ) {
-            if let targetHost = navigationAction.request.url?.host?.lowercased(),
-               targetHost == "boyfriendtv.com" || targetHost.hasSuffix(".boyfriendtv.com") {
-                decisionHandler(.allow)
-                return
-            }
-            decisionHandler(.cancel)
+            let allowed = Self.allowsNavigation(
+                to: navigationAction.request.url,
+                isMainFrame: navigationAction.targetFrame?.isMainFrame
+            )
+            decisionHandler(allowed ? .allow : .cancel)
         }
     }
 
@@ -3203,7 +3234,7 @@ public struct DownloadResult: Sendable {
 
         await seedBoyfriendTVWebKitCookies(rawCookies, for: url)
 
-        let webView = WKWebView(frame: .zero, configuration: configuration)
+        let webView = WKWebView(frame: NSRect(x: 0, y: 0, width: 1000, height: 760), configuration: configuration)
         let navigationDelegate = BoyfriendTVNavigationDelegate()
         webView.navigationDelegate = navigationDelegate
         // Keep WKWebView's native user-agent. Pretending to be Safari while running
@@ -3217,17 +3248,23 @@ public struct DownloadResult: Sendable {
         request.setValue("text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8", forHTTPHeaderField: "Accept")
 
         webView.load(request)
+        var window: NSWindow?
+        let windowDelegate = BrowserSessionWindowDelegate()
         defer {
             _ = navigationDelegate
+            _ = windowDelegate
             webView.stopLoading()
+            window?.close()
         }
 
         var lastHTML: String?
         var settledPolls = 0
+        // Hidden while no check is shown (the session's clearance is valid). A check
+        // opens the page in a window: Cloudflare's managed challenge completes only in
+        // a visible page, and any interactive step is the user's. Siphon never completes it.
+        var deadline = Date().addingTimeInterval(20)
 
-        // Give one hidden browser session enough time to complete a managed
-        // JavaScript challenge, but keep the fallback strictly bounded.
-        for _ in 0..<40 {
+        while Date() < deadline, !windowDelegate.didClose {
             try Task.checkCancellation()
             try await Task.sleep(nanoseconds: 500_000_000)
             try Task.checkCancellation()
@@ -3248,6 +3285,15 @@ public struct DownloadResult: Sendable {
 
             if isBoyfriendTVChallengeHTML(resolved) {
                 settledPolls = 0
+                if window == nil {
+                    LoggerService.shared.log("[ProtectedSite] stage=\(stage) result=challenge; waiting for the user", level: .info)
+                    window = presentBrowserSessionWindow(
+                        webView,
+                        title: String(format: LanguageService.s("site_verification_title"), url.host ?? ""),
+                        delegate: windowDelegate
+                    )
+                    deadline = Date().addingTimeInterval(300)
+                }
                 continue
             }
 
@@ -3262,7 +3308,9 @@ public struct DownloadResult: Sendable {
         }
 
         let finalResult: String
-        if let lastHTML {
+        if windowDelegate.didClose {
+            finalResult = "window-closed"
+        } else if let lastHTML {
             finalResult = isBoyfriendTVChallengeHTML(lastHTML) ? "challenge-timeout" : "page-timeout"
         } else {
             finalResult = "no-html"
@@ -3307,10 +3355,7 @@ public struct DownloadResult: Sendable {
             }.joined(separator: "\n")
             let lower = decoded.lowercased()
             let hasStream = extractStreamURLFromHTML(decoded) != nil
-            let challenge = !hasStream && (
-                lower.contains("cf-chl-") || lower.contains("/cdn-cgi/challenge-platform/") ||
-                lower.contains("<title>just a moment") || lower.contains("cf-turnstile")
-            )
+            let challenge = !hasStream && isBoyfriendTVChallengeHTML(decoded)
             let login = !hasStream && lower.contains("to watch this video please") && lower.contains("login")
             sawChallenge = sawChallenge || challenge
             sawLoginPage = sawLoginPage || login
@@ -3380,7 +3425,7 @@ public struct DownloadResult: Sendable {
                     classification = "other"
                 }
                 LoggerService.shared.log("[ProtectedSite] stage=\(stage) yt-dlp=\(classification)", level: .debug)
-                let challengePage = html.lowercased().contains("cf-chl-") || html.lowercased().contains("/cdn-cgi/challenge-platform/") || html.lowercased().contains("<title>just a moment")
+                let challengePage = isBoyfriendTVChallengeHTML(html)
                 if !didRetry && (challenge || challengePage || transient) && !hasBoyfriendTVMediaData(html) {
                     didRetry = true
                     LoggerService.shared.log("[ProtectedSite] Retrying transient page resolution once", level: .info)
