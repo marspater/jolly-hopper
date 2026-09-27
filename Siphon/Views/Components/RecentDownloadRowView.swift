@@ -93,7 +93,7 @@ struct RecentDownloadRowView: View {
                 .frame(width: 54, height: 36)
 
             if let thumb = download.thumbnailURL {
-                AsyncImage(url: thumb) { image in
+                ThumbnailImage(url: thumb) { image in
                     image
                         .resizable()
                         .aspectRatio(contentMode: .fill)
