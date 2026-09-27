@@ -101,6 +101,25 @@ final class DownloadEventCoalescer: @unchecked Sendable {
     }
 }
 
+extension URLSession {
+    /// `data(for:)` with a response-body cap, for pages and images fetched
+    /// outside yt-dlp.
+    func boundedData(
+        for request: URLRequest,
+        delegate: (any URLSessionTaskDelegate)? = nil,
+        limit: Int = 8 * 1024 * 1024
+    ) async throws -> (Data, URLResponse) {
+        let (bytes, response) = try await self.bytes(for: request, delegate: delegate)
+        guard response.expectedContentLength <= limit else { throw URLError(.dataLengthExceedsMaximum) }
+        var data = Data()
+        for try await byte in bytes {
+            data.append(byte)
+            if data.count > limit { throw URLError(.dataLengthExceedsMaximum) }
+        }
+        return (data, response)
+    }
+}
+
 /// Refuses redirects that leave the public network boundary.
 private final class PublicRedirectPolicy: NSObject, URLSessionTaskDelegate, Sendable {
     func urlSession(
@@ -276,11 +295,14 @@ final class DownloadExecutor: ObservableObject {
             let sanitizedBaseName = YtdlpService.sanitizeFilename(rawBaseName)
             let folderPath = download.options.saveFolder
 
+            // Same key as the queue's collision planning (case and Unicode
+            // normalization), so a name the queue would rename is reported here.
+            let baseNameKey = DownloadQueue.filenameCollisionKey(sanitizedBaseName)
             let fileExists = await Task.detached {
                 if let contents = try? FileManager.default.contentsOfDirectory(at: folderPath, includingPropertiesForKeys: nil) {
                     let matches = contents.filter { file in
                         let nameWithoutExt = file.deletingPathExtension().lastPathComponent
-                        let isExactMatch = nameWithoutExt == sanitizedBaseName
+                        let isExactMatch = DownloadQueue.filenameCollisionKey(nameWithoutExt) == baseNameKey
                         let isPart = file.lastPathComponent.hasSuffix(".part") || file.lastPathComponent.hasSuffix(".ytdl")
                         let isMedia = YtdlpService.isMediaFilePath(file.path)
                         return isExactMatch && !isPart && isMedia
@@ -638,33 +660,44 @@ final class DownloadExecutor: ObservableObject {
     /// targets (re-checked on every redirect), bound the body size, and refuse
     /// images whose pixel dimensions would make decoding expensive.
     nonisolated static func fetchThumbnailData(from url: URL, session: URLSession = .shared) async -> Data? {
-        guard ExternalDownloadTargetPolicy.isAllowed(url) else { return nil }
-        let request = URLRequest(url: url, timeoutInterval: 15)
-        guard let (bytes, response) = try? await session.bytes(for: request, delegate: PublicRedirectPolicy()),
+        await fetchThumbnailData(for: URLRequest(url: url, timeoutInterval: 15), session: session)
+    }
+
+    nonisolated static func fetchThumbnailData(for request: URLRequest, session: URLSession = .shared) async -> Data? {
+        guard let url = request.url, ExternalDownloadTargetPolicy.isAllowed(url),
+              let (data, response) = try? await session.boundedData(
+                  for: request,
+                  delegate: PublicRedirectPolicy(),
+                  limit: maxThumbnailBytes
+              ),
               (response as? HTTPURLResponse)?.statusCode == 200,
-              response.expectedContentLength <= maxThumbnailBytes else {
-            return nil
-        }
-
-        var data = Data()
-        do {
-            for try await byte in bytes {
-                data.append(byte)
-                if data.count > maxThumbnailBytes { return nil }
-            }
-        } catch {
-            return nil
-        }
-
-        guard let source = CGImageSourceCreateWithData(data as CFData, nil),
-              let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
-              let width = properties[kCGImagePropertyPixelWidth] as? Int,
-              let height = properties[kCGImagePropertyPixelHeight] as? Int,
-              width <= maxThumbnailPixelDimension,
-              height <= maxThumbnailPixelDimension else {
+              let source = CGImageSourceCreateWithData(data as CFData, nil),
+              hasAcceptableDimensions(source) else {
             return nil
         }
         return data
+    }
+
+    /// Loads a thumbnail file from scratch (written by Siphon or by yt-dlp)
+    /// under the same size and dimension limits as a fetched one.
+    nonisolated static func loadThumbnailImage(at url: URL) -> NSImage? {
+        guard let size = (try? url.resourceValues(forKeys: [.fileSizeKey]))?.fileSize,
+              size <= maxThumbnailBytes,
+              let source = CGImageSourceCreateWithURL(url as CFURL, nil),
+              hasAcceptableDimensions(source) else {
+            return nil
+        }
+        return NSImage(contentsOf: url)
+    }
+
+    /// Reads only the image header, so nothing oversized is ever decoded.
+    private nonisolated static func hasAcceptableDimensions(_ source: CGImageSource) -> Bool {
+        guard let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+              let width = properties[kCGImagePropertyPixelWidth] as? Int,
+              let height = properties[kCGImagePropertyPixelHeight] as? Int else {
+            return false
+        }
+        return width <= maxThumbnailPixelDimension && height <= maxThumbnailPixelDimension
     }
 
     static func errorMessage(for error: Error, languageService: LanguageService?) -> String {

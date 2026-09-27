@@ -271,6 +271,28 @@ final class StreamDrainBarrier: @unchecked Sendable {
         }
         if runNow { action() }
     }
+
+    /// Like `whenDrained`, but stops waiting after `timeout`: a descendant that
+    /// inherited the pipes can hold them open after the process exits, and the
+    /// job must not wait for it forever. `onTimeout` runs before `action`.
+    func whenDrained(
+        within timeout: TimeInterval,
+        onTimeout: @escaping @Sendable () -> Void,
+        _ action: @escaping @Sendable () -> Void
+    ) {
+        whenDrained(action)
+        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + timeout) { [self] in
+            let pending: (@Sendable () -> Void)? = lock.withLock {
+                guard pendingStreams > 0 else { return nil }
+                pendingStreams = 0
+                defer { onDrained = nil }
+                return onDrained
+            }
+            guard let pending else { return }
+            onTimeout()
+            pending()
+        }
+    }
 }
 
 public struct DownloadProcessResult: Sendable {
@@ -314,8 +336,28 @@ extension YtdlpProcessRunning {
 }
 
 public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
-    public init() {
-        // Default initializer for DefaultYtdlpProcessRunner
+    /// How long to wait for pipe EOF after the process itself has exited.
+    let streamDrainTimeout: TimeInterval
+
+    public init(streamDrainTimeout: TimeInterval = 10) {
+        self.streamDrainTimeout = streamDrainTimeout
+    }
+
+    /// The process group to stop when descendants outlive `process`. Only the
+    /// siphon-pgrp helper makes the process a group leader; without it the id
+    /// may already name an unrelated group, so there is none (0).
+    static func ownedProcessGroup(of process: Process) -> pid_t {
+        process.executableURL?.path == "/usr/bin/env" ? 0 : process.processIdentifier
+    }
+
+    /// Stops descendants still holding the output pipes after the process exited.
+    static func stopOutputHolders(processGroup: pid_t) {
+        Task { @MainActor in
+            LoggerService.shared.log("A background process kept subprocess output open after exit; stopping its process group.", level: .warning)
+        }
+        if processGroup > 0 {
+            kill(-processGroup, SIGKILL)
+        }
     }
 
     public static func helperExecutableURL() -> URL? {
@@ -412,11 +454,16 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
                 }
             }
 
+            let drainTimeout = streamDrainTimeout
             process.terminationHandler = { proc in
                 proc.terminationHandler = nil
                 let exitCode = proc.terminationStatus
                 let reason = proc.terminationReason
-                outputDrained.whenDrained {
+                let processGroup = Self.ownedProcessGroup(of: proc)
+                outputDrained.whenDrained(within: drainTimeout, onTimeout: {
+                    Self.stopOutputHolders(processGroup: processGroup)
+                    pipe.fileHandleForReading.readabilityHandler = nil
+                }) {
                     try? pipe.fileHandleForReading.close()
 
                     if outputBuffer.isOverflow {
@@ -675,9 +722,11 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
             let outputBuffer = StreamBuffer()
             let errorBuffer = StreamBuffer()
 
+            // Delivered synchronously, like stdout: an async hop to main could
+            // land after the drain barrier and the caller's final log flush.
             let postErrorLine: @Sendable (String) -> Void = { line in
                 outputState.appendError(line + "\n")
-                DispatchQueue.main.async { onOutput("[ERROR] \(line)") }
+                onOutput("[ERROR] \(line)")
             }
 
             // Finished once each reader sees EOF. Clearing the handlers on exit
@@ -715,12 +764,18 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
                 }
             }
 
+            let drainTimeout = streamDrainTimeout
             process.terminationHandler = { proc in
                 controller.transitionToTerminated(exitCode: proc.terminationStatus, reason: proc.terminationReason)
                 proc.terminationHandler = nil
                 let exitCode = proc.terminationStatus
                 let reason = proc.terminationReason
-                streamsDrained.whenDrained {
+                let processGroup = Self.ownedProcessGroup(of: proc)
+                streamsDrained.whenDrained(within: drainTimeout, onTimeout: {
+                    Self.stopOutputHolders(processGroup: processGroup)
+                    outputPipe.fileHandleForReading.readabilityHandler = nil
+                    errorPipe.fileHandleForReading.readabilityHandler = nil
+                }) {
                     try? outputPipe.fileHandleForReading.close()
                     try? errorPipe.fileHandleForReading.close()
 

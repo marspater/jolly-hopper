@@ -194,6 +194,17 @@ final class DownloadExecutorTests: XCTestCase {
         let huge = try pngData(width: DownloadExecutor.maxThumbnailPixelDimension + 1, height: 1)
         let hugeResult = await DownloadExecutor.fetchThumbnailData(from: publicURL, session: thumbnailSession(body: huge))
         XCTAssertNil(hugeResult)
+
+        // Scratch files (written by yt-dlp) are held to the same limits before decoding.
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("thumb_files_\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let smallFile = dir.appendingPathComponent("small.png")
+        let hugeFile = dir.appendingPathComponent("huge.png")
+        try small.write(to: smallFile)
+        try huge.write(to: hugeFile)
+        XCTAssertNotNil(DownloadExecutor.loadThumbnailImage(at: smallFile))
+        XCTAssertNil(DownloadExecutor.loadThumbnailImage(at: hugeFile))
     }
 
     func testOwnedScratchSurvivesPauseAndIsCleanedOnStopOrCompletion() throws {

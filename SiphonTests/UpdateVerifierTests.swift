@@ -247,6 +247,31 @@ final class UpdateVerifierTests: XCTestCase {
         XCTAssertNil(installer.locateAppBundle(in: root), "Updater must not follow symlinked app bundles out of staging")
     }
 
+    func testLocateAppBundleSelectsSiphonByBundleIdentifier() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("update_locate_id_\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        func makeApp(_ name: String, bundleID: String) throws -> URL {
+            let app = root.appendingPathComponent(name)
+            let contents = app.appendingPathComponent("Contents")
+            try FileManager.default.createDirectory(at: contents, withIntermediateDirectories: true)
+            let plist = try PropertyListSerialization.data(
+                fromPropertyList: ["CFBundleIdentifier": bundleID],
+                format: .xml,
+                options: 0
+            )
+            try plist.write(to: contents.appendingPathComponent("Info.plist"))
+            return app
+        }
+        // Can be enumerated before Siphon.app, so a first-.app search may pick it.
+        _ = try makeApp("Aaa Uninstaller.app", bundleID: "com.example.Uninstaller")
+        let siphon = try makeApp("Siphon.app", bundleID: "com.marspater.Siphon")
+
+        let installer = UpdateInstaller()
+        XCTAssertEqual(installer.locateAppBundle(in: root)?.lastPathComponent, siphon.lastPathComponent)
+        XCTAssertNil(installer.locateAppBundle(in: root, bundleID: "com.example.Missing"))
+    }
+
     func testUpdateDownloaderRejectsConcurrentCalls() async throws {
         let started = expectation(description: "First update started")
         let downloader = UpdateDownloader(sessionFactory: { delegate in
