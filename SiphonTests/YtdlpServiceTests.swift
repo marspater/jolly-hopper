@@ -1337,10 +1337,51 @@ final class YtdlpServiceTests: XCTestCase {
         try ciphertext.write(to: tempFileURL)
         defer { try? FileManager.default.removeItem(at: tempFileURL) }
 
-        try service.decryptBestCamFile(at: tempFileURL, filename: filename)
+        try YtdlpService.decryptBestCamFile(at: tempFileURL, filename: filename)
         let plaintext = try Data(contentsOf: tempFileURL)
         let headerHex = plaintext.prefix(16).map { String(format: "%02x", $0) }.joined()
         XCTAssertEqual(headerHex, "000000206674797069736f6d00000200", "Decrypted stream must match MP4 container header")
+    }
+
+    func testBestCamDecryptionStreamsAcrossChunksAndLeavesNoTemporaryFile() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("bestcam_chunks_\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let fileURL = directory.appendingPathComponent("stream.mp4")
+        // Larger than the 1 MB chunk and not a multiple of it, so the cipher
+        // state must carry across chunk boundaries.
+        let original = Data((0..<(2 * 1024 * 1024 + 4_321)).map { UInt8(truncatingIfNeeded: $0 &* 31) })
+        try original.write(to: fileURL)
+
+        // AES-CTR is its own inverse: two passes restore the input.
+        try YtdlpService.decryptBestCamFile(at: fileURL, filename: "chunk-test")
+        XCTAssertNotEqual(try Data(contentsOf: fileURL), original)
+        try YtdlpService.decryptBestCamFile(at: fileURL, filename: "chunk-test")
+        XCTAssertEqual(try Data(contentsOf: fileURL), original)
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: directory.path), ["stream.mp4"])
+    }
+
+    func testDependencyDownloadReportsHTTPErrorsInsteadOfChecksumMismatch() async throws {
+        MockURLProtocol.requestHandler = { request in
+            let response = try XCTUnwrap(HTTPURLResponse(url: try XCTUnwrap(request.url), statusCode: 503, httpVersion: nil, headerFields: nil))
+            return (response, Data("Service Unavailable".utf8))
+        }
+        URLProtocol.registerClass(MockURLProtocol.self)
+        defer {
+            URLProtocol.unregisterClass(MockURLProtocol.self)
+            MockURLProtocol.requestHandler = nil
+        }
+        let destination = FileManager.default.temporaryDirectory.appendingPathComponent("dependency_\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: destination) }
+
+        do {
+            try await DependencyInstaller.download(DependencyChecksums.ytdlpURL, named: "yt-dlp", to: destination)
+            XCTFail("An HTTP error page must not be staged as a dependency")
+        } catch DependencyInstaller.InstallError.downloadFailed(let file, let statusCode) {
+            XCTAssertEqual(file, "yt-dlp")
+            XCTAssertEqual(statusCode, 503)
+        }
+        XCTAssertFalse(FileManager.default.fileExists(atPath: destination.path))
     }
 
     func testBestCamSourceParsingFromFristDatasSchema() throws {

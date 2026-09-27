@@ -6,6 +6,8 @@
 import Foundation
 
 struct QueueRecoveryRecord: Codable, Identifiable, Sendable {
+    static let maxLogCharacters = 8_000
+
     let id: UUID
     let url: String
     let title: String
@@ -46,7 +48,12 @@ struct QueueRecoveryRecord: Codable, Identifiable, Sendable {
         self.errorMessage = download.errorMessage.map {
             LoggerService.sanitizeLogContentForExport(LoggerService.sanitizeDiagnosticText($0))
         }
-        self.log = LoggerService.sanitizeLogContentForExport(LoggerService.sanitizeDiagnosticText(download.log))
+        // Recovery rewrites every active job at each 5% of progress, on the main
+        // actor. Sanitizing a full 50k-character log costs ~8 ms per job there;
+        // the tail is enough context for a restored job.
+        self.log = LoggerService.sanitizeLogContentForExport(
+            LoggerService.sanitizeDiagnosticText(String(download.log.suffix(Self.maxLogCharacters)))
+        )
     }
 
     @MainActor

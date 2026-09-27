@@ -244,12 +244,17 @@ public final class UpdateDownloader: NSObject, URLSessionDownloadDelegate, @unch
 
         // Keep staging and claiming the result atomic with cancellation. The source
         // is URLSession's temporary file and the destination is unique to this attempt.
+        // An HTTP error body is not a package; reporting it here beats a checksum mismatch later.
         let result: Result<URL, Error>
-        do {
-            try FileManager.default.moveItem(at: location, to: stagedFile)
-            result = .success(stagedFile)
-        } catch {
-            result = .failure(UpdateDownloadError.downloadFailed("Failed to move downloaded file: \(error.localizedDescription)"))
+        if let statusCode = (downloadTask.response as? HTTPURLResponse)?.statusCode, !(200..<300).contains(statusCode) {
+            result = .failure(UpdateDownloadError.downloadFailed("server returned HTTP \(statusCode)"))
+        } else {
+            do {
+                try FileManager.default.moveItem(at: location, to: stagedFile)
+                result = .success(stagedFile)
+            } catch {
+                result = .failure(UpdateDownloadError.downloadFailed("Failed to move downloaded file: \(error.localizedDescription)"))
+            }
         }
         let cont = clearAttemptLocked()
         lock.unlock()

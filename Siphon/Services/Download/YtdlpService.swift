@@ -36,9 +36,12 @@ actor DependencyInstaller {
         case executionFailed(binary: String, message: String)
         case rollbackFailed(destination: String, underlyingError: Error)
         case installationFailed(destination: String, underlyingError: Error)
+        case downloadFailed(file: String, statusCode: Int)
 
         var errorDescription: String? {
             switch self {
+            case .downloadFailed(let file, let statusCode):
+                return "\(file) download failed: the server returned HTTP \(statusCode)."
             case .sha256Mismatch(let file, let exp):
                 return "\(file) failed SHA-256 verification. Expected: \(exp)"
             case .executionFailed(let bin, let msg):
@@ -48,6 +51,22 @@ actor DependencyInstaller {
             case .installationFailed(let dest, let err):
                 return "Installation failed for \(dest): \(err.localizedDescription)"
             }
+        }
+    }
+
+    /// URLSession treats an HTTP error page as a successful download, which
+    /// would otherwise surface as a misleading SHA-256 mismatch.
+    static func download(_ url: URL, named file: String, to destination: URL) async throws {
+        let (temporaryURL, response) = try await URLSession.shared.download(from: url)
+        if let statusCode = (response as? HTTPURLResponse)?.statusCode, !(200..<300).contains(statusCode) {
+            try? FileManager.default.removeItem(at: temporaryURL)
+            throw InstallError.downloadFailed(file: file, statusCode: statusCode)
+        }
+        do {
+            try FileManager.default.moveItem(at: temporaryURL, to: destination)
+        } catch {
+            try? FileManager.default.removeItem(at: temporaryURL)
+            throw error
         }
     }
 
@@ -112,13 +131,8 @@ actor DependencyInstaller {
             }
         }
 
-        let (downloadedTempURL, _) = try await URLSession.shared.download(from: downloadURL)
+        try await Self.download(downloadURL, named: "yt-dlp", to: tempStaging)
         onProgress?(0.65)
-
-        if FileManager.default.fileExists(atPath: tempStaging.path) {
-            try FileManager.default.removeItem(at: tempStaging)
-        }
-        try FileManager.default.moveItem(at: downloadedTempURL, to: tempStaging)
 
         // 1. Verify SHA-256
         guard YtdlpService.verifySHA256(fileURL: tempStaging, expectedHash: expectedSHA256) else {
@@ -191,17 +205,14 @@ actor DependencyInstaller {
         let ffmpegGz = appSupportDir.appendingPathComponent("ffmpeg_\(UUID().uuidString).gz")
         let ffprobeGz = appSupportDir.appendingPathComponent("ffprobe_\(UUID().uuidString).gz")
 
-        // 1. Download both archives
-        let (tempFfmpegURL, _) = try await URLSession.shared.download(from: ffmpegURL)
-        let (tempFfprobeURL, _) = try await URLSession.shared.download(from: ffprobeURL)
-
-        try FileManager.default.moveItem(at: tempFfmpegURL, to: ffmpegGz)
-        try FileManager.default.moveItem(at: tempFfprobeURL, to: ffprobeGz)
-
+        // 1. Download both archives. The cleanup is registered first, so a
+        // failed second download does not leave the first archive behind.
         defer {
             try? FileManager.default.removeItem(at: ffmpegGz)
             try? FileManager.default.removeItem(at: ffprobeGz)
         }
+        try await Self.download(ffmpegURL, named: "FFmpeg", to: ffmpegGz)
+        try await Self.download(ffprobeURL, named: "FFprobe", to: ffprobeGz)
 
         // 2. Verify both .gz archive SHA-256
         guard YtdlpService.verifySHA256(fileURL: ffmpegGz, expectedHash: ffmpegArchiveSHA256) else {
@@ -1986,7 +1997,9 @@ public struct DownloadResult: Sendable {
 
         if let key = bestCamDecryptionKey {
             onOutput("[Siphon Info] Decrypting downloaded stream...\n")
-            try decryptBestCamFile(at: finalFileURL, filename: key)
+            try await Task.detached(priority: .utility) {
+                try Self.decryptBestCamFile(at: finalFileURL, filename: key)
+            }.value
         }
 
         // Post-download cover art fallback: if the output file lacks an embedded thumbnail and we have a local cover image, embed it via FFmpeg
@@ -4924,7 +4937,9 @@ public struct DownloadResult: Sendable {
         return decryptedData.prefix(dataOutMoved)
     }
 
-    func decryptBestCamFile(at fileURL: URL, filename: String) throws {
+    /// Streams the file through the cipher off the main actor. Each chunk is
+    /// released per iteration, so memory stays flat for multi-GB videos.
+    nonisolated static func decryptBestCamFile(at fileURL: URL, filename: String) throws {
         let keyHex = BestCamStreamCipher.deriveKeyHex(from: filename)
         guard let keyData = keyHex.data(using: .ascii), keyData.count == 32 else {
             throw YtdlpError.downloadFailed("Invalid stream decryption key")
@@ -4956,9 +4971,12 @@ public struct DownloadResult: Sendable {
         guard FileManager.default.createFile(atPath: tempOutputURL.path, contents: nil, attributes: [.posixPermissions: 0o600]) else {
             throw YtdlpError.downloadFailed("Failed to create temporary file for stream decryption with restricted permissions")
         }
+        var replaced = false
+        defer {
+            if !replaced { try? FileManager.default.removeItem(at: tempOutputURL) }
+        }
         guard let readHandle = try? FileHandle(forReadingFrom: fileURL),
               let writeHandle = try? FileHandle(forWritingTo: tempOutputURL) else {
-            try? FileManager.default.removeItem(at: tempOutputURL)
             throw YtdlpError.downloadFailed("Failed to open file handles for stream decryption")
         }
         defer {
@@ -4969,37 +4987,46 @@ public struct DownloadResult: Sendable {
         let chunkSize = 1024 * 1024
         var buffer = Data(count: chunkSize)
 
-        while true {
-            let chunk = readHandle.readData(ofLength: chunkSize)
-            if chunk.isEmpty { break }
+        do {
+            var hasMoreData = true
+            while hasMoreData {
+                hasMoreData = try autoreleasepool {
+                    guard let chunk = try readHandle.read(upToCount: chunkSize), !chunk.isEmpty else { return false }
 
-            let capacity = chunk.count
-            if buffer.count < capacity {
-                buffer = Data(count: capacity)
-            }
-            var dataOutMoved = 0
-            let updateStatus = chunk.withUnsafeBytes { inBytes in
-                buffer.withUnsafeMutableBytes { outBytes in
-                    CCCryptorUpdate(
-                        ref,
-                        inBytes.baseAddress,
-                        capacity,
-                        outBytes.baseAddress,
-                        capacity,
-                        &dataOutMoved
-                    )
+                    let capacity = chunk.count
+                    if buffer.count < capacity {
+                        buffer = Data(count: capacity)
+                    }
+                    var dataOutMoved = 0
+                    let updateStatus = chunk.withUnsafeBytes { inBytes in
+                        buffer.withUnsafeMutableBytes { outBytes in
+                            CCCryptorUpdate(
+                                ref,
+                                inBytes.baseAddress,
+                                capacity,
+                                outBytes.baseAddress,
+                                capacity,
+                                &dataOutMoved
+                            )
+                        }
+                    }
+                    guard updateStatus == kCCSuccess else {
+                        throw YtdlpError.downloadFailed("Stream decryption update failed")
+                    }
+                    try writeHandle.write(contentsOf: buffer.prefix(dataOutMoved))
+                    return true
                 }
             }
-            guard updateStatus == kCCSuccess else {
-                try? FileManager.default.removeItem(at: tempOutputURL)
-                throw YtdlpError.downloadFailed("Stream decryption update failed")
-            }
-            writeHandle.write(buffer.prefix(dataOutMoved))
+        } catch let error as YtdlpError {
+            throw error
+        } catch {
+            throw YtdlpError.downloadFailed("Stream decryption could not read or write the file: \(error.localizedDescription)")
         }
 
         try? readHandle.close()
         try? writeHandle.close()
         _ = try FileManager.default.replaceItemAt(fileURL, withItemAt: tempOutputURL)
+        replaced = true
     }
 
     func parseBestCamSources(from json: [String: Any]) -> [BestCamSource] {
@@ -7037,8 +7064,9 @@ final class ThreadSafeOutputState: @unchecked Sendable {
     func appendError(_ text: String) {
         lock.lock()
         errorText += text
-        // Bound error buffer to prevent unbounded memory growth during long-running error outputs
-        if errorText.count > 100_000 {
+        // Bound error buffer to prevent unbounded memory growth during long-running error outputs.
+        // utf8.count is O(1); count walks every character on each appended line.
+        if errorText.utf8.count > 100_000 {
             errorText = String(errorText.suffix(50_000))
         }
         lock.unlock()

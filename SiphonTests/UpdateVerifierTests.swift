@@ -277,6 +277,27 @@ final class UpdateVerifierTests: XCTestCase {
         XCTAssertNil(installer.locateAppBundle(in: root, bundleID: "com.example.Missing"))
     }
 
+    func testUpdateDownloaderReportsHTTPErrorInsteadOfStagingTheBody() async throws {
+        MockURLProtocol.requestHandler = { request in
+            let response = try XCTUnwrap(HTTPURLResponse(url: try XCTUnwrap(request.url), statusCode: 404, httpVersion: nil, headerFields: nil))
+            return (response, Data("Not Found".utf8))
+        }
+        defer { MockURLProtocol.requestHandler = nil }
+        let downloader = UpdateDownloader(sessionFactory: { delegate in
+            let configuration = URLSessionConfiguration.ephemeral
+            configuration.protocolClasses = [MockURLProtocol.self]
+            return URLSession(configuration: configuration, delegate: delegate, delegateQueue: nil)
+        })
+        let url = URL(string: "https://github.com/marspater/jolly-hopper/releases/download/v1.0.0/Siphon.dmg")!
+
+        do {
+            _ = try await downloader.download(from: url)
+            XCTFail("An HTTP error body must not be staged as the update package")
+        } catch UpdateDownloadError.downloadFailed(let message) {
+            XCTAssertTrue(message.contains("HTTP 404"), message)
+        }
+    }
+
     func testUpdateDownloaderRejectsConcurrentCalls() async throws {
         let started = expectation(description: "First update started")
         let downloader = UpdateDownloader(sessionFactory: { delegate in

@@ -465,6 +465,9 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
                     pipe.fileHandleForReading.readabilityHandler = nil
                 }) {
                     try? pipe.fileHandleForReading.close()
+                    // Before any early return: a controller left in .running would
+                    // signal the stale PID on a later cancel, after the OS may reuse it.
+                    controller.transitionToTerminated(exitCode: exitCode, reason: reason)
 
                     if outputBuffer.isOverflow {
                         safeContinuation.resume(throwing: YtdlpError.downloadFailed("Subprocess output exceeded the 32 MB safety limit."))
@@ -472,7 +475,6 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
                     }
 
                     let output = outputBuffer.getString()
-                    controller.transitionToTerminated(exitCode: exitCode, reason: reason)
 
                     if Task.isCancelled || controller.isCancelled || reason == .uncaughtSignal {
                         safeContinuation.resume(throwing: YtdlpError.downloadFailed("Command was cancelled."))
