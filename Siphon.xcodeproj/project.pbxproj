@@ -30,6 +30,7 @@
 		E0001008 /* YtdlpProcessRunner.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000008 /* YtdlpProcessRunner.swift */; };
 		E0001009 /* PreferencesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000009 /* PreferencesView.swift */; };
 		E0001011 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = E0000011 /* Assets.xcassets */; };
+		E00010F0 /* AppIcon.icon in Resources */ = {isa = PBXBuildFile; fileRef = E00000F0 /* AppIcon.icon */; };
 		E0001012 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = E0000014 /* InfoPlist.strings */; };
 		E0001020 /* NotificationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000020 /* NotificationService.swift */; };
 		E0001021 /* LoginItemHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000021 /* LoginItemHelper.swift */; };
@@ -41,7 +42,6 @@
 		E0001090 /* BrowserUtils.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000090 /* BrowserUtils.swift */; };
 		E0001028 /* View+Compatibility.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000028 /* View+Compatibility.swift */; };
 		E0001029 /* PreferencesWindowManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000029 /* PreferencesWindowManager.swift */; };
-		E0001030 /* AppIcon.icns in Resources */ = {isa = PBXBuildFile; fileRef = E0000030 /* AppIcon.icns */; };
 		E0001031 /* UserDefaultsKeys.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000031 /* UserDefaultsKeys.swift */; };
 		E0001032 /* ReadOnlyLogView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000032 /* ReadOnlyLogView.swift */; };
 		E0001033 /* DebugLogWindowManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000033 /* DebugLogWindowManager.swift */; };
@@ -113,6 +113,7 @@
 		E0000008 /* YtdlpProcessRunner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YtdlpProcessRunner.swift; sourceTree = "<group>"; };
 		E0000009 /* PreferencesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreferencesView.swift; sourceTree = "<group>"; };
 		E0000011 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		E00000F0 /* AppIcon.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.iconcomposer.icon; path = AppIcon.icon; sourceTree = "<group>"; };
 		E0000012 /* Siphon.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Siphon.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		E0000013 /* Siphon.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Siphon.entitlements; sourceTree = "<group>"; };
 		E0000015 /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/InfoPlist.strings; sourceTree = "<group>"; };
@@ -126,7 +127,6 @@
 		E0000090 /* BrowserUtils.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowserUtils.swift; sourceTree = "<group>"; };
 		E0000028 /* View+Compatibility.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "View+Compatibility.swift"; sourceTree = "<group>"; };
 		E0000029 /* PreferencesWindowManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreferencesWindowManager.swift; sourceTree = "<group>"; };
-		E0000030 /* AppIcon.icns */ = {isa = PBXFileReference; lastKnownFileType = image.icns; path = AppIcon.icns; sourceTree = "<group>"; };
 		E0000031 /* UserDefaultsKeys.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserDefaultsKeys.swift; sourceTree = "<group>"; };
 		E0000032 /* ReadOnlyLogView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReadOnlyLogView.swift; sourceTree = "<group>"; };
 		E0000033 /* DebugLogWindowManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugLogWindowManager.swift; sourceTree = "<group>"; };
@@ -195,21 +195,12 @@
 			path = Utilities;
 			sourceTree = "<group>";
 		};
-		44F4CAC630137C7400207052 /* Recovered References */ = {
-			isa = PBXGroup;
-			children = (
-				E0000030 /* AppIcon.icns */,
-			);
-			name = "Recovered References";
-			sourceTree = "<group>";
-		};
 		E0003001 = {
 			isa = PBXGroup;
 			children = (
 				E0003002 /* Siphon */,
 				E0003020 /* SiphonTests */,
 				E0003003 /* Products */,
-				44F4CAC630137C7400207052 /* Recovered References */,
 			);
 			sourceTree = "<group>";
 		};
@@ -377,6 +368,7 @@
 				E0000057 /* GeistMono-Medium.otf */,
 				E0000058 /* GeistMono-SemiBold.otf */,
 				E0000059 /* GeistMono-Bold.otf */,
+				E00000F0 /* AppIcon.icon */,
 				E0000011 /* Assets.xcassets */,
 				E0000014 /* InfoPlist.strings */,
 			);
@@ -526,9 +518,9 @@
 				E0001057 /* GeistMono-Medium.otf in Resources */,
 				E0001058 /* GeistMono-SemiBold.otf in Resources */,
 				E0001059 /* GeistMono-Bold.otf in Resources */,
+				E00010F0 /* AppIcon.icon in Resources */,
 				E0001011 /* Assets.xcassets in Resources */,
 				E0001012 /* InfoPlist.strings in Resources */,
-				E0001030 /* AppIcon.icns in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

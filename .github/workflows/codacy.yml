@@ -40,9 +40,7 @@ jobs:
           verbose: true
           output: codacy-results.sarif
           format: sarif
-          severity-cutoff: 2
           fail-if-incomplete: false
-          run-parameters: "--disable-engine markdownlint --disable-engine remarklint --disable-engine swiftlint --disable-engine tailor --disable-engine duplication --disable-engine rubocop --disable-engine jshint --exclude-paths '.jules/**,**.md,docs/**,scripts/**,SiphonTests/**,Casks/**'"
 
       - name: Consolidate SARIF runs for GitHub Code Scanning
         id: consolidate
@@ -54,8 +52,8 @@ jobs:
           INPUT="codacy-results.sarif"
           OUTPUT="codacy-results-normalized.sarif"
 
-          if [[ ! -f "$INPUT" ]]; then
-            echo "No Codacy SARIF file was produced. Skipping normalization."
+          if [[ ! -s "$INPUT" ]]; then
+            echo "No Codacy SARIF output was produced. Skipping normalization."
             exit 0
           fi
 
