@@ -69,9 +69,9 @@ public struct UpdateVerifier: Sendable {
     }
 
     /// Verifies that a downloaded file matches the expected SHA-256 checksum.
+    /// An empty or malformed checksum never matches, so it fails verification.
     public static func verifySHA256(fileURL: URL, expectedChecksum: String) throws {
         let cleanExpected = expectedChecksum.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard !cleanExpected.isEmpty else { return }
 
         let calculated = try computeSHA256(for: fileURL).lowercased()
         guard calculated == cleanExpected else {
