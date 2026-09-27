@@ -51,18 +51,6 @@ public final class UpdateChecker: ObservableObject {
         return hash
     }
 
-    public func cancelUpdate() {
-        updateOperationID = nil
-        downloader.cancel()
-        downloadURL = nil
-        downloadAssetName = nil
-        expectedChecksum = nil
-        checksumURL = nil
-        isDownloading = false
-        isInstalling = false
-        updateProgress = 0
-    }
-
     public func checkForUpdates(manual: Bool = false) async {
         guard !isChecking else { return }
         isChecking = true

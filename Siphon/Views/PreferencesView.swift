@@ -47,7 +47,6 @@ struct PreferencesView: View {
     @EnvironmentObject var downloadManager: DownloadManager
     @EnvironmentObject var appState: AppState
     @Environment(\.colorScheme) private var colorScheme
-    @State private var selectedReleaseId: Int? = nil
     @State private var showLanguageChangeAlert = false
     @State private var previousLanguage: Language? = nil
     @State private var installedBrowsers: [SupportedBrowser] = []
