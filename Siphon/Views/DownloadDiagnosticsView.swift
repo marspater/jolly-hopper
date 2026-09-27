@@ -64,7 +64,7 @@ struct DownloadDiagnosticsView: View {
                             .clipped()
                     } else {
                         Rectangle()
-                            .fill(Color.primary.opacity(0.06))
+                            .fill(Color.primary.opacity(SiphonTheme.Opacity.fillPlaceholder))
                             .frame(width: 54, height: 36)
                             .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusSmall, style: .continuous))
                     }
@@ -222,11 +222,11 @@ struct DownloadDiagnosticsView: View {
                         .foregroundColor(.primary.opacity(0.85))
                         .padding(10)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(Color.primary.opacity(0.04))
+                        .background(Color.primary.opacity(SiphonTheme.Opacity.fillPill))
                         .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusSmall, style: .continuous))
                         .overlay(
                             RoundedRectangle(cornerRadius: SiphonTheme.radiusSmall, style: .continuous)
-                                .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+                                .stroke(Color.primary.opacity(SiphonTheme.Opacity.borderHairline), lineWidth: 1)
                         )
                 }
             }
@@ -268,11 +268,11 @@ struct DownloadDiagnosticsView: View {
                         .padding(10)
                 }
                 .frame(minHeight: 180, maxHeight: 240)
-                .background(Color.primary.opacity(0.03))
+                .background(Color.primary.opacity(SiphonTheme.Opacity.fillCard))
                 .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusSmall, style: .continuous))
                 .overlay(
                     RoundedRectangle(cornerRadius: SiphonTheme.radiusSmall, style: .continuous)
-                        .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+                        .stroke(Color.primary.opacity(SiphonTheme.Opacity.borderHairline), lineWidth: 1)
                 )
             }
         }

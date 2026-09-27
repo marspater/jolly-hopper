@@ -47,8 +47,14 @@ truth only when the value is genuinely reused or has semantic meaning.
   icons. The saturated `accent` and `status*` values are for fills, rings,
   tints and motion; as text they fall below 4.5:1 on light surfaces or dark
   glass.
-- The primary gradient runs `accentDeep` → `accentInk` so white labels stay at
-  or above 4.5:1 across the whole button.
+- The primary gradient runs `accentDeep` → `accentInk` (azure to indigo) so
+  white labels stay at or above 4.5:1 across the whole button.
+- The palette is one OKLCH system with fixed hue angles: cyan 222, blue 258,
+  indigo 266, violet 292, amber 62, green 150, red 25. A semantic color's fill
+  and text tones share its hue; only lightness changes. Fills sit near the P3
+  chroma limit for their lightness; text tones are solved for about 5:1
+  against the window surface. Derive new tones the same way instead of
+  eyeballing RGB values.
 - Use semantic status colors only for status meaning:
   - downloading: blue
   - queued: amber
@@ -105,7 +111,10 @@ truth only when the value is genuinely reused or has semantic meaning.
 
 ### Surfaces and depth
 
-- Root windows and utility surfaces use `siphonWindowBackground()`.
+- Root windows and utility surfaces use `siphonWindowBackground()`. It supplies
+  the material, the faint brand wash and the Siphon accent tint for native
+  controls, so feature views do not re-tint toggles or pickers or add their own
+  backdrop. Apply it once per window, not to nested panes.
 - Content cards use `SiphonTheme.cardBackground` and matching border helpers.
 - Interactive status/navigation surfaces may use `siphonGlassSurface()`, which
   opts into native `Glass.regular.interactive()` on macOS 26+ and preserves the
