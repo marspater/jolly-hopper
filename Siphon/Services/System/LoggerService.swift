@@ -34,7 +34,7 @@ class LoggerService: ObservableObject {
 
     nonisolated private static let exportAuthRegex = try? NSRegularExpression(pattern: "(?i)(Authorization:\\s*(?:Bearer|Basic|Token)\\s+)[A-Za-z0-9._~+/=-]+", options: [])
     nonisolated private static let exportCookieHeaderRegex = try? NSRegularExpression(pattern: "(?i)(Cookie:\\s*)[^\r\n]+", options: [])
-    nonisolated private static let exportKeyHeaderRegex = try? NSRegularExpression(pattern: "(?i)((?:x-[a-z0-9\\-]*api-key|x-[a-z0-9\\-]*token|x-[a-z0-9\\-]*auth[a-z0-9\\-]*):\\s*)[^\\r\\n]+", options: [])
+    nonisolated private static let exportKeyHeaderRegex = try? NSRegularExpression(pattern: "(?i)((?:x-[a-z0-9\\-]*api-key|x-[a-z0-9\\-]*token|x-[a-z0-9\\-]*auth[a-z0-9\\-]*):\\s*)[^\\s\\r\\n]+", options: [])
     nonisolated private static let exportSecretQueryRegex = try? NSRegularExpression(pattern: "(?i)([?&](?:token|auth|key|api_key|password|secret|sig|signature)=)[^&\\s\\r\\n]+", options: [])
     nonisolated private static let exportHomeDirRegex = try? NSRegularExpression(pattern: "/Users/([a-zA-Z0-9._-]+)/", options: [])
     
