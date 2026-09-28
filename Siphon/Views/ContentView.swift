@@ -114,7 +114,9 @@ struct ContentView: View {
             Text(String(format: languageService.s("queue_recovery_message"), downloadManager.recoverableJobsCount))
         }
         .confirmationDialog(
-            String(format: languageService.s("clear_history_confirm_title"), clearableHistory.count),
+            clearableHistory.count == 1
+                ? languageService.s("clear_history_confirm_title_one")
+                : String(format: languageService.s("clear_history_confirm_title"), clearableHistory.count),
             isPresented: $confirmClearHistory,
             titleVisibility: .visible
         ) {

@@ -571,6 +571,23 @@ struct FileThumbnailView: View {
         SiphonTheme.statusForeground(for: download.status, colorScheme: colorScheme)
     }
     
+    /// The trailing "More Actions" menu shared by every row state.
+    private func moreActionsMenu<Items: View>(@ViewBuilder _ items: () -> Items) -> some View {
+        Menu(content: items) {
+            Image(systemName: "ellipsis.circle")
+                .font(.system(size: 17, weight: .regular))
+                .foregroundColor(.secondary)
+                .frame(width: 28, height: 28)
+                .contentShape(Rectangle())
+        }
+        // A plain button menu draws the label as authored (secondary), not accent-tinted.
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .menuIndicator(.hidden)
+        .help(languageService.s("more_actions"))
+        .accessibilityLabel(languageService.s("more_actions"))
+    }
+
     private var actionButtons: some View {
         HStack(spacing: SiphonTheme.spacing6) {
             // Completed state: one visible contextual action + exhaustive More menu
@@ -588,7 +605,7 @@ struct FileThumbnailView: View {
                     .accessibilityLabel(languageService.s("play"))
                 }
                 
-                Menu {
+                moreActionsMenu {
                     if download.filePaths.count > 1 {
                         Menu {
                             ForEach(download.filePaths, id: \.self) { chapter in
@@ -671,18 +688,7 @@ struct FileThumbnailView: View {
                     } label: {
                         Label(languageService.s("remove"), systemImage: "trash")
                     }
-                } label: {
-                    Image(systemName: "ellipsis.circle")
-                        .font(.system(size: 17, weight: .regular))
-                        .foregroundColor(.secondary)
-                        .frame(width: 28, height: 28)
-                        .contentShape(Rectangle())
                 }
-                .menuStyle(.button)
-                .buttonStyle(.plain)
-                .menuIndicator(.hidden)
-                .help(languageService.s("more_actions"))
-                .accessibilityLabel(languageService.s("more_actions"))
             }
             
             // Downloading / Fetching / Processing: one visible Pause action + More menu
@@ -698,7 +704,7 @@ struct FileThumbnailView: View {
                 .help(languageService.s("pause"))
                 .accessibilityLabel(languageService.s("pause"))
                 
-                Menu {
+                moreActionsMenu {
                     Button {
                         downloadManager.pauseDownload(download)
                     } label: {
@@ -723,18 +729,7 @@ struct FileThumbnailView: View {
                     } label: {
                         Label(languageService.s("log"), systemImage: "doc.text")
                     }
-                } label: {
-                    Image(systemName: "ellipsis.circle")
-                        .font(.system(size: 17, weight: .regular))
-                        .foregroundColor(.secondary)
-                        .frame(width: 28, height: 28)
-                        .contentShape(Rectangle())
                 }
-                .menuStyle(.button)
-                .buttonStyle(.plain)
-                .menuIndicator(.hidden)
-                .help(languageService.s("more_actions"))
-                .accessibilityLabel(languageService.s("more_actions"))
             }
             
             // Queued state: Pause + Reorder + More Menu
@@ -750,7 +745,7 @@ struct FileThumbnailView: View {
                 .help(languageService.s("pause"))
                 .accessibilityLabel(languageService.s("pause"))
                 
-                Menu {
+                moreActionsMenu {
                     Button {
                         downloadManager.moveDownloadToTop(download)
                     } label: {
@@ -782,18 +777,7 @@ struct FileThumbnailView: View {
                     } label: {
                         Label(languageService.s("stop"), systemImage: "stop.fill")
                     }
-                } label: {
-                    Image(systemName: "ellipsis.circle")
-                        .font(.system(size: 17, weight: .regular))
-                        .foregroundColor(.secondary)
-                        .frame(width: 28, height: 28)
-                        .contentShape(Rectangle())
                 }
-                .menuStyle(.button)
-                .buttonStyle(.plain)
-                .menuIndicator(.hidden)
-                .help(languageService.s("more_actions"))
-                .accessibilityLabel(languageService.s("more_actions"))
             }
             
             // Paused state: Resume + More Menu
@@ -809,7 +793,7 @@ struct FileThumbnailView: View {
                 .help(languageService.s("resume"))
                 .accessibilityLabel(languageService.s("resume"))
                 
-                Menu {
+                moreActionsMenu {
                     Button {
                         downloadManager.resumeDownload(download)
                     } label: {
@@ -829,18 +813,7 @@ struct FileThumbnailView: View {
                     } label: {
                         Label(languageService.s("remove"), systemImage: "trash")
                     }
-                } label: {
-                    Image(systemName: "ellipsis.circle")
-                        .font(.system(size: 17, weight: .regular))
-                        .foregroundColor(.secondary)
-                        .frame(width: 28, height: 28)
-                        .contentShape(Rectangle())
                 }
-                .menuStyle(.button)
-                .buttonStyle(.plain)
-                .menuIndicator(.hidden)
-                .help(languageService.s("more_actions"))
-                .accessibilityLabel(languageService.s("more_actions"))
             }
             
             // Failed / Stopped state: Retry + More Menu
@@ -856,7 +829,7 @@ struct FileThumbnailView: View {
                 .help(languageService.s("retry"))
                 .accessibilityLabel(languageService.s("retry"))
                 
-                Menu {
+                moreActionsMenu {
                     Button {
                         downloadManager.retryDownload(download)
                     } label: {
@@ -889,18 +862,7 @@ struct FileThumbnailView: View {
                     } label: {
                         Label(languageService.s("remove"), systemImage: "trash")
                     }
-                } label: {
-                    Image(systemName: "ellipsis.circle")
-                        .font(.system(size: 17, weight: .regular))
-                        .foregroundColor(.secondary)
-                        .frame(width: 28, height: 28)
-                        .contentShape(Rectangle())
                 }
-                .menuStyle(.button)
-                .buttonStyle(.plain)
-                .menuIndicator(.hidden)
-                .help(languageService.s("more_actions"))
-                .accessibilityLabel(languageService.s("more_actions"))
             }
             
             // FileExists state
