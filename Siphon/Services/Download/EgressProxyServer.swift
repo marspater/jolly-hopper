@@ -94,14 +94,19 @@ public final class EgressProxyServer: @unchecked Sendable {
             newListener.start(queue: queue)
         }
 
-        // stop() ran while the listener was coming up: don't resurrect it.
-        if Task.isCancelled {
-            newListener.cancel()
-            throw CancellationError()
-        }
-        lock.withLock {
+        // stop() cancels the start task under this lock, so checking here (not
+        // before taking it) means a stop() that ran while the listener was coming
+        // up is always seen, and one that runs later always finds it to cancel.
+        let published = lock.withLock { () -> Bool in
+            guard !Task.isCancelled else { return false }
+            listener?.cancel()
             listener = newListener
             port = assignedPort
+            return true
+        }
+        guard published else {
+            newListener.cancel()
+            throw CancellationError()
         }
         return assignedPort
     }
