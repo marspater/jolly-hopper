@@ -1,11 +1,31 @@
 # Changelog
 
-## Unreleased
+## 5.5.0 - 2026-09-28
+
+Siphon 5.5.0 adds a public-network boundary for browser links, requires signed release manifests, and makes the main window calmer and more predictable.
+
+### Highlights
+
+- **Calmer main window:** The status strip shows Downloading, Completed, and Failed, and only Downloading animates, as a fill that tracks overall progress (paused with Reduce Motion). Finished rows and cards no longer glow.
+- **Unified color and surfaces:** Theme colors are rebuilt on one Display P3 palette with ~5:1 text contrast in Light and Dark, and every window shares the same background treatment.
+- **Predictable download lists:** The list keeps downloads in arrival order, Recent shows the newest first, and each list has a title and count header.
+- **Queue reordering:** Move Up and Move Down follow the rows visible in the Queue tab instead of hidden positions in the full list.
+- **New app icon:** A layered Icon Composer icon with default, dark, and mono variants replaces the legacy PNG set.
+- **More sites:** PussySpace and StarWank support.
+
+### UI polish
+
+- Copy and Paste confirmations stay up for their full duration when clicked repeatedly.
+- Clear History asks for confirmation, with a singular title for one item.
+- The Home card says "Press ⏎ to download" instead of repeating the page subtitle, and row More menus use a neutral tint so Play is the only accent.
+- The sidebar toggle no longer flashes into the toolbar overflow menu at narrow widths.
+- Download preset rows read as one element in VoiceOver, and recent-download rows use the shared radius, badge, and button styles.
 
 ### Security
 
 - **Egress boundary for browser links:** Downloads started from a browser extension, including their metadata preview and site-specific resolvers, run through a local proxy that refuses private, loopback, link-local, and reserved destinations at connection time and on every redirect.
 - **Signed release manifests:** Releases after 5.4.5 must ship an Ed25519-signed `release-manifest.json`; the updater refuses a release without one instead of trusting the checksum alone.
+- Exported debug logs redact API key and token headers.
 - Tighter file-collision checks, protected output arguments (`-o`/`-P` and, for browser links, `--proxy` are ignored in extra arguments), hardened updater redirects, and bounded thumbnail and page fetches.
 
 ### Fixes
@@ -14,7 +34,8 @@
 - Safari cookies without Full Disk Access are skipped for the rest of the session after the first denial instead of costing a failed attempt per site.
 - Dropping a `.txt` list of URLs on the Home screen starts its downloads instead of reporting an invalid URL.
 - Stop All stays responsive, quitting no longer leaves orphaned scratch data, and the log keeps its final lines.
-- Protected-site recovery for BoyfriendTV (visible WebKit challenge), Recu, and Eporner; new StarWank support.
+- Protected-site recovery for BoyfriendTV (visible WebKit challenge), Recu, and Eporner.
+- Missing completed files show "File moved or deleted", HTTP errors from dependency and update downloads are reported as such, and a full disk no longer crashes the logger.
 - Many smaller fixes to format ranking, window reopening, menu bar presets, error messages, and missing translations.
 
 ### Maintenance
