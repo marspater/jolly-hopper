@@ -3,9 +3,9 @@
 A high-performance, native macOS media extractor & downloader powered by `yt-dlp` and `FFmpeg`. Engineered with advanced anti-bot bypass mechanisms for Cloudflare, YouTube, and 1,000+ protected video streaming sites.
 
 <div align="center">
-  <img src="assets/app_screenshot.png?v=3" alt="Siphon Interface" width="880" style="border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.3);" />
+  <img src="assets/app_screenshot.png?v=4" alt="Siphon main window" width="880" style="border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.3);" />
   <p>
-    <a href="https://github.com/marspater/jolly-hopper/releases/latest"><img src="https://img.shields.io/badge/Version-v5.4.5-indigo?style=for-the-badge&logo=swift&logoColor=white" alt="Version 5.4.5" /></a>
+    <a href="https://github.com/marspater/jolly-hopper/releases/latest"><img src="https://img.shields.io/badge/Version-v5.5.0-indigo?style=for-the-badge&logo=swift&logoColor=white" alt="Version 5.5.0" /></a>
     <a href="https://github.com/marspater/jolly-hopper/releases/latest"><img src="https://img.shields.io/badge/Download-macOS-blue?style=for-the-badge&logo=apple&logoColor=white" alt="Download Siphon for macOS" /></a>
     <a href="https://github.com/marspater/jolly-hopper"><img src="https://img.shields.io/badge/Repository-jolly--hopper-818cf8?style=for-the-badge&logo=github&logoColor=white" alt="GitHub Repository" /></a>
     <a href="https://github.com/marspater/jolly-hopper/blob/main/SUPPORTED_SITES.md"><img src="https://img.shields.io/badge/Supported--Sites-1000%2B-green?style=for-the-badge&logo=globe&logoColor=white" alt="Supported Sites" /></a>
@@ -22,7 +22,7 @@ A high-performance, native macOS media extractor & downloader powered by `yt-dlp
 - 🛡️ **Hardened update trust chain**: App updates are checked against an Ed25519-signed release manifest, dependencies are pinned by SHA-256, and installs keep rollback protection, stale-operation guards, and explicit exclusion between yt-dlp replacement and active downloads.
 - 🧱 **Public-network boundary for browser links**: Downloads that arrive from a browser extension run through a local egress proxy that refuses private, loopback, and reserved addresses at connection time, including after redirects.
 - 🌐 **Protected-site recovery**: Hardened site-specific extraction keeps browser cookies, user agents, origins, signed streams, and CDN boundaries coherent.
-- 💧 **Native macOS presentation**: Refined Liquid Glass surfaces, stronger light/dark contrast, responsive download rows, accessibility improvements, and lower idle rendering overhead.
+- 💧 **Native macOS presentation**: Liquid Glass surfaces on one Display P3 palette, a status strip that only animates while downloading, downloads kept in arrival order with Recent newest first, a layered app icon, and accessible light/dark contrast.
 - 🧭 **Explicit runtime ownership**: Download queueing, execution, app-level update state, shutdown, and browser ingress now have documented ownership boundaries and regression coverage.
 - 🎯 **Broad extraction & media control**: yt-dlp-backed support for 1,000+ sites, quality/codec presets, playlists, subtitles, SponsorBlock, FFmpeg processing, and fast browser-triggered downloads.
 

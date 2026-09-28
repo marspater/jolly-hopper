@@ -28,34 +28,34 @@ final class ReleaseNotesService {
 
     static let defaultFeatures: [ReleaseFeature] = [
         ReleaseFeature(
-            icon: "arrow.clockwise.icloud.fill",
-            iconColor: .orange,
-            title: "Durable Queue Recovery",
-            description: "Interrupted download jobs are atomically persisted across state changes, offering one-click queue restoration after unexpected crashes."
-        ),
-        ReleaseFeature(
-            icon: "lock.shield.fill",
+            icon: "network.badge.shield.half.filled",
             iconColor: .green,
-            title: "Secure Browser Handoff",
-            description: "Browser extensions no longer put raw cookies in custom URLs; browser identity is validated and scoped to the target origin."
-        ),
-        ReleaseFeature(
-            icon: "arrow.triangle.2.circlepath.circle.fill",
-            iconColor: .blue,
-            title: "Reliable Pause & Resume",
-            description: "Per-download scratch directories preserve resumable partial data while cancellation keeps executor ownership until teardown completes."
+            title: "Public-Network Boundary",
+            description: "Downloads from browser links run through a local proxy that refuses private, loopback, and reserved destinations, including after redirects."
         ),
         ReleaseFeature(
             icon: "checkmark.seal.fill",
             iconColor: .purple,
-            title: "Hardened Update Pipeline",
-            description: "Pinned release digests, rollback safety, stale-operation protection, and download/update exclusion keep dependency replacement deterministic."
+            title: "Signed Releases",
+            description: "App updates must carry an Ed25519-signed release manifest; a release without one is refused instead of trusting its checksum alone."
         ),
         ReleaseFeature(
-            icon: "network.badge.shield.half.filled",
+            icon: "macwindow",
             iconColor: .cyan,
-            title: "Protected-Site Recovery",
-            description: "Expanded protected-site and browser-session handling preserves the correct browser and transport identity."
+            title: "Calmer Main Window",
+            description: "The status strip only animates while downloading, colors share one Display P3 palette, and finished downloads no longer glow."
+        ),
+        ReleaseFeature(
+            icon: "list.bullet.rectangle",
+            iconColor: .blue,
+            title: "Predictable Lists",
+            description: "Downloads stay in arrival order, Recent shows the newest first, and Queue Move Up/Down follows the rows you see."
+        ),
+        ReleaseFeature(
+            icon: "sparkles",
+            iconColor: .orange,
+            title: "New App Icon",
+            description: "A layered Liquid Glass icon with light, dark, and mono variants."
         )
     ]
 

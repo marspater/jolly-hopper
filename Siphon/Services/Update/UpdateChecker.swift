@@ -20,7 +20,7 @@ public final class UpdateChecker: ObservableObject {
     @Published public var releasePageURL: URL? = URL(string: "https://github.com/marspater/jolly-hopper/releases/latest")
 
     public var currentVersion: String {
-        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "5.4.5"
+        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "5.5.0"
     }
 
     private let repoOwner = "marspater"
