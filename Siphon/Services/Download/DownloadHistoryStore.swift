@@ -68,7 +68,14 @@ final class DownloadHistoryStore {
         history.append(historic)
 
         if history.count > Self.maxHistoryCount {
-            history.removeFirst(history.count - Self.maxHistoryCount)
+            // Paused jobs are live, resumable work with scratch data on disk, not
+            // history: evict the oldest finished entries instead.
+            var excess = history.count - Self.maxHistoryCount
+            history.removeAll { entry in
+                guard excess > 0, entry.status != .paused else { return false }
+                excess -= 1
+                return true
+            }
         }
 
         if !skipSave {

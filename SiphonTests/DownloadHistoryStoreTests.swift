@@ -36,6 +36,24 @@ final class DownloadHistoryStoreTests: XCTestCase {
         XCTAssertEqual(loaded.first?.title, "Test Video")
     }
 
+    func testHistoryCapNeverEvictsPausedJobs() {
+        let store = DownloadHistoryStore(userDefaults: testDefaults, historyKey: "test_history")
+        var history: [HistoricDownload] = []
+
+        let paused = Download(url: "https://example.com/paused", options: .default, title: "Paused")
+        paused.status = .paused
+        store.addToHistory(paused, history: &history, skipSave: true)
+        for index in 0..<DownloadHistoryStore.maxHistoryCount {
+            let done = Download(url: "https://example.com/\(index)", options: .default, title: "Done \(index)")
+            done.status = .completed
+            store.addToHistory(done, history: &history, skipSave: true)
+        }
+
+        XCTAssertEqual(history.count, DownloadHistoryStore.maxHistoryCount)
+        XCTAssertTrue(history.contains { $0.id == paused.id }, "The oldest entry was paused, so a finished one must go instead")
+        XCTAssertFalse(history.contains { $0.url == "https://example.com/0" })
+    }
+
     func testHistoryStripsSecretsFromLogsAndAdvancedArguments() {
         var options = DownloadOptions.default
         options.additionalArguments = "--add-header Authorization:Bearer super_secret --proxy https://user:pass@example.com"
