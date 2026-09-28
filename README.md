@@ -19,7 +19,8 @@ A high-performance, native macOS media extractor & downloader powered by `yt-dlp
 - 💾 **Durable queue recovery**: Queued and running jobs are persisted atomically across state changes so interrupted work can be recovered with one click after unexpected exits or crashes.
 - 🔐 **Credential-free browser handoff**: Safari, Chrome-family, and Firefox integrations pass browser identity without putting raw cookies into custom URLs. Session state is scoped to validated origins and private-network deep links are rejected.
 - ♻️ **Reliable pause, resume, and cancellation**: Per-download scratch storage preserves resumable partial data, while executor ownership remains intact until process teardown actually finishes.
-- 🛡️ **Hardened update trust chain**: App and dependency updates use verified release metadata, pinned digests, rollback protection, stale-operation guards, and explicit exclusion between yt-dlp replacement and active downloads.
+- 🛡️ **Hardened update trust chain**: App updates are checked against an Ed25519-signed release manifest, dependencies are pinned by SHA-256, and installs keep rollback protection, stale-operation guards, and explicit exclusion between yt-dlp replacement and active downloads.
+- 🧱 **Public-network boundary for browser links**: Downloads that arrive from a browser extension run through a local egress proxy that refuses private, loopback, and reserved addresses at connection time, including after redirects.
 - 🌐 **Protected-site recovery**: Hardened site-specific extraction keeps browser cookies, user agents, origins, signed streams, and CDN boundaries coherent.
 - 💧 **Native macOS presentation**: Refined Liquid Glass surfaces, stronger light/dark contrast, responsive download rows, accessibility improvements, and lower idle rendering overhead.
 - 🧭 **Explicit runtime ownership**: Download queueing, execution, app-level update state, shutdown, and browser ingress now have documented ownership boundaries and regression coverage.
@@ -65,8 +66,10 @@ xattr -cr /Applications/"Siphon.app"
 
 Integrate Siphon directly into your favorite web browser for 1-click video downloads:
 - **Chrome / Brave / Edge / Helium**: Navigate to `chrome://extensions`, enable **Developer Mode**, and click **Load Unpacked** pointing to `SiphonExtension_Chrome`.
-- **Safari**: Enable the extension in Safari Preferences > Extensions.
+- **Safari**: Enable the extension in Safari > Settings > Extensions.
 - **Firefox**: Load `SiphonExtension_Firefox` in `about:debugging#/runtime/this-firefox`.
+
+Extensions hand Siphon only the page URL and which browser to read cookies from, never the cookies themselves. To use **Safari** cookies (for sites that need a signed-in session), grant Siphon **Full Disk Access** in System Settings > Privacy & Security, then relaunch Siphon. Without it, Siphon skips Safari cookies for the rest of the session and downloads without them.
 
 ---
 
@@ -77,6 +80,17 @@ Integrate Siphon directly into your favorite web browser for 1-click video downl
 - **Media Transcoder**: Native `FFmpeg` & `FFprobe` 6.1.1 (`arm64` / `x86_64`)
 - **Logging & Diagnostics**: Centralized structured `LoggerService` & os_log tracing
 - **Target OS**: macOS 15.0 (Sequoia) through macOS 27+
+
+## 🔧 Building from Source
+
+Requires Xcode 16 or later on macOS 15 or later. Open `Siphon.xcodeproj` and run the **Siphon** scheme, or run the test suite from the command line:
+
+```bash
+xcodebuild test -project Siphon.xcodeproj -scheme Siphon -destination 'platform=macOS' \
+  CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO
+```
+
+Siphon downloads its pinned `yt-dlp`, `FFmpeg`, and `FFprobe` builds on first launch and verifies each against its SHA-256 before use. Contributor and agent rules live in [AGENTS.md](AGENTS.md).
 
 ## 🧭 Architecture
 

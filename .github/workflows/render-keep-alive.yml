@@ -2,7 +2,8 @@ name: Render Keep-Alive
 
 on:
   schedule:
-    # Run every 14 minutes to prevent Render free instance from spinning down
+    # Asks for every 14 minutes. GitHub throttles frequent schedules (runs land
+    # hours apart), so this mainly detects an unreachable service.
     - cron: '*/14 * * * *'
   workflow_dispatch:
 
@@ -15,6 +16,7 @@ concurrency:
 jobs:
   ping:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Ping Render Service
         run: |
@@ -23,10 +25,13 @@ jobs:
             --proto '=https' \
             --proto-redir '=https' \
             --connect-timeout 10 \
-            --max-time 45 \
+            --max-time 90 \
             --retry 2 \
             --retry-delay 3 \
             --retry-all-errors \
             https://jolly-hopper.onrender.com/healthz; then
-            echo "::warning::Render keep-alive ping failed or the service is still warming up."
+            # A free instance wakes in about a minute; still no answer after the
+            # retries means the service is down, and the run should say so.
+            echo "::error::The Render companion service did not answer /healthz."
+            exit 1
           fi

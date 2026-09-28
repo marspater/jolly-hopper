@@ -12,6 +12,8 @@ When setting up this service on Render:
 - **Start Command**: `npm start`
 - **Health Check Path**: `/healthz` (or `/health`)
 
+The service listens on `PORT` (default `3000`). On Render (where `RENDER` is set) it binds to all interfaces so Render can route traffic to it; everywhere else it binds to `127.0.0.1`. Set `HOST` to override either.
+
 ## Endpoints
 
 ### System & Health

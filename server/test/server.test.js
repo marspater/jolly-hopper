@@ -1,7 +1,7 @@
 const { test, describe, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const http = require('node:http');
-const { createServer } = require('../index.js');
+const { createServer, listenHost } = require('../index.js');
 
 async function listen(server) {
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
@@ -30,6 +30,12 @@ function scriptedFetch(outcomes) {
   };
   return { fetchImpl, calls };
 }
+
+test('listens on every interface on Render and on loopback elsewhere', () => {
+  assert.equal(listenHost({ RENDER: 'true' }), '0.0.0.0');
+  assert.equal(listenHost({}), '127.0.0.1');
+  assert.equal(listenHost({ RENDER: 'true', HOST: '::' }), '::');
+});
 
 describe('Siphon Companion Server', () => {
   let server;
