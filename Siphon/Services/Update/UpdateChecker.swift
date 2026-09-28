@@ -29,13 +29,21 @@ public final class UpdateChecker: ObservableObject {
     private var downloadAssetName: String?
     private var expectedChecksum: String?
     private var checksumURL: URL?
+    public private(set) var manifestURL: URL?
+    public private(set) var manifestSigURL: URL?
+    public var requireSignedManifest: Bool
     private var updateOperationID: UUID?
 
     private let downloader = UpdateDownloader()
     private let installer = UpdateInstaller()
+    private let manifestVerifier: UpdateManifestVerifier
 
-    public init() {
-        // Intentionally empty initializer for actor instantiation (swift:S1186)
+    public init(
+        manifestVerifier: UpdateManifestVerifier = UpdateManifestVerifier(),
+        requireSignedManifest: Bool = false
+    ) {
+        self.manifestVerifier = manifestVerifier
+        self.requireSignedManifest = requireSignedManifest
     }
 
     nonisolated static func parseGitHubAssetSHA256(_ digest: String?) -> String? {
@@ -99,6 +107,8 @@ public final class UpdateChecker: ObservableObject {
             downloadAssetName = nil
             expectedChecksum = nil
             checksumURL = nil
+            manifestURL = nil
+            manifestSigURL = nil
 
             if let assets = json["assets"] as? [[String: Any]] {
                     #if arch(arm64)
@@ -150,6 +160,26 @@ public final class UpdateChecker: ObservableObject {
                                    name == "checksums.sha256"
                         }), let sumUrlStr = sumAsset["browser_download_url"] as? String {
                             checksumURL = URL(string: sumUrlStr)
+                        }
+
+                        if let manifestAsset = assets.first(where: {
+                            let name = ($0["name"] as? String)?.lowercased() ?? ""
+                            return name == "release-manifest.json" ||
+                                   name == "manifest.json" ||
+                                   name == "release_manifest.json"
+                        }), let mUrlStr = manifestAsset["browser_download_url"] as? String {
+                            manifestURL = URL(string: mUrlStr)
+                        }
+
+                        if let sigAsset = assets.first(where: {
+                            let name = ($0["name"] as? String)?.lowercased() ?? ""
+                            return name == "release-manifest.json.sig" ||
+                                   name == "manifest.json.sig" ||
+                                   name == "release-manifest.sig" ||
+                                   name == "manifest.sig" ||
+                                   name == "release_manifest.json.sig"
+                        }), let sUrlStr = sigAsset["browser_download_url"] as? String {
+                            manifestSigURL = URL(string: sUrlStr)
                         }
                     }
                 }
@@ -213,7 +243,50 @@ public final class UpdateChecker: ObservableObject {
             return
         }
 
-        // 1. Fetch checksum in background if available
+        // 1. Fetch and verify signed release manifest if available or required
+        if manifestURL != nil || manifestSigURL != nil || requireSignedManifest {
+            guard let mURL = manifestURL, let sURL = manifestSigURL else {
+                let message = "A signed release manifest and signature are required to verify this update."
+                updateError = UpdateDownloadError.checksumUnavailable(message).localizedDescription
+                LoggerService.shared.log(message, level: .error)
+                return
+            }
+            guard UpdateDownloader.isTrustedGitHubURL(mURL) && UpdateDownloader.isTrustedGitHubURL(sURL) else {
+                updateError = UpdateDownloadError.invalidURL.localizedDescription
+                LoggerService.shared.log("Refusing untrusted manifest URL for app update.", level: .error)
+                return
+            }
+            do {
+                let manifestData = try await UpdateDownloader.fetchData(from: mURL)
+                let signatureData = try await UpdateDownloader.fetchData(from: sURL)
+                guard updateOperationID == operationID else { return }
+
+                let verifiedChecksum = try manifestVerifier.verify(
+                    manifestData: manifestData,
+                    signatureData: signatureData,
+                    expectedVersion: latestVersion ?? "",
+                    targetAssetName: downloadAssetName ?? ""
+                )
+                guard updateOperationID == operationID else { return }
+
+                if let currentChecksum = expectedChecksum, currentChecksum.lowercased() != verifiedChecksum.lowercased() {
+                    let message = "GitHub asset digest does not match the signed release manifest."
+                    updateError = UpdateDownloadError.checksumUnavailable(message).localizedDescription
+                    LoggerService.shared.log(message, level: .error)
+                    return
+                }
+                expectedChecksum = verifiedChecksum
+            } catch is CancellationError {
+                return
+            } catch {
+                guard updateOperationID == operationID else { return }
+                updateError = error.localizedDescription
+                LoggerService.shared.log("Signed manifest verification failed: \(error.localizedDescription)", level: .error)
+                return
+            }
+        }
+
+        // 2. Fetch checksum in background if available
         if let cURL = checksumURL {
             guard UpdateDownloader.isTrustedGitHubURL(cURL) else {
                 updateError = UpdateDownloadError.invalidURL.localizedDescription
@@ -314,6 +387,28 @@ public final class UpdateChecker: ObservableObject {
 
     public func restartApp() {
         UpdateInstaller.restartApp()
+    }
+
+    /// Test seam: seeds what `checkForUpdates` would discover. Internal (not
+    /// `#if DEBUG`) so `@testable` Release test runs in CI can reach it too.
+    func configureUpdateSources(
+        downloadURL: URL?,
+        downloadAssetName: String?,
+        expectedChecksum: String? = nil,
+        checksumURL: URL? = nil,
+        manifestURL: URL? = nil,
+        manifestSigURL: URL? = nil,
+        latestVersion: String? = nil
+    ) {
+        self.downloadURL = downloadURL
+        self.downloadAssetName = downloadAssetName
+        self.expectedChecksum = expectedChecksum
+        self.checksumURL = checksumURL
+        self.manifestURL = manifestURL
+        self.manifestSigURL = manifestSigURL
+        if let latestVersion {
+            self.latestVersion = latestVersion
+        }
     }
 
     // MARK: - Compatibility & Static Verification Helpers

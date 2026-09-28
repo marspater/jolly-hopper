@@ -80,8 +80,8 @@ public final class UpdateDownloader: NSObject, URLSessionDownloadDelegate, @unch
     private final class RedirectPolicy: NSObject, URLSessionTaskDelegate {
         func urlSession(
             _ session: URLSession,
-            task: URLSessionTask,
-            willPerformHTTPRedirection response: HTTPURLResponse,
+            task _: URLSessionTask,
+            willPerformHTTPRedirection _: HTTPURLResponse,
             newRequest request: URLRequest
         ) async -> URLRequest? {
             UpdateDownloader.redirectRequestIfTrusted(request)
@@ -141,18 +141,29 @@ public final class UpdateDownloader: NSObject, URLSessionDownloadDelegate, @unch
         return nil
     }
 
-    /// Fetches and parses a SHA-256 checksum from a GitHub release checksum file.
-    public static func fetchExpectedChecksum(from checksumURL: URL, targetAssetName: String) async throws -> String {
-        guard isTrustedGitHubURL(checksumURL) else {
+    /// Fetches raw data from a trusted GitHub URL, applying redirect trust policy to every hop.
+    public static func fetchData(from url: URL) async throws -> Data {
+        guard isTrustedGitHubURL(url) else {
             throw UpdateDownloadError.invalidURL
         }
 
-        var request = URLRequest(url: checksumURL, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 15)
+        var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 15)
         request.setValue("Siphon-Updater", forHTTPHeaderField: "User-Agent")
-        let (cData, response) = try await URLSession.shared.data(for: request, delegate: RedirectPolicy())
+        let (data, response) = try await URLSession.shared.data(for: request, delegate: RedirectPolicy())
         guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
             let status = (response as? HTTPURLResponse)?.statusCode ?? -1
-            throw UpdateDownloadError.checksumUnavailable("checksum endpoint returned HTTP \(status)")
+            throw UpdateDownloadError.downloadFailed("Endpoint returned HTTP \(status)")
+        }
+        return data
+    }
+
+    /// Fetches and parses a SHA-256 checksum from a GitHub release checksum file.
+    public static func fetchExpectedChecksum(from checksumURL: URL, targetAssetName: String) async throws -> String {
+        let cData: Data
+        do {
+            cData = try await fetchData(from: checksumURL)
+        } catch UpdateDownloadError.downloadFailed(let msg) {
+            throw UpdateDownloadError.checksumUnavailable(msg)
         }
         guard let text = String(data: cData, encoding: .utf8) else {
             throw UpdateDownloadError.checksumUnavailable("checksum response was not valid UTF-8")
@@ -262,8 +273,8 @@ public final class UpdateDownloader: NSObject, URLSessionDownloadDelegate, @unch
 
     public func urlSession(
         _ session: URLSession,
-        task: URLSessionTask,
-        willPerformHTTPRedirection response: HTTPURLResponse,
+        task _: URLSessionTask,
+        willPerformHTTPRedirection _: HTTPURLResponse,
         newRequest request: URLRequest,
         completionHandler: @escaping @Sendable (URLRequest?) -> Void
     ) {
