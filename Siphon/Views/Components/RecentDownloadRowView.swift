@@ -60,7 +60,7 @@ struct RecentDownloadRowView: View {
                 accentColor: statusTint
             )
         )
-        .siphonCardHover(isHovered: isHovered, tint: statusTint)
+        .siphonCardHover(isHovered: isHovered, tint: glowTint)
         .task(id: download.primaryFilePath) {
             primaryFileIsPresent = download.primaryFileExistsOnDisk
         }
@@ -80,6 +80,14 @@ struct RecentDownloadRowView: View {
         case .queued, .paused, .fileExists: return SiphonTheme.statusQueued
         case .completed: return SiphonTheme.statusCompleted
         case .failed, .stopped: return SiphonTheme.statusFailed
+        }
+    }
+
+    /// Finished rows keep their status-colored border but cast no status glow.
+    private var glowTint: Color {
+        switch download.status {
+        case .completed, .failed, .stopped: return .clear
+        default: return statusTint
         }
     }
 
