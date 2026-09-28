@@ -2,6 +2,7 @@ import XCTest
 @testable import Siphon
 import CryptoKit
 import SwiftUI
+import UniformTypeIdentifiers
 
 @MainActor
 final class QueueAndErrorUXTests: XCTestCase {
@@ -2002,6 +2003,32 @@ final class QueueAndErrorUXTests: XCTestCase {
         state.setExternalTarget(sheetURL)
         state.clearExternalTarget()
         XCTAssertFalse(state.consumeExternalTarget(for: sheetURL))
+    }
+
+    func testRedownloadKeepsDeepLinkBoundary() {
+        let state = AppState()
+        var external = DownloadOptions.default
+        external.enforcePublicNetworkBoundary = true
+        let deepLinked = Download(url: "https://public.example.com/video/a", options: external)
+
+        state.reopenInAddSheet(deepLinked)
+        XCTAssertEqual(state.urlToDownload, deepLinked.url)
+        XCTAssertTrue(state.showAddDownloadSheet)
+        XCTAssertTrue(state.consumeExternalTarget(for: deepLinked.url), "Re-downloading a deep-linked job must stay behind the egress proxy")
+
+        let local = Download(url: "https://public.example.com/video/b", options: .default)
+        state.reopenInAddSheet(local)
+        XCTAssertFalse(state.consumeExternalTarget(for: local.url))
+    }
+
+    func testHeroDropReadsFileBeforeURL() throws {
+        let list = FileManager.default.temporaryDirectory.appendingPathComponent("siphon-drop-\(UUID().uuidString).txt")
+        XCTAssertEqual(HeroDropURLView.dropType(of: NSItemProvider(object: list as NSURL)), .fileURL, "A dropped .txt list must not be read as a file:// link")
+        let web = try XCTUnwrap(URL(string: "https://www.example.com/watch?v=1"))
+        XCTAssertEqual(HeroDropURLView.dropType(of: NSItemProvider(object: web as NSURL)), .url)
+        // A text drag from another app carries only plain text on its pasteboard.
+        let batch = NSItemProvider(item: "https://www.example.com/a\nhttps://www.example.com/b" as NSString, typeIdentifier: UTType.utf8PlainText.identifier)
+        XCTAssertEqual(HeroDropURLView.dropType(of: batch), .utf8PlainText)
     }
 
     func testBrowserSourceValidationRejectsUnrecognizedValues() {

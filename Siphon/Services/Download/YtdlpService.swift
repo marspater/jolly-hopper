@@ -1991,7 +1991,7 @@ public struct DownloadResult: Sendable {
                     triedStrategies.insert(.stripCookies)
                     LoggerService.shared.log("Browser cookie access failed or database missing (\(errText.trimmingCharacters(in: .whitespacesAndNewlines))). Retrying download without browser cookies...", level: .warning)
                     if let browser = Self.validatedBrowserCookieSource(options.browserCookieSource) ?? configuredBrowserCookieSource() {
-                        recordCookieDenial(browser: browser, url: normalizedURL)
+                        recordCookieDenial(browser: browser, url: normalizedURL, errorOutput: errText)
                     }
                     onOutput("[Siphon Info] Browser cookies unavailable. Retrying download directly without browser cookies...\n")
                     currentArgs = stripCookieArgs(from: currentArgs)
@@ -2495,9 +2495,15 @@ public struct DownloadResult: Sendable {
         return deniedCookieSources.contains(key) || deniedCookieSources.contains(browser)
     }
 
-    private func recordCookieDenial(browser: String, url: String) {
-        let key = cookieScopeKey(browser: browser, url: url)
-        deniedCookieSources.insert(key)
+    private func recordCookieDenial(browser: String, url: String, errorOutput: String) {
+        // Without Full Disk Access macOS denies Safari's cookie file for every
+        // site until Siphon relaunches. A per-host entry re-ran a failing yt-dlp
+        // (about 4 s) for each new host, and again for its CDN host.
+        if browser == "safari" && isSafariPermissionError(errorOutput) {
+            deniedCookieSources.insert(browser)
+        } else {
+            deniedCookieSources.insert(cookieScopeKey(browser: browser, url: url))
+        }
     }
 
     nonisolated static func cookiesFromBrowserArgument(for browser: String) -> String {
@@ -3475,7 +3481,7 @@ public struct DownloadResult: Sendable {
         }
         var resolvedPageURL = pageURL
         var html = ""
-        var safariCookieAccessDenied = false
+        var safariCookieAccessDenied = deniedCookieSources.contains("safari")
         var sawChallenge = false
         var sawLoginPage = false
         var sawForbidden = false
@@ -3542,6 +3548,7 @@ public struct DownloadResult: Sendable {
                 sawUnauthorized = sawUnauthorized || lower.contains("http error 401")
                 if args.contains("safari"), isSafariPermissionError(output) {
                     safariCookieAccessDenied = true
+                    recordCookieDenial(browser: "safari", url: args.last ?? targetUrl, errorOutput: output)
                 }
                 let html = inspectPage(output, stage: stage)
                 let transient = isTransientServerError(lower) || lower.contains("timed out")
@@ -3630,6 +3637,7 @@ public struct DownloadResult: Sendable {
                 let candidateURL = candidatePage.absoluteString
                 let isAlternate = candidateURL != targetUrl
                 for browser in browsersToTry {
+                    if let browserName = browser, deniedCookieSources.contains(browserName) { continue }
                     var args = [ytdlp.path, "--ignore-config", "--dump-pages", "--skip-download", "--no-playlist"]
                     if let browserName = browser {
                         args.append(contentsOf: ["--cookies-from-browser", Self.cookiesFromBrowserArgument(for: browserName)])
@@ -3830,6 +3838,7 @@ public struct DownloadResult: Sendable {
                     }
 
                     for browser in browsersToTry {
+                        if let browserName = browser, deniedCookieSources.contains(browserName) { continue }
                         var embedArgs = [ytdlp.path, "--ignore-config", "--dump-pages", "--skip-download", "--no-playlist"]
                         if let browserName = browser {
                             embedArgs.append(contentsOf: ["--cookies-from-browser", Self.cookiesFromBrowserArgument(for: browserName)])
@@ -4624,6 +4633,7 @@ public struct DownloadResult: Sendable {
         // 2. Try browser cookies and impersonated HTTP page dump
         if html.isEmpty, let ytdlp = ytdlpBinary {
             for browser in browsersToTry {
+                if let browserName = browser, deniedCookieSources.contains(browserName) { continue }
                 var args = [ytdlp.path, "--ignore-config", "--dump-pages"]
                 if let browserName = browser {
                     args.append(contentsOf: ["--cookies-from-browser", Self.cookiesFromBrowserArgument(for: browserName)])
@@ -4803,6 +4813,7 @@ public struct DownloadResult: Sendable {
                 if streamURL != nil { break }
                 if let ytdlp = ytdlpBinary {
                     for browser in browsersToTry {
+                        if let browserName = browser, deniedCookieSources.contains(browserName) { continue }
                         var embedArgs = [ytdlp.path, "--ignore-config", "--dump-pages"]
                         if let browserName = browser {
                             embedArgs.append(contentsOf: ["--cookies-from-browser", Self.cookiesFromBrowserArgument(for: browserName)])
@@ -6668,7 +6679,7 @@ public struct DownloadResult: Sendable {
                 let browser = args[idx + 1]
                 LoggerService.shared.log("Browser cookie access failed for '\(browser)' or database missing. Checking alternative browsers...", level: .info)
                 if let urlArg = args.last {
-                    recordCookieDenial(browser: browser, url: urlArg)
+                    recordCookieDenial(browser: browser, url: urlArg, errorOutput: output)
                 }
                 
                 LoggerService.shared.log(
