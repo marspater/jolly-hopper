@@ -18,7 +18,7 @@ struct MenuBarView: View {
     @AppStorage("customPresets") private var customPresetsData: Data = Data()
     
     @State private var customPresets: [CustomPreset] = []
-    @State private var isPasted: Bool = false
+    @StateObject private var pasteFeedback = TransientFeedbackState()
 
     var body: some View {
         VStack(spacing: SiphonTheme.spacing12) {
@@ -110,20 +110,16 @@ struct MenuBarView: View {
             Button {
                 if let clipboard = NSPasteboard.general.string(forType: .string) {
                     url = clipboard.trimmingCharacters(in: .whitespacesAndNewlines)
-                    isPasted = true
-                    Task { @MainActor in
-                        try? await Task.sleep(nanoseconds: 1_200_000_000)
-                        isPasted = false
-                    }
+                    pasteFeedback.show(languageService.s("paste"), isSuccess: true, duration: 1.2)
                 }
             } label: {
-                Image(systemName: isPasted ? "checkmark" : "doc.on.clipboard")
+                Image(systemName: pasteFeedback.isShowing ? "checkmark" : "doc.on.clipboard")
                     .font(.system(size: 12))
-                    .foregroundColor(isPasted ? SiphonTheme.statusCompletedText : .secondary)
+                    .foregroundColor(pasteFeedback.isShowing ? SiphonTheme.statusCompletedText : .secondary)
             }
             .buttonStyle(.plain)
             .help(languageService.s("paste_from_clipboard"))
-            .accessibilityLabel(isPasted ? languageService.s("paste") : languageService.s("paste_from_clipboard"))
+            .accessibilityLabel(pasteFeedback.isShowing ? languageService.s("paste") : languageService.s("paste_from_clipboard"))
         }
         .padding(.horizontal, SiphonTheme.spacing10)
         .padding(.vertical, 7)

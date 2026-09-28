@@ -103,8 +103,8 @@ struct DownloadRowView: View {
     @State private var isHovering = false
     @State private var showLog = false
     @State private var showDiagnostics = false
-    @State private var isCopiedLog = false
-    @State private var isCopiedError = false
+    @StateObject private var logCopyFeedback = TransientFeedbackState()
+    @StateObject private var errorCopyFeedback = TransientFeedbackState()
     @State private var showRawError = false
     /// nil until checked; unknown counts as present so actions don't flicker.
     @State private var primaryFileIsPresent: Bool?
@@ -350,23 +350,19 @@ struct DownloadRowView: View {
                                 Button {
                                     NSPasteboard.general.clearContents()
                                     NSPasteboard.general.setString(info.rawError, forType: .string)
-                                    isCopiedError = true
-                                    Task {
-                                        try? await Task.sleep(nanoseconds: 1_500_000_000)
-                                        isCopiedError = false
-                                    }
+                                    errorCopyFeedback.show(languageService.s("copied"), isSuccess: true, duration: 1.5)
                                 } label: {
                                     HStack(spacing: 3) {
-                                        Image(systemName: isCopiedError ? "checkmark" : "doc.on.doc")
+                                        Image(systemName: errorCopyFeedback.isShowing ? "checkmark" : "doc.on.doc")
                                             .font(.siphonMicro)
-                                        Text(isCopiedError ? languageService.s("copied") : languageService.s("copy_error"))
+                                        Text(errorCopyFeedback.isShowing ? languageService.s("copied") : languageService.s("copy_error"))
                                             .font(.siphonMicroMedium)
                                     }
                                 }
                                 .buttonStyle(.plain)
-                                .foregroundColor(isCopiedError ? SiphonTheme.statusCompletedText : SiphonTheme.accentText)
+                                .foregroundColor(errorCopyFeedback.isShowing ? SiphonTheme.statusCompletedText : SiphonTheme.accentText)
                                 .help(languageService.s("copy_error"))
-                                .accessibilityLabel(isCopiedError ? languageService.s("copied") : languageService.s("copy_error"))
+                                .accessibilityLabel(errorCopyFeedback.isShowing ? languageService.s("copied") : languageService.s("copy_error"))
                                 
                                 Spacer()
                                 
@@ -1131,23 +1127,15 @@ struct FileThumbnailView: View {
                     let pasteboard = NSPasteboard.general
                     pasteboard.clearContents()
                     pasteboard.setString(download.log, forType: .string)
-                    withAnimation(SiphonAnimation.snappySpring) {
-                        isCopiedLog = true
-                    }
-                    Task {
-                        try? await Task.sleep(nanoseconds: 1_500_000_000)
-                        withAnimation(SiphonAnimation.snappySpring) {
-                            isCopiedLog = false
-                        }
-                    }
+                    logCopyFeedback.show(languageService.s("copied"), isSuccess: true, duration: 1.5, animation: SiphonAnimation.snappySpring)
                 } label: {
                     HStack(spacing: 6) {
-                        Image(systemName: isCopiedLog ? "checkmark" : "doc.on.doc")
+                        Image(systemName: logCopyFeedback.isShowing ? "checkmark" : "doc.on.doc")
                             .font(.system(size: 11, weight: .semibold))
-                        Text(isCopiedLog ? languageService.s("copied") : languageService.s("copy_log"))
+                        Text(logCopyFeedback.isShowing ? languageService.s("copied") : languageService.s("copy_log"))
                             .font(.siphonSecondaryMedium)
                     }
-                    .foregroundColor(isCopiedLog ? SiphonTheme.statusCompletedText : .primary)
+                    .foregroundColor(logCopyFeedback.isShowing ? SiphonTheme.statusCompletedText : .primary)
                 }
                 .buttonStyle(.siphonSecondary)
                 .disabled(download.log.isEmpty)
