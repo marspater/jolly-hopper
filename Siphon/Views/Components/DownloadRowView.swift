@@ -627,8 +627,7 @@ struct FileThumbnailView: View {
                     }
                     
                     Button {
-                        appState.urlToDownload = download.url
-                        appState.showAddDownloadSheet = true
+                        appState.reopenInAddSheet(download)
                     } label: {
                         Label(languageService.s("redownload"), systemImage: "arrow.down.circle")
                     }
@@ -838,8 +837,7 @@ struct FileThumbnailView: View {
                     }
                     
                     Button {
-                        appState.urlToDownload = download.url
-                        appState.showAddDownloadSheet = true
+                        appState.reopenInAddSheet(download)
                     } label: {
                         Label(languageService.s("redownload"), systemImage: "arrow.down.circle")
                     }
