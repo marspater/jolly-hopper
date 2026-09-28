@@ -164,4 +164,32 @@ final class CustomPresetTests: XCTestCase {
         XCTAssertEqual(preset.sponsorBlock, true)
         XCTAssertEqual(preset.splitChapters, true)
     }
+
+    @MainActor
+    func testMenuBarOptionsFollowPreferencesAndPresetSubtitleRule() throws {
+        let suite = "test.menubar.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        defaults.set(false, forKey: UserDefaultsKeys.embedThumbnail)
+        defaults.set(false, forKey: UserDefaultsKeys.embedMetadata)
+
+        let separate = CustomPreset(name: "Separate", videoCodec: .h264, audioCodec: .aac, videoResolution: .r720p, fileType: .mp4, downloadSubtitles: true, subtitleLanguage: "de")
+        let embedded = CustomPreset(name: "Embedded", videoCodec: .h264, audioCodec: .aac, videoResolution: .r720p, fileType: .mp4, downloadSubtitles: true, subtitleLanguage: "embed:fr")
+
+        let separateOptions = MenuBarView.downloadOptions(selectedPreset: "custom_\(separate.id.uuidString)", selectedType: "video", customPresets: [separate, embedded], userDefaults: defaults)
+        XCTAssertFalse(separateOptions.embedThumbnail, "Menu bar downloads must honor the embed-thumbnail preference")
+        XCTAssertFalse(separateOptions.embedMetadata)
+        XCTAssertEqual(separateOptions.videoResolution, .r720p)
+        XCTAssertEqual(separateOptions.subtitleLanguages, ["de"])
+        XCTAssertTrue(separateOptions.downloadSubtitles)
+        XCTAssertFalse(separateOptions.embedSubtitles, "Without an embed: prefix the preset saves a separate subtitle file")
+
+        let embeddedOptions = MenuBarView.downloadOptions(selectedPreset: "custom_\(embedded.id.uuidString)", selectedType: "video", customPresets: [separate, embedded], userDefaults: defaults)
+        XCTAssertEqual(embeddedOptions.subtitleLanguages, ["fr"])
+        XCTAssertTrue(embeddedOptions.embedSubtitles)
+
+        let audio = MenuBarView.downloadOptions(selectedPreset: "missing", selectedType: "audio", customPresets: [], userDefaults: defaults)
+        XCTAssertTrue(audio.fileType.isAudio)
+        XCTAssertNil(audio.videoResolution)
+    }
 }

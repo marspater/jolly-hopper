@@ -150,6 +150,64 @@ final class EgressProxyTests: XCTestCase {
         XCTAssertEqual(receivedPath.get(), "/a%20b%2Fc?x=%26")
     }
 
+    func testProxyForwardsOneRequestPerUpstreamConnection() async throws {
+        let server = MockHTTPServer()
+        let serverPort = try server.start { _ in (200, [:], Data("OK".utf8)) }
+        defer { server.stop() }
+
+        let proxy = EgressProxyServer(targetValidator: { _, port in port == Int(serverPort) })
+        let proxyPort = try await proxy.start()
+        defer { proxy.stop() }
+
+        let response = try await sendThroughProxy(
+            port: proxyPort,
+            "GET http://127.0.0.1:\(serverPort)/ HTTP/1.1\r\nHost: 127.0.0.1:\(serverPort)\r\n" +
+            "Connection: keep-alive\r\nProxy-Connection: keep-alive\r\nKeep-Alive: timeout=5\r\n" +
+            "Proxy-Authorization: Basic c2VjcmV0\r\nX-Kept: yes\r\n\r\n"
+        )
+        XCTAssertTrue(response.hasPrefix("HTTP/1.1 200"), "Expected 200, got: \(response)")
+
+        let headerLines = server.lastRequestText.components(separatedBy: "\r\n").map { $0.lowercased() }
+        XCTAssertEqual(headerLines.filter { $0.hasPrefix("connection:") }, ["connection: close"])
+        XCTAssertFalse(headerLines.contains { $0.hasPrefix("proxy-connection:") || $0.hasPrefix("keep-alive:") || $0.hasPrefix("proxy-authorization:") })
+        XCTAssertTrue(headerLines.contains("x-kept: yes"), "End-to-end headers must still reach the server")
+    }
+
+    func testBoundaryProxyIsAddedOnlyToUnproxiedYtdlpRuns() {
+        let ytdlp = ["/Library/Siphon/yt-dlp", "--dump-json", "--", "https://example.com/v"]
+        XCTAssertEqual(EgressBoundary.applying(to: ytdlp), ytdlp, "Unbound tasks run unchanged")
+
+        EgressBoundary.$proxyURL.withValue("http://127.0.0.1:4321") {
+            XCTAssertEqual(
+                EgressBoundary.applying(to: ytdlp),
+                ["/Library/Siphon/yt-dlp", "--proxy", "http://127.0.0.1:4321", "--dump-json", "--", "https://example.com/v"]
+            )
+            let ffmpeg = ["/Library/Siphon/ffmpeg", "-i", "in.mp4", "out.mp4"]
+            XCTAssertEqual(EgressBoundary.applying(to: ffmpeg), ffmpeg, "Only yt-dlp talks to the network")
+            let proxied = ["/Library/Siphon/yt-dlp", "--proxy", "http://127.0.0.1:1", "--", "https://example.com/v"]
+            XCTAssertEqual(EgressBoundary.applying(to: proxied), proxied)
+            XCTAssertFalse(EgressBoundary.session === URLSession.shared)
+            XCTAssertEqual(EgressBoundary.webKitProxyConfigurations.count, 1)
+        }
+        XCTAssertTrue(EgressBoundary.session === URLSession.shared)
+        XCTAssertTrue(EgressBoundary.webKitProxyConfigurations.isEmpty)
+    }
+
+    func testRunnerAddsBoundaryProxyToResolverYtdlpRuns() async throws {
+        // A stand-in yt-dlp that prints its arguments.
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("boundary_\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let script = dir.appendingPathComponent("yt-dlp")
+        try "#!/bin/sh\necho \"$@\"\n".write(to: script, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: script.path)
+
+        let output = try await EgressBoundary.$proxyURL.withValue("http://127.0.0.1:4321") {
+            try await DefaultYtdlpProcessRunner().runCommand([script.path, "--dump-pages", "--", "https://example.com/v"])
+        }
+        XCTAssertEqual(output.trimmingCharacters(in: .whitespacesAndNewlines), "--proxy http://127.0.0.1:4321 --dump-pages -- https://example.com/v")
+    }
+
     @MainActor
     func testRemovingProxyArguments() {
         let args = ["--proxy", "http://evil:8080", "--keep-video", "--proxy=http://other:8080"]
@@ -165,6 +223,22 @@ final class EgressProxyTests: XCTestCase {
         XCTAssertFalse(ExternalDownloadTargetPolicy.isAllowedTarget(host: "169.254.169.254"))
         XCTAssertFalse(ExternalDownloadTargetPolicy.isAllowedTarget(host: "::1"))
         XCTAssertFalse(ExternalDownloadTargetPolicy.isAllowedTarget(host: "fe80::1"))
+    }
+
+    func testTranslationPrefixesInheritIPv4Rules() {
+        // NAT64 and 6to4 carry the IPv4 address a gateway connects to.
+        XCTAssertFalse(ExternalDownloadTargetPolicy.isAllowedTarget(host: "64:ff9b::7f00:1"), "NAT64 of 127.0.0.1")
+        XCTAssertFalse(ExternalDownloadTargetPolicy.isAllowedTarget(host: "64:ff9b::a9fe:a9fe"), "NAT64 of 169.254.169.254")
+        XCTAssertTrue(ExternalDownloadTargetPolicy.isAllowedTarget(host: "64:ff9b::808:808"), "NAT64 of 8.8.8.8")
+        XCTAssertFalse(ExternalDownloadTargetPolicy.isAllowedTarget(host: "64:ff9b:1::808:808"), "Local-use NAT64 maps to private IPv4")
+        XCTAssertFalse(ExternalDownloadTargetPolicy.isAllowedTarget(host: "2002:c0a8:101::1"), "6to4 of 192.168.1.1")
+        XCTAssertTrue(ExternalDownloadTargetPolicy.isAllowedTarget(host: "2002:808:808::1"), "6to4 of 8.8.8.8")
+        XCTAssertFalse(ExternalDownloadTargetPolicy.isAllowedTarget(host: "2001:0:4136:e378::1"), "Teredo")
+        XCTAssertFalse(ExternalDownloadTargetPolicy.isAllowedTarget(host: "::ffff:10.0.0.1"))
+        XCTAssertTrue(ExternalDownloadTargetPolicy.isAllowedTarget(host: "2606:4700:4700::1111"))
+        XCTAssertFalse(ExternalDownloadTargetPolicy.isAllowedTarget(host: "192.0.2.10"))
+        XCTAssertFalse(ExternalDownloadTargetPolicy.isAllowedTarget(host: "192.0.0.170"))
+        XCTAssertTrue(ExternalDownloadTargetPolicy.isAllowedTarget(host: "8.8.8.8"))
     }
 }
 
@@ -232,9 +306,11 @@ private final class MockHTTPServer: @unchecked Sendable {
     private var listener: NWListener?
     private let queue = DispatchQueue(label: "com.marspater.siphon.mock-http")
     private var hits: Int = 0
+    private var lastRequest = ""
     private let lock = NSLock()
 
     var hitCount: Int { lock.withLock { hits } }
+    var lastRequestText: String { lock.withLock { lastRequest } }
 
     func start(handler: @escaping @Sendable (String) -> (statusCode: Int, headers: [String: String], body: Data)) throws -> UInt16 {
         let params = NWParameters.tcp
@@ -252,7 +328,10 @@ private final class MockHTTPServer: @unchecked Sendable {
                 let parts = firstLine.split(separator: " ")
                 let path = parts.count > 1 ? String(parts[1]) : "/"
 
-                self.lock.withLock { self.hits += 1 }
+                self.lock.withLock {
+                    self.hits += 1
+                    self.lastRequest = text
+                }
 
                 let result = handler(path)
                 var response = "HTTP/1.1 \(result.statusCode) OK\r\nContent-Length: \(result.body.count)\r\nConnection: close\r\n"

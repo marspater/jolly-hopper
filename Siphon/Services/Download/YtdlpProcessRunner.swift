@@ -313,8 +313,12 @@ final class StreamDrainBarrier: @unchecked Sendable {
 public struct DownloadProcessResult: Sendable {
     public let primaryPath: String
     public let allPaths: [String]
+    /// Set when yt-dlp exited with an error after some entries (for example
+    /// playlist items) had already finished: the error of the ones that failed.
+    public let partialFailure: String?
 
-    public init(primaryPath: String, allPaths: [String] = []) {
+    public init(primaryPath: String, allPaths: [String] = [], partialFailure: String? = nil) {
+        self.partialFailure = partialFailure
         let validPaths = allPaths.filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
         let validPrimary = primaryPath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : primaryPath
         self.allPaths = validPaths.isEmpty ? (validPrimary.map { [$0] } ?? []) : validPaths
@@ -420,7 +424,7 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
 
     public func runCommand(_ args: [String], processController: DownloadProcessController?) async throws -> String {
         try Task.checkCancellation()
-        let prepared = try ChromiumCookieReader.prepare(args)
+        let prepared = try ChromiumCookieReader.prepare(EgressBoundary.applying(to: args))
         defer { prepared.cookieFile?.cleanup() }
         let args = prepared.args
         let process = Process()
@@ -527,7 +531,7 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
         onOutput: @escaping @Sendable (String) -> Void
     ) async throws -> DownloadProcessResult {
         try Task.checkCancellation()
-        let prepared = try ChromiumCookieReader.prepare(args)
+        let prepared = try ChromiumCookieReader.prepare(EgressBoundary.applying(to: args))
         defer { prepared.cookieFile?.cleanup() }
         let args = prepared.args
         let controller = processController ?? DownloadProcessController()
@@ -808,6 +812,7 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
 
                     let fm = FileManager.default
                     var verifiedFinalPaths: [String] = []
+                    var finishedEntryCount = 0
 
                     // 1. Check deterministic final path(s) emitted by yt-dlp
                     for directPath in outputState.getFinalPaths() {
@@ -822,6 +827,7 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
                             verifiedFinalPaths.append(resolved.path)
                         }
                     }
+                    finishedEntryCount = verifiedFinalPaths.count
 
                     // 2. Fallback to candidate paths parsed from output if no direct final paths verified
                     if verifiedFinalPaths.isEmpty {
@@ -849,6 +855,16 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
                         } else {
                             safeContinuation.resume(throwing: YtdlpError.downloadFailed("Download process completed, but no valid media file was verified in the target destination."))
                         }
+                    } else if finishedEntryCount > 0 {
+                        // yt-dlp moves past a failed playlist entry but still exits 1.
+                        // Entries that printed their after_move path are complete, so
+                        // keep them instead of failing (and later re-running) the job.
+                        let failure = Self.extractCleanError(from: errorOutput).trimmingCharacters(in: .whitespacesAndNewlines)
+                        safeContinuation.resume(returning: DownloadProcessResult(
+                            primaryPath: verifiedFinalPaths[0],
+                            allPaths: verifiedFinalPaths,
+                            partialFailure: failure.isEmpty ? "Process exited with code \(exitCode)" : failure
+                        ))
                     } else {
                         safeContinuation.resume(throwing: Self.classifyFailure(
                             errorOutput: errorOutput,

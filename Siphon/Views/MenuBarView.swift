@@ -263,68 +263,56 @@ struct MenuBarView: View {
     }
 
     private func submitToManager(resolvedURL: String) {
-        // A deleted custom preset falls back to the standard preset instead of dropping the URL.
-        if selectedPreset.hasPrefix("custom_"),
-           let preset = customPresets.first(where: { $0.id.uuidString == String(selectedPreset.dropFirst(7)) }) {
-            downloadManager.addDownload(url: resolvedURL, options: DownloadOptions(
-                saveFolder: getSaveFolder(),
-                fileType: preset.fileType,
-                videoFormat: nil,
-                audioFormat: nil,
-                videoResolution: preset.videoResolution,
-                audioQuality: .best,
-                downloadSubtitles: preset.downloadSubtitles ?? false,
-                subtitleLanguages: [(preset.subtitleLanguage ?? "en").replacingOccurrences(of: "embed:", with: "")],
-                subtitleFormat: preset.subtitleFormat ?? .srt,
-                embedSubtitles: preset.downloadSubtitles ?? false,
-                downloadThumbnail: false,
-                embedThumbnail: true,
-                embedMetadata: true,
-                splitChapters: preset.splitChapters ?? false,
-                sponsorBlock: preset.sponsorBlock ?? false,
-                timeFrameStart: nil,
-                timeFrameEnd: nil,
-                customFilename: nil,
-                videoCodec: preset.videoCodec,
-                audioCodec: preset.audioCodec,
-                forceOverwrite: false
-            ))
-        } else {
-            let preset = DownloadPreset(rawValue: selectedPreset) ?? (selectedType == "audio" ? .audioOnly : .bestQuality)
-            downloadManager.addDownload(url: resolvedURL, options: DownloadOptions(
-                saveFolder: getSaveFolder(),
-                fileType: preset.fileType,
-                videoFormat: nil,
-                audioFormat: nil,
-                videoResolution: preset.videoResolution,
-                audioQuality: .best,
-                downloadSubtitles: false,
-                subtitleLanguages: ["en"],
-                subtitleFormat: .srt,
-                embedSubtitles: false,
-                downloadThumbnail: false,
-                embedThumbnail: true,
-                embedMetadata: true,
-                splitChapters: false,
-                sponsorBlock: UserDefaults.standard.bool(forKey: UserDefaultsKeys.sponsorBlock),
-                timeFrameStart: nil,
-                timeFrameEnd: nil,
-                customFilename: nil,
-                videoCodec: preset.videoCodec,
-                audioCodec: preset.audioCodec,
-                forceOverwrite: false
-            ))
-        }
-
+        downloadManager.addDownload(
+            url: resolvedURL,
+            options: Self.downloadOptions(selectedPreset: selectedPreset, selectedType: selectedType, customPresets: customPresets)
+        )
         url = ""
         MenuBarManager.shared.closePopover()
     }
 
-    private func getSaveFolder() -> URL {
-        let defaultPath = UserDefaults.standard.string(forKey: UserDefaultsKeys.defaultSaveFolder) ?? ""
-        return defaultPath.isEmpty ?
-            (FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Downloads")) :
-            URL(fileURLWithPath: defaultPath)
+    /// Starts from the same Preferences as the Add sheet and the Home drop target
+    /// (save folder, embedding, fallback policy, default arguments), then applies
+    /// the chosen preset's format choices on top.
+    static func downloadOptions(
+        selectedPreset: String,
+        selectedType: String,
+        customPresets: [CustomPreset],
+        userDefaults: UserDefaults = .standard
+    ) -> DownloadOptions {
+        var options = DownloadOptions.defaultFromPreferences(userDefaults: userDefaults)
+        // A deleted custom preset falls back to the standard preset instead of dropping the URL.
+        if selectedPreset.hasPrefix("custom_"),
+           let preset = customPresets.first(where: { $0.id.uuidString == String(selectedPreset.dropFirst(7)) }) {
+            applyFormat(fileType: preset.fileType, resolution: preset.videoResolution, videoCodec: preset.videoCodec, audioCodec: preset.audioCodec, to: &options)
+            // Same subtitle rule as the Add sheet: an "embed:" prefix embeds, otherwise a separate file.
+            let rawLanguage = preset.subtitleLanguage ?? ""
+            let language = rawLanguage.replacingOccurrences(of: "embed:", with: "")
+            options.downloadSubtitles = preset.downloadSubtitles ?? false
+            options.subtitleLanguages = [language.isEmpty ? "en" : language]
+            options.subtitleFormat = preset.subtitleFormat ?? .srt
+            options.embedSubtitles = options.downloadSubtitles && rawLanguage.hasPrefix("embed:")
+            options.splitChapters = preset.splitChapters ?? false
+            options.sponsorBlock = preset.sponsorBlock ?? false
+        } else {
+            let preset = DownloadPreset(rawValue: selectedPreset) ?? (selectedType == "audio" ? .audioOnly : .bestQuality)
+            applyFormat(fileType: preset.fileType, resolution: preset.videoResolution, videoCodec: preset.videoCodec, audioCodec: preset.audioCodec, to: &options)
+        }
+        return options
+    }
+
+    private static func applyFormat(
+        fileType: MediaFileType,
+        resolution: VideoResolution,
+        videoCodec: VideoCodec,
+        audioCodec: AudioCodec,
+        to options: inout DownloadOptions
+    ) {
+        options.fileType = fileType
+        options.videoResolution = fileType.isVideo ? resolution : nil
+        options.audioQuality = fileType.isAudio ? .best : nil
+        options.videoCodec = videoCodec
+        options.audioCodec = audioCodec
     }
 
     // MARK: - Footer

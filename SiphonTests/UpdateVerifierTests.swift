@@ -574,6 +574,29 @@ final class UpdateVerifierTests: XCTestCase {
     }
 
     @MainActor
+    func testReleasesAfterCutoverRequireSignedManifestEvenWhenItIsMissing() async {
+        XCTAssertFalse(UpdateChecker.releaseRequiresSignedManifest(UpdateChecker.lastUnsignedRelease))
+        XCTAssertFalse(UpdateChecker.releaseRequiresSignedManifest("5.4.0"))
+        XCTAssertTrue(UpdateChecker.releaseRequiresSignedManifest("5.4.6"))
+        XCTAssertTrue(UpdateChecker.releaseRequiresSignedManifest("5.10.0"))
+
+        // A newer release that simply leaves the manifest out must not fall back
+        // to the unsigned checksum path.
+        let checker = UpdateChecker()
+        checker.configureUpdateSources(
+            downloadURL: URL(string: "https://github.com/marspater/jolly-hopper/releases/download/v5.5.0/Siphon.dmg")!,
+            downloadAssetName: "Siphon.dmg",
+            expectedChecksum: "d7a8fbb307d7809469ca9abcb0082e4f8d5651e46d3cdb762d02d0bf37c9e592",
+            checksumURL: nil,
+            manifestURL: nil,
+            manifestSigURL: nil,
+            latestVersion: "5.5.0"
+        )
+        await checker.downloadAndInstallUpdate()
+        XCTAssertTrue(checker.updateError?.contains("signed release manifest") == true)
+    }
+
+    @MainActor
     func testUpdateCheckerRejectsUntrustedManifestURL() async {
         let checker = UpdateChecker()
         let downloadURL = URL(string: "https://github.com/marspater/jolly-hopper/releases/download/v5.5.0/Siphon.dmg")!
