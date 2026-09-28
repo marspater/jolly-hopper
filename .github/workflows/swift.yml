@@ -6,9 +6,17 @@ on:
   pull_request:
     branches: [ "main" ]
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: macos-latest
+    timeout-minutes: 90
 
     steps:
       - name: Checkout code
@@ -21,17 +29,21 @@ jobs:
             -scheme Siphon \
             -destination 'platform=macOS' \
             -configuration Debug \
+            MACOSX_DEPLOYMENT_TARGET=15.0 \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO
 
       - name: Test (Release)
+        # Run even when Debug fails, so one CI run reports both configurations.
+        if: ${{ !cancelled() }}
         run: |
           xcodebuild test \
             -project Siphon.xcodeproj \
             -scheme Siphon \
             -destination 'platform=macOS' \
             -configuration Release \
+            MACOSX_DEPLOYMENT_TARGET=15.0 \
             ENABLE_TESTABILITY=YES \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \

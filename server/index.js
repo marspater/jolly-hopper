@@ -225,10 +225,17 @@ function createServer({
   });
 }
 
+// Render routes public traffic to the port on every interface and sets
+// RENDER=true; bound to loopback there, the service never answers. Anywhere
+// else it stays on loopback unless HOST says otherwise.
+function listenHost(env = process.env) {
+  return env.HOST || (env.RENDER ? '0.0.0.0' : '127.0.0.1');
+}
+
 if (require.main === module) {
   const configuredPort = Number.parseInt(process.env.PORT ?? '', 10);
   const port = Number.isInteger(configuredPort) && configuredPort >= 1 && configuredPort <= 65535 ? configuredPort : 3000;
-  const host = process.env.HOST || '127.0.0.1';
+  const host = listenHost();
   const server = createServer();
 
   server.listen(port, host, () => {
@@ -253,4 +260,4 @@ if (require.main === module) {
   process.on('SIGINT', shutdown);
 }
 
-module.exports = { createServer };
+module.exports = { createServer, listenHost };
