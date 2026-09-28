@@ -44,7 +44,7 @@ struct AddDownloadView: View {
 
 
     @State private var downloadSubtitles: Bool = false
-    @State private var isPasted: Bool = false
+    @StateObject private var pasteFeedback = TransientFeedbackState()
     @State private var selectedSubtitleLangs: Set<String> = []
     @State private var availableSubtitles: [SubtitleOption] = []
     @State private var embedSubtitles: Bool = true
@@ -532,20 +532,16 @@ struct AddDownloadView: View {
                 Button {
                     if let clipboardString = NSPasteboard.general.string(forType: .string) {
                         urlInput = clipboardString
-                        isPasted = true
-                        Task {
-                            try? await Task.sleep(nanoseconds: 1_500_000_000)
-                            isPasted = false
-                        }
+                        pasteFeedback.show(languageService.s("paste"), isSuccess: true, duration: 1.5)
                     }
                 } label: {
                     HStack(spacing: SiphonTheme.spacing4) {
-                        Image(systemName: isPasted ? "checkmark" : "doc.on.clipboard")
+                        Image(systemName: pasteFeedback.isShowing ? "checkmark" : "doc.on.clipboard")
                             .font(.system(size: 12, weight: .medium))
                         Text(languageService.s("paste"))
                             .font(.siphonSecondaryMedium)
                     }
-                    .foregroundColor(isPasted ? SiphonTheme.statusForeground(for: .completed, colorScheme: colorScheme) : .primary)
+                    .foregroundColor(pasteFeedback.isShowing ? SiphonTheme.statusForeground(for: .completed, colorScheme: colorScheme) : .primary)
                     .padding(.horizontal, SiphonTheme.spacing10)
                     .padding(.vertical, 7)
                     .background(SiphonTheme.controlBackground(cornerRadius: SiphonTheme.radiusControl))
@@ -556,7 +552,7 @@ struct AddDownloadView: View {
                 }
                 .buttonStyle(.bouncy(scale: 0.97, hover: 1.015))
                 .help(languageService.s("paste_from_clipboard"))
-                .accessibilityLabel(isPasted ? languageService.s("paste") : languageService.s("paste_from_clipboard"))
+                .accessibilityLabel(pasteFeedback.isShowing ? languageService.s("paste") : languageService.s("paste_from_clipboard"))
 
                 Button {
                     fetchInfo()
