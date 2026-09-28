@@ -193,6 +193,20 @@ final class EgressProxyTests: XCTestCase {
         XCTAssertTrue(EgressBoundary.webKitProxyConfigurations.isEmpty)
     }
 
+    @MainActor
+    func testWebKitStoresNeverShareAProxyAcrossEgressRoutes() {
+        let service = YtdlpService()
+        let proxyURL = "http://127.0.0.1:4321"
+        let proxied = EgressBoundary.$proxyURL.withValue(proxyURL) { service.boyfriendTVWebDataStore }
+        // A direct job starting while the boundary job's page is still loading.
+        let direct = service.boyfriendTVWebDataStore
+
+        XCTAssertFalse(direct === proxied)
+        XCTAssertTrue(direct.proxyConfigurations.isEmpty)
+        XCTAssertEqual(proxied.proxyConfigurations.count, 1, "The direct job must not clear the boundary proxy")
+        XCTAssertTrue(EgressBoundary.$proxyURL.withValue(proxyURL) { service.boyfriendTVWebDataStore } === proxied)
+    }
+
     func testRunnerAddsBoundaryProxyToResolverYtdlpRuns() async throws {
         // A stand-in yt-dlp that prints its arguments.
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("boundary_\(UUID().uuidString)")
