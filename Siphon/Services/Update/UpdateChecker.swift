@@ -46,6 +46,17 @@ public final class UpdateChecker: ObservableObject {
         self.requireSignedManifest = requireSignedManifest
     }
 
+    /// The last release published without a signed manifest. Every newer release
+    /// must carry one; otherwise leaving the manifest out of a release would skip
+    /// signature verification entirely. Sign releases with
+    /// `scripts/sign-release-manifest.swift`.
+    nonisolated static let lastUnsignedRelease = "5.4.5"
+
+    nonisolated static func releaseRequiresSignedManifest(_ version: String?) -> Bool {
+        guard let version, !version.isEmpty else { return true }
+        return version.compare(lastUnsignedRelease, options: .numeric) == .orderedDescending
+    }
+
     nonisolated static func parseGitHubAssetSHA256(_ digest: String?) -> String? {
         guard let digest = digest?.trimmingCharacters(in: .whitespacesAndNewlines),
               digest.lowercased().hasPrefix("sha256:") else {
@@ -244,7 +255,7 @@ public final class UpdateChecker: ObservableObject {
         }
 
         // 1. Fetch and verify signed release manifest if available or required
-        if manifestURL != nil || manifestSigURL != nil || requireSignedManifest {
+        if manifestURL != nil || manifestSigURL != nil || requireSignedManifest || Self.releaseRequiresSignedManifest(latestVersion) {
             guard let mURL = manifestURL, let sURL = manifestSigURL else {
                 let message = "A signed release manifest and signature are required to verify this update."
                 updateError = UpdateDownloadError.checksumUnavailable(message).localizedDescription

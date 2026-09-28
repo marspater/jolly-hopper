@@ -128,6 +128,11 @@ public enum ExternalDownloadTargetPolicy {
         if a == 172 && (16...31).contains(second) { return false }
         if a == 192 && second == 168 { return false }
         if a == 198 && (second == 18 || second == 19) { return false }
+        // IETF protocol assignments, documentation (TEST-NET-1/2/3), 6to4 relay anycast.
+        if a == 192 && second == 0 && (b[2] == 0 || b[2] == 2) { return false }
+        if a == 198 && second == 51 && b[2] == 100 { return false }
+        if a == 203 && second == 0 && b[2] == 113 { return false }
+        if a == 192 && second == 88 && b[2] == 99 { return false }
 
         return true
     }
@@ -147,28 +152,7 @@ public enum ExternalDownloadTargetPolicy {
             }
         }
         guard parsed == 1 else { return false }
-
-        // IPv4-mapped (::ffff:a.b.c.d / ::ffff:7f00:1) and legacy
-        // IPv4-compatible (::a.b.c.d) forms must inherit IPv4 routing rules.
-        let firstTenZero = bytes[0..<10].allSatisfy { $0 == 0 }
-        if firstTenZero, bytes[10] == 0xff, bytes[11] == 0xff {
-            return isGloballyRoutableIPv4(Array(bytes[12..<16]))
-        }
-        if bytes[0..<12].allSatisfy({ $0 == 0 }) {
-            return isGloballyRoutableIPv4(Array(bytes[12..<16]))
-        }
-
-        // Unique-local, link-local, deprecated site-local, multicast, and the
-        // documentation prefix are never valid external deep-link targets.
-        if (bytes[0] & 0xfe) == 0xfc { return false } // fc00::/7
-        if bytes[0] == 0xfe, (bytes[1] & 0xc0) == 0x80 { return false } // fe80::/10
-        if bytes[0] == 0xfe, (bytes[1] & 0xc0) == 0xc0 { return false } // fec0::/10
-        if bytes[0] == 0xff { return false } // ff00::/8
-        if bytes[0] == 0x20, bytes[1] == 0x01, bytes[2] == 0x0d, bytes[3] == 0xb8 {
-            return false // 2001:db8::/32
-        }
-
-        return true
+        return isGloballyRoutableIPv6Bytes(bytes)
     }
 
     /// Resolve all A/AAAA records for `host` and reject if **any** resolved
@@ -240,12 +224,27 @@ public enum ExternalDownloadTargetPolicy {
             return isGloballyRoutableIPv4(Array(bytes[12..<16]))
         }
 
-        if (bytes[0] & 0xfe) == 0xfc { return false }
-        if bytes[0] == 0xfe, (bytes[1] & 0xc0) == 0x80 { return false }
-        if bytes[0] == 0xfe, (bytes[1] & 0xc0) == 0xc0 { return false }
-        if bytes[0] == 0xff { return false }
+        // Translation prefixes carry an IPv4 address that a gateway or relay
+        // connects to, so they inherit IPv4 routing rules.
+        if bytes[0..<4] == [0x00, 0x64, 0xff, 0x9b] {
+            if bytes[4..<12].allSatisfy({ $0 == 0 }) {
+                return isGloballyRoutableIPv4(Array(bytes[12..<16])) // NAT64 64:ff9b::/96
+            }
+            if bytes[4] == 0x00, bytes[5] == 0x01 { return false } // local-use NAT64 64:ff9b:1::/48
+        }
+        if bytes[0] == 0x20, bytes[1] == 0x02 {
+            return isGloballyRoutableIPv4(Array(bytes[2..<6])) // 6to4 2002::/16
+        }
+        if bytes[0..<4] == [0x20, 0x01, 0x00, 0x00] { return false } // Teredo 2001::/32
+
+        // Unique-local, link-local, deprecated site-local, multicast, and the
+        // documentation prefix are never valid external deep-link targets.
+        if (bytes[0] & 0xfe) == 0xfc { return false } // fc00::/7
+        if bytes[0] == 0xfe, (bytes[1] & 0xc0) == 0x80 { return false } // fe80::/10
+        if bytes[0] == 0xfe, (bytes[1] & 0xc0) == 0xc0 { return false } // fec0::/10
+        if bytes[0] == 0xff { return false } // ff00::/8
         if bytes[0] == 0x20, bytes[1] == 0x01, bytes[2] == 0x0d, bytes[3] == 0xb8 {
-            return false
+            return false // 2001:db8::/32
         }
 
         return true
