@@ -4,6 +4,17 @@ import XCTest
 @MainActor
 final class DownloadManagerTests: XCTestCase {
 
+    func testRecentDownloadsListsNewestJobsFirst() {
+        let manager = DownloadManager()
+        defer { manager.shutdown() }
+        manager.downloads = ["Old", "Middle", "Newer", "Newest"].map {
+            Download(url: "https://example.com/\($0)", options: .default, title: $0)
+        }
+
+        XCTAssertEqual(manager.recentDownloads(limit: 3).map(\.title), ["Newest", "Newer", "Middle"])
+        XCTAssertEqual(manager.downloads.first?.title, "Old", "Queue order must not change")
+    }
+
     func testPauseResumeReusesPartialDataAndCompletionRemovesScratch() async throws {
         let originalHistory = UserDefaults.standard.object(forKey: UserDefaultsKeys.downloadHistory)
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
