@@ -351,7 +351,10 @@ class YtdlpService: ObservableObject {
 
     var processRunner: YtdlpProcessRunning
     var updateYtdlpHandler: (() async throws -> String)?
-    private lazy var boyfriendTVWebDataStore = WKWebsiteDataStore.nonPersistent()
+    private var boyfriendTVWebDataStores: [String: WKWebsiteDataStore] = [:]
+    var boyfriendTVWebDataStore: WKWebsiteDataStore {
+        webDataStore(in: &boyfriendTVWebDataStores) { .nonPersistent() }
+    }
     // Test seam for the browser-engine fallback. Production uses WKWebView.
     var boyfriendTVRenderedPageLoader: ((URL) async throws -> String?)?
     // Test seam for media URLs that only exist in the live browser runtime.
@@ -359,14 +362,36 @@ class YtdlpService: ObservableObject {
     // Test seam for installed browser candidate discovery.
     var installedBrowsersProvider: (() async -> [String])?
     // Persistent, so the user's recu.me clearance and sign-in survive relaunches.
-    private lazy var recuWebDataStore = WKWebsiteDataStore(
-        forIdentifier: UUID(uuidString: "6F1E2B7C-3A4D-4E5F-9A8B-7C6D5E4F3A2B")!
-    )
+    // Boundary-enforced jobs keep theirs in a second store, signed in separately.
+    private var recuWebDataStores: [String: WKWebsiteDataStore] = [:]
+    private var recuWebDataStore: WKWebsiteDataStore {
+        webDataStore(in: &recuWebDataStores) {
+            let identifier = EgressBoundary.proxyURL == nil
+                ? "6F1E2B7C-3A4D-4E5F-9A8B-7C6D5E4F3A2B"
+                : "0C494988-0FFE-497D-904A-DCC4E85842B7"
+            return WKWebsiteDataStore(forIdentifier: UUID(uuidString: identifier)!)
+        }
+    }
     // Test seam for the recu.me WebKit session. Production uses WKWebView.
     var recuBrowserSessionLoader: ((URL, String) async throws -> RecuBrowserSession)?
 
     init(processRunner: YtdlpProcessRunning = DefaultYtdlpProcessRunner()) {
         self.processRunner = processRunner
+    }
+
+    /// The store for the current job's egress route. A store's proxy is store-wide,
+    /// so jobs on different routes never share a store, and each store's proxy is
+    /// set once, at creation: a concurrent job can never change another's route.
+    private func webDataStore(
+        in stores: inout [String: WKWebsiteDataStore],
+        make: () -> WKWebsiteDataStore
+    ) -> WKWebsiteDataStore {
+        let route = EgressBoundary.proxyURL ?? ""
+        if let store = stores[route] { return store }
+        let store = make()
+        store.proxyConfigurations = EgressBoundary.webKitProxyConfigurations
+        stores[route] = store
+        return store
     }
 
     nonisolated static func verifySHA256(fileURL: URL, expectedHash: String) -> Bool {
@@ -2861,9 +2886,6 @@ public struct DownloadResult: Sendable {
             throw YtdlpError.cloudflareBlocked
         }
 
-        // ponytail: one store-wide setting, so recu jobs with different boundaries
-        // running at once share whichever was set last; per-job stores if that matters.
-        recuWebDataStore.proxyConfigurations = EgressBoundary.webKitProxyConfigurations
         let configuration = WKWebViewConfiguration()
         configuration.websiteDataStore = recuWebDataStore
         configuration.mediaTypesRequiringUserActionForPlayback = .all
@@ -3370,7 +3392,6 @@ public struct DownloadResult: Sendable {
             return nil
         }
 
-        boyfriendTVWebDataStore.proxyConfigurations = EgressBoundary.webKitProxyConfigurations
         let configuration = WKWebViewConfiguration()
         configuration.websiteDataStore = boyfriendTVWebDataStore
         configuration.defaultWebpagePreferences.allowsContentJavaScript = true
