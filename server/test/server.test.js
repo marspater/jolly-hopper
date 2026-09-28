@@ -62,6 +62,7 @@ describe('Siphon Companion Server', () => {
     assert.equal(res.headers.get('x-content-type-options'), 'nosniff');
     assert.equal(res.headers.get('x-frame-options'), 'DENY');
     assert.equal(res.headers.get('referrer-policy'), 'no-referrer');
+    assert.equal(res.headers.get('content-security-policy'), "default-src 'none'; frame-ancestors 'none'");
   });
 
   test('GET /health returns 200 with status ok', async () => {
