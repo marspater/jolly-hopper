@@ -1330,7 +1330,8 @@ class YtdlpService: ObservableObject {
         url: String,
         rawCookies: String? = nil,
         rawUserAgent: String? = nil,
-        browserCookieSource: String? = nil
+        browserCookieSource: String? = nil,
+        proxy: String? = nil
     ) async throws -> [MediaInfo] {
         guard let path = ytdlpPath else {
             throw YtdlpError.notFound
@@ -1344,6 +1345,9 @@ class YtdlpService: ObservableObject {
             "--no-warnings"
         ]
         appendJsRuntimeArgs(to: &args)
+        if let proxy = proxy, !proxy.isEmpty {
+            args.append(contentsOf: ["--proxy", proxy])
+        }
         
         var secureCookieFile: SecureCookieFile? = nil
         defer {
@@ -1786,9 +1790,7 @@ public struct DownloadResult: Sendable {
         }
 
         if options.enforcePublicNetworkBoundary {
-            if let _ = try? EgressProxyServer.shared.start() {
-                args.append(contentsOf: ["--proxy", EgressProxyServer.shared.proxyURLString])
-            }
+            args.append(contentsOf: ["--proxy", try egressProxyURL()])
         }
 
         // Reuse the metadata fetched moments ago instead of extracting again
@@ -6797,6 +6799,18 @@ public struct DownloadResult: Sendable {
             index += 1
         }
         return kept
+    }
+
+    /// Starts the shared egress proxy and returns its URL. Logs and rethrows when
+    /// it cannot start, so boundary-enforced work never runs unproxied.
+    func egressProxyURL() throws -> String {
+        do {
+            let port = try EgressProxyServer.shared.start()
+            return "http://127.0.0.1:\(port)"
+        } catch {
+            LoggerService.shared.log("Egress proxy failed to start; refusing to contact external target directly: \(error.localizedDescription)", level: .error)
+            throw error
+        }
     }
 
     /// Drops `--proxy` (with its value) from user arguments when public-network

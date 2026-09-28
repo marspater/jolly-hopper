@@ -25,10 +25,6 @@ public final class EgressProxyServer: @unchecked Sendable {
     private var isStarted = false
     public private(set) var port: UInt16 = 0
 
-    public var proxyURLString: String {
-        "http://127.0.0.1:\(port)"
-    }
-
     public init(targetValidator: TargetValidator? = nil) {
         self.targetValidator = targetValidator ?? { host, port in
             ExternalDownloadTargetPolicy.isAllowedTarget(host: host, port: port)
@@ -177,7 +173,7 @@ public final class EgressProxyServer: @unchecked Sendable {
             return
         }
 
-        guard targetValidator(host, port) else {
+        guard let address = approvedAddress(host: host, port: port) else {
             Task { @MainActor in
                 LoggerService.shared.log("Egress proxy blocked CONNECT target outside public network: \(host):\(port)", level: .warning)
             }
@@ -185,7 +181,7 @@ public final class EgressProxyServer: @unchecked Sendable {
             return
         }
 
-        connectUpstream(host: host, port: port) { [weak self] upstreamResult in
+        connectUpstream(address: address, port: port) { [weak self] upstreamResult in
             guard let self = self else {
                 client.cancel()
                 return
@@ -221,9 +217,12 @@ public final class EgressProxyServer: @unchecked Sendable {
         if let url = URL(string: target), let urlHost = url.host {
             host = urlHost
             port = url.port ?? (url.scheme?.lowercased() == "https" ? 443 : 80)
-            let path = url.path.isEmpty ? "/" : url.path
-            let query = url.query.map { "?\($0)" } ?? ""
-            relativePath = path + query
+            // Keep the path as the client encoded it; URL.path would decode
+            // %20/%2F and forward an invalid or different request line.
+            let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+            let path = components?.percentEncodedPath ?? ""
+            let query = components?.percentEncodedQuery.map { "?\($0)" } ?? ""
+            relativePath = (path.isEmpty ? "/" : path) + query
         } else {
             var hostHeaderValue: String?
             for line in lines.dropFirst() {
@@ -241,7 +240,7 @@ public final class EgressProxyServer: @unchecked Sendable {
             relativePath = target
         }
 
-        guard targetValidator(host, port) else {
+        guard let address = approvedAddress(host: host, port: port) else {
             Task { @MainActor in
                 LoggerService.shared.log("Egress proxy blocked HTTP target outside public network: \(host):\(port)", level: .warning)
             }
@@ -249,7 +248,7 @@ public final class EgressProxyServer: @unchecked Sendable {
             return
         }
 
-        connectUpstream(host: host, port: port) { [weak self] upstreamResult in
+        connectUpstream(address: address, port: port) { [weak self] upstreamResult in
             guard let self = self else {
                 client.cancel()
                 return
@@ -285,14 +284,58 @@ public final class EgressProxyServer: @unchecked Sendable {
         }
     }
 
-    private func connectUpstream(host: String, port: Int, completion: @escaping @Sendable (Result<NWConnection, Error>) -> Void) {
+    /// Resolves `host` once and returns the numeric address to connect to, only
+    /// when the name and every address it resolves to pass the validator.
+    /// Connecting to that exact address, instead of letting NWConnection resolve
+    /// the name again, closes the DNS-rebinding window between check and connect.
+    private func approvedAddress(host: String, port: Int) -> String? {
+        guard targetValidator(host, port) else { return nil }
+        let addresses = Self.resolveNumericAddresses(host)
+        guard let first = addresses.first,
+              addresses.allSatisfy({ targetValidator($0, port) }) else {
+            return nil
+        }
+        return first
+    }
+
+    private static func resolveNumericAddresses(_ host: String) -> [String] {
+        var hints = addrinfo()
+        hints.ai_family = AF_UNSPEC
+        hints.ai_socktype = SOCK_STREAM
+
+        var result: UnsafeMutablePointer<addrinfo>?
+        guard getaddrinfo(host, nil, &hints, &result) == 0 else { return [] }
+        defer { freeaddrinfo(result) }
+
+        var addresses: [String] = []
+        var current = result
+        while let info = current {
+            var buffer = [CChar](repeating: 0, count: Int(NI_MAXHOST))
+            if let addr = info.pointee.ai_addr,
+               getnameinfo(addr, info.pointee.ai_addrlen, &buffer, socklen_t(buffer.count), nil, 0, NI_NUMERICHOST) == 0 {
+                addresses.append(buffer.withUnsafeBufferPointer { String(cString: $0.baseAddress!) })
+            }
+            current = info.pointee.ai_next
+        }
+        return addresses
+    }
+
+    private static let upstreamConnectTimeout: TimeInterval = 15
+
+    private func connectUpstream(address: String, port: Int, completion: @escaping @Sendable (Result<NWConnection, Error>) -> Void) {
         guard let nwPort = NWEndpoint.Port(rawValue: UInt16(port)) else {
             completion(.failure(NSError(domain: "EgressProxyServer", code: -1, userInfo: [NSLocalizedDescriptionKey: "Invalid port"])))
             return
         }
 
-        let upstream = NWConnection(host: NWEndpoint.Host(host), port: nwPort, using: .tcp)
+        let upstream = NWConnection(host: NWEndpoint.Host(address), port: nwPort, using: .tcp)
         let completedBox = AtomicBox<Bool>(false)
+        let fail: @Sendable (Error) -> Void = { error in
+            if completedBox.compareAndSet(expected: false, newValue: true) {
+                upstream.cancel()
+                completion(.failure(error))
+            }
+        }
 
         upstream.stateUpdateHandler = { state in
             switch state {
@@ -300,21 +343,21 @@ public final class EgressProxyServer: @unchecked Sendable {
                 if completedBox.compareAndSet(expected: false, newValue: true) {
                     completion(.success(upstream))
                 }
-            case .failed(let err):
-                if completedBox.compareAndSet(expected: false, newValue: true) {
-                    upstream.cancel()
-                    completion(.failure(err))
-                }
+            // .waiting means no usable path (refused, unreachable); NWConnection
+            // would retry indefinitely and hold the client connection open.
+            case .waiting(let err), .failed(let err):
+                fail(err)
             case .cancelled:
-                if completedBox.compareAndSet(expected: false, newValue: true) {
-                    completion(.failure(NSError(domain: "EgressProxyServer", code: -1, userInfo: [NSLocalizedDescriptionKey: "Connection cancelled"])))
-                }
+                fail(NSError(domain: "EgressProxyServer", code: -1, userInfo: [NSLocalizedDescriptionKey: "Connection cancelled"]))
             default:
                 break
             }
         }
 
         upstream.start(queue: queue)
+        queue.asyncAfter(deadline: .now() + Self.upstreamConnectTimeout) {
+            fail(NSError(domain: "EgressProxyServer", code: -2, userInfo: [NSLocalizedDescriptionKey: "Upstream connect timed out"]))
+        }
     }
 
     private func bridgeConnections(client: NWConnection, upstream: NWConnection) {
