@@ -102,13 +102,13 @@ struct SiphonApp: App {
                 }
             }
             CommandGroup(replacing: .newItem) {
-                Button(languageService.s("new_download") + "...") {
+                Button(languageService.s("new_download") + "…") {
                     AddDownloadWindowManager.shared.showAddDownloadWindow(downloadManager: downloadManager, appState: appState, languageService: languageService)
                 }
                 .keyboardShortcut("n", modifiers: .command)
             }
             CommandGroup(replacing: .appSettings) {
-                Button(languageService.s("settings") + "...") {
+                Button(languageService.s("settings") + "…") {
                     PreferencesWindowManager.shared.showPreferencesWindow(
                         languageService: languageService,
                         updateChecker: updateChecker,

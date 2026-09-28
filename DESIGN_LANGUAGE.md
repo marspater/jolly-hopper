@@ -29,7 +29,8 @@ decoration for its own sake.
 - `Siphon/Views/Components/LiquidWaterWaveView.swift`: `StatusSegmentFill`, the
   Home status segment background. Idle segments are flat, segments with items
   get a static tint, and only live download progress animates (a liquid fill
-  whose width follows progress).
+  whose width follows progress). Completed is the resting state: its icon is
+  green, but its segment stays flat.
 
 Do not introduce a second palette, spacing scale, radius scale, animation scale,
 or glass implementation in a feature view. Add a token to the shared source of
@@ -62,6 +63,9 @@ truth only when the value is genuinely reused or has semantic meaning.
   - failed/stopped: red
 - Accent color is not a general-purpose decoration. If every icon is tinted,
   nothing communicates priority.
+- Finished work is calm. Completed, failed and stopped rows use neutral borders
+  and cast no colored shadow; the status label and icon carry the state. Only
+  in-flight rows (downloading, queued) are tinted.
 - Preserve readable contrast in Light and Dark appearances: text at least
   4.5:1 against `surfaceElevated`, and icons, borders and focus rings at least
   3:1. Increase Contrast

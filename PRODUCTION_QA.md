@@ -74,12 +74,14 @@ Expected:
 
 Current production targets:
 
-- Card hover: 1.012 scale, 2 pt lift, status-tinted 14 pt shadow.
+- Card hover: 1.012 scale, 2 pt lift. In-flight rows cast a status-tinted
+  14 pt shadow; finished rows cast none.
 - Hero drag target: 1.012 scale with the stronger dashed accent/glow treatment.
 - Status segments (Downloading → Completed → Failed): only the Downloading
   segment animates, as a liquid fill tracking aggregate progress; it stops when
-  nothing downloads, while Siphon is inactive, or with Reduce Motion. Other
-  segments use a static tint and stay inside the group's rounded corners.
+  nothing downloads, while Siphon is inactive, or with Reduce Motion. Failed
+  uses a static tint that stays inside the group's rounded corners; Completed
+  stays flat.
 - The progress fill uses the display's 60/120 Hz sampling policy without
   changing animation physics.
 

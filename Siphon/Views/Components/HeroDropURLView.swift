@@ -18,7 +18,6 @@ struct HeroDropURLView: View {
     @State private var inputURL: String = ""
     @State private var isTargeted: Bool = false
     @State private var isPasting: Bool = false
-    @State private var isExtracting: Bool = false
     @StateObject private var feedback = TransientFeedbackState()
 
     private var showsFieldFocus: Bool {
@@ -105,17 +104,11 @@ struct HeroDropURLView: View {
                                 .font(.system(size: 13, weight: .semibold))
                                 .foregroundColor(.white)
                         }
+                        .accessibilityHidden(true)
 
-                        VStack(alignment: .leading, spacing: 1.5) {
-                            Text(languageService.s("drop_url_here"))
-                                .font(.siphonHeadline)
-                                .foregroundColor(.primary)
-
-                            Text(languageService.s("ready_to_download_subtitle"))
-                                .font(.siphonMetadata)
-                                .foregroundColor(.secondary)
-                                .lineLimit(1)
-                        }
+                        Text(languageService.s("drop_url_here"))
+                            .font(.siphonHeadline)
+                            .foregroundColor(.primary)
                     }
 
                     Spacer()
@@ -152,7 +145,7 @@ struct HeroDropURLView: View {
                         .foregroundColor(showsFieldFocus ? SiphonTheme.accentText : .secondary)
                         .frame(width: 16, alignment: .center)
 
-                    TextField(languageService.s("hero_enter_url"), text: $inputURL)
+                    TextField(languageService.s("url_hint"), text: $inputURL)
                         .textFieldStyle(.plain)
                         .font(.siphonStandard)
                         .focused($isFieldFocused)
@@ -211,7 +204,7 @@ struct HeroDropURLView: View {
                     }
                     .buttonStyle(.siphonPrimary)
                     .fixedSize(horizontal: true, vertical: false)
-                    .disabled(isExtracting || inputURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .disabled(inputURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     .accessibilityLabel(languageService.s("download_btn"))
                 }
                 .padding(.horizontal, SiphonTheme.spacing12)
@@ -226,14 +219,7 @@ struct HeroDropURLView: View {
 
                 // Inline Real-Time Status & Validation Feedback
                 HStack(spacing: 6) {
-                    if isExtracting {
-                        SiphonSpinner(size: 11, color: SiphonTheme.accent, lineWidth: 1.8)
-                        Text(languageService.s("hero_extracting_metadata"))
-                            .font(.siphonMetadataMedium)
-                            .foregroundColor(SiphonTheme.accentForeground(for: colorScheme))
-                            .lineLimit(1)
-                            .truncationMode(.tail)
-                    } else if let current = feedback.current {
+                    if let current = feedback.current {
                         Image(systemName: current.icon ?? (current.isSuccess ? "checkmark.circle.fill" : "exclamationmark.circle.fill"))
                             .font(.system(size: 11, weight: .semibold))
                         Text(current.message)
@@ -242,7 +228,8 @@ struct HeroDropURLView: View {
                             .truncationMode(.tail)
                             .help(current.message)
                     } else {
-                        Text(isTargeted ? languageService.s("drop_url_here") : languageService.s("or_paste_clipboard"))
+                        // The Paste button already offers the clipboard; teach the shortcut instead.
+                        Text(isTargeted ? languageService.s("drop_url_here") : languageService.s("press_return_to_download"))
                             .font(.siphonMetadata)
                             .foregroundColor(.secondary)
                             .lineLimit(1)
