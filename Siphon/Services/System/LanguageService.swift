@@ -215,6 +215,7 @@ class LanguageService: ObservableObject {
         "clear_history": "Clear History",
         "clear_history_help": "Clear download history list (downloaded files will not be deleted)",
         "clear_history_confirm_title": "Clear %d downloads from history?",
+        "clear_history_confirm_title_one": "Clear 1 download from history?",
         "clear_history_confirm_message": "The downloaded files stay on disk.",
         "history_empty": "Download history is empty",
         "history_desc": "Completed downloads will appear here",
