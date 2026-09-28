@@ -102,6 +102,11 @@ class DownloadManager: ObservableObject {
         downloads.filter { $0.status == .failed || $0.status == .stopped }
     }
 
+    /// Newest jobs first; `downloads` itself stays in queue (arrival) order.
+    func recentDownloads(limit: Int) -> [Download] {
+        Array(downloads.suffix(limit).reversed())
+    }
+
     var actionRequiredDownloads: [Download] {
         downloads.filter { $0.status == .fileExists }
     }
