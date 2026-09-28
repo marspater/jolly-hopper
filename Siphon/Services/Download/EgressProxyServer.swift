@@ -173,7 +173,7 @@ public final class EgressProxyServer: @unchecked Sendable {
             return
         }
 
-        guard let address = approvedAddress(host: host, port: port) else {
+        guard let addresses = approvedAddresses(host: host, port: port) else {
             Task { @MainActor in
                 LoggerService.shared.log("Egress proxy blocked CONNECT target outside public network: \(host):\(port)", level: .warning)
             }
@@ -181,7 +181,7 @@ public final class EgressProxyServer: @unchecked Sendable {
             return
         }
 
-        connectUpstream(address: address, port: port) { [weak self] upstreamResult in
+        connectUpstream(addresses: addresses[...], port: port) { [weak self] upstreamResult in
             guard let self = self else {
                 client.cancel()
                 return
@@ -240,7 +240,7 @@ public final class EgressProxyServer: @unchecked Sendable {
             relativePath = target
         }
 
-        guard let address = approvedAddress(host: host, port: port) else {
+        guard let addresses = approvedAddresses(host: host, port: port) else {
             Task { @MainActor in
                 LoggerService.shared.log("Egress proxy blocked HTTP target outside public network: \(host):\(port)", level: .warning)
             }
@@ -248,7 +248,7 @@ public final class EgressProxyServer: @unchecked Sendable {
             return
         }
 
-        connectUpstream(address: address, port: port) { [weak self] upstreamResult in
+        connectUpstream(addresses: addresses[...], port: port) { [weak self] upstreamResult in
             guard let self = self else {
                 client.cancel()
                 return
@@ -284,18 +284,18 @@ public final class EgressProxyServer: @unchecked Sendable {
         }
     }
 
-    /// Resolves `host` once and returns the numeric address to connect to, only
+    /// Resolves `host` once and returns the numeric addresses to connect to, only
     /// when the name and every address it resolves to pass the validator.
-    /// Connecting to that exact address, instead of letting NWConnection resolve
+    /// Connecting to those exact addresses, instead of letting NWConnection resolve
     /// the name again, closes the DNS-rebinding window between check and connect.
-    private func approvedAddress(host: String, port: Int) -> String? {
+    private func approvedAddresses(host: String, port: Int) -> [String]? {
         guard targetValidator(host, port) else { return nil }
         let addresses = Self.resolveNumericAddresses(host)
-        guard let first = addresses.first,
+        guard !addresses.isEmpty,
               addresses.allSatisfy({ targetValidator($0, port) }) else {
             return nil
         }
-        return first
+        return addresses
     }
 
     private static func resolveNumericAddresses(_ host: String) -> [String] {
@@ -321,6 +321,22 @@ public final class EgressProxyServer: @unchecked Sendable {
     }
 
     private static let upstreamConnectTimeout: TimeInterval = 15
+
+    /// Tries the validated addresses in resolver order, moving on when one fails,
+    /// since pinning addresses gives up NWConnection's own Happy Eyeballs fallback.
+    private func connectUpstream(addresses: ArraySlice<String>, port: Int, completion: @escaping @Sendable (Result<NWConnection, Error>) -> Void) {
+        guard let address = addresses.first else {
+            completion(.failure(NSError(domain: "EgressProxyServer", code: -1, userInfo: [NSLocalizedDescriptionKey: "No address to connect to"])))
+            return
+        }
+        connectUpstream(address: address, port: port) { [weak self] result in
+            if case .failure = result, addresses.count > 1, let self {
+                self.connectUpstream(addresses: addresses.dropFirst(), port: port, completion: completion)
+            } else {
+                completion(result)
+            }
+        }
+    }
 
     private func connectUpstream(address: String, port: Int, completion: @escaping @Sendable (Result<NWConnection, Error>) -> Void) {
         guard let nwPort = NWEndpoint.Port(rawValue: UInt16(port)) else {
