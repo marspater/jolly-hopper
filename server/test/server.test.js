@@ -197,6 +197,33 @@ describe('GET /api/latest', () => {
     assert.equal(calls.length, 1);
   });
 
+  test('concurrent cold-cache requests share one upstream call', async () => {
+    let calls = 0;
+    let release;
+    let markStarted;
+    const gate = new Promise((resolve) => { release = resolve; });
+    const started = new Promise((resolve) => { markStarted = resolve; });
+    const server = createServer({
+      fetchImpl: async () => {
+        calls += 1;
+        markStarted();
+        await gate;
+        return new Response(JSON.stringify(RELEASE_PAYLOAD), { status: 200 });
+      }
+    });
+    servers.push(server);
+    const baseUrl = await listen(server);
+
+    const pending = Array.from({ length: 5 }, () => fetch(`${baseUrl}/api/latest`));
+    await started;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    release();
+
+    const responses = await Promise.all(pending);
+    assert.ok(responses.every((res) => res.status === 200));
+    assert.equal(calls, 1);
+  });
+
   [
     ['rate limiting', { status: 403, body: { message: 'API rate limit exceeded' } }],
     ['a server error', { status: 502, body: 'Bad Gateway' }],

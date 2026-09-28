@@ -656,8 +656,10 @@ extension DownloadManager: DownloadExecutorDelegate {
         guard downloadIDs.contains(download.id) else { return }
         addToHistory(download, skipSave: skipSave)
 
-        // For normal single-job transitions, history is durable at this point,
-        // so recovery can now drop the old active snapshot. Batched callers
+        // For normal single-job transitions, history has been handed to
+        // UserDefaults (written out of process, so an app crash keeps it; a
+        // power loss before it syncs may not), so recovery can now drop the
+        // old active snapshot. Batched callers
         // persist recovery only after their shared saveHistory() call.
         if !skipSave {
             persistQueueRecoveryState()

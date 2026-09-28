@@ -295,21 +295,17 @@ final class DownloadExecutor: ObservableObject {
             let sanitizedBaseName = YtdlpService.sanitizeFilename(rawBaseName)
             let folderPath = download.options.saveFolder
 
-            // Same key as the queue's collision planning (case and Unicode
-            // normalization), so a name the queue would rename is reported here.
-            let baseNameKey = DownloadQueue.filenameCollisionKey(sanitizedBaseName)
+            // Same rule as the queue's collision planning, so a name the
+            // queue would rename is reported here. Playlist entries are named
+            // per entry by yt-dlp, so the job title says nothing about a collision.
+            let options = download.options
+            let isPlaylist = info.playlist != nil
             let fileExists = await Task.detached {
-                if let contents = try? FileManager.default.contentsOfDirectory(at: folderPath, includingPropertiesForKeys: nil) {
-                    let matches = contents.filter { file in
-                        let nameWithoutExt = file.deletingPathExtension().lastPathComponent
-                        let isExactMatch = DownloadQueue.filenameCollisionKey(nameWithoutExt) == baseNameKey
-                        let isPart = file.lastPathComponent.hasSuffix(".part") || file.lastPathComponent.hasSuffix(".ytdl")
-                        let isMedia = YtdlpService.isMediaFilePath(file.path)
-                        return isExactMatch && !isPart && isMedia
-                    }
-                    return !matches.isEmpty
-                }
-                return false
+                !isPlaylist && DownloadQueue.mediaFileCollides(
+                    baseName: sanitizedBaseName,
+                    options: options,
+                    existingMediaFileKeys: DownloadQueue.existingMediaFileKeys(in: folderPath)
+                )
             }.value
 
             guard !Task.isCancelled else { return }
