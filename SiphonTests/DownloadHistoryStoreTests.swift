@@ -127,10 +127,25 @@ final class DownloadHistoryStoreTests: XCTestCase {
         let restored = DownloadHistoryStore.restoreDownloads(from: history, existingDownloads: existing)
         XCTAssertEqual(restored.count, 3)
         XCTAssertEqual(restored[0].title, "Existing")
-        XCTAssertEqual(restored[1].title, "2")
-        XCTAssertEqual(restored[1].status, .stopped)
-        XCTAssertEqual(restored[2].title, "1")
-        XCTAssertEqual(restored[2].status, .completed)
+        XCTAssertEqual(restored[1].title, "1")
+        XCTAssertEqual(restored[1].status, .completed)
+        XCTAssertEqual(restored[2].title, "2")
+        XCTAssertEqual(restored[2].status, .stopped)
+    }
+
+    func testRestoredHistoryKeepsArrivalOrderWithNewJobs() {
+        let store = DownloadHistoryStore(userDefaults: testDefaults, historyKey: "test_history_order")
+        var history: [HistoricDownload] = []
+        for title in ["Old", "Middle", "Newest finished"] {
+            let dl = Download(url: "https://example.com/\(title)", options: .default, title: title)
+            dl.status = .completed
+            store.addToHistory(dl, history: &history, skipSave: true)
+        }
+
+        var downloads = DownloadHistoryStore.restoreDownloads(from: history, existingDownloads: [])
+        downloads.append(Download(url: "https://example.com/new", options: .default, title: "New job"))
+
+        XCTAssertEqual(downloads.map(\.title), ["Old", "Middle", "Newest finished", "New job"])
     }
 
     func testClearHistory() {

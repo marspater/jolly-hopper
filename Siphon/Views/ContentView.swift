@@ -490,7 +490,7 @@ struct HomeView: View {
                 )
             } else {
                 VStack(spacing: 6) {
-                    ForEach(downloadManager.downloads.prefix(3)) { download in
+                    ForEach(downloadManager.recentDownloads(limit: 3)) { download in
                         RecentDownloadRowView(download: download)
                     }
                 }
