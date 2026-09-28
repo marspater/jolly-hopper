@@ -31,6 +31,7 @@ struct ContentView: View {
     @EnvironmentObject var languageService: LanguageService
     @EnvironmentObject var updateChecker: UpdateChecker
     @State private var showUpdateAlert = false
+    @State private var confirmClearHistory = false
     @State private var columnVisibility: NavigationSplitViewVisibility = .detailOnly
     @AppStorage("showMenuBarIcon") private var showMenuBarIcon: Bool = true
     @AppStorage(UserDefaultsKeys.theme) private var theme: String = "system"
@@ -112,7 +113,31 @@ struct ContentView: View {
         } message: {
             Text(String(format: languageService.s("queue_recovery_message"), downloadManager.recoverableJobsCount))
         }
+        .confirmationDialog(
+            String(format: languageService.s("clear_history_confirm_title"), clearableHistory.count),
+            isPresented: $confirmClearHistory,
+            titleVisibility: .visible
+        ) {
+            Button(languageService.s("clear_history"), role: .destructive) {
+                if appState.selectedNavItem == .failed {
+                    downloadManager.clearFailedDownloads()
+                } else {
+                    downloadManager.clearCompletedDownloads()
+                }
+            }
+        } message: {
+            Text(languageService.s("clear_history_confirm_message"))
+        }
         .frame(minWidth: 860, idealWidth: 980, minHeight: 580, idealHeight: 620)
+    }
+
+    /// History the toolbar's Clear History button would remove on the current page.
+    private var clearableHistory: [Download] {
+        switch appState.selectedNavItem {
+        case .completed: return downloadManager.completedDownloads
+        case .failed: return downloadManager.failedDownloads
+        default: return []
+        }
     }
     
     @ViewBuilder
@@ -155,17 +180,9 @@ struct ContentView: View {
                 }
                 .help(languageService.s("stop_all"))
                 .accessibilityLabel(languageService.s("stop_all"))
-            } else if appState.selectedNavItem == .completed && !downloadManager.completedDownloads.isEmpty {
+            } else if !clearableHistory.isEmpty {
                 Button {
-                    downloadManager.clearCompletedDownloads()
-                } label: {
-                    Label(languageService.s("clear_history"), systemImage: "trash")
-                }
-                .help(languageService.s("clear_history_help"))
-                .accessibilityLabel(languageService.s("clear_history"))
-            } else if appState.selectedNavItem == .failed && !downloadManager.failedDownloads.isEmpty {
-                Button {
-                    downloadManager.clearFailedDownloads()
+                    confirmClearHistory = true
                 } label: {
                     Label(languageService.s("clear_history"), systemImage: "trash")
                 }
@@ -380,6 +397,7 @@ struct HomeView: View {
                         HStack(spacing: 5) {
                             Image(systemName: "terminal.fill")
                                 .font(.system(size: 10, weight: .medium))
+                                .accessibilityHidden(true)
                             Text("yt-dlp \(version)")
                                 .font(.siphonMetadataMonoMedium)
                         }
@@ -395,6 +413,7 @@ struct HomeView: View {
                         Image(systemName: "heart.fill")
                             .font(.system(size: 9))
                             .foregroundColor(SiphonTheme.accentText)
+                            .accessibilityHidden(true)
                     }
                 }
                 .padding(.horizontal, SiphonTheme.spacing24)
@@ -627,11 +646,13 @@ struct StatusSegmentButton: View {
             appState.selectedNavItem = item
         } label: {
             ZStack {
+                // Completed is the resting state: its icon turns green, but the
+                // segment stays flat so finished work never glows.
                 StatusSegmentFill(
                     color: color,
                     progress: item == .downloading ? ringProgress : nil,
                     isHovered: isHovered,
-                    isActive: isActive
+                    isActive: isActive && item != .completed
                 )
                 .zIndex(0)
 
@@ -794,7 +815,6 @@ struct WhatsNewSheetView: View {
                     }
                 }
                 .buttonStyle(.siphonSecondary)
-                .help("View release notes on GitHub")
 
                 Spacer()
 
@@ -824,26 +844,27 @@ struct WhatsNewSheetView: View {
     }
 }
 
+/// Static release-note card. It is not interactive, so it has no hover state.
 private struct FeatureCardRow: View {
     let feature: ReleaseFeature
-    @State private var isHovered = false
 
     var body: some View {
         HStack(alignment: .top, spacing: 14) {
             // Category Icon Squircle
             ZStack {
                 RoundedRectangle(cornerRadius: SiphonTheme.radiusControl, style: .continuous)
-                    .fill(feature.iconColor.opacity(isHovered ? 0.18 : 0.12))
+                    .fill(feature.iconColor.opacity(0.12))
                     .frame(width: 36, height: 36)
                     .overlay(
                         RoundedRectangle(cornerRadius: SiphonTheme.radiusControl, style: .continuous)
-                            .stroke(feature.iconColor.opacity(isHovered ? 0.35 : 0.20), lineWidth: 1)
+                            .stroke(feature.iconColor.opacity(0.20), lineWidth: 1)
                     )
 
                 Image(systemName: feature.icon)
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundColor(feature.iconColor)
             }
+            .accessibilityHidden(true)
 
             // Title & Description
             VStack(alignment: .leading, spacing: 3) {
@@ -863,20 +884,9 @@ private struct FeatureCardRow: View {
         .padding(12)
         .background(
             RoundedRectangle(cornerRadius: SiphonTheme.radiusControl, style: .continuous)
-                .fill(Color.primary.opacity(isHovered ? 0.055 : 0.035))
+                .fill(Color.primary.opacity(SiphonTheme.Opacity.fillCard))
         )
-        .overlay(
-            SiphonTheme.cardBorder(
-                cornerRadius: SiphonTheme.radiusControl,
-                isHovered: isHovered,
-                accentColor: feature.iconColor
-            )
-        )
-        .siphonCardHover(isHovered: isHovered, tint: feature.iconColor)
-        .onHover { hovering in
-            withAnimation(SiphonAnimation.hoverSpring) {
-                isHovered = hovering
-            }
-        }
+        .overlay(SiphonTheme.cardBorder(cornerRadius: SiphonTheme.radiusControl))
+        .accessibilityElement(children: .combine)
     }
 }

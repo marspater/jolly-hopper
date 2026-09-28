@@ -1366,6 +1366,9 @@ struct SiphonStatusBadge: View {
                     lineWidth: 1
                 )
         )
+        // The glyph only restates the title; VoiceOver reads the title once.
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(title)
     }
 }
 
