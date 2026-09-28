@@ -117,6 +117,7 @@ function sendResponse(res, statusCode, headers, body) {
     'X-Content-Type-Options': 'nosniff',
     'X-Frame-Options': 'DENY',
     'Referrer-Policy': 'no-referrer',
+    'Content-Security-Policy': "default-src 'none'; frame-ancestors 'none'",
     ...headers
   };
   res.writeHead(statusCode, mergedHeaders);
@@ -227,7 +228,7 @@ function createServer({
 if (require.main === module) {
   const configuredPort = Number.parseInt(process.env.PORT ?? '', 10);
   const port = Number.isInteger(configuredPort) && configuredPort >= 1 && configuredPort <= 65535 ? configuredPort : 3000;
-  const host = '0.0.0.0';
+  const host = process.env.HOST || '127.0.0.1';
   const server = createServer();
 
   server.listen(port, host, () => {
