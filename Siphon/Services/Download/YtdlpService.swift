@@ -1352,24 +1352,6 @@ class YtdlpService: ObservableObject {
         browserCookieSource: String? = nil,
         proxy: String? = nil
     ) async throws -> [MediaInfo] {
-        try await EgressBoundary.$proxyURL.withValue(proxy ?? EgressBoundary.proxyURL) {
-            try await fetchPlaylistInfoWithinBoundary(
-                url: url,
-                rawCookies: rawCookies,
-                rawUserAgent: rawUserAgent,
-                browserCookieSource: browserCookieSource,
-                proxy: proxy
-            )
-        }
-    }
-
-    private func fetchPlaylistInfoWithinBoundary(
-        url: String,
-        rawCookies: String?,
-        rawUserAgent: String?,
-        browserCookieSource: String?,
-        proxy: String?
-    ) async throws -> [MediaInfo] {
         guard let path = ytdlpPath else {
             throw YtdlpError.notFound
         }
