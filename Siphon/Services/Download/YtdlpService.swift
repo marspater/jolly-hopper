@@ -1790,7 +1790,7 @@ public struct DownloadResult: Sendable {
         }
 
         if options.enforcePublicNetworkBoundary {
-            args.append(contentsOf: ["--proxy", try egressProxyURL()])
+            args.append(contentsOf: ["--proxy", try await egressProxyURL()])
         }
 
         // Reuse the metadata fetched moments ago instead of extracting again
@@ -6803,9 +6803,9 @@ public struct DownloadResult: Sendable {
 
     /// Starts the shared egress proxy and returns its URL. Logs and rethrows when
     /// it cannot start, so boundary-enforced work never runs unproxied.
-    func egressProxyURL() throws -> String {
+    func egressProxyURL() async throws -> String {
         do {
-            let port = try EgressProxyServer.shared.start()
+            let port = try await EgressProxyServer.shared.start()
             return "http://127.0.0.1:\(port)"
         } catch {
             LoggerService.shared.log("Egress proxy failed to start; refusing to contact external target directly: \(error.localizedDescription)", level: .error)

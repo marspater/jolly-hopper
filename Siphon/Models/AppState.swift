@@ -481,12 +481,18 @@ public final class AppState: ObservableObject {
         return false
     }
 
+    /// Clears browser credentials only. The external-target marker is security
+    /// provenance, not a credential: it must outlive credential clears, or a URL
+    /// that arrived by deep link could download without the egress proxy.
     public func clearBrowserSession() {
         rawCookiesToDownload = nil
         rawUserAgentToDownload = nil
         browserCookieSourceToDownload = nil
         browserSessionOriginScheme = nil
         browserSessionOriginHost = nil
+    }
+
+    public func clearExternalTarget() {
         externalTargetURL = nil
     }
 }
