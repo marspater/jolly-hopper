@@ -37,12 +37,22 @@ function createReleaseFetcher(fetchImpl, cacheTtlMs) {
     expiresAt: 0
   };
 
-  return async function getLatestRelease() {
-    const now = Date.now();
-    if (releaseCache.data && now < releaseCache.expiresAt) {
-      return { ...releaseCache.data, cached: true };
-    }
+  // Concurrent cache misses share one upstream request instead of each
+  // hitting the GitHub API.
+  let inFlight = null;
 
+  return function getLatestRelease() {
+    if (releaseCache.data && Date.now() < releaseCache.expiresAt) {
+      return Promise.resolve({ ...releaseCache.data, cached: true });
+    }
+    if (!inFlight) {
+      inFlight = refresh().finally(() => { inFlight = null; });
+    }
+    return inFlight;
+  };
+
+  async function refresh() {
+    const now = Date.now();
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 10000);
 
@@ -90,7 +100,7 @@ function createReleaseFetcher(fetchImpl, cacheTtlMs) {
     } finally {
       clearTimeout(timeout);
     }
-  };
+  }
 }
 
 function sendResponse(res, statusCode, headers, body) {

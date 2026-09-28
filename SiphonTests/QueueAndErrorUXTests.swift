@@ -1104,7 +1104,8 @@ final class QueueAndErrorUXTests: XCTestCase {
         let subAttackerUrl = URL(string: "https://github.com.attacker.com/malware.dmg")!
 
         XCTAssertTrue(UpdateChecker.isTrustedGitHubURL(valid1))
-        XCTAssertTrue(UpdateChecker.isTrustedGitHubURL(valid2))
+        XCTAssertFalse(UpdateChecker.isTrustedGitHubURL(valid2), "The asset CDN is trusted only as a redirect target")
+        XCTAssertTrue(UpdateDownloader.isTrustedRedirectURL(valid2))
         XCTAssertFalse(UpdateChecker.isTrustedGitHubURL(httpUrl), "Insecure HTTP scheme must be rejected")
         XCTAssertFalse(UpdateChecker.isTrustedGitHubURL(attackerUrl), "Untrusted domain must be rejected")
         XCTAssertFalse(UpdateChecker.isTrustedGitHubURL(subAttackerUrl), "Attacker subdomain must be rejected")

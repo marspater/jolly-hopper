@@ -1690,7 +1690,7 @@ struct AddDownloadView: View {
             let filename = customFilename.isEmpty ? (mediaInfo?.title ?? "") : customFilename
             if !filename.isEmpty {
                 let safeName = YtdlpService.sanitizeFilename(filename)
-                let potentialPath = saveFolder.appendingPathComponent("\(safeName).\(fileType.fileExtension)")
+                let potentialPath = saveFolder.appendingPathComponent("\(safeName).\(YtdlpService.resolvedOutputFileExtension(for: options))")
                 let pathString = potentialPath.path
 
                 let folder = saveFolder
@@ -1699,15 +1699,12 @@ struct AddDownloadView: View {
                 isCheckingExistingFile = true
                 Task {
                     defer { isCheckingExistingFile = false }
-                    let fileExists = await Task.detached { [folder] in
-                        if let contents = try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil) {
-                            return contents.contains { file in
-                                let nameWithoutExt = file.deletingPathExtension().lastPathComponent
-                                let isPart = file.lastPathComponent.hasSuffix(".part") || file.lastPathComponent.hasSuffix(".ytdl")
-                                return nameWithoutExt == safeName && !isPart && YtdlpService.isMediaFilePath(file.path)
-                            }
-                        }
-                        return false
+                    let fileExists = await Task.detached { [folder, options] in
+                        DownloadQueue.mediaFileCollides(
+                            baseName: safeName,
+                            options: options,
+                            existingMediaFileKeys: DownloadQueue.existingMediaFileKeys(in: folder)
+                        )
                     }.value
 
                     if fileExists {
