@@ -124,8 +124,8 @@ extension URLSession {
 private final class PublicRedirectPolicy: NSObject, URLSessionTaskDelegate, Sendable {
     func urlSession(
         _ session: URLSession,
-        task: URLSessionTask,
-        willPerformHTTPRedirection response: HTTPURLResponse,
+        task _: URLSessionTask,
+        willPerformHTTPRedirection _: HTTPURLResponse,
         newRequest request: URLRequest
     ) async -> URLRequest? {
         guard let url = request.url, ExternalDownloadTargetPolicy.isAllowed(url) else { return nil }
@@ -275,6 +275,7 @@ final class DownloadExecutor: ObservableObject {
         var eventCoalescer: DownloadEventCoalescer?
         do {
             let info: MediaInfo
+            let proxyURL = download.options.enforcePublicNetworkBoundary ? try ytdlpService.egressProxyURL() : nil
             if let existing = download.mediaInfo {
                 info = existing
             } else {
@@ -282,7 +283,8 @@ final class DownloadExecutor: ObservableObject {
                     url: download.url,
                     rawCookies: download.options.rawCookies,
                     rawUserAgent: download.options.rawUserAgent,
-                    browserCookieSource: download.options.browserCookieSource
+                    browserCookieSource: download.options.browserCookieSource,
+                    proxy: proxyURL
                 )
             }
 

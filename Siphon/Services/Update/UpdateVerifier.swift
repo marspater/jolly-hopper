@@ -178,3 +178,186 @@ public struct UpdateVerifier: Sendable {
         }
     }
 }
+
+public enum ManifestVerificationError: LocalizedError, Sendable {
+    case invalidSignature
+    case invalidPublicKey
+    case versionMismatch(expected: String, actual: String)
+    case assetNotFound(String)
+    case invalidChecksum(String)
+    case manifestNotFound
+    case signatureNotFound
+    case malformedManifest(String)
+
+    public var errorDescription: String? {
+        switch self {
+        case .invalidSignature:
+            return "Release manifest signature verification failed"
+        case .invalidPublicKey:
+            return "Invalid Ed25519 public key"
+        case .versionMismatch(let expected, let actual):
+            return "Manifest version '\(actual)' does not match release version '\(expected)'"
+        case .assetNotFound(let asset):
+            return "Asset '\(asset)' not found in signed release manifest"
+        case .invalidChecksum(let checksum):
+            return "Checksum '\(checksum)' in manifest is not a valid 64-character SHA-256 hex string"
+        case .manifestNotFound:
+            return "Release manifest was not found"
+        case .signatureNotFound:
+            return "Release manifest signature was not found"
+        case .malformedManifest(let reason):
+            return "Release manifest is malformed: \(reason)"
+        }
+    }
+}
+
+public struct ReleaseManifest: Codable, Equatable, Sendable {
+    public let version: String
+    public let assets: [String: String]
+
+    public init(version: String, assets: [String: String]) {
+        self.version = version
+        self.assets = assets
+    }
+
+    private struct ManifestAssetItem: Codable {
+        let name: String
+        let sha256: String
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case version
+        case assets
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.version = try container.decode(String.self, forKey: .version)
+
+        if let dict = try? container.decode([String: String].self, forKey: .assets) {
+            self.assets = dict
+        } else if let array = try? container.decode([ManifestAssetItem].self, forKey: .assets) {
+            var map: [String: String] = [:]
+            for item in array {
+                map[item.name] = item.sha256
+            }
+            self.assets = map
+        } else {
+            throw DecodingError.dataCorruptedError(forKey: .assets, in: container, debugDescription: "Expected dictionary or array for assets")
+        }
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(version, forKey: .version)
+        try container.encode(assets, forKey: .assets)
+    }
+}
+
+public struct UpdateManifestVerifier: Sendable {
+    /// Pinned Ed25519 public key for Siphon release manifest verification.
+    /// The corresponding private key is held offline outside GitHub Actions.
+    public static let defaultPublicKeyBase64 = "Lmu0+3Kurb7TKWcwNNgDDKmXP/7F4rPRXqR10Q3k8/w="
+
+    public static let defaultPublicKey: Curve25519.Signing.PublicKey = {
+        guard let data = Data(base64Encoded: defaultPublicKeyBase64),
+              let key = try? Curve25519.Signing.PublicKey(rawRepresentation: data) else {
+            fatalError("Invalid hardcoded Ed25519 release public key")
+        }
+        return key
+    }()
+
+    public let publicKey: Curve25519.Signing.PublicKey
+
+    public init(publicKey: Curve25519.Signing.PublicKey = defaultPublicKey) {
+        self.publicKey = publicKey
+    }
+
+    public init(publicKeyBase64: String) throws {
+        guard let data = Data(base64Encoded: publicKeyBase64.trimmingCharacters(in: .whitespacesAndNewlines)) else {
+            throw ManifestVerificationError.invalidPublicKey
+        }
+        do {
+            self.publicKey = try Curve25519.Signing.PublicKey(rawRepresentation: data)
+        } catch {
+            throw ManifestVerificationError.invalidPublicKey
+        }
+    }
+
+    public static func parseSignatureData(_ signatureData: Data) throws -> Data {
+        if signatureData.count == 64 {
+            return signatureData
+        }
+
+        if let string = String(data: signatureData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) {
+            if let decoded = Data(base64Encoded: string), decoded.count == 64 {
+                return decoded
+            }
+            if string.count == 128 && string.allSatisfy(\.isHexDigit) {
+                var data = Data(capacity: 64)
+                var index = string.startIndex
+                while index < string.endIndex {
+                    let next = string.index(index, offsetBy: 2)
+                    if let byte = UInt8(string[index..<next], radix: 16) {
+                        data.append(byte)
+                    } else {
+                        break
+                    }
+                    index = next
+                }
+                if data.count == 64 {
+                    return data
+                }
+            }
+        }
+
+        throw ManifestVerificationError.invalidSignature
+    }
+
+    public static func decodeManifest(_ data: Data) throws -> ReleaseManifest {
+        do {
+            return try JSONDecoder().decode(ReleaseManifest.self, from: data)
+        } catch {
+            throw ManifestVerificationError.malformedManifest(error.localizedDescription)
+        }
+    }
+
+    public func verify(
+        manifestData: Data,
+        signatureData: Data,
+        expectedVersion: String,
+        targetAssetName: String
+    ) throws -> String {
+        let rawSig = try Self.parseSignatureData(signatureData)
+
+        guard publicKey.isValidSignature(rawSig, for: manifestData) else {
+            throw ManifestVerificationError.invalidSignature
+        }
+
+        let manifest = try Self.decodeManifest(manifestData)
+
+        let cleanExpected = (expectedVersion.hasPrefix("v") || expectedVersion.hasPrefix("V"))
+            ? String(expectedVersion.dropFirst())
+            : expectedVersion
+        let cleanManifest = (manifest.version.hasPrefix("v") || manifest.version.hasPrefix("V"))
+            ? String(manifest.version.dropFirst())
+            : manifest.version
+
+        guard cleanExpected == cleanManifest else {
+            throw ManifestVerificationError.versionMismatch(expected: cleanExpected, actual: cleanManifest)
+        }
+
+        let lowerTarget = targetAssetName.lowercased()
+        guard let checksum = manifest.assets.first(where: { $0.key.lowercased() == lowerTarget })?.value else {
+            throw ManifestVerificationError.assetNotFound(targetAssetName)
+        }
+
+        let cleanChecksum = checksum.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard cleanChecksum.count == 64,
+              cleanChecksum.range(of: "^[0-9a-f]{64}$", options: .regularExpression) != nil else {
+            throw ManifestVerificationError.invalidChecksum(cleanChecksum)
+        }
+
+        return cleanChecksum
+    }
+}
