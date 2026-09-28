@@ -542,8 +542,8 @@ struct FileThumbnailView: View {
     private var statusTint: Color {
         switch download.status {
         case .downloading, .fetching, .processing: return SiphonTheme.statusDownloading
-        case .completed: return SiphonTheme.statusCompleted
-        case .failed, .stopped: return SiphonTheme.statusFailed
+        // Finished cards stay calm: no status-colored glow under them.
+        case .completed, .failed, .stopped: return .clear
         case .queued, .paused, .fileExists: return SiphonTheme.statusQueued
         }
     }
