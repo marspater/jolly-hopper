@@ -91,7 +91,7 @@ class DownloadManager: ObservableObject {
     }
 
     var queuedDownloads: [Download] {
-        downloads.filter { $0.status == .queued || $0.status == .paused }
+        downloads.filter(DownloadQueue.isQueueTabMember)
     }
 
     var completedDownloads: [Download] {
@@ -368,6 +368,14 @@ class DownloadManager: ObservableObject {
         updateStatus(for: download, to: .queued)
         objectWillChange.send()
         processQueue()
+    }
+
+    func canMoveDownloadUp(_ download: Download) -> Bool {
+        queue.canMoveUp(download: download, in: downloads)
+    }
+
+    func canMoveDownloadDown(_ download: Download) -> Bool {
+        queue.canMoveDown(download: download, in: downloads)
     }
 
     func moveDownloadUp(_ download: Download) {

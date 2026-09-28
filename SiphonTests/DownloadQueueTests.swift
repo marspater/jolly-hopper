@@ -206,4 +206,37 @@ final class DownloadQueueTests: XCTestCase {
         queue.move(from: IndexSet(integer: 2), to: 0, in: &downloads)
         XCTAssertEqual(downloads.map { $0.id }, [dl3.id, dl1.id, dl2.id])
     }
+
+    func testReorderingSkipsDownloadsHiddenFromQueueTab() {
+        let queue = DownloadQueue(userDefaults: testDefaults)
+        let queuedA = Download(url: "https://example.com/a", options: .default)
+        let active = Download(url: "https://example.com/active", options: .default)
+        let finished = Download(url: "https://example.com/finished", options: .default)
+        let pausedB = Download(url: "https://example.com/b", options: .default)
+        let failed = Download(url: "https://example.com/failed", options: .default)
+        active.status = .downloading
+        finished.status = .completed
+        pausedB.status = .paused
+        failed.status = .failed
+        var downloads = [queuedA, active, finished, pausedB, failed]
+
+        // Visible order is [queuedA, pausedB]; Up/Down swap the visible neighbours.
+        XCTAssertFalse(queue.canMoveUp(download: queuedA, in: downloads))
+        XCTAssertTrue(queue.canMoveDown(download: queuedA, in: downloads))
+        XCTAssertTrue(queue.canMoveUp(download: pausedB, in: downloads))
+        XCTAssertFalse(queue.canMoveDown(download: pausedB, in: downloads))
+
+        XCTAssertTrue(queue.moveDown(download: queuedA, in: &downloads))
+        XCTAssertEqual(downloads.map(\.id), [pausedB.id, active.id, finished.id, queuedA.id, failed.id])
+        XCTAssertEqual(downloads.filter(DownloadQueue.isQueueTabMember).map(\.id), [pausedB.id, queuedA.id])
+
+        // Last visible row cannot move down past a hidden failed download.
+        XCTAssertFalse(queue.moveDown(download: queuedA, in: &downloads))
+
+        XCTAssertTrue(queue.moveUp(download: queuedA, in: &downloads))
+        XCTAssertEqual(downloads.map(\.id), [queuedA.id, active.id, finished.id, pausedB.id, failed.id])
+
+        // First visible row cannot move up.
+        XCTAssertFalse(queue.moveUp(download: queuedA, in: &downloads))
+    }
 }
