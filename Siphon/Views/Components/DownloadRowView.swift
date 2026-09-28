@@ -745,30 +745,36 @@ struct FileThumbnailView: View {
                 .help(languageService.s("pause"))
                 .accessibilityLabel(languageService.s("pause"))
                 
+                let canMoveUp = downloadManager.canMoveDownloadUp(download)
+                let canMoveDown = downloadManager.canMoveDownloadDown(download)
                 moreActionsMenu {
                     Button {
                         downloadManager.moveDownloadToTop(download)
                     } label: {
                         Label(languageService.s("move_to_top"), systemImage: "arrow.up.to.line")
                     }
+                    .disabled(!canMoveUp)
                     
                     Button {
                         downloadManager.moveDownloadUp(download)
                     } label: {
                         Label(languageService.s("move_up"), systemImage: "arrow.up")
                     }
+                    .disabled(!canMoveUp)
                     
                     Button {
                         downloadManager.moveDownloadDown(download)
                     } label: {
                         Label(languageService.s("move_down"), systemImage: "arrow.down")
                     }
+                    .disabled(!canMoveDown)
                     
                     Button {
                         downloadManager.moveDownloadToBottom(download)
                     } label: {
                         Label(languageService.s("move_to_bottom"), systemImage: "arrow.down.to.line")
                     }
+                    .disabled(!canMoveDown)
                     
                     Divider()
                     
