@@ -89,7 +89,9 @@ final class DownloadHistoryStore {
     }
 
     static func restoreDownloads(from history: [HistoricDownload], existingDownloads: [Download]) -> [Download] {
-        let restored = history.reversed().map { $0.toDownload() }
+        // History is stored oldest-first and `downloads` is in queue (arrival)
+        // order, so restore chronologically: new jobs append after it.
+        let restored = history.map { $0.toDownload() }
         var result = existingDownloads
         var existingIds = Set(result.lazy.map { $0.id })
 
