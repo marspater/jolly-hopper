@@ -65,10 +65,35 @@ public final class UpdateDownloader: NSObject, URLSessionDownloadDelegate, @unch
         if host == "raw.githubusercontent.com" {
             return path.hasPrefix("/marspater/jolly-hopper/")
         }
-        if host == "objects.githubusercontent.com" {
-            return true
-        }
         return false
+    }
+
+    /// Release assets on github.com redirect to GitHub's asset CDN. Those
+    /// hosts are trusted only as redirect targets of a trusted request, and
+    /// every redirect hop is checked against this policy.
+    public static func isTrustedRedirectURL(_ url: URL) -> Bool {
+        if isTrustedGitHubURL(url) { return true }
+        guard url.scheme == "https", let host = url.host?.lowercased() else { return false }
+        return host == "objects.githubusercontent.com" || host == "release-assets.githubusercontent.com"
+    }
+
+    private final class RedirectPolicy: NSObject, URLSessionTaskDelegate {
+        func urlSession(
+            _ session: URLSession,
+            task: URLSessionTask,
+            willPerformHTTPRedirection response: HTTPURLResponse,
+            newRequest request: URLRequest
+        ) async -> URLRequest? {
+            UpdateDownloader.redirectRequestIfTrusted(request)
+        }
+    }
+
+    static func redirectRequestIfTrusted(_ request: URLRequest) -> URLRequest? {
+        guard let url = request.url, isTrustedRedirectURL(url) else {
+            log("Blocked update redirect to an untrusted host: \(request.url?.host ?? "unknown")", level: .error)
+            return nil
+        }
+        return request
     }
 
     static func stagedFileURL(
@@ -124,7 +149,7 @@ public final class UpdateDownloader: NSObject, URLSessionDownloadDelegate, @unch
 
         var request = URLRequest(url: checksumURL, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 15)
         request.setValue("Siphon-Updater", forHTTPHeaderField: "User-Agent")
-        let (cData, response) = try await URLSession.shared.data(for: request)
+        let (cData, response) = try await URLSession.shared.data(for: request, delegate: RedirectPolicy())
         guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
             let status = (response as? HTTPURLResponse)?.statusCode ?? -1
             throw UpdateDownloadError.checksumUnavailable("checksum endpoint returned HTTP \(status)")
@@ -233,6 +258,16 @@ public final class UpdateDownloader: NSObject, URLSessionDownloadDelegate, @unch
         lock.unlock()
         let progress = max(0.0, min(1.0, Double(totalBytesWritten) / Double(totalBytesExpectedToWrite)))
         handler?(progress)
+    }
+
+    public func urlSession(
+        _ session: URLSession,
+        task: URLSessionTask,
+        willPerformHTTPRedirection response: HTTPURLResponse,
+        newRequest request: URLRequest,
+        completionHandler: @escaping @Sendable (URLRequest?) -> Void
+    ) {
+        completionHandler(Self.redirectRequestIfTrusted(request))
     }
 
     public func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {

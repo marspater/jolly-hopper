@@ -114,6 +114,28 @@ final class DownloadQueueTests: XCTestCase {
         XCTAssertFalse(queue.isPathReserved(path1))
     }
 
+    func testCollisionPlanningComparesOnlyExtensionsTheJobCanProduce() {
+        let queue = DownloadQueue(userDefaults: testDefaults)
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try? FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+        FileManager.default.createFile(atPath: tempDir.appendingPathComponent("Song.mp3").path, contents: Data())
+        FileManager.default.createFile(atPath: tempDir.appendingPathComponent("clip.WEBM").path, contents: Data())
+
+        func plannedName(_ title: String, _ fileType: MediaFileType) -> String {
+            var options = DownloadOptions.default
+            options.saveFolder = tempDir
+            options.fileType = fileType
+            return queue.planUniqueOutputPath(for: Download(url: "https://example.com/v", options: options, title: title)).resolvedBaseName
+        }
+
+        XCTAssertEqual(plannedName("Song", .mp4), "Song", "An audio file must not block a video of the same name")
+        XCTAssertEqual(plannedName("Song", .flac), "Song", "Audio is converted to its exact extension")
+        XCTAssertEqual(plannedName("song", .mp3), "song (1)", "Same file, case-only difference")
+        XCTAssertEqual(plannedName("Clip", .mp4), "Clip (1)", "Unmerged video can keep the source container")
+        XCTAssertEqual(plannedName("Clip", .m4a), "Clip", "A video file must not block audio of the same name")
+    }
+
     func testOutputReservationsAreCaseInsensitiveAndUnicodeCanonicalized() {
         let queue = DownloadQueue(userDefaults: testDefaults)
         let upper = "/tmp/Siphon/Video Name.mp4"
