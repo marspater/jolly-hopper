@@ -22,16 +22,24 @@ jobs:
     steps:
       - name: Extract version from tag
         id: version
+        env:
+          TAG_NAME: ${{ github.event.inputs.tag_name || github.ref_name }}
         run: |
-          TAG_NAME="${{ github.event.inputs.tag_name || github.ref_name }}"
-          VERSION="${TAG_NAME#v}"
-          echo "tag_name=$TAG_NAME" >> $GITHUB_OUTPUT
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          set -euo pipefail
+          # The tag lands in a URL, a sed expression and a commit message.
+          if [[ ! "$TAG_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Unexpected release tag: $TAG_NAME" >&2
+            exit 1
+          fi
+          echo "tag_name=$TAG_NAME" >> "$GITHUB_OUTPUT"
+          echo "version=${TAG_NAME#v}" >> "$GITHUB_OUTPUT"
 
       - name: Get release asset info
         id: asset
+        env:
+          TAG_NAME: ${{ steps.version.outputs.tag_name }}
         run: |
-          TAG_NAME="${{ steps.version.outputs.tag_name }}"
+          set -euo pipefail
           ASSET_URL="https://github.com/marspater/jolly-hopper/releases/download/${TAG_NAME}/Siphon-${TAG_NAME}.dmg"
           
           curl --fail --silent --show-error --location \
@@ -49,7 +57,7 @@ jobs:
           fi
 
           SHA256=$(sha256sum siphon.dmg | cut -d' ' -f1)
-          echo "sha256=$SHA256" >> $GITHUB_OUTPUT
+          echo "sha256=$SHA256" >> "$GITHUB_OUTPUT"
 
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -57,21 +65,26 @@ jobs:
           ref: main
 
       - name: Update Cask formula
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          SHA256: ${{ steps.asset.outputs.sha256 }}
         run: |
           set -euo pipefail
           test -f Casks/siphon.rb
-          sed -i 's/version "[^"]*"/version "${{ steps.version.outputs.version }}"/' Casks/siphon.rb
-          sed -i 's/sha256 "[^"]*"/sha256 "${{ steps.asset.outputs.sha256 }}"/' Casks/siphon.rb
+          sed -i "s/version \"[^\"]*\"/version \"$VERSION\"/" Casks/siphon.rb
+          sed -i "s/sha256 \"[^\"]*\"/sha256 \"$SHA256\"/" Casks/siphon.rb
           git diff --check
           git add Casks/siphon.rb
 
       - name: Commit and push changes
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
         run: |
           set -euo pipefail
           git config user.name "GitHub Actions Bot"
           git config user.email "actions@github.com"
           if ! git diff --cached --quiet; then
-            git commit -m "chore(cask): update Siphon to v${{ steps.version.outputs.version }}"
+            git commit -m "chore(cask): update Siphon to v$VERSION"
             git push origin HEAD:main
           else
             echo "Cask already matches the published release"

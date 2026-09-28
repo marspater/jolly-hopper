@@ -130,4 +130,4 @@ jobs:
 
           The workflow checked that \`SHA2-256SUMS\` is signed by the yt-dlp release key \`$YTDLP_SIGNING_KEY\` and that \`yt-dlp_macos\` matches the signed digest. It then updated the version, URL and SHA-256 together.
 
-          Pull requests opened with the workflow token do not start CI. Close and reopen this PR to run the checks."
+          This PR was opened with the workflow token, so its CI runs wait for approval. Select **Approve workflows to run** in the merge box to start them."
