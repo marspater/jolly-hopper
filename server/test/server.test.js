@@ -253,4 +253,26 @@ describe('GET /api/latest', () => {
     assert.equal(data.cached, true);
     assert.equal(data.stale, true);
   });
+
+  test('backs off after a failed refresh instead of retrying every request', async () => {
+    const { baseUrl, calls } = await start(
+      [{ status: 200, body: RELEASE_PAYLOAD }, new Error('upstream down')],
+      { cacheTtlMs: 0 }
+    );
+
+    await fetch(`${baseUrl}/api/latest`);
+    await fetch(`${baseUrl}/api/latest`);
+    const res = await fetch(`${baseUrl}/api/latest`);
+    assert.equal(res.status, 200);
+    assert.equal((await res.json()).stale, true);
+    assert.equal(calls.length, 2);
+  });
+
+  test('backs off after a cold-cache failure too', async () => {
+    const { baseUrl, calls } = await start([new Error('upstream down')]);
+
+    assert.equal((await fetch(`${baseUrl}/api/latest`)).status, 503);
+    assert.equal((await fetch(`${baseUrl}/api/latest`)).status, 503);
+    assert.equal(calls.length, 1);
+  });
 });

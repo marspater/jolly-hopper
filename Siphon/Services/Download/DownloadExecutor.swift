@@ -275,7 +275,7 @@ final class DownloadExecutor: ObservableObject {
         var eventCoalescer: DownloadEventCoalescer?
         do {
             let info: MediaInfo
-            let proxyURL = download.options.enforcePublicNetworkBoundary ? try ytdlpService.egressProxyURL() : nil
+            let proxyURL = download.options.enforcePublicNetworkBoundary ? try await ytdlpService.egressProxyURL() : nil
             if let existing = download.mediaInfo {
                 info = existing
             } else {

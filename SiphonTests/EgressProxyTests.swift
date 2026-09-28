@@ -8,9 +8,23 @@ import Network
 @testable import Siphon
 
 final class EgressProxyTests: XCTestCase {
+    func testConcurrentStartsShareOneListenerAndRestartAfterStop() async throws {
+        let proxy = EgressProxyServer()
+        async let first = proxy.start()
+        async let second = proxy.start()
+        let ports = try await [first, second]
+        XCTAssertNotEqual(ports[0], 0)
+        XCTAssertEqual(ports[0], ports[1], "Concurrent callers must share one listener")
+
+        proxy.stop()
+        let restarted = try await proxy.start()
+        defer { proxy.stop() }
+        XCTAssertNotEqual(restarted, 0)
+    }
+
     func testProxyBlocksDirectLoopbackConnection() async throws {
         let proxy = EgressProxyServer()
-        let proxyPort = try proxy.start()
+        let proxyPort = try await proxy.start()
         defer { proxy.stop() }
 
         let response = try await sendThroughProxy(
@@ -22,7 +36,7 @@ final class EgressProxyTests: XCTestCase {
 
     func testProxyBlocksDirectPrivateIPConnection() async throws {
         let proxy = EgressProxyServer()
-        let proxyPort = try proxy.start()
+        let proxyPort = try await proxy.start()
         defer { proxy.stop() }
 
         let response = try await sendThroughProxy(
@@ -53,7 +67,7 @@ final class EgressProxyTests: XCTestCase {
             if port == Int(publicPort) { return true }
             return ExternalDownloadTargetPolicy.isAllowedTarget(host: host, port: port)
         })
-        let proxyPort = try proxy.start()
+        let proxyPort = try await proxy.start()
         defer { proxy.stop() }
 
         let first = try await sendThroughProxy(
@@ -82,7 +96,7 @@ final class EgressProxyTests: XCTestCase {
         // The name passes but none of its addresses do: the proxy must judge
         // (and connect to) what the name resolves to, not the name alone.
         let proxy = EgressProxyServer(targetValidator: { host, _ in host == "localhost" })
-        let proxyPort = try proxy.start()
+        let proxyPort = try await proxy.start()
         defer { proxy.stop() }
 
         let response = try await sendThroughProxy(
@@ -104,7 +118,7 @@ final class EgressProxyTests: XCTestCase {
             targetValidator: { _, port in port == Int(serverPort) },
             addressResolver: { _ in ["::1", "127.0.0.1"] }
         )
-        let proxyPort = try proxy.start()
+        let proxyPort = try await proxy.start()
         defer { proxy.stop() }
 
         let response = try await sendThroughProxy(
@@ -125,7 +139,7 @@ final class EgressProxyTests: XCTestCase {
         defer { server.stop() }
 
         let proxy = EgressProxyServer(targetValidator: { _, port in port == Int(serverPort) })
-        let proxyPort = try proxy.start()
+        let proxyPort = try await proxy.start()
         defer { proxy.stop() }
 
         let response = try await sendThroughProxy(
