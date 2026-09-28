@@ -57,10 +57,10 @@ struct RecentDownloadRowView: View {
             SiphonTheme.borderSubtle(
                 cornerRadius: SiphonTheme.radiusControl,
                 isHovered: isHovered,
-                accentColor: statusTint
+                accentColor: activeTint
             )
         )
-        .siphonCardHover(isHovered: isHovered, tint: glowTint)
+        .siphonCardHover(isHovered: isHovered, tint: activeTint ?? .clear)
         .task(id: download.primaryFilePath) {
             primaryFileIsPresent = download.primaryFileExistsOnDisk
         }
@@ -74,20 +74,13 @@ struct RecentDownloadRowView: View {
         }
     }
 
-    private var statusTint: Color {
+    /// Only in-flight rows are tinted. Finished rows stay neutral (no colored
+    /// border, no glow); the status label already says how they ended.
+    private var activeTint: Color? {
         switch download.status {
         case .downloading, .fetching, .processing: return SiphonTheme.statusDownloading
         case .queued, .paused, .fileExists: return SiphonTheme.statusQueued
-        case .completed: return SiphonTheme.statusCompleted
-        case .failed, .stopped: return SiphonTheme.statusFailed
-        }
-    }
-
-    /// Finished rows keep their status-colored border but cast no status glow.
-    private var glowTint: Color {
-        switch download.status {
-        case .completed, .failed, .stopped: return .clear
-        default: return statusTint
+        case .completed, .failed, .stopped: return nil
         }
     }
 
@@ -231,6 +224,7 @@ struct RecentDownloadRowView: View {
                 Image(systemName: "clock.fill")
                     .font(.system(size: 13))
                     .foregroundColor(SiphonTheme.statusForeground(for: .queued, colorScheme: colorScheme))
+                    .accessibilityHidden(true)
 
             case .completed:
                 HStack(spacing: 6) {
@@ -240,6 +234,7 @@ struct RecentDownloadRowView: View {
                     Image(systemName: "checkmark.circle.fill")
                         .font(.system(size: 14))
                         .foregroundColor(SiphonTheme.statusCompletedText)
+                        .accessibilityHidden(true)
                 }
 
                 if let fileURL = download.primaryFilePath, primaryFileIsPresent != false {
@@ -262,9 +257,10 @@ struct RecentDownloadRowView: View {
                 Image(systemName: "exclamationmark.circle.fill")
                     .font(.system(size: 14))
                     .foregroundColor(SiphonTheme.statusFailedText)
+                    .accessibilityHidden(true)
 
             default:
-                Text(download.status.rawValue.capitalized)
+                Text(download.status.title(lang: languageService))
                     .font(.siphonMetadataMedium)
                     .foregroundColor(.secondary)
             }

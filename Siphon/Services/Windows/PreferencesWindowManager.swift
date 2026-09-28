@@ -46,7 +46,7 @@ final class PreferencesWindowManager: NSObject, NSWindowDelegate {
         window.titlebarAppearsTransparent = true
         window.center()
         window.isReleasedWhenClosed = false
-        window.title = languageService.s("preferences")
+        window.title = languageService.s("settings")
         window.minSize = NSSize(width: 500, height: 646)
         window.contentViewController = hostingController
         window.delegate = self

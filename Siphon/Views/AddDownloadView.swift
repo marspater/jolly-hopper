@@ -822,6 +822,7 @@ struct AddDownloadView: View {
                     .overlay(SiphonTheme.pillBorder(isSelected: false))
                 }
                 .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
                 
                 // Video / Audio Capsule Switcher
                 SiphonSegmentedPicker(
