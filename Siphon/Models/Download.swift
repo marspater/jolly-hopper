@@ -459,6 +459,7 @@ struct DownloadOptions: Codable {
     var hdrAction: HDRAction?
     var resolutionFallbackPolicy: ResolutionFallbackPolicy?
     var additionalArguments: String?
+    var enforcePublicNetworkBoundary: Bool = false
 
     enum CodingKeys: String, CodingKey {
         case saveFolder
@@ -487,6 +488,7 @@ struct DownloadOptions: Codable {
         case hdrAction
         case resolutionFallbackPolicy
         case additionalArguments
+        case enforcePublicNetworkBoundary
     }
 
     init(
@@ -518,7 +520,8 @@ struct DownloadOptions: Codable {
         selectedFormatId: String? = nil,
         hdrAction: HDRAction? = .preserveHDR,
         resolutionFallbackPolicy: ResolutionFallbackPolicy? = .strictCeiling,
-        additionalArguments: String? = nil
+        additionalArguments: String? = nil,
+        enforcePublicNetworkBoundary: Bool = false
     ) {
         self.saveFolder = saveFolder
         self.fileType = fileType
@@ -549,6 +552,7 @@ struct DownloadOptions: Codable {
         self.hdrAction = hdrAction
         self.resolutionFallbackPolicy = resolutionFallbackPolicy ?? .strictCeiling
         self.additionalArguments = additionalArguments
+        self.enforcePublicNetworkBoundary = enforcePublicNetworkBoundary
     }
 
     init(from decoder: Decoder) throws {
@@ -582,6 +586,7 @@ struct DownloadOptions: Codable {
         self.hdrAction = try container.decodeIfPresent(HDRAction.self, forKey: .hdrAction) ?? .preserveHDR
         self.resolutionFallbackPolicy = try container.decodeIfPresent(ResolutionFallbackPolicy.self, forKey: .resolutionFallbackPolicy) ?? .strictCeiling
         self.additionalArguments = try container.decodeIfPresent(String.self, forKey: .additionalArguments)
+        self.enforcePublicNetworkBoundary = try container.decodeIfPresent(Bool.self, forKey: .enforcePublicNetworkBoundary) ?? false
     }
     
     static var defaultOptions: DownloadOptions {

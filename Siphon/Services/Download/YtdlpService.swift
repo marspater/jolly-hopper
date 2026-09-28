@@ -797,7 +797,8 @@ class YtdlpService: ObservableObject {
         url: String,
         rawCookies: String? = nil,
         rawUserAgent: String? = nil,
-        browserCookieSource: String? = nil
+        browserCookieSource: String? = nil,
+        proxy: String? = nil
     ) async throws -> MediaInfo {
         guard let path = ytdlpPath else {
             throw YtdlpError.notFound
@@ -813,7 +814,8 @@ class YtdlpService: ObservableObject {
                     url: normalizedURL,
                     rawCookies: rawCookies,
                     rawUserAgent: rawUserAgent,
-                    browserCookieSource: browserCookieSource
+                    browserCookieSource: browserCookieSource,
+                    proxy: proxy
                 )
             } catch {
                 if error is CancellationError { throw error }
@@ -828,7 +830,8 @@ class YtdlpService: ObservableObject {
                 url: normalizedURL,
                 rawCookies: rawCookies,
                 rawUserAgent: rawUserAgent,
-                browserCookieSource: browserCookieSource
+                browserCookieSource: browserCookieSource,
+                proxy: proxy
             )
         } catch {
             throw mapSiteSpecificError(
@@ -864,7 +867,8 @@ class YtdlpService: ObservableObject {
         forceBrowserCookies: Bool = false,
         rawCookies: String? = nil,
         rawUserAgent: String? = nil,
-        browserCookieSource: String? = nil
+        browserCookieSource: String? = nil,
+        proxy: String? = nil
     ) async throws -> MediaInfo {
         if isRecuURL(url) {
             let recuMedia = try await resolveRecuMediaInfo(url: url)
@@ -881,6 +885,9 @@ class YtdlpService: ObservableObject {
             }
             probeArgs.append(contentsOf: ["--add-header", "Origin:https://recu.me"])
             probeArgs.append(contentsOf: ["--add-header", "Referer:\(recuMedia.pageURL)"])
+            if let proxy = proxy, !proxy.isEmpty {
+                probeArgs.append(contentsOf: ["--proxy", proxy])
+            }
             probeArgs.append("--")
             probeArgs.append(recuMedia.playlistURL)
 
@@ -943,6 +950,9 @@ class YtdlpService: ObservableObject {
                     "--no-warnings"
                 ]
                 appendSiteSpecificArgs(for: btvMedia.embedURL, to: &btvArgs)
+                if let proxy = proxy, !proxy.isEmpty {
+                    btvArgs.append(contentsOf: ["--proxy", proxy])
+                }
                 btvArgs.append("--")
                 btvArgs.append(btvMedia.streamURL)
                 
@@ -1140,6 +1150,9 @@ class YtdlpService: ObservableObject {
             "--no-warnings"
         ]
         appendJsRuntimeArgs(to: &args)
+        if let proxy = proxy, !proxy.isEmpty {
+            args.append(contentsOf: ["--proxy", proxy])
+        }
         
         var secureCookieFile: SecureCookieFile? = nil
         defer {
@@ -1222,7 +1235,8 @@ class YtdlpService: ObservableObject {
         url: String,
         rawCookies: String? = nil,
         rawUserAgent: String? = nil,
-        browserCookieSource: String? = nil
+        browserCookieSource: String? = nil,
+        proxy: String? = nil
     ) async throws -> MediaInfo {
         var args = [
             path,
@@ -1232,6 +1246,9 @@ class YtdlpService: ObservableObject {
             "--no-warnings"
         ]
         appendJsRuntimeArgs(to: &args)
+        if let proxy = proxy, !proxy.isEmpty {
+            args.append(contentsOf: ["--proxy", proxy])
+        }
         
         var secureCookieFile: SecureCookieFile? = nil
         defer {
@@ -1761,8 +1778,17 @@ public struct DownloadResult: Sendable {
         }
 
         if let extra = options.additionalArguments?.trimmingCharacters(in: .whitespacesAndNewlines), !extra.isEmpty {
-            let extraArgs = Self.removingOutputLocationArguments(Self.parseArgumentString(extra))
+            var extraArgs = Self.removingOutputLocationArguments(Self.parseArgumentString(extra))
+            if options.enforcePublicNetworkBoundary {
+                extraArgs = Self.removingProxyArguments(extraArgs)
+            }
             args.append(contentsOf: extraArgs)
+        }
+
+        if options.enforcePublicNetworkBoundary {
+            if let _ = try? EgressProxyServer.shared.start() {
+                args.append(contentsOf: ["--proxy", EgressProxyServer.shared.proxyURLString])
+            }
         }
 
         // Reuse the metadata fetched moments ago instead of extracting again
@@ -6765,6 +6791,28 @@ public struct DownloadResult: Sendable {
                 || (argument.count > 2 && (argument.hasPrefix("-P") || argument.hasPrefix("-o")) && !argument.hasPrefix("--"))
             if attachedValue {
                 LoggerService.shared.log("Ignoring additional argument \(argument.prefix(2)): Siphon controls the output location.", level: .warning)
+            } else {
+                kept.append(argument)
+            }
+            index += 1
+        }
+        return kept
+    }
+
+    /// Drops `--proxy` (with its value) from user arguments when public-network
+    /// boundary enforcement is active, so deep-link jobs cannot bypass the egress proxy.
+    static func removingProxyArguments(_ arguments: [String]) -> [String] {
+        var kept: [String] = []
+        var index = arguments.startIndex
+        while index < arguments.endIndex {
+            let argument = arguments[index]
+            if argument == "--proxy" {
+                LoggerService.shared.log("Ignoring additional argument --proxy: Siphon enforces egress boundary for this job.", level: .warning)
+                index += 2
+                continue
+            }
+            if argument.hasPrefix("--proxy=") {
+                LoggerService.shared.log("Ignoring additional argument --proxy: Siphon enforces egress boundary for this job.", level: .warning)
             } else {
                 kept.append(argument)
             }

@@ -240,14 +240,17 @@ struct SiphonApp: App {
             rawUserAgent: sanitizedUserAgent,
             browserCookieSource: sanitizedBrowserSource
         )
+        appState.setExternalTarget(rawVideoUrl)
 
         if isFastDownload {
             let session = appState.consumeBrowserSession(for: rawVideoUrl)
+            _ = appState.consumeExternalTarget(for: rawVideoUrl)
             downloadManager.quickDownload(
                 url: rawVideoUrl,
                 rawCookies: nil,
                 rawUserAgent: session?.rawUserAgent,
-                browserCookieSource: session?.browserCookieSource
+                browserCookieSource: session?.browserCookieSource,
+                enforcePublicNetworkBoundary: true
             )
             appState.selectedNavItem = .downloading
             appState.showAddDownloadSheet = false

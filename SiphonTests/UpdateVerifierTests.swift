@@ -339,6 +339,306 @@ final class UpdateVerifierTests: XCTestCase {
         downloader.cancel()
         _ = try? await task1.value
     }
+
+    // MARK: - Signed Release Manifest Tests (Finding 9 / Issue #354)
+
+    func testEmbeddedReleasePublicKeyIsValid() {
+        XCTAssertEqual(UpdateManifestVerifier.defaultPublicKey.rawRepresentation.count, 32)
+    }
+
+    func testUpdateManifestVerifierValidSignature() throws {
+        let privateKey = Curve25519.Signing.PrivateKey()
+        let verifier = UpdateManifestVerifier(publicKey: privateKey.publicKey)
+        let hash = "d7a8fbb307d7809469ca9abcb0082e4f8d5651e46d3cdb762d02d0bf37c9e592"
+        let manifest = """
+        {
+            "version": "5.5.0",
+            "assets": {
+                "Siphon-arm64.dmg": "\(hash)",
+                "Siphon-x86_64.dmg": "\(String(repeating: "b", count: 64))"
+            }
+        }
+        """
+        let manifestData = Data(manifest.utf8)
+        let signatureData = try privateKey.signature(for: manifestData)
+
+        let verifiedChecksum = try verifier.verify(
+            manifestData: manifestData,
+            signatureData: signatureData,
+            expectedVersion: "5.5.0",
+            targetAssetName: "Siphon-arm64.dmg"
+        )
+        XCTAssertEqual(verifiedChecksum, hash)
+
+        let verifiedLower = try verifier.verify(
+            manifestData: manifestData,
+            signatureData: signatureData,
+            expectedVersion: "v5.5.0",
+            targetAssetName: "siphon-arm64.dmg"
+        )
+        XCTAssertEqual(verifiedLower, hash)
+    }
+
+    func testUpdateManifestVerifierRejectsTamperedManifest() throws {
+        let privateKey = Curve25519.Signing.PrivateKey()
+        let verifier = UpdateManifestVerifier(publicKey: privateKey.publicKey)
+        let manifest = """
+        {
+            "version": "5.5.0",
+            "assets": {
+                "Siphon-arm64.dmg": "\(String(repeating: "a", count: 64))"
+            }
+        }
+        """
+        let manifestData = Data(manifest.utf8)
+        let signatureData = try privateKey.signature(for: manifestData)
+
+        var tamperedData = manifestData
+        tamperedData[tamperedData.count - 5] ^= 0xFF
+
+        XCTAssertThrowsError(
+            try verifier.verify(
+                manifestData: tamperedData,
+                signatureData: signatureData,
+                expectedVersion: "5.5.0",
+                targetAssetName: "Siphon-arm64.dmg"
+            )
+        ) { error in
+            guard case ManifestVerificationError.invalidSignature = error else {
+                XCTFail("Expected invalidSignature, got \(error)")
+                return
+            }
+        }
+    }
+
+    func testUpdateManifestVerifierRejectsForgedSignature() throws {
+        let validKey = Curve25519.Signing.PrivateKey()
+        let attackerKey = Curve25519.Signing.PrivateKey()
+        let verifier = UpdateManifestVerifier(publicKey: validKey.publicKey)
+
+        let manifestData = Data("{\"version\": \"5.5.0\", \"assets\": {\"Siphon.dmg\": \"\(String(repeating: "a", count: 64))\"}}".utf8)
+        let forgedSignature = try attackerKey.signature(for: manifestData)
+
+        XCTAssertThrowsError(
+            try verifier.verify(
+                manifestData: manifestData,
+                signatureData: forgedSignature,
+                expectedVersion: "5.5.0",
+                targetAssetName: "Siphon.dmg"
+            )
+        ) { error in
+            guard case ManifestVerificationError.invalidSignature = error else {
+                XCTFail("Expected invalidSignature, got \(error)")
+                return
+            }
+        }
+    }
+
+    func testUpdateManifestVerifierRejectsVersionMismatch() throws {
+        let privateKey = Curve25519.Signing.PrivateKey()
+        let verifier = UpdateManifestVerifier(publicKey: privateKey.publicKey)
+        let manifestData = Data("{\"version\": \"5.5.0\", \"assets\": {\"Siphon.dmg\": \"\(String(repeating: "a", count: 64))\"}}".utf8)
+        let signatureData = try privateKey.signature(for: manifestData)
+
+        XCTAssertThrowsError(
+            try verifier.verify(
+                manifestData: manifestData,
+                signatureData: signatureData,
+                expectedVersion: "5.5.1",
+                targetAssetName: "Siphon.dmg"
+            )
+        ) { error in
+            guard case ManifestVerificationError.versionMismatch(let expected, let actual) = error else {
+                XCTFail("Expected versionMismatch, got \(error)")
+                return
+            }
+            XCTAssertEqual(expected, "5.5.1")
+            XCTAssertEqual(actual, "5.5.0")
+        }
+    }
+
+    func testUpdateManifestVerifierRejectsMissingAsset() throws {
+        let privateKey = Curve25519.Signing.PrivateKey()
+        let verifier = UpdateManifestVerifier(publicKey: privateKey.publicKey)
+        let manifestData = Data("{\"version\": \"5.5.0\", \"assets\": {\"Siphon-x86_64.dmg\": \"\(String(repeating: "a", count: 64))\"}}".utf8)
+        let signatureData = try privateKey.signature(for: manifestData)
+
+        XCTAssertThrowsError(
+            try verifier.verify(
+                manifestData: manifestData,
+                signatureData: signatureData,
+                expectedVersion: "5.5.0",
+                targetAssetName: "Siphon-arm64.dmg"
+            )
+        ) { error in
+            guard case ManifestVerificationError.assetNotFound = error else {
+                XCTFail("Expected assetNotFound, got \(error)")
+                return
+            }
+        }
+    }
+
+    func testUpdateManifestVerifierRejectsMalformedChecksum() throws {
+        let privateKey = Curve25519.Signing.PrivateKey()
+        let verifier = UpdateManifestVerifier(publicKey: privateKey.publicKey)
+        let manifestData = Data("{\"version\": \"5.5.0\", \"assets\": {\"Siphon.dmg\": \"not-a-valid-sha256\"}}".utf8)
+        let signatureData = try privateKey.signature(for: manifestData)
+
+        XCTAssertThrowsError(
+            try verifier.verify(
+                manifestData: manifestData,
+                signatureData: signatureData,
+                expectedVersion: "5.5.0",
+                targetAssetName: "Siphon.dmg"
+            )
+        ) { error in
+            guard case ManifestVerificationError.invalidChecksum = error else {
+                XCTFail("Expected invalidChecksum, got \(error)")
+                return
+            }
+        }
+    }
+
+    func testUpdateManifestVerifierSupportsArrayAssetFormat() throws {
+        let privateKey = Curve25519.Signing.PrivateKey()
+        let verifier = UpdateManifestVerifier(publicKey: privateKey.publicKey)
+        let hash = "d7a8fbb307d7809469ca9abcb0082e4f8d5651e46d3cdb762d02d0bf37c9e592"
+        let manifest = """
+        {
+            "version": "5.5.0",
+            "assets": [
+                {
+                    "name": "Siphon-arm64.dmg",
+                    "sha256": "\(hash)"
+                }
+            ]
+        }
+        """
+        let manifestData = Data(manifest.utf8)
+        let signatureData = try privateKey.signature(for: manifestData)
+
+        let verifiedChecksum = try verifier.verify(
+            manifestData: manifestData,
+            signatureData: signatureData,
+            expectedVersion: "5.5.0",
+            targetAssetName: "Siphon-arm64.dmg"
+        )
+        XCTAssertEqual(verifiedChecksum, hash)
+    }
+
+    func testUpdateManifestVerifierParsesBase64AndHexSignatures() throws {
+        let privateKey = Curve25519.Signing.PrivateKey()
+        let verifier = UpdateManifestVerifier(publicKey: privateKey.publicKey)
+        let hash = "d7a8fbb307d7809469ca9abcb0082e4f8d5651e46d3cdb762d02d0bf37c9e592"
+        let manifestData = Data("{\"version\": \"5.5.0\", \"assets\": {\"Siphon.dmg\": \"\(hash)\"}}".utf8)
+        let rawSignature = try privateKey.signature(for: manifestData)
+
+        // 1. Base64 signature
+        let base64Sig = Data(rawSignature.base64EncodedString().utf8)
+        let result1 = try verifier.verify(
+            manifestData: manifestData,
+            signatureData: base64Sig,
+            expectedVersion: "5.5.0",
+            targetAssetName: "Siphon.dmg"
+        )
+        XCTAssertEqual(result1, hash)
+
+        // 2. Hex signature
+        let hexString = rawSignature.map { String(format: "%02x", $0) }.joined()
+        let hexSig = Data(hexString.utf8)
+        let result2 = try verifier.verify(
+            manifestData: manifestData,
+            signatureData: hexSig,
+            expectedVersion: "5.5.0",
+            targetAssetName: "Siphon.dmg"
+        )
+        XCTAssertEqual(result2, hash)
+    }
+
+    @MainActor
+    func testUpdateCheckerRequiresSignedManifestWhenConfigured() async {
+        let checker = UpdateChecker(requireSignedManifest: true)
+        let downloadURL = URL(string: "https://github.com/marspater/jolly-hopper/releases/download/v5.5.0/Siphon.dmg")!
+        checker.configureUpdateSources(
+            downloadURL: downloadURL,
+            downloadAssetName: "Siphon.dmg",
+            expectedChecksum: nil,
+            checksumURL: nil,
+            manifestURL: nil,
+            manifestSigURL: nil,
+            latestVersion: "5.5.0"
+        )
+        await checker.downloadAndInstallUpdate()
+        XCTAssertNotNil(checker.updateError)
+        XCTAssertTrue(checker.updateError?.contains("signed release manifest") == true)
+    }
+
+    @MainActor
+    func testUpdateCheckerRejectsUntrustedManifestURL() async {
+        let checker = UpdateChecker()
+        let downloadURL = URL(string: "https://github.com/marspater/jolly-hopper/releases/download/v5.5.0/Siphon.dmg")!
+        let untrustedManifest = URL(string: "http://malicious.com/manifest.json")!
+        let untrustedSig = URL(string: "http://malicious.com/manifest.sig")!
+        checker.configureUpdateSources(
+            downloadURL: downloadURL,
+            downloadAssetName: "Siphon.dmg",
+            expectedChecksum: nil,
+            checksumURL: nil,
+            manifestURL: untrustedManifest,
+            manifestSigURL: untrustedSig,
+            latestVersion: "5.5.0"
+        )
+        await checker.downloadAndInstallUpdate()
+        XCTAssertEqual(checker.updateError, UpdateDownloadError.invalidURL.localizedDescription)
+    }
+
+    @MainActor
+    func testUpdateCheckerRejectsMismatchedManifestSignature() async throws {
+        let privateKey = Curve25519.Signing.PrivateKey()
+        let otherKey = Curve25519.Signing.PrivateKey()
+        let verifier = UpdateManifestVerifier(publicKey: privateKey.publicKey)
+        let checker = UpdateChecker(manifestVerifier: verifier)
+
+        let downloadURL = URL(string: "https://github.com/marspater/jolly-hopper/releases/download/v5.5.0/Siphon.dmg")!
+        let manifestURL = URL(string: "https://github.com/marspater/jolly-hopper/releases/download/v5.5.0/release-manifest.json")!
+        let sigURL = URL(string: "https://github.com/marspater/jolly-hopper/releases/download/v5.5.0/release-manifest.json.sig")!
+
+        let hash = "d7a8fbb307d7809469ca9abcb0082e4f8d5651e46d3cdb762d02d0bf37c9e592"
+        let manifestData = Data("{\"version\": \"5.5.0\", \"assets\": {\"Siphon.dmg\": \"\(hash)\"}}".utf8)
+        let badSignatureData = try otherKey.signature(for: manifestData)
+
+        URLProtocol.registerClass(MockURLProtocol.self)
+        defer {
+            URLProtocol.unregisterClass(MockURLProtocol.self)
+            MockURLProtocol.requestHandler = nil
+        }
+
+        MockURLProtocol.requestHandler = { request in
+            guard let url = request.url else { throw URLError(.badURL) }
+            if url == manifestURL {
+                let response = HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil)!
+                return (response, manifestData)
+            } else if url == sigURL {
+                let response = HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil)!
+                return (response, badSignatureData)
+            }
+            throw URLError(.fileDoesNotExist)
+        }
+
+        checker.configureUpdateSources(
+            downloadURL: downloadURL,
+            downloadAssetName: "Siphon.dmg",
+            expectedChecksum: nil,
+            checksumURL: nil,
+            manifestURL: manifestURL,
+            manifestSigURL: sigURL,
+            latestVersion: "5.5.0"
+        )
+
+        await checker.downloadAndInstallUpdate()
+        XCTAssertNotNil(checker.updateError)
+        XCTAssertTrue(checker.updateError?.contains("Signature verification failed") == true || checker.updateError?.contains("signature") == true)
+    }
 }
 
 private final class HoldingUpdateURLProtocol: URLProtocol, @unchecked Sendable {

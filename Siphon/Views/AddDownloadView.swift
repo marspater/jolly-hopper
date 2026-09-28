@@ -1763,6 +1763,9 @@ struct AddDownloadView: View {
 
     private func proceedWithBatchDownload(urls: [String], options: DownloadOptions) {
         var finalOptions = options
+        if appState.consumeExternalTarget(for: urls) {
+            finalOptions.enforcePublicNetworkBoundary = true
+        }
         if let session = appState.consumeBrowserSession(for: urls) {
             finalOptions.rawCookies = session.rawCookies
             finalOptions.rawUserAgent = session.rawUserAgent
@@ -1780,6 +1783,10 @@ struct AddDownloadView: View {
         finalOptions.forceOverwrite = forceOverwrite
 
         let cleanURL = urlInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        let isExternal = appState.consumeExternalTarget(for: cleanURL)
+        if isExternal {
+            finalOptions.enforcePublicNetworkBoundary = true
+        }
         if downloadMode == .single {
             if let session = appState.consumeBrowserSession(for: cleanURL) {
                 finalOptions.rawCookies = session.rawCookies
@@ -1790,6 +1797,9 @@ struct AddDownloadView: View {
         } else {
             let selectedItems = playlistItems.filter { selectedPlaylistIds.contains($0.id) }
             let urls = selectedItems.map { $0.resolvedURL }
+            if isExternal || appState.consumeExternalTarget(for: urls) {
+                finalOptions.enforcePublicNetworkBoundary = true
+            }
             if let session = appState.consumeBrowserSession(for: urls) {
                 finalOptions.rawCookies = session.rawCookies
                 finalOptions.rawUserAgent = session.rawUserAgent
