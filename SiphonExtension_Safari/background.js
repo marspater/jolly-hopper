@@ -28,7 +28,7 @@ function closeDeepLinkTab(tabId) {
 if (chrome.windows?.onFocusChanged) {
     chrome.windows.onFocusChanged.addListener((windowId) => {
         if (windowId !== chrome.windows.WINDOW_ID_NONE) return;
-        for (const tabId of [...deepLinkTabs]) {
+        for (const tabId of deepLinkTabs) {
             closeDeepLinkTab(tabId);
         }
     });
