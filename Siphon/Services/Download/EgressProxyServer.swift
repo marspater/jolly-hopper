@@ -220,7 +220,8 @@ public final class EgressProxyServer: @unchecked Sendable {
             return
         }
 
-        let lines = headerString.components(separatedBy: "\r\n").flatMap { $0.components(separatedBy: "\n") }
+        // Bolt Performance Optimization: Use split(whereSeparator: \.isNewline) over Substring views to avoid double intermediate String array allocations on every proxy request header parse
+        let lines = headerString.split(whereSeparator: \.isNewline).map(String.init)
         guard let firstLine = lines.first?.trimmingCharacters(in: .whitespacesAndNewlines), !firstLine.isEmpty else {
             sendResponse(client: client, status: "400 Bad Request", body: "Empty request\n", close: true)
             return
