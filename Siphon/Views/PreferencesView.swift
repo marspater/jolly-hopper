@@ -532,6 +532,7 @@ struct PreferencesView: View {
                         Spacer()
                     }
                     .tag(preset.rawValue)
+                    .accessibilityElement(children: .combine)
                 }
             }
             .pickerStyle(.radioGroup)
