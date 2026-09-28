@@ -17,8 +17,8 @@ struct HeroDropURLView: View {
     @FocusState private var isFieldFocused: Bool
     @State private var inputURL: String = ""
     @State private var isTargeted: Bool = false
-    @State private var isPasting: Bool = false
     @StateObject private var feedback = TransientFeedbackState()
+    @StateObject private var pasteFeedback = TransientFeedbackState()
 
     private var showsFieldFocus: Bool {
         isFieldFocused && appearsActive && !appState.showAddDownloadSheet
@@ -175,12 +175,12 @@ struct HeroDropURLView: View {
                         handlePasteAction()
                     } label: {
                         HStack(spacing: 4) {
-                            Image(systemName: isPasting ? "checkmark" : "doc.on.clipboard")
+                            Image(systemName: pasteFeedback.isShowing ? "checkmark" : "doc.on.clipboard")
                                 .font(.system(size: 11, weight: .semibold))
                             Text(languageService.s("paste"))
                                 .font(.siphonMetadataMedium)
                         }
-                        .foregroundColor(isPasting ? SiphonTheme.statusForeground(for: .completed, colorScheme: colorScheme) : .primary)
+                        .foregroundColor(pasteFeedback.isShowing ? SiphonTheme.statusForeground(for: .completed, colorScheme: colorScheme) : .primary)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 4)
                         .background(SiphonTheme.controlBackground(cornerRadius: SiphonTheme.radiusSmall))
@@ -311,11 +311,7 @@ struct HeroDropURLView: View {
                 return
             } else if let single = extracted.first {
                 inputURL = single
-                isPasting = true
-                Task { @MainActor in
-                    try? await Task.sleep(nanoseconds: 1_200_000_000)
-                    isPasting = false
-                }
+                pasteFeedback.show(languageService.s("paste"), isSuccess: true, duration: 1.2)
                 return
             }
         }

@@ -1692,6 +1692,21 @@ final class QueueAndErrorUXTests: XCTestCase {
         XCTAssertNil(feedback.current)
     }
 
+    func testTransientFeedbackRepeatShowKeepsLatestDuration() async throws {
+        let feedback = TransientFeedbackState()
+
+        feedback.show("Copied", isSuccess: true, duration: 0.3)
+        try await Task.sleep(nanoseconds: 150_000_000)
+        feedback.show("Copied", isSuccess: true, duration: 1.0)
+
+        // Past the first call's deadline: its dismissal must have been cancelled.
+        try await Task.sleep(nanoseconds: 400_000_000)
+        XCTAssertTrue(feedback.isShowing)
+
+        try await Task.sleep(nanoseconds: 1_000_000_000)
+        XCTAssertFalse(feedback.isShowing)
+    }
+
     func testDownloadURLValidator() {
         // Valid URLs with scheme
         let res1 = DownloadURLValidator.validate("https://www.youtube.com/watch?v=dQw4w9WgXcQ")

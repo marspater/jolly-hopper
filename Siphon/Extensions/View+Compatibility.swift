@@ -315,13 +315,27 @@ public final class TransientFeedbackState: ObservableObject {
         // Intentionally empty initializer for ObservableObject instantiation (swift:S1186)
     }
 
-    public func show(_ message: String, isSuccess: Bool, icon: String? = nil, duration: TimeInterval = 3.5) {
+    public var isShowing: Bool { current != nil }
+
+    /// Shows `message` and schedules its dismissal. A repeat call cancels the
+    /// pending dismissal, so each confirmation stays up for its full duration.
+    public func show(
+        _ message: String,
+        isSuccess: Bool,
+        icon: String? = nil,
+        duration: TimeInterval = 3.5,
+        animation: Animation? = nil
+    ) {
         dismissTask?.cancel()
-        current = Item(message: message, isSuccess: isSuccess, icon: icon)
+        withAnimation(animation) {
+            current = Item(message: message, isSuccess: isSuccess, icon: icon)
+        }
         dismissTask = Task { @MainActor [weak self] in
             try? await Task.sleep(nanoseconds: UInt64(duration * 1_000_000_000))
             guard !Task.isCancelled else { return }
-            self?.current = nil
+            withAnimation(animation) {
+                self?.current = nil
+            }
         }
     }
 

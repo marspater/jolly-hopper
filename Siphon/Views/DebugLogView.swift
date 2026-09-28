@@ -5,7 +5,7 @@ struct DebugLogView: View {
     @ObservedObject private var logger = LoggerService.shared
     @ObservedObject private var languageService = LanguageService.shared
     @AppStorage(UserDefaultsKeys.theme) private var theme: String = "system"
-    @State private var isCopied = false
+    @StateObject private var copyFeedback = TransientFeedbackState()
 
     var body: some View {
         VStack(spacing: 0) {
@@ -62,23 +62,15 @@ struct DebugLogView: View {
                     let pasteboard = NSPasteboard.general
                     pasteboard.clearContents()
                     pasteboard.setString(logger.logs.joined(separator: "\n"), forType: .string)
-                    withAnimation(SiphonAnimation.snappySpring) {
-                        isCopied = true
-                    }
-                    Task {
-                        try? await Task.sleep(nanoseconds: 1_500_000_000)
-                        withAnimation(SiphonAnimation.snappySpring) {
-                            isCopied = false
-                        }
-                    }
+                    copyFeedback.show(languageService.s("copied"), isSuccess: true, duration: 1.5, animation: SiphonAnimation.snappySpring)
                 } label: {
                     HStack(spacing: 6) {
-                        Image(systemName: isCopied ? "checkmark" : "doc.on.doc")
+                        Image(systemName: copyFeedback.isShowing ? "checkmark" : "doc.on.doc")
                             .font(.system(size: 11, weight: .semibold))
-                        Text(isCopied ? languageService.s("copied") : languageService.s("copy_log"))
+                        Text(copyFeedback.isShowing ? languageService.s("copied") : languageService.s("copy_log"))
                             .font(.siphonSecondaryMedium)
                     }
-                    .foregroundColor(isCopied ? SiphonTheme.statusCompletedText : .primary)
+                    .foregroundColor(copyFeedback.isShowing ? SiphonTheme.statusCompletedText : .primary)
                 }
                 .buttonStyle(.siphonSecondary)
                 .disabled(logger.logs.isEmpty)
