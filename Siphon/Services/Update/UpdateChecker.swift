@@ -389,8 +389,9 @@ public final class UpdateChecker: ObservableObject {
         UpdateInstaller.restartApp()
     }
 
-    #if DEBUG
-    public func configureUpdateSources(
+    /// Test seam: seeds what `checkForUpdates` would discover. Internal (not
+    /// `#if DEBUG`) so `@testable` Release test runs in CI can reach it too.
+    func configureUpdateSources(
         downloadURL: URL?,
         downloadAssetName: String?,
         expectedChecksum: String? = nil,
@@ -409,7 +410,6 @@ public final class UpdateChecker: ObservableObject {
             self.latestVersion = latestVersion
         }
     }
-    #endif
 
     // MARK: - Compatibility & Static Verification Helpers
 
