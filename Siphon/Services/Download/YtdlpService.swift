@@ -800,6 +800,25 @@ class YtdlpService: ObservableObject {
         browserCookieSource: String? = nil,
         proxy: String? = nil
     ) async throws -> MediaInfo {
+        // Site resolvers make their own requests; the binding routes those too.
+        try await EgressBoundary.$proxyURL.withValue(proxy ?? EgressBoundary.proxyURL) {
+            try await fetchInfoWithinBoundary(
+                url: url,
+                rawCookies: rawCookies,
+                rawUserAgent: rawUserAgent,
+                browserCookieSource: browserCookieSource,
+                proxy: proxy
+            )
+        }
+    }
+
+    private func fetchInfoWithinBoundary(
+        url: String,
+        rawCookies: String?,
+        rawUserAgent: String?,
+        browserCookieSource: String?,
+        proxy: String?
+    ) async throws -> MediaInfo {
         guard let path = ytdlpPath else {
             throw YtdlpError.notFound
         }
@@ -1333,6 +1352,24 @@ class YtdlpService: ObservableObject {
         browserCookieSource: String? = nil,
         proxy: String? = nil
     ) async throws -> [MediaInfo] {
+        try await EgressBoundary.$proxyURL.withValue(proxy ?? EgressBoundary.proxyURL) {
+            try await fetchPlaylistInfoWithinBoundary(
+                url: url,
+                rawCookies: rawCookies,
+                rawUserAgent: rawUserAgent,
+                browserCookieSource: browserCookieSource,
+                proxy: proxy
+            )
+        }
+    }
+
+    private func fetchPlaylistInfoWithinBoundary(
+        url: String,
+        rawCookies: String?,
+        rawUserAgent: String?,
+        browserCookieSource: String?,
+        proxy: String?
+    ) async throws -> [MediaInfo] {
         guard let path = ytdlpPath else {
             throw YtdlpError.notFound
         }
@@ -1509,6 +1546,29 @@ public struct DownloadResult: Sendable {
         mediaInfo: MediaInfo? = nil,
         processController: DownloadProcessController? = nil,
         temporaryDirectory: URL? = nil,
+        onProgress: @escaping @Sendable (Double, String?, String?) -> Void,
+        onOutput: @escaping @Sendable (String) -> Void
+    ) async throws -> DownloadResult {
+        let boundaryProxy = options.enforcePublicNetworkBoundary ? try await egressProxyURL() : nil
+        return try await EgressBoundary.$proxyURL.withValue(boundaryProxy) {
+            try await downloadWithinBoundary(
+                url: url,
+                options: options,
+                mediaInfo: mediaInfo,
+                processController: processController,
+                temporaryDirectory: temporaryDirectory,
+                onProgress: onProgress,
+                onOutput: onOutput
+            )
+        }
+    }
+
+    private func downloadWithinBoundary(
+        url: String,
+        options: DownloadOptions,
+        mediaInfo: MediaInfo?,
+        processController: DownloadProcessController?,
+        temporaryDirectory: URL?,
         onProgress: @escaping @Sendable (Double, String?, String?) -> Void,
         onOutput: @escaping @Sendable (String) -> Void
     ) async throws -> DownloadResult {
@@ -1789,8 +1849,8 @@ public struct DownloadResult: Sendable {
             args.append(contentsOf: extraArgs)
         }
 
-        if options.enforcePublicNetworkBoundary {
-            args.append(contentsOf: ["--proxy", try await egressProxyURL()])
+        if options.enforcePublicNetworkBoundary, let boundaryProxy = EgressBoundary.proxyURL {
+            args.append(contentsOf: ["--proxy", boundaryProxy])
         }
 
         // Reuse the metadata fetched moments ago instead of extracting again
@@ -2049,6 +2109,10 @@ public struct DownloadResult: Sendable {
 
         guard let finalResult = processResult else {
             throw YtdlpError.downloadFailed("Download failed across all recovery strategies.")
+        }
+        if let partialFailure = finalResult.partialFailure {
+            onOutput("[WARNING] \(finalResult.allPaths.count) item(s) finished; others failed: \(partialFailure)\n")
+            LoggerService.shared.log("Download finished with failed items (\(hostForLog(normalizedURL))): \(partialFailure)", level: .warning)
         }
         let finalFileURL = URL(fileURLWithPath: finalResult.primaryPath, relativeTo: options.saveFolder).absoluteURL
         let allFileURLs = finalResult.allPaths.map { URL(fileURLWithPath: $0, relativeTo: options.saveFolder).absoluteURL }
@@ -2753,16 +2817,42 @@ public struct DownloadResult: Sendable {
         return try? JSONDecoder().decode(RecuPageState.self, from: data)
     }
 
+    /// The page's fetch has no deadline of its own and WebKit ignores task
+    /// cancellation, so a stalled request would hold the job (and its slot) after
+    /// Stop. It aborts after `recuAPITimeoutMs` or as soon as the task is cancelled.
+    private static let recuAPITimeoutMs = 20_000
+
     private func recuAPIResponse(_ webView: WKWebView, url: String) async throws -> String {
         let script = """
-        const response = await fetch(apiURL, { credentials: 'same-origin', headers: { 'X-Requested-With': 'XMLHttpRequest' } });
-        return await response.text();
+        const controller = new AbortController();
+        window.__siphonRecuAbort = controller;
+        const timer = setTimeout(() => controller.abort(), timeoutMs);
+        try {
+            const response = await fetch(apiURL, { credentials: 'same-origin', headers: { 'X-Requested-With': 'XMLHttpRequest' }, signal: controller.signal });
+            return await response.text();
+        } finally {
+            clearTimeout(timer);
+        }
         """
-        let response: String? = await withCheckedContinuation { continuation in
-            webView.callAsyncJavaScript(script, arguments: ["apiURL": url], in: nil, in: .defaultClient) { result in
-                continuation.resume(returning: (try? result.get()) as? String)
+        let response: String? = await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
+                webView.callAsyncJavaScript(
+                    script,
+                    arguments: ["apiURL": url, "timeoutMs": Self.recuAPITimeoutMs],
+                    in: nil,
+                    in: .defaultClient
+                ) { result in
+                    continuation.resume(returning: (try? result.get()) as? String)
+                }
+            }
+        } onCancel: {
+            Task { @MainActor in
+                webView.evaluateJavaScript("window.__siphonRecuAbort?.abort()", in: nil, in: .defaultClient) { _ in
+                    // The aborted fetch resumes the waiting request above.
+                }
             }
         }
+        try Task.checkCancellation()
         guard let response else {
             LoggerService.shared.log("[ProtectedSite] stage=api result=request-failed", level: .debug)
             throw YtdlpError.downloadFailed("Recu.me did not answer the video request. Check the connection, then retry.")
@@ -2783,6 +2873,9 @@ public struct DownloadResult: Sendable {
             throw YtdlpError.cloudflareBlocked
         }
 
+        // ponytail: one store-wide setting, so recu jobs with different boundaries
+        // running at once share whichever was set last; per-job stores if that matters.
+        recuWebDataStore.proxyConfigurations = EgressBoundary.webKitProxyConfigurations
         let configuration = WKWebViewConfiguration()
         configuration.websiteDataStore = recuWebDataStore
         configuration.mediaTypesRequiringUserActionForPlayback = .all
@@ -3289,6 +3382,7 @@ public struct DownloadResult: Sendable {
             return nil
         }
 
+        boyfriendTVWebDataStore.proxyConfigurations = EgressBoundary.webKitProxyConfigurations
         let configuration = WKWebViewConfiguration()
         configuration.websiteDataStore = boyfriendTVWebDataStore
         configuration.defaultWebpagePreferences.allowsContentJavaScript = true
@@ -3499,7 +3593,7 @@ public struct DownloadResult: Sendable {
         func fetchPage(_ request: URLRequest, stage: String) async throws -> String? {
             try Task.checkCancellation()
             do {
-                let (data, response) = try await URLSession.shared.boundedData(for: request)
+                let (data, response) = try await EgressBoundary.session.boundedData(for: request)
                 try Task.checkCancellation()
                 guard let http = response as? HTTPURLResponse else { return nil }
                 sawForbidden = sawForbidden || http.statusCode == 403
@@ -4276,7 +4370,7 @@ public struct DownloadResult: Sendable {
                 request.setValue(raw, forHTTPHeaderField: "Cookie")
             }
             
-            if let (data, response) = try? await URLSession.shared.boundedData(for: request),
+            if let (data, response) = try? await EgressBoundary.session.boundedData(for: request),
                let httpResponse = response as? HTTPURLResponse,
                (200...299).contains(httpResponse.statusCode),
                let fetched = String(data: data, encoding: .utf8) {
@@ -4393,7 +4487,7 @@ public struct DownloadResult: Sendable {
             embedReq.timeoutInterval = 5.0
             embedReq.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36", forHTTPHeaderField: "User-Agent")
             embedReq.setValue("https://guywh.com/", forHTTPHeaderField: "Referer")
-            if let (data, response) = try? await URLSession.shared.boundedData(for: embedReq),
+            if let (data, response) = try? await EgressBoundary.session.boundedData(for: embedReq),
                let httpResponse = response as? HTTPURLResponse,
                (200...299).contains(httpResponse.statusCode),
                let embedHtml = String(data: data, encoding: .utf8) {
@@ -4613,7 +4707,7 @@ public struct DownloadResult: Sendable {
                 request.setValue(raw, forHTTPHeaderField: "Cookie")
             }
             
-            if let (data, response) = try? await URLSession.shared.boundedData(for: request),
+            if let (data, response) = try? await EgressBoundary.session.boundedData(for: request),
                let httpResponse = response as? HTTPURLResponse,
                (200...299).contains(httpResponse.statusCode),
                let fetched = String(data: data, encoding: .utf8) {
@@ -4795,7 +4889,7 @@ public struct DownloadResult: Sendable {
                     embedReq.timeoutInterval = 5.0
                     embedReq.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36", forHTTPHeaderField: "User-Agent")
                     embedReq.setValue("https://gayforfans.com/", forHTTPHeaderField: "Referer")
-                    if let (data, response) = try? await URLSession.shared.boundedData(for: embedReq),
+                    if let (data, response) = try? await EgressBoundary.session.boundedData(for: embedReq),
                        let httpResponse = response as? HTTPURLResponse,
                        (200...299).contains(httpResponse.statusCode),
                        let text = String(data: data, encoding: .utf8) {
@@ -5243,7 +5337,7 @@ public struct DownloadResult: Sendable {
                 if let raw = rawCookies, !raw.isEmpty {
                     request.setValue(raw, forHTTPHeaderField: "Cookie")
                 }
-                if let (data, response) = try? await URLSession.shared.boundedData(for: request),
+                if let (data, response) = try? await EgressBoundary.session.boundedData(for: request),
                    let httpResponse = response as? HTTPURLResponse,
                    (200...299).contains(httpResponse.statusCode),
                    let fetched = String(data: data, encoding: .utf8) {
@@ -5330,7 +5424,7 @@ public struct DownloadResult: Sendable {
         abyssReq.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36", forHTTPHeaderField: "User-Agent")
         abyssReq.setValue("https://bestcam.tv/", forHTTPHeaderField: "Referer")
 
-        if let (data, response) = try? await URLSession.shared.boundedData(for: abyssReq),
+        if let (data, response) = try? await EgressBoundary.session.boundedData(for: abyssReq),
            let httpResponse = response as? HTTPURLResponse,
            (200...299).contains(httpResponse.statusCode),
            let pageHtml = String(data: data, encoding: .utf8),
@@ -5347,7 +5441,7 @@ public struct DownloadResult: Sendable {
             infoReq.setValue("https://bestcam.tv/", forHTTPHeaderField: "Referer")
             infoReq.setValue("https://bestcam.tv/", forHTTPHeaderField: "x-referer")
             infoReq.setValue("1920x1080", forHTTPHeaderField: "x-client-screen")
-            if let (data, response) = try? await URLSession.shared.boundedData(for: infoReq),
+            if let (data, response) = try? await EgressBoundary.session.boundedData(for: infoReq),
                let httpResponse = response as? HTTPURLResponse,
                (200...299).contains(httpResponse.statusCode),
                let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
@@ -5464,7 +5558,7 @@ public struct DownloadResult: Sendable {
                 request.setValue(rawCookies, forHTTPHeaderField: "Cookie")
             }
 
-            if let (data, response) = try? await URLSession.shared.boundedData(for: request),
+            if let (data, response) = try? await EgressBoundary.session.boundedData(for: request),
                let httpResponse = response as? HTTPURLResponse,
                (200...299).contains(httpResponse.statusCode),
                let fetched = String(data: data, encoding: .utf8) {
@@ -5895,7 +5989,7 @@ public struct DownloadResult: Sendable {
             }
             playerReq.httpBody = "id=\(id)".data(using: .utf8)
 
-            if let (data, response) = try? await URLSession.shared.boundedData(for: playerReq),
+            if let (data, response) = try? await EgressBoundary.session.boundedData(for: playerReq),
                let httpResponse = response as? HTTPURLResponse,
                (200...299).contains(httpResponse.statusCode),
                let fetchedPlayer = String(data: data, encoding: .utf8) {
@@ -6653,7 +6747,7 @@ public struct DownloadResult: Sendable {
         request.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36", forHTTPHeaderField: "User-Agent")
 
         do {
-            let (data, _) = try await URLSession.shared.boundedData(for: request)
+            let (data, _) = try await EgressBoundary.session.boundedData(for: request)
             guard let htmlText = String(data: data, encoding: .utf8) else { return nil }
 
             if htmlText.contains("sucuri_cloudproxy_js"), let regex = Self.sucuriAssignmentRegex {

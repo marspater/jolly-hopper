@@ -206,6 +206,53 @@ final class ProcessLifecycleTests: XCTestCase {
         }
     }
 
+    func testRunnerKeepsFinishedPlaylistEntriesWhenAnotherEntryFails() async throws {
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent("partial_\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let first = tempDir.appendingPathComponent("One [a1].mp4").path
+        let second = tempDir.appendingPathComponent("Two [b2].mp4").path
+        let script = "touch '\(first)' '\(second)'; " +
+            "echo 'SIPHON_FINAL_PATH:\(first)'; " +
+            "echo 'ERROR: [youtube] c3: Private video' >&2; " +
+            "echo 'SIPHON_FINAL_PATH:\(second)'; exit 1"
+        let result = try await DefaultYtdlpProcessRunner().runDownloadProcess(
+            args: ["/bin/sh", "-c", script],
+            saveFolder: tempDir,
+            processController: DownloadProcessController(),
+            onProgress: { _, _, _ in /* Progress ignored in test */ },
+            onOutput: { _ in /* Output ignored in test */ }
+        )
+        XCTAssertEqual(result.allPaths.map { URL(fileURLWithPath: $0).lastPathComponent }, ["One [a1].mp4", "Two [b2].mp4"])
+        XCTAssertEqual(result.partialFailure, "[youtube] c3: Private video")
+    }
+
+    func testRunnerStillFailsWhenNoEntryFinished() async {
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent("partial_none_\(UUID().uuidString)")
+        try? FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        // A half-written file named on a Destination line is not a finished entry.
+        let partial = tempDir.appendingPathComponent("Half.mp4").path
+        let script = "touch '\(partial)'; echo '[download] Destination: \(partial)'; " +
+            "echo 'ERROR: unable to download video data' >&2; exit 1"
+        do {
+            _ = try await DefaultYtdlpProcessRunner().runDownloadProcess(
+                args: ["/bin/sh", "-c", script],
+                saveFolder: tempDir,
+                processController: DownloadProcessController(),
+                onProgress: { _, _, _ in /* Progress ignored in test */ },
+                onOutput: { _ in /* Output ignored in test */ }
+            )
+            XCTFail("A run with no finished entry must throw")
+        } catch YtdlpError.downloadFailed(let message) {
+            XCTAssertTrue(message.contains("unable to download video data"))
+        } catch {
+            XCTFail("Expected downloadFailed, got \(error)")
+        }
+    }
+
     func testStreamDrainBarrierRunsOnceAfterEveryStreamFinishes() {
         final class Counter: @unchecked Sendable {
             let lock = NSLock()

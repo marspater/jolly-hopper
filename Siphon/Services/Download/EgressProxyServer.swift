@@ -6,6 +6,60 @@
 import Foundation
 import Network
 
+/// The egress proxy of the boundary-enforced job the current task works for.
+/// Site resolvers deep in YtdlpService launch their own yt-dlp runs, URLSession
+/// requests and WebKit sessions; binding the proxy here covers all of them
+/// without threading a parameter through each one.
+enum EgressBoundary {
+    @TaskLocal static var proxyURL: String?
+
+    /// `args` with the bound proxy added when they launch yt-dlp without one.
+    static func applying(to args: [String]) -> [String] {
+        guard let proxyURL,
+              let executable = args.first,
+              URL(fileURLWithPath: executable).lastPathComponent.hasPrefix("yt-dlp"),
+              !args.contains(where: { $0 == "--proxy" || $0.hasPrefix("--proxy=") }) else {
+            return args
+        }
+        return [executable, "--proxy", proxyURL] + args.dropFirst()
+    }
+
+    /// The session for resolver requests: through the bound proxy, else shared.
+    static var session: URLSession {
+        guard let endpoint = proxyEndpoint else { return .shared }
+        return sessionLock.withLock {
+            if let cached = sessions[endpoint.port] { return cached }
+            let configuration = URLSessionConfiguration.ephemeral
+            configuration.connectionProxyDictionary = [
+                kCFNetworkProxiesHTTPEnable as String: true,
+                kCFNetworkProxiesHTTPProxy as String: endpoint.host,
+                kCFNetworkProxiesHTTPPort as String: endpoint.port,
+                kCFNetworkProxiesHTTPSEnable as String: true,
+                kCFNetworkProxiesHTTPSProxy as String: endpoint.host,
+                kCFNetworkProxiesHTTPSPort as String: endpoint.port
+            ]
+            let session = URLSession(configuration: configuration)
+            sessions[endpoint.port] = session
+            return session
+        }
+    }
+
+    /// WebKit proxy settings for a website data store: the bound proxy, or none.
+    static var webKitProxyConfigurations: [ProxyConfiguration] {
+        guard let endpoint = proxyEndpoint,
+              let port = NWEndpoint.Port(rawValue: UInt16(endpoint.port)) else { return [] }
+        return [ProxyConfiguration(httpCONNECTProxy: .hostPort(host: NWEndpoint.Host(endpoint.host), port: port))]
+    }
+
+    private static var proxyEndpoint: (host: String, port: Int)? {
+        guard let proxyURL, let url = URL(string: proxyURL), let host = url.host, let port = url.port else { return nil }
+        return (host, port)
+    }
+
+    private static let sessionLock = NSLock()
+    nonisolated(unsafe) private static var sessions: [Int: URLSession] = [:]
+}
+
 /// A localhost-bound forward/tunneling proxy that enforces the public network boundary
 /// at connection time for external deep-link downloads.
 ///
@@ -274,16 +328,16 @@ public final class EgressProxyServer: @unchecked Sendable {
             case .failure:
                 self.sendResponse(client: client, status: "502 Bad Gateway", body: "Failed to connect to destination\n", close: true)
             case .success(let upstream):
+                // After this request the connection is a raw pipe to this one
+                // upstream. HTTP clients reuse a proxy connection for plain-HTTP
+                // requests to any host, so a kept-alive connection would carry the
+                // next request (and its cookies) to the wrong server. One request
+                // per connection: drop the hop-by-hop headers and ask to close.
                 var forwardedHeaders = "\(method) \(relativePath) HTTP/1.1\r\n"
-                for line in lines.dropFirst() {
-                    let lower = line.lowercased()
-                    if lower.hasPrefix("proxy-connection:") {
-                        forwardedHeaders += "Connection: close\r\n"
-                    } else {
-                        forwardedHeaders += "\(line)\r\n"
-                    }
+                for line in lines.dropFirst() where !line.isEmpty && !Self.isHopByHopHeader(line) {
+                    forwardedHeaders += "\(line)\r\n"
                 }
-                forwardedHeaders += "\r\n"
+                forwardedHeaders += "Connection: close\r\n\r\n"
 
                 var payload = Data(forwardedHeaders.utf8)
                 payload.append(remainingData)
@@ -437,6 +491,16 @@ public final class EgressProxyServer: @unchecked Sendable {
                 client.cancel()
             }
         })
+    }
+
+    private static let hopByHopHeaders: Set<String> = [
+        "connection", "proxy-connection", "keep-alive", "proxy-authorization", "te", "upgrade"
+    ]
+
+    private static func isHopByHopHeader(_ line: String) -> Bool {
+        guard let colon = line.firstIndex(of: ":") else { return false }
+        let name = line[..<colon].trimmingCharacters(in: .whitespaces).lowercased()
+        return hopByHopHeaders.contains(name)
     }
 
     private static func parseHostAndPort(_ string: String, defaultPort: Int) -> (host: String, port: Int)? {
