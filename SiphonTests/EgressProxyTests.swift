@@ -94,19 +94,22 @@ final class EgressProxyTests: XCTestCase {
     }
 
     func testProxyFallsBackToNextResolvedAddress() async throws {
-        // The mock listens on 127.0.0.1 only; "localhost" usually resolves to
-        // ::1 first, which refuses, so the proxy must move on to 127.0.0.1.
+        // The mock listens on 127.0.0.1 only. A fixed resolver puts ::1 (which
+        // refuses) first, so the request only succeeds through the fallback.
         let server = MockHTTPServer()
         let serverPort = try server.start { _ in (200, [:], Data("REACHED".utf8)) }
         defer { server.stop() }
 
-        let proxy = EgressProxyServer(targetValidator: { _, port in port == Int(serverPort) })
+        let proxy = EgressProxyServer(
+            targetValidator: { _, port in port == Int(serverPort) },
+            addressResolver: { _ in ["::1", "127.0.0.1"] }
+        )
         let proxyPort = try proxy.start()
         defer { proxy.stop() }
 
         let response = try await sendThroughProxy(
             port: proxyPort,
-            "GET http://localhost:\(serverPort)/ HTTP/1.1\r\nHost: localhost:\(serverPort)\r\nConnection: close\r\n\r\n"
+            "GET http://mock.example:\(serverPort)/ HTTP/1.1\r\nHost: mock.example:\(serverPort)\r\nConnection: close\r\n\r\n"
         )
         XCTAssertTrue(response.hasPrefix("HTTP/1.1 200"), "Expected 200, got: \(response)")
         XCTAssertEqual(server.hitCount, 1)

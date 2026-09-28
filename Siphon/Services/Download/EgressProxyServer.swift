@@ -16,19 +16,22 @@ public final class EgressProxyServer: @unchecked Sendable {
     public static let shared = EgressProxyServer()
 
     public typealias TargetValidator = @Sendable (_ host: String, _ port: Int) -> Bool
+    public typealias AddressResolver = @Sendable (_ host: String) -> [String]
 
     private let queue = DispatchQueue(label: "com.marspater.siphon.egress-proxy", attributes: .concurrent)
     private let targetValidator: TargetValidator
+    private let addressResolver: AddressResolver
     private let lock = NSLock()
 
     private var listener: NWListener?
     private var isStarted = false
     public private(set) var port: UInt16 = 0
 
-    public init(targetValidator: TargetValidator? = nil) {
+    public init(targetValidator: TargetValidator? = nil, addressResolver: AddressResolver? = nil) {
         self.targetValidator = targetValidator ?? { host, port in
             ExternalDownloadTargetPolicy.isAllowedTarget(host: host, port: port)
         }
+        self.addressResolver = addressResolver ?? Self.resolveNumericAddresses
     }
 
     /// Starts the proxy listener on a random ephemeral port bound strictly to 127.0.0.1.
@@ -290,7 +293,7 @@ public final class EgressProxyServer: @unchecked Sendable {
     /// the name again, closes the DNS-rebinding window between check and connect.
     private func approvedAddresses(host: String, port: Int) -> [String]? {
         guard targetValidator(host, port) else { return nil }
-        let addresses = Self.resolveNumericAddresses(host)
+        let addresses = addressResolver(host)
         guard !addresses.isEmpty,
               addresses.allSatisfy({ targetValidator($0, port) }) else {
             return nil
@@ -320,25 +323,34 @@ public final class EgressProxyServer: @unchecked Sendable {
         return addresses
     }
 
+    /// Budget for the whole address walk, and for any single address in it.
     private static let upstreamConnectTimeout: TimeInterval = 15
+    private static let perAddressConnectTimeout: TimeInterval = 5
 
     /// Tries the validated addresses in resolver order, moving on when one fails,
     /// since pinning addresses gives up NWConnection's own Happy Eyeballs fallback.
-    private func connectUpstream(addresses: ArraySlice<String>, port: Int, completion: @escaping @Sendable (Result<NWConnection, Error>) -> Void) {
-        guard let address = addresses.first else {
-            completion(.failure(NSError(domain: "EgressProxyServer", code: -1, userInfo: [NSLocalizedDescriptionKey: "No address to connect to"])))
+    /// One deadline bounds the whole walk, however many addresses DNS returned.
+    private func connectUpstream(
+        addresses: ArraySlice<String>,
+        port: Int,
+        deadline: DispatchTime = .now() + EgressProxyServer.upstreamConnectTimeout,
+        completion: @escaping @Sendable (Result<NWConnection, Error>) -> Void
+    ) {
+        guard let address = addresses.first, DispatchTime.now() < deadline else {
+            completion(.failure(NSError(domain: "EgressProxyServer", code: -2, userInfo: [NSLocalizedDescriptionKey: "Upstream connect timed out"])))
             return
         }
-        connectUpstream(address: address, port: port) { [weak self] result in
+        let attemptDeadline = min(deadline, .now() + Self.perAddressConnectTimeout)
+        connectUpstream(address: address, port: port, deadline: attemptDeadline) { [weak self] result in
             if case .failure = result, addresses.count > 1, let self {
-                self.connectUpstream(addresses: addresses.dropFirst(), port: port, completion: completion)
+                self.connectUpstream(addresses: addresses.dropFirst(), port: port, deadline: deadline, completion: completion)
             } else {
                 completion(result)
             }
         }
     }
 
-    private func connectUpstream(address: String, port: Int, completion: @escaping @Sendable (Result<NWConnection, Error>) -> Void) {
+    private func connectUpstream(address: String, port: Int, deadline: DispatchTime, completion: @escaping @Sendable (Result<NWConnection, Error>) -> Void) {
         guard let nwPort = NWEndpoint.Port(rawValue: UInt16(port)) else {
             completion(.failure(NSError(domain: "EgressProxyServer", code: -1, userInfo: [NSLocalizedDescriptionKey: "Invalid port"])))
             return
@@ -371,7 +383,7 @@ public final class EgressProxyServer: @unchecked Sendable {
         }
 
         upstream.start(queue: queue)
-        queue.asyncAfter(deadline: .now() + Self.upstreamConnectTimeout) {
+        queue.asyncAfter(deadline: deadline) {
             fail(NSError(domain: "EgressProxyServer", code: -2, userInfo: [NSLocalizedDescriptionKey: "Upstream connect timed out"]))
         }
     }
