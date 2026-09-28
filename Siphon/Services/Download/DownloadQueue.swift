@@ -182,18 +182,36 @@ final class DownloadQueue: ObservableObject {
 
     // MARK: - Reordering Helpers
 
+    /// Rows shown on the Queue tab. Up/Down reorder relative to these only, so
+    /// a move never swaps with a hidden active, finished, or failed download.
+    static func isQueueTabMember(_ download: Download) -> Bool {
+        download.status == .queued || download.status == .paused
+    }
+
     @discardableResult
     func moveUp(download: Download, in downloads: inout [Download]) -> Bool {
-        guard let index = downloads.firstIndex(where: { $0.id == download.id }), index > 0 else { return false }
-        downloads.swapAt(index, index - 1)
+        guard let index = downloads.firstIndex(where: { $0.id == download.id }),
+              let neighbor = downloads[..<index].lastIndex(where: Self.isQueueTabMember) else { return false }
+        downloads.swapAt(index, neighbor)
         return true
     }
 
     @discardableResult
     func moveDown(download: Download, in downloads: inout [Download]) -> Bool {
-        guard let index = downloads.firstIndex(where: { $0.id == download.id }), index < downloads.count - 1 else { return false }
-        downloads.swapAt(index, index + 1)
+        guard let index = downloads.firstIndex(where: { $0.id == download.id }),
+              let neighbor = downloads[(index + 1)...].firstIndex(where: Self.isQueueTabMember) else { return false }
+        downloads.swapAt(index, neighbor)
         return true
+    }
+
+    func canMoveUp(download: Download, in downloads: [Download]) -> Bool {
+        guard let index = downloads.firstIndex(where: { $0.id == download.id }) else { return false }
+        return downloads[..<index].contains(where: Self.isQueueTabMember)
+    }
+
+    func canMoveDown(download: Download, in downloads: [Download]) -> Bool {
+        guard let index = downloads.firstIndex(where: { $0.id == download.id }) else { return false }
+        return downloads[(index + 1)...].contains(where: Self.isQueueTabMember)
     }
 
     @discardableResult
