@@ -177,7 +177,14 @@ final class UpdateVerifierTests: XCTestCase {
         XCTAssertTrue(UpdateDownloader.isTrustedGitHubURL(URL(string: "https://github.com/marspater/jolly-hopper/releases/download/v1.0.0/Siphon.dmg")!))
         XCTAssertTrue(UpdateDownloader.isTrustedGitHubURL(URL(string: "https://api.github.com/repos/marspater/jolly-hopper/releases/latest")!))
         XCTAssertTrue(UpdateDownloader.isTrustedGitHubURL(URL(string: "https://raw.githubusercontent.com/marspater/jolly-hopper/main/README.md")!))
-        XCTAssertTrue(UpdateDownloader.isTrustedGitHubURL(URL(string: "https://objects.githubusercontent.com/github-production-release-asset-2e65be/12345")!))
+        // The asset CDN is trusted only as a redirect target, never as a starting URL.
+        let cdnAsset = URL(string: "https://objects.githubusercontent.com/github-production-release-asset-2e65be/12345")!
+        XCTAssertFalse(UpdateDownloader.isTrustedGitHubURL(cdnAsset))
+        XCTAssertTrue(UpdateDownloader.isTrustedRedirectURL(cdnAsset))
+        XCTAssertTrue(UpdateDownloader.isTrustedRedirectURL(URL(string: "https://release-assets.githubusercontent.com/github-production-release-asset/1")!))
+        XCTAssertFalse(UpdateDownloader.isTrustedRedirectURL(URL(string: "http://objects.githubusercontent.com/x")!))
+        XCTAssertFalse(UpdateDownloader.isTrustedRedirectURL(URL(string: "https://evil.example/Siphon.dmg")!))
+        XCTAssertNil(UpdateDownloader.redirectRequestIfTrusted(URLRequest(url: URL(string: "https://evil.example/Siphon.dmg")!)))
 
         // Untrusted / Attack URLs
         XCTAssertFalse(UpdateDownloader.isTrustedGitHubURL(URL(string: "https://github.com/attacker/malware/releases/download/v1/bad.dmg")!), "Must reject untrusted GitHub repository")

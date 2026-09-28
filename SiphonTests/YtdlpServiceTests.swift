@@ -621,6 +621,55 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertEqual(prepared, ["yt-dlp", "--", "https://cdn.example.com/stream.m3u8"])
     }
 
+    func testChromiumExportFallsThroughBrowserWithoutMatchingCookies() throws {
+        func makeRoot(_ rows: String) throws -> URL {
+            let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+            let profile = root.appendingPathComponent("Default")
+            try FileManager.default.createDirectory(at: profile, withIntermediateDirectories: true)
+            var db: OpaquePointer?
+            XCTAssertEqual(sqlite3_open(profile.appendingPathComponent("Cookies").path, &db), SQLITE_OK)
+            defer { sqlite3_close(db) }
+            let sql = """
+            CREATE TABLE meta(key TEXT, value TEXT);
+            INSERT INTO meta VALUES ('version','24');
+            CREATE TABLE cookies(host_key TEXT, name TEXT, value TEXT, encrypted_value BLOB, path TEXT, expires_utc INTEGER, is_secure INTEGER, is_httponly INTEGER, has_expires INTEGER);
+            \(rows)
+            """
+            XCTAssertEqual(sqlite3_exec(db, sql, nil, nil, nil), SQLITE_OK)
+            return root
+        }
+        let signedOut = try makeRoot("INSERT INTO cookies VALUES('other.test','session','x',X'','/',0,1,1,0);")
+        let signedIn = try makeRoot("INSERT INTO cookies VALUES('.example.com','session','fixture',X'','/',0,1,1,0);")
+        let missing = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer {
+            try? FileManager.default.removeItem(at: signedOut)
+            try? FileManager.default.removeItem(at: signedIn)
+        }
+
+        let file = try XCTUnwrap(ChromiumCookieReader.export(
+            host: "example.com",
+            from: [(signedOut, nil), (missing, nil), (signedIn, nil)],
+            password: { Data("unused".utf8) }
+        ), "A signed-out browser must not hide a signed-in one")
+        defer { file.cleanup() }
+        XCTAssertTrue(try String(contentsOf: file.fileURL, encoding: .utf8).contains("fixture"))
+
+        XCTAssertNil(try ChromiumCookieReader.export(
+            host: "example.com",
+            from: [(signedOut, nil), (missing, nil)],
+            password: { Data("unused".utf8) }
+        ), "No matching cookies anywhere still proceeds anonymously")
+    }
+
+    func testAdditionalArgumentsCannotMoveOutputOutOfSaveFolder() {
+        XCTAssertEqual(
+            YtdlpService.removingOutputLocationArguments(
+                ["-P", "/tmp/x", "--embed-chapters", "--output=%(id)s.%(ext)s", "-o", "a.mp4", "-o%(title)s", "--paths", "home:/tmp", "--no-mtime", "-f", "best"]
+            ),
+            ["--embed-chapters", "--no-mtime", "-f", "best"]
+        )
+    }
+
     func testChromiumCookieReaderPrepareBypassesChromiumAndInterceptsArc() throws {
         // "chromium" is natively supported by yt-dlp, so prepare must not intercept it
         let chromiumArgs = ["yt-dlp", "--cookies-from-browser", "chromium", "https://example.com/video"]

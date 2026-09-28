@@ -76,6 +76,35 @@ final class DownloadQueue: ObservableObject {
         value.precomposedStringWithCanonicalMapping.lowercased()
     }
 
+    /// Collision keys (full filename) of the finished media files in `folder`.
+    nonisolated static func existingMediaFileKeys(
+        in folder: URL,
+        fileManager: FileManager = .default
+    ) -> Set<String> {
+        let files = (try? fileManager.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)) ?? []
+        return Set(files.compactMap { file in
+            YtdlpService.isMediaFilePath(file.path) ? filenameCollisionKey(file.lastPathComponent) : nil
+        })
+    }
+
+    private nonisolated static let videoContainerExtensions = ["mp4", "m4v", "mkv", "webm", "mov", "avi", "flv", "wmv", "ts"]
+
+    /// The one "file exists" rule shared by the queue, the executor and the
+    /// Add Download sheet. Audio jobs always convert to their exact
+    /// extension. A video job keeps the source container when yt-dlp does not
+    /// merge, so it collides with a video file of that name in any container,
+    /// but never with audio: `Song.mp3` does not block `Song.mp4`.
+    nonisolated static func mediaFileCollides(
+        baseName: String,
+        options: DownloadOptions,
+        existingMediaFileKeys: Set<String>
+    ) -> Bool {
+        let extensions = options.fileType.isVideo
+            ? videoContainerExtensions
+            : [YtdlpService.resolvedOutputFileExtension(for: options)]
+        return extensions.contains { existingMediaFileKeys.contains(filenameCollisionKey("\(baseName).\($0)")) }
+    }
+
     func planUniqueOutputPath(
         for download: Download,
         forceIncrement: Bool = false,
@@ -86,11 +115,7 @@ final class DownloadQueue: ObservableObject {
         let folder = download.options.saveFolder
         let ext = YtdlpService.resolvedOutputFileExtension(for: download.options)
 
-        let existingFiles = (try? fileManager.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)) ?? []
-        let existingBaseNames = Set(existingFiles.compactMap { file -> String? in
-            guard YtdlpService.isMediaFilePath(file.path) else { return nil }
-            return Self.filenameCollisionKey(file.deletingPathExtension().lastPathComponent)
-        })
+        let existingFiles = Self.existingMediaFileKeys(in: folder, fileManager: fileManager)
 
         if download.options.forceOverwrite == true && !forceIncrement {
             var candidateName = sanitizedBase
@@ -112,7 +137,7 @@ final class DownloadQueue: ObservableObject {
         }
         var candidatePath = folder.appendingPathComponent("\(candidateName).\(ext)").path
 
-        while existingBaseNames.contains(Self.filenameCollisionKey(candidateName)) ||
+        while Self.mediaFileCollides(baseName: candidateName, options: download.options, existingMediaFileKeys: existingFiles) ||
               fileManager.fileExists(atPath: candidatePath) ||
               isPathReserved(candidatePath) {
             candidateName = "\(sanitizedBase) (\(counter))"

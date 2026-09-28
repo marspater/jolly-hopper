@@ -62,6 +62,12 @@ enum ChromiumCookieReader {
             keychainAccount: "Vivaldi"
         ),
         ChromiumBrowserTarget(
+            name: "Thorium",
+            relativePath: "Library/Application Support/Thorium",
+            keychainService: "Thorium Safe Storage",
+            keychainAccount: "Thorium"
+        ),
+        ChromiumBrowserTarget(
             name: "Opera",
             relativePath: "Library/Application Support/com.operasoftware.Opera",
             keychainService: "Opera Safe Storage",
@@ -185,8 +191,9 @@ enum ChromiumCookieReader {
         return value
     }
 
-    /// Returns nil when the first readable profile has no cookies for the target host.
-    /// Other browsers' profiles are not probed in that case.
+    /// Returns nil when no readable profile has cookies for the target host.
+    /// A browser with no matching cookies falls through to the next one, so an
+    /// installed but signed-out Chrome does not hide a signed-in Arc.
     static func export(
         for target: URL,
         root: URL = defaultHeliumRoot,
@@ -212,7 +219,16 @@ enum ChromiumCookieReader {
             candidateRoots.append((root, matched))
         }
 
+        return try export(host: host, from: candidateRoots, password: password)
+    }
+
+    static func export(
+        host: String,
+        from candidateRoots: [(root: URL, target: ChromiumBrowserTarget?)],
+        password: (() throws -> Data)?
+    ) throws -> SecureCookieFile? {
         var lastError: Error?
+        var foundReadableProfile = false
         for candidate in candidateRoots {
             do {
                 let candidatePassword: () throws -> Data = {
@@ -224,12 +240,18 @@ enum ChromiumCookieReader {
                     }
                     return try keychainPassword()
                 }
-                return try exportFromProfile(targetHost: host, root: candidate.root, password: candidatePassword)
+                if let file = try exportFromProfile(targetHost: host, root: candidate.root, password: candidatePassword) {
+                    return file
+                }
+                foundReadableProfile = true
             } catch {
                 lastError = error
             }
         }
 
+        if foundReadableProfile {
+            return nil
+        }
         if let lastError {
             throw lastError
         }

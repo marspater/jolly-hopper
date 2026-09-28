@@ -1761,7 +1761,7 @@ public struct DownloadResult: Sendable {
         }
 
         if let extra = options.additionalArguments?.trimmingCharacters(in: .whitespacesAndNewlines), !extra.isEmpty {
-            let extraArgs = Self.parseArgumentString(extra)
+            let extraArgs = Self.removingOutputLocationArguments(Self.parseArgumentString(extra))
             args.append(contentsOf: extraArgs)
         }
 
@@ -2362,11 +2362,11 @@ public struct DownloadResult: Sendable {
         return args
     }
 
-    static func resolvedOutputFileExtension(for options: DownloadOptions) -> String {
+    nonisolated static func resolvedOutputFileExtension(for options: DownloadOptions) -> String {
         Self.compatibleMergeOutputFormat(for: options) ?? options.fileType.fileExtension
     }
 
-    static func compatibleMergeOutputFormat(for options: DownloadOptions) -> String? {
+    nonisolated static func compatibleMergeOutputFormat(for options: DownloadOptions) -> String? {
         guard options.fileType.isVideo else { return nil }
 
         if let conversionCodec = options.conversionCodec, conversionCodec != .none {
@@ -6745,6 +6745,32 @@ public struct DownloadResult: Sendable {
         }
 
         return trimmed.isEmpty ? "download" : trimmed
+    }
+
+    /// Drops `-P/--paths` and `-o/--output` (with their values) from user
+    /// arguments. Siphon sets both and only accepts output inside the save
+    /// folder, so an override downloads fine but the job reports failure.
+    static func removingOutputLocationArguments(_ arguments: [String]) -> [String] {
+        let separateValue: Set<String> = ["-P", "--paths", "-o", "--output"]
+        var kept: [String] = []
+        var index = arguments.startIndex
+        while index < arguments.endIndex {
+            let argument = arguments[index]
+            if separateValue.contains(argument) {
+                LoggerService.shared.log("Ignoring additional argument \(argument): Siphon controls the output location.", level: .warning)
+                index += 2
+                continue
+            }
+            let attachedValue = argument.hasPrefix("--paths=") || argument.hasPrefix("--output=")
+                || (argument.count > 2 && (argument.hasPrefix("-P") || argument.hasPrefix("-o")) && !argument.hasPrefix("--"))
+            if attachedValue {
+                LoggerService.shared.log("Ignoring additional argument \(argument.prefix(2)): Siphon controls the output location.", level: .warning)
+            } else {
+                kept.append(argument)
+            }
+            index += 1
+        }
+        return kept
     }
 
     nonisolated static func parseArgumentString(_ argString: String) -> [String] {
