@@ -3638,6 +3638,30 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertEqual(info.title, "Sample Video")
     }
 
+    func testSafariPermissionDenialSkipsSafariCookiesForEveryHost() async throws {
+        UserDefaults.standard.set("safari", forKey: UserDefaultsKeys.browserForCookies)
+        YtdlpService.hasFullDiskAccessOverride = false
+        defer {
+            UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.browserForCookies)
+            YtdlpService.hasFullDiskAccessOverride = nil
+        }
+        let cookieRuns = TestBox(0)
+        service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
+            if args.contains("--cookies-from-browser") {
+                cookieRuns.value += 1
+                throw YtdlpError.commandFailed("ERROR: [Cookies] Failed to extract cookies from Safari: [Errno 1] Operation not permitted: '/Users/test/Library/Containers/com.apple.Safari/Data/Library/Cookies/Cookies.binarycookies'")
+            }
+            return #"{"id":"1","title":"Sample","formats":[{"format_id":"720p","height":720,"ext":"mp4","protocol":"https"}]}"#
+        })
+
+        _ = try await service.fetchInfo(url: "https://example.com/videos/a")
+        _ = try await service.fetchInfo(url: "https://other.example.org/videos/b", browserCookieSource: "safari")
+
+        // macOS denies the file to every site until relaunch; a second host must
+        // not pay for another failing yt-dlp run.
+        XCTAssertEqual(cookieRuns.value, 1)
+    }
+
     func testSafariCookieFailureFallsBackToUnauthenticatedDownloadForPublicVideos() async throws {
         service.ytdlpPath = URL(fileURLWithPath: "/usr/local/bin/yt-dlp")
         UserDefaults.standard.set("safari", forKey: UserDefaultsKeys.browserForCookies)
