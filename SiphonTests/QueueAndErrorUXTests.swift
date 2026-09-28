@@ -1975,6 +1975,35 @@ final class QueueAndErrorUXTests: XCTestCase {
         XCTAssertNil(state.browserCookieSourceToDownload)
     }
 
+    func testExternalTargetSurvivesBrowserCredentialClears() throws {
+        let state = AppState()
+        let sheetURL = "https://public.example.com/video/a"
+        state.setBrowserSession(
+            for: try XCTUnwrap(URL(string: sheetURL)),
+            rawCookies: nil,
+            rawUserAgent: "FixtureBrowser/1.0"
+        )
+        state.setExternalTarget(sheetURL)
+
+        // Every credential-clearing path another deep link or URL edit can take.
+        _ = state.consumeBrowserSession(for: "https://other.example.com/video/b")
+        _ = state.consumeBrowserSession(for: ["https://other.example.com/video/b"])
+        state.clearBrowserSessionIfOriginChanged(to: "https://other.example.com/video/b")
+        state.setBrowserSession(
+            for: try XCTUnwrap(URL(string: "https://other.example.com/video/b")),
+            rawCookies: nil,
+            rawUserAgent: nil
+        )
+        state.clearBrowserSession()
+
+        XCTAssertTrue(state.consumeExternalTarget(for: sheetURL), "A deep-linked URL must keep the public network boundary after credential clears")
+        XCTAssertFalse(state.consumeExternalTarget(for: sheetURL), "The boundary marker is single-use")
+
+        state.setExternalTarget(sheetURL)
+        state.clearExternalTarget()
+        XCTAssertFalse(state.consumeExternalTarget(for: sheetURL))
+    }
+
     func testBrowserSourceValidationRejectsUnrecognizedValues() {
         XCTAssertEqual(AppState.normalizedBrowserCookieSource(" Chrome "), "chrome")
         XCTAssertEqual(AppState.normalizedBrowserCookieSource("firefox"), "firefox")

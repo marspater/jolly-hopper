@@ -259,6 +259,7 @@ struct AddDownloadView: View {
             playlistTask?.cancel()
             playlistTask = nil
             appState.clearBrowserSession()
+            appState.clearExternalTarget()
         }
     }
 
@@ -1486,7 +1487,7 @@ struct AddDownloadView: View {
                     rawCookies: session?.rawCookies,
                     rawUserAgent: session?.rawUserAgent,
                     browserCookieSource: session?.browserCookieSource,
-                    proxy: try previewProxy(for: cleanURL)
+                    proxy: try await previewProxy(for: cleanURL)
                 )
                 guard !Task.isCancelled else { return }
                 mediaInfo = info
@@ -1568,10 +1569,10 @@ struct AddDownloadView: View {
 
     /// Deep-link targets are probed through the egress proxy too: the preview
     /// runs before the user confirms, and its info JSON is reused for the download.
-    private func previewProxy(for url: String) throws -> String? {
+    private func previewProxy(for url: String) async throws -> String? {
         let clean = url.trimmingCharacters(in: .whitespacesAndNewlines)
         guard appState.externalTargetURL == clean else { return nil }
-        return try downloadManager.ytdlpService.egressProxyURL()
+        return try await downloadManager.ytdlpService.egressProxyURL()
     }
 
     private func loadPlaylist() {
@@ -1586,7 +1587,7 @@ struct AddDownloadView: View {
                     rawCookies: session?.rawCookies,
                     rawUserAgent: session?.rawUserAgent,
                     browserCookieSource: session?.browserCookieSource,
-                    proxy: try previewProxy(for: urlInput)
+                    proxy: try await previewProxy(for: urlInput)
                 )
                 guard !Task.isCancelled else { return }
                 playlistItems = items
