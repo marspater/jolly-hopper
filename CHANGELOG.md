@@ -1,5 +1,27 @@
 # Changelog
 
+## Unreleased
+
+### Security
+
+- **Egress boundary for browser links:** Downloads started from a browser extension, including their metadata preview and site-specific resolvers, run through a local proxy that refuses private, loopback, link-local, and reserved destinations at connection time and on every redirect.
+- **Signed release manifests:** Releases after 5.4.5 must ship an Ed25519-signed `release-manifest.json`; the updater refuses a release without one instead of trusting the checksum alone.
+- Tighter file-collision checks, protected output arguments (`-o`/`-P` and, for browser links, `--proxy` are ignored in extra arguments), hardened updater redirects, and bounded thumbnail and page fetches.
+
+### Fixes
+
+- Playlist jobs keep the entries that finished when others fail.
+- Safari cookies without Full Disk Access are skipped for the rest of the session after the first denial instead of costing a failed attempt per site.
+- Dropping a `.txt` list of URLs on the Home screen starts its downloads instead of reporting an invalid URL.
+- Stop All stays responsive, quitting no longer leaves orphaned scratch data, and the log keeps its final lines.
+- Protected-site recovery for BoyfriendTV (visible WebKit challenge), Recu, and Eporner; new StarWank support.
+- Many smaller fixes to format ranking, window reopening, menu bar presets, error messages, and missing translations.
+
+### Maintenance
+
+- CI runs the Swift tests once per push (Debug and Release), scans every `main` commit with CodeQL and Codacy, and validates release tags in the Homebrew workflow.
+- The companion service binds to all interfaces on Render and to loopback elsewhere.
+
 ## 5.4.5 - 2026-09-20
 
 Siphon 5.4.5 focuses on durable queue recovery, download reliability, browser-session security, updater integrity, and clearer runtime ownership.

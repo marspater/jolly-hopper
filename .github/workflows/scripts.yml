@@ -28,7 +28,6 @@ jobs:
         run: |
           set -euo pipefail
           node --version
-          python3 --version
           node -e 'const major = Number(process.versions.node.split(".")[0]); if (major < 18) { throw new Error("Node.js 18+ is required"); }'
 
       - name: Check JavaScript syntax
@@ -58,7 +57,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for file in             SiphonExtension_Chrome/background.js             SiphonExtension_Firefox/background.js             SiphonExtension_Safari/background.js
+          for file in \
+            SiphonExtension_Chrome/background.js \
+            SiphonExtension_Firefox/background.js \
+            SiphonExtension_Safari/background.js
           do
             if grep -Eq '([?&]cookies=|getCookiesForUrl|(chrome|browser)\.cookies)' "$file"; then
               echo "Browser credential material must not enter extension deep-link transport: $file" >&2
@@ -73,5 +75,5 @@ jobs:
       - name: Test companion server
         run: npm test --prefix server
 
-      - name: Check Python syntax
-        run: python3 -m py_compile scripts/update-supported-sites.py
+      - name: Check shell script syntax
+        run: bash -n scripts/verify_bundle.sh script/build_and_run.sh

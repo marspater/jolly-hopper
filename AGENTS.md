@@ -85,7 +85,7 @@ xcodebuild test \
   CODE_SIGNING_ALLOWED=NO
 ```
 
-CI (`.github/workflows/swift.yml`) also runs the same suite with `-configuration Release ENABLE_TESTABILITY=YES`; run it for changes that may behave differently under optimization. For extension, server, or script changes, mirror `.github/workflows/scripts.yml`: `node --check` on the extension/server JS, `npm test --prefix server`, and `python3 -m py_compile scripts/update-supported-sites.py`.
+CI (`.github/workflows/swift.yml`) also runs the same suite with `-configuration Release ENABLE_TESTABILITY=YES`; run it for changes that may behave differently under optimization. For extension, server, or script changes, mirror `.github/workflows/scripts.yml`: `node --check` on the extension/server JS, `npm test --prefix server`, and `bash -n` on the shell scripts.
 
 Run relevant build/tests for the change and report validation honestly. Add regression coverage when practical, especially for lifecycle, concurrency, persistence, cancellation, and security fixes. Never weaken tests to make CI green.
 
