@@ -264,7 +264,8 @@ class DownloadManager: ObservableObject {
         url: String,
         rawCookies: String? = nil,
         rawUserAgent: String? = nil,
-        browserCookieSource: String? = nil
+        browserCookieSource: String? = nil,
+        enforcePublicNetworkBoundary: Bool = false
     ) {
         // Same defaults as the Add sheet and the Home drop target: the selected
         // preset writes its codec/resolution/file type into these preferences.
@@ -272,6 +273,7 @@ class DownloadManager: ObservableObject {
         options.rawCookies = rawCookies
         options.rawUserAgent = rawUserAgent
         options.browserCookieSource = AppState.normalizedBrowserCookieSource(browserCookieSource)
+        options.enforcePublicNetworkBoundary = enforcePublicNetworkBoundary
         addDownload(url: url, options: options)
     }
 

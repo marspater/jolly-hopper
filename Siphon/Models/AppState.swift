@@ -59,6 +59,18 @@ public enum ExternalDownloadTargetPolicy {
         return resolveAndValidateHost(host)
     }
 
+    public static func isAllowedTarget(host: String, port: Int? = nil) -> Bool {
+        var cleanHost = host.trimmingCharacters(in: .whitespacesAndNewlines)
+        if cleanHost.hasPrefix("[") && cleanHost.hasSuffix("]") {
+            cleanHost = String(cleanHost.dropFirst().dropLast())
+        }
+        guard !cleanHost.isEmpty else { return false }
+        let hostForURL = cleanHost.contains(":") ? "[\(cleanHost)]" : cleanHost
+        let portStr = port.map { ":\($0)" } ?? ""
+        guard let url = URL(string: "https://\(hostForURL)\(portStr)") else { return false }
+        return isAllowed(url)
+    }
+
     private static func looksLikeLegacyIPv4Literal(_ host: String) -> Bool {
         let parts = host.split(separator: ".", omittingEmptySubsequences: false).map(String.init)
         guard (1...4).contains(parts.count), parts.allSatisfy({ !$0.isEmpty }) else {
@@ -272,6 +284,7 @@ public final class AppState: ObservableObject {
     @Published public private(set) var browserCookieSourceToDownload: String? = nil
     @Published public private(set) var browserSessionOriginScheme: String? = nil
     @Published public private(set) var browserSessionOriginHost: String? = nil
+    @Published public private(set) var externalTargetURL: String? = nil
 
     @Published var ytdlpVersion: String?
     @Published var showWhatsNew: Bool = false
@@ -446,11 +459,34 @@ public final class AppState: ObservableObject {
         return credentials
     }
 
+    public func setExternalTarget(_ urlString: String) {
+        externalTargetURL = urlString.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    public func consumeExternalTarget(for urlString: String) -> Bool {
+        let clean = urlString.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let target = externalTargetURL, target == clean {
+            externalTargetURL = nil
+            return true
+        }
+        return false
+    }
+
+    public func consumeExternalTarget(for urls: [String]) -> Bool {
+        let cleanUrls = Set(urls.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) })
+        if let target = externalTargetURL, cleanUrls.contains(target) {
+            externalTargetURL = nil
+            return true
+        }
+        return false
+    }
+
     public func clearBrowserSession() {
         rawCookiesToDownload = nil
         rawUserAgentToDownload = nil
         browserCookieSourceToDownload = nil
         browserSessionOriginScheme = nil
         browserSessionOriginHost = nil
+        externalTargetURL = nil
     }
 }
