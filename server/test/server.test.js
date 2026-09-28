@@ -200,10 +200,13 @@ describe('GET /api/latest', () => {
   test('concurrent cold-cache requests share one upstream call', async () => {
     let calls = 0;
     let release;
+    let markStarted;
     const gate = new Promise((resolve) => { release = resolve; });
+    const started = new Promise((resolve) => { markStarted = resolve; });
     const server = createServer({
       fetchImpl: async () => {
         calls += 1;
+        markStarted();
         await gate;
         return new Response(JSON.stringify(RELEASE_PAYLOAD), { status: 200 });
       }
@@ -212,7 +215,7 @@ describe('GET /api/latest', () => {
     const baseUrl = await listen(server);
 
     const pending = Array.from({ length: 5 }, () => fetch(`${baseUrl}/api/latest`));
-    while (calls === 0) await new Promise((resolve) => setTimeout(resolve, 5));
+    await started;
     await new Promise((resolve) => setTimeout(resolve, 50));
     release();
 
