@@ -50,6 +50,7 @@ struct DownloadListView: View {
             } else {
                 ScrollView {
                     LazyVStack(spacing: 12) {
+                        header
                         ForEach(downloads) { download in
                             DownloadRowView(download: download, showStop: showStop)
                         }
@@ -60,6 +61,24 @@ struct DownloadListView: View {
         }
     }
     
+    /// The sidebar starts hidden, so the list names itself.
+    private var header: some View {
+        HStack(alignment: .firstTextBaseline, spacing: SiphonTheme.spacing8) {
+            Text(appState.selectedNavItem.title(lang: languageService))
+                .font(.siphonWindowTitle)
+                .foregroundColor(.primary)
+            Text("\(downloads.count)")
+                .font(.siphonSecondaryMonoMedium)
+                .foregroundColor(.secondary)
+                .contentTransition(.numericText(value: Double(downloads.count)))
+                .animation(SiphonAnimation.fluidSpring, value: downloads.count)
+            Spacer()
+        }
+        .padding(.horizontal, SiphonTheme.spacing4)
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isHeader)
+    }
+
     private var emptyState: some View {
         SiphonEmptyStateView(
             icon: emptyIcon,
@@ -659,7 +678,9 @@ struct FileThumbnailView: View {
                         .frame(width: 28, height: 28)
                         .contentShape(Rectangle())
                 }
-                .menuStyle(.borderlessButton)
+                .menuStyle(.button)
+                .buttonStyle(.plain)
+                .menuIndicator(.hidden)
                 .help(languageService.s("more_actions"))
                 .accessibilityLabel(languageService.s("more_actions"))
             }
@@ -709,7 +730,9 @@ struct FileThumbnailView: View {
                         .frame(width: 28, height: 28)
                         .contentShape(Rectangle())
                 }
-                .menuStyle(.borderlessButton)
+                .menuStyle(.button)
+                .buttonStyle(.plain)
+                .menuIndicator(.hidden)
                 .help(languageService.s("more_actions"))
                 .accessibilityLabel(languageService.s("more_actions"))
             }
@@ -766,7 +789,9 @@ struct FileThumbnailView: View {
                         .frame(width: 28, height: 28)
                         .contentShape(Rectangle())
                 }
-                .menuStyle(.borderlessButton)
+                .menuStyle(.button)
+                .buttonStyle(.plain)
+                .menuIndicator(.hidden)
                 .help(languageService.s("more_actions"))
                 .accessibilityLabel(languageService.s("more_actions"))
             }
@@ -811,7 +836,9 @@ struct FileThumbnailView: View {
                         .frame(width: 28, height: 28)
                         .contentShape(Rectangle())
                 }
-                .menuStyle(.borderlessButton)
+                .menuStyle(.button)
+                .buttonStyle(.plain)
+                .menuIndicator(.hidden)
                 .help(languageService.s("more_actions"))
                 .accessibilityLabel(languageService.s("more_actions"))
             }
@@ -869,7 +896,9 @@ struct FileThumbnailView: View {
                         .frame(width: 28, height: 28)
                         .contentShape(Rectangle())
                 }
-                .menuStyle(.borderlessButton)
+                .menuStyle(.button)
+                .buttonStyle(.plain)
+                .menuIndicator(.hidden)
                 .help(languageService.s("more_actions"))
                 .accessibilityLabel(languageService.s("more_actions"))
             }
