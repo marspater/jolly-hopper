@@ -234,27 +234,27 @@ struct SiphonApp: App {
             return userAgent
         }()
 
-        appState.setBrowserSession(
-            for: targetURL,
-            rawCookies: nil,
-            rawUserAgent: sanitizedUserAgent,
-            browserCookieSource: sanitizedBrowserSource
-        )
-        appState.setExternalTarget(rawVideoUrl)
-
         if isFastDownload {
-            let session = appState.consumeBrowserSession(for: rawVideoUrl)
-            _ = appState.consumeExternalTarget(for: rawVideoUrl)
+            // Hand the session straight to the job. Going through AppState's shared
+            // deep-link state would overwrite the session and external-target marker
+            // of an Add Download sheet that is still open.
             downloadManager.quickDownload(
                 url: rawVideoUrl,
                 rawCookies: nil,
-                rawUserAgent: session?.rawUserAgent,
-                browserCookieSource: session?.browserCookieSource,
+                rawUserAgent: sanitizedUserAgent,
+                browserCookieSource: sanitizedBrowserSource,
                 enforcePublicNetworkBoundary: true
             )
             appState.selectedNavItem = .downloading
             appState.showAddDownloadSheet = false
         } else {
+            appState.setBrowserSession(
+                for: targetURL,
+                rawCookies: nil,
+                rawUserAgent: sanitizedUserAgent,
+                browserCookieSource: sanitizedBrowserSource
+            )
+            appState.setExternalTarget(rawVideoUrl)
             appState.urlToDownload = rawVideoUrl
             appState.showAddDownloadSheet = true
         }

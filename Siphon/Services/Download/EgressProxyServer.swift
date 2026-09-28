@@ -24,7 +24,7 @@ public final class EgressProxyServer: @unchecked Sendable {
     private let lock = NSLock()
 
     private var listener: NWListener?
-    private var isStarted = false
+    private var startTask: Task<UInt16, Error>?
     public private(set) var port: UInt16 = 0
 
     public init(targetValidator: TargetValidator? = nil, addressResolver: AddressResolver? = nil) {
@@ -35,70 +35,83 @@ public final class EgressProxyServer: @unchecked Sendable {
     }
 
     /// Starts the proxy listener on a random ephemeral port bound strictly to 127.0.0.1.
+    /// Concurrent callers share one startup; readiness is awaited, never blocked on,
+    /// so main-actor callers stay responsive while Network.framework brings it up.
     @discardableResult
-    public func start() throws -> UInt16 {
-        lock.lock()
-        if isStarted, port > 0 {
-            let p = port
-            lock.unlock()
-            return p
+    public func start() async throws -> UInt16 {
+        let task: Task<UInt16, Error> = lock.withLock {
+            if let startTask { return startTask }
+            let task = Task { try await self.startListener() }
+            startTask = task
+            return task
         }
-        lock.unlock()
+        do {
+            return try await task.value
+        } catch {
+            lock.withLock {
+                if startTask == task { startTask = nil }
+            }
+            throw error
+        }
+    }
 
+    private func startListener() async throws -> UInt16 {
         let params = NWParameters.tcp
         params.requiredLocalEndpoint = NWEndpoint.hostPort(host: "127.0.0.1", port: .any)
 
         let newListener = try NWListener(using: params)
-        let readySemaphore = DispatchSemaphore(value: 0)
-        let startupErrorBox = AtomicBox<Error?>(nil)
-
-        newListener.stateUpdateHandler = { [weak self] state in
-            switch state {
-            case .ready:
-                if let assignedPort = newListener.port?.rawValue {
-                    self?.lock.lock()
-                    self?.port = assignedPort
-                    self?.isStarted = true
-                    self?.lock.unlock()
-                }
-                readySemaphore.signal()
-            case .failed(let error):
-                startupErrorBox.set(error)
-                readySemaphore.signal()
-            default:
-                break
-            }
-        }
-
         newListener.newConnectionHandler = { [weak self] clientConn in
             self?.handleClientConnection(clientConn)
         }
 
-        newListener.start(queue: queue)
+        let assignedPort: UInt16 = try await withCheckedThrowingContinuation { continuation in
+            let resumed = AtomicBox(false)
+            let finish: @Sendable (Result<UInt16, Error>) -> Void = { result in
+                guard resumed.compareAndSet(expected: false, newValue: true) else { return }
+                if case .failure = result { newListener.cancel() }
+                continuation.resume(with: result)
+            }
 
-        let waitResult = readySemaphore.wait(timeout: .now() + 5.0)
-        if waitResult == .timedOut {
-            newListener.cancel()
-            throw NSError(domain: "EgressProxyServer", code: -1, userInfo: [NSLocalizedDescriptionKey: "Proxy listener startup timed out"])
+            newListener.stateUpdateHandler = { state in
+                switch state {
+                case .ready:
+                    if let port = newListener.port?.rawValue {
+                        finish(.success(port))
+                    } else {
+                        finish(.failure(NSError(domain: "EgressProxyServer", code: -2, userInfo: [NSLocalizedDescriptionKey: "Proxy listener has no port"])))
+                    }
+                case .failed(let error):
+                    finish(.failure(error))
+                case .cancelled:
+                    finish(.failure(CancellationError()))
+                default:
+                    break
+                }
+            }
+            queue.asyncAfter(deadline: .now() + 5.0) {
+                finish(.failure(NSError(domain: "EgressProxyServer", code: -1, userInfo: [NSLocalizedDescriptionKey: "Proxy listener startup timed out"])))
+            }
+            newListener.start(queue: queue)
         }
-        if let error = startupErrorBox.get() {
+
+        // stop() ran while the listener was coming up: don't resurrect it.
+        if Task.isCancelled {
             newListener.cancel()
-            throw error
+            throw CancellationError()
         }
-
-        lock.lock()
-        self.listener = newListener
-        let finalPort = self.port
-        lock.unlock()
-
-        return finalPort
+        lock.withLock {
+            listener = newListener
+            port = assignedPort
+        }
+        return assignedPort
     }
 
     public func stop() {
         lock.lock()
         listener?.cancel()
         listener = nil
-        isStarted = false
+        startTask?.cancel()
+        startTask = nil
         port = 0
         lock.unlock()
     }

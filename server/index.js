@@ -28,14 +28,19 @@ segment0.ts
 `;
 
 const RELEASE_CACHE_TTL_MS = 15 * 60 * 1000;
+const RELEASE_FAILURE_RETRY_MS = 30 * 1000;
 
 // Returns a release lookup with its own in-memory cache. `fetchImpl` is
 // injectable so tests never depend on the live GitHub API.
-function createReleaseFetcher(fetchImpl, cacheTtlMs) {
+function createReleaseFetcher(fetchImpl, cacheTtlMs, failureRetryMs) {
   let releaseCache = {
     data: null,
     expiresAt: 0
   };
+
+  // After a failed refresh, hold off before asking GitHub again so an outage
+  // or rate limit is not hammered once per request.
+  let retryAfter = 0;
 
   // Concurrent cache misses share one upstream request instead of each
   // hitting the GitHub API.
@@ -44,6 +49,9 @@ function createReleaseFetcher(fetchImpl, cacheTtlMs) {
   return function getLatestRelease() {
     if (releaseCache.data && Date.now() < releaseCache.expiresAt) {
       return Promise.resolve({ ...releaseCache.data, cached: true });
+    }
+    if (!inFlight && Date.now() < retryAfter) {
+      return Promise.resolve(staleOrNull());
     }
     if (!inFlight) {
       inFlight = refresh().finally(() => { inFlight = null; });
@@ -92,14 +100,15 @@ function createReleaseFetcher(fetchImpl, cacheTtlMs) {
       return { ...cleanData, cached: false };
     } catch (error) {
       console.error('Failed to refresh release metadata:', error instanceof Error ? error.message : String(error));
-      if (releaseCache.data) {
-        return { ...releaseCache.data, cached: true, stale: true };
-      }
-
-      return null;
+      retryAfter = Date.now() + failureRetryMs;
+      return staleOrNull();
     } finally {
       clearTimeout(timeout);
     }
+  }
+
+  function staleOrNull() {
+    return releaseCache.data ? { ...releaseCache.data, cached: true, stale: true } : null;
   }
 }
 
@@ -182,8 +191,12 @@ async function handleReleaseApi(req, res, pathname, getLatestRelease) {
   return true;
 }
 
-function createServer({ fetchImpl = globalThis.fetch, cacheTtlMs = RELEASE_CACHE_TTL_MS } = {}) {
-  const getLatestRelease = createReleaseFetcher(fetchImpl, cacheTtlMs);
+function createServer({
+  fetchImpl = globalThis.fetch,
+  cacheTtlMs = RELEASE_CACHE_TTL_MS,
+  failureRetryMs = RELEASE_FAILURE_RETRY_MS
+} = {}) {
+  const getLatestRelease = createReleaseFetcher(fetchImpl, cacheTtlMs, failureRetryMs);
   return http.createServer(async (req, res) => {
     try {
       let url;
