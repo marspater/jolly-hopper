@@ -7,7 +7,7 @@ struct DownloadDiagnosticsView: View {
     @EnvironmentObject var languageService: LanguageService
     
     @State private var selectedTab = 0
-    @State private var copiedNotice: String? = nil
+    @StateObject private var copyFeedback = TransientFeedbackState()
     @State private var logSearchText: String = ""
     
     var body: some View {
@@ -282,7 +282,7 @@ struct DownloadDiagnosticsView: View {
     
     private var footerView: some View {
         HStack {
-            if let notice = copiedNotice {
+            if let notice = copyFeedback.current?.message {
                 HStack(spacing: 4) {
                     Image(systemName: "checkmark.circle.fill")
                         .foregroundColor(SiphonTheme.statusCompletedText)
@@ -403,14 +403,7 @@ struct DownloadDiagnosticsView: View {
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
         pasteboard.setString(text, forType: .string)
-        withAnimation {
-            copiedNotice = label
-        }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
-            withAnimation {
-                copiedNotice = nil
-            }
-        }
+        copyFeedback.show(label, isSuccess: true, duration: 2.0, animation: .default)
     }
     
     private func exportDiagnosticsMarkdown() {
