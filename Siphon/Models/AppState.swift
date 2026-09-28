@@ -494,4 +494,15 @@ public final class AppState: ObservableObject {
     public func clearExternalTarget() {
         externalTargetURL = nil
     }
+
+    /// Opens a job's URL in the Add Download window again. A job that came from
+    /// a deep link keeps its external-target marker, so the new download (and
+    /// its preview) stays behind the egress proxy.
+    func reopenInAddSheet(_ download: Download) {
+        if download.options.enforcePublicNetworkBoundary {
+            setExternalTarget(download.url)
+        }
+        urlToDownload = download.url
+        showAddDownloadSheet = true
+    }
 }
