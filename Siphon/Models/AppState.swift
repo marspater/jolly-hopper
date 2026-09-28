@@ -312,7 +312,7 @@ public final class AppState: ObservableObject {
     }
 
     var appVersion: String {
-        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "5.4.5"
+        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "5.5.0"
     }
 
     func initializeApplicationServices(
