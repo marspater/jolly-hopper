@@ -77,7 +77,7 @@ public final class EgressProxyServer: @unchecked Sendable {
     private let addressResolver: AddressResolver
     private let lock = NSLock()
 
-    private var listener: NWListener?
+    private(set) var listener: NWListener?
     private var startTask: Task<UInt16, Error>?
     public private(set) var port: UInt16 = 0
 
@@ -94,7 +94,21 @@ public final class EgressProxyServer: @unchecked Sendable {
     @discardableResult
     public func start() async throws -> UInt16 {
         let task: Task<UInt16, Error> = lock.withLock {
-            if let startTask { return startTask }
+            if let startTask {
+                // A listener that dies after startup never recovers; replace it
+                // rather than hand out its dead port.
+                switch listener?.state {
+                case .failed?, .cancelled?:
+                    listener?.cancel()
+                    listener = nil
+                    port = 0
+                    Task { @MainActor in
+                        LoggerService.shared.log("Egress proxy listener stopped after startup; restarting it", level: .warning)
+                    }
+                default:
+                    return startTask
+                }
+            }
             let task = Task { try await self.startListener() }
             startTask = task
             return task

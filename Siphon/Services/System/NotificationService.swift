@@ -168,20 +168,20 @@ final class NotificationService: NSObject, @unchecked Sendable, UNUserNotificati
                     if granted {
                         self.logMessage("Notification permission granted upon request. Posting notification...", level: .info)
                         self.postNotificationRequest(center: center, content: content, identifier: identifier, logName: logName)
-                    } else {
-                        if let error = error {
-                            self.logPermissionError(error)
-                        } else {
-                            self.logMessage("Notification permission denied by user upon request.", level: .warning)
-                        }
+                    } else if let error = error {
+                        // The system refused to register Siphon, so UserNotifications cannot deliver here.
+                        self.logPermissionError(error)
                         self.fallbackDisplayNotification(title: content.title, body: content.body)
+                    } else {
+                        // An explicit "Don't Allow" is the user's choice; no fallback.
+                        self.logMessage("Notification permission denied by user upon request.", level: .warning)
                     }
                 }
             case .authorized, .provisional:
                 self.postNotificationRequest(center: center, content: content, identifier: identifier, logName: logName)
             case .denied:
-                self.logMessage("Notification permission is denied in macOS Settings for Siphon. Using fallback...", level: .warning)
-                self.fallbackDisplayNotification(title: content.title, body: content.body)
+                // The user turned Siphon off in System Settings. An osascript banner would bypass that choice.
+                self.logMessage("Notifications are turned off for Siphon in System Settings; not showing them.", level: .info)
             @unknown default:
                 self.postNotificationRequest(center: center, content: content, identifier: identifier, logName: logName)
             }

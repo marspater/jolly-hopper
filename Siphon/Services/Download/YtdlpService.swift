@@ -6974,23 +6974,6 @@ public struct DownloadResult: Sendable {
         return args
     }
 
-    static func getSecureTempCookiesDirectory() -> URL? {
-        let cookiesDir = FileManager.default.temporaryDirectory.appendingPathComponent("siphon_cookies")
-        let path = cookiesDir.path
-        let fileManager = FileManager.default
-        if !fileManager.fileExists(atPath: path) {
-            do {
-                try fileManager.createDirectory(at: cookiesDir, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
-            } catch {
-                LoggerService.shared.log("Error creating secure cookies directory: \(error.localizedDescription)", level: .error)
-                return nil
-            }
-        } else {
-            try? fileManager.setAttributes([.posixPermissions: 0o700], ofItemAtPath: path)
-        }
-        return cookiesDir
-    }
-
     private func sanitizeCookieToken(_ token: String) -> String {
         return token.replacingOccurrences(of: "\t", with: "")
                     .replacingOccurrences(of: "\n", with: "")
@@ -6999,7 +6982,7 @@ public struct DownloadResult: Sendable {
     }
 
     func createTempCookiesFile(url: String, cookieName: String, cookieValue: String) -> URL? {
-        guard let cookiesDir = YtdlpService.getSecureTempCookiesDirectory() else { return nil }
+        guard let cookiesDir = CookieManager.getSecureTempCookiesDirectory() else { return nil }
         let tempCookiesURL = cookiesDir.appendingPathComponent("siphon_cookies_\(UUID().uuidString).txt")
         let host = URL(string: url)?.host ?? ""
         let cleanName = sanitizeCookieToken(cookieName)
@@ -7019,7 +7002,7 @@ public struct DownloadResult: Sendable {
 
     func createTempCookiesFileFromHeader(url: String, cookieHeader: String) -> URL? {
         guard let urlObj = URL(string: url), let host = urlObj.host, !host.isEmpty else { return nil }
-        guard let cookiesDir = YtdlpService.getSecureTempCookiesDirectory() else { return nil }
+        guard let cookiesDir = CookieManager.getSecureTempCookiesDirectory() else { return nil }
         let domain = host.hasPrefix(".") ? host : ".\(host)"
         let requireSecureTransport = urlObj.scheme?.lowercased() == "https"
         let tempCookiesURL = cookiesDir.appendingPathComponent("siphon_header_cookies_\(UUID().uuidString).txt")

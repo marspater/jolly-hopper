@@ -15,6 +15,39 @@ final class DownloadManagerTests: XCTestCase {
         XCTAssertEqual(manager.downloads.first?.title, "Old", "Queue order must not change")
     }
 
+    func testRecentDownloadsIgnoreQueueReordering() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let manager = DownloadManager(recoveryFileURL: root.appendingPathComponent("recovery.json"))
+        defer { manager.shutdown() }
+        manager.ytdlpService.isUpdating = true // hold jobs in the queue
+        let titles = ["Paused", "Done", "Q1", "Q2", "Q3"]
+        manager.downloads = titles.enumerated().map { index, title in
+            Download(
+                url: "https://example.com/\(title)",
+                options: .default,
+                title: title,
+                createdAt: Date(timeIntervalSinceReferenceDate: Double(index))
+            )
+        }
+        manager.downloads[0].status = .paused
+        manager.downloads[1].status = .completed
+        XCTAssertEqual(manager.recentDownloads(limit: 3).map(\.title), ["Q3", "Q2", "Q1"])
+
+        func download(_ title: String) throws -> Download {
+            try XCTUnwrap(manager.downloads.first(where: { $0.title == title }))
+        }
+        try manager.moveDownloadToTop(download("Q3"))
+        try manager.moveDownloadToBottom(download("Paused"))
+        try manager.moveDownloadUp(download("Q2"))
+        try manager.moveDownloadDown(download("Q1"))
+
+        XCTAssertNotEqual(manager.downloads.map(\.title), titles, "The queue must actually have been reordered")
+        XCTAssertEqual(manager.recentDownloads(limit: 3).map(\.title), ["Q3", "Q2", "Q1"])
+        XCTAssertEqual(manager.recentDownloads(limit: 10).map(\.title), Array(titles.reversed()))
+    }
+
     func testPauseResumeReusesPartialDataAndCompletionRemovesScratch() async throws {
         let originalHistory = UserDefaults.standard.object(forKey: UserDefaultsKeys.downloadHistory)
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
