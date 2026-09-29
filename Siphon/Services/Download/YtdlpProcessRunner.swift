@@ -57,7 +57,10 @@ public final class DownloadProcessController: @unchecked Sendable {
 
     public static func terminateProcessTree(_ proc: Process?, pid: pid_t? = nil) {
         let resolvedPID: pid_t = if let pid, pid > 0 { pid } else { proc?.processIdentifier ?? 0 }
-        guard resolvedPID > 0 || proc?.isRunning == true else { return }
+        // Foundation reaps the process before isRunning turns false; after that its PID
+        // may be reused, so a reaped process is never signalled, even by a tree kill
+        // queued just before it exited on its own.
+        guard proc?.isRunning ?? (resolvedPID > 0) else { return }
 
         // 1. Gather all descendants BEFORE terminating the parent to prevent reparenting to launchd (PID 1)
         var allSignaledPIDs: Set<pid_t> = []
@@ -81,11 +84,16 @@ public final class DownloadProcessController: @unchecked Sendable {
             proc.terminate()
         }
         if resolvedPID > 0 {
-            kill(resolvedPID, SIGTERM)
+            // proc.terminate() already sent SIGTERM; a bare PID is signalled directly.
+            if proc == nil {
+                kill(resolvedPID, SIGTERM)
+            }
 
             // 3. Multi-pass sweep to catch any late spawns during shutdown
             for _ in 0..<2 {
                 usleep(25_000) // 25ms grace period
+                // Once the root is reaped its children belong to launchd and its PID may be reused.
+                guard proc?.isRunning != false else { break }
                 let currentDescendants = getDescendantPIDs(for: resolvedPID)
                 for child in currentDescendants {
                     if allSignaledPIDs.insert(child).inserted {
@@ -96,11 +104,15 @@ public final class DownloadProcessController: @unchecked Sendable {
 
             // 4. Forceful SIGKILL escalation if processes refuse SIGTERM
             var lingering = allSignaledPIDs.filter { kill($0, 0) == 0 }
-            if kill(resolvedPID, 0) == 0 {
+            if proc?.isRunning != false, kill(resolvedPID, 0) == 0 {
                 lingering.insert(resolvedPID)
             }
             if !lingering.isEmpty {
                 usleep(50_000) // 50ms final grace period
+                let rootRunning = proc?.isRunning != false
+                if !rootRunning {
+                    lingering.remove(resolvedPID)
+                }
                 for targetPID in lingering {
                     if kill(targetPID, 0) == 0 {
                         kill(targetPID, SIGKILL)
@@ -108,7 +120,7 @@ public final class DownloadProcessController: @unchecked Sendable {
                 }
                 let pgid = getpgid(resolvedPID)
                 let appPgrp = getpgrp()
-                if pgid > 0 && pgid == resolvedPID && pgid != appPgrp {
+                if rootRunning && pgid > 0 && pgid == resolvedPID && pgid != appPgrp {
                     kill(-pgid, SIGKILL)
                 }
             }

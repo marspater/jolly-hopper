@@ -354,6 +354,26 @@ final class ProcessLifecycleTests: XCTestCase {
         XCTAssertEqual(proc.terminationReason, .uncaughtSignal)
     }
 
+    func testTreeKillSkipsAlreadyReapedProcess() throws {
+        // A cancel can queue the tree kill just before the process exits on its own.
+        // Once reaped, its PID may name another process: model that reuse with a
+        // live bystander and make sure it is not signalled.
+        let exited = Process()
+        exited.executableURL = URL(fileURLWithPath: "/usr/bin/true")
+        try exited.run()
+        exited.waitUntilExit()
+
+        let bystander = Process()
+        bystander.executableURL = URL(fileURLWithPath: "/bin/sleep")
+        bystander.arguments = ["30"]
+        try bystander.run()
+
+        DownloadProcessController.terminateProcessTree(exited, pid: bystander.processIdentifier)
+        kill(bystander.processIdentifier, SIGKILL)
+        bystander.waitUntilExit()
+        XCTAssertEqual(bystander.terminationStatus, SIGKILL, "The stale PID must not be signalled")
+    }
+
     func testCancelBeforeStartTransitionsToCancelling() {
         let controller = DownloadProcessController()
         controller.cancel()

@@ -176,6 +176,67 @@ final class DownloadQueueTests: XCTestCase {
         XCTAssertEqual(path, existingFilePath.path, "forceOverwrite must target the existing file path")
     }
 
+    func testReservationsBlockOtherVideoContainersOfTheSameName() throws {
+        let queue = DownloadQueue(userDefaults: testDefaults)
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        func plannedName(_ title: String, _ fileType: MediaFileType, videoCodec: VideoCodec? = nil, forceOverwrite: Bool = false) -> String {
+            var options = DownloadOptions.default
+            options.saveFolder = tempDir
+            options.fileType = fileType
+            options.videoCodec = videoCodec
+            options.forceOverwrite = forceOverwrite
+            return queue.planUniqueOutputPath(for: Download(url: "https://example.com/v", options: options, title: title)).resolvedBaseName
+        }
+
+        // Another active video job holds Movie.mp4. Unmerged output keeps the
+        // source container, so both jobs could still finish as Movie.webm.
+        queue.reserveOutputPath(tempDir.appendingPathComponent("Movie.mp4").path)
+        XCTAssertEqual(plannedName("Movie", .mkv), "Movie (1)")
+        XCTAssertEqual(plannedName("Movie", .webm), "Movie (1)")
+        XCTAssertEqual(plannedName("Movie", .mp4, videoCodec: .vp9), "Movie (1)", "Predicted mkv must still see the mp4 reservation")
+        XCTAssertEqual(plannedName("Movie", .mkv, forceOverwrite: true), "Movie (1)", "Overwrite must not take a name another active job holds")
+        XCTAssertEqual(plannedName("Movie", .mp3), "Movie", "A video reservation must not block audio")
+
+        queue.reserveOutputPath(tempDir.appendingPathComponent("Song.mp3").path)
+        XCTAssertEqual(plannedName("Song", .mp4), "Song", "An audio reservation must not block video")
+        XCTAssertEqual(plannedName("Song", .mp3), "Song (1)")
+        XCTAssertEqual(plannedName("Song", .flac), "Song", "Audio reservations stay exact-extension")
+    }
+
+    func testForceOverwriteTargetsOwnNameAndNeverClobbersRenamedFiles() throws {
+        let queue = DownloadQueue(userDefaults: testDefaults)
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+        for name in ["Movie.mkv", "Movie.webm"] {
+            FileManager.default.createFile(atPath: tempDir.appendingPathComponent(name).path, contents: Data())
+        }
+
+        var options = DownloadOptions.default
+        options.saveFolder = tempDir
+        options.fileType = .mp4
+        options.forceOverwrite = true
+        let download = Download(url: "https://example.com/movie", options: options, title: "Movie")
+
+        // Overwrite keeps the original name even with several existing
+        // containers; yt-dlp replaces only the file it writes.
+        let (name, path) = queue.planUniqueOutputPath(for: download)
+        XCTAssertEqual(name, "Movie")
+        XCTAssertEqual(path, tempDir.appendingPathComponent("Movie.mp4").path)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: tempDir.appendingPathComponent("Movie.mkv").path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: tempDir.appendingPathComponent("Movie.webm").path))
+
+        // Another active job holds the original name. The bumped name must be
+        // free on disk, or --force-overwrites would delete "Movie (1).mp4".
+        FileManager.default.createFile(atPath: tempDir.appendingPathComponent("Movie (1).mp4").path, contents: Data())
+        queue.reserveOutputPath(tempDir.appendingPathComponent("Movie.mp4").path)
+        XCTAssertEqual(queue.planUniqueOutputPath(for: download).resolvedBaseName, "Movie (2)")
+        XCTAssertEqual(queue.planUniqueOutputPath(for: download, forceIncrement: true).resolvedBaseName, "Movie (2)")
+    }
+
     func testReorderingHelpers() {
         let queue = DownloadQueue(userDefaults: testDefaults)
         let dl1 = Download(url: "https://example.com/1", options: .default)

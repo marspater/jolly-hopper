@@ -99,10 +99,23 @@ final class DownloadQueue: ObservableObject {
         options: DownloadOptions,
         existingMediaFileKeys: Set<String>
     ) -> Bool {
-        let extensions = options.fileType.isVideo
+        collisionExtensions(for: options).contains {
+            existingMediaFileKeys.contains(filenameCollisionKey("\(baseName).\($0)"))
+        }
+    }
+
+    private nonisolated static func collisionExtensions(for options: DownloadOptions) -> [String] {
+        options.fileType.isVideo
             ? videoContainerExtensions
             : [YtdlpService.resolvedOutputFileExtension(for: options)]
-        return extensions.contains { existingMediaFileKeys.contains(filenameCollisionKey("\(baseName).\($0)")) }
+    }
+
+    /// Other jobs' reservations block a name by the same rule as files on
+    /// disk: a video job holding `Movie.mp4` blocks `Movie.mkv`.
+    private func isOutputReserved(baseName: String, in folder: URL, options: DownloadOptions) -> Bool {
+        Self.collisionExtensions(for: options).contains {
+            isPathReserved(folder.appendingPathComponent("\(baseName).\($0)").path)
+        }
     }
 
     func planUniqueOutputPath(
@@ -116,18 +129,10 @@ final class DownloadQueue: ObservableObject {
         let ext = YtdlpService.resolvedOutputFileExtension(for: download.options)
 
         let existingFiles = Self.existingMediaFileKeys(in: folder, fileManager: fileManager)
-
-        if download.options.forceOverwrite == true && !forceIncrement {
-            var candidateName = sanitizedBase
-            var candidatePath = folder.appendingPathComponent("\(candidateName).\(ext)").path
-            var counter = 1
-            while isPathReserved(candidatePath) {
-                candidateName = "\(sanitizedBase) (\(counter))"
-                candidatePath = folder.appendingPathComponent("\(candidateName).\(ext)").path
-                counter += 1
-            }
-            return (candidateName, candidatePath)
-        }
+        // Overwrite consents to replacing the original name only. A name bumped
+        // past another job's reservation must be free on disk too, or
+        // --force-overwrites would clobber an unrelated file.
+        let overwritesOriginal = download.options.forceOverwrite == true
 
         var counter = 1
         var candidateName = sanitizedBase
@@ -137,9 +142,10 @@ final class DownloadQueue: ObservableObject {
         }
         var candidatePath = folder.appendingPathComponent("\(candidateName).\(ext)").path
 
-        while Self.mediaFileCollides(baseName: candidateName, options: download.options, existingMediaFileKeys: existingFiles) ||
-              fileManager.fileExists(atPath: candidatePath) ||
-              isPathReserved(candidatePath) {
+        while isOutputReserved(baseName: candidateName, in: folder, options: download.options) ||
+              (!(overwritesOriginal && candidateName == sanitizedBase) &&
+               (Self.mediaFileCollides(baseName: candidateName, options: download.options, existingMediaFileKeys: existingFiles) ||
+                fileManager.fileExists(atPath: candidatePath))) {
             candidateName = "\(sanitizedBase) (\(counter))"
             candidatePath = folder.appendingPathComponent("\(candidateName).\(ext)").path
             counter += 1

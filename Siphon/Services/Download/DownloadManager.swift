@@ -102,9 +102,16 @@ class DownloadManager: ObservableObject {
         downloads.filter { $0.status == .failed || $0.status == .stopped }
     }
 
-    /// Newest jobs first; `downloads` itself stays in queue (arrival) order.
+    /// Newest jobs first, by creation time. `downloads` is the scheduling
+    /// order, which Queue reordering changes; Home's Recent must not follow it.
+    /// Equal timestamps (a fast batch add) break the tie by list position.
     func recentDownloads(limit: Int) -> [Download] {
-        Array(downloads.suffix(limit).reversed())
+        // ponytail: full sort per call; fine for the 500-entry history cap plus
+        // a live queue. Switch to a top-k pass if Home ever lists huge batches.
+        downloads.enumerated()
+            .sorted { ($0.element.createdAt, $0.offset) > ($1.element.createdAt, $1.offset) }
+            .prefix(limit)
+            .map { $0.element }
     }
 
     var actionRequiredDownloads: [Download] {
