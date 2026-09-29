@@ -221,32 +221,27 @@ public enum ExternalDownloadTargetPolicy {
             return isGloballyRoutableIPv4(Array(bytes[12..<16]))
         }
         if bytes[0..<12].allSatisfy({ $0 == 0 }) {
-            return isGloballyRoutableIPv4(Array(bytes[12..<16]))
+            return false // ::, ::1 and deprecated IPv4-compatible ::/96
         }
 
         // Translation prefixes carry an IPv4 address that a gateway or relay
         // connects to, so they inherit IPv4 routing rules.
-        if bytes[0..<4] == [0x00, 0x64, 0xff, 0x9b] {
-            if bytes[4..<12].allSatisfy({ $0 == 0 }) {
-                return isGloballyRoutableIPv4(Array(bytes[12..<16])) // NAT64 64:ff9b::/96
-            }
-            if bytes[4] == 0x00, bytes[5] == 0x01 { return false } // local-use NAT64 64:ff9b:1::/48
+        if bytes[0..<4] == [0x00, 0x64, 0xff, 0x9b], bytes[4..<12].allSatisfy({ $0 == 0 }) {
+            return isGloballyRoutableIPv4(Array(bytes[12..<16])) // NAT64 64:ff9b::/96
         }
         if bytes[0] == 0x20, bytes[1] == 0x02 {
             return isGloballyRoutableIPv4(Array(bytes[2..<6])) // 6to4 2002::/16
         }
-        if bytes[0..<4] == [0x20, 0x01, 0x00, 0x00] { return false } // Teredo 2001::/32
 
-        // Unique-local, link-local, deprecated site-local, multicast, and the
-        // documentation prefix are never valid external deep-link targets.
-        if (bytes[0] & 0xfe) == 0xfc { return false } // fc00::/7
-        if bytes[0] == 0xfe, (bytes[1] & 0xc0) == 0x80 { return false } // fe80::/10
-        if bytes[0] == 0xfe, (bytes[1] & 0xc0) == 0xc0 { return false } // fec0::/10
-        if bytes[0] == 0xff { return false } // ff00::/8
-        if bytes[0] == 0x20, bytes[1] == 0x01, bytes[2] == 0x0d, bytes[3] == 0xb8 {
-            return false // 2001:db8::/32
-        }
-
+        // Fail closed: only global unicast 2000::/3 is publicly routed. This also
+        // rejects unique-local, link-local, site-local, multicast, discard-only
+        // 100::/64, local-use NAT64 64:ff9b:1::/48, SRv6 SIDs 5f00::/16 and any
+        // unallocated or future special-purpose range outside it.
+        guard (bytes[0] & 0xe0) == 0x20 else { return false }
+        // Special-purpose blocks inside 2000::/3.
+        if bytes[0] == 0x20, bytes[1] == 0x01, bytes[2] < 0x02 { return false } // IETF 2001::/23 (Teredo, benchmarking, ORCHID)
+        if bytes[0..<4] == [0x20, 0x01, 0x0d, 0xb8] { return false } // documentation 2001:db8::/32
+        if bytes[0] == 0x3f, bytes[1] == 0xff, bytes[2] < 0x10 { return false } // documentation 3fff::/20
         return true
     }
 }

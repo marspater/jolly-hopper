@@ -20,9 +20,20 @@ public actor CookieManager {
         }
     }
 
+    private nonisolated static var rootDirectory: URL {
+        FileManager.default.temporaryDirectory.appendingPathComponent("siphon_cookies")
+    }
+
     /// Directory used for temporary cookie files with strict 0o700 folder permissions.
+    /// The app is unsandboxed, so every Siphon process of this user (installed and dev
+    /// builds, other bundle IDs, the test host) shares $TMPDIR. Each process writes only
+    /// into its own session directory, so another instance's purge cannot delete its files.
     public nonisolated static func getSecureTempCookiesDirectory() -> URL? {
-        let cookiesDir = FileManager.default.temporaryDirectory.appendingPathComponent("siphon_cookies")
+        guard let root = secureDirectory(rootDirectory) else { return nil }
+        return secureDirectory(root.appendingPathComponent("session-\(getpid())"))
+    }
+
+    private nonisolated static func secureDirectory(_ cookiesDir: URL) -> URL? {
         let path = cookiesDir.path
         let fileManager = FileManager.default
 
@@ -77,8 +88,10 @@ public actor CookieManager {
     /// Sweeps and removes any orphaned temporary cookie files left behind from crashes or SIGKILL.
     public nonisolated static func purgeOrphanedTempCookieFiles() {
         let fileManager = FileManager.default
+        let root = secureDirectory(rootDirectory)
         let tempDirsToClean: [URL] = [
             FileManager.default.temporaryDirectory,
+            root,
             getSecureTempCookiesDirectory()
         ].compactMap { $0 }
 
@@ -93,6 +106,23 @@ public actor CookieManager {
                         log("Failed to remove orphaned temporary cookie file: \(error.localizedDescription)", level: .warning)
                     }
                 }
+            }
+        }
+
+        // Sessions of Siphon processes that are gone (crash, SIGKILL). A live one belongs
+        // to another running instance and is left alone.
+        guard let root, let sessions = try? fileManager.contentsOfDirectory(at: root, includingPropertiesForKeys: nil) else { return }
+        for session in sessions {
+            let name = session.lastPathComponent
+            guard name.hasPrefix("session-"), let pid = pid_t(name.dropFirst("session-".count)),
+                  pid > 0, pid != getpid() else { continue }
+            // ponytail: liveness is by PID only, so a reused PID keeps a stale session until
+            // that process exits; add a launch token to the directory name if that matters.
+            if kill(pid, 0) == 0 || errno == EPERM { continue }
+            do {
+                try fileManager.removeItem(at: session)
+            } catch {
+                log("Failed to remove orphaned cookie session directory: \(error.localizedDescription)", level: .warning)
             }
         }
     }
