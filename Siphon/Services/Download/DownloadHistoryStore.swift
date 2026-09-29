@@ -18,9 +18,17 @@ final class DownloadHistoryStore {
 
     func loadHistory() -> [HistoricDownload] {
         guard let data = userDefaults.data(forKey: historyKey) else { return [] }
+        let decoder = JSONDecoder()
+        // Fast path: Attempt direct batch decoding of valid history arrays.
+        // Avoids O(N) Foundation object deserializations, intermediate Data allocations,
+        // and per-item JSONDecoder invocations when history is uncorrupted.
+        if let decoded = try? decoder.decode([HistoricDownload].self, from: data) {
+            return decoded
+        }
+        // Fallback path: If batch decoding fails (e.g. malformed or corrupted entry),
+        // deserialize item-by-item to salvage valid history items and purge bad ones.
         do {
             guard let rawItems = try JSONSerialization.jsonObject(with: data) as? [Any] else { return [] }
-            let decoder = JSONDecoder()
             var decoded: [HistoricDownload] = []
             var skippedCount = 0
             decoded.reserveCapacity(rawItems.count)
