@@ -394,6 +394,7 @@ struct AddDownloadView: View {
                                 .font(.system(size: 10, weight: .semibold))
                                 .foregroundColor(.secondary)
                                 .frame(width: 12)
+                                .accessibilityHidden(true)
 
                             Text(languageService.s("stream_inspector"))
                                 .font(.siphonSecondaryMedium)
@@ -417,6 +418,8 @@ struct AddDownloadView: View {
                         .overlay(SiphonTheme.fieldBorder())
                     }
                     .buttonStyle(.plain)
+                    .accessibilityElement(children: .combine)
+                    .accessibilityValue(showStreamInspector ? "Expanded" : "Collapsed")
 
                     if showStreamInspector {
                         VStack(alignment: .leading, spacing: 8) {
@@ -1028,6 +1031,7 @@ struct AddDownloadView: View {
                         .font(.siphonMetadataSemibold)
                         .foregroundColor(SiphonTheme.accentText)
                         .frame(width: 12)
+                        .accessibilityHidden(true)
 
                     Text(languageService.s("advanced_options"))
                         .font(.siphonStandardSemibold)
@@ -1054,7 +1058,8 @@ struct AddDownloadView: View {
                 )
             }
             .buttonStyle(.plain)
-            .accessibilityAddTraits(.isButton)
+            .accessibilityElement(children: .combine)
+            .accessibilityValue(showOptionalSettings ? "Expanded" : "Collapsed")
 
             if showOptionalSettings {
                 VStack(alignment: .leading, spacing: SiphonTheme.spacing14) {
