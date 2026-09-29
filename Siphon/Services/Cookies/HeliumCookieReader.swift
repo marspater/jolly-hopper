@@ -193,7 +193,8 @@ enum ChromiumCookieReader {
 
     /// Returns nil when no readable profile has cookies for the target host.
     /// A browser with no matching cookies falls through to the next one, so an
-    /// installed but signed-out Chrome does not hide a signed-in Arc.
+    /// installed but signed-out Chrome does not hide a signed-in Arc. A browser whose
+    /// matching cookies cannot be decrypted fails the export even when another has none.
     static func export(
         for target: URL,
         root: URL = defaultHeliumRoot,
@@ -228,10 +229,15 @@ enum ChromiumCookieReader {
         password: (() throws -> Data)?
     ) throws -> SecureCookieFile? {
         var lastError: Error?
+        var cookieError: Error?
         var foundReadableProfile = false
         for candidate in candidateRoots {
+            // The key is read only for a cookie that matches the host, so a failure after
+            // that is a Keychain or decryption error, not a missing or locked profile.
+            var readKey = false
             do {
                 let candidatePassword: () throws -> Data = {
+                    readKey = true
                     if let password {
                         return try password()
                     }
@@ -245,10 +251,19 @@ enum ChromiumCookieReader {
                 }
                 foundReadableProfile = true
             } catch {
-                lastError = error
+                if readKey {
+                    cookieError = cookieError ?? error
+                } else {
+                    lastError = error
+                }
             }
         }
 
+        // A browser that holds cookies for this host but cannot decrypt them must fail the
+        // export instead of being masked by another browser that simply has none.
+        if let cookieError {
+            throw cookieError
+        }
         if foundReadableProfile {
             return nil
         }

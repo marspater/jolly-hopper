@@ -4,6 +4,7 @@
 //
 
 import XCTest
+import SQLite3
 @testable import Siphon
 
 final class SecureCookieFileTests: XCTestCase {
@@ -181,10 +182,83 @@ final class SecureCookieFileTests: XCTestCase {
         }
 
         XCTAssertTrue(FileManager.default.fileExists(atPath: dir.path))
+        XCTAssertEqual(dir.lastPathComponent, "session-\(getpid())", "Each process must write into its own session directory")
 
         if let attrs = try? FileManager.default.attributesOfItem(atPath: dir.path),
            let perm = (attrs[.posixPermissions] as? NSNumber)?.intValue {
             XCTAssertEqual(perm, 0o700, "Directory permissions must be 0o700")
         }
+    }
+
+    func testPurgeKeepsLiveSessionsOfOtherProcesses() throws {
+        let fileManager = FileManager.default
+        let own = try XCTUnwrap(CookieManager.getSecureTempCookiesDirectory())
+        let root = own.deletingLastPathComponent()
+        // PID 1 (launchd) is always alive; 999999 is above the macOS PID limit, so never alive.
+        let live = root.appendingPathComponent("session-1")
+        let dead = root.appendingPathComponent("session-999999")
+        defer {
+            try? fileManager.removeItem(at: live)
+            try? fileManager.removeItem(at: dead)
+        }
+        for dir in [live, dead] {
+            try fileManager.createDirectory(at: dir, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+            try "dummy".write(to: dir.appendingPathComponent("siphon_cookies_x.txt"), atomically: true, encoding: .utf8)
+        }
+        let ownFile = own.appendingPathComponent("siphon_cookies_own.txt")
+        try "dummy".write(to: ownFile, atomically: true, encoding: .utf8)
+
+        CookieManager.purgeOrphanedTempCookieFiles()
+
+        XCTAssertTrue(fileManager.fileExists(atPath: live.appendingPathComponent("siphon_cookies_x.txt").path),
+                      "Another running Siphon's cookie file must survive this process's purge")
+        XCTAssertFalse(fileManager.fileExists(atPath: dead.path), "A session whose process is gone must be removed")
+        XCTAssertFalse(fileManager.fileExists(atPath: ownFile.path))
+    }
+
+    func testChromiumExportKeepsKeychainFailureOverBrowserWithoutMatches() throws {
+        struct KeychainDenied: Error {}
+        func makeRoot(_ row: String) throws -> URL {
+            let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+            let profile = root.appendingPathComponent("Default")
+            try FileManager.default.createDirectory(at: profile, withIntermediateDirectories: true)
+            var db: OpaquePointer?
+            XCTAssertEqual(sqlite3_open(profile.appendingPathComponent("Cookies").path, &db), SQLITE_OK)
+            defer { sqlite3_close(db) }
+            let sql = """
+            CREATE TABLE meta(key TEXT, value TEXT);
+            INSERT INTO meta VALUES ('version','24');
+            CREATE TABLE cookies(host_key TEXT, name TEXT, value TEXT, encrypted_value BLOB, path TEXT, expires_utc INTEGER, is_secure INTEGER, is_httponly INTEGER, has_expires INTEGER);
+            \(row)
+            """
+            XCTAssertEqual(sqlite3_exec(db, sql, nil, nil, nil), SQLITE_OK)
+            return root
+        }
+        // An encrypted cookie for the host forces the Keychain read, which is denied.
+        let locked = try makeRoot("INSERT INTO cookies VALUES('.example.com','session','',X'7631300102','/',0,1,1,0);")
+        let signedOut = try makeRoot("INSERT INTO cookies VALUES('other.test','session','x',X'','/',0,1,1,0);")
+        let signedIn = try makeRoot("INSERT INTO cookies VALUES('.example.com','session','fixture',X'','/',0,1,1,0);")
+        let missing = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer {
+            for root in [locked, signedOut, signedIn] { try? FileManager.default.removeItem(at: root) }
+        }
+        let denied: () throws -> Data = { throw KeychainDenied() }
+
+        let orders: [[(root: URL, target: ChromiumCookieReader.ChromiumBrowserTarget?)]] = [
+            [(locked, nil), (signedOut, nil), (missing, nil)],
+            [(missing, nil), (signedOut, nil), (locked, nil)]
+        ]
+        for order in orders {
+            XCTAssertThrowsError(try ChromiumCookieReader.export(
+                host: "example.com", from: order, password: denied
+            ), "A browser without matches must not mask one whose cookies cannot be decrypted") {
+                XCTAssertTrue($0 is KeychainDenied, "Unexpected error: \($0)")
+            }
+        }
+
+        let file = try XCTUnwrap(ChromiumCookieReader.export(
+            host: "example.com", from: [(locked, nil), (signedIn, nil)], password: denied
+        ), "A later browser with readable cookies still wins")
+        file.cleanup()
     }
 }

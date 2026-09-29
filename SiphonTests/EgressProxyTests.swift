@@ -22,6 +22,28 @@ final class EgressProxyTests: XCTestCase {
         XCTAssertNotEqual(restarted, 0)
     }
 
+    func testStartReplacesListenerThatDiedAfterStartup() async throws {
+        let proxy = EgressProxyServer()
+        _ = try await proxy.start()
+        defer { proxy.stop() }
+
+        let dead = try XCTUnwrap(proxy.listener)
+        dead.cancel()
+        let gone = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            if case .cancelled = dead.state { return true }
+            return false
+        }, object: nil)
+        await fulfillment(of: [gone], timeout: 5)
+
+        let port = try await proxy.start()
+        XCTAssertFalse(proxy.listener === dead, "A dead listener must be replaced, not reused")
+        let response = try await sendThroughProxy(
+            port: port,
+            "CONNECT 127.0.0.1:1 HTTP/1.1\r\nHost: 127.0.0.1:1\r\n\r\n"
+        )
+        XCTAssertTrue(response.hasPrefix("HTTP/1.1 403"), "Expected the new listener to answer, got: \(response)")
+    }
+
     func testProxyBlocksDirectLoopbackConnection() async throws {
         let proxy = EgressProxyServer()
         let proxyPort = try await proxy.start()
@@ -236,6 +258,7 @@ final class EgressProxyTests: XCTestCase {
         XCTAssertFalse(ExternalDownloadTargetPolicy.isAllowedTarget(host: "192.168.1.1"))
         XCTAssertFalse(ExternalDownloadTargetPolicy.isAllowedTarget(host: "169.254.169.254"))
         XCTAssertFalse(ExternalDownloadTargetPolicy.isAllowedTarget(host: "::1"))
+        XCTAssertFalse(ExternalDownloadTargetPolicy.isAllowedTarget(host: "::8.8.8.8"), "deprecated IPv4-compatible")
         XCTAssertFalse(ExternalDownloadTargetPolicy.isAllowedTarget(host: "fe80::1"))
     }
 
@@ -253,6 +276,23 @@ final class EgressProxyTests: XCTestCase {
         XCTAssertFalse(ExternalDownloadTargetPolicy.isAllowedTarget(host: "192.0.2.10"))
         XCTAssertFalse(ExternalDownloadTargetPolicy.isAllowedTarget(host: "192.0.0.170"))
         XCTAssertTrue(ExternalDownloadTargetPolicy.isAllowedTarget(host: "8.8.8.8"))
+    }
+
+    func testSpecialPurposeIPv6RangesAreRejected() {
+        for host in [
+            "100::1", // discard-only 100::/64
+            "100:0:0:1::1", // dummy prefix
+            "2001:2::1", // benchmarking 2001:2::/48
+            "2001:10::1", // ORCHID
+            "3fff::1", "3fff:fff::1", // documentation 3fff::/20
+            "5f00::1", // SRv6 SIDs 5f00::/16
+            "4000::1", // unallocated, outside 2000::/3
+            "ff02::1" // multicast
+        ] {
+            XCTAssertFalse(ExternalDownloadTargetPolicy.isAllowedTarget(host: host), host)
+        }
+        XCTAssertTrue(ExternalDownloadTargetPolicy.isAllowedTarget(host: "2001:4860:4860::8888"))
+        XCTAssertTrue(ExternalDownloadTargetPolicy.isAllowedTarget(host: "2001:200::1"), "Just past 2001::/23")
     }
 }
 
