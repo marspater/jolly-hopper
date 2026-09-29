@@ -74,7 +74,8 @@ actor DependencyInstaller {
         guard FileManager.default.isExecutableFile(atPath: url.path) else { return false }
         let proc = Process()
         proc.executableURL = URL(fileURLWithPath: "/usr/bin/codesign")
-        proc.arguments = ["--verify", "--deep", "--strict", url.path]
+        // Use '--' to delimit arguments from option flags to prevent CLI option injection if a file path starts with '-'
+        proc.arguments = ["--verify", "--deep", "--strict", "--", url.path]
         proc.environment = YtdlpService.createSanitizedEnvironment()
         let nullPipe = Pipe()
         proc.standardOutput = nullPipe
