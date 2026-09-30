@@ -9,7 +9,9 @@ A high-performance, native macOS media extractor & downloader powered by `yt-dlp
     <a href="https://github.com/marspater/jolly-hopper/releases/latest"><img src="https://img.shields.io/badge/platform-macOS%2015%2B-0284c7?style=flat&labelColor=18181b&logo=apple&logoColor=white" alt="Platform macOS 15+" /></a>
     <a href="https://github.com/marspater/jolly-hopper/blob/main/SUPPORTED_SITES.md"><img src="https://img.shields.io/badge/sites-1000%2B-10b981?style=flat&labelColor=18181b&logo=safari&logoColor=white" alt="Supported Sites" /></a>
     <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0-8b5cf6?style=flat&labelColor=18181b" alt="License GPL-3.0" /></a>
-    <a href="https://ko-fi.com/marspater"><img src="https://img.shields.io/badge/Ko--fi-Support-FF5E5B?style=flat&labelColor=18181b&logo=ko-fi&logoColor=white" alt="Support on Ko-fi" /></a>
+  </p>
+  <p>
+    <a href="https://ko-fi.com/marspater"><img src="https://ko-fi.com/img/githubbutton_sm.svg" height="30" alt="Support me on Ko-fi" /></a>
   </p>
 </div>
 
