@@ -1,102 +1,42 @@
-# Prerequisites
-*.d
+# macOS
+.DS_Store
 
-# Compiled Object files
-*.slo
-*.lo
-*.o
-*.obj
+# Xcode
+DerivedData/
+xcuserdata/
+*.xcuserstate
 
-# Precompiled Headers
-*.gch
-*.pch
+# Swift Package Manager
+.build/
 
-# Compiled Dynamic libraries
-*.so
-*.dylib
-*.dll
-
-# Fortran module files
-*.mod
-*.smod
-
-# Compiled Static libraries
-*.lai
-*.la
-*.a
-*.lib
-
-# Executables
-*.exe
-*.out
-*.app
-
-# User-specific files
-*.rsuser
-*.suo
-*.user
-*.user.*
-*.userosscache
-*.sln.docstates
-
-# Directories
-out/
-out-linux/
-out-windows/
-out-mac/
-build/
-build-linux/
-build-windows/
-build-mac/
-bin/
-.cache/
-.vs/
+# Editors
 .vscode/
 .idea/
 .fleet/
-.flatpak-builder/
-.flatpak/
-_nickbuild/
-*.snap
 
-# CMake
-CMakeUserPresets.json
-compile_commands.json
-
-# Setup Files
-inno/*.exe
-
-# Custom Builds & Logs
+# Build output
+build/
 build_release/
 build_debug/
-build_log.txt
-dist/
-.DS_Store
-*.dmg
-
-# Test Builds
 build_test/
 build_release_universal/
+build_log.txt
+dist/
 dmg_stage/
+*.app
+*.dmg
 
-# Release Artifacts
+# Release artifacts
 RELEASE_NOTES.md
 SOCIAL_MEDIA.md
 
-# Xcode DerivedData
-DerivedData/
-
-# Local Case Studies & Scratch Docs
+# Local case studies & scratch docs
 local_case_studies/
 
-# Swift Package Manager & Xcode Builds
-.build/
-
-# Temporary & Ad-Hoc Investigation Scripts
+# Temporary & ad-hoc investigation scripts
 check_*
 find_*
 fix_*
 print_code.py
 test_a11y*
 scratch_*
-

@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+### Security
+
+- Browser-link downloads accept only global unicast IPv6 destinations and reject IPv4-compatible addresses.
+- `codesign` checks pass the binary path after `--`, so a path starting with `-` cannot be read as an option.
+- Temporary cookie files live in a per-process session folder, and a Keychain or decryption failure in one Chromium browser is no longer hidden by another browser with no match.
+
+### Fixes
+
+- Recent on Home stays newest-first when the queue is reordered.
+- Output reservations cover every video container for a file name, and overwrite only exempts the original name.
+- No AppleScript notification fallback after notifications were denied.
+- The egress proxy restarts a listener that died after startup, and process-tree cleanup never signals an already-reaped process.
+- Faster download history loading, and clearer VoiceOver state for disclosure buttons in Add Download.
+
 ## 5.5.0 - 2026-09-28
 
 Siphon 5.5.0 adds a public-network boundary for browser links, requires signed release manifests, and makes the main window calmer and more predictable.
