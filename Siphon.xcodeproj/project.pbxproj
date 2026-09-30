@@ -791,7 +791,6 @@
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Siphon/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Siphon";
-				INFOPLIST_KEY_CFBundleURLTypes = "{\n    CFBundleURLSchemes =     (\n        macabolic\n    );\n}";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright © 2026 marspater. All rights reserved.";
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -828,7 +827,6 @@
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Siphon/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Siphon";
-				INFOPLIST_KEY_CFBundleURLTypes = "{\n    CFBundleURLSchemes =     (\n        luma,\n        macabolic\n    );\n}";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright © 2026 marspater. All rights reserved.";
 				LD_RUNPATH_SEARCH_PATHS = (
