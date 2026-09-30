@@ -5,11 +5,11 @@ A high-performance, native macOS media extractor & downloader powered by `yt-dlp
 <div align="center">
   <img src="assets/app_screenshot.png?v=4" alt="Siphon main window" width="880" style="border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.3);" />
   <p>
-    <a href="https://github.com/marspater/jolly-hopper/releases/latest"><img src="https://img.shields.io/badge/Version-v5.5.0-indigo?style=for-the-badge&logo=swift&logoColor=white" alt="Version 5.5.0" /></a>
-    <a href="https://github.com/marspater/jolly-hopper/releases/latest"><img src="https://img.shields.io/badge/Download-macOS-blue?style=for-the-badge&logo=apple&logoColor=white" alt="Download Siphon for macOS" /></a>
-    <a href="https://github.com/marspater/jolly-hopper"><img src="https://img.shields.io/badge/Repository-jolly--hopper-818cf8?style=for-the-badge&logo=github&logoColor=white" alt="GitHub Repository" /></a>
-    <a href="https://github.com/marspater/jolly-hopper/blob/main/SUPPORTED_SITES.md"><img src="https://img.shields.io/badge/Supported--Sites-1000%2B-green?style=for-the-badge&logo=globe&logoColor=white" alt="Supported Sites" /></a>
-    <a href="https://ko-fi.com/marspater"><img src="https://img.shields.io/badge/Ko--fi-Support-FF5E5B?style=for-the-badge&logo=ko-fi&logoColor=white" alt="Support on Ko-fi" /></a>
+    <a href="https://github.com/marspater/jolly-hopper/releases/latest"><img src="https://img.shields.io/badge/version-v5.5.0-6366f1?style=flat&labelColor=18181b&logo=swift&logoColor=white" alt="Version 5.5.0" /></a>
+    <a href="https://github.com/marspater/jolly-hopper/releases/latest"><img src="https://img.shields.io/badge/platform-macOS%2015%2B-0284c7?style=flat&labelColor=18181b&logo=apple&logoColor=white" alt="Platform macOS 15+" /></a>
+    <a href="https://github.com/marspater/jolly-hopper/blob/main/SUPPORTED_SITES.md"><img src="https://img.shields.io/badge/sites-1000%2B-10b981?style=flat&labelColor=18181b&logo=safari&logoColor=white" alt="Supported Sites" /></a>
+    <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0-8b5cf6?style=flat&labelColor=18181b" alt="License GPL-3.0" /></a>
+    <a href="https://ko-fi.com/marspater"><img src="https://img.shields.io/badge/Ko--fi-Support-FF5E5B?style=flat&labelColor=18181b&logo=ko-fi&logoColor=white" alt="Support on Ko-fi" /></a>
   </p>
 </div>
 
