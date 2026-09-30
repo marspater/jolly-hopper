@@ -7159,6 +7159,9 @@ final class StreamBuffer: @unchecked Sendable {
     private var buffer = Data()
     private let lock = NSLock()
 
+    // Bolt Performance Optimization: Process output lines using direct zero-copy Data byte slicing
+    // and byte-level \r trimming without allocating intermediate Data objects.
+    // Preserves Data capacity using removeAll(keepingCapacity: true) when all lines are consumed.
     func appendAndExtractLines(_ chunk: Data) -> [String] {
         lock.lock()
         defer { lock.unlock() }
@@ -7167,29 +7170,32 @@ final class StreamBuffer: @unchecked Sendable {
 
         var searchStartIndex = buffer.startIndex
         while let newlineIndex = buffer[searchStartIndex...].firstIndex(of: 0x0A) { // 0x0A is '\n'
-            let lineData = buffer.subdata(in: searchStartIndex..<newlineIndex)
+            var lineSlice = buffer[searchStartIndex..<newlineIndex]
             searchStartIndex = newlineIndex + 1
 
-            if let line = String(data: lineData, encoding: .utf8) {
-                var trimmed = line[...]
-                while trimmed.hasSuffix("\r") { trimmed = trimmed.dropLast() }
-                while trimmed.hasPrefix("\r") { trimmed = trimmed.dropFirst() }
-                if !trimmed.isEmpty {
-                    lines.append(String(trimmed))
-                }
+            while lineSlice.last == 0x0D { lineSlice = lineSlice.dropLast() }
+            while lineSlice.first == 0x0D { lineSlice = lineSlice.dropFirst() }
+
+            if !lineSlice.isEmpty, let line = String(data: lineSlice, encoding: .utf8) {
+                lines.append(line)
             }
         }
 
-        if searchStartIndex > buffer.startIndex {
+        if searchStartIndex == buffer.endIndex {
+            buffer.removeAll(keepingCapacity: true)
+        } else if searchStartIndex > buffer.startIndex {
             buffer.removeSubrange(buffer.startIndex..<searchStartIndex)
         }
 
         // Safety bound: If continuous stream chunk exceeds 512KB without newline, extract and clear to prevent memory growth
         if buffer.count > 512 * 1024 {
-            if let line = String(data: buffer, encoding: .utf8) {
+            var lineSlice = buffer[...]
+            while lineSlice.last == 0x0D || lineSlice.last == 0x0A { lineSlice = lineSlice.dropLast() }
+            while lineSlice.first == 0x0D || lineSlice.first == 0x0A { lineSlice = lineSlice.dropFirst() }
+            if !lineSlice.isEmpty, let line = String(data: lineSlice, encoding: .utf8) {
                 lines.append(line)
             }
-            buffer.removeAll()
+            buffer.removeAll(keepingCapacity: true)
         }
 
         return lines
@@ -7200,15 +7206,13 @@ final class StreamBuffer: @unchecked Sendable {
         defer { lock.unlock() }
         var lines: [String] = []
         if !buffer.isEmpty {
-            if let line = String(data: buffer, encoding: .utf8) {
-                var trimmed = line[...]
-                while trimmed.hasSuffix("\r") || trimmed.hasSuffix("\n") { trimmed = trimmed.dropLast() }
-                while trimmed.hasPrefix("\r") || trimmed.hasPrefix("\n") { trimmed = trimmed.dropFirst() }
-                if !trimmed.isEmpty {
-                    lines.append(String(trimmed))
-                }
+            var lineSlice = buffer[...]
+            while lineSlice.last == 0x0D || lineSlice.last == 0x0A { lineSlice = lineSlice.dropLast() }
+            while lineSlice.first == 0x0D || lineSlice.first == 0x0A { lineSlice = lineSlice.dropFirst() }
+            if !lineSlice.isEmpty, let line = String(data: lineSlice, encoding: .utf8) {
+                lines.append(line)
             }
-            buffer.removeAll()
+            buffer.removeAll(keepingCapacity: true)
         }
         return lines
     }
