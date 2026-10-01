@@ -4806,6 +4806,17 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertTrue(out.contains("siphon_pg_ok"))
     }
 
+    func testConfigureProcessCommandIncludesOptionDelimiterForEnv() {
+        let process = Process()
+        DefaultYtdlpProcessRunner.configureProcessCommand(process, args: ["-custom-binary", "arg1"])
+        if process.executableURL?.path == "/usr/bin/env" {
+            XCTAssertEqual(process.arguments?.first, "--", "env invocation must prepend '--' to prevent CLI option injection if binary path starts with '-'")
+            XCTAssertEqual(process.arguments, ["--", "-custom-binary", "arg1"])
+        } else {
+            XCTAssertEqual(process.arguments, ["-custom-binary", "arg1"])
+        }
+    }
+
     func testHistoricDownloadMigrationAndForwardCompatibility() throws {
         // 1. Legacy JSON with only filePath
         let legacyJSON = """

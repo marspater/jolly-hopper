@@ -102,7 +102,7 @@ actor DependencyInstaller {
         let binaryPath = url.path
         let proc = Process()
         proc.executableURL = URL(fileURLWithPath: "/usr/bin/codesign")
-        proc.arguments = ["--force", "--sign", "-", binaryPath]
+        proc.arguments = ["--force", "--sign", "-", "--", binaryPath]
         proc.environment = YtdlpService.createSanitizedEnvironment()
         let errPipe = Pipe()
         proc.standardError = errPipe
