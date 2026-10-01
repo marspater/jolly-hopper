@@ -108,14 +108,14 @@ struct RecentDownloadRowView: View {
                         .frame(width: 54, height: 36)
                         .clipped()
                 } placeholder: {
-                    Image(systemName: "film")
-                        .font(.system(size: 14))
-                        .foregroundColor(.secondary)
+                    Image(systemName: "play.rectangle.fill")
+                        .font(.system(size: 16))
+                        .foregroundColor(.secondary.opacity(0.6))
                 }
             } else {
-                Image(systemName: "film")
-                    .font(.system(size: 14))
-                    .foregroundColor(.secondary)
+                Image(systemName: "play.rectangle.fill")
+                    .font(.system(size: 16))
+                    .foregroundColor(.secondary.opacity(0.6))
             }
         }
         .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusSmall, style: .continuous))
