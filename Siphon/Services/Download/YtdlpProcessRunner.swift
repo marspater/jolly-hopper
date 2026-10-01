@@ -427,7 +427,7 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
             LoggerService.shared.log("Native process group helper unavailable; running directly via /usr/bin/env.", level: .warning)
         }
         process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        process.arguments = args
+        process.arguments = ["--"] + args
     }
 
     public func runCommand(_ args: [String]) async throws -> String {
