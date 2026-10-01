@@ -227,8 +227,10 @@ class LoggerService: ObservableObject {
         let sanitizedMessage = Self.sanitizeDiagnosticText(message)
         let entry = "[\(timestamp)] [\(level.rawValue)] \(sanitizedMessage)"
         
+        // Bolt Performance Optimization: Amortize O(N) array element shifts during high-frequency logging
+        // by batch-trimming oldest entries when the buffer exceeds maxLogEntries + 50 instead of shifting on every single log call.
         logs.append(entry)
-        if logs.count > maxLogEntries {
+        if logs.count > maxLogEntries + 50 {
             logs.removeFirst(logs.count - maxLogEntries)
         }
         
