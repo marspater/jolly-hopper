@@ -69,13 +69,16 @@ final class DownloadEventCoalescer: @unchecked Sendable {
         pendingLogLines.append(line)
         pendingLogBytes += line.utf8.count
 
-        // Bounded queue: drop oldest lines if exceeding line cap or byte cap
-        while pendingLogLines.count > maxPendingLines || pendingLogBytes > maxPendingBytes {
-            if let dropped = pendingLogLines.first {
-                pendingLogBytes -= dropped.utf8.count
-                pendingLogLines.removeFirst()
-            } else {
-                break
+        // Bolt Performance Optimization: Calculate total lines to drop upfront and perform a single `removeFirst(dropCount)`
+        // memory move instead of executing repeated O(N) array shifts in a loop for each dropped line.
+        if pendingLogLines.count > maxPendingLines || pendingLogBytes > maxPendingBytes {
+            var dropCount = 0
+            while (pendingLogLines.count - dropCount > maxPendingLines || pendingLogBytes > maxPendingBytes) && dropCount < pendingLogLines.count {
+                pendingLogBytes -= pendingLogLines[dropCount].utf8.count
+                dropCount += 1
+            }
+            if dropCount > 0 {
+                pendingLogLines.removeFirst(dropCount)
             }
         }
 
