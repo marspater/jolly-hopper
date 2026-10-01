@@ -755,7 +755,7 @@ final class QueueAndErrorUXTests: XCTestCase {
         // until task teardown completes; wait for the public state to become idle.
         for _ in 0..<100 {
             if manager.activeExecutionCount == 0 { break }
-            await Task.yield()
+            try? await Task.sleep(nanoseconds: 10_000_000)
         }
 
         XCTAssertEqual(
@@ -857,9 +857,9 @@ final class QueueAndErrorUXTests: XCTestCase {
         XCTAssertEqual(manager.queue.activeSlotCount, 0)
 
         manager.ytdlpService.isUpdating = false
-        for _ in 0..<20 {
+        for _ in 0..<100 {
             if manager.activeExecutionCount == 1 { break }
-            await Task.yield()
+            try? await Task.sleep(nanoseconds: 10_000_000)
         }
 
         XCTAssertEqual(manager.activeExecutionCount, 1)

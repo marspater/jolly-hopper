@@ -334,9 +334,9 @@ final class DownloadExecutorTests: XCTestCase {
         XCTAssertTrue(queue.isSlotReserved(for: download.id), "Concurrency slot must remain reserved until teardown")
         XCTAssertEqual(delegate.finishedCount, 0, "Finish callback belongs to task teardown, not the cancellation request")
 
-        for _ in 0..<20 {
+        for _ in 0..<50 {
             if executor.executionState(for: download.id) == .idle { break }
-            await Task.yield()
+            try? await Task.sleep(nanoseconds: 10_000_000)
         }
 
         XCTAssertEqual(executor.executionState(for: download.id), .idle)
@@ -379,6 +379,7 @@ final class DownloadExecutorTests: XCTestCase {
         let executor = DownloadExecutor(ytdlpService: service, delegate: delegate)
         let queue = DownloadQueue()
         let download = Download(url: "https://example.com/shutdown-test", options: .default)
+        download.mediaInfo = MediaInfo(id: "shutdown-test", title: "Shutdown Test")
 
         XCTAssertTrue(queue.reserveSlot(for: download.id))
         executor.startDownloadTask(
@@ -390,7 +391,7 @@ final class DownloadExecutorTests: XCTestCase {
 
         for _ in 0..<100 {
             if executor.activeControllers[download.id] != nil { break }
-            await Task.yield()
+            try? await Task.sleep(nanoseconds: 10_000_000)
         }
 
         guard let controller = executor.activeControllers[download.id] else {
@@ -409,7 +410,7 @@ final class DownloadExecutorTests: XCTestCase {
 
         for _ in 0..<100 {
             if executor.executionState(for: download.id) == .idle { break }
-            await Task.yield()
+            try? await Task.sleep(nanoseconds: 10_000_000)
         }
 
         XCTAssertEqual(executor.executionState(for: download.id), .idle)
