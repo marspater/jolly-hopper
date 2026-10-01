@@ -66,3 +66,7 @@
 ## 2026-09-22 - Lazy Substring Splitting with Reverse Search in Error Parsing
 **Learning:** Using `errorOutput.split(whereSeparator: \.isNewline).reversed()` allocates an intermediate `Array<Substring>` containing all lines before reversing. Prepending `.lazy` (`errorOutput.lazy.split(whereSeparator: \.isNewline).reversed()`) constructs a lazy reversed collection that scans backward from the end without allocating an array for all line substrings, short-circuiting as soon as the first matching line from the end is found.
 **Action:** Use `.lazy.split(whereSeparator: \.isNewline).reversed()` when searching backwards for specific log or error lines in multiline string outputs.
+
+## 2026-09-23 - Batch Array Trimming and Single-Pass Range Deletion for High-Frequency Buffers
+**Learning:** Calling `removeFirst()` repeatedly in a `while` loop or on every single `append()` when an array is over capacity causes repeated $O(N)$ memory shifting operations per element. Calculating `dropCount` upfront and invoking `removeFirst(dropCount)` once performs a single $O(N)$ memory move. Similarly, batch-trimming log arrays when exceeding a threshold (e.g. `maxLogEntries + 50`) amortizes array shift operations over 50 events.
+**Action:** Always batch-trim high-frequency array buffers or calculate `dropCount` upfront to invoke `removeFirst(dropCount)` once instead of calling `removeFirst()` in a loop.
