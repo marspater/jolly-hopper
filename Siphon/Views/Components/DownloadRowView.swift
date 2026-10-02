@@ -246,7 +246,6 @@ struct DownloadRowView: View {
                         Image(systemName: "exclamationmark.triangle.fill")
                             .font(.siphonSecondary)
                             .foregroundColor(SiphonTheme.statusForeground(for: .failed, colorScheme: colorScheme))
-                            .accessibilityHidden(true)
                         Text(info.headline)
                             .font(.siphonStandardSemibold)
                             .foregroundColor(SiphonTheme.statusForeground(for: .failed, colorScheme: colorScheme))
@@ -325,7 +324,6 @@ struct DownloadRowView: View {
                                     .font(.siphonMetadataMedium)
                                 Image(systemName: showRawError ? "chevron.up" : "chevron.down")
                                     .font(.siphonMicro)
-                                    .accessibilityHidden(true)
                             }
                             .foregroundColor(.secondary)
                         }
@@ -357,7 +355,6 @@ struct DownloadRowView: View {
                                     HStack(spacing: 3) {
                                         Image(systemName: errorCopyFeedback.isShowing ? "checkmark" : "doc.on.doc")
                                             .font(.siphonMicro)
-                                            .accessibilityHidden(true)
                                         Text(errorCopyFeedback.isShowing ? languageService.s("copied") : languageService.s("copy_error"))
                                             .font(.siphonMicroMedium)
                                     }
@@ -375,7 +372,6 @@ struct DownloadRowView: View {
                                     HStack(spacing: 3) {
                                         Image(systemName: "doc.text")
                                             .font(.siphonMicro)
-                                            .accessibilityHidden(true)
                                         Text(languageService.s("download_log"))
                                             .font(.siphonMicroMedium)
                                     }
@@ -474,7 +470,6 @@ struct DownloadRowView: View {
                         .font(.system(size: 18, weight: .bold))
                         .foregroundColor(.white)
                         .shadow(radius: 3)
-                        .accessibilityHidden(true)
                 }
                 .transition(.opacity)
             }
@@ -1088,7 +1083,6 @@ struct FileThumbnailView: View {
                 Image(systemName: "terminal.fill")
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundColor(SiphonTheme.accentText)
-                    .accessibilityHidden(true)
 
                 Text(languageService.s("download_log"))
                     .font(.siphonHeadline)
@@ -1144,7 +1138,6 @@ struct FileThumbnailView: View {
                     HStack(spacing: 6) {
                         Image(systemName: logCopyFeedback.isShowing ? "checkmark" : "doc.on.doc")
                             .font(.system(size: 11, weight: .semibold))
-                            .accessibilityHidden(true)
                         Text(logCopyFeedback.isShowing ? languageService.s("copied") : languageService.s("copy_log"))
                             .font(.siphonSecondaryMedium)
                     }
@@ -1153,7 +1146,7 @@ struct FileThumbnailView: View {
                 .buttonStyle(.siphonSecondary)
                 .disabled(download.log.isEmpty)
                 .help(languageService.s("copy_log"))
-                .accessibilityLabel(logCopyFeedback.isShowing ? languageService.s("copied") : languageService.s("copy_log"))
+                .accessibilityLabel(languageService.s("copy_log"))
 
                 Spacer()
 
