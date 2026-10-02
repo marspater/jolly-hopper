@@ -23,30 +23,17 @@ struct RecentDownloadRowView: View {
             metadataView
             formatPillsView
                 .fixedSize(horizontal: true, vertical: false)
-            statusActionView
-                .frame(width: 168, alignment: .trailing)
+            statusLabelView
+                .frame(width: 136, alignment: .trailing)
 
-            Group {
-                if canRemoveFromHistory {
-                    Button {
-                        downloadManager.removeDownload(download)
-                    } label: {
-                        Image(systemName: "xmark.circle")
-                            .font(.system(size: 13))
-                            .foregroundColor(.secondary)
-                            .frame(width: 24, height: 24)
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.siphonIcon(size: 24))
-                    .help(languageService.s("remove_from_history"))
-                    .accessibilityLabel(languageService.s("remove_from_history"))
-                } else {
-                    Color.clear
-                        .frame(width: 24, height: 24)
-                        .accessibilityHidden(true)
-                }
+            // Fixed 24 pt slots keep every row's icons on the same columns,
+            // whether or not a row has a primary action.
+            HStack(spacing: SiphonTheme.spacing8) {
+                primaryActionView
+                    .frame(width: 24, height: 24)
+                removeActionView
+                    .frame(width: 24, height: 24)
             }
-            .frame(width: 24, height: 24)
         }
         .padding(.horizontal, SiphonTheme.spacing14)
         .padding(.vertical, 8)
@@ -181,90 +168,117 @@ struct RecentDownloadRowView: View {
     }
 
     @ViewBuilder
-    private var statusActionView: some View {
-        HStack(spacing: SiphonTheme.spacing8) {
-            switch download.status {
-            case .downloading:
-                let rawProgress = download.progress
-                let safeProgress = rawProgress.isNaN ? 0.0 : max(0.0, min(1.0, rawProgress))
-                let percentText = "\(Int(safeProgress * 100))%"
+    private var statusLabelView: some View {
+        switch download.status {
+        case .downloading:
+            let rawProgress = download.progress
+            let safeProgress = rawProgress.isNaN ? 0.0 : max(0.0, min(1.0, rawProgress))
+            let percentText = "\(Int(safeProgress * 100))%"
 
-                VStack(alignment: .trailing, spacing: 3) {
-                    HStack(spacing: 4) {
-                        Text(languageService.s("downloading"))
-                            .font(.siphonMetadataMedium)
-                            .foregroundColor(SiphonTheme.statusForeground(for: .downloading, colorScheme: colorScheme))
-                        Text(percentText)
-                            .font(.siphonMetadataMonoSemibold)
-                            .foregroundColor(.primary)
-                    }
-
-                    ProgressView(value: safeProgress)
-                        .progressViewStyle(.linear)
-                        .frame(width: 80)
-                        .tint(SiphonTheme.statusDownloading)
-                        .animation(SiphonAnimation.snappySpring, value: safeProgress)
-                }
-
-                Button {
-                    downloadManager.stopDownload(download)
-                } label: {
-                    Image(systemName: "stop.circle.fill")
-                        .font(.system(size: 14))
-                        .foregroundColor(SiphonTheme.statusDownloadingText)
-                }
-                .buttonStyle(.siphonIcon(size: 24))
-                .help(languageService.s("stop_download"))
-                .accessibilityLabel(languageService.s("stop_download"))
-
-            case .queued:
-                Text(languageService.s("queued"))
-                    .font(.siphonMetadataMedium)
-                    .foregroundColor(SiphonTheme.statusForeground(for: .queued, colorScheme: colorScheme))
-                Image(systemName: "clock.fill")
-                    .font(.system(size: 13))
-                    .foregroundColor(SiphonTheme.statusForeground(for: .queued, colorScheme: colorScheme))
-                    .accessibilityHidden(true)
-
-            case .completed:
-                HStack(spacing: 6) {
-                    Text(languageService.s("completed"))
+            VStack(alignment: .trailing, spacing: 3) {
+                HStack(spacing: 4) {
+                    Text(languageService.s("downloading"))
                         .font(.siphonMetadataMedium)
-                        .foregroundColor(SiphonTheme.statusForeground(for: .completed, colorScheme: colorScheme))
-                    Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 14))
-                        .foregroundColor(SiphonTheme.statusCompletedText)
-                        .accessibilityHidden(true)
+                        .foregroundColor(SiphonTheme.statusForeground(for: .downloading, colorScheme: colorScheme))
+                    Text(percentText)
+                        .font(.siphonMetadataMonoSemibold)
+                        .foregroundColor(.primary)
                 }
 
-                if let fileURL = download.primaryFilePath, primaryFileIsPresent != false {
-                    Button {
-                        NSWorkspace.shared.activateFileViewerSelecting([fileURL])
-                    } label: {
-                        Image(systemName: "folder")
-                            .font(.system(size: 13))
-                            .foregroundColor(.secondary)
-                    }
-                    .buttonStyle(.siphonIcon(size: 24))
-                    .help(languageService.s("reveal_in_finder"))
-                    .accessibilityLabel(languageService.s("reveal_in_finder"))
-                }
-
-            case .failed:
-                Text(languageService.s("failed"))
-                    .font(.siphonMetadataMedium)
-                    .foregroundColor(SiphonTheme.statusForeground(for: .failed, colorScheme: colorScheme))
-                Image(systemName: "exclamationmark.circle.fill")
-                    .font(.system(size: 14))
-                    .foregroundColor(SiphonTheme.statusFailedText)
-                    .accessibilityHidden(true)
-
-            default:
+                ProgressView(value: safeProgress)
+                    .progressViewStyle(.linear)
+                    .frame(width: 80)
+                    .tint(SiphonTheme.statusDownloading)
+                    .animation(SiphonAnimation.snappySpring, value: safeProgress)
+            }
+        case .fetching, .processing:
+            HStack(spacing: 6) {
                 Text(download.status.title(lang: languageService))
                     .font(.siphonMetadataMedium)
+                    .foregroundColor(SiphonTheme.statusForeground(for: download.status, colorScheme: colorScheme))
+                    .lineLimit(1)
+                ProgressView()
+                    .controlSize(.mini)
+                    .frame(width: 14, height: 14)
+            }
+        case .queued:
+            statusLabel(languageService.s("queued"), icon: "clock.fill", status: .queued)
+        case .paused:
+            statusLabel(download.status.title(lang: languageService), icon: "pause.circle.fill", status: .paused)
+        case .completed:
+            statusLabel(languageService.s("completed"), icon: "checkmark.circle.fill", status: .completed)
+        case .failed:
+            statusLabel(languageService.s("failed"), icon: "exclamationmark.circle.fill", status: .failed)
+        case .stopped:
+            statusLabel(download.status.title(lang: languageService), icon: "stop.circle.fill", status: .stopped)
+        case .fileExists:
+            statusLabel(download.status.title(lang: languageService), icon: "doc.on.doc.fill", status: .fileExists)
+        }
+    }
+
+    private func statusLabel(_ text: String, icon: String, status: DownloadStatus) -> some View {
+        let color = SiphonTheme.statusForeground(for: status, colorScheme: colorScheme)
+        return HStack(spacing: 6) {
+            Text(text)
+                .font(.siphonMetadataMedium)
+                .foregroundColor(color)
+                .lineLimit(1)
+            Image(systemName: icon)
+                .font(.system(size: 14))
+                .foregroundColor(color)
+                .accessibilityHidden(true)
+        }
+    }
+
+    @ViewBuilder
+    private var primaryActionView: some View {
+        switch download.status {
+        case .downloading, .fetching, .processing:
+            Button {
+                downloadManager.stopDownload(download)
+            } label: {
+                Image(systemName: "stop.circle.fill")
+                    .font(.system(size: 14))
+                    .foregroundColor(SiphonTheme.statusDownloadingText)
+            }
+            .buttonStyle(.siphonIcon(size: 24))
+            .help(languageService.s("stop_download"))
+            .accessibilityLabel(languageService.s("stop_download"))
+        case .completed where download.primaryFilePath != nil && primaryFileIsPresent != false:
+            revealButton { downloadManager.showInFinder(download.filePaths) }
+        case .fileExists:
+            revealButton { downloadManager.revealExistingFile(for: download) }
+        default:
+            Color.clear.accessibilityHidden(true)
+        }
+    }
+
+    private func revealButton(_ action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: "folder")
+                .font(.system(size: 13))
+                .foregroundColor(.secondary)
+        }
+        .buttonStyle(.siphonIcon(size: 24))
+        .help(languageService.s("reveal_in_finder"))
+        .accessibilityLabel(languageService.s("reveal_in_finder"))
+    }
+
+    @ViewBuilder
+    private var removeActionView: some View {
+        if canRemoveFromHistory {
+            Button {
+                downloadManager.removeDownload(download)
+            } label: {
+                Image(systemName: "xmark.circle")
+                    .font(.system(size: 13))
                     .foregroundColor(.secondary)
             }
+            .buttonStyle(.siphonIcon(size: 24))
+            .help(languageService.s("remove_from_history"))
+            .accessibilityLabel(languageService.s("remove_from_history"))
+        } else {
+            Color.clear.accessibilityHidden(true)
         }
-        .frame(maxWidth: .infinity, alignment: .trailing)
     }
 }

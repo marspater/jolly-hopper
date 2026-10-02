@@ -760,6 +760,8 @@ public enum SiphonTheme {
 // MARK: - Adaptive Window Surface
 
 public struct SiphonWindowBackgroundModifier: ViewModifier {
+    @Environment(\.colorScheme) private var colorScheme
+
     public init() {
         // Intentionally empty initializer for ViewModifier struct instantiation (swift:S1186)
     }
@@ -767,7 +769,9 @@ public struct SiphonWindowBackgroundModifier: ViewModifier {
     public func body(content: Content) -> some View {
         content
             .tint(SiphonTheme.accent)
-            .background(.ultraThinMaterial)
+            // In Dark Mode a bright window behind ultra-thin glass turns it light
+            // grey, under white and light-blue text. Regular glass stays dark.
+            .background(colorScheme == .dark ? Material.regular : Material.ultraThin)
             .background {
                 // Faint brand wash behind the material, shared by every window.
                 ZStack {

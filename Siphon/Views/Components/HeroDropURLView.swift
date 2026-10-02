@@ -10,6 +10,7 @@ struct HeroDropURLView: View {
     @EnvironmentObject var downloadManager: DownloadManager
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var languageService: LanguageService
+    @EnvironmentObject var updateChecker: UpdateChecker
 
     @Environment(\.appearsActive) private var appearsActive
     @Environment(\.colorScheme) private var colorScheme
@@ -62,10 +63,11 @@ struct HeroDropURLView: View {
                     ],
                     center: .center,
                     startRadius: 20,
-                    endRadius: 260
+                    // Fits the 320 pt frame, so the glow fades out instead of
+                    // being cut off at the frame's edges.
+                    endRadius: 150
                 )
                 .frame(width: 320)
-                .blur(radius: 20)
                 .allowsHitTesting(false)
             }
             .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusHero, style: .continuous))
@@ -119,23 +121,16 @@ struct HeroDropURLView: View {
                     } label: {
                         HStack(spacing: 5) {
                             Image(systemName: "slider.horizontal.3")
-                                .font(.system(size: 11, weight: .medium))
+                                .font(.system(size: 12, weight: .semibold))
                             Text(languageService.s("hero_options"))
-                                .font(.siphonMetadataMedium)
+                                .font(.siphonSecondaryMedium)
                         }
-                        .foregroundColor(.secondary)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 5)
-                        .background(
-                            SiphonTheme.controlBackground(cornerRadius: SiphonTheme.radiusControl)
-                        )
-                        .overlay(
-                            SiphonTheme.controlBorder(cornerRadius: SiphonTheme.radiusControl)
-                        )
                     }
-                    .buttonStyle(.bouncy(scale: 0.96, hover: 1.04))
-                    .help(languageService.s("advanced_options"))
-                    .accessibilityLabel(languageService.s("advanced_options"))
+                    // Options, Paste and Download share one height, radius and type
+                    // size; only Download, the primary action, is filled.
+                    .buttonStyle(.siphonSecondary)
+                    .help(languageService.s("hero_options_help"))
+                    .accessibilityLabel(languageService.s("hero_options_help"))
                 }
 
                 // Interactive URL Input Bar
@@ -174,19 +169,15 @@ struct HeroDropURLView: View {
                     Button {
                         handlePasteAction()
                     } label: {
-                        HStack(spacing: 4) {
+                        HStack(spacing: 5) {
                             Image(systemName: pasteFeedback.isShowing ? "checkmark" : "doc.on.clipboard")
-                                .font(.system(size: 11, weight: .semibold))
+                                .font(.system(size: 12, weight: .semibold))
                             Text(languageService.s("paste"))
-                                .font(.siphonMetadataMedium)
+                                .font(.siphonSecondaryMedium)
                         }
                         .foregroundColor(pasteFeedback.isShowing ? SiphonTheme.statusForeground(for: .completed, colorScheme: colorScheme) : .primary)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(SiphonTheme.controlBackground(cornerRadius: SiphonTheme.radiusSmall))
-                        .overlay(SiphonTheme.controlBorder(cornerRadius: SiphonTheme.radiusSmall))
                     }
-                    .buttonStyle(.bouncy(scale: 0.96, hover: 1.02))
+                    .buttonStyle(.siphonSecondary)
                     .fixedSize(horizontal: true, vertical: false)
                     .help(languageService.s("paste_from_clipboard"))
                     .accessibilityLabel(languageService.s("paste_from_clipboard"))
@@ -292,12 +283,16 @@ struct HeroDropURLView: View {
         }
     }
 
+    /// Links started here use the default download options, so Options opens
+    /// the Settings tab that holds them.
     private func openOptions() {
-        let trimmed = inputURL.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !trimmed.isEmpty {
-            appState.urlToDownload = trimmed
-        }
-        appState.showAddDownloadSheet = true
+        PreferencesWindowManager.shared.showPreferencesWindow(
+            languageService: languageService,
+            updateChecker: updateChecker,
+            downloadManager: downloadManager,
+            appState: appState,
+            initialTab: .download
+        )
     }
 
     private func handlePasteAction() {

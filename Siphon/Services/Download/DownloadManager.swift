@@ -625,6 +625,20 @@ class DownloadManager: ObservableObject {
         }
     }
 
+    /// Reveals the file that blocked a `.fileExists` download, or its folder.
+    func revealExistingFile(for download: Download) {
+        // Same base name the executor checked for the collision.
+        let baseName = YtdlpService.sanitizeFilename(download.options.customFilename ?? download.title)
+        let options = download.options
+        let folder = options.saveFolder
+        Task {
+            let existing = await Task.detached {
+                DownloadQueue.collidingMediaFile(baseName: baseName, options: options, in: folder)
+            }.value
+            showInFinder([existing ?? folder.appendingPathComponent(baseName)])
+        }
+    }
+
     func showInFinder(_ path: URL) {
         showInFinder([path])
     }

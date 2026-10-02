@@ -134,6 +134,16 @@ final class DownloadQueueTests: XCTestCase {
         XCTAssertEqual(plannedName("song", .mp3), "song (1)", "Same file, case-only difference")
         XCTAssertEqual(plannedName("Clip", .mp4), "Clip (1)", "Unmerged video can keep the source container")
         XCTAssertEqual(plannedName("Clip", .m4a), "Clip", "A video file must not block audio of the same name")
+
+        // Reveal in Finder for a `.fileExists` row selects the file that collided.
+        func colliding(_ baseName: String, _ fileType: MediaFileType) -> String? {
+            var options = DownloadOptions.default
+            options.fileType = fileType
+            return DownloadQueue.collidingMediaFile(baseName: baseName, options: options, in: tempDir)?.lastPathComponent
+        }
+        XCTAssertEqual(colliding("Clip", .mp4), "clip.WEBM")
+        XCTAssertEqual(colliding("song", .mp3), "Song.mp3")
+        XCTAssertNil(colliding("Song", .mp4))
     }
 
     func testOutputReservationsAreCaseInsensitiveAndUnicodeCanonicalized() {

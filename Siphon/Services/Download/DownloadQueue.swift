@@ -104,6 +104,20 @@ final class DownloadQueue: ObservableObject {
         }
     }
 
+    /// The file on disk that makes `mediaFileCollides` true, if any.
+    nonisolated static func collidingMediaFile(
+        baseName: String,
+        options: DownloadOptions,
+        in folder: URL,
+        fileManager: FileManager = .default
+    ) -> URL? {
+        let keys = Set(collisionExtensions(for: options).map { filenameCollisionKey("\(baseName).\($0)") })
+        let files = (try? fileManager.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)) ?? []
+        return files.first {
+            YtdlpService.isMediaFilePath($0.path) && keys.contains(filenameCollisionKey($0.lastPathComponent))
+        }
+    }
+
     private nonisolated static func collisionExtensions(for options: DownloadOptions) -> [String] {
         options.fileType.isVideo
             ? videoContainerExtensions
