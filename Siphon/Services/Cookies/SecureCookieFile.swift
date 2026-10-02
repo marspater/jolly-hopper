@@ -154,20 +154,24 @@ public final class SecureCookieFile: @unchecked Sendable {
         additionalCookies: [(name: String, value: String)] = [],
         additionalNetscapeLines: [String] = []
     ) throws -> SecureCookieFile {
-        guard let urlObj = URL(string: url), let host = urlObj.host, !host.isEmpty else {
+        guard let urlObj = URL(string: url), let rawHost = urlObj.host, !rawHost.isEmpty else {
+            throw SecureCookieError.creationFailed("Invalid URL or host: \(url)")
+        }
+        let cleanHost = sanitizeCookieToken(rawHost)
+        guard !cleanHost.isEmpty else {
             throw SecureCookieError.creationFailed("Invalid URL or host: \(url)")
         }
         guard let cookiesDir = CookieManager.getSecureTempCookiesDirectory() else {
             throw SecureCookieError.creationFailed("Could not access secure cookies directory")
         }
 
-        let defaultDomain = host.hasPrefix(".") ? host : ".\(host)"
+        let defaultDomain = cleanHost.hasPrefix(".") ? cleanHost : ".\(cleanHost)"
         let requireSecureTransport = urlObj.scheme?.lowercased() == "https"
         let tempCookiesURL = cookiesDir.appendingPathComponent("siphon_consolidated_cookies_\(UUID().uuidString).txt")
         let defaultExpiry = Int(Date().addingTimeInterval(86400 * 30).timeIntervalSince1970)
 
         var domains: [String] = [defaultDomain]
-        let lowerHost = host.lowercased()
+        let lowerHost = cleanHost.lowercased()
         if lowerHost.hasPrefix("www.") {
             domains.append(".\(lowerHost.dropFirst(4))")
         }
