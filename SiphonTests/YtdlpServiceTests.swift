@@ -2833,6 +2833,72 @@ final class YtdlpServiceTests: XCTestCase {
         }
     }
 
+    func testSafariCookieReaderParsesBinaryCookiesAndSkipsMalformedData() throws {
+        func le32(_ value: Int) -> [UInt8] { (0..<4).map { UInt8((value >> (8 * $0)) & 0xff) } }
+        func record(domain: String, name: String, value: String, flags: Int, expires: Date) -> [UInt8] {
+            let strings = [domain, name, "/", value].map { Array($0.utf8) + [0] }
+            var offsets: [Int] = []
+            var end = 56
+            for string in strings {
+                offsets.append(end)
+                end += string.count
+            }
+            let time = expires.timeIntervalSinceReferenceDate.bitPattern
+            return le32(end) + le32(1) + le32(flags) + le32(0) + offsets.flatMap(le32) + [UInt8](repeating: 0, count: 8)
+                + (0..<8).map { UInt8((time >> (8 * UInt64($0))) & 0xff) } + [UInt8](repeating: 0, count: 8)
+                + strings.flatMap { $0 }
+        }
+        let expires = Date(timeIntervalSinceReferenceDate: 820_000_000)
+        let records = [
+            record(domain: ".boyfriendtv.com", name: "remember", value: "token123", flags: 0x4209 | 4, expires: expires),
+            record(domain: "www.example.com", name: "plain", value: "v", flags: 0, expires: expires)
+        ]
+        var page: [UInt8] = [0, 0, 1, 0] + le32(records.count)
+        var offset = 8 + 4 * records.count + 4
+        for record in records {
+            page += le32(offset)
+            offset += record.count
+        }
+        page += le32(0) + records.flatMap { $0 }
+        let file = Array("cook".utf8) + le32(1).reversed() + le32(page.count).reversed() + page + [0, 0, 0, 0]
+
+        let cookies = SafariCookieReader.parse(Data(file))
+
+        XCTAssertEqual(cookies.map(\.name), ["remember", "plain"])
+        let remember = try XCTUnwrap(cookies.first)
+        XCTAssertEqual(remember.domain, ".boyfriendtv.com")
+        XCTAssertEqual(remember.value, "token123")
+        XCTAssertEqual(remember.path, "/")
+        XCTAssertTrue(remember.isSecure)
+        XCTAssertTrue(remember.isHTTPOnly)
+        XCTAssertEqual(remember.expiresDate, expires)
+        XCTAssertFalse(cookies[1].isSecure)
+
+        // Truncated or foreign data yields nothing rather than a crash.
+        XCTAssertTrue(SafariCookieReader.parse(Data(file.prefix(40))).isEmpty)
+        XCTAssertTrue(SafariCookieReader.parse(Data(Array("cook".utf8) + [0xff, 0xff, 0xff, 0xff])).isEmpty)
+        XCTAssertTrue(SafariCookieReader.parse(Data("not a cookie file".utf8)).isEmpty)
+    }
+
+    func testBoyfriendTVTakesTheSafariSignInButNotCloudflareCookies() {
+        func cookie(_ domain: String, _ name: String) -> HTTPCookie {
+            HTTPCookie(properties: [.domain: domain, .name: name, .value: "v", .path: "/"])!
+        }
+        let cookies = [
+            cookie(".boyfriendtv.com", "remember"),
+            cookie("www.boyfriend.tv", "session"),
+            cookie(".boyfriendtv.com", "cf_clearance"),
+            cookie(".boyfriendtv.com", "__cf_bm"),
+            cookie(".boyfriendtv.com", "_cfuvid"),
+            cookie(".notboyfriendtv.com", "remember"),
+            cookie(".example.com", "remember")
+        ]
+
+        let taken = YtdlpService.boyfriendTVSessionCookies(from: cookies)
+
+        XCTAssertEqual(taken.map { "\($0.domain) \($0.name)" }, [".boyfriendtv.com remember", "www.boyfriend.tv session"])
+    }
+
     func testBoyfriendTVRememberMeStartsTickedButKeepsTheUsersChoice() async throws {
         let configuration = WKWebViewConfiguration()
         configuration.websiteDataStore = .nonPersistent()

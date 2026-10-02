@@ -3600,6 +3600,33 @@ public struct DownloadResult: Sendable {
         )
     }
 
+    /// The user's BoyfriendTV cookies from Safari. A sign-in made there with "Remember
+    /// me" ticked is a persistent cookie Siphon can carry over, for when the site's
+    /// sign-in doesn't complete in Siphon's own window. Cloudflare's cookies stay out:
+    /// they are bound to Safari's fingerprint, and WebKit gets its own.
+    nonisolated static func boyfriendTVSessionCookies(from cookies: [HTTPCookie]) -> [HTTPCookie] {
+        cookies.filter { cookie in
+            let name = cookie.name.lowercased()
+            let host = cookie.domain.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "."))
+            return boyfriendTVCookieScope(for: host) != nil &&
+                !name.hasPrefix("cf_") && !name.hasPrefix("__cf") && name != "_cfuvid"
+        }
+    }
+
+    private func seedBoyfriendTVSafariSession() async {
+        let cookies = Self.boyfriendTVSessionCookies(from: SafariCookieReader.cookies())
+        guard !cookies.isEmpty else { return }
+        let store = boyfriendTVWebDataStore.httpCookieStore
+        for cookie in cookies {
+            await withCheckedContinuation { continuation in
+                store.setCookie(cookie) {
+                    continuation.resume()
+                }
+            }
+        }
+        LoggerService.shared.log("[BoyfriendTV] stage=webkit-session safari-cookies=\(cookies.count)", level: .debug)
+    }
+
     private func boyfriendTVWebViewDocumentHTML(_ webView: WKWebView) async -> String? {
         await withCheckedContinuation { continuation in
             webView.evaluateJavaScript("document.documentElement.outerHTML") { value, error in
@@ -3717,6 +3744,13 @@ public struct DownloadResult: Sendable {
                 to: navigationAction.request.url,
                 isMainFrame: navigationAction.targetFrame?.isMainFrame
             ) else {
+                // Host and frame only: paths and queries can carry tokens.
+                let url = navigationAction.request.url
+                let frame = navigationAction.targetFrame.map { $0.isMainFrame ? "main" : "sub" } ?? "popup"
+                LoggerService.shared.log(
+                    "[ProtectedSite] stage=webkit-navigation refused frame=\(frame) scheme=\(url?.scheme ?? "none") host=\(url?.host ?? "none")",
+                    level: .debug
+                )
                 decisionHandler(.cancel)
                 return
             }
@@ -3798,6 +3832,9 @@ public struct DownloadResult: Sendable {
         ))
 
         await seedBoyfriendTVWebKitCookies(rawCookies, for: url)
+        if configuredBrowserCookieSource() == "safari" {
+            await seedBoyfriendTVSafariSession()
+        }
 
         let webView = WKWebView(frame: NSRect(x: 0, y: 0, width: 1000, height: 760), configuration: configuration)
         let navigationDelegate = BoyfriendTVNavigationDelegate()
@@ -7540,7 +7577,7 @@ enum YtdlpError: LocalizedError {
         case .protectedSiteLoginRequired:
             // BoyfriendTV only. Browser sessions can't carry its sign-in: Safari never
             // saves the site's login cookie to disk.
-            return "BoyfriendTV shows this video only to signed-in members, and sign-in in Siphon's window didn't finish. Retry and sign in there; Siphon keeps the sign-in for later downloads."
+            return "BoyfriendTV shows this video only to signed-in members. Sign in at boyfriendtv.com in Safari with “Remember me” ticked, then retry: Siphon uses that sign-in. Signing in in Siphon's window also works when the site completes it there."
         case .safariCookiesFullDiskAccessRequired:
             return LanguageService.s("safari_fda_required")
         case .securityViolation(let message):
