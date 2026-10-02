@@ -43,6 +43,24 @@ final class SecureCookieFileTests: XCTestCase {
         XCTAssertTrue(content.contains("LOGIN_INFO\ttoken789"))
     }
 
+    func testSanitizesHostWithControlCharacters() throws {
+        // Crafted host with tab and newline characters
+        let malformedURL = "https://example.com\t\r\ninjected.org/video"
+        let cookie = try SecureCookieFile.create(
+            url: malformedURL,
+            rawCookies: "session=valid_token"
+        )
+        defer { cookie.cleanup() }
+
+        XCTAssertNoThrow(try cookie.validate())
+        let content = try String(contentsOf: cookie.fileURL, encoding: .utf8)
+        XCTAssertFalse(content.contains("\r"), "Netscape file must not contain raw carriage returns")
+        let lines = content.components(separatedBy: .newlines)
+        // Ensure host control characters were stripped and didn't create extra lines
+        XCTAssertTrue(content.contains("example.cominjected.org"))
+        XCTAssertEqual(lines.filter { !$0.isEmpty }.count, 2, "Must contain header line and single cookie entry")
+    }
+
     func testValidationRejectsEmptyOrInvalidFiles() throws {
         let tempDir = FileManager.default.temporaryDirectory
         let emptyURL = tempDir.appendingPathComponent("test_empty_\(UUID().uuidString).txt")

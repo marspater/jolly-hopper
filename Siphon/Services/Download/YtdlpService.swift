@@ -6985,7 +6985,7 @@ public struct DownloadResult: Sendable {
     func createTempCookiesFile(url: String, cookieName: String, cookieValue: String) -> URL? {
         guard let cookiesDir = CookieManager.getSecureTempCookiesDirectory() else { return nil }
         let tempCookiesURL = cookiesDir.appendingPathComponent("siphon_cookies_\(UUID().uuidString).txt")
-        let host = URL(string: url)?.host ?? ""
+        let host = sanitizeCookieToken(URL(string: url)?.host ?? "")
         let cleanName = sanitizeCookieToken(cookieName)
         let cleanValue = sanitizeCookieToken(cookieValue)
         guard !cleanName.isEmpty, !cleanValue.isEmpty else { return nil }
@@ -7002,7 +7002,9 @@ public struct DownloadResult: Sendable {
     }
 
     func createTempCookiesFileFromHeader(url: String, cookieHeader: String) -> URL? {
-        guard let urlObj = URL(string: url), let host = urlObj.host, !host.isEmpty else { return nil }
+        guard let urlObj = URL(string: url), let rawHost = urlObj.host, !rawHost.isEmpty else { return nil }
+        let host = sanitizeCookieToken(rawHost)
+        guard !host.isEmpty else { return nil }
         guard let cookiesDir = CookieManager.getSecureTempCookiesDirectory() else { return nil }
         let domain = host.hasPrefix(".") ? host : ".\(host)"
         let requireSecureTransport = urlObj.scheme?.lowercased() == "https"
