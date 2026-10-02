@@ -717,7 +717,7 @@ final class DownloadExecutor: ObservableObject {
             case .protectedSiteNeedsBrowserCookies:
                 return lang.s("browser_cookies_required")
             case .protectedSiteLoginRequired:
-                return lang.s("login_required")
+                return lang.s("site_sign_in_required")
             case .notFound:
                 return lang.s("ytdlp_not_found")
             case .parseError:

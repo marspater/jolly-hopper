@@ -59,6 +59,7 @@ class LoggerService: ObservableObject {
         "--2factor": "\"<2FACTOR>\"",
         "-2": "\"<2FACTOR>\"",
         "--token": "\"<TOKEN>\"",
+        "--login-with-token": "\"<TOKEN>\"",
         "--api-key": "\"<API_KEY>\"",
         "--client-certificate-password": "\"<PASSWORD>\"",
         "--client-certificate": "\"<CLIENT_CERT_REDACTED>\"",
