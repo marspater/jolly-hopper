@@ -2938,6 +2938,26 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertTrue(SafariCookieReader.parse(Data(file.prefix(40))).isEmpty)
         XCTAssertTrue(SafariCookieReader.parse(Data(Array("cook".utf8) + [0xff, 0xff, 0xff, 0xff])).isEmpty)
         XCTAssertTrue(SafariCookieReader.parse(Data("not a cookie file".utf8)).isEmpty)
+
+        // A page whose record table is corrupt is skipped without losing the pages after it.
+        let badPage: [UInt8] = [0, 0, 1, 0] + le32(1_000) + le32(0)
+        let threePages = Array("cook".utf8) + le32(3).reversed()
+            + [page.count, badPage.count, page.count].flatMap { le32($0).reversed() }
+            + page + badPage + page + [0, 0, 0, 0]
+        XCTAssertEqual(SafariCookieReader.parse(Data(threePages)).count, 4)
+
+        // A readable but corrupt or expired store falls through to the next store.
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let corrupt = directory.appendingPathComponent("corrupt")
+        let valid = directory.appendingPathComponent("valid")
+        try Data("cook garbage".utf8).write(to: corrupt)
+        try Data(file).write(to: valid)
+        let now = expires.addingTimeInterval(-60)
+        XCTAssertEqual(SafariCookieReader.cookies(now: now, files: [corrupt, valid]).map(\.name), ["remember", "plain"])
+        XCTAssertEqual(SafariCookieReader.cookies(now: now, files: [valid, corrupt]).count, 2)
+        XCTAssertTrue(SafariCookieReader.cookies(now: expires, files: [valid, corrupt]).isEmpty)
     }
 
     func testBoyfriendTVTakesTheSafariSignInButNotCloudflareCookies() {

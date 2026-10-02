@@ -155,6 +155,11 @@ struct PreferencesView: View {
         .siphonAdaptiveRendering()
         .background(PreferencesWindowConfigurator())
         .siphonWindowBackground()
+        .onReceive(NotificationCenter.default.publisher(for: .siphonShowPreferencesTab)) { notification in
+            if let tab = notification.object as? PreferenceTab {
+                selectedTab = tab
+            }
+        }
         .onChange(of: languageService.selectedLanguage) { _, newValue in
             if previousLanguage != nil && previousLanguage != newValue {
                 showLanguageChangeAlert = true
@@ -563,6 +568,7 @@ struct PreferencesView: View {
                 showCreatePresetSheet = true
             } label: {
                 Label(languageService.s("create_preset"), systemImage: "plus.circle")
+                    .foregroundColor(SiphonTheme.accentText)
             }
             .buttonStyle(.borderless)
         }
@@ -967,6 +973,10 @@ struct PreferencesView: View {
                 Button("View Debug Logs") {
                     DebugLogWindowManager.shared.showDebugLogWindow()
                 }
+                // Secondary push buttons and menus drop the window's accent tint:
+                // tinted, their label is accent text on tinted glass, which is
+                // hard to read in Dark Mode. Untinted they use the system label.
+                .tint(nil)
             }
         }
     }
@@ -1006,6 +1016,7 @@ struct PreferencesView: View {
                     Button(languageService.s("update_now")) {
                         updateYtdlp()
                     }
+                    .tint(nil)
                 }
             }
         }
@@ -1021,6 +1032,7 @@ struct PreferencesView: View {
                     }
                 }
                 .labelsHidden()
+                .tint(nil)
                 .accessibilityLabel(languageService.s("browser_cookies"))
                 
                 Text(languageService.s("browser_hint"))
@@ -1098,6 +1110,7 @@ struct PreferencesView: View {
                     }
                     .buttonStyle(.bordered)
                     .controlSize(.small)
+                    .tint(nil)
                     .disabled(isCheckingPermission)
 
                     Button(languageService.s("restart_siphon")) {
@@ -1105,6 +1118,7 @@ struct PreferencesView: View {
                     }
                     .buttonStyle(.bordered)
                     .controlSize(.small)
+                    .tint(nil)
                 }
 
                 permissionFeedbackView

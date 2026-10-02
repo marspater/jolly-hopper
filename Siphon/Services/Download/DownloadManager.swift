@@ -324,7 +324,8 @@ class DownloadManager: ObservableObject {
               download.status == .downloading ||
               download.status == .processing ||
               executor.hasActiveTask(for: download.id) {
-            if Task.isCancelled {
+            // After shutdown nothing will ever admit a queued download.
+            if Task.isCancelled || (isShuttingDown && !executor.hasActiveTask(for: download.id)) {
                 return
             }
             do {
@@ -621,6 +622,20 @@ class DownloadManager: ObservableObject {
         if !NSWorkspace.shared.open(path) {
             LoggerService.shared.log("Could not open \(path.lastPathComponent); it may have been moved or deleted.", level: .warning)
             NSSound.beep()
+        }
+    }
+
+    /// Reveals the file that blocked a `.fileExists` download, or its folder.
+    func revealExistingFile(for download: Download) {
+        // Same base name the executor checked for the collision.
+        let baseName = YtdlpService.sanitizeFilename(download.options.customFilename ?? download.title)
+        let options = download.options
+        let folder = options.saveFolder
+        Task {
+            let existing = await Task.detached {
+                DownloadQueue.collidingMediaFile(baseName: baseName, options: options, in: folder)
+            }.value
+            showInFinder([existing ?? folder.appendingPathComponent(baseName)])
         }
     }
 

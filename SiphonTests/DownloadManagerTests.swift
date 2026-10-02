@@ -336,6 +336,16 @@ final class DownloadManagerTests: XCTestCase {
         XCTAssertNotEqual(path1, path3)
     }
 
+    func testProcessDownloadReturnsAfterShutdown() async {
+        let manager = DownloadManager()
+        manager.shutdown()
+        let download = Download(url: "https://example.com/after-shutdown", options: .default)
+
+        await manager.processDownload(download)
+
+        XCTAssertEqual(download.status, .queued, "A shut-down manager never admits the download, and the wait must end")
+    }
+
     func testProcessDownloadExitsIfCancelledWhileQueued() async {
         let manager = DownloadManager()
         let options = DownloadOptions.default

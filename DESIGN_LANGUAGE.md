@@ -27,10 +27,10 @@ decoration for its own sake.
 - `Siphon/Extensions/Font+Geist.swift`: Geist and Geist Mono registrations plus
   semantic typography roles.
 - `Siphon/Views/Components/LiquidWaterWaveView.swift`: `StatusSegmentFill`, the
-  Home status segment background. Idle segments are flat, segments with items
-  get a static tint, and only live download progress animates (a liquid fill
-  whose width follows progress). Completed is the resting state: its icon is
-  green, but its segment stays flat.
+  Home status segment background. Only the Downloading segment is filled, and
+  only live download progress animates (a liquid fill whose width follows
+  progress). Completed and Failed are finished work: their icons are green or
+  red, but their segments stay flat.
 
 Do not introduce a second palette, spacing scale, radius scale, animation scale,
 or glass implementation in a feature view. Add a token to the shared source of
@@ -118,8 +118,16 @@ truth only when the value is genuinely reused or has semantic meaning.
 - Root windows and utility surfaces use `siphonWindowBackground()`. It supplies
   the material, the faint brand wash and the Siphon accent tint for native
   controls, so feature views do not re-tint toggles or pickers or add their own
-  backdrop. Apply it once per window, not to nested panes.
+  backdrop. Apply it once per window, not to nested panes. The accent tint is
+  for fills: toggles, selection, progress and prominent buttons. Secondary
+  native push buttons and pop-up menus set `.tint(nil)`; tinted, their label is
+  accent text on tinted glass, which is hard to read in Dark Mode. Dark Mode
+  uses regular rather than ultra-thin material, so a bright window behind does
+  not wash text out.
 - Content cards use `SiphonTheme.cardBackground` and matching border helpers.
+  Gradient borders draw through `.drawingGroup()`: as plain layers they are
+  rasterized on the CPU at the card's full size, which stalled fast scrolling
+  of long lists.
 - Interactive status/navigation surfaces may use `siphonGlassSurface()`, which
   opts into native `Glass.regular.interactive()` on macOS 26+ and preserves the
   adaptive Siphon material fallback on macOS 15–25.

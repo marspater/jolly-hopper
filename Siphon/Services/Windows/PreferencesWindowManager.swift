@@ -12,9 +12,13 @@ final class PreferencesWindowManager: NSObject, NSWindowDelegate {
         updateChecker: UpdateChecker,
         downloadManager: DownloadManager,
         appState: AppState,
-        initialTab: PreferencesView.PreferenceTab = .general
+        initialTab: PreferencesView.PreferenceTab? = nil
     ) {
         if let existingController = windowController, let existingWindow = existingController.window {
+            // An open window keeps its tab unless a caller asks for a specific one.
+            if let initialTab {
+                NotificationCenter.default.post(name: .siphonShowPreferencesTab, object: initialTab)
+            }
             if existingWindow.frame.height > 690 || existingWindow.frame.height < 646 {
                 var f = existingWindow.frame
                 f.size.height = 662
@@ -26,7 +30,7 @@ final class PreferencesWindowManager: NSObject, NSWindowDelegate {
             return
         }
         
-        let prefsView = PreferencesView(initialTab: initialTab)
+        let prefsView = PreferencesView(initialTab: initialTab ?? .general)
             .environmentObject(languageService)
             .environmentObject(updateChecker)
             .environmentObject(downloadManager)
@@ -67,4 +71,8 @@ final class PreferencesWindowManager: NSObject, NSWindowDelegate {
     func windowWillClose(_ _: Notification) {
         windowController = nil
     }
+}
+
+extension Notification.Name {
+    static let siphonShowPreferencesTab = Notification.Name("SiphonShowPreferencesTab")
 }
