@@ -140,49 +140,48 @@ public final class UpdateChecker: ObservableObject {
             manifestURL = nil
             manifestSigURL = nil
 
-            if let assets = json["assets"] as? [[String: Any]] {
-                    if let dlpAsset = Self.installerAsset(in: assets, tag: trimmedTag),
-                       let downloadUrlStr = dlpAsset["browser_download_url"] as? String {
-                        downloadURL = URL(string: downloadUrlStr)
-                        let assetName = (dlpAsset["name"] as? String) ?? ""
-                        downloadAssetName = assetName
-                        expectedChecksum = Self.parseGitHubAssetSHA256(dlpAsset["digest"] as? String)
+            if let assets = json["assets"] as? [[String: Any]],
+               let dlpAsset = Self.installerAsset(in: assets, tag: trimmedTag),
+               let downloadUrlStr = dlpAsset["browser_download_url"] as? String {
+                downloadURL = URL(string: downloadUrlStr)
+                let assetName = (dlpAsset["name"] as? String) ?? ""
+                downloadAssetName = assetName
+                expectedChecksum = Self.parseGitHubAssetSHA256(dlpAsset["digest"] as? String)
 
-                        let lowerAssetName = assetName.lowercased()
-                        if let sumAsset = assets.first(where: {
-                            let name = ($0["name"] as? String)?.lowercased() ?? ""
-                            return name == "\(lowerAssetName).sha256" ||
-                                   name == "\(lowerAssetName).sha256.txt" ||
-                                   name == "\(lowerAssetName).sha256sum" ||
-                                   name == "sha256sums.txt" ||
-                                   name == "checksums.txt" ||
-                                   name == "sha256sum.txt" ||
-                                   name == "checksums.sha256"
-                        }), let sumUrlStr = sumAsset["browser_download_url"] as? String {
-                            checksumURL = URL(string: sumUrlStr)
-                        }
-
-                        if let manifestAsset = assets.first(where: {
-                            let name = ($0["name"] as? String)?.lowercased() ?? ""
-                            return name == "release-manifest.json" ||
-                                   name == "manifest.json" ||
-                                   name == "release_manifest.json"
-                        }), let mUrlStr = manifestAsset["browser_download_url"] as? String {
-                            manifestURL = URL(string: mUrlStr)
-                        }
-
-                        if let sigAsset = assets.first(where: {
-                            let name = ($0["name"] as? String)?.lowercased() ?? ""
-                            return name == "release-manifest.json.sig" ||
-                                   name == "manifest.json.sig" ||
-                                   name == "release-manifest.sig" ||
-                                   name == "manifest.sig" ||
-                                   name == "release_manifest.json.sig"
-                        }), let sUrlStr = sigAsset["browser_download_url"] as? String {
-                            manifestSigURL = URL(string: sUrlStr)
-                        }
-                    }
+                let lowerAssetName = assetName.lowercased()
+                if let sumAsset = assets.first(where: {
+                    let name = ($0["name"] as? String)?.lowercased() ?? ""
+                    return name == "\(lowerAssetName).sha256" ||
+                           name == "\(lowerAssetName).sha256.txt" ||
+                           name == "\(lowerAssetName).sha256sum" ||
+                           name == "sha256sums.txt" ||
+                           name == "checksums.txt" ||
+                           name == "sha256sum.txt" ||
+                           name == "checksums.sha256"
+                }), let sumUrlStr = sumAsset["browser_download_url"] as? String {
+                    checksumURL = URL(string: sumUrlStr)
                 }
+
+                if let manifestAsset = assets.first(where: {
+                    let name = ($0["name"] as? String)?.lowercased() ?? ""
+                    return name == "release-manifest.json" ||
+                           name == "manifest.json" ||
+                           name == "release_manifest.json"
+                }), let mUrlStr = manifestAsset["browser_download_url"] as? String {
+                    manifestURL = URL(string: mUrlStr)
+                }
+
+                if let sigAsset = assets.first(where: {
+                    let name = ($0["name"] as? String)?.lowercased() ?? ""
+                    return name == "release-manifest.json.sig" ||
+                           name == "manifest.json.sig" ||
+                           name == "release-manifest.sig" ||
+                           name == "manifest.sig" ||
+                           name == "release_manifest.json.sig"
+                }), let sUrlStr = sigAsset["browser_download_url"] as? String {
+                    manifestSigURL = URL(string: sUrlStr)
+                }
+            }
 
             if !hasUpdate {
                     showUpToDateMessage = true
