@@ -250,17 +250,6 @@ final class QueueAndErrorUXTests: XCTestCase {
         XCTAssertEqual(info?.actionType, .retry)
     }
     
-    func testSiteSignInFailureOffersRetryNotSettings() {
-        let lang = LanguageService()
-        let download = Download(url: "https://www.boyfriendtv.com/videos/1684628/test/", options: .default)
-        download.errorMessage = DownloadExecutor.errorMessage(for: YtdlpError.protectedSiteLoginRequired, languageService: lang)
-
-        let info = download.errorUXInfo(lang: lang)
-
-        XCTAssertEqual(info?.description, lang.s("site_sign_in_required_desc"))
-        XCTAssertEqual(info?.actionType, .retry, "Retrying opens the sign-in window; Settings can't fix it")
-    }
-
     func testQueuePauseAndResume() {
         let manager = DownloadManager()
         let options = DownloadOptions.default

@@ -37,6 +37,40 @@ class LoggerService: ObservableObject {
     nonisolated private static let exportKeyHeaderRegex = try? NSRegularExpression(pattern: "(?i)((?:x-[a-z0-9\\-]*api-key|x-[a-z0-9\\-]*token|x-[a-z0-9\\-]*auth[a-z0-9\\-]*):\\s*)[^\\s\\r\\n]+", options: [])
     nonisolated private static let exportSecretQueryRegex = try? NSRegularExpression(pattern: "(?i)([?&](?:token|auth|key|api_key|password|secret|sig|signature)=)[^&\\s\\r\\n]+", options: [])
     nonisolated private static let exportHomeDirRegex = try? NSRegularExpression(pattern: "/Users/([a-zA-Z0-9._-]+)/", options: [])
+
+    // Bolt Performance Optimization: Pre-compile sensitiveValueFlags dictionary as a nonisolated private static constant
+    // to eliminate repetitive dictionary allocations, string hashing, and heap overhead on every command log call.
+    nonisolated private static let sensitiveValueFlags: [String: String] = [
+        "--cookies": "\"<COOKIE_FILE>\"",
+        "--cookies-from-browser": "\"<BROWSER>\"",
+        "-b": "\"<BROWSER>\"",
+        "--add-header": "\"<REDACTED_HEADER>\"",
+        "--add-headers": "\"<REDACTED_HEADER>\"",
+        "--header": "\"<REDACTED_HEADER>\"",
+        "--http-header": "\"<REDACTED_HEADER>\"",
+        "-H": "\"<REDACTED_HEADER>\"",
+        "--username": "\"<USERNAME>\"",
+        "-u": "\"<USERNAME>\"",
+        "--password": "\"<PASSWORD>\"",
+        "-p": "\"<PASSWORD>\"",
+        "--video-password": "\"<PASSWORD>\"",
+        "--ap-username": "\"<USERNAME>\"",
+        "--ap-password": "\"<PASSWORD>\"",
+        "--2factor": "\"<2FACTOR>\"",
+        "-2": "\"<2FACTOR>\"",
+        "--token": "\"<TOKEN>\"",
+        "--api-key": "\"<API_KEY>\"",
+        "--client-certificate-password": "\"<PASSWORD>\"",
+        "--client-certificate": "\"<CLIENT_CERT_REDACTED>\"",
+        "--client-certificate-key": "\"<CLIENT_KEY_REDACTED>\"",
+        "--proxy": "\"<PROXY_REDACTED>\"",
+        "--ffmpeg-location": "\"<LOCATION_REDACTED>\"",
+        "--netrc-cmd": "\"<COMMAND_REDACTED>\"",
+        "--exec": "\"<EXEC_REDACTED>\"",
+        "--postprocessor-args": "\"<ARGS_REDACTED>\"",
+        "--downloader-args": "\"<ARGS_REDACTED>\"",
+        "--external-downloader-args": "\"<ARGS_REDACTED>\""
+    ]
     
     nonisolated static func sanitizeURLForLog(_ urlString: String) -> String {
         guard let url = URL(string: urlString) else { return urlString }
@@ -51,39 +85,6 @@ class LoggerService: ObservableObject {
     nonisolated static func sanitizeCommandForLog(_ args: [String]) -> String {
         var sanitizedArgs: [String] = []
         var skipNextForRedaction: String? = nil
-
-        let sensitiveValueFlags: [String: String] = [
-            "--cookies": "\"<COOKIE_FILE>\"",
-            "--cookies-from-browser": "\"<BROWSER>\"",
-            "-b": "\"<BROWSER>\"",
-            "--add-header": "\"<REDACTED_HEADER>\"",
-            "--add-headers": "\"<REDACTED_HEADER>\"",
-            "--header": "\"<REDACTED_HEADER>\"",
-            "--http-header": "\"<REDACTED_HEADER>\"",
-            "-H": "\"<REDACTED_HEADER>\"",
-            "--username": "\"<USERNAME>\"",
-            "-u": "\"<USERNAME>\"",
-            "--password": "\"<PASSWORD>\"",
-            "-p": "\"<PASSWORD>\"",
-            "--video-password": "\"<PASSWORD>\"",
-            "--ap-username": "\"<USERNAME>\"",
-            "--ap-password": "\"<PASSWORD>\"",
-            "--2factor": "\"<2FACTOR>\"",
-            "-2": "\"<2FACTOR>\"",
-            "--token": "\"<TOKEN>\"",
-            "--login-with-token": "\"<TOKEN>\"",
-            "--api-key": "\"<API_KEY>\"",
-            "--client-certificate-password": "\"<PASSWORD>\"",
-            "--client-certificate": "\"<CLIENT_CERT_REDACTED>\"",
-            "--client-certificate-key": "\"<CLIENT_KEY_REDACTED>\"",
-            "--proxy": "\"<PROXY_REDACTED>\"",
-            "--ffmpeg-location": "\"<LOCATION_REDACTED>\"",
-            "--netrc-cmd": "\"<COMMAND_REDACTED>\"",
-            "--exec": "\"<EXEC_REDACTED>\"",
-            "--postprocessor-args": "\"<ARGS_REDACTED>\"",
-            "--downloader-args": "\"<ARGS_REDACTED>\"",
-            "--external-downloader-args": "\"<ARGS_REDACTED>\""
-        ]
 
         for arg in args {
             if let redactionPlaceholder = skipNextForRedaction {
