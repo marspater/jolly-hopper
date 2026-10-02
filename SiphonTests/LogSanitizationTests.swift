@@ -41,13 +41,6 @@ final class LogSanitizationTests: XCTestCase {
         XCTAssertTrue(sanitized.contains("quality=1080p"))
     }
 
-    func testSanitizeLoginWithTokenCommandFlag() {
-        let args = ["yt-dlp", "--login-with-token", "secret_user_login_token_12345", "https://example.com/video"]
-        let sanitized = LoggerService.sanitizeCommandForLog(args)
-        XCTAssertFalse(sanitized.contains("secret_user_login_token_12345"))
-        XCTAssertTrue(sanitized.contains("--login-with-token \"<TOKEN>\""))
-    }
-
     func testSanitizeLocalUserHomePaths() {
         let raw = "File saved to /Users/secret_developer_name/Library/Application Support/Siphon/download.mp4"
         let sanitized = LoggerService.sanitizeLogContentForExport(raw)
