@@ -98,7 +98,6 @@ class LanguageService: ObservableObject {
         "cloudflare_blocked": "Blocked by anti-bot protection. Siphon could not complete the browser challenge automatically.",
         "recu_verification_title": "recu.me — complete the check or sign in; Siphon continues automatically",
         "site_verification_title": "%@ — complete the check; Siphon continues automatically",
-        "site_sign_in_title": "%@ — sign in to watch this video; Siphon continues automatically",
         "site_play_title": "%@ — complete the check or start the video; Siphon continues automatically",
         "site_sign_in_required": "This video is for signed-in members. Sign in to the site in Safari with “Remember me” ticked, then retry.",
         "site_sign_in_required_desc": "Members only: sign in in Safari with “Remember me”, then retry",
