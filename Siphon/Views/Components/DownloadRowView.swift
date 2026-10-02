@@ -290,6 +290,7 @@ struct DownloadRowView: View {
                             }
                             .buttonStyle(.bordered)
                             .controlSize(.small)
+                            .tint(nil)
                             
                         case .changeFolder:
                             Button {
@@ -310,6 +311,7 @@ struct DownloadRowView: View {
                             }
                             .buttonStyle(.bordered)
                             .controlSize(.small)
+                            .tint(nil)
                             
                         case .noAction:
                             EmptyView()
@@ -903,6 +905,17 @@ struct FileThumbnailView: View {
                 .buttonStyle(.siphonGhost)
                 .help(languageService.s("download_new_name"))
                 .accessibilityLabel(languageService.s("download_new_name"))
+
+                Button {
+                    downloadManager.revealExistingFile(for: download)
+                } label: {
+                    Image(systemName: "folder")
+                        .font(.system(size: 15, weight: .regular))
+                        .foregroundColor(.secondary)
+                }
+                .buttonStyle(.siphonIcon(size: 28))
+                .help(languageService.s("reveal_in_finder"))
+                .accessibilityLabel(languageService.s("reveal_in_finder"))
             }
         }
     }
@@ -1040,6 +1053,12 @@ struct FileThumbnailView: View {
                 downloadManager.resumeWithNewName(download)
             } label: {
                 Label(languageService.s("download_new_name"), systemImage: "plus.square.on.square.fill")
+            }
+
+            Button {
+                downloadManager.revealExistingFile(for: download)
+            } label: {
+                Label(languageService.s("show_in_finder"), systemImage: "folder")
             }
             
             Button {
