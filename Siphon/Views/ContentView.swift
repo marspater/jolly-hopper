@@ -172,7 +172,27 @@ struct ContentView: View {
             .accessibilityLabel(languageService.s("toggle_sidebar"))
         }
 
-        ToolbarItemGroup(placement: .primaryAction) {
+        // The sidebar starts hidden, so list pages need their own way home.
+        if appState.selectedNavItem != .home {
+            ToolbarItem(placement: .navigation) {
+                Button {
+                    appState.selectedNavItem = .home
+                } label: {
+                    Label(languageService.s("back_to_home"), systemImage: "chevron.left")
+                }
+                .keyboardShortcut("[", modifiers: .command)
+                .help(languageService.s("back_to_home"))
+                .accessibilityLabel(languageService.s("back_to_home"))
+            }
+        }
+
+        // Actions sit at the trailing edge, apart from the navigation buttons.
+        // On macOS .primaryAction is leading, which crowded the two groups.
+        if #available(macOS 26.0, *) {
+            ToolbarSpacer(.flexible)
+        }
+
+        ToolbarItemGroup(placement: .automatic) {
             if (appState.selectedNavItem == .downloading || appState.selectedNavItem == .queued || appState.selectedNavItem == .home) &&
                 (downloadManager.downloadingCount > 0 || downloadManager.queuedCount > 0) {
                 Button {
@@ -425,19 +445,22 @@ struct HomeView: View {
             .padding(.vertical, SiphonTheme.spacing12)
         }
         .background(
+            // Runs under the transparent toolbar so the wash fades out on its own
+            // instead of stopping at the safe-area edge.
             GeometryReader { proxy in
                 RadialGradient(
                     gradient: Gradient(colors: [
-                        SiphonTheme.accent.opacity(0.12),
+                        SiphonTheme.accent.opacity(0.10),
                         SiphonTheme.accent.opacity(0.03),
                         Color.clear
                     ]),
-                    center: UnitPoint(x: 0.5, y: 0.20),
+                    center: UnitPoint(x: 0.5, y: 0.25),
                     startRadius: 20,
-                    endRadius: max(proxy.size.width * 0.45, 380)
+                    endRadius: max(proxy.size.width * 0.5, 420)
                 )
-                .allowsHitTesting(false)
             }
+            .ignoresSafeArea()
+            .allowsHitTesting(false)
         )
     }
     
@@ -648,13 +671,13 @@ struct StatusSegmentButton: View {
             appState.selectedNavItem = item
         } label: {
             ZStack {
-                // Completed is the resting state: its icon turns green, but the
-                // segment stays flat so finished work never glows.
+                // Finished work never glows: Completed and Failed keep a colored
+                // icon on a flat segment. Only in-flight work is filled.
                 StatusSegmentFill(
                     color: color,
                     progress: item == .downloading ? ringProgress : nil,
                     isHovered: isHovered,
-                    isActive: isActive && item != .completed
+                    isActive: isActive && item == .downloading
                 )
                 .zIndex(0)
 

@@ -170,6 +170,7 @@ struct MenuBarView: View {
             .pickerStyle(.menu)
             .controlSize(.small)
             .labelsHidden()
+            .tint(nil)
             .accessibilityLabel(languageService.s("menubar_preset"))
         }
     }

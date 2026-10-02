@@ -651,7 +651,7 @@ struct AddDownloadView: View {
             if isLoadingPlaylist {
                 ProgressView().controlSize(.small)
             } else {
-                Button(languageService.s("load_playlist")) { loadPlaylist() }.buttonStyle(.bordered)
+                Button(languageService.s("load_playlist")) { loadPlaylist() }.buttonStyle(.bordered).tint(nil)
             }
         }
         .padding()
@@ -668,6 +668,7 @@ struct AddDownloadView: View {
                     downloadMode = .single
                 }
                 .buttonStyle(.link)
+                .foregroundColor(SiphonTheme.accentText)
             }
 
             HStack(spacing: 12) {
@@ -1390,6 +1391,7 @@ struct AddDownloadView: View {
                         }
                         .buttonStyle(.bordered)
                         .controlSize(.small)
+                        .tint(nil)
                     } else {
                         Button {
                             PreferencesWindowManager.shared.showPreferencesWindow(

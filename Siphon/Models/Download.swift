@@ -203,7 +203,17 @@ class Download: ObservableObject, Identifiable {
         let headline: String
         let description: String
         let actionType: ErrorActionType
-        let rawError: String
+        /// Unsanitized log text. Rows build this on every redraw, while the
+        /// sanitized copy is needed only when the details are shown or copied.
+        private let unsanitizedError: String
+        var rawError: String { LoggerService.sanitizeDiagnosticText(unsanitizedError) }
+
+        init(headline: String, description: String, actionType: ErrorActionType, rawError: String) {
+            self.headline = headline
+            self.description = description
+            self.actionType = actionType
+            self.unsanitizedError = rawError
+        }
     }
 
     func errorUXInfo(lang: LanguageService) -> ErrorUXInfo? {
@@ -212,7 +222,7 @@ class Download: ObservableObject, Identifiable {
         }
         
         let lower = error.lowercased()
-        let rawError = LoggerService.sanitizeDiagnosticText(log.isEmpty ? error : log)
+        let rawError = log.isEmpty ? error : log
         
         let isYouTube = url.lowercased().contains("youtube.com") || url.lowercased().contains("youtu.be")
         let isYouTubeSignIn = isYouTube && lower.contains("sign in to confirm")

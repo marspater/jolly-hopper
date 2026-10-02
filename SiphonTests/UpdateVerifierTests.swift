@@ -208,6 +208,16 @@ final class UpdateVerifierTests: XCTestCase {
         XCTAssertEqual(zip.pathExtension.lowercased(), "zip")
     }
 
+    func testInstallerAssetFollowsReleaseNameContract() {
+        func asset(_ name: String) -> [String: Any] { ["name": name, "browser_download_url": "https://github.com/\(name)"] }
+        let release = [asset("Siphon-v5.5.0.dSYM.zip"), asset("helper.zip"), asset("Siphon-v5.5.0.zip"), asset("Siphon-v5.5.0.dmg")]
+
+        XCTAssertEqual(UpdateChecker.installerAsset(in: release, tag: "v5.5.0")?["name"] as? String, "Siphon-v5.5.0.dmg")
+        XCTAssertEqual(UpdateChecker.installerAsset(in: Array(release.prefix(3)), tag: "v5.5.0")?["name"] as? String, "Siphon-v5.5.0.zip")
+        XCTAssertNil(UpdateChecker.installerAsset(in: Array(release.prefix(2)), tag: "v5.5.0"))
+        XCTAssertNil(UpdateChecker.installerAsset(in: release, tag: "v5.6.0"), "An archive from another release is never picked")
+    }
+
     func testChecksumParserRequiresMatchingAssetAndValidSHA256() {
         let hash = String(repeating: "a", count: 64)
         let manifest = """
