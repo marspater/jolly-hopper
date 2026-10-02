@@ -69,6 +69,14 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertTrue(allows("https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/g/turnstile/if/ov2/", mainFrame: false))
         XCTAssertTrue(allows("about:blank", mainFrame: false))
         XCTAssertFalse(allows("about:blank", mainFrame: true))
+        // The sign-in form's reCAPTCHA widget and its image challenge.
+        XCTAssertTrue(allows("https://www.google.com/recaptcha/api2/anchor?ar=1&k=key&size=normal", mainFrame: false))
+        XCTAssertTrue(allows("https://www.google.com/recaptcha/api2/bframe?hl=en&k=key", mainFrame: false))
+        XCTAssertTrue(allows("https://www.recaptcha.net/recaptcha/enterprise/anchor?k=key", mainFrame: false))
+        XCTAssertFalse(allows("https://www.google.com/recaptcha/api2/anchor?k=key", mainFrame: true))
+        XCTAssertFalse(allows("http://www.google.com/recaptcha/api2/anchor?k=key", mainFrame: false))
+        XCTAssertFalse(allows("https://www.google.com/search?q=x", mainFrame: false))
+        XCTAssertFalse(allows("https://accounts.google.com/recaptcha/x", mainFrame: false))
 
         XCTAssertFalse(allows("https://challenges.cloudflare.com/", mainFrame: true), "The challenge widget may not replace the page")
         XCTAssertFalse(allows("https://ads.example.com/frame", mainFrame: false))
@@ -2750,6 +2758,335 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertTrue(renderedLoads.value[0].path.contains("/videos/1710869"))
     }
 
+    func testBoyfriendTVLoginPageFallsBackToSignedInWebKitSession() async throws {
+        UserDefaults.standard.set("none", forKey: UserDefaultsKeys.browserForCookies)
+        defer { UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.browserForCookies) }
+
+        // Safari keeps the login in a session cookie that cookie import never sees,
+        // so every non-WebKit stage gets the login page without any 403.
+        let stream = "https://cdn.boyfriendtv.com/key=member/media=hls4A/multi=854x480:v480/2026-10/_TPL_.mp4"
+        let login = "<html><body><p>To watch this video please <a href='/login'>login</a></p></body></html>"
+        let renderedLoads = TestBox<[URL]>([])
+        let dumpedPages = TestBox<[String]>([])
+        service.installedBrowsersProvider = { [] }
+
+        service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
+            if args.contains("--dump-pages") {
+                dumpedPages.value.append(args.last ?? "")
+                return Data(login.utf8).base64EncodedString()
+            }
+            if args.contains("--dump-json") {
+                return "{\"id\":\"1684628\",\"title\":\"Members test\"}"
+            }
+            return "{}"
+        })
+        // The signed-in page still carries the login notice in its i18n strings.
+        service.boyfriendTVRenderedPageLoader = { url in
+            renderedLoads.value.append(url)
+            return "<html><body><script>const messages = {loginProtected: \"To watch this video please Login\"}; var hlsAuto = \"\(stream)\";</script></body></html>"
+        }
+
+        let info = try await service.fetchInfo(
+            url: "https://www.boyfriendtv.com/videos/1684628/test/"
+        )
+
+        XCTAssertEqual(info.manifestUrl, stream)
+        XCTAssertEqual(renderedLoads.value.count, 1)
+        // A members-only page goes straight to WebKit: the mirror can't sign in either.
+        XCTAssertEqual(dumpedPages.value, ["https://www.boyfriendtv.com/videos/1684628/"])
+    }
+
+    func testBoyfriendTVUnfinishedSignInStopsBeforeEmbedWindows() async throws {
+        UserDefaults.standard.set("none", forKey: UserDefaultsKeys.browserForCookies)
+        defer { UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.browserForCookies) }
+        service.installedBrowsersProvider = { [] }
+
+        let login = "<html><body><p>To watch this video please <a href='/login'>login</a></p><iframe src='/embed/1684628/'></iframe></body></html>"
+        let renderedLoads = TestBox<[URL]>([])
+        service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
+            if args.contains("--dump-pages") {
+                return Data(login.utf8).base64EncodedString() + "\nERROR: HTTP Error 403: Forbidden"
+            }
+            return "{}"
+        })
+        // The user closed the sign-in window, or it timed out: still the login page.
+        service.boyfriendTVRenderedPageLoader = { url in
+            renderedLoads.value.append(url)
+            return login
+        }
+
+        do {
+            _ = try await service.fetchInfo(url: "https://www.boyfriendtv.com/es/videos/1684628/menl0ver09/")
+            XCTFail("Expected the sign-in error")
+        } catch YtdlpError.protectedSiteLoginRequired {
+            // One window, not one more per embed.
+            XCTAssertEqual(renderedLoads.value.map(\.path), ["/videos/1684628"])
+        }
+    }
+
+    func testBoyfriendTVSignInWindowKeepsAccountPagesOpen() {
+        for path in ["/login/", "/login-router/", "/registration/", "/es/lost-password/", "/reset-password/abc"] {
+            XCTAssertTrue(YtdlpService.isBoyfriendTVAccountPath(path), path)
+        }
+        for path in ["/", "/es/", "/videos/1684628/", "/es/videos/1684628/menl0ver09/", "/logout/"] {
+            XCTAssertFalse(YtdlpService.isBoyfriendTVAccountPath(path), path)
+        }
+    }
+
+    func testBoyfriendTVRememberMeStartsTickedButKeepsTheUsersChoice() async throws {
+        let configuration = WKWebViewConfiguration()
+        configuration.websiteDataStore = .nonPersistent()
+        configuration.userContentController.addUserScript(WKUserScript(
+            source: YtdlpService.boyfriendTVRememberMeScript,
+            injectionTime: .atDocumentEnd,
+            forMainFrameOnly: true
+        ))
+        let webView = WKWebView(frame: .zero, configuration: configuration)
+        webView.loadHTMLString(
+            "<form><input id='login' name='login'><input type='checkbox' value='1' name='rememberMe' id='rememberMe'></form>",
+            baseURL: URL(string: "https://www.boyfriendtv.com/login/")
+        )
+
+        var ticked = false
+        for _ in 0..<50 where !ticked {
+            ticked = (try? await webView.evaluateJavaScript("document.getElementById('rememberMe').checked")) as? Bool ?? false
+            if !ticked { try await Task.sleep(nanoseconds: 100_000_000) }
+        }
+        XCTAssertTrue(ticked, "Remember me must start ticked so the sign-in outlives the app")
+
+        let afterUntick = try await webView.evaluateJavaScript("""
+            const box = document.getElementById('rememberMe');
+            box.checked = false;
+            box.dispatchEvent(new Event('change', { bubbles: true }));
+            document.getElementById('login').dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
+            box.closest('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+            box.checked;
+            """)
+        XCTAssertEqual(afterUntick as? Bool, false, "A box the user unticked stays unticked")
+    }
+
+    func testWebKitSessionsRunOneAtATimeAndCancelledWaitersLeave() async throws {
+        let events = TestBox<[String]>([])
+        let service = self.service!
+        let first = Task {
+            try await service.withExclusiveWebKitSession {
+                events.value.append("a-start")
+                try await Task.sleep(nanoseconds: 300_000_000)
+                events.value.append("a-end")
+            }
+        }
+        while !events.value.contains("a-start") { await Task.yield() }
+
+        let second = Task {
+            try await service.withExclusiveWebKitSession {
+                events.value.append("b-run")
+            }
+        }
+        let cancelled = Task {
+            do {
+                try await service.withExclusiveWebKitSession { events.value.append("c-run") }
+            } catch is CancellationError {
+                events.value.append("c-cancelled")
+            }
+        }
+        try await Task.sleep(nanoseconds: 50_000_000)
+        cancelled.cancel()
+        try await cancelled.value
+        try await first.value
+        try await second.value
+
+        XCTAssertEqual(events.value, ["a-start", "c-cancelled", "a-end", "b-run"])
+        // Released: the next session starts at once.
+        try await service.withExclusiveWebKitSession { events.value.append("d-run") }
+        XCTAssertEqual(events.value.last, "d-run")
+    }
+
+    func testCapturedStreamAcceptsOnlyPlainMediaURLs() {
+        let frame = "https://playmogo.com/e/kaigmohs3gpb"
+        XCTAssertNotNil(YtdlpService.capturedStream(url: "https://s355ml.cloudatacdn.com/u5kj/qb0x~0mv?token=t&expiry=1", frameURL: frame))
+        XCTAssertNotNil(YtdlpService.capturedStream(url: "https://hanerix.com/stream/a/b/1/2/master.m3u8", frameURL: frame))
+        XCTAssertNil(YtdlpService.capturedStream(url: "blob:https://playmogo.com/1", frameURL: frame))
+        XCTAssertNil(YtdlpService.capturedStream(url: "file:///etc/passwd", frameURL: frame))
+        XCTAssertNil(YtdlpService.capturedStream(url: "https://user:pass@cdn.example.com/v.mp4", frameURL: frame))
+        XCTAssertNil(YtdlpService.capturedStream(url: "https://ads.example.com/vast/preroll.mp4", frameURL: frame))
+        XCTAssertNil(YtdlpService.capturedStream(url: "https://cdn.example.com/v.mp4", frameURL: "about:blank"))
+    }
+
+    func testBrowserCapturePageStaysOnItsSiteWhileFramesLoadPlayers() {
+        func allows(_ url: String, mainFrame: Bool?) -> Bool {
+            YtdlpService.BrowserCaptureNavigationDelegate.allowsNavigation(
+                to: URL(string: url),
+                isMainFrame: mainFrame,
+                siteHost: "gayteam.club"
+            )
+        }
+        XCTAssertTrue(allows("https://gayteam.club/41596-x.html?__cf_chl_tk=1", mainFrame: true))
+        XCTAssertTrue(allows("https://www.gayteam.club/41596-x.html", mainFrame: true))
+        XCTAssertFalse(allows("https://turnhub.net/?affid=1", mainFrame: true), "An ad must not replace the page")
+        XCTAssertFalse(allows("https://gayteam.club.evil.com/", mainFrame: true))
+        XCTAssertFalse(allows("https://playmogo.com/e/1", mainFrame: nil), "Popups are refused")
+        XCTAssertTrue(allows("https://playmogo.com/e/kaigmohs3gpb", mainFrame: false))
+        XCTAssertTrue(allows("https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/", mainFrame: false))
+        XCTAssertTrue(allows("about:srcdoc", mainFrame: false))
+        XCTAssertFalse(allows("javascript:alert(1)", mainFrame: false))
+        XCTAssertFalse(allows("file:///etc/passwd", mainFrame: false))
+    }
+
+    func testBrowserCaptureScriptStartsLazyPlayersAndReportsVideoSources() async throws {
+        final class Collector: NSObject, WKScriptMessageHandler {
+            var urls: [String] = []
+            func userContentController(_ _: WKUserContentController, didReceive message: WKScriptMessage) {
+                if let url = (message.body as? [String: Any])?["url"] as? String { urls.append(url) }
+            }
+        }
+        let collector = Collector()
+        let configuration = WKWebViewConfiguration()
+        configuration.websiteDataStore = .nonPersistent()
+        configuration.userContentController.add(collector, name: "siphonCapture")
+        configuration.userContentController.addUserScript(WKUserScript(
+            source: YtdlpService.browserCaptureScript,
+            injectionTime: .atDocumentEnd,
+            forMainFrameOnly: false
+        ))
+        defer { configuration.userContentController.removeScriptMessageHandler(forName: "siphonCapture") }
+        let webView = WKWebView(frame: .zero, configuration: configuration)
+        webView.loadHTMLString(
+            """
+            <div class="hidden"><iframe id="player" data-src="https://127.0.0.1:9/e/abc"></iframe>
+            <iframe id="script" data-src="javascript:alert(1)"></iframe></div>
+            <video src="https://127.0.0.1:9/stream/qb0x~0mv?token=t"></video>
+            """,
+            baseURL: URL(string: "https://gayteam.club/41596-x.html")
+        )
+
+        for _ in 0..<50 where collector.urls.isEmpty {
+            try await Task.sleep(nanoseconds: 100_000_000)
+        }
+        XCTAssertEqual(collector.urls, ["https://127.0.0.1:9/stream/qb0x~0mv?token=t"])
+        let sources = try await webView.evaluateJavaScript(
+            "[document.getElementById('player').getAttribute('src'), document.getElementById('script').getAttribute('src')].join('|')"
+        )
+        XCTAssertEqual(sources as? String, "https://127.0.0.1:9/e/abc|", "Only http(s) lazy players start")
+    }
+
+    func testGayteamPrefersDirectFilesSkipsShortClipsAndFallsBackToHLS() async throws {
+        let ad = YtdlpService.CapturedStream(url: "https://cdn.adnet.example/creative/15s.mp4", frameURL: "https://cdntop.space/e/YU9R")
+        let dood = YtdlpService.CapturedStream(
+            url: "https://s355ml.cloudatacdn.com/u5kj/qb0x7ccr7j~0mvKM3p1GH?token=t&expiry=1",
+            frameURL: "https://playmogo.com/e/kaigmohs3gpb"
+        )
+        let hls = YtdlpService.CapturedStream(url: "https://hanerix.com/stream/a/b/1/2/master.m3u8", frameURL: "https://hanerix.com/e/whmrzm56v144")
+        let streams = TestBox<[YtdlpService.CapturedStream]>([hls, ad, dood])
+        service.browserCaptureLoader = { _ in
+            YtdlpService.BrowserCapture(
+                pageHTML: """
+                <meta property="og:title" content="Rico Marlon &amp; Coelhinho do Pauzao">
+                <meta property="og:image" content="https://gayteam.club/uploads/posts/2026-01/x.webp">
+                """,
+                streams: streams.value
+            )
+        }
+        let probes = TestBox<[[String]]>([])
+        service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
+            probes.value.append(args)
+            switch args.last {
+            case ad.url: return #"{"id":"ad","title":"ad","duration":15}"#
+            case dood.url: return #"{"id":"qb0x","title":"qb0x","formats":[{"format_id":"mp4","ext":"mp4","protocol":"https"}]}"#
+            default: return #"{"id":"hls","title":"hls","duration":1710}"#
+            }
+        })
+        let pageURL = "https://gayteam.club/41596-rico-marlon-amp-coelhinho-do-pauzao.html"
+
+        // The direct file wins even when HLS started first; the 15 s clip is skipped.
+        var info = try await service.fetchInfo(url: pageURL)
+        XCTAssertEqual(info.title, "Rico Marlon & Coelhinho do Pauzao")
+        XCTAssertEqual(info.thumbnail, "https://gayteam.club/uploads/posts/2026-01/x.webp")
+        XCTAssertEqual(info.manifestUrl, dood.url)
+        XCTAssertEqual(info.webpageUrl, dood.frameURL)
+        XCTAssertEqual(info.formatProtocol, "https")
+        XCTAssertEqual(probes.value.map(\.last), [ad.url, dood.url])
+        // DoodStream's CDN redirects requests without the player's Referer.
+        XCTAssertTrue(probes.value[1].contains("Referer:https://playmogo.com/"))
+
+        // Only HLS left: it is used, with its own player's Referer.
+        streams.value = [ad, hls]
+        probes.value = []
+        info = try await service.fetchInfo(url: pageURL)
+        XCTAssertEqual(info.manifestUrl, hls.url)
+        XCTAssertEqual(info.webpageUrl, hls.frameURL)
+        XCTAssertEqual(info.formatProtocol, "m3u8_native")
+        XCTAssertEqual(probes.value.map(\.last), [ad.url, hls.url])
+        XCTAssertTrue(probes.value[1].contains("Referer:https://hanerix.com/"))
+    }
+
+    func testGayteamReportsWhenNoPlayerLoadedAVideo() async throws {
+        service.browserCaptureLoader = { _ in YtdlpService.BrowserCapture(pageHTML: "<title>x</title>", streams: []) }
+        service.processRunner = MockYtdlpProcessRunner(mockCommand: { _ in
+            XCTFail("Nothing to probe")
+            return "{}"
+        })
+        do {
+            _ = try await service.fetchInfo(url: "https://gayteam.club/41596-x.html")
+            XCTFail("Expected an error")
+        } catch YtdlpError.downloadFailed(let message) {
+            XCTAssertTrue(message.contains("didn't load a video"), message)
+        }
+    }
+
+    func testGayteamDownloadReusesAFreshCaptureAndRecapturesAStaleOne() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        var options = DownloadOptions.default
+        options.saveFolder = root
+        let stale = "https://s355ml.cloudatacdn.com/u5kj/old~0mvKM3p1GH?token=old&expiry=1"
+        let fresh = YtdlpService.CapturedStream(
+            url: "https://s355ml.cloudatacdn.com/u5kj/new~0mvKM3p1GH?token=new&expiry=2",
+            frameURL: "https://playmogo.com/e/kaigmohs3gpb"
+        )
+        var info = MediaInfo(
+            id: "https://gayteam.club/41596-x.html",
+            title: "Rico Marlon & Coelhinho do Pauzao",
+            uploader: "Gayteam",
+            formats: [MediaFormat(formatId: "mp4", ext: "mp4", resolution: nil, vcodec: nil, acodec: nil)],
+            webpageUrl: "https://playmogo.com/e/kaigmohs3gpb",
+            originalUrl: stale,
+            formatProtocol: "https",
+            manifestUrl: stale
+        )
+        let captures = TestBox(0)
+        service.browserCaptureLoader = { _ in
+            captures.value += 1
+            return YtdlpService.BrowserCapture(pageHTML: "", streams: [fresh])
+        }
+        let downloaded = TestBox<[String]>([])
+        service.processRunner = MockYtdlpProcessRunner(
+            mockCommand: { _ in #"{"id":"new","title":"new","formats":[{"format_id":"mp4","ext":"mp4","protocol":"https"}]}"# },
+            mockDownload: { args in
+                downloaded.value.append(args.last ?? "")
+                // DoodStream's CDN redirects requests without the player's Referer.
+                XCTAssertTrue(args.contains("Referer:https://playmogo.com/"))
+                throw CancellationError()
+            }
+        )
+        func download(_ info: MediaInfo) async throws {
+            do {
+                _ = try await service.download(url: "https://gayteam.club/41596-x.html", options: options, mediaInfo: info, temporaryDirectory: root.appendingPathComponent("scratch"), onProgress: { _, _, _ in }, onOutput: { _ in })
+                XCTFail("Expected cancellation")
+            } catch is CancellationError {}
+        }
+
+        info.fetchedAt = Date()
+        try await download(info)
+        // Captured hours ago, or recovered from the queue without a capture time.
+        info.fetchedAt = Date(timeIntervalSinceNow: -2 * 60 * 60)
+        try await download(info)
+        info.fetchedAt = nil
+        try await download(info)
+
+        XCTAssertEqual(downloaded.value, [stale, fresh.url, fresh.url])
+        XCTAssertEqual(captures.value, 2)
+    }
+
     func testBoyfriendTVWebKitFallbackResolvesEmbedChallenge() async throws {
         UserDefaults.standard.set("none", forKey: UserDefaultsKeys.browserForCookies)
         defer { UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.browserForCookies) }
@@ -2876,15 +3213,11 @@ final class YtdlpServiceTests: XCTestCase {
             _ = try await service.fetchInfo(
                 url: "https://www.boyfriendtv.com/videos/1710869/test/"
             )
-            XCTFail("Expected browser-cookie requirement after WebKit cleared the challenge")
+            XCTFail("Expected the sign-in requirement after WebKit cleared the challenge")
         } catch let error as YtdlpError {
-            switch error {
-            case .protectedSiteNeedsBrowserCookies:
-                break
-            case .downloadFailed(let message):
-                XCTAssertTrue(message.contains("sign-in page") || message.contains("browser sessions"))
-            default:
-                XCTFail("Expected login/cookie error after clearance, got \(error)")
+            // Only Siphon's own WebKit session can sign in to BoyfriendTV.
+            guard case .protectedSiteLoginRequired = error else {
+                return XCTFail("Expected the sign-in error after clearance, got \(error)")
             }
         }
     }
