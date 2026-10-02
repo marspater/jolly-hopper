@@ -14,8 +14,3 @@
 **Vulnerability:** Dynamic strings interpolated directly into AppleScript code blocks executed via `osascript -e` can lead to AppleScript code injection or syntax errors when strings contain quotes, backslashes, or control characters.
 **Learning:** Interpolating user or dynamic inputs directly into AppleScript script strings bypasses string parsing boundaries. Passing arguments as positional CLI arguments to `osascript` with `on run argv` allows AppleScript to safely read inputs from `argv` as data values without code evaluation.
 **Prevention:** Never interpolate dynamic variables into AppleScript script strings. Always pass parameters as positional arguments to `osascript` using `-e "on run argv"` and reference them via `item 1 of argv`, `item 2 of argv`, etc.
-
-## 2026-03-31 - Unsanitized Host in Netscape Cookie File Generation
-**Vulnerability:** Dynamic URL host strings interpolated into Netscape cookie format domain entries were not sanitized for tab, carriage return, and newline control characters, allowing potential cookie line injection in temporary cookie files.
-**Learning:** Extracting `URL.host` from user-supplied or deep-link URLs and using it directly in line-oriented file formats (like Netscape HTTP Cookie File syntax) without token sanitization allows control characters (`\t`, `\r`, `\n`) to inject extra Netscape lines.
-**Prevention:** Always sanitize `URL.host` and domain strings with `sanitizeCookieToken` (stripping `\t`, `\r`, `\n`, `\0`) before writing them into Netscape cookie files.

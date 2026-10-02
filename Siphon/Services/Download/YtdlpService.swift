@@ -352,18 +352,9 @@ class YtdlpService: ObservableObject {
 
     var processRunner: YtdlpProcessRunning
     var updateYtdlpHandler: (() async throws -> String)?
-    // Persistent, so a BoyfriendTV sign-in survives relaunches. Safari keeps the
-    // site's login in a session cookie it never writes to disk, so browser-cookie
-    // import cannot see it; the user signs in once in Siphon's window instead.
-    // Boundary-enforced jobs keep theirs in a second store, signed in separately.
     private var boyfriendTVWebDataStores: [String: WKWebsiteDataStore] = [:]
     var boyfriendTVWebDataStore: WKWebsiteDataStore {
-        webDataStore(in: &boyfriendTVWebDataStores) {
-            let identifier = EgressBoundary.proxyURL == nil
-                ? "F2F923A6-E203-4927-88BB-CCB9DF9DF651"
-                : "550F3EA0-3E13-4475-B62F-146DC44E6700"
-            return WKWebsiteDataStore(forIdentifier: UUID(uuidString: identifier)!)
-        }
+        webDataStore(in: &boyfriendTVWebDataStores) { .nonPersistent() }
     }
     // Test seam for the browser-engine fallback. Production uses WKWebView.
     var boyfriendTVRenderedPageLoader: ((URL) async throws -> String?)?
@@ -384,25 +375,6 @@ class YtdlpService: ObservableObject {
     }
     // Test seam for the recu.me WebKit session. Production uses WKWebView.
     var recuBrowserSessionLoader: ((URL, String) async throws -> RecuBrowserSession)?
-    // Persistent, so Gayteam's Cloudflare clearance survives relaunches.
-    private var gayteamWebDataStores: [String: WKWebsiteDataStore] = [:]
-    private var gayteamWebDataStore: WKWebsiteDataStore {
-        webDataStore(in: &gayteamWebDataStores) {
-            let identifier = EgressBoundary.proxyURL == nil
-                ? "3B8E6C1D-7F2A-4E95-B0C4-9D1A6E5F2C83"
-                : "A4D2F7E9-1C6B-4A38-8E5D-2F9B7C3A6D14"
-            return WKWebsiteDataStore(forIdentifier: UUID(uuidString: identifier)!)
-        }
-    }
-    // Test seam for the player capture session. Production uses WKWebView.
-    var browserCaptureLoader: ((URL) async throws -> BrowserCapture)?
-    // One WebKit page session at a time. Parallel jobs would each open their own
-    // sign-in or verification window; queued, they reuse the first one's result.
-    private var webKitSessionBusy = false
-    private var webKitSessionWaiters: [(id: UUID, continuation: CheckedContinuation<Void, Error>)] = []
-    // When the user closes a site's window, jobs already queued for that site stop
-    // without opening one each. A later retry opens it again.
-    private var sessionWindowClosedAt: [String: Date] = [:]
 
     init(processRunner: YtdlpProcessRunning = DefaultYtdlpProcessRunner()) {
         self.processRunner = processRunner
@@ -421,39 +393,6 @@ class YtdlpService: ObservableObject {
         store.proxyConfigurations = EgressBoundary.webKitProxyConfigurations
         stores[route] = store
         return store
-    }
-
-    func withExclusiveWebKitSession<T>(_ body: () async throws -> T) async throws -> T {
-        if webKitSessionBusy {
-            let id = UUID()
-            try await withTaskCancellationHandler {
-                try await withCheckedThrowingContinuation { continuation in
-                    webKitSessionWaiters.append((id, continuation))
-                }
-            } onCancel: {
-                Task { @MainActor in self.cancelWebKitSessionWait(id) }
-            }
-        } else {
-            webKitSessionBusy = true
-        }
-        // The session passes straight to the next waiter, so it is never free in between.
-        defer {
-            if webKitSessionWaiters.isEmpty {
-                webKitSessionBusy = false
-            } else {
-                webKitSessionWaiters.removeFirst().continuation.resume()
-            }
-        }
-        return try await body()
-    }
-
-    private func cancelWebKitSessionWait(_ id: UUID) {
-        guard let index = webKitSessionWaiters.firstIndex(where: { $0.id == id }) else { return }
-        webKitSessionWaiters.remove(at: index).continuation.resume(throwing: CancellationError())
-    }
-
-    private func mayOpenSessionWindow(for site: String, requestedAt: Date) -> Bool {
-        (sessionWindowClosedAt[site] ?? .distantPast) < requestedAt
     }
 
     nonisolated static func verifySHA256(fileURL: URL, expectedHash: String) -> Bool {
@@ -1039,10 +978,6 @@ class YtdlpService: ObservableObject {
                 formatProtocol: "m3u8_native",
                 manifestUrl: recuMedia.playlistURL
             )
-        }
-
-        if isGayteamURL(url) {
-            return try await resolveGayteamMediaInfo(url: url, path: path, proxy: proxy)
         }
 
         if isBoyfriendTVURL(url),
@@ -1693,20 +1628,6 @@ public struct DownloadResult: Sendable {
                 customEmbedURL = btvMedia.embedURL
                 customThumbnailURL = btvMedia.thumbnailURL
             }
-        } else if isGayteamURL(url) {
-            // The captured stream while its player token is surely valid; else (also
-            // for a recovered queue item, which has no capture time) capture again.
-            let media: MediaInfo
-            if let mediaInfo, let stream = mediaInfo.manifestUrl, !stream.isEmpty, !isGayteamURL(stream),
-               let fetchedAt = mediaInfo.fetchedAt, Date().timeIntervalSince(fetchedAt) < 60 * 60 {
-                media = mediaInfo
-            } else {
-                media = try await resolveGayteamMediaInfo(url: normalizedURL, path: path.path, proxy: EgressBoundary.proxyURL)
-            }
-            targetURL = media.manifestUrl ?? targetURL
-            customResolvedTitle = media.title
-            customEmbedURL = media.webpageUrl
-            customThumbnailURL = media.thumbnail
         } else if isGuywhURL(url) {
             if let reused = reusedDirectMedia(
                 mediaInfo: mediaInfo,
@@ -3100,286 +3021,6 @@ public struct DownloadResult: Sendable {
         )
     }
 
-    // MARK: - Gayteam (player capture)
-
-    private func isGayteamURL(_ urlOrHost: String) -> Bool {
-        let host = (URL(string: urlOrHost)?.host ?? urlOrHost).lowercased()
-        return host == "gayteam.club" || host.hasSuffix(".gayteam.club")
-    }
-
-    /// A stream a player loaded, and the player page that loaded it. That page's
-    /// host is the Referer the stream's CDN expects (DoodStream redirects without it).
-    struct CapturedStream: Sendable, Equatable {
-        let url: String
-        let frameURL: String
-    }
-
-    struct BrowserCapture: Sendable {
-        let pageHTML: String
-        let streams: [CapturedStream]
-    }
-
-    /// Page scripts report these, so only plain http(s) URLs pass. Ads are dropped
-    /// by name here and, like previews, by duration when the stream is probed.
-    nonisolated static func capturedStream(url: String, frameURL: String) -> CapturedStream? {
-        guard url.count < 4096,
-              let stream = URL(string: url),
-              let frame = URL(string: frameURL),
-              ["http", "https"].contains(stream.scheme?.lowercased() ?? ""),
-              ["http", "https"].contains(frame.scheme?.lowercased() ?? ""),
-              stream.host?.isEmpty == false,
-              stream.user == nil,
-              stream.password == nil else {
-            return nil
-        }
-        let lower = url.lowercased()
-        guard !["/vast", "preroll", "/ads/", "/ad/"].contains(where: { lower.contains($0) }) else { return nil }
-        return CapturedStream(url: url, frameURL: frameURL)
-    }
-
-    /// Runs in every frame. In the page it starts lazy (`data-src`) player frames;
-    /// in every frame it reports what a player loads: a <video>'s source (DoodStream
-    /// plays an MP4 directly) or an HLS playlist fetched by script (StreamWish-style).
-    nonisolated static let browserCaptureScript = #"""
-    (() => {
-        if (window.__siphonCapture) return;
-        window.__siphonCapture = true;
-        const seen = new Set();
-        const report = (url) => {
-            if (typeof url !== 'string' || !/^https?:\/\//i.test(url) || seen.has(url)) return;
-            seen.add(url);
-            try {
-                window.webkit.messageHandlers.siphonCapture.postMessage({ url, frame: location.href });
-            } catch (_) {}
-        };
-        try {
-            new PerformanceObserver((list) => list.getEntries().forEach((entry) => {
-                if (/\.m3u8(?:[?#]|$)/i.test(entry.name)) report(entry.name);
-            })).observe({ type: 'resource', buffered: true });
-        } catch (_) {}
-        setInterval(() => {
-            document.querySelectorAll('video, video source').forEach((el) => report(el.currentSrc || el.src));
-            if (window !== window.top) return;
-            document.querySelectorAll('iframe[data-src]').forEach((frame) => {
-                const source = frame.getAttribute('data-src');
-                if (!frame.getAttribute('src') && /^https?:\/\//i.test(source)) frame.setAttribute('src', source);
-            });
-        }, 500);
-    })();
-    """#
-
-    /// WebKit retains a script message handler; the session removes it when done.
-    @MainActor
-    final class BrowserCaptureMessageHandler: NSObject, WKScriptMessageHandler {
-        private(set) var streams: [CapturedStream] = []
-
-        func userContentController(_ _: WKUserContentController, didReceive message: WKScriptMessage) {
-            guard streams.count < 32,
-                  let body = message.body as? [String: Any],
-                  let url = body["url"] as? String,
-                  let frameURL = body["frame"] as? String,
-                  let stream = YtdlpService.capturedStream(url: url, frameURL: frameURL),
-                  !streams.contains(stream) else {
-                return
-            }
-            streams.append(stream)
-        }
-    }
-
-    final class BrowserCaptureNavigationDelegate: NSObject, WKNavigationDelegate {
-        private let siteHost: String
-
-        init(siteHost: String) {
-            self.siteHost = siteHost
-        }
-
-        /// The page stays on its site. Frames load what a browser would (players,
-        /// Cloudflare's widget, ads); popups are refused.
-        nonisolated static func allowsNavigation(to url: URL?, isMainFrame: Bool?, siteHost: String) -> Bool {
-            guard let isMainFrame, let scheme = url?.scheme?.lowercased() else { return false }
-            guard isMainFrame else { return ["https", "http", "about", "data"].contains(scheme) }
-            guard scheme == "https" || scheme == "http", let host = url?.host?.lowercased() else { return false }
-            return host == siteHost || host.hasSuffix("." + siteHost)
-        }
-
-        func webView(
-            _ _: WKWebView,
-            decidePolicyFor navigationAction: WKNavigationAction,
-            decisionHandler: @escaping @MainActor (WKNavigationActionPolicy) -> Void
-        ) {
-            guard Self.allowsNavigation(
-                to: navigationAction.request.url,
-                isMainFrame: navigationAction.targetFrame?.isMainFrame,
-                siteHost: siteHost
-            ) else {
-                decisionHandler(.cancel)
-                return
-            }
-            decisionHandler(.allow)
-        }
-    }
-
-    /// Loads the page in Siphon's WebKit session and collects the streams its
-    /// players load. Hidden while the session's clearance is valid. Cloudflare's
-    /// check, or players that wait for a click, open the page in a window; Siphon
-    /// never completes a check or presses play itself.
-    private func captureBrowserStreams(
-        pageURL: URL,
-        siteHost: String,
-        store: WKWebsiteDataStore,
-        requestedAt: Date
-    ) async throws -> BrowserCapture {
-        let configuration = WKWebViewConfiguration()
-        configuration.websiteDataStore = store
-        configuration.mediaTypesRequiringUserActionForPlayback = .all
-        let messageHandler = BrowserCaptureMessageHandler()
-        configuration.userContentController.add(messageHandler, name: "siphonCapture")
-        configuration.userContentController.addUserScript(WKUserScript(
-            source: Self.browserCaptureScript,
-            injectionTime: .atDocumentEnd,
-            forMainFrameOnly: false
-        ))
-        let webView = WKWebView(frame: NSRect(x: 0, y: 0, width: 1100, height: 800), configuration: configuration)
-        let navigationDelegate = BrowserCaptureNavigationDelegate(siteHost: siteHost)
-        webView.navigationDelegate = navigationDelegate
-        webView.load(URLRequest(url: pageURL))
-
-        var window: NSWindow?
-        let windowDelegate = BrowserSessionWindowDelegate()
-        defer {
-            _ = navigationDelegate
-            configuration.userContentController.removeScriptMessageHandler(forName: "siphonCapture")
-            webView.stopLoading()
-            window?.close()
-        }
-
-        var deadline = Date().addingTimeInterval(20)
-        var firstStreamAt: Date?
-
-        func presentWindow(reason: String) throws {
-            guard window == nil else { return }
-            guard mayOpenSessionWindow(for: siteHost, requestedAt: requestedAt) else {
-                throw YtdlpError.downloadFailed("The \(siteHost) window was closed, so Siphon stopped the downloads waiting for it. Retry to open it again.")
-            }
-            LoggerService.shared.log("[ProtectedSite] stage=capture-webkit result=\(reason); waiting for the user", level: .info)
-            window = presentBrowserSessionWindow(
-                webView,
-                title: String(format: LanguageService.s("site_play_title"), pageURL.host ?? siteHost),
-                delegate: windowDelegate
-            )
-            deadline = Date().addingTimeInterval(300)
-        }
-
-        while true {
-            try Task.checkCancellation()
-            try await Task.sleep(nanoseconds: 500_000_000)
-            try Task.checkCancellation()
-
-            if windowDelegate.didClose {
-                sessionWindowClosedAt[siteHost] = Date()
-                throw YtdlpError.downloadFailed("The \(siteHost) window was closed before a video started.")
-            }
-            // Players start within a moment of each other; keep the order they started in.
-            if !messageHandler.streams.isEmpty {
-                let first = firstStreamAt ?? Date()
-                firstStreamAt = first
-                if Date().timeIntervalSince(first) >= 1.5 { break }
-                continue
-            }
-            if Date() > deadline {
-                guard window == nil else {
-                    throw YtdlpError.downloadFailed("No video started on \(siteHost) within 5 minutes.")
-                }
-                try presentWindow(reason: "no-stream")
-                continue
-            }
-            if let html = await boyfriendTVWebViewDocumentHTML(webView), isBoyfriendTVChallengeHTML(html) {
-                try presentWindow(reason: "challenge")
-            }
-        }
-        LoggerService.shared.log("[ProtectedSite] stage=capture-webkit result=streams count=\(messageHandler.streams.count)", level: .debug)
-        return BrowserCapture(
-            pageHTML: await boyfriendTVWebViewDocumentHTML(webView) ?? "",
-            streams: messageHandler.streams
-        )
-    }
-
-    /// Gayteam lazy-loads third-party players (DoodStream, StreamWish and similar
-    /// hosts that rotate domains) behind Cloudflare; yt-dlp supports neither. Siphon
-    /// takes the stream a player loads in its WebKit session and probes it.
-    private func resolveGayteamMediaInfo(url: String, path: String, proxy: String?) async throws -> MediaInfo {
-        guard let pageURL = URL(string: url) else {
-            throw YtdlpError.downloadFailed("Unsupported Gayteam URL.")
-        }
-        let capture: BrowserCapture
-        if let loader = browserCaptureLoader {
-            capture = try await loader(pageURL)
-        } else {
-            guard processRunner is DefaultYtdlpProcessRunner else { throw YtdlpError.cloudflareBlocked }
-            let requestedAt = Date()
-            capture = try await withExclusiveWebKitSession {
-                try await captureBrowserStreams(
-                    pageURL: pageURL,
-                    siteHost: "gayteam.club",
-                    store: gayteamWebDataStore,
-                    requestedAt: requestedAt
-                )
-            }
-        }
-
-        let title = Self.firstRegexCapture(in: capture.pageHTML, regexes: Self.ogTitleRegexes) { raw in
-            let value = raw.decodingHTMLEntities().trimmingCharacters(in: .whitespacesAndNewlines)
-            return value.isEmpty ? nil : value
-        }
-        let thumbnail = Self.protectedThumbnail(in: capture.pageHTML, regexes: Self.ogImageRegexes)
-
-        // Direct files first (DoodStream serves the upload itself), in the order the
-        // players started. HLS is the fallback: StreamWish-style hosts hide segments
-        // behind a fake PNG header on an image CDN, which ffmpeg can't read.
-        // ponytail: no segment unwrapping; add it if a site has only such players.
-        let isHLS = { (stream: CapturedStream) in URL(string: stream.url)?.pathExtension.lowercased() == "m3u8" }
-        for stream in capture.streams.filter({ !isHLS($0) }) + capture.streams.filter(isHLS) {
-            var args = [path, "--ignore-config", "--dump-json", "--no-playlist", "--no-warnings"]
-            appendSiteSpecificArgs(for: stream.frameURL, to: &args)
-            if let proxy, !proxy.isEmpty {
-                args.append(contentsOf: ["--proxy", proxy])
-            }
-            args.append(contentsOf: ["--", stream.url])
-            let parsed: MediaInfo?
-            do {
-                parsed = try await runCommand(args).data(using: .utf8).flatMap {
-                    try? JSONDecoder().decode(MediaInfo.self, from: $0)
-                }
-            } catch {
-                if error is CancellationError { throw error }
-                try Task.checkCancellation()
-                parsed = nil
-            }
-            // An ad or a preview: the scene itself runs for many minutes.
-            guard let parsed, (parsed.duration ?? .infinity) >= 60 else {
-                LoggerService.shared.log("[ProtectedSite] stage=stream-probe result=rejected", level: .debug)
-                continue
-            }
-            var info = MediaInfo(
-                id: url,
-                title: title ?? parsed.title,
-                thumbnail: thumbnail ?? parsed.thumbnail,
-                duration: parsed.duration,
-                uploader: "Gayteam",
-                formats: parsed.formats,
-                webpageUrl: stream.frameURL,
-                originalUrl: stream.url,
-                formatProtocol: stream.url.contains(".m3u8") ? "m3u8_native" : "https",
-                manifestUrl: stream.url
-            )
-            info.fetchedAt = Date()
-            return info
-        }
-        throw YtdlpError.downloadFailed(capture.streams.isEmpty
-            ? "Gayteam's players didn't load a video. It may have been removed from every player on the page."
-            : "None of the videos Gayteam's players loaded could be downloaded. Retry in a moment.")
-    }
-
     private func isGayPornTubeURL(_ urlOrHost: String) -> Bool {
         let host = (URL(string: urlOrHost)?.host ?? urlOrHost).lowercased()
         return host == "gayporntube.com" || host.hasSuffix(".gayporntube.com")
@@ -3691,8 +3332,7 @@ public struct DownloadResult: Sendable {
     final class BoyfriendTVNavigationDelegate: NSObject, WKNavigationDelegate {
         /// The page may only navigate within BoyfriendTV (both domains). Frames may
         /// also load Cloudflare's challenge widget, which the challenge cannot
-        /// complete without, the reCAPTCHA widget the sign-in form requires, and
-        /// script-built `about:` frames, which fetch nothing.
+        /// complete without, and script-built `about:` frames, which fetch nothing.
         /// Popups and every other target are refused.
         nonisolated static func allowsNavigation(to url: URL?, isMainFrame: Bool?) -> Bool {
             guard let isMainFrame, let scheme = url?.scheme?.lowercased() else { return false }
@@ -3701,11 +3341,7 @@ public struct DownloadResult: Sendable {
                 return false
             }
             let isBoyfriendTV = ["boyfriend.tv", "boyfriendtv.com"].contains { host == $0 || host.hasSuffix("." + $0) }
-            if isBoyfriendTV { return true }
-            guard !isMainFrame, scheme == "https" else { return false }
-            let isReCAPTCHA = ["www.google.com", "www.recaptcha.net"].contains(host) &&
-                url?.path.hasPrefix("/recaptcha/") == true
-            return isReCAPTCHA || host == "challenges.cloudflare.com"
+            return isBoyfriendTV || (!isMainFrame && host == "challenges.cloudflare.com")
         }
 
         func webView(
@@ -3756,46 +3392,10 @@ public struct DownloadResult: Sendable {
         guard processRunner is DefaultYtdlpProcessRunner else {
             return nil
         }
-        let requestedAt = Date()
-        return try await withExclusiveWebKitSession {
-            try await renderBoyfriendTVPage(url, stage: stage, rawCookies: rawCookies, requestedAt: requestedAt)
-        }
-    }
 
-    /// The site's login cookie ends with the app unless "Remember me" is ticked, so
-    /// the box starts ticked in Siphon's window. A box the user changes stays as set.
-    nonisolated static let boyfriendTVRememberMeScript = """
-    (() => {
-        const tick = (form) => {
-            const box = form && form.querySelector && form.querySelector('input[name="rememberMe"]');
-            if (box && !box.dataset.siphonUserChoice) box.checked = true;
-        };
-        document.querySelectorAll('form').forEach(tick);
-        document.addEventListener('focusin', (event) => tick(event.target.form), true);
-        document.addEventListener('submit', (event) => tick(event.target), true);
-        document.addEventListener('change', (event) => {
-            if (event.target.name === 'rememberMe') event.target.dataset.siphonUserChoice = '1';
-        }, true);
-    })();
-    """
-
-    /// Sign-up and password pages, which the user may open from the sign-in form.
-    nonisolated static func isBoyfriendTVAccountPath(_ path: String) -> Bool {
-        path.range(
-            of: #"^/(?:[a-z]{2}/)?(?:login|registration|lost-password|reset-password|password)"#,
-            options: [.regularExpression, .caseInsensitive]
-        ) != nil
-    }
-
-    private func renderBoyfriendTVPage(_ url: URL, stage: String, rawCookies: String?, requestedAt: Date) async throws -> String? {
         let configuration = WKWebViewConfiguration()
         configuration.websiteDataStore = boyfriendTVWebDataStore
         configuration.defaultWebpagePreferences.allowsContentJavaScript = true
-        configuration.userContentController.addUserScript(WKUserScript(
-            source: Self.boyfriendTVRememberMeScript,
-            injectionTime: .atDocumentEnd,
-            forMainFrameOnly: true
-        ))
 
         await seedBoyfriendTVWebKitCookies(rawCookies, for: url)
 
@@ -3824,25 +3424,10 @@ public struct DownloadResult: Sendable {
 
         var lastHTML: String?
         var settledPolls = 0
-        var awaitingSignIn = false
         // Hidden while no check is shown (the session's clearance is valid). A check
         // opens the page in a window: Cloudflare's managed challenge completes only in
         // a visible page, and any interactive step is the user's. Siphon never completes it.
         var deadline = Date().addingTimeInterval(20)
-
-        // False when the user closed a BoyfriendTV window after this job asked.
-        func presentWindow(titleKey: String, result: String) -> Bool {
-            guard window == nil else { return true }
-            guard mayOpenSessionWindow(for: "boyfriendtv", requestedAt: requestedAt) else { return false }
-            LoggerService.shared.log("[ProtectedSite] stage=\(stage) result=\(result); waiting for the user", level: .info)
-            window = presentBrowserSessionWindow(
-                webView,
-                title: String(format: LanguageService.s(titleKey), url.host ?? ""),
-                delegate: windowDelegate
-            )
-            deadline = Date().addingTimeInterval(300)
-            return true
-        }
 
         while Date() < deadline, !windowDelegate.didClose {
             try Task.checkCancellation()
@@ -3865,27 +3450,14 @@ public struct DownloadResult: Sendable {
 
             if isBoyfriendTVChallengeHTML(resolved) {
                 settledPolls = 0
-                guard presentWindow(titleKey: "site_verification_title", result: "challenge") else { return resolved }
-                continue
-            }
-
-            // A members-only video, or the sign-in form the user opened from it. The
-            // sign-in is the user's, in the same window; the site reloads the page
-            // once it succeeds.
-            if isBoyfriendTVLoginHTML(resolved) || (awaitingSignIn && resolved.contains("id=\"loginForm\"")) {
-                settledPolls = 0
-                guard presentWindow(titleKey: "site_sign_in_title", result: "login-page") else { return resolved }
-                awaitingSignIn = true
-                continue
-            }
-
-            // Sign-in often lands on the home page; return to the video from there.
-            // Sign-up and password pages stay open for the user.
-            if awaitingSignIn, webView.url?.path != url.path {
-                settledPolls = 0
-                if !webView.isLoading, !Self.isBoyfriendTVAccountPath(webView.url?.path ?? "") {
-                    awaitingSignIn = false
-                    webView.load(request)
+                if window == nil {
+                    LoggerService.shared.log("[ProtectedSite] stage=\(stage) result=challenge; waiting for the user", level: .info)
+                    window = presentBrowserSessionWindow(
+                        webView,
+                        title: String(format: LanguageService.s("site_verification_title"), url.host ?? ""),
+                        delegate: windowDelegate
+                    )
+                    deadline = Date().addingTimeInterval(300)
                 }
                 continue
             }
@@ -3903,7 +3475,6 @@ public struct DownloadResult: Sendable {
         let finalResult: String
         if windowDelegate.didClose {
             finalResult = "window-closed"
-            sessionWindowClosedAt["boyfriendtv"] = Date()
         } else if let lastHTML {
             finalResult = isBoyfriendTVChallengeHTML(lastHTML) ? "challenge-timeout" : "page-timeout"
         } else {
@@ -4112,16 +3683,13 @@ public struct DownloadResult: Sendable {
                         break
                     }
                 }
-                // A login page means a members-only video that no browser session
-                // here can play. The mirror and plain HTTP can't sign in either, so
-                // go straight to Siphon's own (signed-in) WebKit session.
-                if !html.isEmpty || sawLoginPage { break }
+                if !html.isEmpty { break }
             }
         }
 
         // URLSession is a final transport fallback. Raw extension cookies are only
         // forwarded within the same BoyfriendTV cookie scope.
-        if html.isEmpty && !sawLoginPage && (processRunner is DefaultYtdlpProcessRunner) {
+        if html.isEmpty && (processRunner is DefaultYtdlpProcessRunner) {
             for candidatePage in pageCandidates {
                 var request = URLRequest(url: candidatePage)
                 request.timeoutInterval = 3.0
@@ -4157,7 +3725,7 @@ public struct DownloadResult: Sendable {
         // the final network fallback so its post-challenge state is authoritative.
         // If the primary WebKit session itself times out on the challenge, do not
         // repeat the same fingerprint against mirror hosts and embeds.
-        if html.isEmpty, (sawChallenge || sawForbidden || sawLoginPage) {
+        if html.isEmpty, (sawChallenge || sawForbidden) {
             for candidatePage in pageCandidates {
                 let stage = candidatePage == pageURL ? "main-webkit" : "main-webkit-alt"
                 let scopedCookies = rawCookies.flatMap { raw in
@@ -4178,16 +3746,11 @@ public struct DownloadResult: Sendable {
                     webKitChallengeTimedOut = true
                     break
                 }
-                // Still the login page: sign-in in Siphon's window didn't finish. The
-                // embeds need the same sign-in, so don't open more windows for them.
-                // (A playable page can carry the login text in its scripts.)
-                if extractStreamURLFromHTML(rendered) == nil, isBoyfriendTVLoginHTML(rendered) {
-                    throw YtdlpError.protectedSiteLoginRequired
-                }
 
                 sawChallenge = false
                 sawForbidden = false
                 sawUnauthorized = false
+                sawLoginPage = sawLoginPage || isBoyfriendTVLoginHTML(rendered)
                 html = rendered
                 resolvedPageURL = candidatePage
                 break
@@ -4359,14 +3922,11 @@ public struct DownloadResult: Sendable {
                             webKitChallengeTimedOut = true
                             break
                         }
-                        // Same as the page: one unfinished sign-in, not a window per embed.
-                        if extractStreamURLFromHTML(rendered) == nil, isBoyfriendTVLoginHTML(rendered) {
-                            throw YtdlpError.protectedSiteLoginRequired
-                        }
 
                         sawChallenge = false
                         sawForbidden = false
                         sawUnauthorized = false
+                        sawLoginPage = sawLoginPage || isBoyfriendTVLoginHTML(rendered)
                         if let extracted = extractStreamURLFromHTML(rendered) {
                             streamUrl = extracted
                             embedUrl = embed
@@ -7425,8 +6985,7 @@ public struct DownloadResult: Sendable {
     func createTempCookiesFile(url: String, cookieName: String, cookieValue: String) -> URL? {
         guard let cookiesDir = CookieManager.getSecureTempCookiesDirectory() else { return nil }
         let tempCookiesURL = cookiesDir.appendingPathComponent("siphon_cookies_\(UUID().uuidString).txt")
-        let host = sanitizeCookieToken(URL(string: url)?.host ?? "")
-        guard !host.isEmpty else { return nil }
+        let host = URL(string: url)?.host ?? ""
         let cleanName = sanitizeCookieToken(cookieName)
         let cleanValue = sanitizeCookieToken(cookieValue)
         guard !cleanName.isEmpty, !cleanValue.isEmpty else { return nil }
@@ -7443,9 +7002,7 @@ public struct DownloadResult: Sendable {
     }
 
     func createTempCookiesFileFromHeader(url: String, cookieHeader: String) -> URL? {
-        guard let urlObj = URL(string: url), let rawHost = urlObj.host, !rawHost.isEmpty else { return nil }
-        let host = sanitizeCookieToken(rawHost)
-        guard !host.isEmpty else { return nil }
+        guard let urlObj = URL(string: url), let host = urlObj.host, !host.isEmpty else { return nil }
         guard let cookiesDir = CookieManager.getSecureTempCookiesDirectory() else { return nil }
         let domain = host.hasPrefix(".") ? host : ".\(host)"
         let requireSecureTransport = urlObj.scheme?.lowercased() == "https"
@@ -7541,9 +7098,7 @@ enum YtdlpError: LocalizedError {
         case .protectedSiteNeedsBrowserCookies:
             return "This video site requires signed-in browser cookies. Open Settings > Advanced > Browser Cookies, choose your browser, then try again."
         case .protectedSiteLoginRequired:
-            // BoyfriendTV only. Browser sessions can't carry its sign-in: Safari never
-            // saves the site's login cookie to disk.
-            return "BoyfriendTV shows this video only to signed-in members, and sign-in in Siphon's window didn't finish. Retry and sign in there; Siphon keeps the sign-in for later downloads."
+            return "The site returned a sign-in page for the available browser sessions. Sign in to the site in your browser, then retry; Siphon will reuse that session automatically."
         case .safariCookiesFullDiskAccessRequired:
             return LanguageService.s("safari_fda_required")
         case .securityViolation(let message):

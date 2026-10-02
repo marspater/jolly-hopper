@@ -233,14 +233,6 @@ class Download: ObservableObject, Identifiable {
                 actionType: isYouTubeSignIn ? .fixInSettings : .retry,
                 rawError: rawError
             )
-        } else if error == lang.s("site_sign_in_required") {
-            // Settings can't fix this one; a retry opens the site's sign-in window.
-            return ErrorUXInfo(
-                headline: lang.s("couldnt_download"),
-                description: lang.s("site_sign_in_required_desc"),
-                actionType: .retry,
-                rawError: rawError
-            )
         } else if lower.contains("sign in") || lower.contains("login") || lower.contains("cookies") {
             let desc = isYouTube ? lang.s("youtube_auth_required") : lang.s("login_required_desc")
             return ErrorUXInfo(
