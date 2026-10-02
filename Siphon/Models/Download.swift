@@ -234,7 +234,7 @@ class Download: ObservableObject, Identifiable {
                 rawError: rawError
             )
         } else if error == lang.s("site_sign_in_required") {
-            // Settings can't fix this one; a retry opens the site's sign-in window.
+            // Settings can't fix this one: the user signs in (Safari or Siphon's window), then retries.
             return ErrorUXInfo(
                 headline: lang.s("couldnt_download"),
                 description: lang.s("site_sign_in_required_desc"),

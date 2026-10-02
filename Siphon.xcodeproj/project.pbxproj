@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		F0011001 /* HeliumCookieReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0010001 /* HeliumCookieReader.swift */; };
+		F0011002 /* SafariCookieReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0010002 /* SafariCookieReader.swift */; };
 		E0001092 /* ImageUtilities.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000092 /* ImageUtilities.swift */; };
 		E0001091 /* ImageUtilitiesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000091 /* ImageUtilitiesTests.swift */; };
 		E0001050 /* Font+Geist.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000050 /* Font+Geist.swift */; };
@@ -93,6 +94,7 @@
 
 /* Begin PBXFileReference section */
 		F0010001 /* HeliumCookieReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeliumCookieReader.swift; sourceTree = "<group>"; };
+		F0010002 /* SafariCookieReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SafariCookieReader.swift; sourceTree = "<group>"; };
 		E0000092 /* ImageUtilities.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageUtilities.swift; sourceTree = "<group>"; };
 		E0000091 /* ImageUtilitiesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageUtilitiesTests.swift; sourceTree = "<group>"; };
 		E0000050 /* Font+Geist.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Font+Geist.swift"; sourceTree = "<group>"; };
@@ -281,6 +283,7 @@
 				E00000A2 /* SecureCookieFile.swift */,
 				E00000A3 /* CookieManager.swift */,
 				F0010001 /* HeliumCookieReader.swift */,
+				F0010002 /* SafariCookieReader.swift */,
 			);
 			path = Cookies;
 			sourceTree = "<group>";
@@ -574,6 +577,7 @@
 				E00010A2 /* SecureCookieFile.swift in Sources */,
 				E00010A3 /* CookieManager.swift in Sources */,
 				F0011001 /* HeliumCookieReader.swift in Sources */,
+				F0011002 /* SafariCookieReader.swift in Sources */,
 				E00010A4 /* UpdateVerifier.swift in Sources */,
 				E00010A5 /* UpdateDownloader.swift in Sources */,
 				E00010A6 /* UpdateInstaller.swift in Sources */,
