@@ -6986,6 +6986,7 @@ public struct DownloadResult: Sendable {
         guard let cookiesDir = CookieManager.getSecureTempCookiesDirectory() else { return nil }
         let tempCookiesURL = cookiesDir.appendingPathComponent("siphon_cookies_\(UUID().uuidString).txt")
         let host = sanitizeCookieToken(URL(string: url)?.host ?? "")
+        guard !host.isEmpty else { return nil }
         let cleanName = sanitizeCookieToken(cookieName)
         let cleanValue = sanitizeCookieToken(cookieValue)
         guard !cleanName.isEmpty, !cleanValue.isEmpty else { return nil }

@@ -44,21 +44,28 @@ final class SecureCookieFileTests: XCTestCase {
     }
 
     func testSanitizesHostWithControlCharacters() throws {
-        // Crafted host with tab and newline characters
-        let malformedURL = "https://example.com\t\r\ninjected.org/video"
-        let cookie = try SecureCookieFile.create(
-            url: malformedURL,
+        // 1. Invalid URL string with unencoded control characters throws creationFailed
+        let invalidURL = "https://example.com\t\r\ninjected.org/video"
+        XCTAssertThrowsError(try SecureCookieFile.create(
+            url: invalidURL,
             rawCookies: "session=valid_token"
+        ))
+
+        // 2. Netscape lines or additional cookies containing control characters must be sanitized without line injection
+        let malformedNetscapeLine = "example.com\r\ninjected.org\tTRUE\t/\tFALSE\t2000000000\tsession\ttoken\r\nvalue"
+        let cookie = try SecureCookieFile.create(
+            url: "https://example.com/video",
+            additionalNetscapeLines: [malformedNetscapeLine]
         )
         defer { cookie.cleanup() }
 
         XCTAssertNoThrow(try cookie.validate())
         let content = try String(contentsOf: cookie.fileURL, encoding: .utf8)
         XCTAssertFalse(content.contains("\r"), "Netscape file must not contain raw carriage returns")
-        let lines = content.components(separatedBy: .newlines)
-        // Ensure host control characters were stripped and didn't create extra lines
+        let lines = content.components(separatedBy: .newlines).filter { !$0.isEmpty }
+        XCTAssertEqual(lines.count, 2, "Must contain header line and single sanitized cookie entry")
         XCTAssertTrue(content.contains("example.cominjected.org"))
-        XCTAssertEqual(lines.filter { !$0.isEmpty }.count, 2, "Must contain header line and single cookie entry")
+        XCTAssertTrue(content.contains("tokenvalue"))
     }
 
     func testValidationRejectsEmptyOrInvalidFiles() throws {
