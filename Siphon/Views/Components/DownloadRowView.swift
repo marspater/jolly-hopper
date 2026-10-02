@@ -42,6 +42,7 @@ struct DownloadListView: View {
     @EnvironmentObject var downloadManager: DownloadManager
     @EnvironmentObject var languageService: LanguageService
     @EnvironmentObject var appState: AppState
+    @State private var scrollActivity = ListScrollActivity()
     
     var body: some View {
         Group {
@@ -57,6 +58,10 @@ struct DownloadListView: View {
                     }
                     .padding()
                 }
+                .onScrollPhaseChange { _, phase in
+                    scrollActivity.isScrolling = phase != .idle
+                }
+                .environment(\.listScrollActivity, scrollActivity)
             }
         }
     }
@@ -108,6 +113,7 @@ struct DownloadRowView: View {
     @State private var showRawError = false
     /// nil until checked; unknown counts as present so actions don't flicker.
     @State private var primaryFileIsPresent: Bool?
+    @Environment(\.listScrollActivity) private var scrollActivity
     
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -217,6 +223,9 @@ struct DownloadRowView: View {
         }
         .siphonCardHover(isHovered: isHovering, tint: statusTint)
         .onHover { hovering in
+            // Rows sliding under a still cursor would each lift and settle
+            // mid-scroll; only an exit is taken while the list scrolls.
+            guard !hovering || scrollActivity?.isScrolling != true else { return }
             isHovering = hovering
         }
         .contextMenu {
@@ -230,11 +239,11 @@ struct DownloadRowView: View {
                 .environmentObject(languageService)
         }
         .task(id: download.primaryFilePath) {
-            primaryFileIsPresent = download.primaryFileExistsOnDisk
+            primaryFileIsPresent.refreshPresence(of: download)
         }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             // Files are usually moved or deleted in Finder, while Siphon is inactive.
-            primaryFileIsPresent = download.primaryFileExistsOnDisk
+            primaryFileIsPresent.refreshPresence(of: download)
         }
     }
     
@@ -447,12 +456,16 @@ struct DownloadRowView: View {
                             image
                                 .resizable()
                                 .aspectRatio(contentMode: .fill)
-                        case .failure, .empty:
+                        case .failure:
                             if let filePath = download.primaryFilePath {
                                 FileThumbnailView(fileURL: filePath, isHDR: isHDRMedia)
                             } else {
                                 thumbnailPlaceholder
                             }
+                        case .empty:
+                            // Rendering the file while the remote image loads costs a
+                            // video decode per row that the remote image then replaces.
+                            thumbnailPlaceholder
                         @unknown default:
                             thumbnailPlaceholder
                         }
@@ -509,7 +522,13 @@ struct DownloadRowView: View {
 struct FileThumbnailView: View {
     let fileURL: URL
     let isHDR: Bool
-    @State private var thumbnailImage: NSImage? = nil
+    @State private var thumbnailImage: NSImage?
+
+    init(fileURL: URL, isHDR: Bool) {
+        self.fileURL = fileURL
+        self.isHDR = isHDR
+        _thumbnailImage = State(initialValue: ThumbnailCache.images.object(forKey: fileURL as NSURL))
+    }
 
     var body: some View {
         Group {
@@ -545,7 +564,9 @@ struct FileThumbnailView: View {
     }
 
     private func generateThumbnail() async {
+        guard thumbnailImage == nil else { return }
         if let image = await ImageUtilities.generateThumbnail(for: fileURL) {
+            ThumbnailCache.images.setObject(image, forKey: fileURL as NSURL)
             await MainActor.run {
                 self.thumbnailImage = image
             }
@@ -1232,17 +1253,72 @@ struct LinearProgressBar: View {
     }
 }
 
+/// Whether a download list is scrolling. Deliberately not observable: rows
+/// read it only inside hover callbacks, so a scroll never re-renders them.
+@MainActor
+final class ListScrollActivity {
+    var isScrolling = false
+}
+
+extension EnvironmentValues {
+    @Entry var listScrollActivity: ListScrollActivity?
+}
+
+extension Bool? {
+    /// Stores the primary file's presence only when it changes what a row
+    /// shows: unknown and present look the same, and every state write
+    /// re-places all rows of a lazy list.
+    @MainActor mutating func refreshPresence(of download: Download) {
+        let present = download.primaryFileExistsOnDisk
+        if (present == false) != (self == false) {
+            self = present
+        }
+    }
+}
+
+/// Decoded, downsampled thumbnails. Rows in a lazy list are rebuilt as they
+/// scroll back into view; without this each one refetched its image and
+/// decoded it at full size on the main thread mid-scroll.
+enum ThumbnailCache {
+    // NSCache is thread-safe; images are decoded off the main thread.
+    nonisolated(unsafe) static let images: NSCache<NSURL, NSImage> = {
+        let cache = NSCache<NSURL, NSImage>()
+        cache.countLimit = 300
+        return cache
+    }()
+
+    /// Decodes off the main thread at no more than 480 px, enough for the
+    /// largest thumbnail slot on a 2x display.
+    nonisolated static func decoded(_ data: Data) -> NSImage? {
+        let options: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceShouldCacheImmediately: true,
+            kCGImageSourceThumbnailMaxPixelSize: 480
+        ]
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil),
+              let image = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else { return nil }
+        return NSImage(cgImage: image, size: NSSize(width: image.width, height: image.height))
+    }
+}
+
 /// `AsyncImage` for thumbnail URLs from site metadata. Loads through
 /// `DownloadExecutor.fetchThumbnailData`, so target, body size and pixel
 /// dimensions are checked before anything is decoded.
 struct ThumbnailImage<Content: View>: View {
     let url: URL?
     let content: (AsyncImagePhase) -> Content
-    @State private var phase: AsyncImagePhase = .empty
+    @State private var phase: AsyncImagePhase
+    /// The URL `phase` belongs to. Each state write re-places every row of a
+    /// lazy list, so a row whose image is already shown writes nothing.
+    @State private var phaseURL: URL?
 
     init(url: URL?, @ViewBuilder content: @escaping (AsyncImagePhase) -> Content) {
         self.url = url
         self.content = content
+        let cached = url.flatMap { ThumbnailCache.images.object(forKey: $0 as NSURL) }
+        _phase = State(initialValue: cached.map { .success(Image(nsImage: $0)) } ?? .empty)
+        _phaseURL = State(initialValue: cached == nil ? nil : url)
     }
 
     init<I: View, P: View>(
@@ -1262,15 +1338,30 @@ struct ThumbnailImage<Content: View>: View {
     var body: some View {
         content(phase)
             .task(id: url) {
-                phase = .empty
-                guard let url else { return }
+                guard phaseURL != url || (url == nil && phase.image != nil) else { return }
+                guard let url else {
+                    phase = .empty
+                    phaseURL = nil
+                    return
+                }
+                if let cached = ThumbnailCache.images.object(forKey: url as NSURL) {
+                    phase = .success(Image(nsImage: cached))
+                    phaseURL = url
+                    return
+                }
+                if phase.image != nil {
+                    phase = .empty
+                }
                 let data = await DownloadExecutor.fetchThumbnailData(from: url)
+                let image = await Task.detached(priority: .utility) { data.flatMap(ThumbnailCache.decoded) }.value
                 guard !Task.isCancelled else { return }
-                if let data, let image = NSImage(data: data) {
+                if let image {
+                    ThumbnailCache.images.setObject(image, forKey: url as NSURL)
                     phase = .success(Image(nsImage: image))
                 } else {
                     phase = .failure(URLError(.cannotDecodeContentData))
                 }
+                phaseURL = url
             }
     }
 }
