@@ -49,10 +49,10 @@ struct RecentDownloadRowView: View {
         )
         .siphonCardHover(isHovered: isHovered, tint: activeTint ?? .clear)
         .task(id: download.primaryFilePath) {
-            primaryFileIsPresent = download.primaryFileExistsOnDisk
+            primaryFileIsPresent.refreshPresence(of: download)
         }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
-            primaryFileIsPresent = download.primaryFileExistsOnDisk
+            primaryFileIsPresent.refreshPresence(of: download)
         }
         .onHover { hovering in
             withAnimation(SiphonAnimation.hoverSpring) {

@@ -532,68 +532,78 @@ public enum SiphonTheme {
     // MARK: - Semantic Adaptive Borders
     @ViewBuilder
     public static func borderSubtle(cornerRadius: CGFloat = radiusControl, isHovered: Bool = false, accentColor: Color? = nil) -> some View {
-        if let accent = accentColor {
-            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                .strokeBorder(
-                    LinearGradient(
-                        colors: [
-                            accent.opacity(isHovered ? 0.72 : 0.44),
-                            accent.opacity(isHovered ? 0.30 : 0.14),
-                            Color.clear
-                        ],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    ),
-                    lineWidth: 1
-                )
-        } else {
-            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                .strokeBorder(
-                    LinearGradient(
-                        colors: [
-                            Color.primary.opacity(isHovered ? 0.26 : 0.14),
-                            Color.primary.opacity(isHovered ? 0.10 : 0.05),
-                            Color.clear
-                        ],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    ),
-                    lineWidth: 1
-                )
+        // Drawn on the GPU: as a plain layer, a gradient stroke is rasterized on
+        // the CPU at the card's full size, once per row a list scrolls into view.
+        Group {
+            if let accent = accentColor {
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .strokeBorder(
+                        LinearGradient(
+                            colors: [
+                                accent.opacity(isHovered ? 0.72 : 0.44),
+                                accent.opacity(isHovered ? 0.30 : 0.14),
+                                Color.clear
+                            ],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        ),
+                        lineWidth: 1
+                    )
+            } else {
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .strokeBorder(
+                        LinearGradient(
+                            colors: [
+                                Color.primary.opacity(isHovered ? 0.26 : 0.14),
+                                Color.primary.opacity(isHovered ? 0.10 : 0.05),
+                                Color.clear
+                            ],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        ),
+                        lineWidth: 1
+                    )
+            }
         }
+        .drawingGroup()
     }
 
     @ViewBuilder
     public static func cardBorder(cornerRadius: CGFloat = radiusCard, isHovered: Bool = false, accentColor: Color? = nil) -> some View {
-        if let accent = accentColor {
-            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                .strokeBorder(
-                    LinearGradient(
-                        colors: [
-                            accent.opacity(isHovered ? 0.62 : 0.42),
-                            accent.opacity(isHovered ? 0.24 : 0.13),
-                            Color.clear
-                        ],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    ),
-                    lineWidth: 1
-                )
-        } else {
-            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                .strokeBorder(
-                    LinearGradient(
-                        colors: [
-                            Color.primary.opacity(isHovered ? Opacity.borderHover : Opacity.borderRest),
-                            Color.primary.opacity(isHovered ? 0.10 : 0.05),
-                            Color.clear
-                        ],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    ),
-                    lineWidth: 1
-                )
+        // Drawn on the GPU: as a plain layer, a gradient stroke is rasterized on
+        // the CPU at the card's full size, once per row a list scrolls into view.
+        Group {
+            if let accent = accentColor {
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .strokeBorder(
+                        LinearGradient(
+                            colors: [
+                                accent.opacity(isHovered ? 0.62 : 0.42),
+                                accent.opacity(isHovered ? 0.24 : 0.13),
+                                Color.clear
+                            ],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        ),
+                        lineWidth: 1
+                    )
+            } else {
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .strokeBorder(
+                        LinearGradient(
+                            colors: [
+                                Color.primary.opacity(isHovered ? Opacity.borderHover : Opacity.borderRest),
+                                Color.primary.opacity(isHovered ? 0.10 : 0.05),
+                                Color.clear
+                            ],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        ),
+                        lineWidth: 1
+                    )
+            }
         }
+        .drawingGroup()
     }
     
     // Pill / Badge Backgrounds (Capsule)
@@ -1383,6 +1393,7 @@ struct SiphonStatusBadge: View {
                     ),
                     lineWidth: 1
                 )
+                .drawingGroup()
         )
         // The glyph only restates the title; VoiceOver reads the title once.
         .accessibilityElement(children: .ignore)

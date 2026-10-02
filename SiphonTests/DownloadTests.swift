@@ -16,6 +16,27 @@ final class DownloadTests: XCTestCase {
         XCTAssertEqual(download.primaryFileExistsOnDisk, true)
     }
 
+    func testRowFilePresenceStoresOnlyChangesARowShows() throws {
+        let download = Download(url: "https://example.com/v", options: .default, title: "V")
+        let file = FileManager.default.temporaryDirectory.appendingPathComponent("presence_\(UUID().uuidString).mp4")
+        download.filePaths = [file]
+        try Data([0]).write(to: file)
+        defer { try? FileManager.default.removeItem(at: file) }
+
+        // Unknown and present look the same, so a present file writes nothing.
+        var shown: Bool?
+        shown.refreshPresence(of: download)
+        XCTAssertNil(shown)
+
+        try FileManager.default.removeItem(at: file)
+        shown.refreshPresence(of: download)
+        XCTAssertEqual(shown, false)
+
+        try Data([0]).write(to: file)
+        shown.refreshPresence(of: download)
+        XCTAssertEqual(shown, true)
+    }
+
 
     // MARK: - Initialization & Core Properties
 

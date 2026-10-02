@@ -125,6 +125,9 @@ truth only when the value is genuinely reused or has semantic meaning.
   uses regular rather than ultra-thin material, so a bright window behind does
   not wash text out.
 - Content cards use `SiphonTheme.cardBackground` and matching border helpers.
+  Gradient borders draw through `.drawingGroup()`: as plain layers they are
+  rasterized on the CPU at the card's full size, which stalled fast scrolling
+  of long lists.
 - Interactive status/navigation surfaces may use `siphonGlassSurface()`, which
   opts into native `Glass.regular.interactive()` on macOS 26+ and preserves the
   adaptive Siphon material fallback on macOS 15–25.
