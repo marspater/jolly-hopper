@@ -55,6 +55,22 @@ public final class DownloadProcessController: @unchecked Sendable {
         return descendants
     }
 
+    /// Kernel start time of `pid`, or nil once it has exited. A PID alone is not an
+    /// identity: after a process exits the kernel can hand its PID to an unrelated one.
+    static func processStartTime(_ pid: pid_t) -> UInt64? {
+        guard pid > 0 else { return nil }
+        var info = proc_bsdinfo()
+        let size = Int32(MemoryLayout<proc_bsdinfo>.size)
+        guard proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, &info, size) == size else { return nil }
+        return info.pbi_start_tvsec &* 1_000_000 &+ info.pbi_start_tvusec
+    }
+
+    /// Signals `pid` only while it is still the process first seen at `startTime`.
+    private static func signal(_ pid: pid_t, startedAt startTime: UInt64?, _ sig: Int32) {
+        guard let startTime, processStartTime(pid) == startTime else { return }
+        kill(pid, sig)
+    }
+
     public static func terminateProcessTree(_ proc: Process?, pid: pid_t? = nil) {
         let resolvedPID: pid_t = if let pid, pid > 0 { pid } else { proc?.processIdentifier ?? 0 }
         // Foundation reaps the process before isRunning turns false; after that its PID
@@ -62,12 +78,16 @@ public final class DownloadProcessController: @unchecked Sendable {
         // queued just before it exited on its own.
         guard proc?.isRunning ?? (resolvedPID > 0) else { return }
 
+        // Identity of every process signalled here, so a later escalation never
+        // reaches an unrelated process that inherited a PID after an exit.
+        let rootStart = processStartTime(resolvedPID)
+
         // 1. Gather all descendants BEFORE terminating the parent to prevent reparenting to launchd (PID 1)
-        var allSignaledPIDs: Set<pid_t> = []
+        var signaled: [pid_t: UInt64] = [:]
         if resolvedPID > 0 {
-            let descendants = getDescendantPIDs(for: resolvedPID)
-            for child in descendants {
-                allSignaledPIDs.insert(child)
+            for child in getDescendantPIDs(for: resolvedPID) {
+                guard let start = processStartTime(child) else { continue }
+                signaled[child] = start
                 kill(child, SIGTERM)
             }
 
@@ -86,37 +106,34 @@ public final class DownloadProcessController: @unchecked Sendable {
         if resolvedPID > 0 {
             // proc.terminate() already sent SIGTERM; a bare PID is signalled directly.
             if proc == nil {
-                kill(resolvedPID, SIGTERM)
+                signal(resolvedPID, startedAt: rootStart, SIGTERM)
             }
 
             // 3. Multi-pass sweep to catch any late spawns during shutdown
             for _ in 0..<2 {
                 usleep(25_000) // 25ms grace period
                 // Once the root is reaped its children belong to launchd and its PID may be reused.
-                guard proc?.isRunning != false else { break }
-                let currentDescendants = getDescendantPIDs(for: resolvedPID)
-                for child in currentDescendants {
-                    if allSignaledPIDs.insert(child).inserted {
-                        kill(child, SIGTERM)
-                    }
+                guard proc?.isRunning != false, processStartTime(resolvedPID) == rootStart else { break }
+                for child in getDescendantPIDs(for: resolvedPID) where signaled[child] == nil {
+                    guard let start = processStartTime(child) else { continue }
+                    signaled[child] = start
+                    kill(child, SIGTERM)
                 }
             }
 
             // 4. Forceful SIGKILL escalation if processes refuse SIGTERM
-            var lingering = allSignaledPIDs.filter { kill($0, 0) == 0 }
-            if proc?.isRunning != false, kill(resolvedPID, 0) == 0 {
-                lingering.insert(resolvedPID)
+            let isLingering = { (pid: pid_t, start: UInt64) in processStartTime(pid) == start }
+            if let rootStart, proc?.isRunning != false, isLingering(resolvedPID, rootStart) {
+                signaled[resolvedPID] = rootStart
             }
-            if !lingering.isEmpty {
+            if signaled.contains(where: isLingering) {
                 usleep(50_000) // 50ms final grace period
-                let rootRunning = proc?.isRunning != false
+                let rootRunning = proc?.isRunning != false && processStartTime(resolvedPID) == rootStart
                 if !rootRunning {
-                    lingering.remove(resolvedPID)
+                    signaled[resolvedPID] = nil
                 }
-                for targetPID in lingering {
-                    if kill(targetPID, 0) == 0 {
-                        kill(targetPID, SIGKILL)
-                    }
+                for (targetPID, start) in signaled {
+                    signal(targetPID, startedAt: start, SIGKILL)
                 }
                 let pgid = getpgid(resolvedPID)
                 let appPgrp = getpgrp()

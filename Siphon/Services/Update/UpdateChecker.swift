@@ -57,6 +57,25 @@ public final class UpdateChecker: ObservableObject {
         return version.compare(lastUnsignedRelease, options: .numeric) == .orderedDescending
     }
 
+    /// The release's installer archive. Release assets follow one contract,
+    /// `Siphon-<tag>[-<arch>].dmg|zip`; any other archive (symbols, helpers) is ignored.
+    nonisolated static func installerAsset(in assets: [[String: Any]], tag: String) -> [String: Any]? {
+        #if arch(arm64)
+        let archSuffixes = ["-arm64", "-aarch64", "-universal", ""]
+        #else
+        let archSuffixes = ["-x86_64", "-intel", "-universal", ""]
+        #endif
+        let lowerTag = tag.lowercased()
+        let accepted = archSuffixes.flatMap { arch in
+            ["dmg", "zip"].map { "siphon-\(lowerTag)\(arch).\($0)" }
+        }
+        let byName = Dictionary(
+            assets.compactMap { asset in (asset["name"] as? String).map { ($0.lowercased(), asset) } },
+            uniquingKeysWith: { first, _ in first }
+        )
+        return accepted.lazy.compactMap { byName[$0] }.first
+    }
+
     nonisolated static func parseGitHubAssetSHA256(_ digest: String?) -> String? {
         guard let digest = digest?.trimmingCharacters(in: .whitespacesAndNewlines),
               digest.lowercased().hasPrefix("sha256:") else {
@@ -122,38 +141,8 @@ public final class UpdateChecker: ObservableObject {
             manifestSigURL = nil
 
             if let assets = json["assets"] as? [[String: Any]] {
-                    #if arch(arm64)
-                    let targetArch = "arm64"
-                    let altArch = "aarch64"
-                    let nonTargetArch = "x86_64"
-                    #else
-                    let targetArch = "x86_64"
-                    let altArch = "intel"
-                    let nonTargetArch = "arm64"
-                    #endif
-
-                    let sortedAssets = assets.sorted { a, b in
-                        let nameA = (a["name"] as? String)?.lowercased() ?? ""
-                        let nameB = (b["name"] as? String)?.lowercased() ?? ""
-
-                        let aMatchesTarget = nameA.contains(targetArch) || nameA.contains(altArch) || nameA.contains("universal")
-                        let bMatchesTarget = nameB.contains(targetArch) || nameB.contains(altArch) || nameB.contains("universal")
-                        let aMatchesNonTarget = nameA.contains(nonTargetArch)
-                        let bMatchesNonTarget = nameB.contains(nonTargetArch)
-
-                        if aMatchesTarget && !bMatchesTarget { return true }
-                        if !aMatchesTarget && bMatchesTarget { return false }
-                        if !aMatchesNonTarget && bMatchesNonTarget { return true }
-                        if aMatchesNonTarget && !bMatchesNonTarget { return false }
-
-                        if nameA.hasSuffix(".dmg") && !nameB.hasSuffix(".dmg") { return true }
-                        return false
-                    }
-
-                    if let dlpAsset = sortedAssets.first(where: {
-                        let name = ($0["name"] as? String)?.lowercased() ?? ""
-                        return name.hasSuffix(".dmg") || name.hasSuffix(".zip") || name.hasSuffix(".app.zip")
-                    }), let downloadUrlStr = dlpAsset["browser_download_url"] as? String {
+                    if let dlpAsset = Self.installerAsset(in: assets, tag: trimmedTag),
+                       let downloadUrlStr = dlpAsset["browser_download_url"] as? String {
                         downloadURL = URL(string: downloadUrlStr)
                         let assetName = (dlpAsset["name"] as? String) ?? ""
                         downloadAssetName = assetName

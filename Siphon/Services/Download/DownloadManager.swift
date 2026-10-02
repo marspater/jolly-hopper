@@ -324,7 +324,8 @@ class DownloadManager: ObservableObject {
               download.status == .downloading ||
               download.status == .processing ||
               executor.hasActiveTask(for: download.id) {
-            if Task.isCancelled {
+            // After shutdown nothing will ever admit a queued download.
+            if Task.isCancelled || (isShuttingDown && !executor.hasActiveTask(for: download.id)) {
                 return
             }
             do {
