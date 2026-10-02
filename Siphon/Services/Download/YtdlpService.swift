@@ -394,6 +394,8 @@ class YtdlpService: ObservableObject {
             return WKWebsiteDataStore(forIdentifier: UUID(uuidString: identifier)!)
         }
     }
+    // Test seam for Safari's saved cookies. Production reads Safari's cookie store.
+    var safariCookiesProvider: () -> [HTTPCookie] = { SafariCookieReader.cookies() }
     // Test seam for the player capture session. Production uses WKWebView.
     var browserCaptureLoader: ((URL) async throws -> BrowserCapture)?
     // One WebKit page session at a time. Parallel jobs would each open their own
@@ -3542,9 +3544,12 @@ public struct DownloadResult: Sendable {
                lower.contains("cf-turnstile")
     }
 
+    /// The members-only notice. Its element class is the same in every language; the
+    /// link text is not ("Login", "Ingrese", ...).
     private func isBoyfriendTVLoginHTML(_ html: String) -> Bool {
         let lower = html.lowercased()
         return (lower.contains("to watch this video please") && lower.contains("login")) ||
+               lower.range(of: #"class\s*=\s*["'][^"']*\bloginprotected\b"#, options: .regularExpression) != nil ||
                lower.contains("user has been banned")
     }
 
@@ -3614,7 +3619,7 @@ public struct DownloadResult: Sendable {
     }
 
     private func seedBoyfriendTVSafariSession() async {
-        let cookies = Self.boyfriendTVSessionCookies(from: SafariCookieReader.cookies())
+        let cookies = Self.boyfriendTVSessionCookies(from: safariCookiesProvider())
         guard !cookies.isEmpty else { return }
         let store = boyfriendTVWebDataStore.httpCookieStore
         for cookie in cookies {
@@ -3718,8 +3723,7 @@ public struct DownloadResult: Sendable {
     final class BoyfriendTVNavigationDelegate: NSObject, WKNavigationDelegate {
         /// The page may only navigate within BoyfriendTV (both domains). Frames may
         /// also load Cloudflare's challenge widget, which the challenge cannot
-        /// complete without, the reCAPTCHA widget the sign-in form requires, and
-        /// script-built `about:` frames, which fetch nothing.
+        /// complete without, and script-built `about:` frames, which fetch nothing.
         /// Popups and every other target are refused.
         nonisolated static func allowsNavigation(to url: URL?, isMainFrame: Bool?) -> Bool {
             guard let isMainFrame, let scheme = url?.scheme?.lowercased() else { return false }
@@ -3728,11 +3732,7 @@ public struct DownloadResult: Sendable {
                 return false
             }
             let isBoyfriendTV = ["boyfriend.tv", "boyfriendtv.com"].contains { host == $0 || host.hasSuffix("." + $0) }
-            if isBoyfriendTV { return true }
-            guard !isMainFrame, scheme == "https" else { return false }
-            let isReCAPTCHA = ["www.google.com", "www.recaptcha.net"].contains(host) &&
-                url?.path.hasPrefix("/recaptcha/") == true
-            return isReCAPTCHA || host == "challenges.cloudflare.com"
+            return isBoyfriendTV || (!isMainFrame && host == "challenges.cloudflare.com")
         }
 
         func webView(
@@ -3796,40 +3796,10 @@ public struct DownloadResult: Sendable {
         }
     }
 
-    /// The site's login cookie ends with the app unless "Remember me" is ticked, so
-    /// the box starts ticked in Siphon's window. A box the user changes stays as set.
-    nonisolated static let boyfriendTVRememberMeScript = """
-    (() => {
-        const tick = (form) => {
-            const box = form && form.querySelector && form.querySelector('input[name="rememberMe"]');
-            if (box && !box.dataset.siphonUserChoice) box.checked = true;
-        };
-        document.querySelectorAll('form').forEach(tick);
-        document.addEventListener('focusin', (event) => tick(event.target.form), true);
-        document.addEventListener('submit', (event) => tick(event.target), true);
-        document.addEventListener('change', (event) => {
-            if (event.target.name === 'rememberMe') event.target.dataset.siphonUserChoice = '1';
-        }, true);
-    })();
-    """
-
-    /// Sign-up and password pages, which the user may open from the sign-in form.
-    nonisolated static func isBoyfriendTVAccountPath(_ path: String) -> Bool {
-        path.range(
-            of: #"^/(?:[a-z]{2}/)?(?:login|registration|lost-password|reset-password|password)"#,
-            options: [.regularExpression, .caseInsensitive]
-        ) != nil
-    }
-
     private func renderBoyfriendTVPage(_ url: URL, stage: String, rawCookies: String?, requestedAt: Date) async throws -> String? {
         let configuration = WKWebViewConfiguration()
         configuration.websiteDataStore = boyfriendTVWebDataStore
         configuration.defaultWebpagePreferences.allowsContentJavaScript = true
-        configuration.userContentController.addUserScript(WKUserScript(
-            source: Self.boyfriendTVRememberMeScript,
-            injectionTime: .atDocumentEnd,
-            forMainFrameOnly: true
-        ))
 
         await seedBoyfriendTVWebKitCookies(rawCookies, for: url)
         if configuredBrowserCookieSource() == "safari" {
@@ -3861,20 +3831,19 @@ public struct DownloadResult: Sendable {
 
         var lastHTML: String?
         var settledPolls = 0
-        var awaitingSignIn = false
         // Hidden while no check is shown (the session's clearance is valid). A check
         // opens the page in a window: Cloudflare's managed challenge completes only in
         // a visible page, and any interactive step is the user's. Siphon never completes it.
         var deadline = Date().addingTimeInterval(20)
 
         // False when the user closed a BoyfriendTV window after this job asked.
-        func presentWindow(titleKey: String, result: String) -> Bool {
+        func presentWindow() -> Bool {
             guard window == nil else { return true }
             guard mayOpenSessionWindow(for: "boyfriendtv", requestedAt: requestedAt) else { return false }
-            LoggerService.shared.log("[ProtectedSite] stage=\(stage) result=\(result); waiting for the user", level: .info)
+            LoggerService.shared.log("[ProtectedSite] stage=\(stage) result=challenge; waiting for the user", level: .info)
             window = presentBrowserSessionWindow(
                 webView,
-                title: String(format: LanguageService.s(titleKey), url.host ?? ""),
+                title: String(format: LanguageService.s("site_verification_title"), url.host ?? ""),
                 delegate: windowDelegate
             )
             deadline = Date().addingTimeInterval(300)
@@ -3902,29 +3871,16 @@ public struct DownloadResult: Sendable {
 
             if isBoyfriendTVChallengeHTML(resolved) {
                 settledPolls = 0
-                guard presentWindow(titleKey: "site_verification_title", result: "challenge") else { return resolved }
+                guard presentWindow() else { return resolved }
                 continue
             }
 
-            // A members-only video, or the sign-in form the user opened from it. The
-            // sign-in is the user's, in the same window; the site reloads the page
-            // once it succeeds.
-            if isBoyfriendTVLoginHTML(resolved) || (awaitingSignIn && resolved.contains("id=\"loginForm\"")) {
-                settledPolls = 0
-                guard presentWindow(titleKey: "site_sign_in_title", result: "login-page") else { return resolved }
-                awaitingSignIn = true
-                continue
-            }
-
-            // Sign-in often lands on the home page; return to the video from there.
-            // Sign-up and password pages stay open for the user.
-            if awaitingSignIn, webView.url?.path != url.path {
-                settledPolls = 0
-                if !webView.isLoading, !Self.isBoyfriendTVAccountPath(webView.url?.path ?? "") {
-                    awaitingSignIn = false
-                    webView.load(request)
-                }
-                continue
+            // Members-only, and this session isn't signed in. The site's sign-in does not
+            // complete in Siphon's window, so the caller asks for the Safari sign-in.
+            if isBoyfriendTVLoginHTML(resolved) {
+                guard !webView.isLoading else { continue }
+                LoggerService.shared.log("[ProtectedSite] stage=\(stage) result=login-page", level: .debug)
+                return resolved
             }
 
             if !webView.isLoading {
@@ -3987,7 +3943,7 @@ public struct DownloadResult: Sendable {
             let lower = decoded.lowercased()
             let hasStream = extractStreamURLFromHTML(decoded) != nil
             let challenge = !hasStream && isBoyfriendTVChallengeHTML(decoded)
-            let login = !hasStream && lower.contains("to watch this video please") && lower.contains("login")
+            let login = !hasStream && isBoyfriendTVLoginHTML(decoded)
             sawChallenge = sawChallenge || challenge
             sawLoginPage = sawLoginPage || login
             let result: String
@@ -4103,6 +4059,32 @@ public struct DownloadResult: Sendable {
             if hasBoyfriendTVMediaData(rawHtml) { html = rawHtml }
         }
 
+        // The user's own sign-in from Safari ("Remember me" makes it a saved cookie),
+        // without Safari's Cloudflare cookies: those are bound to Safari's fingerprint,
+        // and with them Cloudflare refuses yt-dlp (403). Without them this is the
+        // anonymous request, plus the user's session.
+        var safariSessionSignedOut = false
+        if html.isEmpty, rawCookies?.isEmpty != false, effectiveBrowserSource == "safari",
+           let ytdlp = ytdlpBinary, let scope = Self.boyfriendTVCookieScope(for: targetUrl) {
+            let header = Self.boyfriendTVSessionCookies(from: safariCookiesProvider())
+                .filter { Self.boyfriendTVCookieScope(for: $0.domain.trimmingCharacters(in: CharacterSet(charactersIn: "."))) == scope }
+                .map { "\($0.name)=\($0.value)" }
+                .joined(separator: "; ")
+            if !header.isEmpty, let tempFile = createTempCookiesFileFromHeader(url: targetUrl, cookieHeader: header) {
+                defer { try? FileManager.default.removeItem(at: tempFile) }
+                var args = [ytdlp.path, "--ignore-config", "--dump-pages", "--skip-download", "--no-playlist", "--cookies", tempFile.path]
+                appendSiteSpecificArgs(for: targetUrl, rawUserAgent: rawUserAgent, to: &args)
+                args.append(contentsOf: ["--", targetUrl])
+                let page = try await dumpPage(args, stage: "main-safari-session")
+                if hasBoyfriendTVMediaData(page) {
+                    html = page
+                } else {
+                    // Safari isn't signed in, so its cookies via yt-dlp can't do better.
+                    safariSessionSignedOut = sawLoginPage
+                }
+            }
+        }
+
         let installedBrowsers: [String]
         if let provider = installedBrowsersProvider {
             installedBrowsers = await provider()
@@ -4120,7 +4102,7 @@ public struct DownloadResult: Sendable {
             level: .debug
         )
 
-        if html.isEmpty, let ytdlp = ytdlpBinary {
+        if html.isEmpty, !safariSessionSignedOut, let ytdlp = ytdlpBinary {
             for candidatePage in pageCandidates {
                 let candidateURL = candidatePage.absoluteString
                 let isAlternate = candidateURL != targetUrl
@@ -7580,7 +7562,7 @@ enum YtdlpError: LocalizedError {
         case .protectedSiteLoginRequired:
             // BoyfriendTV only. Browser sessions can't carry its sign-in: Safari never
             // saves the site's login cookie to disk.
-            return "BoyfriendTV shows this video only to signed-in members. Sign in at boyfriendtv.com in Safari with “Remember me” ticked, then retry: Siphon uses that sign-in. Signing in in Siphon's window also works when the site completes it there."
+            return "BoyfriendTV shows this video only to signed-in members. Sign in at boyfriendtv.com in Safari with “Remember me” ticked, then retry: Siphon uses that sign-in (Settings > Advanced > Browser Cookies must be Safari)."
         case .safariCookiesFullDiskAccessRequired:
             return LanguageService.s("safari_fda_required")
         case .securityViolation(let message):

@@ -69,14 +69,7 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertTrue(allows("https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/g/turnstile/if/ov2/", mainFrame: false))
         XCTAssertTrue(allows("about:blank", mainFrame: false))
         XCTAssertFalse(allows("about:blank", mainFrame: true))
-        // The sign-in form's reCAPTCHA widget and its image challenge.
-        XCTAssertTrue(allows("https://www.google.com/recaptcha/api2/anchor?ar=1&k=key&size=normal", mainFrame: false))
-        XCTAssertTrue(allows("https://www.google.com/recaptcha/api2/bframe?hl=en&k=key", mainFrame: false))
-        XCTAssertTrue(allows("https://www.recaptcha.net/recaptcha/enterprise/anchor?k=key", mainFrame: false))
-        XCTAssertFalse(allows("https://www.google.com/recaptcha/api2/anchor?k=key", mainFrame: true))
-        XCTAssertFalse(allows("http://www.google.com/recaptcha/api2/anchor?k=key", mainFrame: false))
-        XCTAssertFalse(allows("https://www.google.com/search?q=x", mainFrame: false))
-        XCTAssertFalse(allows("https://accounts.google.com/recaptcha/x", mainFrame: false))
+        XCTAssertFalse(allows("https://accounts.google.com/gsi/button", mainFrame: false))
 
         XCTAssertFalse(allows("https://challenges.cloudflare.com/", mainFrame: true), "The challenge widget may not replace the page")
         XCTAssertFalse(allows("https://ads.example.com/frame", mainFrame: false))
@@ -268,6 +261,8 @@ final class YtdlpServiceTests: XCTestCase {
         service.ytdlpPath = URL(fileURLWithPath: "/usr/local/bin/yt-dlp")
         service.ffmpegPath = URL(fileURLWithPath: "/usr/local/bin/ffmpeg")
         service.ffprobePath = URL(fileURLWithPath: "/usr/local/bin/ffprobe")
+        // Never the machine's real Safari cookies.
+        service.safariCookiesProvider = { [] }
     }
 
     override func tearDown() async throws {
@@ -2796,7 +2791,7 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertEqual(dumpedPages.value, ["https://www.boyfriendtv.com/videos/1684628/"])
     }
 
-    func testBoyfriendTVUnfinishedSignInStopsBeforeEmbedWindows() async throws {
+    func testBoyfriendTVSignedOutWebKitPageStopsBeforeEmbeds() async throws {
         UserDefaults.standard.set("none", forKey: UserDefaultsKeys.browserForCookies)
         defer { UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.browserForCookies) }
         service.installedBrowsersProvider = { [] }
@@ -2809,7 +2804,7 @@ final class YtdlpServiceTests: XCTestCase {
             }
             return "{}"
         })
-        // The user closed the sign-in window, or it timed out: still the login page.
+        // Siphon's session isn't signed in either: still the login page.
         service.boyfriendTVRenderedPageLoader = { url in
             renderedLoads.value.append(url)
             return login
@@ -2819,17 +2814,82 @@ final class YtdlpServiceTests: XCTestCase {
             _ = try await service.fetchInfo(url: "https://www.boyfriendtv.com/es/videos/1684628/menl0ver09/")
             XCTFail("Expected the sign-in error")
         } catch YtdlpError.protectedSiteLoginRequired {
-            // One window, not one more per embed.
+            // The embeds need the same sign-in: no WebKit load for them.
             XCTAssertEqual(renderedLoads.value.map(\.path), ["/videos/1684628"])
         }
     }
 
-    func testBoyfriendTVSignInWindowKeepsAccountPagesOpen() {
-        for path in ["/login/", "/login-router/", "/registration/", "/es/lost-password/", "/reset-password/abc"] {
-            XCTAssertTrue(YtdlpService.isBoyfriendTVAccountPath(path), path)
+    func testBoyfriendTVUsesTheSafariSignInWithoutSafarisCloudflareCookies() async throws {
+        UserDefaults.standard.set("safari", forKey: UserDefaultsKeys.browserForCookies)
+        defer { UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.browserForCookies) }
+        service.installedBrowsersProvider = { [] }
+        func cookie(_ domain: String, _ name: String, _ value: String) -> HTTPCookie {
+            HTTPCookie(properties: [.domain: domain, .name: name, .value: value, .path: "/"])!
         }
-        for path in ["/", "/es/", "/videos/1684628/", "/es/videos/1684628/menl0ver09/", "/logout/"] {
-            XCTAssertFalse(YtdlpService.isBoyfriendTVAccountPath(path), path)
+        service.safariCookiesProvider = {
+            [cookie(".boyfriendtv.com", "remember", "signed-in"),
+             cookie(".boyfriendtv.com", "cf_clearance", "safari-bound"),
+             cookie(".boyfriend.tv", "other_domain", "x")]
+        }
+        let stream = "https://cdn.boyfriendtv.com/key=member/media=hls4A/multi=854x480:v480/2026-10/_TPL_.mp4"
+        let cookieFiles = TestBox<[String]>([])
+        let browserAttempts = TestBox(0)
+        service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
+            if args.contains("--dump-pages") {
+                if args.contains("--cookies-from-browser") { browserAttempts.value += 1 }
+                if let index = args.firstIndex(of: "--cookies"), index + 1 < args.count {
+                    cookieFiles.value.append((try? String(contentsOfFile: args[index + 1], encoding: .utf8)) ?? "")
+                    return Data("<script>var hlsAuto = \"\(stream)\";</script>".utf8).base64EncodedString()
+                }
+                return Data("<div class='loginProtected'>To watch this video please Login</div>".utf8).base64EncodedString()
+            }
+            return "{}"
+        })
+        service.boyfriendTVRenderedPageLoader = { _ in
+            XCTFail("A signed-in Safari session needs no WebKit window")
+            return nil
+        }
+
+        let info = try await service.fetchInfo(url: "https://www.boyfriendtv.com/es/videos/1409118/n0vae3/")
+
+        XCTAssertEqual(info.manifestUrl, stream)
+        XCTAssertEqual(browserAttempts.value, 0, "No 403-prone --cookies-from-browser attempt once Safari's session worked")
+        let file = try XCTUnwrap(cookieFiles.value.first)
+        XCTAssertTrue(file.contains("remember\tsigned-in"))
+        XCTAssertFalse(file.contains("cf_clearance"), "Safari's Cloudflare cookie makes Cloudflare refuse yt-dlp")
+        XCTAssertFalse(file.contains("other_domain"), "Only the requested domain's cookies")
+    }
+
+    func testBoyfriendTVSignedOutSafariFailsFastWithTheSafariSignInError() async throws {
+        UserDefaults.standard.set("safari", forKey: UserDefaultsKeys.browserForCookies)
+        defer { UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.browserForCookies) }
+        service.installedBrowsersProvider = { [] }
+        service.safariCookiesProvider = {
+            [HTTPCookie(properties: [.domain: ".boyfriendtv.com", .name: "configLang", .value: "es", .path: "/"])!]
+        }
+        // The Spanish page: the notice's link says "Ingrese", never "Login".
+        let login = "<div class=\"loginProtected\" style=\"position: absolute\">To watch this video please <a href=\"/es/ingresar/\">Ingrese</a></div>"
+        let dumps = TestBox(0)
+        service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
+            if args.contains("--dump-pages") {
+                dumps.value += 1
+                return Data(login.utf8).base64EncodedString()
+            }
+            return "{}"
+        })
+        let renderedLoads = TestBox(0)
+        service.boyfriendTVRenderedPageLoader = { _ in
+            renderedLoads.value += 1
+            return login
+        }
+
+        do {
+            _ = try await service.fetchInfo(url: "https://www.boyfriendtv.com/es/videos/1409118/n0vae3/")
+            XCTFail("Expected the sign-in error")
+        } catch YtdlpError.protectedSiteLoginRequired {
+            XCTAssertEqual(dumps.value, 1, "Safari's cookies already showed the login page; other sessions can't do better")
+            XCTAssertEqual(renderedLoads.value, 1)
+            XCTAssertTrue(YtdlpError.protectedSiteLoginRequired.localizedDescription.contains("Remember me"))
         }
     }
 
@@ -2897,38 +2957,6 @@ final class YtdlpServiceTests: XCTestCase {
         let taken = YtdlpService.boyfriendTVSessionCookies(from: cookies)
 
         XCTAssertEqual(taken.map { "\($0.domain) \($0.name)" }, [".boyfriendtv.com remember", "www.boyfriend.tv session"])
-    }
-
-    func testBoyfriendTVRememberMeStartsTickedButKeepsTheUsersChoice() async throws {
-        let configuration = WKWebViewConfiguration()
-        configuration.websiteDataStore = .nonPersistent()
-        configuration.userContentController.addUserScript(WKUserScript(
-            source: YtdlpService.boyfriendTVRememberMeScript,
-            injectionTime: .atDocumentEnd,
-            forMainFrameOnly: true
-        ))
-        let webView = WKWebView(frame: .zero, configuration: configuration)
-        webView.loadHTMLString(
-            "<form><input id='login' name='login'><input type='checkbox' value='1' name='rememberMe' id='rememberMe'></form>",
-            baseURL: URL(string: "https://www.boyfriendtv.com/login/")
-        )
-
-        var ticked = false
-        for _ in 0..<50 where !ticked {
-            ticked = (try? await webView.evaluateJavaScript("document.getElementById('rememberMe').checked")) as? Bool ?? false
-            if !ticked { try await Task.sleep(nanoseconds: 100_000_000) }
-        }
-        XCTAssertTrue(ticked, "Remember me must start ticked so the sign-in outlives the app")
-
-        let afterUntick = try await webView.evaluateJavaScript("""
-            const box = document.getElementById('rememberMe');
-            box.checked = false;
-            box.dispatchEvent(new Event('change', { bubbles: true }));
-            document.getElementById('login').dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
-            box.closest('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
-            box.checked;
-            """)
-        XCTAssertEqual(afterUntick as? Bool, false, "A box the user unticked stays unticked")
     }
 
     func testWebKitSessionsRunOneAtATimeAndCancelledWaitersLeave() async throws {
