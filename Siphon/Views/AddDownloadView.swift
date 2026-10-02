@@ -1623,7 +1623,7 @@ struct AddDownloadView: View {
             case .protectedSiteNeedsBrowserCookies:
                 return "This site requires signed-in browser cookies. Open Settings > Advanced > Browser Cookies, choose your browser, then try again."
             case .protectedSiteLoginRequired:
-                return languageService.s("login_required")
+                return languageService.s("site_sign_in_required")
             case .subtitleError(let details):
                 return String(format: languageService.s("subtitle_download_failed"), details)
             case .ffmpegInstallationFailed:
