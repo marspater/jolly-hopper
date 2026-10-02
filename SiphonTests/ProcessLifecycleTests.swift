@@ -374,6 +374,23 @@ final class ProcessLifecycleTests: XCTestCase {
         XCTAssertEqual(bystander.terminationStatus, SIGKILL, "The stale PID must not be signalled")
     }
 
+    func testProcessStartTimeIdentifiesOneProcessNotItsPID() throws {
+        // Descendants are escalated to SIGKILL only while their PID still carries the
+        // start time recorded when they were first signalled.
+        let first = Process()
+        first.executableURL = URL(fileURLWithPath: "/bin/sleep")
+        first.arguments = ["30"]
+        try first.run()
+        let recorded = try XCTUnwrap(DownloadProcessController.processStartTime(first.processIdentifier))
+        XCTAssertEqual(DownloadProcessController.processStartTime(first.processIdentifier), recorded)
+        first.terminate()
+        first.waitUntilExit()
+
+        XCTAssertNotEqual(DownloadProcessController.processStartTime(first.processIdentifier), recorded,
+                          "An exited process never matches its recorded identity")
+        XCTAssertNil(DownloadProcessController.processStartTime(0))
+    }
+
     func testCancelBeforeStartTransitionsToCancelling() {
         let controller = DownloadProcessController()
         controller.cancel()

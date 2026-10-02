@@ -12,11 +12,13 @@ enum SafariCookieReader {
         ].map { home.appendingPathComponent($0) }
     }()
 
-    /// Unexpired cookies from the first readable store.
-    static func cookies(now: Date = Date()) -> [HTTPCookie] {
-        for file in cookieFiles {
+    /// Unexpired cookies from the first store that has any. A readable store that is
+    /// corrupt, empty or fully expired falls through to the next one.
+    static func cookies(now: Date = Date(), files: [URL] = cookieFiles) -> [HTTPCookie] {
+        for file in files {
             guard let data = try? Data(contentsOf: file) else { continue }
-            return parse(data).filter { ($0.expiresDate ?? .distantFuture) > now }
+            let live = parse(data).filter { ($0.expiresDate ?? .distantFuture) > now }
+            if !live.isEmpty { return live }
         }
         return []
     }
@@ -47,11 +49,13 @@ enum SafariCookieReader {
         var cookies: [HTTPCookie] = []
         var pageStart = 8 + 4 * pageCount
         for page in 0..<pageCount {
+            // A bad page size loses every later page boundary; a bad record table does not.
             guard let pageSize = uint32(8 + 4 * page, bigEndian: true),
-                  pageSize >= 8, pageStart + pageSize <= bytes.count,
-                  let count = uint32(pageStart + 4, bigEndian: false),
-                  count <= (pageSize - 8) / 4 else { break }
+                  pageSize >= 8, pageStart + pageSize <= bytes.count else { break }
             let pageEnd = pageStart + pageSize
+            defer { pageStart = pageEnd }
+            guard let count = uint32(pageStart + 4, bigEndian: false),
+                  count <= (pageSize - 8) / 4 else { continue }
             for index in 0..<count {
                 guard let offset = uint32(pageStart + 8 + 4 * index, bigEndian: false) else { break }
                 let record = pageStart + offset
@@ -77,7 +81,6 @@ enum SafariCookieReader {
                 if flags & 4 != 0 { properties[HTTPCookiePropertyKey("HttpOnly")] = "TRUE" }
                 if let cookie = HTTPCookie(properties: properties) { cookies.append(cookie) }
             }
-            pageStart = pageEnd
         }
         return cookies
     }
