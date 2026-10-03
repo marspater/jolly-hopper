@@ -221,6 +221,7 @@ struct PreferencesView: View {
             HStack(spacing: 5) {
                 Image(systemName: icon)
                     .font(.system(size: 11, weight: .semibold))
+                    .accessibilityHidden(true)
                 Text(title)
                     .font(.siphonSecondarySemibold)
                     .lineLimit(1)
@@ -791,6 +792,7 @@ struct PreferencesView: View {
                 HStack {
                     Image(systemName: "info.circle.fill")
                         .foregroundColor(SiphonTheme.accentText)
+                        .accessibilityHidden(true)
                     Text(languageService.s("h264_preset_info"))
                         .font(.siphonMetadata)
                         .foregroundColor(.secondary)
