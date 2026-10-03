@@ -32,12 +32,20 @@ final class LogSanitizationTests: XCTestCase {
     }
 
     func testSanitizeQuerySecrets() {
-        let raw = "Fetching https://api.service.com/stream?token=secret_stream_token_123&quality=1080p&key=api_key_456"
+        let raw = "Fetching https://api.service.com/stream?token=secret_stream_token_123&quality=1080p&key=api_key_456&access_token=sec_access_789&session=sess_abc_123&jwt=eyJhbGci_secret&oauth_token=oauth_xyz_999"
         let sanitized = LoggerService.sanitizeLogContentForExport(raw)
         XCTAssertFalse(sanitized.contains("secret_stream_token_123"))
         XCTAssertFalse(sanitized.contains("api_key_456"))
+        XCTAssertFalse(sanitized.contains("sec_access_789"))
+        XCTAssertFalse(sanitized.contains("sess_abc_123"))
+        XCTAssertFalse(sanitized.contains("eyJhbGci_secret"))
+        XCTAssertFalse(sanitized.contains("oauth_xyz_999"))
         XCTAssertTrue(sanitized.contains("token=<REDACTED>"))
         XCTAssertTrue(sanitized.contains("key=<REDACTED>"))
+        XCTAssertTrue(sanitized.contains("access_token=<REDACTED>"))
+        XCTAssertTrue(sanitized.contains("session=<REDACTED>"))
+        XCTAssertTrue(sanitized.contains("jwt=<REDACTED>"))
+        XCTAssertTrue(sanitized.contains("oauth_token=<REDACTED>"))
         XCTAssertTrue(sanitized.contains("quality=1080p"))
     }
 
