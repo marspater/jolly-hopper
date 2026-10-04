@@ -16,9 +16,10 @@ final class LogSanitizationTests: XCTestCase {
     }
 
     func testSanitizeCookieHeaders() {
-        let raw = "Sending request with Cookie: SID=super_secret_cookie; HSID=top_secret_auth\nEnd"
+        let raw = "Sending request with Cookie: SID=super_secret_cookie; HSID=top_secret_auth\nResponse: Set-Cookie: SESSION=response_secret_cookie; Path=/\nEnd"
         let sanitized = LoggerService.sanitizeLogContentForExport(raw)
         XCTAssertFalse(sanitized.contains("super_secret_cookie"))
+        XCTAssertFalse(sanitized.contains("response_secret_cookie"))
         XCTAssertTrue(sanitized.contains("<REDACTED_COOKIES>"))
     }
 
@@ -32,12 +33,16 @@ final class LogSanitizationTests: XCTestCase {
     }
 
     func testSanitizeQuerySecrets() {
-        let raw = "Fetching https://api.service.com/stream?token=secret_stream_token_123&quality=1080p&key=api_key_456"
+        let raw = "Fetching https://api.service.com/stream?token=secret_stream_token_123&quality=1080p&key=api_key_456&access_token=secret_jwt_789&session=sess_abc_123"
         let sanitized = LoggerService.sanitizeLogContentForExport(raw)
         XCTAssertFalse(sanitized.contains("secret_stream_token_123"))
         XCTAssertFalse(sanitized.contains("api_key_456"))
+        XCTAssertFalse(sanitized.contains("secret_jwt_789"))
+        XCTAssertFalse(sanitized.contains("sess_abc_123"))
         XCTAssertTrue(sanitized.contains("token=<REDACTED>"))
         XCTAssertTrue(sanitized.contains("key=<REDACTED>"))
+        XCTAssertTrue(sanitized.contains("access_token=<REDACTED>"))
+        XCTAssertTrue(sanitized.contains("session=<REDACTED>"))
         XCTAssertTrue(sanitized.contains("quality=1080p"))
     }
 
