@@ -1696,6 +1696,17 @@ public struct DownloadResult: Sendable {
         onProgress: @escaping @Sendable (Double, String?, String?) -> Void,
         onOutput: @escaping @Sendable (String) -> Void
     ) async throws -> DownloadResult {
+        if let formats = mediaInfo?.formats, !formats.isEmpty {
+            guard formats.contains(where: { !$0.isKnownDRM }) else {
+                throw YtdlpError.noDownloadableFormats
+            }
+            if let selection = options.selectedFormatId {
+                let ids = selection.split(separator: "+").map { $0.trimmingCharacters(in: .whitespaces) }
+                if formats.contains(where: { $0.isKnownDRM && ids.contains($0.formatId) }) {
+                    throw YtdlpError.downloadFailed(LanguageService.s("drm_protected"))
+                }
+            }
+        }
         let boundaryProxy = options.enforcePublicNetworkBoundary ? try await egressProxyURL() : nil
         return try await EgressBoundary.$proxyURL.withValue(boundaryProxy) {
             try await downloadWithinBoundary(
@@ -2580,7 +2591,7 @@ public struct DownloadResult: Sendable {
     /// Any `[height<=N]` selector rejects it, so such a lone format is taken as-is.
     static func isSingleUnprobedFormat(_ info: MediaInfo?) -> Bool {
         guard let formats = info?.formats, formats.count == 1 else { return false }
-        return formats[0].resolution == nil || formats[0].resolution == "unknown"
+        return !formats[0].isKnownDRM && (formats[0].resolution == nil || formats[0].resolution == "unknown")
     }
 
     private func buildFormatArgs(url: String? = nil, options: DownloadOptions, mediaInfo: MediaInfo? = nil) -> [String] {
@@ -7717,6 +7728,7 @@ public struct DownloadResult: Sendable {
 enum YtdlpError: LocalizedError {
     case notFound
     case parseError
+    case noDownloadableFormats
     case commandFailed(String)
     case downloadFailed(String)
     case tooManyRequests
@@ -7734,6 +7746,8 @@ enum YtdlpError: LocalizedError {
             return "yt-dlp not found. Set its path in Settings > Advanced."
         case .parseError:
             return "Failed to parse data"
+        case .noDownloadableFormats:
+            return LanguageService.s("no_downloadable_formats")
         case .commandFailed(let output):
             return "Command failed: \(output)"
         case .downloadFailed(let output):

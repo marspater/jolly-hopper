@@ -117,6 +117,7 @@ class LanguageService: ObservableObject {
         "ytdlp_update_unavailable_message": "Wait for active downloads to finish before updating yt-dlp.",
         "login_required": "This video requires signing in. Please configure browser cookies in Settings > Advanced > Browser Cookies.",
         "drm_protected": "This video is DRM-protected and cannot be downloaded.",
+        "no_downloadable_formats": "No downloadable non-DRM formats are available for this video.",
         "video_unavailable": "This video is unavailable, private, or has been removed.",
         "disk_full": "Download failed: Not enough free disk space on the target volume.",
         "permission_denied": "Download failed: Permission denied when saving file. Please check folder permissions.",

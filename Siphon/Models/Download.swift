@@ -1283,7 +1283,7 @@ struct MediaInfo: Codable {
         self.formatProtocol = formatProtocol
         self.manifestUrl = manifestUrl
 
-        if let fmts = formats, !fmts.isEmpty {
+        if let fmts = formats?.filter({ !$0.isKnownDRM }), !fmts.isEmpty {
             self.maxFormatHeight = fmts.compactMap { $0.parsedHeight }.max()
             self.firstHDRSummary = fmts.first(where: { $0.isHDR })?.hdrSummary
         } else {
@@ -1316,7 +1316,7 @@ struct MediaInfo: Codable {
         self.formatProtocol = try container.decodeIfPresent(String.self, forKey: .formatProtocol)
         self.manifestUrl = try container.decodeIfPresent(String.self, forKey: .manifestUrl)
 
-        if let fmts = self.formats, !fmts.isEmpty {
+        if let fmts = self.formats?.filter({ !$0.isKnownDRM }), !fmts.isEmpty {
             self.maxFormatHeight = fmts.compactMap { $0.parsedHeight }.max()
             self.firstHDRSummary = fmts.first(where: { $0.isHDR })?.hdrSummary
         } else {
@@ -1426,8 +1426,13 @@ struct MediaInfo: Codable {
         return false
     }
 
+    var downloadableFormats: [MediaFormat] {
+        (formats ?? []).filter { !$0.isKnownDRM }
+    }
+
     func resolveSelectedFormats(options: DownloadOptions) -> [MediaFormat] {
-        guard let formats = formats, !formats.isEmpty else { return [] }
+        let formats = downloadableFormats
+        guard !formats.isEmpty else { return [] }
         
         // Bolt Performance Optimization: Lazily filter and sort audio formats at most once across resolution branches
         var cachedBestAudio: MediaFormat?? = nil
@@ -1621,6 +1626,30 @@ public extension String {
 }
 
 struct MediaFormat: Codable, Identifiable, Hashable {
+    /// yt-dlp uses booleans for known DRM and "maybe" for formats that need probing.
+    enum DRMStatus: Codable, Hashable {
+        case clear, maybe, protected
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.singleValueContainer()
+            if let flag = try? container.decode(Bool.self) {
+                self = flag ? .protected : .clear
+            } else {
+                let value = try container.decode(String.self)
+                self = value == "maybe" ? .maybe : (value.isEmpty ? .clear : .protected)
+            }
+        }
+
+        func encode(to encoder: Encoder) throws {
+            var container = encoder.singleValueContainer()
+            if self == .maybe {
+                try container.encode("maybe")
+            } else {
+                try container.encode(self == .protected)
+            }
+        }
+    }
+
     var id: String { formatId }
     let formatId: String
     let ext: String
@@ -1637,6 +1666,7 @@ struct MediaFormat: Codable, Identifiable, Hashable {
     let formatProtocol: String?
     let manifestUrl: String?
     let needsTesting: Bool?
+    let hasDRM: DRMStatus?
     let language: String?
     let languagePreference: Int?
     let preference: Int?
@@ -1655,6 +1685,7 @@ struct MediaFormat: Codable, Identifiable, Hashable {
         case formatProtocol = "protocol"
         case manifestUrl = "manifest_url"
         case needsTesting = "__needs_testing"
+        case hasDRM = "has_drm"
         case language
         case languagePreference = "language_preference"
         case preference
@@ -1682,6 +1713,7 @@ struct MediaFormat: Codable, Identifiable, Hashable {
         formatProtocol: String? = nil,
         manifestUrl: String? = nil,
         needsTesting: Bool? = nil,
+        hasDRM: DRMStatus? = nil,
         language: String? = nil,
         languagePreference: Int? = nil,
         preference: Int? = nil,
@@ -1707,6 +1739,7 @@ struct MediaFormat: Codable, Identifiable, Hashable {
         self.formatProtocol = formatProtocol
         self.manifestUrl = manifestUrl
         self.needsTesting = needsTesting
+        self.hasDRM = hasDRM
         self.language = language
         self.languagePreference = languagePreference
         self.preference = preference
@@ -1717,6 +1750,8 @@ struct MediaFormat: Codable, Identifiable, Hashable {
         self.bitDepth = bitDepth
         self.quality = quality
     }
+
+    var isKnownDRM: Bool { hasDRM == .protected }
 
     var isHDR: Bool {
         if let dr = dynamicRange?.lowercased(), !dr.isEmpty && dr != "sdr" {
