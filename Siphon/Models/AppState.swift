@@ -334,6 +334,14 @@ public final class AppState: ObservableObject {
         }
     }
 
+    /// Re-resolves the user's yt-dlp after its path setting changes.
+    func reloadYtdlp(using ytdlpService: YtdlpService) async {
+        await ytdlpService.findYtdlp()
+        await ytdlpService.getVersion()
+        dependencyCoordinator.version = ytdlpService.version
+        ytdlpVersion = ytdlpService.version
+    }
+
     func updateYtdlp(
         using ytdlpService: YtdlpService,
         activeExecutionCount: Int,
