@@ -118,16 +118,18 @@ struct SiphonApp: App {
                 }
                 .keyboardShortcut(",", modifiers: .command)
                 
-                Button(languageService.s("ytdlp_update")) {
-                    Task {
-                        await appState.updateYtdlp(
-                            using: downloadManager.ytdlpService,
-                            activeExecutionCount: downloadManager.activeExecutionCount,
-                            languageService: languageService
-                        )
+                if DependencyChecksums.managedYtdlpEnabled {
+                    Button(languageService.s("ytdlp_update")) {
+                        Task {
+                            await appState.updateYtdlp(
+                                using: downloadManager.ytdlpService,
+                                activeExecutionCount: downloadManager.activeExecutionCount,
+                                languageService: languageService
+                            )
+                        }
                     }
+                    .disabled(appState.isUpdatingYtdlp || downloadManager.activeExecutionCount > 0)
                 }
-                .disabled(appState.isUpdatingYtdlp || downloadManager.activeExecutionCount > 0)
             }
         }
     }

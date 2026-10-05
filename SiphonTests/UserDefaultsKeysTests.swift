@@ -38,6 +38,7 @@ final class UserDefaultsKeysTests: XCTestCase {
         XCTAssertEqual(UserDefaultsKeys.selectedPreset, "selectedPreset")
         XCTAssertEqual(UserDefaultsKeys.sponsorBlock, "sponsorBlock")
         XCTAssertEqual(UserDefaultsKeys.defaultAdditionalArguments, "defaultAdditionalArguments")
+        XCTAssertEqual(UserDefaultsKeys.customYtdlpPath, "customYtdlpPath")
         XCTAssertEqual(UserDefaultsKeys.startInBackground, "startInBackground")
         XCTAssertEqual(UserDefaultsKeys.selectedCustomPresetId, "selectedCustomPresetId")
         XCTAssertEqual(UserDefaultsKeys.downloadSpeedLimit, "downloadSpeedLimit")
