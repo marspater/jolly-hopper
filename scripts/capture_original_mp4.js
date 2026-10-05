@@ -24,12 +24,20 @@
         return [...urls];
     }
 
+    async function inspectResponse(response, active, collect) {
+        if (!active || !(response?.headers?.get?.("content-type") || "").includes("json")) return;
+        try {
+            const data = await response.clone().json();
+            collect(data);
+        } catch (_) { /* A consumed response cannot be inspected. */ }
+    }
+
     function init(env) {
-        const win = (env && env.window) || (typeof window !== "undefined" ? window : undefined);
-        const doc = (env && env.document) || (typeof document !== "undefined" ? document : undefined);
-        const nav = (env && env.navigator) || (typeof navigator !== "undefined" ? navigator : undefined);
-        const XHR = (env && env.XMLHttpRequest) || (typeof XMLHttpRequest !== "undefined" ? XMLHttpRequest : undefined);
-        const perf = (env && env.performance) || (typeof performance !== "undefined" ? performance : undefined);
+        const win = env?.window ?? (typeof window !== "undefined" ? window : undefined);
+        const doc = env?.document ?? (typeof document !== "undefined" ? document : undefined);
+        const nav = env?.navigator ?? (typeof navigator !== "undefined" ? navigator : undefined);
+        const XHR = env?.XMLHttpRequest ?? (typeof XMLHttpRequest !== "undefined" ? XMLHttpRequest : undefined);
+        const perf = env?.performance ?? (typeof performance !== "undefined" ? performance : undefined);
 
         if (!win || !doc || !nav || !XHR) return;
         if (win.__siphonOriginalCapture) return;
@@ -63,7 +71,7 @@
             }
         };
 
-        if (perf && typeof perf.getEntriesByType === "function") {
+        if (typeof perf?.getEntriesByType === "function") {
             collect(perf.getEntriesByType("resource").map(entry => entry.name));
         }
         if (typeof doc.querySelectorAll === "function") {
@@ -71,17 +79,9 @@
         }
 
         const previousFetch = win.fetch;
-        const inspectResponse = async (response) => {
-            try {
-                const data = await response.clone().json();
-                collect(data);
-            } catch (_) { /* A consumed response cannot be inspected. */ }
-        };
         const captureFetch = async function (...args) {
             const response = await previousFetch.apply(this, args);
-            if (active && (response?.headers?.get?.("content-type") || "").includes("json")) {
-                inspectResponse(response);
-            }
+            void inspectResponse(response, active, collect);
             return response;
         };
         win.fetch = captureFetch;
