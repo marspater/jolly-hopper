@@ -1014,15 +1014,18 @@ struct PreferencesView: View {
                 Spacer()
                 if !customYtdlpPath.isEmpty {
                     Button(languageService.s("ytdlp_auto_detect")) {
+                        guard downloadManager.activeExecutionCount == 0 else { return }
                         customYtdlpPath = ""
                         reloadYtdlp()
                     }
                     .tint(nil)
+                    .disabled(downloadManager.activeExecutionCount > 0)
                 }
                 Button(languageService.s("ytdlp_choose")) {
                     selectYtdlp()
                 }
                 .tint(nil)
+                .disabled(downloadManager.activeExecutionCount > 0)
             }
         }
     }
@@ -1368,6 +1371,7 @@ struct PreferencesView: View {
     }
     
     private func selectYtdlp() {
+        guard downloadManager.activeExecutionCount == 0 else { return }
         let panel = NSOpenPanel()
         panel.canChooseDirectories = false
         panel.canChooseFiles = true
@@ -1384,7 +1388,8 @@ struct PreferencesView: View {
 
     private func reloadYtdlp() {
         Task {
-            await appState.reloadYtdlp(using: downloadManager.ytdlpService)
+            await appState.reloadYtdlp(using: downloadManager.ytdlpService,
+                                       activeExecutionCount: downloadManager.activeExecutionCount)
         }
     }
 
