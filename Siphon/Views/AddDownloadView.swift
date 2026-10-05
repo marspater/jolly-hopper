@@ -382,7 +382,8 @@ struct AddDownloadView: View {
 
     private func streamInspectorSection(_ info: MediaInfo) -> some View {
         Group {
-            if let formats = info.formats, !formats.isEmpty {
+            let formats = info.downloadableFormats
+            if !formats.isEmpty {
                 VStack(alignment: .leading, spacing: 8) {
                     Button {
                         withAnimation(SiphonAnimation.snappySpring) {
@@ -1528,7 +1529,7 @@ struct AddDownloadView: View {
                 var codecOptions: [CodecOption] = []
 
                 if let formats = info.formats {
-                    for format in formats {
+                    for format in formats where !format.isKnownDRM {
                         if let vcodec = format.vcodec, vcodec != "none" {
                             if vcodec.hasPrefix("avc1"), !codecs.contains("h264") {
                                 codecs.insert("h264")
@@ -1622,6 +1623,8 @@ struct AddDownloadView: View {
                 return languageService.s("ytdlp_not_found")
             case .parseError:
                 return languageService.s("parse_error")
+            case .noDownloadableFormats:
+                return languageService.s("no_downloadable_formats")
             case .protectedSiteNeedsBrowserCookies:
                 return "This site requires signed-in browser cookies. Open Settings > Advanced > Browser Cookies, choose your browser, then try again."
             case .protectedSiteLoginRequired:

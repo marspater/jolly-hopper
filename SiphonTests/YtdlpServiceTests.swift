@@ -972,6 +972,62 @@ final class YtdlpServiceTests: XCTestCase {
         }
     }
 
+    func testKnownDRMSelectionIsRejectedBeforeLaunchingProcesses() async throws {
+        service.processRunner = MockYtdlpProcessRunner(
+            mockCommand: { _ in XCTFail("DRM selection must not launch a command"); return "" },
+            mockDownload: { _ in XCTFail("DRM selection must not launch a download"); return "" }
+        )
+        let drm = MediaFormat(formatId: "drm", ext: "mp4", hasDRM: .protected)
+        let clear = MediaFormat(formatId: "clear", ext: "mp4")
+        let drmOnly = MediaInfo(id: "x", title: "DRM only", formats: [drm])
+        for fileType in [MediaFileType.mp4, .mp3] {
+            var options = DownloadOptions.default
+            options.fileType = fileType
+            do {
+                _ = try await service.download(url: "https://example.com/video", options: options,
+                                               mediaInfo: drmOnly, onProgress: { _, _, _ in }, onOutput: { _ in })
+                XCTFail("DRM-only metadata must fail")
+            } catch YtdlpError.noDownloadableFormats {
+                XCTAssertEqual(DownloadExecutor.errorMessage(for: YtdlpError.noDownloadableFormats, languageService: nil),
+                               LanguageService.s("no_downloadable_formats"))
+            }
+            for id in ["drm", "clear+drm", "drm+clear"] {
+                options.selectedFormatId = id
+                do {
+                    _ = try await service.download(url: "https://example.com/video", options: options,
+                                                   mediaInfo: MediaInfo(id: "x", title: "Mixed", formats: [clear, drm]),
+                                                   onProgress: { _, _, _ in }, onOutput: { _ in })
+                    XCTFail("Explicit DRM IDs must fail")
+                } catch YtdlpError.downloadFailed(let reason) {
+                    XCTAssertEqual(reason, LanguageService.s("drm_protected"))
+                }
+            }
+        }
+    }
+
+    func testMixedDRMMetadataPassesOnlyClearFormatIDsToDownloader() async throws {
+        let captured = TestBox<[String]>([])
+        service.processRunner = MockYtdlpProcessRunner(mockDownload: { args in
+            captured.value = args
+            return "/tmp/clear-selection.mp4"
+        })
+        let info = MediaInfo(id: "x", title: "Mixed", formats: [
+            MediaFormat(formatId: "drm-v", ext: "mp4", resolution: "1920x1080", vcodec: "avc1", acodec: "none", hasDRM: .protected),
+            MediaFormat(formatId: "clear-v", ext: "mp4", resolution: "1280x720", vcodec: "avc1", acodec: "none"),
+            MediaFormat(formatId: "drm-a", ext: "m4a", vcodec: "none", acodec: "aac", abr: 320, hasDRM: .protected),
+            MediaFormat(formatId: "clear-a", ext: "m4a", vcodec: "none", acodec: "aac", abr: 128)
+        ])
+        for fileType in [MediaFileType.mp4, .mp3] {
+            var options = DownloadOptions.default
+            options.fileType = fileType
+            options.embedThumbnail = false
+            _ = try await service.download(url: "https://example.com/video", options: options, mediaInfo: info,
+                                           onProgress: { _, _, _ in }, onOutput: { _ in })
+            let index = try XCTUnwrap(captured.value.firstIndex(of: "-f"))
+            XCTAssertEqual(captured.value[index + 1], fileType.isAudio ? "clear-a" : "clear-v+clear-a")
+        }
+    }
+
     func testAudioExtractionAndMetadataFlags() async throws {
         let capturedArgsBox = TestBox<[String]>([])
         service.processRunner = MockYtdlpProcessRunner(mockDownload: { args in

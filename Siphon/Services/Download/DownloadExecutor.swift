@@ -722,6 +722,8 @@ final class DownloadExecutor: ObservableObject {
                 return lang.s("ytdlp_not_found")
             case .parseError:
                 return lang.s("parse_error")
+            case .noDownloadableFormats:
+                return lang.s("no_downloadable_formats")
             case .ffmpegInstallationFailed:
                 return lang.s("ffmpeg_error")
             case .securityViolation(let message):
