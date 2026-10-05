@@ -460,7 +460,7 @@ final class QueueAndErrorUXTests: XCTestCase {
         XCTAssertEqual(result.lastPathComponent, "hls_stream_success.mp4")
     }
 
-    func testProactiveHlsDownloaderAppendedOnM3u8URL() async throws {
+    func testDirectHlsUsesNativeDownloaderBeforeFfmpegFallback() async throws {
         let service = YtdlpService()
         service.ytdlpPath = URL(fileURLWithPath: "/usr/local/bin/yt-dlp")
         let capturedArgs = TestBox<[String]>([])
@@ -477,7 +477,7 @@ final class QueueAndErrorUXTests: XCTestCase {
             onOutput: { _ in /* Output ignored in test */ }
         )
 
-        XCTAssertTrue(capturedArgs.value.contains("--downloader"), "Metadata-first detection must add --downloader ffmpeg on attempt 1 for .m3u8 streams")
+        XCTAssertFalse(capturedArgs.value.contains("--downloader"), "Native HLS must check encryption before delegating to FFmpeg")
         XCTAssertTrue(capturedArgs.value.contains("--hls-use-mpegts"))
     }
 
