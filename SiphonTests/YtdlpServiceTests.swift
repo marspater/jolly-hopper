@@ -112,6 +112,68 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertFalse(try FileManager.default.contentsOfDirectory(atPath: root.path).contains { $0.hasPrefix("thumb_") })
     }
 
+    func testThumbnailInspectionRequiresAttachedPictureAndGeneratesMissingPoster() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let media = root.appendingPathComponent("video.mp4")
+        let cover = root.appendingPathComponent("cover.jpg")
+        try Data("media".utf8).write(to: media)
+        for tool in ["ffmpeg", "ffprobe"] {
+            try FileManager.default.createSymbolicLink(at: root.appendingPathComponent(tool), withDestinationURL: URL(fileURLWithPath: "/usr/bin/true"))
+        }
+        for (output, expected) in [("0\n0\n", false), ("0\n1\n0\n", true), ("", false)] {
+            service.processRunner = MockYtdlpProcessRunner(mockCommand: { _ in output })
+            let attached = try await service.hasAttachedThumbnail(mediaFile: media, ffmpegDir: root.path)
+            XCTAssertEqual(attached, expected)
+        }
+        service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
+            XCTAssertTrue(args.contains("-xerror"))
+            XCTAssertEqual(args.last, cover.path)
+            try Data("cover".utf8).write(to: cover)
+            return ""
+        })
+        try await service.generateVideoThumbnail(mediaFile: media, destination: cover, ffmpegDir: root.path)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: cover.path))
+        XCTAssertEqual(try String(contentsOf: media, encoding: .utf8), "media")
+    }
+
+    func testDirectHlsKeepsNativeEncryptionCheckAndDoesNotRetryDrmWithFfmpeg() async throws {
+        let calls = TestBox(0)
+        service.processRunner = MockYtdlpProcessRunner(mockDownload: { args in
+            calls.value += 1
+            XCTAssertFalse(args.contains("--downloader"), "Native HLS must inspect DRM before delegating")
+            throw YtdlpError.downloadFailed("ERROR: This format is DRM protected")
+        })
+        do {
+            _ = try await service.download(url: "https://media.example.com/master.m3u8", options: .default,
+                                           onProgress: { _, _, _ in }, onOutput: { _ in })
+            XCTFail("Encrypted samples must not be reported as a completed download")
+        } catch YtdlpError.downloadFailed(let message) {
+            XCTAssertTrue(message.contains("DRM"))
+        }
+        XCTAssertEqual(calls.value, 1)
+    }
+
+    func testSignedHlsRefreshesVariantsAndPreservesMasterQuery() async throws {
+        let url = "https://cdn2.onlyfans.com/hls/sample.m3u8?Policy=sample&Signature=sample&Key-Pair-Id=sample"
+        XCTAssertTrue(YtdlpService.requiresHlsVariantQuery(url))
+        XCTAssertFalse(YtdlpService.requiresHlsVariantQuery("https://cdn.example.com/sample.m3u8?Policy=sample&Signature=sample&Key-Pair-Id=sample"))
+        XCTAssertFalse(YtdlpService.requiresHlsVariantQuery("https://cdn2.onlyfans.com/sample.m3u8"))
+        var info = MediaInfo(id: "sample", title: "Signed stream")
+        info.rawJSON = Data("{}".utf8)
+        info.fetchedAt = Date()
+        service.processRunner = MockYtdlpProcessRunner(mockDownload: { args in
+            XCTAssertTrue(args.contains("generic:variant_query"))
+            XCTAssertFalse(args.contains("--load-info-json"), "Older cached metadata may have unsigned variant URLs")
+            XCTAssertFalse(args.contains("--downloader"))
+            XCTAssertEqual(args.last, url)
+            return "/tmp/signed-stream.mp4"
+        })
+        _ = try await service.download(url: url, options: .default, mediaInfo: info,
+                                       onProgress: { _, _, _ in }, onOutput: { _ in })
+    }
+
     func testDownloadUsesRelativeTemplateAndPreservesOwnedScratchOnCancellation() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         let scratch = root.appendingPathComponent("scratch")
@@ -4747,6 +4809,8 @@ final class YtdlpServiceTests: XCTestCase {
 
         XCTAssertEqual(callCountBox.value, 2, "Must retry download when HLS postprocessing stream error is encountered")
         XCTAssertTrue(capturedArgsBox.value.contains("--downloader"), "Retried attempt must include --downloader")
+        let separator = try XCTUnwrap(capturedArgsBox.value.firstIndex(of: "--"))
+        XCTAssertLessThan(try XCTUnwrap(capturedArgsBox.value.firstIndex(of: "--downloader")), separator)
         if let idx = capturedArgsBox.value.firstIndex(of: "--downloader") {
             XCTAssertEqual(capturedArgsBox.value[idx + 1], "ffmpeg")
         }
