@@ -648,6 +648,7 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
             process.environment = YtdlpService.createSanitizedEnvironment()
 
             let outputState = ThreadSafeOutputState()
+            let ffmpegProgress = FfmpegDownloadProgress()
 
             // Bolt Performance Optimization: Process output lines using Substring slices and range searches to eliminate intermediate String array allocations during real-time output stream handling
             let processOutputLine: @Sendable (String) -> Void = { line in
@@ -775,6 +776,11 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
             // Delivered synchronously, like stdout: an async hop to main could
             // land after the drain barrier and the caller's final log flush.
             let postErrorLine: @Sendable (String) -> Void = { line in
+                if let progress = ffmpegProgress.parse(line) {
+                    onProgress(progress.fraction, progress.speed, progress.eta)
+                    onOutput(line)
+                    return
+                }
                 outputState.appendError(line + "\n")
                 onOutput("[ERROR] \(line)")
             }
@@ -915,5 +921,42 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
                 safeContinuation.resume(throwing: error)
             }
         }
+    }
+}
+
+/// FFmpeg writes elapsed media time to stderr rather than yt-dlp progress hooks.
+final class FfmpegDownloadProgress: @unchecked Sendable {
+    private let lock = NSLock()
+    private var duration: Double?
+
+    func parse(_ line: String) -> (fraction: Double, speed: String?, eta: String?)? {
+        lock.lock()
+        defer { lock.unlock() }
+        func token(after marker: String) -> String? {
+            guard let range = line.range(of: marker) else { return nil }
+            return line[range.upperBound...].split(whereSeparator: { $0.isWhitespace || $0 == "," }).first.map(String.init)
+        }
+        func seconds(_ text: String?) -> Double? {
+            guard let text else { return nil }
+            let parts = text.split(separator: ":").compactMap { Double($0) }
+            guard parts.count == 3, parts.allSatisfy({ $0.isFinite && $0 >= 0 }) else { return nil }
+            return parts[0] * 3600 + parts[1] * 60 + parts[2]
+        }
+        if line.contains("Duration:") {
+            duration = seconds(token(after: "Duration:"))
+            return nil
+        }
+        guard line.trimmingCharacters(in: .whitespaces).hasPrefix("frame=") ||
+                line.trimmingCharacters(in: .whitespaces).hasPrefix("size=") else { return nil }
+        guard let duration, duration > 0, let elapsed = seconds(token(after: "time=")) else { return nil }
+        let speed = token(after: "speed=")
+        let multiplier = speed.flatMap { Double($0.replacingOccurrences(of: "x", with: "")) }
+        let eta: String?
+        if let multiplier, multiplier.isFinite, multiplier > 0 {
+            eta = String(format: "%.0fs", max(0, duration - elapsed) / multiplier)
+        } else {
+            eta = nil
+        }
+        return (min(1, elapsed / duration), speed == "N/A" ? nil : speed, eta)
     }
 }

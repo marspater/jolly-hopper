@@ -17,5 +17,10 @@
 
 ## 2026-03-31 - Unsanitized Host in Netscape Cookie File Generation
 **Vulnerability:** Dynamic URL host strings interpolated into Netscape cookie format domain entries were not sanitized for tab, carriage return, and newline control characters, allowing potential cookie line injection in temporary cookie files.
-**Learning:** Extracting `URL.host` from user-supplied or deep-link URLs and using it directly in line-oriented file formats (like Netscape HTTP Cookie File syntax) without token sanitization allows control characters (`\t`, `\r`, `\n`) to inject extra Netscape lines.
+**Learning:** Extracting `URL.host` from user-supplied or dynamic URLs and using it directly in line-oriented file formats (like Netscape HTTP Cookie File syntax) without token sanitization allows control characters (`\t`, `\r`, `\n`) to inject extra Netscape lines.
 **Prevention:** Always sanitize `URL.host` and domain strings with `sanitizeCookieToken` (stripping `\t`, `\r`, `\n`, `\0`) before writing them into Netscape cookie files.
+
+## 2026-04-01 - Credential Leakage via Attached Short Flags and Quoted/Flag-Prefixed URLs in Log Sanitizer
+**Vulnerability:** Command log sanitizer failed to redact sensitive short options passed with attached values (e.g., `-pPASSWORD`, `-uUSER`, `-2TOKEN`, `-HHEADER`) and URLs enclosed in quotes or flag prefixes (e.g. `--url=https://...`), exposing raw credentials and tokens in debug logs.
+**Learning:** Checking only exact dictionary matches, separate argument pairs, or `hasPrefix("http")` in CLI argument sanitization bypasses attached short-flag syntax and quote/flag-wrapped URL values.
+**Prevention:** When sanitizing command arguments, explicitly match attached short flag prefixes without `=` delimiters and search for scheme substrings (`http://`, `https://`) within quote-wrapped or flag-prefixed options.

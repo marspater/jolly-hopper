@@ -122,6 +122,7 @@ struct HeroDropURLView: View {
                         HStack(spacing: 5) {
                             Image(systemName: "slider.horizontal.3")
                                 .font(.system(size: 12, weight: .semibold))
+                                .accessibilityHidden(true)
                             Text(languageService.s("hero_options"))
                                 .font(.siphonSecondaryMedium)
                         }
@@ -139,6 +140,7 @@ struct HeroDropURLView: View {
                         .font(.system(size: 13, weight: .medium))
                         .foregroundColor(showsFieldFocus ? SiphonTheme.accentText : .secondary)
                         .frame(width: 16, alignment: .center)
+                        .accessibilityHidden(true)
 
                     TextField(languageService.s("url_hint"), text: $inputURL)
                         .textFieldStyle(.plain)
@@ -172,6 +174,7 @@ struct HeroDropURLView: View {
                         HStack(spacing: 5) {
                             Image(systemName: pasteFeedback.isShowing ? "checkmark" : "doc.on.clipboard")
                                 .font(.system(size: 12, weight: .semibold))
+                                .accessibilityHidden(true)
                             Text(languageService.s("paste"))
                                 .font(.siphonSecondaryMedium)
                         }
@@ -189,6 +192,7 @@ struct HeroDropURLView: View {
                         HStack(spacing: 5) {
                             Image(systemName: "arrow.down.circle.fill")
                                 .font(.system(size: 12, weight: .semibold))
+                                .accessibilityHidden(true)
                             Text(languageService.s("download_btn"))
                                 .font(.siphonSecondarySemibold)
                         }
@@ -213,6 +217,7 @@ struct HeroDropURLView: View {
                     if let current = feedback.current {
                         Image(systemName: current.icon ?? (current.isSuccess ? "checkmark.circle.fill" : "exclamationmark.circle.fill"))
                             .font(.system(size: 11, weight: .semibold))
+                            .accessibilityHidden(true)
                         Text(current.message)
                             .font(.siphonMetadataMedium)
                             .lineLimit(1)

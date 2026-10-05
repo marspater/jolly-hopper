@@ -8,6 +8,47 @@ import XCTest
 
 final class ProcessLifecycleTests: XCTestCase {
 
+    func testFfmpegProgressHandlesDurationUnknownValuesAndCarriageReturns() {
+        let parser = FfmpegDownloadProgress()
+        XCTAssertNil(parser.parse("frame=10 time=00:00:10.00 speed=2x"))
+        XCTAssertNil(parser.parse("  Duration: 00:01:00.00, start: 0.000000, bitrate: 100 kb/s"))
+        let progress = parser.parse("frame=10 fps=30 time=00:00:15.00 bitrate=100kbits/s speed=2x")
+        XCTAssertEqual(progress?.fraction, 0.25)
+        XCTAssertEqual(progress?.speed, "2x")
+        XCTAssertEqual(progress?.eta, "22s")
+        XCTAssertNil(parser.parse("frame=10 time=N/A speed=N/A"))
+        XCTAssertEqual(parser.parse("size=1024kB time=00:01:30.00 speed=N/A")?.fraction, 1)
+        XCTAssertNil(parser.parse("file time=00:00:15.00"))
+        XCTAssertNil(parser.parse("Duration: N/A, start: 0.0"))
+        XCTAssertNil(parser.parse("frame=10 time=00:00:15.00 speed=2x"))
+
+        let buffer = StreamBuffer()
+        XCTAssertEqual(buffer.appendAndExtractLines(Data("frame=1\rframe=2\r".utf8)), ["frame=1", "frame=2"])
+        XCTAssertEqual(buffer.appendAndExtractLines(Data("frame=3\r\n".utf8)), ["frame=3"])
+    }
+
+    func testRunnerDeliversFfmpegStderrProgressBeforeProcessExits() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let gate = root.appendingPathComponent("progress-received")
+        let media = root.appendingPathComponent("video.mp4")
+        let script = "printf 'Duration: 00:01:00.00, start: 0.0\\n' >&2; " +
+            "printf 'frame=10 time=00:00:15.00 speed=2x\\r' >&2; " +
+            "for i in $(seq 1 100); do test -f '\(gate.path)' && break; sleep 0.02; done; " +
+            "test -f '\(gate.path)' || exit 1; touch '\(media.path)'; echo 'SIPHON_FINAL_PATH:\(media.path)'"
+        let result = try await DefaultYtdlpProcessRunner().runDownloadProcess(
+            args: ["/bin/sh", "-c", script], saveFolder: root, processController: DownloadProcessController(),
+            onProgress: { fraction, speed, eta in
+                XCTAssertEqual(fraction, 0.25)
+                XCTAssertEqual(speed, "2x")
+                XCTAssertEqual(eta, "22s")
+                _ = FileManager.default.createFile(atPath: gate.path, contents: Data())
+            }, onOutput: { _ in }
+        )
+        XCTAssertEqual(result.primaryPath, media.path)
+    }
+
     @MainActor
     func testCommandUsesSharedControllerAndAllowsMainActorCancellation() async throws {
         let controller = DownloadProcessController()

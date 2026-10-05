@@ -1895,18 +1895,8 @@ public struct DownloadResult: Sendable {
         // the runner parses. --no-quiet keeps the normal output alongside it.
         args.append("--no-quiet")
 
-        // Metadata-first HLS detection: configure FFmpeg downloader up-front for standalone .m3u8 streams
-        // (YouTube and DASH formats must ALWAYS use yt-dlp's native downloader)
-        let isHlsOrStream: Bool = {
-            let lower = targetURL.lowercased()
-            let parsedHost = (URL(string: targetURL)?.host ?? targetURL).lowercased()
-            let isYouTube = parsedHost == "youtube.com" || parsedHost.hasSuffix(".youtube.com") || parsedHost == "youtu.be" || parsedHost.hasSuffix(".youtu.be")
-            if isYouTube { return false }
-            return lower.contains(".m3u8")
-        }()
-        if isHlsOrStream && !args.contains("--downloader") {
-            args.append(contentsOf: ["--downloader", "ffmpeg", "--hls-use-mpegts"])
-        }
+        // Let yt-dlp inspect HLS encryption before choosing a downloader.
+        // Forcing FFmpeg skips its FairPlay/DRM rejection and can copy encrypted samples.
 
         args.append(contentsOf: buildFormatArgs(url: url, options: options, mediaInfo: mediaInfo))
         let codecFallbackWarnings = codecFallbackOutputWarnings(options: options)
@@ -1984,6 +1974,7 @@ public struct DownloadResult: Sendable {
         // fetched from, only while its signed stream URLs are surely fresh.
         var infoJSONFile: URL?
         if targetURL == normalizedURL,
+           !Self.requiresHlsVariantQuery(targetURL),
            mediaInfo?.playlist == nil,
            let raw = mediaInfo?.rawJSON,
            let fetchedAt = mediaInfo?.fetchedAt,
@@ -2165,13 +2156,14 @@ public struct DownloadResult: Sendable {
                     LoggerService.shared.log("Live HLS / stream format detected (\(errText.trimmingCharacters(in: .whitespacesAndNewlines))). Retrying download with FFmpeg downloader...", level: .warning)
                     onOutput("[Siphon Info] HLS stream requires FFmpeg downloader. Retrying with FFmpeg downloader...\n")
                     var ffmpegArgs = currentArgs
-                    ffmpegArgs.append(contentsOf: ["--downloader", "ffmpeg"])
+                    var recoveryArgs = ["--downloader", "ffmpeg"]
                     if !ffmpegArgs.contains("--downloader-args") {
-                        ffmpegArgs.append(contentsOf: ["--downloader-args", "ffmpeg_i:-analyzeduration 20M -probesize 20M"])
+                        recoveryArgs.append(contentsOf: ["--downloader-args", "ffmpeg_i:-analyzeduration 20M -probesize 20M"])
                     }
                     if !ffmpegArgs.contains("--hls-use-mpegts") {
-                        ffmpegArgs.append(contentsOf: ["--hls-use-mpegts"])
+                        recoveryArgs.append("--hls-use-mpegts")
                     }
+                    ffmpegArgs.insert(contentsOf: recoveryArgs, at: ffmpegArgs.firstIndex(of: "--") ?? ffmpegArgs.endIndex)
                     currentArgs = ffmpegArgs
                     continue
                 }
@@ -2250,7 +2242,14 @@ public struct DownloadResult: Sendable {
             }.value
         }
 
-        // Post-download cover art fallback: if the output file lacks an embedded thumbnail and we have a local cover image, embed it via FFmpeg
+        // Direct streams often have no poster. Use a decoded frame for their cover.
+        if (options.embedThumbnail || options.downloadThumbnail), options.fileType.isVideo,
+           !FileManager.default.fileExists(atPath: scratchThumbnailURL.path) {
+            try await generateVideoThumbnail(mediaFile: finalFileURL, destination: scratchThumbnailURL,
+                                             ffmpegDir: ffmpegDir, processController: processController)
+        }
+
+        // Post-download cover art fallback: embed a local cover if it is missing.
         if options.embedThumbnail && FileManager.default.fileExists(atPath: scratchThumbnailURL.path) {
             let hasThumb = try await hasAttachedThumbnail(mediaFile: finalFileURL, ffmpegDir: ffmpegDir, processController: processController)
             if !hasThumb {
@@ -2308,6 +2307,25 @@ public struct DownloadResult: Sendable {
 
         guard let data = await DownloadExecutor.fetchThumbnailData(for: request) else { return false }
         return (try? data.write(to: destinationURL, options: .atomic)) != nil
+    }
+
+    func generateVideoThumbnail(mediaFile: URL, destination: URL, ffmpegDir: String,
+                                processController: DownloadProcessController? = nil) async throws {
+        let ffmpeg = URL(fileURLWithPath: ffmpegDir).appendingPathComponent("ffmpeg")
+        guard FileManager.default.isExecutableFile(atPath: ffmpeg.path),
+              FileManager.default.fileExists(atPath: mediaFile.path) else { return }
+        do {
+            _ = try await processRunner.runCommand([
+                ffmpeg.path, "-nostdin", "-y", "-v", "error", "-xerror", "-i", mediaFile.path,
+                "-map", "0:v:0", "-frames:v", "1", "-vf", "scale=512:512:force_original_aspect_ratio=decrease",
+                destination.path
+            ], processController: processController)
+        } catch {
+            if error is CancellationError { throw error }
+            try Task.checkCancellation()
+            guard processController?.isCancelled != true else { throw CancellationError() }
+            LoggerService.shared.log("Video thumbnail generation failed: \(error.localizedDescription)", level: .warning)
+        }
     }
 
     func embedThumbnailWithFfmpeg(imageFile: URL, mediaFile: URL, ffmpegDir: String, processController: DownloadProcessController? = nil) async throws -> Bool {
@@ -2403,7 +2421,7 @@ public struct DownloadResult: Sendable {
         let args = [
             ffprobeBin.path,
             "-v", "error",
-            "-show_entries", "stream_disposition=attached_pic:format_tags=cover:format_tags=covr:stream_tags=cover:stream_tags=covr",
+            "-show_entries", "stream_disposition=attached_pic",
             "-of", "csv=p=0",
             mediaFile.path
         ]
@@ -2411,8 +2429,8 @@ public struct DownloadResult: Sendable {
             let output = try await processRunner.runCommand(args, processController: processController)
             try Task.checkCancellation()
             guard processController?.isCancelled != true else { throw CancellationError() }
-            return output.lazy.split(whereSeparator: \.isNewline).contains { line in
-                line.contains { !$0.isWhitespace }
+            return output.split(whereSeparator: \.isNewline).contains { line in
+                line.trimmingCharacters(in: .whitespacesAndNewlines) == "1"
             }
         } catch {
             if error is CancellationError { throw error }
@@ -7062,6 +7080,10 @@ public struct DownloadResult: Sendable {
             args.append(contentsOf: ["--add-header", "Referer:https://single-stream video site.com/"])
         } else if lowerUrl.contains(".m3u8") || lowerUrl.contains(".mpd") {
             args.append(contentsOf: ["--hls-use-mpegts"])
+            if Self.requiresHlsVariantQuery(url) {
+                // This CDN's relative variant links omit the master signature.
+                args.append(contentsOf: ["--extractor-args", "generic:variant_query"])
+            }
         } else if let components = URLComponents(string: url), let host = components.host, !host.isEmpty, !host.contains("\r"), !host.contains("\n") {
             // Universal Referer and Origin auto-injection for anti-hotlinking CDN protection
             let scheme = components.scheme ?? "https"
@@ -7092,6 +7114,14 @@ public struct DownloadResult: Sendable {
                                      "--retry-sleep", "fragment:exp=1:8",
                                      "--retry-sleep", "extractor:exp=1:8"])
         }
+    }
+
+    nonisolated static func requiresHlsVariantQuery(_ url: String) -> Bool {
+        guard let components = URLComponents(string: url),
+              let host = components.host?.lowercased(),
+              host.hasSuffix(".onlyfans.com"), components.path.lowercased().hasSuffix(".m3u8") else { return false }
+        let names = Set(components.queryItems?.map(\.name) ?? [])
+        return names.contains("Policy") && names.contains("Signature") && names.contains("Key-Pair-Id")
     }
 
     static let safariUserAgent: String = {
@@ -7670,7 +7700,8 @@ final class StreamBuffer: @unchecked Sendable {
         var lines: [String] = []
 
         var searchStartIndex = buffer.startIndex
-        while let newlineIndex = buffer[searchStartIndex...].firstIndex(of: 0x0A) { // 0x0A is '\n'
+        // FFmpeg statistics end in carriage returns, without a newline.
+        while let newlineIndex = buffer[searchStartIndex...].firstIndex(where: { $0 == 0x0A || $0 == 0x0D }) {
             var lineSlice = buffer[searchStartIndex..<newlineIndex]
             searchStartIndex = newlineIndex + 1
 
