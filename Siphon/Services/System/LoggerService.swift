@@ -85,6 +85,14 @@ class LoggerService: ObservableObject {
             "--external-downloader-args": "\"<ARGS_REDACTED>\""
         ]
 
+        let shortSensitiveFlags: [String: String] = [
+            "-p": "\"<PASSWORD>\"",
+            "-u": "\"<USERNAME>\"",
+            "-2": "\"<2FACTOR>\"",
+            "-b": "\"<BROWSER>\"",
+            "-H": "\"<REDACTED_HEADER>\""
+        ]
+
         for arg in args {
             if let redactionPlaceholder = skipNextForRedaction {
                 sanitizedArgs.append(redactionPlaceholder)
@@ -98,6 +106,17 @@ class LoggerService: ObservableObject {
                 continue
             }
 
+            // Check attached short option syntax (e.g., -pPassword, -uUser, -2Code)
+            var handledShort = false
+            for (shortFlag, placeholder) in shortSensitiveFlags {
+                if arg.hasPrefix(shortFlag) && arg.count > 2 && !arg.hasPrefix(shortFlag + "=") {
+                    sanitizedArgs.append("\(shortFlag)\(placeholder)")
+                    handledShort = true
+                    break
+                }
+            }
+            if handledShort { continue }
+
             // Check --flag=value syntax
             var handledInline = false
             for (flag, placeholder) in sensitiveValueFlags {
@@ -109,9 +128,13 @@ class LoggerService: ObservableObject {
             }
             if handledInline { continue }
 
-            if arg.hasPrefix("http://") || arg.hasPrefix("https://") {
-                let sanitized = sanitizeURLForLog(arg)
-                sanitizedArgs.append(sanitized.contains(" ") ? "\"\(sanitized)\"" : sanitized)
+            // Check URLs (including quoted URLs or flag-prefixed URLs like --url=https://...)
+            if let schemeRange = arg.range(of: "http://") ?? arg.range(of: "https://") {
+                let prefix = String(arg[..<schemeRange.lowerBound])
+                let rawURL = String(arg[schemeRange.lowerBound...]).trimmingCharacters(in: CharacterSet(charactersIn: "\"'"))
+                let sanitized = sanitizeURLForLog(rawURL)
+                let full = prefix + sanitized
+                sanitizedArgs.append(full.contains(" ") || arg.hasPrefix("\"") || arg.hasPrefix("'") ? "\"\(full)\"" : full)
                 continue
             }
 
