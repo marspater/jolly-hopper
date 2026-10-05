@@ -335,11 +335,16 @@ public final class AppState: ObservableObject {
     }
 
     /// Re-resolves the user's yt-dlp after its path setting changes.
-    func reloadYtdlp(using ytdlpService: YtdlpService) async {
+    /// Returns false, leaving yt-dlp untouched, while a download is running so one job
+    /// can never mix two yt-dlp builds.
+    @discardableResult
+    func reloadYtdlp(using ytdlpService: YtdlpService, activeExecutionCount: Int) async -> Bool {
+        guard activeExecutionCount == 0 else { return false }
         await ytdlpService.findYtdlp()
         await ytdlpService.getVersion()
         dependencyCoordinator.version = ytdlpService.version
         ytdlpVersion = ytdlpService.version
+        return true
     }
 
     func updateYtdlp(

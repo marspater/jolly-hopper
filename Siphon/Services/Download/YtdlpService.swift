@@ -678,7 +678,28 @@ class YtdlpService: ObservableObject {
     ) -> URL? {
         let custom = (customPath ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         let candidates = custom.isEmpty ? searchPaths : [(custom as NSString).expandingTildeInPath]
-        return candidates.first { fileManager.isExecutableFile(atPath: $0) }.map { URL(fileURLWithPath: $0) }
+        return candidates.first { isRegularExecutable($0, fileManager: fileManager) }.map { URL(fileURLWithPath: $0) }
+    }
+
+    nonisolated static func isRegularExecutable(_ path: String, fileManager: FileManager = .default) -> Bool {
+        var isDirectory: ObjCBool = false
+        return fileManager.fileExists(atPath: path, isDirectory: &isDirectory)
+            && !isDirectory.boolValue && fileManager.isExecutableFile(atPath: path)
+    }
+
+    /// yt-dlp prints a date version such as `2026.09.30` or `2026.09.30.232921`.
+    nonisolated static func isYtdlpVersion(_ output: String) -> Bool {
+        output.trimmingCharacters(in: .whitespacesAndNewlines)
+            .range(of: #"^\d{4}\.\d{2}\.\d{2}(\.\d+)?$"#, options: .regularExpression) != nil
+    }
+
+    /// The yt-dlp every code path must run. With user-provided yt-dlp only the
+    /// validated `ytdlpPath` counts; a stale bundled or App Support copy never does.
+    var resolvedYtdlpBinary: URL? {
+        if !DependencyChecksums.managedYtdlpEnabled { return ytdlpPath }
+        let installed = Self.getAppSupportDirectory().appendingPathComponent("yt-dlp")
+        return ytdlpPath ?? Bundle.main.url(forResource: "yt-dlp", withExtension: nil)
+            ?? (FileManager.default.fileExists(atPath: installed.path) ? installed : nil)
     }
 
     func findYtdlp() async {
@@ -686,14 +707,28 @@ class YtdlpService: ObservableObject {
             return
         }
         if !DependencyChecksums.managedYtdlpEnabled {
-            ytdlpPath = Self.userYtdlpPath()
-            isAvailable = ytdlpPath != nil
+            ytdlpPath = nil
+            isAvailable = false
             version = nil
-            if let path = ytdlpPath {
-                LoggerService.shared.log("Using user-provided yt-dlp at \(path.path)", level: .info)
-            } else {
+            guard let candidate = Self.userYtdlpPath() else {
                 LoggerService.shared.log("No yt-dlp found. Set its path in Settings > Advanced.", level: .warning)
+                return
             }
+            // Commit only a binary that identifies itself as yt-dlp.
+            do {
+                let output = try await processRunner.runCommand([candidate.path, "--ignore-config", "--version"])
+                guard Self.isYtdlpVersion(output) else {
+                    LoggerService.shared.log("\(candidate.path) is not yt-dlp (unexpected --version output).", level: .warning)
+                    return
+                }
+                version = output.trimmingCharacters(in: .whitespacesAndNewlines)
+            } catch {
+                LoggerService.shared.log("\(candidate.path) failed its yt-dlp version check: \(error.localizedDescription)", level: .warning)
+                return
+            }
+            ytdlpPath = candidate
+            isAvailable = true
+            LoggerService.shared.log("Using user-provided yt-dlp at \(candidate.path)", level: .info)
             return
         }
         let appSupport = Self.getAppSupportDirectory()
@@ -2232,14 +2267,28 @@ public struct DownloadResult: Sendable {
             onOutput("[WARNING] \(finalResult.allPaths.count) item(s) finished; others failed: \(partialFailure)\n")
             LoggerService.shared.log("Download finished with failed items (\(hostForLog(normalizedURL))): \(partialFailure)", level: .warning)
         }
-        let finalFileURL = URL(fileURLWithPath: finalResult.primaryPath, relativeTo: options.saveFolder).absoluteURL
-        let allFileURLs = finalResult.allPaths.map { URL(fileURLWithPath: $0, relativeTo: options.saveFolder).absoluteURL }
+        var finalFileURL = URL(fileURLWithPath: finalResult.primaryPath, relativeTo: options.saveFolder).absoluteURL
+        var allFileURLs = finalResult.allPaths.map { URL(fileURLWithPath: $0, relativeTo: options.saveFolder).absoluteURL }
 
         if let key = bestCamDecryptionKey {
             onOutput("[Siphon Info] Decrypting downloaded stream...\n")
+            let encryptedFile = finalFileURL
             try await Task.detached(priority: .utility) {
-                try Self.decryptBestCamFile(at: finalFileURL, filename: key)
+                try Self.decryptBestCamFile(at: encryptedFile, filename: key)
             }.value
+        }
+
+        // yt-dlp saves GIF links and GIF pages as .gif; a video download must end as video.
+        if options.fileType.isVideo, allFileURLs.contains(where: Self.isGIF) {
+            onOutput("[Siphon Info] \(LanguageService.s("converting_gif_to_video"))\n")
+            let primary = finalFileURL
+            for index in allFileURLs.indices where Self.isGIF(allFileURLs[index]) {
+                let gif = allFileURLs[index]
+                let video = try await convertGIFToVideo(gif: gif, ffmpegDir: ffmpegDir,
+                                                        processController: processController)
+                allFileURLs[index] = video
+                if gif == primary { finalFileURL = video }
+            }
         }
 
         // A successful remux does not prove that fragmented media can be decoded.
@@ -2320,6 +2369,44 @@ public struct DownloadResult: Sendable {
 
         guard let data = await DownloadExecutor.fetchThumbnailData(for: request) else { return false }
         return (try? data.write(to: destinationURL, options: .atomic)) != nil
+    }
+
+    nonisolated static func isGIF(_ file: URL) -> Bool { file.pathExtension.lowercased() == "gif" }
+
+    /// Re-encodes an animated GIF as H.264 MP4 beside it, then removes the GIF.
+    /// The GIF is kept if conversion fails. Even dimensions and yuv420p keep the MP4 playable everywhere.
+    func convertGIFToVideo(gif: URL, ffmpegDir: String,
+                           processController: DownloadProcessController? = nil) async throws -> URL {
+        try Task.checkCancellation()
+        guard processController?.isCancelled != true else { throw CancellationError() }
+        let ffmpeg = URL(fileURLWithPath: ffmpegDir).appendingPathComponent("ffmpeg")
+        let fm = FileManager.default
+        let directory = gif.deletingLastPathComponent()
+        let base = gif.deletingPathExtension().lastPathComponent
+        var destination = directory.appendingPathComponent(base + ".mp4")
+        var copy = 1
+        while fm.fileExists(atPath: destination.path) {
+            copy += 1
+            destination = directory.appendingPathComponent("\(base) (\(copy)).mp4")
+        }
+        let partial = directory.appendingPathComponent(".\(UUID().uuidString).mp4.partial")
+        defer { try? fm.removeItem(at: partial) }
+        do {
+            _ = try await processRunner.runCommand([
+                ffmpeg.path, "-nostdin", "-v", "error", "-y", "-i", gif.path,
+                "-an", "-vf", "scale=trunc(iw/2)*2:trunc(ih/2)*2",
+                "-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "18", "-preset", "medium",
+                "-movflags", "+faststart", "-f", "mp4", partial.path
+            ], processController: processController)
+            try fm.moveItem(at: partial, to: destination)
+        } catch {
+            if error is CancellationError { throw error }
+            try Task.checkCancellation()
+            LoggerService.shared.log("GIF to video conversion failed: \(error.localizedDescription)", level: .error)
+            throw YtdlpError.downloadFailed(LanguageService.s("gif_conversion_failed"))
+        }
+        try? fm.removeItem(at: gif)
+        return destination
     }
 
     func validateDownloadedMedia(mediaFile: URL, ffmpegDir: String,
@@ -2489,6 +2576,13 @@ public struct DownloadResult: Sendable {
 
 
 
+    /// Generic page extractors (og:video, <video> tags) return one format with no height.
+    /// Any `[height<=N]` selector rejects it, so such a lone format is taken as-is.
+    static func isSingleUnprobedFormat(_ info: MediaInfo?) -> Bool {
+        guard let formats = info?.formats, formats.count == 1 else { return false }
+        return formats[0].resolution == nil || formats[0].resolution == "unknown"
+    }
+
     private func buildFormatArgs(url: String? = nil, options: DownloadOptions, mediaInfo: MediaInfo? = nil) -> [String] {
         var args: [String] = []
 
@@ -2506,7 +2600,8 @@ public struct DownloadResult: Sendable {
                                         (url.map(isBoyfriendTVURL) ?? false) ||
                                         (url.map(isBestCamURL) ?? false) ||
                                         (url.map(isStarwankURL) ?? false) ||
-                                        (url.map(isPussyspaceURL) ?? false)
+                                        (url.map(isPussyspaceURL) ?? false) ||
+                                        Self.isSingleUnprobedFormat(mediaInfo)
 
         // 1. Audio downloads: return early with audio extraction and quality options
         if options.fileType.isAudio {
@@ -4133,8 +4228,7 @@ public struct DownloadResult: Sendable {
             }
         }
 
-        let appSupportYtdlp = Self.getAppSupportDirectory().appendingPathComponent("yt-dlp")
-        let ytdlpBinary = ytdlpPath ?? Bundle.main.url(forResource: "yt-dlp", withExtension: nil) ?? (FileManager.default.fileExists(atPath: appSupportYtdlp.path) ? appSupportYtdlp : nil)
+        let ytdlpBinary = resolvedYtdlpBinary
 
         // Try raw session cookies if provided (e.g. from browser extension)
         if let raw = rawCookies, !raw.isEmpty, let ytdlp = ytdlpBinary,
@@ -4942,8 +5036,7 @@ public struct DownloadResult: Sendable {
         
         // 2. Fallback to yt-dlp dump-pages if direct fetch failed
         if html.isEmpty {
-            let appSupportYtdlp = Self.getAppSupportDirectory().appendingPathComponent("yt-dlp")
-            let ytdlpBinary = ytdlpPath ?? Bundle.main.url(forResource: "yt-dlp", withExtension: nil) ?? (FileManager.default.fileExists(atPath: appSupportYtdlp.path) ? appSupportYtdlp : nil)
+            let ytdlpBinary = resolvedYtdlpBinary
             if let ytdlp = ytdlpBinary {
                 var dumpArgs = [ytdlp.path, "--ignore-config", "--dump-pages"]
                 appendSiteSpecificArgs(for: targetUrl, to: &dumpArgs)
@@ -5132,8 +5225,7 @@ public struct DownloadResult: Sendable {
         LoggerService.shared.log("[GFF] Extracting media for: \(LoggerService.sanitizeURLForLog(targetUrl))", level: .info)
         var html = ""
         
-        let appSupportYtdlp = Self.getAppSupportDirectory().appendingPathComponent("yt-dlp")
-        let ytdlpBinary = ytdlpPath ?? Bundle.main.url(forResource: "yt-dlp", withExtension: nil) ?? (FileManager.default.fileExists(atPath: appSupportYtdlp.path) ? appSupportYtdlp : nil)
+        let ytdlpBinary = resolvedYtdlpBinary
 
         // 1. Try raw session cookies if provided (e.g. from browser extension)
         if let raw = rawCookies, !raw.isEmpty, let ytdlp = ytdlpBinary,
@@ -5910,8 +6002,7 @@ public struct DownloadResult: Sendable {
             }
 
             if html.isEmpty {
-                let appSupportYtdlp = Self.getAppSupportDirectory().appendingPathComponent("yt-dlp")
-                let ytdlpBinary = ytdlpPath ?? Bundle.main.url(forResource: "yt-dlp", withExtension: nil) ?? (FileManager.default.fileExists(atPath: appSupportYtdlp.path) ? appSupportYtdlp : nil)
+                let ytdlpBinary = resolvedYtdlpBinary
                 if let ytdlp = ytdlpBinary {
                     var dumpArgs = [ytdlp.path, "--ignore-config", "--dump-pages"]
                     appendSiteSpecificArgs(for: targetUrl, to: &dumpArgs)
@@ -6014,8 +6105,7 @@ public struct DownloadResult: Sendable {
         }
 
         if datasB64 == nil && infoJSON == nil {
-            let appSupportYtdlp = Self.getAppSupportDirectory().appendingPathComponent("yt-dlp")
-            let ytdlpBinary = ytdlpPath ?? Bundle.main.url(forResource: "yt-dlp", withExtension: nil) ?? (FileManager.default.fileExists(atPath: appSupportYtdlp.path) ? appSupportYtdlp : nil)
+            let ytdlpBinary = resolvedYtdlpBinary
             if let ytdlp = ytdlpBinary {
                 var dumpArgs = [ytdlp.path, "--ignore-config", "--dump-pages"]
                 appendSiteSpecificArgs(for: embedURL, to: &dumpArgs)
@@ -6131,10 +6221,7 @@ public struct DownloadResult: Sendable {
         }
 
         if html.isEmpty {
-            let appSupportYtdlp = Self.getAppSupportDirectory().appendingPathComponent("yt-dlp")
-            let bundledYtdlp = Bundle.main.url(forResource: "yt-dlp", withExtension: nil)
-            let installedYtdlp = FileManager.default.fileExists(atPath: appSupportYtdlp.path) ? appSupportYtdlp : nil
-            if let ytdlp = ytdlpPath ?? bundledYtdlp ?? installedYtdlp {
+            if let ytdlp = resolvedYtdlpBinary {
                 var dumpArgs = [ytdlp.path, "--ignore-config", "--dump-pages"]
                 appendSiteSpecificArgs(for: targetURL, to: &dumpArgs)
                 dumpArgs.append(contentsOf: ["--", targetURL])
