@@ -2242,6 +2242,19 @@ public struct DownloadResult: Sendable {
             }.value
         }
 
+        // A successful remux does not prove that fragmented media can be decoded.
+        // Custom downloaders can return success after copying encrypted samples.
+        let selectedFormats = mediaInfo?.resolveSelectedFormats(options: options) ?? []
+        if URL(string: targetURL)?.pathExtension.lowercased() == "m3u8" ||
+           URL(string: targetURL)?.pathExtension.lowercased() == "mpd" ||
+           mediaInfo?.isFragmented == true || selectedFormats.contains(where: \.isFragmented) {
+            onOutput("[Siphon Info] \(LanguageService.s("checking_media_integrity"))\n")
+            for file in allFileURLs {
+                try await validateDownloadedMedia(mediaFile: file, ffmpegDir: ffmpegDir,
+                                                  processController: processController)
+            }
+        }
+
         // Direct streams often have no poster. Use a decoded frame for their cover.
         if (options.embedThumbnail || options.downloadThumbnail), options.fileType.isVideo,
            !FileManager.default.fileExists(atPath: scratchThumbnailURL.path) {
@@ -2307,6 +2320,28 @@ public struct DownloadResult: Sendable {
 
         guard let data = await DownloadExecutor.fetchThumbnailData(for: request) else { return false }
         return (try? data.write(to: destinationURL, options: .atomic)) != nil
+    }
+
+    func validateDownloadedMedia(mediaFile: URL, ffmpegDir: String,
+                                 processController: DownloadProcessController? = nil) async throws {
+        try Task.checkCancellation()
+        guard processController?.isCancelled != true else { throw CancellationError() }
+        let ffmpeg = URL(fileURLWithPath: ffmpegDir).appendingPathComponent("ffmpeg")
+        do {
+            _ = try await processRunner.runCommand([
+                ffmpeg.path, "-nostdin", "-v", "error", "-xerror", "-err_detect", "explode",
+                "-i", mediaFile.path, "-map", "0:V?", "-map", "0:a?",
+                "-abort_on", "empty_output_stream", "-f", "null", "-"
+            ], processController: processController)
+        } catch {
+            if error is CancellationError { throw error }
+            try Task.checkCancellation()
+            guard processController?.isCancelled != true else { throw CancellationError() }
+            LoggerService.shared.log("Downloaded media failed its decode check: \(error.localizedDescription)", level: .error)
+            throw YtdlpError.downloadFailed(LanguageService.s("media_integrity_failed"))
+        }
+        try Task.checkCancellation()
+        guard processController?.isCancelled != true else { throw CancellationError() }
     }
 
     func generateVideoThumbnail(mediaFile: URL, destination: URL, ffmpegDir: String,

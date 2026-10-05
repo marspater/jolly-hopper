@@ -31,6 +31,8 @@ class LanguageService: ObservableObject {
     }
 
     nonisolated private static let staticTranslations: [String: String] = [
+        "checking_media_integrity": "Checking downloaded audio and video...",
+        "media_integrity_failed": "The downloaded file could not be decoded. It may be corrupted or still encrypted. Siphon kept the file for inspection and did not mark the download as completed.",
         "queue_recovery_title": "Interrupted Downloads Detected",
         "queue_recovery_message": "Siphon detected %d download(s) that were interrupted when the app closed unexpectedly. Would you like to restore them to the queue?",
         "queue_recovery_restore": "Restore Queue",
