@@ -16,9 +16,10 @@ final class LogSanitizationTests: XCTestCase {
     }
 
     func testSanitizeCookieHeaders() {
-        let raw = "Sending request with Cookie: SID=super_secret_cookie; HSID=top_secret_auth\nEnd"
+        let raw = "Sending request with Cookie: SID=super_secret_cookie; HSID=top_secret_auth\nResponse: Set-Cookie: SESSION=response_secret_cookie; Path=/\nEnd"
         let sanitized = LoggerService.sanitizeLogContentForExport(raw)
         XCTAssertFalse(sanitized.contains("super_secret_cookie"))
+        XCTAssertFalse(sanitized.contains("response_secret_cookie"))
         XCTAssertTrue(sanitized.contains("<REDACTED_COOKIES>"))
     }
 
@@ -32,12 +33,16 @@ final class LogSanitizationTests: XCTestCase {
     }
 
     func testSanitizeQuerySecrets() {
-        let raw = "Fetching https://api.service.com/stream?token=secret_stream_token_123&quality=1080p&key=api_key_456"
+        let raw = "Fetching https://api.service.com/stream?token=secret_stream_token_123&quality=1080p&key=api_key_456&access_token=secret_jwt_789&session=sess_abc_123"
         let sanitized = LoggerService.sanitizeLogContentForExport(raw)
         XCTAssertFalse(sanitized.contains("secret_stream_token_123"))
         XCTAssertFalse(sanitized.contains("api_key_456"))
+        XCTAssertFalse(sanitized.contains("secret_jwt_789"))
+        XCTAssertFalse(sanitized.contains("sess_abc_123"))
         XCTAssertTrue(sanitized.contains("token=<REDACTED>"))
         XCTAssertTrue(sanitized.contains("key=<REDACTED>"))
+        XCTAssertTrue(sanitized.contains("access_token=<REDACTED>"))
+        XCTAssertTrue(sanitized.contains("session=<REDACTED>"))
         XCTAssertTrue(sanitized.contains("quality=1080p"))
     }
 
@@ -46,6 +51,34 @@ final class LogSanitizationTests: XCTestCase {
         let sanitized = LoggerService.sanitizeCommandForLog(args)
         XCTAssertFalse(sanitized.contains("secret_user_login_token_12345"))
         XCTAssertTrue(sanitized.contains("--login-with-token \"<TOKEN>\""))
+    }
+
+    func testSanitizeAttachedShortCommandFlags() {
+        let args = ["yt-dlp", "-pMySecretPass", "-uAdminUser", "-2Token123456", "-bHelium", "-HCookie: secret=123", "https://example.com/video"]
+        let sanitized = LoggerService.sanitizeCommandForLog(args)
+        XCTAssertFalse(sanitized.contains("MySecretPass"))
+        XCTAssertFalse(sanitized.contains("AdminUser"))
+        XCTAssertFalse(sanitized.contains("Token123456"))
+        XCTAssertFalse(sanitized.contains("Helium"))
+        XCTAssertFalse(sanitized.contains("secret=123"))
+        XCTAssertTrue(sanitized.contains("-p\"<PASSWORD>\""))
+        XCTAssertTrue(sanitized.contains("-u\"<USERNAME>\""))
+        XCTAssertTrue(sanitized.contains("-2\"<2FACTOR>\""))
+        XCTAssertTrue(sanitized.contains("-b\"<BROWSER>\""))
+        XCTAssertTrue(sanitized.contains("-H\"<REDACTED_HEADER>\""))
+    }
+
+    func testSanitizeQuotedAndFlagPrefixedURLsInCommand() {
+        let args = [
+            "yt-dlp",
+            "\"https://example.com/video?token=secret_query_param_123\"",
+            "--url=https://example.com/stream?secret_key=abc456"
+        ]
+        let sanitized = LoggerService.sanitizeCommandForLog(args)
+        XCTAssertFalse(sanitized.contains("secret_query_param_123"))
+        XCTAssertFalse(sanitized.contains("secret_key=abc456"))
+        XCTAssertTrue(sanitized.contains("\"https://example.com/video\""))
+        XCTAssertTrue(sanitized.contains("--url=https://example.com/stream"))
     }
 
     func testSanitizeLocalUserHomePaths() {

@@ -234,21 +234,21 @@ public final class EgressProxyServer: @unchecked Sendable {
             return
         }
 
-        // Bolt Performance Optimization: Use split(whereSeparator: \.isNewline) over Substring views to avoid double intermediate String array allocations on every proxy request header parse
-        let lines = headerString.split(whereSeparator: \.isNewline).map(String.init)
+        // Bolt Performance Optimization: Use Substring views directly from split(whereSeparator: \.isNewline) and split(separator: " ") without calling .map(String.init) to eliminate per-line heap allocations for header strings on every proxy request.
+        let lines = headerString.split(whereSeparator: \.isNewline)
         guard let firstLine = lines.first?.trimmingCharacters(in: .whitespacesAndNewlines), !firstLine.isEmpty else {
             sendResponse(client: client, status: "400 Bad Request", body: "Empty request\n", close: true)
             return
         }
 
-        let parts = firstLine.split(separator: " ").map(String.init)
+        let parts = firstLine.split(separator: " ")
         guard parts.count >= 2 else {
             sendResponse(client: client, status: "400 Bad Request", body: "Invalid request line\n", close: true)
             return
         }
 
         let method = parts[0].uppercased()
-        let target = parts[1]
+        let target = String(parts[1])
 
         if method == "CONNECT" {
             handleConnect(client: client, target: target, remainingData: remainingData)
@@ -299,7 +299,7 @@ public final class EgressProxyServer: @unchecked Sendable {
         }
     }
 
-    private func handleForwardRequest(client: NWConnection, method: String, target: String, lines: [String], remainingData: Data) {
+    private func handleForwardRequest(client: NWConnection, method: String, target: String, lines: [Substring], remainingData: Data) {
         let host: String
         let port: Int
         let relativePath: String
@@ -317,7 +317,7 @@ public final class EgressProxyServer: @unchecked Sendable {
             var hostHeaderValue: String?
             for line in lines.dropFirst() {
                 if line.lowercased().hasPrefix("host:") {
-                    hostHeaderValue = line.dropFirst(5).trimmingCharacters(in: .whitespacesAndNewlines)
+                    hostHeaderValue = String(line.dropFirst(5)).trimmingCharacters(in: .whitespacesAndNewlines)
                     break
                 }
             }
@@ -517,9 +517,9 @@ public final class EgressProxyServer: @unchecked Sendable {
         "connection", "proxy-connection", "keep-alive", "proxy-authorization", "te", "upgrade"
     ]
 
-    private static func isHopByHopHeader(_ line: String) -> Bool {
+    private static func isHopByHopHeader(_ line: Substring) -> Bool {
         guard let colon = line.firstIndex(of: ":") else { return false }
-        let name = line[..<colon].trimmingCharacters(in: .whitespaces).lowercased()
+        let name = String(line[..<colon]).trimmingCharacters(in: .whitespaces).lowercased()
         return hopByHopHeaders.contains(name)
     }
 
