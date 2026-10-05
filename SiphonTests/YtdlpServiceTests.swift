@@ -1436,6 +1436,27 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: destination.path))
     }
 
+    func testUserYtdlpPathPrefersCustomPathAndSkipsNonExecutables() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let plain = dir.appendingPathComponent("plain")
+        let found = dir.appendingPathComponent("found")
+        let custom = dir.appendingPathComponent("custom")
+        for file in [plain, found, custom] {
+            FileManager.default.createFile(atPath: file.path, contents: Data("#!/bin/sh\n".utf8))
+        }
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: found.path)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: custom.path)
+        let search = [dir.appendingPathComponent("missing").path, plain.path, found.path]
+
+        XCTAssertEqual(YtdlpService.userYtdlpPath(customPath: nil, searchPaths: search)?.path, found.path)
+        XCTAssertEqual(YtdlpService.userYtdlpPath(customPath: "  ", searchPaths: search)?.path, found.path)
+        XCTAssertEqual(YtdlpService.userYtdlpPath(customPath: custom.path, searchPaths: search)?.path, custom.path)
+        // A broken explicit choice must not silently fall back to another build.
+        XCTAssertNil(YtdlpService.userYtdlpPath(customPath: plain.path, searchPaths: search))
+    }
+
     func testTwinkabooSponsoredPromoIsNotTreatedAsTheVideo() throws {
         let page = "https://twinkaboo.com/videos/example-33006ba0"
         // Shape of yt-dlp's html5 result on the page, which picks the ad <video>.

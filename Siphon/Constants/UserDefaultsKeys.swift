@@ -24,6 +24,7 @@ enum UserDefaultsKeys {
     static let selectedCustomPresetId = "selectedCustomPresetId"
     static let downloadSpeedLimit = "downloadSpeedLimit"
     static let resolutionFallbackPolicy = "resolutionFallbackPolicy"
+    static let customYtdlpPath = "customYtdlpPath"
 }
 
 extension UserDefaults {
