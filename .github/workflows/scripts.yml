@@ -39,7 +39,9 @@ jobs:
             SiphonExtension_Firefox/background.js \
             SiphonExtension_Safari/background.js \
             server/index.js \
-            server/test/server.test.js
+            server/test/server.test.js \
+            scripts/capture_original_mp4.js \
+            scripts/test_capture_original_mp4.js
           do
             node --check "$file"
           done
@@ -74,6 +76,9 @@ jobs:
 
       - name: Test companion server
         run: npm test --prefix server
+
+      - name: Test original MP4 capture script
+        run: node scripts/test_capture_original_mp4.js
 
       - name: Check shell script syntax
         run: bash -n scripts/verify_bundle.sh scripts/build_and_run.sh
