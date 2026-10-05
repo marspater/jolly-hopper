@@ -4651,6 +4651,95 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertEqual(format.needsTesting, true)
     }
 
+    func testUserYtdlpMustIdentifyAsYtdlpBeforeItIsCommitted() async throws {
+        XCTAssertTrue(YtdlpService.isYtdlpVersion("2026.09.30\n"))
+        XCTAssertTrue(YtdlpService.isYtdlpVersion("2026.09.30.232921"))
+        XCTAssertFalse(YtdlpService.isYtdlpVersion("GNU bash, version 5.2"))
+        XCTAssertFalse(YtdlpService.isYtdlpVersion(""))
+
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        XCTAssertFalse(YtdlpService.isRegularExecutable(root.path), "A directory is executable but not yt-dlp")
+        let fake = root.appendingPathComponent("yt-dlp")
+        try Data("#!/bin/sh\n".utf8).write(to: fake)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: fake.path)
+        XCTAssertTrue(YtdlpService.isRegularExecutable(fake.path))
+
+        let key = UserDefaultsKeys.customYtdlpPath
+        let previous = UserDefaults.standard.string(forKey: key)
+        defer { UserDefaults.standard.set(previous, forKey: key) }
+        UserDefaults.standard.set(fake.path, forKey: key)
+
+        service.ytdlpPath = nil // findYtdlp() keeps a preset path when the runner is a mock
+        service.processRunner = MockYtdlpProcessRunner(mockCommand: { _ in "GNU bash, version 5.2" })
+        await service.findYtdlp()
+        XCTAssertNil(service.ytdlpPath)
+        XCTAssertFalse(service.isAvailable, "A non-yt-dlp executable must not make yt-dlp available")
+        XCTAssertNil(service.resolvedYtdlpBinary, "No legacy binary may be used as a fallback")
+
+        service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
+            XCTAssertEqual(Array(args.dropFirst()), ["--ignore-config", "--version"])
+            return "2026.09.30\n"
+        })
+        service.ytdlpPath = nil
+        await service.findYtdlp()
+        XCTAssertEqual(service.ytdlpPath?.path, fake.path)
+        XCTAssertTrue(service.isAvailable)
+        XCTAssertEqual(service.version, "2026.09.30")
+        XCTAssertEqual(service.resolvedYtdlpBinary?.path, fake.path)
+    }
+
+    func testReloadYtdlpIsRefusedWhileDownloadsRun() async {
+        let state = AppState()
+        let reloaded = await state.reloadYtdlp(using: service, activeExecutionCount: 1)
+        XCTAssertFalse(reloaded)
+    }
+
+    func testGifDownloadIsConvertedToMp4AndGifRemoved() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let gif = root.appendingPathComponent("clip.gif")
+        try Data("GIF89a".utf8).write(to: gif)
+        XCTAssertTrue(YtdlpService.isGIF(gif))
+        XCTAssertFalse(YtdlpService.isGIF(root.appendingPathComponent("clip.mp4")))
+
+        service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
+            XCTAssertTrue(args.contains("libx264") && args.contains("yuv420p"))
+            XCTAssertTrue(args.contains(gif.path))
+            try Data("mp4".utf8).write(to: URL(fileURLWithPath: args.last!))
+            return ""
+        })
+        let video = try await service.convertGIFToVideo(gif: gif, ffmpegDir: root.path)
+        XCTAssertEqual(video.lastPathComponent, "clip.mp4")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: gif.path))
+        XCTAssertEqual(try String(contentsOf: video, encoding: .utf8), "mp4")
+
+        // An existing file is never overwritten, and a failed conversion keeps the GIF.
+        try Data("GIF89a".utf8).write(to: gif)
+        service.processRunner = MockYtdlpProcessRunner(mockCommand: { _ in throw YtdlpError.commandFailed("bad") })
+        do {
+            _ = try await service.convertGIFToVideo(gif: gif, ffmpegDir: root.path)
+            XCTFail("Failed conversion must surface")
+        } catch YtdlpError.downloadFailed(let message) {
+            XCTAssertEqual(message, LanguageService.s("gif_conversion_failed"))
+        }
+        XCTAssertTrue(FileManager.default.fileExists(atPath: gif.path))
+        XCTAssertEqual(try String(contentsOf: video, encoding: .utf8), "mp4")
+    }
+
+    func testLoneFormatWithoutHeightBypassesResolutionCeiling() throws {
+        // Generic og:video extraction yields one format with no height (xpics.me).
+        let lone = try JSONDecoder().decode(MediaInfo.self, from: Data(
+            #"{"id":"QdpltyP0DWJR","title":"Clip","formats":[{"format_id":"0","ext":"mp4","protocol":"https"}]}"#.utf8))
+        XCTAssertTrue(YtdlpService.isSingleUnprobedFormat(lone))
+        let sized = try JSONDecoder().decode(MediaInfo.self, from: Data(
+            #"{"id":"a","title":"Clip","formats":[{"format_id":"0","ext":"mp4","resolution":"1280x720","height":720}]}"#.utf8))
+        XCTAssertFalse(YtdlpService.isSingleUnprobedFormat(sized))
+        XCTAssertFalse(YtdlpService.isSingleUnprobedFormat(nil))
+    }
+
     func testResolveSelectedFormatsFiltersUntestedFormatsWhenTestedExist() throws {
         let json = """
         {

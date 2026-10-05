@@ -31,6 +31,8 @@ class LanguageService: ObservableObject {
     }
 
     nonisolated private static let staticTranslations: [String: String] = [
+        "converting_gif_to_video": "Converting GIF to video...",
+        "gif_conversion_failed": "The GIF was downloaded but could not be converted to video. Siphon kept the GIF file.",
         "checking_media_integrity": "Checking downloaded audio and video...",
         "media_integrity_failed": "The downloaded file could not be decoded. It may be corrupted or still encrypted. Siphon kept the file for inspection and did not mark the download as completed.",
         "queue_recovery_title": "Interrupted Downloads Detected",
