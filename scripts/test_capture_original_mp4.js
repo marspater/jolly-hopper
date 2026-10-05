@@ -1,7 +1,5 @@
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
-const vm = require("node:vm");
-const { originalURLs } = require("./capture_original_mp4.js");
+const { originalURLs, init } = require("./capture_original_mp4.js");
 
 const original = "https://cdn.example.com/video_source.mp4?Policy=sample&Signature=a%2Bb&u=123";
 assert.deepEqual(originalURLs({ files: { source: { url: original } } }), [original]);
@@ -40,17 +38,34 @@ class FakeXHR {
 }
 const previousSend = FakeXHR.prototype.send;
 const window = { fetch: previousFetch };
-const context = vm.createContext({
-    URL, window, XMLHttpRequest: FakeXHR, navigator: { userAgent: "Test Safari" },
+const env = {
+    window,
+    XMLHttpRequest: FakeXHR,
+    navigator: { userAgent: "Test Safari" },
     document: { body, createElement: element, querySelectorAll: () => [] },
     performance: { getEntriesByType: () => [] }
-});
+};
 
-(async () => {
-    const script = fs.readFileSync(require.resolve("./capture_original_mp4.js"), "utf8");
-    vm.runInContext(script, context);
-    vm.runInContext(script, context);
-    assert.equal(body.children.length, 1, "Repeated activation must not duplicate hooks or panels");
+init(env);
+init(env);
+assert.equal(body.children.length, 1, "Repeated activation must not duplicate hooks or panels");
+
+// Test Edge browser detection
+const edgeBody = element();
+class EdgeFakeXHR {
+    send(value) { return value; }
+}
+init({
+    window: { fetch: previousFetch },
+    XMLHttpRequest: EdgeFakeXHR,
+    navigator: { userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36 Edg/120.0.0.0" },
+    document: { body: edgeBody, createElement: element, querySelectorAll: () => [] },
+    performance: { getEntriesByType: () => [{ name: original }] }
+});
+const edgeLink = new URL(edgeBody.children[0].children[2].children[0].href);
+assert.equal(edgeLink.searchParams.get("browser"), "edge");
+
+async function main() {
     const options = { headers: { "x-example": "unchanged" } };
     assert.equal(await window.fetch("/api/video", options), response);
     await new Promise(resolve => setImmediate(resolve));
@@ -77,4 +92,9 @@ const context = vm.createContext({
     xhr.handlers.load();
     assert.equal(links.children.length, 2, "Stopping must disable outstanding capture listeners");
     console.log("Original MP4 capture checks passed.");
-})().catch(error => { console.error(error); process.exitCode = 1; });
+}
+
+main().catch(error => {
+    console.error(error);
+    process.exitCode = 1;
+});
