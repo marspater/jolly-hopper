@@ -5,6 +5,11 @@ import AppKit
 import WebKit
 
 struct DependencyChecksums {
+    /// Siphon no longer downloads or pins yt-dlp; the user supplies their own
+    /// build (see `findYtdlp`). Flip to re-enable the pinned download and the
+    /// "Update Now" UI that drive `ytdlpURL`/`ytdlpExecutableSHA256`.
+    static let managedYtdlpEnabled = false
+
     static let ytdlpVersion = "2026.08.19"
     static let ytdlpURL = URL(string: "https://github.com/yt-dlp/yt-dlp/releases/download/2026.08.19/yt-dlp_macos") ?? URL(fileURLWithPath: "/")
     static let ytdlpExecutableSHA256 = "0f192b7ec147ab6288885d6351d9ab67367640029b4377576ef46dd79cf7b202"
@@ -655,8 +660,40 @@ class YtdlpService: ObservableObject {
         activeSetupTask = nil
     }
 
+    /// Locations checked for a user-installed yt-dlp when no explicit path is
+    /// set: Homebrew, pipx/`pip install --user`, and the system prefix.
+    nonisolated static let ytdlpSearchPaths: [String] = [
+        "/opt/homebrew/bin/yt-dlp",
+        "/usr/local/bin/yt-dlp",
+        NSHomeDirectory() + "/.local/bin/yt-dlp",
+        "/usr/bin/yt-dlp",
+    ]
+
+    /// The user's yt-dlp: the path chosen in Settings, else the first
+    /// executable in `ytdlpSearchPaths`. Not checksum-verified by design.
+    nonisolated static func userYtdlpPath(
+        customPath: String? = UserDefaults.standard.string(forKey: UserDefaultsKeys.customYtdlpPath),
+        searchPaths: [String] = ytdlpSearchPaths,
+        fileManager: FileManager = .default
+    ) -> URL? {
+        let custom = (customPath ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let candidates = custom.isEmpty ? searchPaths : [(custom as NSString).expandingTildeInPath]
+        return candidates.first { fileManager.isExecutableFile(atPath: $0) }.map { URL(fileURLWithPath: $0) }
+    }
+
     func findYtdlp() async {
         if ytdlpPath != nil && !(processRunner is DefaultYtdlpProcessRunner) {
+            return
+        }
+        if !DependencyChecksums.managedYtdlpEnabled {
+            ytdlpPath = Self.userYtdlpPath()
+            isAvailable = ytdlpPath != nil
+            version = nil
+            if let path = ytdlpPath {
+                LoggerService.shared.log("Using user-provided yt-dlp at \(path.path)", level: .info)
+            } else {
+                LoggerService.shared.log("No yt-dlp found. Set its path in Settings > Advanced.", level: .warning)
+            }
             return
         }
         let appSupport = Self.getAppSupportDirectory()
@@ -7572,7 +7609,7 @@ enum YtdlpError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .notFound:
-            return "yt-dlp not found"
+            return "yt-dlp not found. Set its path in Settings > Advanced."
         case .parseError:
             return "Failed to parse data"
         case .commandFailed(let output):

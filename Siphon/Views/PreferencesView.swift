@@ -41,6 +41,7 @@ struct PreferencesView: View {
     @AppStorage(UserDefaultsKeys.showMenuBarIcon) private var showMenuBarIcon: Bool = true
     @AppStorage(UserDefaultsKeys.startInBackground) private var startInBackground: Bool = false
     @AppStorage(UserDefaultsKeys.downloadSpeedLimit) private var downloadSpeedLimit: Int = 0
+    @AppStorage(UserDefaultsKeys.customYtdlpPath) private var customYtdlpPath: String = ""
     
     @EnvironmentObject var languageService: LanguageService
     @EnvironmentObject var updateChecker: UpdateChecker
@@ -953,7 +954,11 @@ struct PreferencesView: View {
                 Toggle(languageService.s("sponsorblock_desc"), isOn: $sponsorBlock)
             }
             
-            ytdlpUpdateSection
+            if DependencyChecksums.managedYtdlpEnabled {
+                ytdlpUpdateSection
+            } else {
+                ytdlpSourceSection
+            }
             browserCookiesSection
             debugLogsSection
         }
@@ -978,6 +983,45 @@ struct PreferencesView: View {
                 // Secondary push buttons and menus drop the window's accent tint:
                 // tinted, their label is accent text on tinted glass, which is
                 // hard to read in Dark Mode. Untinted they use the system label.
+                .tint(nil)
+            }
+        }
+    }
+
+    private var ytdlpSourceSection: some View {
+        Section(languageService.s("ytdlp_source")) {
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    if let path = downloadManager.ytdlpService.ytdlpPath {
+                        Text(path.path)
+                            .font(.siphonMetadataMonoMedium)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                            .textSelection(.enabled)
+                        if let version = appState.ytdlpVersion {
+                            Text("\(languageService.s("version")): \(version)")
+                                .font(.siphonMetadataMonoMedium)
+                                .foregroundColor(.secondary)
+                        }
+                    } else {
+                        Text(languageService.s("ytdlp_missing"))
+                            .fontWeight(.medium)
+                    }
+                    Text(languageService.s("ytdlp_source_hint"))
+                        .font(.siphonMetadata)
+                        .foregroundColor(.secondary)
+                }
+                Spacer()
+                if !customYtdlpPath.isEmpty {
+                    Button(languageService.s("ytdlp_auto_detect")) {
+                        customYtdlpPath = ""
+                        reloadYtdlp()
+                    }
+                    .tint(nil)
+                }
+                Button(languageService.s("ytdlp_choose")) {
+                    selectYtdlp()
+                }
                 .tint(nil)
             }
         }
@@ -1323,6 +1367,27 @@ struct PreferencesView: View {
         }
     }
     
+    private func selectYtdlp() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = false
+        panel.canChooseFiles = true
+        panel.allowsMultipleSelection = false
+        panel.treatsFilePackagesAsDirectories = true
+        // Unix executables have no extension filter; dot-dirs hold pipx/venv builds.
+        panel.showsHiddenFiles = true
+
+        if panel.runModal() == .OK, let url = panel.url {
+            customYtdlpPath = url.path
+            reloadYtdlp()
+        }
+    }
+
+    private func reloadYtdlp() {
+        Task {
+            await appState.reloadYtdlp(using: downloadManager.ytdlpService)
+        }
+    }
+
     private func updateYtdlp() {
         Task {
             await appState.updateYtdlp(
