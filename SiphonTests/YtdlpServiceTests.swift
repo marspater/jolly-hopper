@@ -155,6 +155,43 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertEqual(calls.value, 1)
     }
 
+    func testHlsDownloadRejectsUndecodableOutputBeforeThumbnailProcessing() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let media = root.appendingPathComponent("stream.mp4")
+        try Data("encrypted samples".utf8).write(to: media)
+        let checks = TestBox(0)
+        service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
+            checks.value += 1
+            XCTAssertTrue(args.contains("-xerror"))
+            XCTAssertTrue(args.contains("explode"))
+            XCTAssertTrue(args.contains("0:V?") && args.contains("0:a?"))
+            XCTAssertFalse(args.contains("-t"), "Check the entire file, including later corrupt fragments")
+            XCTAssertEqual(args.last, "-", "Validation must not overwrite the downloaded file")
+            throw YtdlpError.commandFailed("corrupt decoded frame in stream 0")
+        }, mockDownload: { _ in media.path })
+        var options = DownloadOptions.default
+        options.saveFolder = root
+        do {
+            _ = try await service.download(url: "https://media.example.com/master.m3u8", options: options,
+                                           onProgress: { _, _, _ in }, onOutput: { _ in })
+            XCTFail("A zero download exit status must not hide corrupt media")
+        } catch YtdlpError.downloadFailed(let message) {
+            XCTAssertEqual(message, LanguageService.s("media_integrity_failed"))
+        }
+        XCTAssertEqual(checks.value, 1, "Reject corruption before optional thumbnail processing")
+        XCTAssertEqual(try String(contentsOf: media, encoding: .utf8), "encrypted samples")
+
+        service.processRunner = MockYtdlpProcessRunner(mockCommand: { _ in "" })
+        try await service.validateDownloadedMedia(mediaFile: media, ffmpegDir: root.path)
+        service.processRunner = MockYtdlpProcessRunner(mockCommand: { _ in throw CancellationError() })
+        do {
+            try await service.validateDownloadedMedia(mediaFile: media, ffmpegDir: root.path)
+            XCTFail("Cancellation must remain cancellation")
+        } catch is CancellationError {}
+    }
+
     func testSignedHlsRefreshesVariantsAndPreservesMasterQuery() async throws {
         let url = "https://cdn2.onlyfans.com/hls/sample.m3u8?Policy=sample&Signature=sample&Key-Pair-Id=sample"
         XCTAssertTrue(YtdlpService.requiresHlsVariantQuery(url))
