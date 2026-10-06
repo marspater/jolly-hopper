@@ -264,23 +264,21 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertEqual(checked.maxFormatHeight, 720)
         let roundTrip = try JSONDecoder().decode(MediaInfo.self, from: JSONEncoder().encode(checked))
         XCTAssertEqual(roundTrip.downloadableFormats.map(\.formatId), ["clear"])
-        var explicit = DownloadOptions.default
-        explicit.selectedFormatId = "8774"
-        do {
-            _ = try await service.download(url: url, options: explicit, mediaInfo: checked,
-                                           onProgress: { _, _, _ in }, onOutput: { _ in })
-            XCTFail("A rejected child must not be selected explicitly")
-        } catch YtdlpError.downloadFailed(let reason) {
-            XCTAssertEqual(reason, LanguageService.s("stream_unavailable"))
-        }
-        let failedOnly = MediaInfo(id: "sample", title: "Failed child", formats: checked.formats?.filter { !$0.isDownloadable })
-        do {
-            _ = try await service.download(url: url, options: .default, mediaInfo: failedOnly,
-                                           onProgress: { _, _, _ in }, onOutput: { _ in })
-            XCTFail("Failed-only metadata must not start a download")
-        } catch YtdlpError.downloadFailed(let reason) {
-            XCTAssertEqual(reason, LanguageService.s("no_working_formats"))
-        }
+        // A failed check may have been a transient CDN error: the download
+        // extracts and checks again instead of trusting the cached result.
+        var failedOnly = MediaInfo(id: "sample", title: "Failed child", formats: checked.formats?.filter { !$0.isDownloadable })
+        failedOnly.rawJSON = Data("{}".utf8)
+        failedOnly.fetchedAt = Date()
+        let launched = TestBox(0)
+        service.processRunner = MockYtdlpProcessRunner(mockDownload: { args in
+            launched.value += 1
+            XCTAssertTrue(args.contains("--check-formats"))
+            XCTAssertFalse(args.contains("--load-info-json"))
+            return "/tmp/signed-stream.mp4"
+        })
+        _ = try await service.download(url: url, options: .default, mediaInfo: failedOnly,
+                                       onProgress: { _, _, _ in }, onOutput: { _ in })
+        XCTAssertEqual(launched.value, 1)
     }
 
     func testDownloadUsesRelativeTemplateAndPreservesOwnedScratchOnCancellation() async throws {
