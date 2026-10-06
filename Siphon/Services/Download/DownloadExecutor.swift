@@ -427,7 +427,9 @@ final class DownloadExecutor: ObservableObject {
             } else if let primary = downloadResult.primaryFile {
                 download.filePaths = [primary]
             }
-            download.diagnostics.exitStatus = "Completed (0)"
+            // Keep finished playlist entries, but don't report the job as a clean success.
+            download.errorMessage = downloadResult.partialFailure
+            download.diagnostics.exitStatus = downloadResult.partialFailure == nil ? "Completed (0)" : "Completed with failed items"
             delegate?.executorDidUpdateStatus(for: download, to: .completed)
             download.progress = 1.0
 
@@ -452,6 +454,7 @@ final class DownloadExecutor: ObservableObject {
             let lang = languageService ?? .shared
             notificationService.sendDownloadCompleted(
                 filename: download.displayTitle.isEmpty ? LoggerService.sanitizeURLForLog(download.url) : download.displayTitle,
+                partial: downloadResult.partialFailure != nil,
                 languageService: lang
             )
 
