@@ -16,6 +16,9 @@ final class DownloadExecutorTests: XCTestCase {
         XCTAssertTrue(DownloadExecutor.isPostprocessingOutput("[Merger] Merging formats"))
         XCTAssertTrue(DownloadExecutor.isPostprocessingOutput("[EmbedThumbnail] Adding thumbnail"))
         XCTAssertTrue(DownloadExecutor.isPostprocessingOutput("[Metadata] Adding metadata"))
+        XCTAssertTrue(DownloadExecutor.isPostprocessingOutput("[ExtractAudio] Destination: song.mp3"))
+        XCTAssertTrue(DownloadExecutor.isPostprocessingOutput("[FixupM3u8] Fixing MPEG-TS in MP4 container"))
+        XCTAssertFalse(DownloadExecutor.isPostprocessingOutput("[SubtitlesConvertor] Converting subtitles"))
     }
 
     func testErrorMappingLocalization() {
