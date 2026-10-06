@@ -1696,6 +1696,18 @@ public struct DownloadResult: Sendable {
         onProgress: @escaping @Sendable (Double, String?, String?) -> Void,
         onOutput: @escaping @Sendable (String) -> Void
     ) async throws -> DownloadResult {
+        if let formats = mediaInfo?.formats, !formats.isEmpty {
+            guard formats.contains(where: \.isDownloadable) else {
+                if formats.allSatisfy(\.isKnownDRM) { throw YtdlpError.noDownloadableFormats }
+                throw YtdlpError.downloadFailed(LanguageService.s("no_working_formats"))
+            }
+            if let selection = options.selectedFormatId {
+                let ids = selection.split(separator: "+").map { $0.trimmingCharacters(in: .whitespaces) }
+                if let rejected = formats.first(where: { !$0.isDownloadable && ids.contains($0.formatId) }) {
+                    throw YtdlpError.downloadFailed(LanguageService.s(rejected.isKnownDRM ? "drm_protected" : "stream_unavailable"))
+                }
+            }
+        }
         let boundaryProxy = options.enforcePublicNetworkBoundary ? try await egressProxyURL() : nil
         return try await EgressBoundary.$proxyURL.withValue(boundaryProxy) {
             try await downloadWithinBoundary(
@@ -2079,6 +2091,12 @@ public struct DownloadResult: Sendable {
         }
 
         appendSiteSpecificArgs(for: customEmbedURL ?? targetURL, options: options, mediaInfo: mediaInfo, rawUserAgent: recuUserAgent, to: &args)
+        // Recu recordings are signed VOD streams; a skipped segment would leave
+        // a corrupt recording. Live streams elsewhere may legitimately rotate
+        // unavailable fragments, so keep yt-dlp's default behavior there.
+        if isRecuURL(url) {
+            args.append("--abort-on-unavailable-fragments")
+        }
         if isRecuURL(url), let check = Self.recuSegmentCheck(for: targetURL) {
             args.append(contentsOf: ["--extractor-args", "generic:fragment_query=check=\(check)"])
         }
@@ -2580,7 +2598,7 @@ public struct DownloadResult: Sendable {
     /// Any `[height<=N]` selector rejects it, so such a lone format is taken as-is.
     static func isSingleUnprobedFormat(_ info: MediaInfo?) -> Bool {
         guard let formats = info?.formats, formats.count == 1 else { return false }
-        return formats[0].resolution == nil || formats[0].resolution == "unknown"
+        return formats[0].isDownloadable && (formats[0].resolution == nil || formats[0].resolution == "unknown")
     }
 
     private func buildFormatArgs(url: String? = nil, options: DownloadOptions, mediaInfo: MediaInfo? = nil) -> [String] {
@@ -7073,7 +7091,9 @@ public struct DownloadResult: Sendable {
         //    Safe because runDownloadProcess automatically catches Range-incompatible servers and retries as continuous stream.
         //    Excluded for Eporner CDNs which return HTTP 500 on chunk slicing.
         // 2. 16K buffer size: reduces read/write syscall overhead compared to default small buffers.
-        if !isEporner {
+        // Signed, rate-limited segments should each use one request; splitting a
+        // large segment into Range chunks consumes additional server allowance.
+        if !isEporner && !isRecu {
             args.append(contentsOf: ["--http-chunk-size", "10M"])
         }
         args.append(contentsOf: ["--buffer-size", "16K"])
@@ -7205,6 +7225,8 @@ public struct DownloadResult: Sendable {
             if Self.requiresHlsVariantQuery(url) {
                 // This CDN's relative variant links omit the master signature.
                 args.append(contentsOf: ["--extractor-args", "generic:variant_query"])
+                // Encryption may be declared only in a child playlist, not the master.
+                args.append("--check-formats")
             }
         } else if let components = URLComponents(string: url), let host = components.host, !host.isEmpty, !host.contains("\r"), !host.contains("\n") {
             // Universal Referer and Origin auto-injection for anti-hotlinking CDN protection
@@ -7717,6 +7739,7 @@ public struct DownloadResult: Sendable {
 enum YtdlpError: LocalizedError {
     case notFound
     case parseError
+    case noDownloadableFormats
     case commandFailed(String)
     case downloadFailed(String)
     case tooManyRequests
@@ -7734,6 +7757,8 @@ enum YtdlpError: LocalizedError {
             return "yt-dlp not found. Set its path in Settings > Advanced."
         case .parseError:
             return "Failed to parse data"
+        case .noDownloadableFormats:
+            return LanguageService.s("no_downloadable_formats")
         case .commandFailed(let output):
             return "Command failed: \(output)"
         case .downloadFailed(let output):
