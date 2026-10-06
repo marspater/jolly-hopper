@@ -1693,6 +1693,16 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: destination.path))
     }
 
+    func testYtdlpPinTargetsMirroredForkRelease() {
+        // Version, URL and digest must change together on every bump.
+        XCTAssertTrue(DependencyChecksums.managedYtdlpEnabled)
+        XCTAssertEqual(
+            DependencyChecksums.ytdlpURL.absoluteString,
+            "https://github.com/marspater/jolly-hopper/releases/download/ytdlp-\(DependencyChecksums.ytdlpVersion)/yt-dlp_macos"
+        )
+        XCTAssertNotNil(DependencyChecksums.ytdlpExecutableSHA256.wholeMatch(of: /[0-9a-f]{64}/))
+    }
+
     func testUserYtdlpPathPrefersCustomPathAndSkipsNonExecutables() throws {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
@@ -4826,6 +4836,8 @@ final class YtdlpServiceTests: XCTestCase {
         try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: fake.path)
         XCTAssertTrue(YtdlpService.isRegularExecutable(fake.path))
 
+        // With the managed pin, findYtdlp() never reads the user path.
+        try XCTSkipIf(DependencyChecksums.managedYtdlpEnabled, "User-provided yt-dlp is off")
         let key = UserDefaultsKeys.customYtdlpPath
         let previous = UserDefaults.standard.string(forKey: key)
         defer { UserDefaults.standard.set(previous, forKey: key) }

@@ -93,7 +93,7 @@ xcodebuild test -project Siphon.xcodeproj -scheme Siphon -destination 'platform=
   CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO
 ```
 
-Siphon uses your own `yt-dlp` (install it with `brew install yt-dlp` or `pipx install yt-dlp`, or pick a path in Settings). It downloads its pinned `FFmpeg` and `FFprobe` builds on first launch and verifies each against its SHA-256 before use. Contributor and agent rules live in [AGENTS.md](AGENTS.md).
+Siphon downloads its pinned builds of `yt-dlp` (the Siphon fork, [marspater/yt-dlp](https://github.com/marspater/yt-dlp)), `FFmpeg` and `FFprobe` on first launch and verifies each against its SHA-256 before use. Contributor and agent rules live in [AGENTS.md](AGENTS.md).
 
 ## 🧭 Architecture
 
