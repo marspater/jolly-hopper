@@ -228,6 +228,12 @@ struct DownloadRowView: View {
             guard !hovering || scrollActivity?.isScrolling != true else { return }
             isHovering = hovering
         }
+        .onTapGesture(count: 2) {
+            // Double-clicking a finished card does what its Play button does.
+            if download.status == .completed, let path = download.primaryFilePath, primaryFileIsPresent != false {
+                downloadManager.openFile(path)
+            }
+        }
         .contextMenu {
             rowContextMenu
         }
