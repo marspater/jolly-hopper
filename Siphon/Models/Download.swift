@@ -223,6 +223,16 @@ class Download: ObservableObject, Identifiable {
         
         let lower = error.lowercased()
         let rawError = log.isEmpty ? error : log
+
+        // A completed playlist that lost some entries; retrying can't bring back private/removed items.
+        if status == .completed {
+            return ErrorUXInfo(
+                headline: lang.s("some_items_failed"),
+                description: error,
+                actionType: .noAction,
+                rawError: rawError
+            )
+        }
         
         let isYouTube = url.lowercased().contains("youtube.com") || url.lowercased().contains("youtu.be")
         let isYouTubeSignIn = isYouTube && lower.contains("sign in to confirm")

@@ -548,6 +548,43 @@ final class DownloadExecutorTests: XCTestCase {
         }
     }
 
+    func testPartialPlaylistFailureIsNotReportedAsCleanSuccess() async {
+        struct PartialRunner: YtdlpProcessRunning {
+            func runCommand(_ args: [String]) async throws -> String {
+                #"{"id":"partial","title":"Partial Fixture"}"#
+            }
+            func runDownloadProcess(
+                args: [String],
+                saveFolder: URL,
+                processController: DownloadProcessController?,
+                onProgress: @escaping @Sendable (Double, String?, String?) -> Void,
+                onOutput: @escaping @Sendable (String) -> Void
+            ) async throws -> DownloadProcessResult {
+                DownloadProcessResult(
+                    primaryPath: "/tmp/One [a1].mp4",
+                    allPaths: ["/tmp/One [a1].mp4"],
+                    partialFailure: "[youtube] c3: Private video"
+                )
+            }
+        }
+
+        let delegate = TestExecutorDelegate()
+        let service = YtdlpService(processRunner: PartialRunner())
+        service.ytdlpPath = URL(fileURLWithPath: "/usr/local/bin/yt-dlp")
+        let executor = DownloadExecutor(ytdlpService: service, delegate: delegate)
+        var options = DownloadOptions.default
+        options.embedThumbnail = false
+        let download = Download(url: "https://example.com/partial", options: options)
+        let lang = LanguageService()
+
+        await executor.executeDownload(download, queue: DownloadQueue(), ytdlpVersion: "test", languageService: lang)
+
+        XCTAssertEqual(download.status, .completed, "Finished entries are kept")
+        XCTAssertEqual(download.errorMessage, "[youtube] c3: Private video")
+        XCTAssertEqual(download.diagnostics.exitStatus, "Completed with failed items")
+        XCTAssertEqual(download.errorUXInfo(lang: lang)?.headline, lang.s("some_items_failed"))
+    }
+
     func testErrorMessageDoesNotMisclassifySubstrings() {
         let lang = LanguageService()
 
