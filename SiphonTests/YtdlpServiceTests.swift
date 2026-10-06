@@ -3795,6 +3795,38 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertEqual(capturedArgs.value[index + 1], "1", "The CDN rate-limits parallel segment requests")
     }
 
+    func testResolvedStreamDownloadEmbedsPageURLAndTitleInsteadOfSignedStream() async throws {
+        let pageURL = "https://recu.me/polarny05/video/112873588/play"
+        let signedStream = "https://f61.mediafront.net/vod/polarny05/index.m3u8?expires=1790000321&akey=k&uid=ab1234cd&md5=x&request_id=f00dbeef"
+        let capturedArgs = TestBox<[String]>([])
+        service.recuBrowserSessionLoader = { _, _ in
+            YtdlpService.RecuBrowserSession(
+                pageHTML: #"<html><head><meta property="og:title" content="Back\slash &amp; Friends"></head></html>"#,
+                playlistURL: signedStream,
+                userAgent: nil
+            )
+        }
+        service.processRunner = MockYtdlpProcessRunner(mockDownload: { args in
+            capturedArgs.value = args
+            return "/tmp/recu-test.mp4"
+        })
+        var options = DownloadOptions.default
+        options.embedThumbnail = false
+        options.embedMetadata = true
+
+        _ = try await service.download(url: pageURL, options: options, onProgress: { _, _, _ in }, onOutput: { _ in })
+
+        // yt-dlp embeds its input URL as comment/purl and titles the stream "index".
+        let args = capturedArgs.value
+        let replacements = args.indices.filter { args[$0] == "--replace-in-metadata" }.map { Array(args[($0 + 1)...($0 + 3)]) }
+        XCTAssertEqual(replacements, [
+            ["webpage_url", #"(?s)\A.*\Z"#, pageURL],
+            ["title", #"(?s)\A.*\Z"#, #"Back\\slash & Friends"#]
+        ])
+        XCTAssertEqual(args.filter { $0.contains("akey=") }, [signedStream], "The signed stream is only the input")
+        XCTAssertEqual(args.last, signedStream)
+    }
+
     func testRecuTrimmedDownloadFailsFastInsteadOfFetchingUncheckedSegments() async throws {
         service.recuBrowserSessionLoader = { _, _ in
             XCTFail("A trimmed recu download must fail before resolving a session")
