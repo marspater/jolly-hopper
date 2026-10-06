@@ -435,7 +435,7 @@ final class DownloadExecutor: ObservableObject {
                 Self.attachFinderIcon(from: thumbURL, to: finalURL)
             }
 
-            if download.diagnostics.resolution == nil, let maxH = download.mediaInfo?.formats?.compactMap({ $0.parsedHeight }).max() {
+            if download.diagnostics.resolution == nil, let maxH = download.mediaInfo?.downloadableFormats.compactMap({ $0.parsedHeight }).max() {
                 download.diagnostics.resolution = "\(maxH)p"
             }
 
@@ -527,8 +527,10 @@ final class DownloadExecutor: ObservableObject {
     // MARK: - Lifecycle & Control
 
     static func isPostprocessingOutput(_ line: String) -> Bool {
-        // Thumbnail conversion runs before media transfer in yt-dlp.
-        ["[EmbedThumbnail]", "[Metadata]", "[Merger]", "[VideoConvertor]", "[EmbedSubtitle]"]
+        // Only yt-dlp's post-download steps; subtitle/thumbnail conversion and
+        // SponsorBlock run before the media transfer.
+        ["[Merger]", "[Fixup", "[ExtractAudio]", "[VideoRemuxer]", "[VideoConvertor]", "[EmbedSubtitle]",
+         "[ModifyChapters]", "[Metadata]", "[EmbedThumbnail]", "[SplitChapters]"]
             .contains { line.hasPrefix($0) }
     }
 

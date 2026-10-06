@@ -118,8 +118,6 @@ class LanguageService: ObservableObject {
         "login_required": "This video requires signing in. Please configure browser cookies in Settings > Advanced > Browser Cookies.",
         "drm_protected": "This video is DRM-protected and cannot be downloaded.",
         "no_downloadable_formats": "No downloadable non-DRM formats are available for this video.",
-        "no_working_formats": "No streams passed the download format check.",
-        "stream_unavailable": "This stream failed its download check. Choose another stream.",
         "video_unavailable": "This video is unavailable, private, or has been removed.",
         "disk_full": "Download failed: Not enough free disk space on the target volume.",
         "permission_denied": "Download failed: Permission denied when saving file. Please check folder permissions.",
