@@ -27,6 +27,20 @@ segment0.ts
 #EXT-X-ENDLIST
 `;
 
+// Pre-calculate byte lengths for static sample text fixtures to avoid string encoding scans on every request
+const SAMPLE_VTT_LEN = Buffer.byteLength(SAMPLE_VTT);
+const SAMPLE_M3U8_LEN = Buffer.byteLength(SAMPLE_M3U8);
+
+// Pre-define standard security headers to avoid recreating header object literals on every HTTP response
+const DEFAULT_SECURITY_HEADERS = Object.freeze({
+  'X-Content-Type-Options': 'nosniff',
+  'X-Frame-Options': 'DENY',
+  'Referrer-Policy': 'no-referrer',
+  'Content-Security-Policy': "default-src 'none'; frame-ancestors 'none'",
+  'Cross-Origin-Resource-Policy': 'same-origin',
+  'X-Permitted-Cross-Domain-Policies': 'none'
+});
+
 const RELEASE_CACHE_TTL_MS = 15 * 60 * 1000;
 const RELEASE_FAILURE_RETRY_MS = 30 * 1000;
 
@@ -113,15 +127,7 @@ function createReleaseFetcher(fetchImpl, cacheTtlMs, failureRetryMs) {
 }
 
 function sendResponse(res, statusCode, headers, body) {
-  const mergedHeaders = {
-    'X-Content-Type-Options': 'nosniff',
-    'X-Frame-Options': 'DENY',
-    'Referrer-Policy': 'no-referrer',
-    'Content-Security-Policy': "default-src 'none'; frame-ancestors 'none'",
-    'Cross-Origin-Resource-Policy': 'same-origin',
-    'X-Permitted-Cross-Domain-Policies': 'none',
-    ...headers
-  };
+  const mergedHeaders = headers ? { ...DEFAULT_SECURITY_HEADERS, ...headers } : DEFAULT_SECURITY_HEADERS;
   res.writeHead(statusCode, mergedHeaders);
   res.end(body);
 }
@@ -153,14 +159,14 @@ function handleMockFixtures(req, res, pathname) {
   if (pathname === '/mock/subtitles.vtt') {
     sendResponse(res, 200, {
       'Content-Type': 'text/vtt; charset=utf-8',
-      'Content-Length': Buffer.byteLength(SAMPLE_VTT)
+      'Content-Length': SAMPLE_VTT_LEN
     }, SAMPLE_VTT);
     return true;
   }
   if (pathname === '/mock/playlist.m3u8') {
     sendResponse(res, 200, {
       'Content-Type': 'application/vnd.apple.mpegurl',
-      'Content-Length': Buffer.byteLength(SAMPLE_M3U8)
+      'Content-Length': SAMPLE_M3U8_LEN
     }, SAMPLE_M3U8);
     return true;
   }
