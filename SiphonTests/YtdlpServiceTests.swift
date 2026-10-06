@@ -3736,6 +3736,10 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertEqual(probe.last, stream)
         XCTAssertFalse(probe.contains("--cookies"))
         XCTAssertFalse(probe.contains("--cookies-from-browser"))
+        XCTAssertTrue(probe.contains("Accept:*/*"))
+        XCTAssertTrue(probe.contains("Sec-Fetch-Site:cross-site"))
+        XCTAssertTrue(probe.contains("Sec-Fetch-Mode:cors"))
+        XCTAssertTrue(probe.contains("Sec-Fetch-Dest:empty"))
         let uaIndex = try XCTUnwrap(probe.firstIndex(of: "--user-agent"))
         XCTAssertEqual(probe[uaIndex + 1], "Mozilla/5.0 WebKitFixture")
     }
@@ -3787,12 +3791,78 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertFalse(capturedArgs.value.contains("--cookies-from-browser"))
         XCTAssertTrue(capturedArgs.value.contains("Origin:https://recu.me"))
         XCTAssertTrue(capturedArgs.value.contains("Referer:\(pageURL)"))
+        XCTAssertTrue(capturedArgs.value.contains("Accept:*/*"))
+        XCTAssertTrue(capturedArgs.value.contains("Sec-Fetch-Site:cross-site"))
+        XCTAssertTrue(capturedArgs.value.contains("Sec-Fetch-Mode:cors"))
+        XCTAssertTrue(capturedArgs.value.contains("Sec-Fetch-Dest:empty"))
         // Segments need the player's check value: request_id[0..<4] + uid[2..<6] + expires.suffix(4).
         XCTAssertTrue(capturedArgs.value.contains("generic:fragment_query=check=f00d12340321"))
         XCTAssertFalse(capturedArgs.value.contains("--http-chunk-size"))
         XCTAssertTrue(capturedArgs.value.contains("--abort-on-unavailable-fragments"))
         let index = try XCTUnwrap(capturedArgs.value.firstIndex(of: "--concurrent-fragments"))
         XCTAssertEqual(capturedArgs.value[index + 1], "1", "The CDN rate-limits parallel segment requests")
+    }
+
+    func testRecuDownloadRefreshesExpiredPlaylistOnHTTP410() async throws {
+        let pageURL = "https://recu.me/polarny05/video/112873588/play"
+        let firstStream = "https://cdn.example.test/master.m3u8?uid=ab1234cd&request_id=f00dbeef&expires=1790000321&md5=x"
+        let refreshedStream = "https://cdn.example.test/master.m3u8?uid=xy9876zz&request_id=beefcafe&expires=1790000999&md5=y"
+        let sessionUA = "Mozilla/5.0 WebKitFixture"
+        let sessionCalls = TestBox<Int>(0)
+        let downloadCalls = TestBox<[[String]]>([])
+
+        service.recuBrowserSessionLoader = { _, _ in
+            sessionCalls.value += 1
+            let stream = sessionCalls.value == 1 ? firstStream : refreshedStream
+            return YtdlpService.RecuBrowserSession(
+                pageHTML: "<html></html>",
+                playlistURL: stream,
+                userAgent: sessionUA
+            )
+        }
+        service.processRunner = MockYtdlpProcessRunner(mockDownload: { args in
+            downloadCalls.value.append(args)
+            if downloadCalls.value.count == 1 {
+                throw YtdlpError.commandFailed(
+                    "[generic] index: Unable to download webpage: HTTP Error 410: Gone"
+                )
+            }
+            return "/tmp/recu-test.mp4"
+        })
+
+        var options = DownloadOptions.default
+        options.rawCookies = "session_id=secret; cf_clearance=secret"
+        options.embedThumbnail = false
+        options.embedMetadata = false
+
+        let info = MediaInfo(
+            id: "112873588",
+            title: "Polarny Recording",
+            uploader: "polarny05",
+            webpageUrl: pageURL,
+            originalUrl: firstStream,
+            formatProtocol: "m3u8_native",
+            manifestUrl: firstStream
+        )
+
+        _ = try await service.download(
+            url: pageURL,
+            options: options,
+            mediaInfo: info,
+            onProgress: { _, _, _ in },
+            onOutput: { _ in }
+        )
+
+        XCTAssertEqual(sessionCalls.value, 2, "HTTP 410 must trigger exactly one fresh protected-site resolution")
+        XCTAssertEqual(downloadCalls.value.count, 2)
+        XCTAssertEqual(downloadCalls.value[0].last, firstStream)
+        XCTAssertEqual(downloadCalls.value[1].last, refreshedStream)
+        XCTAssertTrue(downloadCalls.value[1].contains("generic:fragment_query=check=beef98760999"))
+        XCTAssertFalse(downloadCalls.value[1].contains("generic:fragment_query=check=f00d12340321"))
+        let uaIndex = try XCTUnwrap(downloadCalls.value[1].firstIndex(of: "--user-agent"))
+        XCTAssertEqual(downloadCalls.value[1][uaIndex + 1], sessionUA)
+        XCTAssertFalse(downloadCalls.value[1].contains("--cookies"))
+        XCTAssertFalse(downloadCalls.value[1].contains("--cookies-from-browser"))
     }
 
     func testResolvedStreamDownloadEmbedsPageURLAndTitleInsteadOfSignedStream() async throws {
