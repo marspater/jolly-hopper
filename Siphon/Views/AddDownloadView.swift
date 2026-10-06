@@ -356,7 +356,7 @@ struct AddDownloadView: View {
                             .foregroundColor(batchUrlsText.isEmpty ? .secondary.opacity(0.5) : SiphonTheme.statusFailedText)
                             .padding(.horizontal, 12)
                             .padding(.vertical, 5)
-                            .background(batchUrlsText.isEmpty ? Color.clear : SiphonTheme.statusFailed.opacity(0.08))
+                            .background(batchUrlsText.isEmpty ? Color.clear : SiphonTheme.destructiveSurface)
                             .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusControl, style: .continuous))
                     }
                     .buttonStyle(.plain)
@@ -853,6 +853,7 @@ struct AddDownloadView: View {
                                 if isVideoTab { ForEach(MediaFileType.videoTypes) { type in Text(type.rawValue).tag(type) } }
                                 else { ForEach(MediaFileType.audioTypes) { type in Text(type.rawValue).tag(type) } }
                             }
+                            .tint(nil)
                             .labelsHidden()
                             .pickerStyle(.menu)
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -867,6 +868,7 @@ struct AddDownloadView: View {
                                 Picker("", selection: $videoResolution) {
                                     ForEach(filteredResolutions) { res in Text(res.title(lang: languageService)).tag(res) }
                                 }
+                                .tint(nil)
                                 .labelsHidden()
                                 .pickerStyle(.menu)
                                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -880,6 +882,7 @@ struct AddDownloadView: View {
                                 Picker("", selection: $audioQuality) {
                                     ForEach(AudioQuality.allCases) { quality in Text(quality.title(lang: languageService)).tag(quality) }
                                 }
+                                .tint(nil)
                                 .labelsHidden()
                                 .pickerStyle(.menu)
                                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -1176,6 +1179,7 @@ struct AddDownloadView: View {
                                             }
                                         }
                                     }
+                                    .tint(nil)
                                     .menuStyle(.borderedButton)
 
                                     Picker(languageService.s("subtitle_format"), selection: $subtitleFormat) {
@@ -1183,6 +1187,7 @@ struct AddDownloadView: View {
                                             Text(format.displayName).tag(format)
                                         }
                                     }
+                                    .tint(nil)
                                     .pickerStyle(.menu)
                                 }
 
@@ -1341,6 +1346,7 @@ struct AddDownloadView: View {
                 .foregroundColor(.secondary)
 
             Picker("", selection: selection, content: content)
+                .tint(nil)
                 .labelsHidden()
                 .pickerStyle(.menu)
                 .frame(maxWidth: .infinity, alignment: .leading)
