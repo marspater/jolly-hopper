@@ -5,6 +5,7 @@
 ### Changes
 
 - Siphon again downloads a pinned, SHA-256-verified yt-dlp: the Siphon fork 2026.10.06.1, which keeps its DRM-format and byte-range download fixes. The user-provided yt-dlp path in Settings is no longer used.
+- Double-clicking a finished download's card, or its row in Recent downloads, plays the video.
 
 ### Security
 

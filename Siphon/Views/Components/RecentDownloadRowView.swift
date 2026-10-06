@@ -59,6 +59,12 @@ struct RecentDownloadRowView: View {
                 isHovered = hovering
             }
         }
+        .onTapGesture(count: 2) {
+            // Double-clicking a finished row plays it, like Play on its card.
+            if download.status == .completed, let path = download.primaryFilePath, primaryFileIsPresent != false {
+                downloadManager.openFile(path)
+            }
+        }
     }
 
     /// Only in-flight rows are tinted. Finished rows stay neutral (no colored
