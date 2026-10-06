@@ -1696,15 +1696,14 @@ public struct DownloadResult: Sendable {
         onProgress: @escaping @Sendable (Double, String?, String?) -> Void,
         onOutput: @escaping @Sendable (String) -> Void
     ) async throws -> DownloadResult {
+        // Only DRM is final. A failed format check may be a transient CDN error,
+        // and signed streams are extracted and checked again by the download.
         if let formats = mediaInfo?.formats, !formats.isEmpty {
-            guard formats.contains(where: \.isDownloadable) else {
-                if formats.allSatisfy(\.isKnownDRM) { throw YtdlpError.noDownloadableFormats }
-                throw YtdlpError.downloadFailed(LanguageService.s("no_working_formats"))
-            }
+            if formats.allSatisfy(\.isKnownDRM) { throw YtdlpError.noDownloadableFormats }
             if let selection = options.selectedFormatId {
                 let ids = selection.split(separator: "+").map { $0.trimmingCharacters(in: .whitespaces) }
-                if let rejected = formats.first(where: { !$0.isDownloadable && ids.contains($0.formatId) }) {
-                    throw YtdlpError.downloadFailed(LanguageService.s(rejected.isKnownDRM ? "drm_protected" : "stream_unavailable"))
+                if formats.contains(where: { $0.isKnownDRM && ids.contains($0.formatId) }) {
+                    throw YtdlpError.downloadFailed(LanguageService.s("drm_protected"))
                 }
             }
         }
