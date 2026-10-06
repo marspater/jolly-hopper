@@ -1983,6 +1983,18 @@ public struct DownloadResult: Sendable {
             args.append("--embed-metadata")
             args.append("--embed-chapters")
         }
+        // A resolved stream URL carries the user's signed session tokens. yt-dlp
+        // embeds its input URL as the file's source (comment/purl) and titles a
+        // bare stream after its file name ("index"), so give it the page instead.
+        if targetURL != normalizedURL {
+            let wholeValue = #"(?s)\A.*\Z"#
+            // REPLACE is a Python re.sub template, where only a backslash is special.
+            let literal = { (value: String) in value.replacingOccurrences(of: #"\"#, with: #"\\"#) }
+            args.append(contentsOf: ["--replace-in-metadata", "webpage_url", wholeValue, literal(normalizedURL)])
+            if let title = customResolvedTitle, !title.isEmpty {
+                args.append(contentsOf: ["--replace-in-metadata", "title", wholeValue, literal(title)])
+            }
+        }
 
         if options.splitChapters && !isEncryptedStream {
             args.append("--split-chapters")
