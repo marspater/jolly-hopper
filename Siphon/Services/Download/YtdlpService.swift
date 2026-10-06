@@ -1068,6 +1068,10 @@ class YtdlpService: ObservableObject {
             }
             probeArgs.append(contentsOf: ["--add-header", "Origin:https://recu.me"])
             probeArgs.append(contentsOf: ["--add-header", "Referer:\(recuMedia.pageURL)"])
+            probeArgs.append(contentsOf: ["--add-header", "Accept:*/*"])
+            probeArgs.append(contentsOf: ["--add-header", "Sec-Fetch-Site:cross-site"])
+            probeArgs.append(contentsOf: ["--add-header", "Sec-Fetch-Mode:cors"])
+            probeArgs.append(contentsOf: ["--add-header", "Sec-Fetch-Dest:empty"])
             if let proxy = proxy, !proxy.isEmpty {
                 probeArgs.append(contentsOf: ["--proxy", proxy])
             }
@@ -2133,6 +2137,7 @@ public struct DownloadResult: Sendable {
         // Structured bounded recovery state machine
         enum DownloadRecoveryStrategy: Hashable {
             case freshExtraction
+            case refreshRecuStream
             case stripCookies
             case disableRangeChunking
             case useFfmpegHls
@@ -2180,6 +2185,70 @@ public struct DownloadResult: Sendable {
                     LoggerService.shared.log("Download with reused metadata failed; retrying with fresh extraction", level: .info)
                     onOutput("[Siphon Info] Refreshing video information and retrying...\n")
                     currentArgs.removeSubrange(index...index + 1)
+                    continue
+                }
+
+                // Recu's CDN can invalidate a signed playlist after the browser/API
+                // resolution succeeded. Refresh the protected browser session once,
+                // then replace only the CDN URL and identity derived from that session.
+                // Account cookies remain scoped to recu.me and are never forwarded.
+                let lowerErrText = errText.lowercased()
+                if isRecuURL(normalizedURL),
+                   (lowerErrText.contains("http error 410") ||
+                    lowerErrText.contains("410: gone") ||
+                    lowerErrText.contains("410 gone")),
+                   !triedStrategies.contains(.refreshRecuStream) {
+                    triedStrategies.insert(.refreshRecuStream)
+                    LoggerService.shared.log("Recu CDN link returned HTTP 410; refreshing the protected-site session once", level: .info)
+                    onOutput("[Siphon Info] Recu media link expired. Refreshing the protected-site session and retrying...\n")
+
+                    let refreshed = try await resolveRecuMediaInfo(url: normalizedURL)
+                    var refreshedArgs = currentArgs
+
+                    if let separator = refreshedArgs.lastIndex(of: "--"), separator + 1 < refreshedArgs.count {
+                        refreshedArgs[separator + 1] = refreshed.playlistURL
+                    }
+
+                    if let userAgent = refreshed.userAgent?.trimmingCharacters(in: .whitespacesAndNewlines),
+                       !userAgent.isEmpty {
+                        if let userAgentIndex = refreshedArgs.firstIndex(of: "--user-agent"),
+                           userAgentIndex + 1 < refreshedArgs.count {
+                            refreshedArgs[userAgentIndex + 1] = userAgent
+                        } else if let separator = refreshedArgs.lastIndex(of: "--") {
+                            refreshedArgs.insert(contentsOf: ["--user-agent", userAgent], at: separator)
+                        }
+
+                        let impersonation = "generic:impersonate=\(recuImpersonationTarget(rawUserAgent: userAgent, browserCookieSource: options.browserCookieSource))"
+                        if let impersonationIndex = refreshedArgs.indices.first(where: {
+                            refreshedArgs[$0].hasPrefix("generic:impersonate=")
+                        }) {
+                            refreshedArgs[impersonationIndex] = impersonation
+                        } else if let separator = refreshedArgs.lastIndex(of: "--") {
+                            refreshedArgs.insert(contentsOf: ["--extractor-args", impersonation], at: separator)
+                        }
+                    }
+
+                    let refreshedCheck = Self.recuSegmentCheck(for: refreshed.playlistURL)
+                    if let fragmentIndex = refreshedArgs.indices.first(where: {
+                        refreshedArgs[$0].hasPrefix("generic:fragment_query=")
+                    }) {
+                        if let refreshedCheck {
+                            refreshedArgs[fragmentIndex] = "generic:fragment_query=check=\(refreshedCheck)"
+                        } else if fragmentIndex > refreshedArgs.startIndex,
+                                  refreshedArgs[fragmentIndex - 1] == "--extractor-args" {
+                            refreshedArgs.removeSubrange((fragmentIndex - 1)...fragmentIndex)
+                        } else {
+                            refreshedArgs.remove(at: fragmentIndex)
+                        }
+                    } else if let refreshedCheck,
+                              let separator = refreshedArgs.lastIndex(of: "--") {
+                        refreshedArgs.insert(
+                            contentsOf: ["--extractor-args", "generic:fragment_query=check=\(refreshedCheck)"],
+                            at: separator
+                        )
+                    }
+
+                    currentArgs = refreshedArgs
                     continue
                 }
 
@@ -7152,6 +7221,9 @@ public struct DownloadResult: Sendable {
             args.append(contentsOf: ["--add-header", "Origin:https://recu.me"])
             args.append(contentsOf: ["--add-header", "Referer:\(url)"])
             args.append(contentsOf: ["--add-header", "Accept:*/*"])
+            args.append(contentsOf: ["--add-header", "Sec-Fetch-Site:cross-site"])
+            args.append(contentsOf: ["--add-header", "Sec-Fetch-Mode:cors"])
+            args.append(contentsOf: ["--add-header", "Sec-Fetch-Dest:empty"])
             // Recu's CDN serves about one segment per second per client and answers
             // parallel requests with 429, so extra fragment workers only add retries.
             if let index = args.firstIndex(of: "--concurrent-fragments"), index + 1 < args.count {
