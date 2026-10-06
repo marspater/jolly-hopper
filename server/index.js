@@ -118,6 +118,8 @@ function sendResponse(res, statusCode, headers, body) {
     'X-Frame-Options': 'DENY',
     'Referrer-Policy': 'no-referrer',
     'Content-Security-Policy': "default-src 'none'; frame-ancestors 'none'",
+    'Cross-Origin-Resource-Policy': 'same-origin',
+    'X-Permitted-Cross-Domain-Policies': 'none',
     ...headers
   };
   res.writeHead(statusCode, mergedHeaders);
