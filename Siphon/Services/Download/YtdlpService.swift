@@ -5,14 +5,17 @@ import AppKit
 import WebKit
 
 struct DependencyChecksums {
-    /// Siphon no longer downloads or pins yt-dlp; the user supplies their own
-    /// build (see `findYtdlp`). Flip to re-enable the pinned download and the
-    /// "Update Now" UI that drive `ytdlpURL`/`ytdlpExecutableSHA256`.
-    static let managedYtdlpEnabled = false
+    /// Siphon downloads and pins the Siphon build of yt-dlp (marspater/yt-dlp,
+    /// VARIANT "siphon"). Turn off to use a user-provided yt-dlp instead (see
+    /// `findYtdlp`), which Siphon does not checksum-verify.
+    static let managedYtdlpEnabled = true
 
-    static let ytdlpVersion = "2026.08.19"
-    static let ytdlpURL = URL(string: "https://github.com/yt-dlp/yt-dlp/releases/download/2026.08.19/yt-dlp_macos") ?? URL(fileURLWithPath: "/")
-    static let ytdlpExecutableSHA256 = "0f192b7ec147ab6288885d6351d9ab67367640029b4377576ef46dd79cf7b202"
+    /// The fork repository is private, so its `yt-dlp_macos` is mirrored to a
+    /// public `ytdlp-<version>` prerelease of this repository. To bump, mirror
+    /// the new fork asset there and change version, URL and SHA-256 together.
+    static let ytdlpVersion = "2026.10.06.1"
+    static let ytdlpURL = URL(string: "https://github.com/marspater/jolly-hopper/releases/download/ytdlp-2026.10.06.1/yt-dlp_macos") ?? URL(fileURLWithPath: "/")
+    static let ytdlpExecutableSHA256 = "d7e3950941f980895b2b8e5280303373e4b23baacdca51878539fbb19bf9b48a"
 
     #if arch(arm64)
     static let ffmpegURL = URL(string: "https://github.com/eugeneware/ffmpeg-static/releases/download/b6.1.1/ffmpeg-darwin-arm64.gz") ?? URL(fileURLWithPath: "/")

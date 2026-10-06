@@ -18,6 +18,8 @@ concurrency:
 
 jobs:
   update-cask:
+    # ytdlp-* prereleases mirror the yt-dlp fork binary; only vX.Y.Z releases ship the app.
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.event.release.tag_name, 'v')
     runs-on: ubuntu-latest
     steps:
       - name: Extract version from tag
