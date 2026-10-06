@@ -2091,6 +2091,12 @@ public struct DownloadResult: Sendable {
         }
 
         appendSiteSpecificArgs(for: customEmbedURL ?? targetURL, options: options, mediaInfo: mediaInfo, rawUserAgent: recuUserAgent, to: &args)
+        // Recu recordings are signed VOD streams; a skipped segment would leave
+        // a corrupt recording. Live streams elsewhere may legitimately rotate
+        // unavailable fragments, so keep yt-dlp's default behavior there.
+        if isRecuURL(url) {
+            args.append("--abort-on-unavailable-fragments")
+        }
         if isRecuURL(url), let check = Self.recuSegmentCheck(for: targetURL) {
             args.append(contentsOf: ["--extractor-args", "generic:fragment_query=check=\(check)"])
         }
@@ -7085,7 +7091,9 @@ public struct DownloadResult: Sendable {
         //    Safe because runDownloadProcess automatically catches Range-incompatible servers and retries as continuous stream.
         //    Excluded for Eporner CDNs which return HTTP 500 on chunk slicing.
         // 2. 16K buffer size: reduces read/write syscall overhead compared to default small buffers.
-        if !isEporner {
+        // Signed, rate-limited segments should each use one request; splitting a
+        // large segment into Range chunks consumes additional server allowance.
+        if !isEporner && !isRecu {
             args.append(contentsOf: ["--http-chunk-size", "10M"])
         }
         args.append(contentsOf: ["--buffer-size", "16K"])

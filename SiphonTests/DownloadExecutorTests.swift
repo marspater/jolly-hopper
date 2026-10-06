@@ -9,6 +9,15 @@ import XCTest
 @MainActor
 final class DownloadExecutorTests: XCTestCase {
 
+    func testThumbnailPreparationDoesNotHideDownloadProgress() {
+        XCTAssertFalse(DownloadExecutor.isPostprocessingOutput("[ThumbnailsConvertor] Converting thumbnail to jpg"))
+        XCTAssertFalse(DownloadExecutor.isPostprocessingOutput("[download] Destination: [Merger] recording.mp4"))
+        XCTAssertFalse(DownloadExecutor.isPostprocessingOutput("SIPHON_PROG:25%|2MiB/s|00:30"))
+        XCTAssertTrue(DownloadExecutor.isPostprocessingOutput("[Merger] Merging formats"))
+        XCTAssertTrue(DownloadExecutor.isPostprocessingOutput("[EmbedThumbnail] Adding thumbnail"))
+        XCTAssertTrue(DownloadExecutor.isPostprocessingOutput("[Metadata] Adding metadata"))
+    }
+
     func testErrorMappingLocalization() {
         let lang = LanguageService()
 

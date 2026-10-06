@@ -155,6 +155,48 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertEqual(calls.value, 1)
     }
 
+    /// Opt-in integration check with real tools and controlled HLS fixtures.
+    /// Pass TEST_RUNNER_SIPHON_HLS_SMOKE_BASE_URL, TEST_RUNNER_SIPHON_HLS_YTDLP,
+    /// and TEST_RUNNER_SIPHON_HLS_FFMPEG_DIR to xcodebuild. The base serves
+    /// clear/master.m3u8 and aes128/master.m3u8, each six seconds with audio/video.
+    func testRealHLSDownloadsClearAndAES128() async throws {
+        let environment = ProcessInfo.processInfo.environment
+        guard let base = environment["SIPHON_HLS_SMOKE_BASE_URL"],
+              let ytdlp = environment["SIPHON_HLS_YTDLP"],
+              let tools = environment["SIPHON_HLS_FFMPEG_DIR"] else {
+            throw XCTSkip("Requires explicit local HLS fixtures and real downloader paths")
+        }
+        service.ytdlpPath = URL(fileURLWithPath: ytdlp)
+        service.ffmpegPath = URL(fileURLWithPath: tools).appendingPathComponent("ffmpeg")
+        service.ffprobePath = URL(fileURLWithPath: tools).appendingPathComponent("ffprobe")
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        for variant in ["clear", "aes128"] {
+            let url = "\(base)/\(variant)/master.m3u8"
+            let info = try await service.fetchInfo(url: url)
+            XCTAssertFalse(info.downloadableFormats.isEmpty)
+            var options = DownloadOptions.default
+            options.saveFolder = root
+            options.customFilename = variant
+            let result = try await service.download(
+                url: url, options: options, mediaInfo: info,
+                temporaryDirectory: root.appendingPathComponent("scratch-\(variant)"),
+                onProgress: { _, _, _ in }, onOutput: { _ in }
+            )
+            let media = try XCTUnwrap(result.primaryFile)
+            XCTAssertTrue(FileManager.default.fileExists(atPath: media.path))
+            // download() already decodes the entire output. Check it was not truncated.
+            let duration = try await service.processRunner.runCommand([
+                service.ffprobePath!.path, "-v", "error", "-show_entries", "format=duration",
+                "-of", "default=noprint_wrappers=1:nokey=1", media.path
+            ])
+            XCTAssertEqual(try XCTUnwrap(Double(duration.trimmingCharacters(in: .whitespacesAndNewlines))),
+                           6, accuracy: 0.2, variant)
+        }
+    }
+
     func testHlsDownloadRejectsUndecodableOutputBeforeThumbnailProcessing() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
@@ -2334,6 +2376,7 @@ final class YtdlpServiceTests: XCTestCase {
         )
 
         let genericArgs = capturedArgsBox.value
+        XCTAssertFalse(genericArgs.contains("--abort-on-unavailable-fragments"))
         XCTAssertTrue(genericArgs.contains("--http-chunk-size"), "All downloads receive 10M chunking baseline")
         if let idx = genericArgs.firstIndex(of: "--http-chunk-size") {
             XCTAssertEqual(genericArgs[idx + 1], "10M")
@@ -3706,9 +3749,10 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertTrue(capturedArgs.value.contains("Referer:\(pageURL)"))
         // Segments need the player's check value: request_id[0..<4] + uid[2..<6] + expires.suffix(4).
         XCTAssertTrue(capturedArgs.value.contains("generic:fragment_query=check=f00d12340321"))
-        if let index = capturedArgs.value.firstIndex(of: "--concurrent-fragments") {
-            XCTAssertEqual(capturedArgs.value[index + 1], "1", "Recu's CDN answers parallel segment requests with 429")
-        }
+        XCTAssertFalse(capturedArgs.value.contains("--http-chunk-size"))
+        XCTAssertTrue(capturedArgs.value.contains("--abort-on-unavailable-fragments"))
+        let index = try XCTUnwrap(capturedArgs.value.firstIndex(of: "--concurrent-fragments"))
+        XCTAssertEqual(capturedArgs.value[index + 1], "1", "The CDN rate-limits parallel segment requests")
     }
 
     func testRecuTrimmedDownloadFailsFastInsteadOfFetchingUncheckedSegments() async throws {
