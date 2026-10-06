@@ -308,7 +308,7 @@ struct SidebarView: View {
     }
     
     @ViewBuilder
-    private func sidebarButton(item: NavigationItem, badgeCount: Int = 0, badgeColor: Color = .blue) -> some View {
+    private func sidebarButton(item: NavigationItem, badgeCount: Int = 0, badgeColor: Color = SiphonTheme.accentText) -> some View {
         let isSelected = appState.selectedNavItem == item
         Button {
             if appState.selectedNavItem != item {
@@ -878,16 +878,16 @@ private struct FeatureCardRow: View {
             // Category Icon Squircle
             ZStack {
                 RoundedRectangle(cornerRadius: SiphonTheme.radiusControl, style: .continuous)
-                    .fill(feature.iconColor.opacity(0.12))
+                    .fill(SiphonTheme.accent.opacity(SiphonTheme.Opacity.tintBadge))
                     .frame(width: 36, height: 36)
                     .overlay(
                         RoundedRectangle(cornerRadius: SiphonTheme.radiusControl, style: .continuous)
-                            .stroke(feature.iconColor.opacity(0.20), lineWidth: 1)
+                            .stroke(SiphonTheme.accent.opacity(SiphonTheme.Opacity.borderCallout), lineWidth: 1)
                     )
 
                 Image(systemName: feature.icon)
                     .font(.system(size: 15, weight: .semibold))
-                    .foregroundColor(feature.iconColor)
+                    .foregroundColor(SiphonTheme.accentText)
             }
             .accessibilityHidden(true)
 

@@ -641,18 +641,21 @@ struct PreferencesView: View {
                     Text(type.rawValue).tag(type.rawValue.lowercased())
                 }
             }
+            .tint(nil)
             
             Picker(languageService.s("video_quality"), selection: $defaultVideoResolution) {
                 ForEach(VideoResolution.allCases) { res in
                     Text(res.title(lang: languageService)).tag(res.rawValue)
                 }
             }
+            .tint(nil)
 
             Picker(languageService.s("res_fallback_policy"), selection: $resolutionFallbackPolicy) {
                 ForEach(ResolutionFallbackPolicy.allCases) { policy in
                     Text(policy.title(lang: languageService)).tag(policy.rawValue)
                 }
             }
+            .tint(nil)
             
             HStack {
                 Spacer()
@@ -677,12 +680,14 @@ struct PreferencesView: View {
                     Text(codec.title(lang: languageService)).tag(codec.rawValue)
                 }
             }
+            .tint(nil)
             
             Picker(languageService.s("preferred_audio_codec"), selection: $defaultAudioCodec) {
                 ForEach(AudioCodec.allCases) { codec in
                     Text(codec.title(lang: languageService)).tag(codec.rawValue)
                 }
             }
+            .tint(nil)
             
             Text(languageService.s("codec_fallback_note"))
                 .font(.siphonMetadata)
@@ -713,6 +718,7 @@ struct PreferencesView: View {
                 Text("25 MB/s (25600 KB/s)").tag(25600)
                 Text("50 MB/s (51200 KB/s)").tag(51200)
             }
+            .tint(nil)
             Text(languageService.s("speed_limiter_desc"))
                 .font(.siphonMetadata)
                 .foregroundColor(.secondary)
@@ -766,12 +772,14 @@ struct PreferencesView: View {
                     Text(type.rawValue).tag(type)
                 }
             }
+            .tint(nil)
             
             Picker(languageService.s("video_quality"), selection: $presetVideoResolution) {
                 ForEach(presetFilteredResolutions) { res in
                     Text(res.title(lang: languageService)).tag(res)
                 }
             }
+            .tint(nil)
         }
     }
 
@@ -782,12 +790,14 @@ struct PreferencesView: View {
                     Text(codec.title(lang: languageService)).tag(codec)
                 }
             }
+            .tint(nil)
             
             Picker(languageService.s("audio_codec"), selection: $presetAudioCodec) {
                 ForEach(AudioCodec.allCases) { codec in
                     Text(codec.title(lang: languageService)).tag(codec)
                 }
             }
+            .tint(nil)
             
             if presetVideoCodec == .h264 {
                 HStack {
@@ -838,6 +848,7 @@ struct PreferencesView: View {
                             Text(format.displayName).tag(format)
                         }
                     }
+                    .tint(nil)
                     .pickerStyle(.menu)
                 }
             }
@@ -967,17 +978,17 @@ struct PreferencesView: View {
     }
 
     private var debugLogsSection: some View {
-        Section("Debugging & Logs") {
+        Section(languageService.s("debugging_and_logs")) {
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Application & Download Logs")
+                    Text(languageService.s("app_and_download_logs"))
                         .fontWeight(.medium)
-                    Text("View or export debug logs to report issues.")
+                    Text(languageService.s("debug_logs_desc"))
                         .font(.siphonMetadata)
                         .foregroundColor(.secondary)
                 }
                 Spacer()
-                Button("View Debug Logs") {
+                Button(languageService.s("view_debug_logs")) {
                     DebugLogWindowManager.shared.showDebugLogWindow()
                 }
                 // Secondary push buttons and menus drop the window's accent tint:
@@ -1052,7 +1063,7 @@ struct PreferencesView: View {
                             .foregroundColor(.secondary)
                     }
                 } else if downloadManager.activeExecutionCount > 0 {
-                    Text("Finish active downloads before updating yt-dlp.")
+                    Text(languageService.s("ytdlp_update_blocked_active"))
                         .font(.siphonMetadata)
                         .foregroundColor(.secondary)
                         .lineLimit(2)
@@ -1073,17 +1084,16 @@ struct PreferencesView: View {
 
     private var browserCookiesSection: some View {
         Section(languageService.s("browser_cookies")) {
-            VStack(alignment: .leading, spacing: 8) {
-                Picker("", selection: $browserForCookies) {
-                    Text(languageService.s("none")).tag("none")
-                    ForEach(installedBrowsers) { browser in
-                        Text(browser.displayName).tag(browser.id)
-                    }
+            Picker(languageService.s("browser"), selection: $browserForCookies) {
+                Text(languageService.s("none")).tag("none")
+                ForEach(installedBrowsers) { browser in
+                    Text(browser.displayName).tag(browser.id)
                 }
-                .labelsHidden()
-                .tint(nil)
-                .accessibilityLabel(languageService.s("browser_cookies"))
-                
+            }
+            .tint(nil)
+            .accessibilityLabel(languageService.s("browser_cookies"))
+
+            VStack(alignment: .leading, spacing: 8) {
                 Text(languageService.s("browser_hint"))
                     .font(.siphonMetadata)
                     .foregroundColor(.secondary)
