@@ -9,14 +9,12 @@ import SwiftUI
 struct ReleaseFeature: Identifiable, Sendable, Equatable {
     let id: UUID
     let icon: String
-    let iconColor: Color
     let title: String
     let description: String
 
-    init(id: UUID = UUID(), icon: String, iconColor: Color, title: String, description: String) {
+    init(id: UUID = UUID(), icon: String, title: String, description: String) {
         self.id = id
         self.icon = icon
-        self.iconColor = iconColor
         self.title = title
         self.description = description
     }
@@ -29,31 +27,26 @@ final class ReleaseNotesService {
     static let defaultFeatures: [ReleaseFeature] = [
         ReleaseFeature(
             icon: "network.badge.shield.half.filled",
-            iconColor: .green,
             title: "Public-Network Boundary",
             description: "Downloads from browser links run through a local proxy that refuses private, loopback, and reserved destinations, including after redirects."
         ),
         ReleaseFeature(
             icon: "checkmark.seal.fill",
-            iconColor: .purple,
             title: "Signed Releases",
             description: "App updates must carry an Ed25519-signed release manifest; a release without one is refused instead of trusting its checksum alone."
         ),
         ReleaseFeature(
             icon: "macwindow",
-            iconColor: .cyan,
             title: "Calmer Main Window",
             description: "The status strip only animates while downloading, colors share one Display P3 palette, and finished downloads no longer glow."
         ),
         ReleaseFeature(
             icon: "list.bullet.rectangle",
-            iconColor: .blue,
             title: "Predictable Lists",
             description: "Downloads stay in arrival order, Recent shows the newest first, and Queue Move Up/Down follows the rows you see."
         ),
         ReleaseFeature(
             icon: "sparkles",
-            iconColor: .orange,
             title: "New App Icon",
             description: "A layered Liquid Glass icon with light, dark, and mono variants."
         )
@@ -94,31 +87,23 @@ final class ReleaseNotesService {
 
                 let lower = cleanTitle.lowercased() + " " + cleanDesc.lowercased()
                 let icon: String
-                let color: Color
                 if lower.contains("font") || lower.contains("typography") || lower.contains("rebrand") || lower.contains("geist") {
                     icon = "textformat"
-                    color = .purple
                 } else if lower.contains("glass") || lower.contains("translucen") || lower.contains("material") || lower.contains("ui") || lower.contains("layout") {
                     icon = "macwindow"
-                    color = .cyan
                 } else if lower.contains("anti-bot") || lower.contains("stream") || lower.contains("engine") || lower.contains("download") || lower.contains("speed") {
                     icon = "bolt.fill"
-                    color = .blue
                 } else if lower.contains("menu bar") || lower.contains("status bar") || lower.contains("menubar") {
                     icon = "menubar.rectangle"
-                    color = .indigo
                 } else if lower.contains("security") || lower.contains("cookie") || lower.contains("privacy") || lower.contains("sandbox") {
                     icon = "shield.checkerboard"
-                    color = .green
                 } else if lower.contains("accessib") || lower.contains("voiceover") || lower.contains("tooltip") || lower.contains("optim") {
                     icon = "accessibility"
-                    color = .orange
                 } else {
                     icon = "sparkles"
-                    color = .blue
                 }
 
-                features.append(ReleaseFeature(icon: icon, iconColor: color, title: cleanTitle, description: cleanDesc))
+                features.append(ReleaseFeature(icon: icon, title: cleanTitle, description: cleanDesc))
             }
         }
 

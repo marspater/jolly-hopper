@@ -138,6 +138,38 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertEqual(try String(contentsOf: media, encoding: .utf8), "media")
     }
 
+    func testGeneratedPosterSkipsOpeningFramesAndFallsBackToFirstFrame() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let media = root.appendingPathComponent("video.mp4")
+        let cover = root.appendingPathComponent("cover.jpg")
+        try Data("media".utf8).write(to: media)
+        try FileManager.default.createSymbolicLink(at: root.appendingPathComponent("ffmpeg"), withDestinationURL: URL(fileURLWithPath: "/usr/bin/true"))
+
+        // A clip shorter than the seek encodes nothing, so the first frame is used.
+        let seeks = TestBox<[String]>([])
+        service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
+            let seek = args[args.firstIndex(of: "-ss")! + 1]
+            seeks.value.append(seek)
+            if seek == "0" { try Data("cover".utf8).write(to: cover) }
+            return ""
+        })
+        try await service.generateVideoThumbnail(mediaFile: media, destination: cover, ffmpegDir: root.path)
+        XCTAssertEqual(seeks.value, ["5", "0"])
+
+        // A long recording stops at the first seek, past Recu's black opening frame.
+        seeks.value = []
+        try FileManager.default.removeItem(at: cover)
+        service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
+            seeks.value.append(args[args.firstIndex(of: "-ss")! + 1])
+            try Data("cover".utf8).write(to: cover)
+            return ""
+        })
+        try await service.generateVideoThumbnail(mediaFile: media, destination: cover, ffmpegDir: root.path)
+        XCTAssertEqual(seeks.value, ["5"])
+    }
+
     func testDirectHlsKeepsNativeEncryptionCheckAndDoesNotRetryDrmWithFfmpeg() async throws {
         let calls = TestBox(0)
         service.processRunner = MockYtdlpProcessRunner(mockDownload: { args in

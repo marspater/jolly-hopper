@@ -4,6 +4,7 @@ import AppKit
 struct DownloadDiagnosticsView: View {
     @ObservedObject var download: Download
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) private var colorScheme
     @EnvironmentObject var languageService: LanguageService
     
     @State private var selectedTab = 0
@@ -90,7 +91,7 @@ struct DownloadDiagnosticsView: View {
                 HStack(spacing: SiphonTheme.spacing6) {
                     Text(download.status.title(lang: languageService))
                         .font(.siphonMetadataMedium)
-                        .foregroundColor(statusColor(for: download.status))
+                        .foregroundColor(SiphonTheme.statusForeground(for: download.status, colorScheme: colorScheme))
                     
                     Text("•")
                         .foregroundColor(.secondary)
@@ -385,18 +386,6 @@ struct DownloadDiagnosticsView: View {
         let matches = download.log.split(whereSeparator: \.isNewline)
             .filter { $0.localizedCaseInsensitiveContains(logSearchText) }
         return matches.isEmpty ? "No matches for '\(logSearchText)'" : matches.joined(separator: "\n")
-    }
-    
-    private func statusColor(for status: DownloadStatus) -> Color {
-        switch status {
-        case .downloading, .fetching: return SiphonTheme.statusDownloadingText
-        case .queued: return SiphonTheme.statusQueuedText
-        case .completed: return SiphonTheme.statusCompletedText
-        case .failed: return SiphonTheme.statusFailedText
-        case .stopped, .paused: return .secondary
-        case .processing: return .purple
-        case .fileExists: return .orange
-        }
     }
     
     private func copyToClipboard(_ text: String, label: String) {
