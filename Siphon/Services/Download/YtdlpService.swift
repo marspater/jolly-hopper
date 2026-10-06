@@ -2086,7 +2086,9 @@ public struct DownloadResult: Sendable {
         let thumbnailCandidateURL = customThumbnailURL ?? mediaInfo?.thumbnail
         let scratchThumbnailURL = scratchDirectory.appendingPathComponent("custom_cover.jpg")
         if (options.embedThumbnail || options.downloadThumbnail), let thumbStr = thumbnailCandidateURL, !thumbStr.isEmpty {
-            _ = await downloadThumbnailLocally(from: thumbStr, to: scratchThumbnailURL)
+            // Recu signs its poster for the session's user-agent, like its playlist.
+            _ = await downloadThumbnailLocally(from: thumbStr, to: scratchThumbnailURL,
+                                               userAgent: recuUserAgent, referer: recuUserAgent == nil ? nil : customEmbedURL)
         }
 
         appendSiteSpecificArgs(for: customEmbedURL ?? targetURL, options: options, mediaInfo: mediaInfo, rawUserAgent: recuUserAgent, to: &args)
@@ -2376,11 +2378,12 @@ public struct DownloadResult: Sendable {
         return DownloadResult(files: allFileURLs, primaryFile: finalFileURL)
     }
 
-    private func downloadThumbnailLocally(from urlString: String, to destinationURL: URL) async -> Bool {
+    private func downloadThumbnailLocally(from urlString: String, to destinationURL: URL,
+                                          userAgent: String? = nil, referer: String? = nil) async -> Bool {
         guard let url = URL(string: urlString) else { return false }
         var request = URLRequest(url: url, timeoutInterval: 15)
-        request.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36", forHTTPHeaderField: "User-Agent")
-        if let referer = Self.boyfriendTVThumbnailReferer(for: urlString) {
+        request.setValue(userAgent ?? "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36", forHTTPHeaderField: "User-Agent")
+        if let referer = referer ?? Self.boyfriendTVThumbnailReferer(for: urlString) {
             request.setValue(referer, forHTTPHeaderField: "Referer")
         }
 
@@ -2448,22 +2451,29 @@ public struct DownloadResult: Sendable {
         guard processController?.isCancelled != true else { throw CancellationError() }
     }
 
+    nonisolated static let videoThumbnailSeekSeconds = ["5", "0"]
+
     func generateVideoThumbnail(mediaFile: URL, destination: URL, ffmpegDir: String,
                                 processController: DownloadProcessController? = nil) async throws {
         let ffmpeg = URL(fileURLWithPath: ffmpegDir).appendingPathComponent("ffmpeg")
         guard FileManager.default.isExecutableFile(atPath: ffmpeg.path),
               FileManager.default.fileExists(atPath: mediaFile.path) else { return }
-        do {
-            _ = try await processRunner.runCommand([
-                ffmpeg.path, "-nostdin", "-y", "-v", "error", "-xerror", "-i", mediaFile.path,
-                "-map", "0:v:0", "-frames:v", "1", "-vf", "scale=512:512:force_original_aspect_ratio=decrease",
-                destination.path
-            ], processController: processController)
-        } catch {
-            if error is CancellationError { throw error }
-            try Task.checkCancellation()
-            guard processController?.isCancelled != true else { throw CancellationError() }
-            LoggerService.shared.log("Video thumbnail generation failed: \(error.localizedDescription)", level: .warning)
+        // Recordings often open on black frames (Recu's start with a black one), so
+        // take the cover a few seconds in. A clip shorter than that falls back to frame 0.
+        for seek in Self.videoThumbnailSeekSeconds {
+            do {
+                _ = try await processRunner.runCommand([
+                    ffmpeg.path, "-nostdin", "-y", "-v", "error", "-xerror", "-ss", seek, "-i", mediaFile.path,
+                    "-map", "0:v:0", "-frames:v", "1", "-vf", "scale=512:512:force_original_aspect_ratio=decrease",
+                    destination.path
+                ], processController: processController)
+            } catch {
+                if error is CancellationError { throw error }
+                try Task.checkCancellation()
+                guard processController?.isCancelled != true else { throw CancellationError() }
+                LoggerService.shared.log("Video thumbnail generation at \(seek)s failed: \(error.localizedDescription)", level: .warning)
+            }
+            if FileManager.default.fileExists(atPath: destination.path) { return }
         }
     }
 
