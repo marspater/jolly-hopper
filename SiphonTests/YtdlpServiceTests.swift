@@ -155,6 +155,48 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertEqual(calls.value, 1)
     }
 
+    /// Opt-in integration check with real tools and controlled HLS fixtures.
+    /// Pass TEST_RUNNER_SIPHON_HLS_SMOKE_BASE_URL, TEST_RUNNER_SIPHON_HLS_YTDLP,
+    /// and TEST_RUNNER_SIPHON_HLS_FFMPEG_DIR to xcodebuild. The base serves
+    /// clear/master.m3u8 and aes128/master.m3u8, each six seconds with audio/video.
+    func testRealHLSDownloadsClearAndAES128() async throws {
+        let environment = ProcessInfo.processInfo.environment
+        guard let base = environment["SIPHON_HLS_SMOKE_BASE_URL"],
+              let ytdlp = environment["SIPHON_HLS_YTDLP"],
+              let tools = environment["SIPHON_HLS_FFMPEG_DIR"] else {
+            throw XCTSkip("Requires explicit local HLS fixtures and real downloader paths")
+        }
+        service.ytdlpPath = URL(fileURLWithPath: ytdlp)
+        service.ffmpegPath = URL(fileURLWithPath: tools).appendingPathComponent("ffmpeg")
+        service.ffprobePath = URL(fileURLWithPath: tools).appendingPathComponent("ffprobe")
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        for variant in ["clear", "aes128"] {
+            let url = "\(base)/\(variant)/master.m3u8"
+            let info = try await service.fetchInfo(url: url)
+            XCTAssertFalse(info.downloadableFormats.isEmpty)
+            var options = DownloadOptions.default
+            options.saveFolder = root
+            options.customFilename = variant
+            let result = try await service.download(
+                url: url, options: options, mediaInfo: info,
+                temporaryDirectory: root.appendingPathComponent("scratch-\(variant)"),
+                onProgress: { _, _, _ in }, onOutput: { _ in }
+            )
+            let media = try XCTUnwrap(result.primaryFile)
+            XCTAssertTrue(FileManager.default.fileExists(atPath: media.path))
+            // download() already decodes the entire output. Check it was not truncated.
+            let duration = try await service.processRunner.runCommand([
+                service.ffprobePath!.path, "-v", "error", "-show_entries", "format=duration",
+                "-of", "default=noprint_wrappers=1:nokey=1", media.path
+            ])
+            XCTAssertEqual(try XCTUnwrap(Double(duration.trimmingCharacters(in: .whitespacesAndNewlines))),
+                           6, accuracy: 0.2, variant)
+        }
+    }
+
     func testHlsDownloadRejectsUndecodableOutputBeforeThumbnailProcessing() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
@@ -202,6 +244,7 @@ final class YtdlpServiceTests: XCTestCase {
         info.fetchedAt = Date()
         service.processRunner = MockYtdlpProcessRunner(mockDownload: { args in
             XCTAssertTrue(args.contains("generic:variant_query"))
+            XCTAssertTrue(args.contains("--check-formats"), "Probe child playlists before selecting a signed HLS rendition")
             XCTAssertFalse(args.contains("--load-info-json"), "Older cached metadata may have unsigned variant URLs")
             XCTAssertFalse(args.contains("--downloader"))
             XCTAssertEqual(args.last, url)
@@ -209,6 +252,35 @@ final class YtdlpServiceTests: XCTestCase {
         })
         _ = try await service.download(url: url, options: .default, mediaInfo: info,
                                        onProgress: { _, _, _ in }, onOutput: { _ in })
+
+        service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
+            XCTAssertTrue(args.contains("generic:variant_query"))
+            XCTAssertTrue(args.contains("--check-formats"), "Metadata must omit renditions rejected by the downloader")
+            return #"{"id":"sample","title":"Signed stream","formats":[{"format_id":"8774","ext":"mp4","resolution":"1920x1080","has_drm":false,"__working":false},{"format_id":"clear","ext":"mp4","resolution":"1280x720","has_drm":false,"__working":true}]}"#
+        })
+        let checked = try await service.fetchInfo(url: url)
+        XCTAssertEqual(checked.downloadableFormats.map(\.formatId), ["clear"])
+        XCTAssertEqual(checked.resolveSelectedFormats(options: .default).first?.formatId, "clear")
+        XCTAssertEqual(checked.maxFormatHeight, 720)
+        let roundTrip = try JSONDecoder().decode(MediaInfo.self, from: JSONEncoder().encode(checked))
+        XCTAssertEqual(roundTrip.downloadableFormats.map(\.formatId), ["clear"])
+        var explicit = DownloadOptions.default
+        explicit.selectedFormatId = "8774"
+        do {
+            _ = try await service.download(url: url, options: explicit, mediaInfo: checked,
+                                           onProgress: { _, _, _ in }, onOutput: { _ in })
+            XCTFail("A rejected child must not be selected explicitly")
+        } catch YtdlpError.downloadFailed(let reason) {
+            XCTAssertEqual(reason, LanguageService.s("stream_unavailable"))
+        }
+        let failedOnly = MediaInfo(id: "sample", title: "Failed child", formats: checked.formats?.filter { !$0.isDownloadable })
+        do {
+            _ = try await service.download(url: url, options: .default, mediaInfo: failedOnly,
+                                           onProgress: { _, _, _ in }, onOutput: { _ in })
+            XCTFail("Failed-only metadata must not start a download")
+        } catch YtdlpError.downloadFailed(let reason) {
+            XCTAssertEqual(reason, LanguageService.s("no_working_formats"))
+        }
     }
 
     func testDownloadUsesRelativeTemplateAndPreservesOwnedScratchOnCancellation() async throws {
@@ -969,6 +1041,62 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertTrue(capturedArgsBox.value.contains("-f"))
         if let idx = capturedArgsBox.value.firstIndex(of: "-f") {
             XCTAssertEqual(capturedArgsBox.value[idx + 1], "137+140")
+        }
+    }
+
+    func testKnownDRMSelectionIsRejectedBeforeLaunchingProcesses() async throws {
+        service.processRunner = MockYtdlpProcessRunner(
+            mockCommand: { _ in XCTFail("DRM selection must not launch a command"); return "" },
+            mockDownload: { _ in XCTFail("DRM selection must not launch a download"); return "" }
+        )
+        let drm = MediaFormat(formatId: "drm", ext: "mp4", hasDRM: .protected)
+        let clear = MediaFormat(formatId: "clear", ext: "mp4")
+        let drmOnly = MediaInfo(id: "x", title: "DRM only", formats: [drm])
+        for fileType in [MediaFileType.mp4, .mp3] {
+            var options = DownloadOptions.default
+            options.fileType = fileType
+            do {
+                _ = try await service.download(url: "https://example.com/video", options: options,
+                                               mediaInfo: drmOnly, onProgress: { _, _, _ in }, onOutput: { _ in })
+                XCTFail("DRM-only metadata must fail")
+            } catch YtdlpError.noDownloadableFormats {
+                XCTAssertEqual(DownloadExecutor.errorMessage(for: YtdlpError.noDownloadableFormats, languageService: nil),
+                               LanguageService.s("no_downloadable_formats"))
+            }
+            for id in ["drm", "clear+drm", "drm+clear"] {
+                options.selectedFormatId = id
+                do {
+                    _ = try await service.download(url: "https://example.com/video", options: options,
+                                                   mediaInfo: MediaInfo(id: "x", title: "Mixed", formats: [clear, drm]),
+                                                   onProgress: { _, _, _ in }, onOutput: { _ in })
+                    XCTFail("Explicit DRM IDs must fail")
+                } catch YtdlpError.downloadFailed(let reason) {
+                    XCTAssertEqual(reason, LanguageService.s("drm_protected"))
+                }
+            }
+        }
+    }
+
+    func testMixedDRMMetadataPassesOnlyClearFormatIDsToDownloader() async throws {
+        let captured = TestBox<[String]>([])
+        service.processRunner = MockYtdlpProcessRunner(mockDownload: { args in
+            captured.value = args
+            return "/tmp/clear-selection.mp4"
+        })
+        let info = MediaInfo(id: "x", title: "Mixed", formats: [
+            MediaFormat(formatId: "drm-v", ext: "mp4", resolution: "1920x1080", vcodec: "avc1", acodec: "none", hasDRM: .protected),
+            MediaFormat(formatId: "clear-v", ext: "mp4", resolution: "1280x720", vcodec: "avc1", acodec: "none"),
+            MediaFormat(formatId: "drm-a", ext: "m4a", vcodec: "none", acodec: "aac", abr: 320, hasDRM: .protected),
+            MediaFormat(formatId: "clear-a", ext: "m4a", vcodec: "none", acodec: "aac", abr: 128)
+        ])
+        for fileType in [MediaFileType.mp4, .mp3] {
+            var options = DownloadOptions.default
+            options.fileType = fileType
+            options.embedThumbnail = false
+            _ = try await service.download(url: "https://example.com/video", options: options, mediaInfo: info,
+                                           onProgress: { _, _, _ in }, onOutput: { _ in })
+            let index = try XCTUnwrap(captured.value.firstIndex(of: "-f"))
+            XCTAssertEqual(captured.value[index + 1], fileType.isAudio ? "clear-a" : "clear-v+clear-a")
         }
     }
 
@@ -2248,6 +2376,7 @@ final class YtdlpServiceTests: XCTestCase {
         )
 
         let genericArgs = capturedArgsBox.value
+        XCTAssertFalse(genericArgs.contains("--abort-on-unavailable-fragments"))
         XCTAssertTrue(genericArgs.contains("--http-chunk-size"), "All downloads receive 10M chunking baseline")
         if let idx = genericArgs.firstIndex(of: "--http-chunk-size") {
             XCTAssertEqual(genericArgs[idx + 1], "10M")
@@ -3620,9 +3749,10 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertTrue(capturedArgs.value.contains("Referer:\(pageURL)"))
         // Segments need the player's check value: request_id[0..<4] + uid[2..<6] + expires.suffix(4).
         XCTAssertTrue(capturedArgs.value.contains("generic:fragment_query=check=f00d12340321"))
-        if let index = capturedArgs.value.firstIndex(of: "--concurrent-fragments") {
-            XCTAssertEqual(capturedArgs.value[index + 1], "1", "Recu's CDN answers parallel segment requests with 429")
-        }
+        XCTAssertFalse(capturedArgs.value.contains("--http-chunk-size"))
+        XCTAssertTrue(capturedArgs.value.contains("--abort-on-unavailable-fragments"))
+        let index = try XCTUnwrap(capturedArgs.value.firstIndex(of: "--concurrent-fragments"))
+        XCTAssertEqual(capturedArgs.value[index + 1], "1", "The CDN rate-limits parallel segment requests")
     }
 
     func testRecuTrimmedDownloadFailsFastInsteadOfFetchingUncheckedSegments() async throws {

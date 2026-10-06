@@ -378,7 +378,7 @@ final class DownloadExecutor: ObservableObject {
                         Self.appendToLog(for: download, text: combined)
                         if download.status == .downloading {
                             for line in lines {
-                                if line.contains("[EmbedThumbnail]") || line.contains("[Metadata]") || line.contains("[Merger]") || line.contains("[VideoConvertor]") || line.contains("[ThumbnailsConvertor]") || line.contains("[EmbedSubtitle]") {
+                                if Self.isPostprocessingOutput(line) {
                                     self.delegate?.executorDidUpdateStatus(for: download, to: .processing)
                                     self.delegate?.executorDidRequestBroadcast()
                                     break
@@ -525,6 +525,12 @@ final class DownloadExecutor: ObservableObject {
     }
 
     // MARK: - Lifecycle & Control
+
+    static func isPostprocessingOutput(_ line: String) -> Bool {
+        // Thumbnail conversion runs before media transfer in yt-dlp.
+        ["[EmbedThumbnail]", "[Metadata]", "[Merger]", "[VideoConvertor]", "[EmbedSubtitle]"]
+            .contains { line.hasPrefix($0) }
+    }
 
     func stopDownload(
         _ download: Download,
@@ -722,6 +728,8 @@ final class DownloadExecutor: ObservableObject {
                 return lang.s("ytdlp_not_found")
             case .parseError:
                 return lang.s("parse_error")
+            case .noDownloadableFormats:
+                return lang.s("no_downloadable_formats")
             case .ffmpegInstallationFailed:
                 return lang.s("ffmpeg_error")
             case .securityViolation(let message):

@@ -2,6 +2,58 @@ import XCTest
 @testable import Siphon
 
 final class MediaInfoTests: XCTestCase {
+    func testDRMMetadataDecodingAndRoundTrip() throws {
+        for (field, knownDRM) in [
+            ("", false), (",\"has_drm\":null", false),
+            (",\"has_drm\":false", false), (",\"has_drm\":true", true),
+            (",\"has_drm\":\"maybe\"", false), (",\"has_drm\":\"widevine\"", true)
+        ] {
+            let json = Data("{\"format_id\":\"f\",\"ext\":\"mp4\"\(field)}".utf8)
+            let format = try JSONDecoder().decode(MediaFormat.self, from: json)
+            XCTAssertEqual(format.isKnownDRM, knownDRM, field)
+            let roundTrip = try JSONDecoder().decode(MediaFormat.self, from: JSONEncoder().encode(format))
+            XCTAssertEqual(roundTrip.hasDRM, format.hasDRM, field)
+        }
+    }
+
+    @MainActor
+    func testKnownDRMFormatsAreExcludedFromEverySelectionPath() {
+        let formats = [
+            MediaFormat(formatId: "drm-v", ext: "mp4", resolution: "3840x2160", vcodec: "avc1", acodec: "none", hasDRM: .protected),
+            MediaFormat(formatId: "failed-v", ext: "mp4", resolution: "3840x2160", vcodec: "avc1", acodec: "none", isWorking: false),
+            MediaFormat(formatId: "clear-v", ext: "mp4", resolution: "1280x720", vcodec: "avc1", acodec: "none"),
+            MediaFormat(formatId: "drm-a", ext: "m4a", vcodec: "none", acodec: "aac", abr: 320, hasDRM: .protected),
+            MediaFormat(formatId: "failed-a", ext: "m4a", vcodec: "none", acodec: "aac", abr: 320, isWorking: false),
+            MediaFormat(formatId: "clear-a", ext: "m4a", vcodec: "none", acodec: "aac", abr: 128)
+        ]
+        let info = MediaInfo(id: "x", title: "Mixed formats", formats: formats)
+        XCTAssertEqual(info.downloadableFormats.map(\.formatId), ["clear-v", "clear-a"])
+        XCTAssertEqual(info.maxFormatHeight, 720)
+        for id in [nil, "drm-v", "failed-v", "clear-v+drm-a", "clear-v+failed-a", "drm-v+clear-a"] as [String?] {
+            var options = DownloadOptions.default
+            options.videoResolution = nil
+            options.resolutionFallbackPolicy = .allowHigher
+            options.selectedFormatId = id
+            XCTAssertEqual(info.resolveSelectedFormats(options: options).map(\.formatId), ["clear-v", "clear-a"])
+        }
+        var audioOptions = DownloadOptions.default
+        audioOptions.fileType = .mp3
+        audioOptions.selectedFormatId = "drm-a"
+        XCTAssertEqual(info.resolveSelectedFormats(options: audioOptions).map(\.formatId), ["clear-a"])
+
+        let drmOnly = MediaInfo(id: "x", title: "DRM only", formats: formats.filter(\.isKnownDRM))
+        XCTAssertTrue(drmOnly.downloadableFormats.isEmpty)
+        XCTAssertTrue(drmOnly.resolveSelectedFormats(options: .default).isEmpty)
+        XCTAssertNil(drmOnly.maxFormatHeight)
+        XCTAssertFalse(YtdlpService.isSingleUnprobedFormat(MediaInfo(
+            id: "x", title: "DRM only", formats: [MediaFormat(formatId: "drm", ext: "mp4", hasDRM: .protected)])))
+
+        let uncertain = MediaInfo(id: "x", title: "Needs probing", formats: [
+            MediaFormat(formatId: "maybe", ext: "mp4", hasDRM: .maybe)
+        ])
+        XCTAssertEqual(uncertain.resolveSelectedFormats(options: .default).first?.formatId, "maybe")
+    }
+
 
     // Helper function to create a minimal MediaInfo with a specific duration
     private func createMediaInfo(duration: Double?) -> MediaInfo {
