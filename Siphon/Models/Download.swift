@@ -1283,7 +1283,7 @@ struct MediaInfo: Codable {
         self.formatProtocol = formatProtocol
         self.manifestUrl = manifestUrl
 
-        if let fmts = formats?.filter({ !$0.isKnownDRM }), !fmts.isEmpty {
+        if let fmts = formats?.filter(\.isDownloadable), !fmts.isEmpty {
             self.maxFormatHeight = fmts.compactMap { $0.parsedHeight }.max()
             self.firstHDRSummary = fmts.first(where: { $0.isHDR })?.hdrSummary
         } else {
@@ -1316,7 +1316,7 @@ struct MediaInfo: Codable {
         self.formatProtocol = try container.decodeIfPresent(String.self, forKey: .formatProtocol)
         self.manifestUrl = try container.decodeIfPresent(String.self, forKey: .manifestUrl)
 
-        if let fmts = self.formats?.filter({ !$0.isKnownDRM }), !fmts.isEmpty {
+        if let fmts = self.formats?.filter(\.isDownloadable), !fmts.isEmpty {
             self.maxFormatHeight = fmts.compactMap { $0.parsedHeight }.max()
             self.firstHDRSummary = fmts.first(where: { $0.isHDR })?.hdrSummary
         } else {
@@ -1427,7 +1427,7 @@ struct MediaInfo: Codable {
     }
 
     var downloadableFormats: [MediaFormat] {
-        (formats ?? []).filter { !$0.isKnownDRM }
+        (formats ?? []).filter(\.isDownloadable)
     }
 
     func resolveSelectedFormats(options: DownloadOptions) -> [MediaFormat] {
@@ -1667,6 +1667,7 @@ struct MediaFormat: Codable, Identifiable, Hashable {
     let manifestUrl: String?
     let needsTesting: Bool?
     let hasDRM: DRMStatus?
+    let isWorking: Bool?
     let language: String?
     let languagePreference: Int?
     let preference: Int?
@@ -1686,6 +1687,7 @@ struct MediaFormat: Codable, Identifiable, Hashable {
         case manifestUrl = "manifest_url"
         case needsTesting = "__needs_testing"
         case hasDRM = "has_drm"
+        case isWorking = "__working"
         case language
         case languagePreference = "language_preference"
         case preference
@@ -1714,6 +1716,7 @@ struct MediaFormat: Codable, Identifiable, Hashable {
         manifestUrl: String? = nil,
         needsTesting: Bool? = nil,
         hasDRM: DRMStatus? = nil,
+        isWorking: Bool? = nil,
         language: String? = nil,
         languagePreference: Int? = nil,
         preference: Int? = nil,
@@ -1740,6 +1743,7 @@ struct MediaFormat: Codable, Identifiable, Hashable {
         self.manifestUrl = manifestUrl
         self.needsTesting = needsTesting
         self.hasDRM = hasDRM
+        self.isWorking = isWorking
         self.language = language
         self.languagePreference = languagePreference
         self.preference = preference
@@ -1752,6 +1756,7 @@ struct MediaFormat: Codable, Identifiable, Hashable {
     }
 
     var isKnownDRM: Bool { hasDRM == .protected }
+    var isDownloadable: Bool { !isKnownDRM && isWorking != false }
 
     var isHDR: Bool {
         if let dr = dynamicRange?.lowercased(), !dr.isEmpty && dr != "sdr" {

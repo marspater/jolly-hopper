@@ -202,6 +202,7 @@ final class YtdlpServiceTests: XCTestCase {
         info.fetchedAt = Date()
         service.processRunner = MockYtdlpProcessRunner(mockDownload: { args in
             XCTAssertTrue(args.contains("generic:variant_query"))
+            XCTAssertTrue(args.contains("--check-formats"), "Probe child playlists before selecting a signed HLS rendition")
             XCTAssertFalse(args.contains("--load-info-json"), "Older cached metadata may have unsigned variant URLs")
             XCTAssertFalse(args.contains("--downloader"))
             XCTAssertEqual(args.last, url)
@@ -209,6 +210,35 @@ final class YtdlpServiceTests: XCTestCase {
         })
         _ = try await service.download(url: url, options: .default, mediaInfo: info,
                                        onProgress: { _, _, _ in }, onOutput: { _ in })
+
+        service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
+            XCTAssertTrue(args.contains("generic:variant_query"))
+            XCTAssertTrue(args.contains("--check-formats"), "Metadata must omit renditions rejected by the downloader")
+            return #"{"id":"sample","title":"Signed stream","formats":[{"format_id":"8774","ext":"mp4","resolution":"1920x1080","has_drm":false,"__working":false},{"format_id":"clear","ext":"mp4","resolution":"1280x720","has_drm":false,"__working":true}]}"#
+        })
+        let checked = try await service.fetchInfo(url: url)
+        XCTAssertEqual(checked.downloadableFormats.map(\.formatId), ["clear"])
+        XCTAssertEqual(checked.resolveSelectedFormats(options: .default).first?.formatId, "clear")
+        XCTAssertEqual(checked.maxFormatHeight, 720)
+        let roundTrip = try JSONDecoder().decode(MediaInfo.self, from: JSONEncoder().encode(checked))
+        XCTAssertEqual(roundTrip.downloadableFormats.map(\.formatId), ["clear"])
+        var explicit = DownloadOptions.default
+        explicit.selectedFormatId = "8774"
+        do {
+            _ = try await service.download(url: url, options: explicit, mediaInfo: checked,
+                                           onProgress: { _, _, _ in }, onOutput: { _ in })
+            XCTFail("A rejected child must not be selected explicitly")
+        } catch YtdlpError.downloadFailed(let reason) {
+            XCTAssertEqual(reason, LanguageService.s("stream_unavailable"))
+        }
+        let failedOnly = MediaInfo(id: "sample", title: "Failed child", formats: checked.formats?.filter { !$0.isDownloadable })
+        do {
+            _ = try await service.download(url: url, options: .default, mediaInfo: failedOnly,
+                                           onProgress: { _, _, _ in }, onOutput: { _ in })
+            XCTFail("Failed-only metadata must not start a download")
+        } catch YtdlpError.downloadFailed(let reason) {
+            XCTAssertEqual(reason, LanguageService.s("no_working_formats"))
+        }
     }
 
     func testDownloadUsesRelativeTemplateAndPreservesOwnedScratchOnCancellation() async throws {

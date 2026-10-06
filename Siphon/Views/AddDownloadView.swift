@@ -1529,7 +1529,7 @@ struct AddDownloadView: View {
                 var codecOptions: [CodecOption] = []
 
                 if let formats = info.formats {
-                    for format in formats where !format.isKnownDRM {
+                    for format in formats where format.isDownloadable {
                         if let vcodec = format.vcodec, vcodec != "none" {
                             if vcodec.hasPrefix("avc1"), !codecs.contains("h264") {
                                 codecs.insert("h264")

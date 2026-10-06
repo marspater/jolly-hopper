@@ -1697,13 +1697,14 @@ public struct DownloadResult: Sendable {
         onOutput: @escaping @Sendable (String) -> Void
     ) async throws -> DownloadResult {
         if let formats = mediaInfo?.formats, !formats.isEmpty {
-            guard formats.contains(where: { !$0.isKnownDRM }) else {
-                throw YtdlpError.noDownloadableFormats
+            guard formats.contains(where: \.isDownloadable) else {
+                if formats.allSatisfy(\.isKnownDRM) { throw YtdlpError.noDownloadableFormats }
+                throw YtdlpError.downloadFailed(LanguageService.s("no_working_formats"))
             }
             if let selection = options.selectedFormatId {
                 let ids = selection.split(separator: "+").map { $0.trimmingCharacters(in: .whitespaces) }
-                if formats.contains(where: { $0.isKnownDRM && ids.contains($0.formatId) }) {
-                    throw YtdlpError.downloadFailed(LanguageService.s("drm_protected"))
+                if let rejected = formats.first(where: { !$0.isDownloadable && ids.contains($0.formatId) }) {
+                    throw YtdlpError.downloadFailed(LanguageService.s(rejected.isKnownDRM ? "drm_protected" : "stream_unavailable"))
                 }
             }
         }
@@ -2591,7 +2592,7 @@ public struct DownloadResult: Sendable {
     /// Any `[height<=N]` selector rejects it, so such a lone format is taken as-is.
     static func isSingleUnprobedFormat(_ info: MediaInfo?) -> Bool {
         guard let formats = info?.formats, formats.count == 1 else { return false }
-        return !formats[0].isKnownDRM && (formats[0].resolution == nil || formats[0].resolution == "unknown")
+        return formats[0].isDownloadable && (formats[0].resolution == nil || formats[0].resolution == "unknown")
     }
 
     private func buildFormatArgs(url: String? = nil, options: DownloadOptions, mediaInfo: MediaInfo? = nil) -> [String] {
@@ -7216,6 +7217,8 @@ public struct DownloadResult: Sendable {
             if Self.requiresHlsVariantQuery(url) {
                 // This CDN's relative variant links omit the master signature.
                 args.append(contentsOf: ["--extractor-args", "generic:variant_query"])
+                // Encryption may be declared only in a child playlist, not the master.
+                args.append("--check-formats")
             }
         } else if let components = URLComponents(string: url), let host = components.host, !host.isEmpty, !host.contains("\r"), !host.contains("\n") {
             // Universal Referer and Origin auto-injection for anti-hotlinking CDN protection

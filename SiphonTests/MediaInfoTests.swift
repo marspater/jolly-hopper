@@ -20,14 +20,16 @@ final class MediaInfoTests: XCTestCase {
     func testKnownDRMFormatsAreExcludedFromEverySelectionPath() {
         let formats = [
             MediaFormat(formatId: "drm-v", ext: "mp4", resolution: "3840x2160", vcodec: "avc1", acodec: "none", hasDRM: .protected),
+            MediaFormat(formatId: "failed-v", ext: "mp4", resolution: "3840x2160", vcodec: "avc1", acodec: "none", isWorking: false),
             MediaFormat(formatId: "clear-v", ext: "mp4", resolution: "1280x720", vcodec: "avc1", acodec: "none"),
             MediaFormat(formatId: "drm-a", ext: "m4a", vcodec: "none", acodec: "aac", abr: 320, hasDRM: .protected),
+            MediaFormat(formatId: "failed-a", ext: "m4a", vcodec: "none", acodec: "aac", abr: 320, isWorking: false),
             MediaFormat(formatId: "clear-a", ext: "m4a", vcodec: "none", acodec: "aac", abr: 128)
         ]
         let info = MediaInfo(id: "x", title: "Mixed formats", formats: formats)
         XCTAssertEqual(info.downloadableFormats.map(\.formatId), ["clear-v", "clear-a"])
         XCTAssertEqual(info.maxFormatHeight, 720)
-        for id in [nil, "drm-v", "clear-v+drm-a", "drm-v+clear-a"] as [String?] {
+        for id in [nil, "drm-v", "failed-v", "clear-v+drm-a", "clear-v+failed-a", "drm-v+clear-a"] as [String?] {
             var options = DownloadOptions.default
             options.videoResolution = nil
             options.resolutionFallbackPolicy = .allowHigher
