@@ -14,6 +14,7 @@ struct DebugLogView: View {
                 Image(systemName: "terminal.fill")
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundColor(SiphonTheme.accentText)
+                    .accessibilityHidden(true)
 
                 Text(languageService.s("debug_logs"))
                     .font(.siphonHeadline)
@@ -67,6 +68,7 @@ struct DebugLogView: View {
                     HStack(spacing: 6) {
                         Image(systemName: copyFeedback.isShowing ? "checkmark" : "doc.on.doc")
                             .font(.system(size: 11, weight: .semibold))
+                            .accessibilityHidden(true)
                         Text(copyFeedback.isShowing ? languageService.s("copied") : languageService.s("copy_log"))
                             .font(.siphonSecondaryMedium)
                     }
@@ -75,7 +77,7 @@ struct DebugLogView: View {
                 .buttonStyle(.siphonSecondary)
                 .disabled(logger.logs.isEmpty)
                 .help(languageService.s("copy_log"))
-                .accessibilityLabel(languageService.s("copy_log"))
+                .accessibilityLabel(copyFeedback.isShowing ? languageService.s("copied") : languageService.s("copy_log"))
 
                 Button {
                     logger.clearLogs()
@@ -83,6 +85,7 @@ struct DebugLogView: View {
                     HStack(spacing: 6) {
                         Image(systemName: "trash")
                             .font(.system(size: 11, weight: .semibold))
+                            .accessibilityHidden(true)
                         Text(languageService.s("clear"))
                             .font(.siphonSecondaryMedium)
                     }
@@ -105,6 +108,7 @@ struct DebugLogView: View {
                     HStack(spacing: 6) {
                         Image(systemName: "folder")
                             .font(.system(size: 11, weight: .semibold))
+                            .accessibilityHidden(true)
                         Text(languageService.s("reveal_in_finder"))
                             .font(.siphonSecondaryMedium)
                     }
