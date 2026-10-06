@@ -98,7 +98,7 @@ class LanguageService: ObservableObject {
         "download_stopped_title": "Download Stopped",
         "download_stopped_body": "Download of '%@' was stopped.",
         "too_many_requests": "Too many requests (429). Please select a browser in Settings > Advanced.",
-        "ytdlp_not_found": "yt-dlp executable not found. Set its path in Settings > Advanced.",
+        "ytdlp_not_found": "yt-dlp executable not found. Please download dependencies in Settings > Advanced.",
         "parse_error": "Failed to parse video information. The website structure may have changed.",
         "cloudflare_blocked": "Blocked by anti-bot protection. Siphon could not complete the browser challenge automatically.",
         "recu_verification_title": "recu.me — complete the check or sign in; Siphon continues automatically",

@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Changes
+
+- Siphon again downloads a pinned, SHA-256-verified yt-dlp: the Siphon fork 2026.10.06.1, which keeps its DRM-format and byte-range download fixes. The user-provided yt-dlp path in Settings is no longer used.
+
 ### Security
 
 - Browser-link downloads accept only global unicast IPv6 destinations and reject IPv4-compatible addresses.
