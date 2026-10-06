@@ -80,11 +80,24 @@ struct RecentDownloadRowView: View {
 
     // MARK: - Subviews
 
+    /// Signed poster links (Recu's) expire, so a finished download falls back to its file.
+    @ViewBuilder
+    private var fileThumbnail: some View {
+        if let filePath = download.primaryFilePath, primaryFileIsPresent != false {
+            DownloadRowView.FileThumbnailView(fileURL: filePath, isHDR: false)
+                .frame(width: 54, height: 36)
+        } else {
+            Image(systemName: "play.rectangle.fill")
+                .font(.system(size: 16))
+                .foregroundColor(.secondary.opacity(0.6))
+        }
+    }
+
     @ViewBuilder
     private var thumbnailView: some View {
         ZStack {
             RoundedRectangle(cornerRadius: SiphonTheme.radiusSmall, style: .continuous)
-                .fill(Color.primary.opacity(0.08))
+                .fill(Color.primary.opacity(SiphonTheme.Opacity.fillPlaceholder))
                 .frame(width: 54, height: 36)
 
             if let thumb = download.thumbnailURL {
@@ -95,20 +108,16 @@ struct RecentDownloadRowView: View {
                         .frame(width: 54, height: 36)
                         .clipped()
                 } placeholder: {
-                    Image(systemName: "play.rectangle.fill")
-                        .font(.system(size: 16))
-                        .foregroundColor(.secondary.opacity(0.6))
+                    fileThumbnail
                 }
             } else {
-                Image(systemName: "play.rectangle.fill")
-                    .font(.system(size: 16))
-                    .foregroundColor(.secondary.opacity(0.6))
+                fileThumbnail
             }
         }
         .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusSmall, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: SiphonTheme.radiusSmall, style: .continuous)
-                .stroke(Color.primary.opacity(0.12), lineWidth: 0.5)
+                .stroke(Color.primary.opacity(SiphonTheme.Opacity.borderRest), lineWidth: 0.5)
         )
         .accessibilityHidden(true)
     }
