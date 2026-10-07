@@ -225,14 +225,17 @@ class LoggerService: ObservableObject {
         guard !text.isEmpty else { return text }
         var result = text
 
+        // Bolt Performance Optimization: Use Swift Range slicing (`String(result[swiftRange])`) and
+        // native UTF-16 character counting (`result.utf16.count`) instead of bridging to `NSString`
+        // (`(result as NSString).length` and `nsString.substring(with:)`).
+        // This eliminates temporary Objective-C object allocations on every high-frequency log sanitization call.
         // 1. Sanitize URLs (strip query strings, fragments, credentials)
         if let urlRegex = Self.urlRegex {
-            let nsString = result as NSString
-            let matches = urlRegex.matches(in: result, options: [], range: NSRange(location: 0, length: nsString.length))
+            let matches = urlRegex.matches(in: result, options: [], range: NSRange(location: 0, length: result.utf16.count))
             for match in matches.reversed() {
-                let urlStr = nsString.substring(with: match.range)
-                let sanitizedURL = sanitizeURLForLog(urlStr)
                 if let swiftRange = Range(match.range, in: result) {
+                    let urlStr = String(result[swiftRange])
+                    let sanitizedURL = sanitizeURLForLog(urlStr)
                     result.replaceSubrange(swiftRange, with: sanitizedURL)
                 }
             }
@@ -240,7 +243,7 @@ class LoggerService: ObservableObject {
 
         // 2. Redact Bearer / API tokens and credentials using pre-compiled regexes
         for (regex, replacement) in Self.redactionRegexes {
-            result = regex.stringByReplacingMatches(in: result, options: [], range: NSRange(location: 0, length: (result as NSString).length), withTemplate: replacement)
+            result = regex.stringByReplacingMatches(in: result, options: [], range: NSRange(location: 0, length: result.utf16.count), withTemplate: replacement)
         }
 
         return result
