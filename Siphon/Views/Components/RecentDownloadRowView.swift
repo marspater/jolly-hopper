@@ -20,11 +20,15 @@ struct RecentDownloadRowView: View {
     var body: some View {
         HStack(alignment: .center, spacing: SiphonTheme.spacing12) {
             thumbnailView
-            metadataView
-            formatPillsView
-                .fixedSize(horizontal: true, vertical: false)
-            statusLabelView
-                .frame(width: 136, alignment: .trailing)
+
+            HStack(alignment: .center, spacing: SiphonTheme.spacing12) {
+                metadataView
+                formatPillsView
+                    .fixedSize(horizontal: true, vertical: false)
+                statusLabelView
+                    .frame(width: 136, alignment: .trailing)
+            }
+            .accessibilityElement(children: .combine)
 
             // Fixed 24 pt slots keep every row's icons on the same columns,
             // whether or not a row has a primary action.
