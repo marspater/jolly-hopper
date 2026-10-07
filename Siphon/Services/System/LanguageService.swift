@@ -333,6 +333,8 @@ class LanguageService: ObservableObject {
         "h264_preset_info": "H.264 codec selected. Maximum quality is limited to 1080p.",
         "download_completed_title": "Download Completed",
         "download_completed_body": "%@ downloaded successfully.",
+        "download_partial_body": "%@ finished, but some items failed.",
+        "some_items_failed": "Some items failed",
         "download_failed_title": "Download Error",
         "download_failed_body": "An error occurred while downloading %@.",
         "conversion_completed_title": "Video Conversion Complete",
