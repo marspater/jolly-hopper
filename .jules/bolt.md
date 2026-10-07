@@ -70,3 +70,7 @@
 ## 2026-09-23 - Batch Array Trimming and Single-Pass Range Deletion for High-Frequency Buffers
 **Learning:** Calling `removeFirst()` repeatedly in a `while` loop or on every single `append()` when an array is over capacity causes repeated $O(N)$ memory shifting operations per element. Calculating `dropCount` upfront and invoking `removeFirst(dropCount)` once performs a single $O(N)$ memory move. Similarly, batch-trimming log arrays when exceeding a threshold (e.g. `maxLogEntries + 50`) amortizes array shift operations over 50 events.
 **Action:** Always batch-trim high-frequency array buffers or calculate `dropCount` upfront to invoke `removeFirst(dropCount)` once instead of calling `removeFirst()` in a loop.
+
+## 2026-10-15 - Eliminating NSString Bridging in High-Frequency String Sanitization
+**Learning:** In Swift string operations using `NSRegularExpression`, passing `(string as NSString).length` and calling `nsString.substring(with: match.range)` creates repetitive Objective-C bridging allocations. Using `string.utf16.count` for `NSRange` and native Swift Range slicing (`String(string[swiftRange])`) eliminates intermediate `NSString` heap allocations.
+**Action:** Replace `as NSString` length and substring calls with `utf16.count` and native Swift Substring/Range slicing in high-frequency string processing functions.
