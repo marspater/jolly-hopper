@@ -149,6 +149,7 @@ struct HeroDropURLView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .layoutPriority(1)
                         .padding(.leading, SiphonTheme.spacing2)
+                        .accessibilityLabel(languageService.s("video_url"))
                         .onSubmit {
                             submitURL()
                         }
