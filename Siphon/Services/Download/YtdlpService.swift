@@ -755,9 +755,8 @@ class YtdlpService: ObservableObject {
                 try? FileManager.default.removeItem(at: invalidBackup)
                 return
             } else {
-                LoggerService.shared.log("yt-dlp binary in App Support failed SHA-256 verification. Preserving invalid backup and downloading pinned version.", level: .warning)
-                try? FileManager.default.removeItem(at: invalidBackup)
-                try? FileManager.default.moveItem(at: ytdlpInSupport, to: invalidBackup)
+                // Leave it in place: the installer swaps atomically and rolls back to it on failure.
+                LoggerService.shared.log("yt-dlp binary in App Support does not match the pinned SHA-256. Downloading pinned version.", level: .warning)
             }
         }
 
@@ -1613,10 +1612,13 @@ class YtdlpService: ObservableObject {
 public struct DownloadResult: Sendable {
     public let files: [URL]
     public let primaryFile: URL?
+    /// yt-dlp failed some playlist entries after others finished.
+    public let partialFailure: String?
 
-    public init(files: [URL], primaryFile: URL? = nil) {
+    public init(files: [URL], primaryFile: URL? = nil, partialFailure: String? = nil) {
         self.files = files
         self.primaryFile = primaryFile ?? files.first
+        self.partialFailure = partialFailure
     }
 
     public var path: String {
@@ -2459,7 +2461,7 @@ public struct DownloadResult: Sendable {
             }
         }
 
-        return DownloadResult(files: allFileURLs, primaryFile: finalFileURL)
+        return DownloadResult(files: allFileURLs, primaryFile: finalFileURL, partialFailure: finalResult.partialFailure)
     }
 
     private func downloadThumbnailLocally(from urlString: String, to destinationURL: URL,
@@ -7850,7 +7852,7 @@ enum YtdlpError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .notFound:
-            return "yt-dlp not found. Set its path in Settings > Advanced."
+            return "yt-dlp not found. Download dependencies in Settings > Advanced."
         case .parseError:
             return "Failed to parse data"
         case .noDownloadableFormats:

@@ -155,6 +155,10 @@ final class QueueRecoveryStore {
         do {
             let data = try Data(contentsOf: fileURL)
             let snapshot = try JSONDecoder().decode(QueueRecoverySnapshot.self, from: data)
+            guard snapshot.version == 1 else {
+                LoggerService.shared.log("Ignoring queue recovery snapshot with unknown version \(snapshot.version)", level: .warning)
+                return []
+            }
             guard !snapshot.isCleanShutdown && !snapshot.jobs.isEmpty else {
                 return []
             }

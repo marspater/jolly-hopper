@@ -201,12 +201,12 @@ final class NotificationService: NSObject, @unchecked Sendable, UNUserNotificati
         }
     }
 
-    func sendDownloadCompleted(filename: String, languageService: LanguageService? = nil) {
+    func sendDownloadCompleted(filename: String, partial: Bool = false, languageService: LanguageService? = nil) {
         let cleanFilename = filename.decodingHTMLEntities()
         let lang = languageService ?? LanguageService()
         let content = UNMutableNotificationContent()
         content.title = lang.s("download_completed_title")
-        content.body = String(format: lang.s("download_completed_body"), cleanFilename)
+        content.body = String(format: lang.s(partial ? "download_partial_body" : "download_completed_body"), cleanFilename)
         content.sound = .default
         content.categoryIdentifier = "download"
         self.sendNotification(content: content, logName: "Completed: \(cleanFilename)")
