@@ -190,6 +190,9 @@ final class UpdateVerifierTests: XCTestCase {
         XCTAssertFalse(UpdateDownloader.isTrustedGitHubURL(URL(string: "https://github.com/attacker/malware/releases/download/v1/bad.dmg")!), "Must reject untrusted GitHub repository")
         XCTAssertFalse(UpdateDownloader.isTrustedGitHubURL(URL(string: "https://evil.github.com/marspater/jolly-hopper/bad.dmg")!), "Must reject untrusted subdomain")
         XCTAssertFalse(UpdateDownloader.isTrustedGitHubURL(URL(string: "http://github.com/marspater/jolly-hopper/releases/download/v1.0/Siphon.dmg")!), "Must reject insecure http")
+        XCTAssertFalse(UpdateDownloader.isTrustedGitHubURL(URL(string: "https://github.com/marspater/jolly-hopper/../../attacker/repo/releases/download/v1/bad.dmg")!), "Must reject path traversal escaping repository")
+        XCTAssertFalse(UpdateDownloader.isTrustedGitHubURL(URL(string: "https://api.github.com/repos/marspater/jolly-hopper/../../attacker/repo")!), "Must reject path traversal in API URLs")
+        XCTAssertFalse(UpdateDownloader.isTrustedGitHubURL(URL(string: "https://raw.githubusercontent.com/marspater/jolly-hopper/../../attacker/repo/main/bad.txt")!), "Must reject path traversal in raw URLs")
     }
 
     func testUpdateStagingPreservesPackageExtension() {

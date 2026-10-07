@@ -54,7 +54,7 @@ public final class UpdateDownloader: NSObject, URLSessionDownloadDelegate, @unch
 
     public static func isTrustedGitHubURL(_ url: URL) -> Bool {
         guard url.scheme == "https", let host = url.host?.lowercased() else { return false }
-        let path = url.path.lowercased()
+        let path = url.standardized.path.lowercased()
 
         if host == "github.com" {
             return path.hasPrefix("/marspater/jolly-hopper/")
