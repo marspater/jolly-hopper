@@ -692,6 +692,7 @@ struct AddDownloadView: View {
                                     else { selectedPlaylistIds.remove(item.id) }
                                 }
                             ))
+                            .labelsHidden()
                             .toggleStyle(.checkbox)
                             .accessibilityLabel(item.title)
 
@@ -723,6 +724,8 @@ struct AddDownloadView: View {
                         .overlay(
                             SiphonTheme.controlBorder(cornerRadius: SiphonTheme.radiusControl)
                         )
+                        .accessibilityElement(children: .combine)
+                        .accessibilityAddTraits(selectedPlaylistIds.contains(item.id) ? [.isButton, .isSelected] : [.isButton])
                     }
                 }
             }
@@ -1467,6 +1470,7 @@ struct AddDownloadView: View {
                     HStack(spacing: SiphonTheme.spacing6) {
                         Image(systemName: "arrow.down.circle.fill")
                             .font(.system(size: 13, weight: .semibold))
+                            .accessibilityHidden(true)
                         Text(downloadTitle)
                     }
                 }

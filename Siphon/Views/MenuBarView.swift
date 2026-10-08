@@ -184,6 +184,7 @@ struct MenuBarView: View {
             HStack(spacing: SiphonTheme.spacing6) {
                 Image(systemName: "arrow.down.circle.fill")
                     .font(.system(size: 13, weight: .semibold))
+                    .accessibilityHidden(true)
                 Text(languageService.s("download_btn"))
                     .font(.siphonSecondarySemibold)
                 Spacer()
