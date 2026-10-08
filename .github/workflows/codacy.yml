@@ -26,9 +26,15 @@ jobs:
       security-events: write
       actions: read
 
-    name: Codacy Security Scan
+    name: Codacy Security Scan (${{ matrix.tool }})
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        # Run source-security analyzers. The CLI's default suite also runs
+        # unconfigured linters, metrics, and dependency tools on this repo.
+        tool: [opengrep, cppcheck]
 
     steps:
       - name: Checkout code
@@ -41,7 +47,8 @@ jobs:
           verbose: true
           output: codacy-results.sarif
           format: sarif
-          fail-if-incomplete: false
+          tool: ${{ matrix.tool }}
+          fail-if-incomplete: true
 
       - name: Consolidate SARIF runs for GitHub Code Scanning
         id: consolidate
@@ -167,3 +174,4 @@ jobs:
         if: always() && hashFiles('codacy-results-normalized.sarif') != ''
         with:
           sarif_file: codacy-results-normalized.sarif
+          category: codacy/${{ matrix.tool }}
