@@ -140,11 +140,12 @@ public final class SecureCookieFile: @unchecked Sendable {
         }
     }
 
+    // Bolt Performance Optimization: Short-circuit control character check to return token as-is without heap allocations for clean inputs, eliminating 4 intermediate String allocations per call.
     private static func sanitizeCookieToken(_ token: String) -> String {
-        return token.replacingOccurrences(of: "\t", with: "")
-                    .replacingOccurrences(of: "\n", with: "")
-                    .replacingOccurrences(of: "\r", with: "")
-                    .replacingOccurrences(of: "\0", with: "")
+        guard token.contains(where: { $0 == "\t" || $0 == "\n" || $0 == "\r" || $0 == "\0" }) else {
+            return token
+        }
+        return String(token.filter { $0 != "\t" && $0 != "\n" && $0 != "\r" && $0 != "\0" })
     }
 
     /// Creates and validates a new `SecureCookieFile` with 0o600 permissions.

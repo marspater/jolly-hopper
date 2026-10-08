@@ -8,6 +8,9 @@ import SQLite3
 /// Supports universal Chromium browsers (Helium, Chromium, Chrome, Brave, Edge, Arc, Vivaldi, Opera)
 /// on macOS using each browser's respective Keychain storage key and standard on-disk SQLite cookie database.
 enum ChromiumCookieReader {
+    // Bolt Performance Optimization: Pre-compile static CharacterSet to eliminate repeated character set allocations and avoid per-row Array<String> heap allocations during cookie database extraction.
+    nonisolated private static let invalidControlCharSet = CharacterSet(charactersIn: "\t\r\n\0")
+
     struct ChromiumBrowserTarget: Sendable {
         let name: String
         let relativePath: String
@@ -328,7 +331,10 @@ enum ChromiumCookieReader {
             }
             let name = string(1)
             let path = string(4)
-            guard [domain, name, path, value].allSatisfy({ $0.rangeOfCharacter(from: CharacterSet(charactersIn: "\t\r\n\0")) == nil }) else {
+            guard domain.rangeOfCharacter(from: Self.invalidControlCharSet) == nil,
+                  name.rangeOfCharacter(from: Self.invalidControlCharSet) == nil,
+                  path.rangeOfCharacter(from: Self.invalidControlCharSet) == nil,
+                  value.rangeOfCharacter(from: Self.invalidControlCharSet) == nil else {
                 throw failure("Cookie contains invalid control characters.")
             }
             let httpOnly = sqlite3_column_int(statement, 7) != 0 ? "#HttpOnly_" : ""
