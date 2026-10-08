@@ -684,37 +684,39 @@ struct AddDownloadView: View {
             ScrollView {
                 VStack(spacing: 8) {
                     ForEach(playlistItems, id: \.id) { item in
-                        Toggle(isOn: Binding(
-                            get: { selectedPlaylistIds.contains(item.id) },
-                            set: { isSelected in
-                                if isSelected { selectedPlaylistIds.insert(item.id) }
-                                else { selectedPlaylistIds.remove(item.id) }
-                            }
-                        )) {
-                            HStack(spacing: 12) {
-                                ThumbnailImage(url: item.thumbnailURL) { image in image.resizable().aspectRatio(contentMode: .fill) }
-                                placeholder: { Rectangle().fill(Color.primary.opacity(SiphonTheme.Opacity.fillPlaceholder)) }
-                                .frame(width: 50, height: 30)
-                                .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusSmall, style: .continuous))
-                                .accessibilityHidden(true)
-
-                                VStack(alignment: .leading, spacing: SiphonTheme.spacing2) {
-                                    Text(item.title)
-                                        .font(.siphonStandardMedium)
-                                        .lineLimit(1)
-                                        .truncationMode(.tail)
-                                        .help(item.title)
-                                    if let duration = item.durationString {
-                                        Text(duration)
-                                            .font(.siphonMetadata)
-                                            .foregroundColor(.secondary)
-                                    }
+                        let isItemSelected = selectedPlaylistIds.contains(item.id)
+                        HStack(spacing: 12) {
+                            Toggle("", isOn: Binding(
+                                get: { isItemSelected },
+                                set: { isSelected in
+                                    if isSelected { selectedPlaylistIds.insert(item.id) }
+                                    else { selectedPlaylistIds.remove(item.id) }
                                 }
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .layoutPriority(1)
+                            ))
+                            .labelsHidden()
+                            .toggleStyle(.checkbox)
+                            .accessibilityLabel(item.title)
+
+                            ThumbnailImage(url: item.thumbnailURL) { image in image.resizable().aspectRatio(contentMode: .fill) }
+                            placeholder: { Rectangle().fill(Color.primary.opacity(SiphonTheme.Opacity.fillPlaceholder)) }
+                            .frame(width: 50, height: 30)
+                            .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusSmall, style: .continuous))
+
+                            VStack(alignment: .leading, spacing: SiphonTheme.spacing2) {
+                                Text(item.title)
+                                    .font(.siphonStandardMedium)
+                                    .lineLimit(1)
+                                    .truncationMode(.tail)
+                                    .help(item.title)
+                                if let duration = item.durationString {
+                                    Text(duration)
+                                        .font(.siphonMetadata)
+                                        .foregroundColor(.secondary)
+                                }
                             }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .layoutPriority(1)
                         }
-                        .toggleStyle(.checkbox)
                         .padding(8)
                         .background(
                             SiphonTheme.controlBackground(cornerRadius: SiphonTheme.radiusControl)
@@ -723,6 +725,8 @@ struct AddDownloadView: View {
                         .overlay(
                             SiphonTheme.controlBorder(cornerRadius: SiphonTheme.radiusControl)
                         )
+                        .accessibilityElement(children: .combine)
+                        .accessibilityAddTraits(isItemSelected ? [.isButton, .isSelected] : [.isButton])
                     }
                 }
             }
