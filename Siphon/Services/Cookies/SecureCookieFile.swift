@@ -140,11 +140,12 @@ public final class SecureCookieFile: @unchecked Sendable {
         }
     }
 
+    // Bolt Performance Optimization: Short-circuit control character check using unicodeScalars to return clean tokens as-is without heap allocations while correctly handling combined CRLF (\r\n) grapheme clusters.
     private static func sanitizeCookieToken(_ token: String) -> String {
-        return token.replacingOccurrences(of: "\t", with: "")
-                    .replacingOccurrences(of: "\n", with: "")
-                    .replacingOccurrences(of: "\r", with: "")
-                    .replacingOccurrences(of: "\0", with: "")
+        guard token.unicodeScalars.contains(where: { $0.value == 0x09 || $0.value == 0x0A || $0.value == 0x0D || $0.value == 0x00 }) else {
+            return token
+        }
+        return String(token.unicodeScalars.filter { $0.value != 0x09 && $0.value != 0x0A && $0.value != 0x0D && $0.value != 0x00 })
     }
 
     /// Creates and validates a new `SecureCookieFile` with 0o600 permissions.
