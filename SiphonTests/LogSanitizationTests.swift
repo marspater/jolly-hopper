@@ -53,6 +53,32 @@ final class LogSanitizationTests: XCTestCase {
         XCTAssertTrue(sanitized.contains("--login-with-token \"<TOKEN>\""))
     }
 
+    func testSanitizeProxyAuthAndConfigFileCommandFlags() {
+        let args = [
+            "yt-dlp",
+            "--proxy-user", "proxy_user_123",
+            "--proxy-password", "proxy_pass_456",
+            "--user", "user_789",
+            "--netrc-location", "/Users/secret/netrc",
+            "--config-location", "/Users/secret/config",
+            "--client-certificate-key-password", "cert_key_pass_321",
+            "https://example.com/video"
+        ]
+        let sanitized = LoggerService.sanitizeCommandForLog(args)
+        XCTAssertFalse(sanitized.contains("proxy_user_123"))
+        XCTAssertFalse(sanitized.contains("proxy_pass_456"))
+        XCTAssertFalse(sanitized.contains("user_789"))
+        XCTAssertFalse(sanitized.contains("cert_key_pass_321"))
+        XCTAssertFalse(sanitized.contains("/Users/secret/netrc"))
+        XCTAssertFalse(sanitized.contains("/Users/secret/config"))
+        XCTAssertTrue(sanitized.contains("--proxy-user \"<USERNAME>\""))
+        XCTAssertTrue(sanitized.contains("--proxy-password \"<PASSWORD>\""))
+        XCTAssertTrue(sanitized.contains("--user \"<USERNAME>\""))
+        XCTAssertTrue(sanitized.contains("--netrc-location \"<LOCATION_REDACTED>\""))
+        XCTAssertTrue(sanitized.contains("--config-location \"<LOCATION_REDACTED>\""))
+        XCTAssertTrue(sanitized.contains("--client-certificate-key-password \"<PASSWORD>\""))
+    }
+
     func testSanitizeAttachedShortCommandFlags() {
         let args = ["yt-dlp", "-pMySecretPass", "-uAdminUser", "-2Token123456", "-bHelium", "-HCookie: secret=123", "https://example.com/video"]
         let sanitized = LoggerService.sanitizeCommandForLog(args)
