@@ -3270,15 +3270,18 @@ final class YtdlpServiceTests: XCTestCase {
 
     func testWebKitSessionsRunOneAtATimeAndCancelledWaitersLeave() async throws {
         let events = TestBox<[String]>([])
+        let releaseFirst = TestBox<CheckedContinuation<Void, Never>?>(nil)
+        let cancelledWaiting = TestBox(false)
+        defer { releaseFirst.value?.resume() }
         let service = self.service!
         let first = Task {
             try await service.withExclusiveWebKitSession {
                 events.value.append("a-start")
-                try await Task.sleep(nanoseconds: 300_000_000)
+                await withCheckedContinuation { releaseFirst.value = $0 }
                 events.value.append("a-end")
             }
         }
-        while !events.value.contains("a-start") { await Task.yield() }
+        while releaseFirst.value == nil { await Task.yield() }
 
         let second = Task {
             try await service.withExclusiveWebKitSession {
@@ -3287,14 +3290,17 @@ final class YtdlpServiceTests: XCTestCase {
         }
         let cancelled = Task {
             do {
+                cancelledWaiting.value = true
                 try await service.withExclusiveWebKitSession { events.value.append("c-run") }
             } catch is CancellationError {
                 events.value.append("c-cancelled")
             }
         }
-        try await Task.sleep(nanoseconds: 50_000_000)
+        while !cancelledWaiting.value { await Task.yield() }
         cancelled.cancel()
         try await cancelled.value
+        releaseFirst.value?.resume()
+        releaseFirst.value = nil
         try await first.value
         try await second.value
 

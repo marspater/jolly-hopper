@@ -684,37 +684,37 @@ struct AddDownloadView: View {
             ScrollView {
                 VStack(spacing: 8) {
                     ForEach(playlistItems, id: \.id) { item in
-                        HStack(spacing: 12) {
-                            Toggle("", isOn: Binding(
-                                get: { selectedPlaylistIds.contains(item.id) },
-                                set: { isSelected in
-                                    if isSelected { selectedPlaylistIds.insert(item.id) }
-                                    else { selectedPlaylistIds.remove(item.id) }
-                                }
-                            ))
-                            .toggleStyle(.checkbox)
-                            .accessibilityLabel(item.title)
-
-                            ThumbnailImage(url: item.thumbnailURL) { image in image.resizable().aspectRatio(contentMode: .fill) }
-                            placeholder: { Rectangle().fill(Color.primary.opacity(SiphonTheme.Opacity.fillPlaceholder)) }
-                            .frame(width: 50, height: 30)
-                            .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusSmall, style: .continuous))
-
-                            VStack(alignment: .leading, spacing: SiphonTheme.spacing2) {
-                                Text(item.title)
-                                    .font(.siphonStandardMedium)
-                                    .lineLimit(1)
-                                    .truncationMode(.tail)
-                                    .help(item.title)
-                                if let duration = item.durationString {
-                                    Text(duration)
-                                        .font(.siphonMetadata)
-                                        .foregroundColor(.secondary)
-                                }
+                        Toggle(isOn: Binding(
+                            get: { selectedPlaylistIds.contains(item.id) },
+                            set: { isSelected in
+                                if isSelected { selectedPlaylistIds.insert(item.id) }
+                                else { selectedPlaylistIds.remove(item.id) }
                             }
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .layoutPriority(1)
+                        )) {
+                            HStack(spacing: 12) {
+                                ThumbnailImage(url: item.thumbnailURL) { image in image.resizable().aspectRatio(contentMode: .fill) }
+                                placeholder: { Rectangle().fill(Color.primary.opacity(SiphonTheme.Opacity.fillPlaceholder)) }
+                                .frame(width: 50, height: 30)
+                                .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusSmall, style: .continuous))
+                                .accessibilityHidden(true)
+
+                                VStack(alignment: .leading, spacing: SiphonTheme.spacing2) {
+                                    Text(item.title)
+                                        .font(.siphonStandardMedium)
+                                        .lineLimit(1)
+                                        .truncationMode(.tail)
+                                        .help(item.title)
+                                    if let duration = item.durationString {
+                                        Text(duration)
+                                            .font(.siphonMetadata)
+                                            .foregroundColor(.secondary)
+                                    }
+                                }
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .layoutPriority(1)
+                            }
                         }
+                        .toggleStyle(.checkbox)
                         .padding(8)
                         .background(
                             SiphonTheme.controlBackground(cornerRadius: SiphonTheme.radiusControl)
@@ -1467,6 +1467,7 @@ struct AddDownloadView: View {
                     HStack(spacing: SiphonTheme.spacing6) {
                         Image(systemName: "arrow.down.circle.fill")
                             .font(.system(size: 13, weight: .semibold))
+                            .accessibilityHidden(true)
                         Text(downloadTitle)
                     }
                 }
