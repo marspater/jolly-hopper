@@ -269,9 +269,7 @@ if (require.main === module) {
   });
 
   const shutdown = () => {
-    console.log('Received shutdown signal, closing server...');
     server.close(() => {
-      console.log('Server closed successfully.');
       process.exit(0);
     });
     // Node 18 keeps idle keep-alive sockets open, which would stall close().
