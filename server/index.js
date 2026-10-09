@@ -27,10 +27,6 @@ segment0.ts
 #EXT-X-ENDLIST
 `;
 
-// Pre-calculate byte lengths for static sample text fixtures to avoid string encoding scans on every request
-const SAMPLE_VTT_LEN = Buffer.byteLength(SAMPLE_VTT);
-const SAMPLE_M3U8_LEN = Buffer.byteLength(SAMPLE_M3U8);
-
 // Pre-define standard security headers to avoid recreating header object literals on every HTTP response
 const DEFAULT_SECURITY_HEADERS = Object.freeze({
   'X-Content-Type-Options': 'nosniff',
@@ -40,6 +36,35 @@ const DEFAULT_SECURITY_HEADERS = Object.freeze({
   'Cross-Origin-Resource-Policy': 'same-origin',
   'X-Permitted-Cross-Domain-Policies': 'none'
 });
+
+// Bolt Performance Optimization: Pre-compute static response objects with frozen merged headers and pre-serialized payloads
+// to eliminate dynamic JSON serialization, byte length calculation, and intermediate header object allocations on every request.
+function createStaticResponse(statusCode, contentType, body) {
+  const payload = typeof body === 'string' || Buffer.isBuffer(body) ? body : JSON.stringify(body);
+  const contentLength = Buffer.isBuffer(payload) ? payload.length : Buffer.byteLength(payload);
+  const headers = Object.freeze({
+    ...DEFAULT_SECURITY_HEADERS,
+    'Content-Type': contentType,
+    'Content-Length': contentLength
+  });
+  return Object.freeze({ statusCode, headers, payload });
+}
+
+const STATIC_RESPONSES = Object.freeze({
+  BAD_REQUEST: createStaticResponse(400, 'application/json', { error: 'Bad Request' }),
+  NOT_FOUND: createStaticResponse(404, 'application/json', { error: 'Not Found' }),
+  INTERNAL_ERROR: createStaticResponse(500, 'application/json', { error: 'Internal Server Error' }),
+  SERVICE_UNAVAILABLE: createStaticResponse(503, 'application/json', { error: 'Release metadata temporarily unavailable' }),
+  MOCK_VTT: createStaticResponse(200, 'text/vtt; charset=utf-8', SAMPLE_VTT),
+  MOCK_M3U8: createStaticResponse(200, 'application/vnd.apple.mpegurl', SAMPLE_M3U8),
+  MOCK_TS_SEGMENT: createStaticResponse(200, 'video/mp2t', SAMPLE_TS_SEGMENT),
+  MOCK_MP4: createStaticResponse(200, 'video/mp4', SAMPLE_MP4)
+});
+
+function sendStaticResponse(res, staticResponse) {
+  res.writeHead(staticResponse.statusCode, staticResponse.headers);
+  res.end(staticResponse.payload);
+}
 
 const RELEASE_CACHE_TTL_MS = 15 * 60 * 1000;
 const RELEASE_FAILURE_RETRY_MS = 30 * 1000;
@@ -134,10 +159,15 @@ function sendResponse(res, statusCode, headers, body) {
 
 function sendJson(res, statusCode, data) {
   const payload = JSON.stringify(data);
-  sendResponse(res, statusCode, {
+  // Bolt Performance Optimization: Single-pass header object creation combining default security headers with JSON content headers
+  // to avoid intermediate header object allocations and double object spread copies.
+  const headers = {
+    ...DEFAULT_SECURITY_HEADERS,
     'Content-Type': 'application/json',
     'Content-Length': Buffer.byteLength(payload)
-  }, payload);
+  };
+  res.writeHead(statusCode, headers);
+  res.end(payload);
 }
 
 function handleHealthCheck(req, res, pathname) {
@@ -157,31 +187,19 @@ function handleMockFixtures(req, res, pathname) {
     return false;
   }
   if (pathname === '/mock/subtitles.vtt') {
-    sendResponse(res, 200, {
-      'Content-Type': 'text/vtt; charset=utf-8',
-      'Content-Length': SAMPLE_VTT_LEN
-    }, SAMPLE_VTT);
+    sendStaticResponse(res, STATIC_RESPONSES.MOCK_VTT);
     return true;
   }
   if (pathname === '/mock/playlist.m3u8') {
-    sendResponse(res, 200, {
-      'Content-Type': 'application/vnd.apple.mpegurl',
-      'Content-Length': SAMPLE_M3U8_LEN
-    }, SAMPLE_M3U8);
+    sendStaticResponse(res, STATIC_RESPONSES.MOCK_M3U8);
     return true;
   }
   if (pathname === '/mock/segment0.ts') {
-    sendResponse(res, 200, {
-      'Content-Type': 'video/mp2t',
-      'Content-Length': SAMPLE_TS_SEGMENT.length
-    }, SAMPLE_TS_SEGMENT);
+    sendStaticResponse(res, STATIC_RESPONSES.MOCK_TS_SEGMENT);
     return true;
   }
   if (pathname === '/mock/video.mp4') {
-    sendResponse(res, 200, {
-      'Content-Type': 'video/mp4',
-      'Content-Length': SAMPLE_MP4.length
-    }, SAMPLE_MP4);
+    sendStaticResponse(res, STATIC_RESPONSES.MOCK_MP4);
     return true;
   }
   return false;
@@ -193,7 +211,7 @@ async function handleReleaseApi(req, res, pathname, getLatestRelease) {
   }
   const releaseInfo = await getLatestRelease();
   if (!releaseInfo) {
-    sendJson(res, 503, { error: 'Release metadata temporarily unavailable' });
+    sendStaticResponse(res, STATIC_RESPONSES.SERVICE_UNAVAILABLE);
     return true;
   }
   sendJson(res, 200, releaseInfo);
@@ -212,7 +230,7 @@ function createServer({
       try {
         url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
       } catch {
-        sendJson(res, 400, { error: 'Bad Request' });
+        sendStaticResponse(res, STATIC_RESPONSES.BAD_REQUEST);
         return;
       }
 
@@ -221,11 +239,11 @@ function createServer({
       if (handleMockFixtures(req, res, pathname)) return;
       if (await handleReleaseApi(req, res, pathname, getLatestRelease)) return;
 
-      sendJson(res, 404, { error: 'Not Found' });
+      sendStaticResponse(res, STATIC_RESPONSES.NOT_FOUND);
     } catch (error) {
       console.error('Unhandled companion request error:', error instanceof Error ? error.message : String(error));
       if (!res.headersSent) {
-        sendJson(res, 500, { error: 'Internal Server Error' });
+        sendStaticResponse(res, STATIC_RESPONSES.INTERNAL_ERROR);
       } else if (!res.writableEnded) {
         res.destroy();
       }
