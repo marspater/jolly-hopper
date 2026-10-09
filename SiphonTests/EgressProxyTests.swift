@@ -185,13 +185,21 @@ final class EgressProxyTests: XCTestCase {
             port: proxyPort,
             "GET http://127.0.0.1:\(serverPort)/ HTTP/1.1\r\nHost: 127.0.0.1:\(serverPort)\r\n" +
             "Connection: keep-alive\r\nProxy-Connection: keep-alive\r\nKeep-Alive: timeout=5\r\n" +
-            "Proxy-Authorization: Basic c2VjcmV0\r\nX-Kept: yes\r\n\r\n"
+            "Proxy-Authorization: Basic c2VjcmV0\r\nProxy-Authenticate: Basic realm=\"test\"\r\n" +
+            "Transfer-Encoding: chunked\r\nTrailer: Max-Forwards\r\nX-Kept: yes\r\n\r\n"
         )
         XCTAssertTrue(response.hasPrefix("HTTP/1.1 200"), "Expected 200, got: \(response)")
 
         let headerLines = server.lastRequestText.components(separatedBy: "\r\n").map { $0.lowercased() }
         XCTAssertEqual(headerLines.filter { $0.hasPrefix("connection:") }, ["connection: close"])
-        XCTAssertFalse(headerLines.contains { $0.hasPrefix("proxy-connection:") || $0.hasPrefix("keep-alive:") || $0.hasPrefix("proxy-authorization:") })
+        XCTAssertFalse(headerLines.contains {
+            $0.hasPrefix("proxy-connection:") ||
+            $0.hasPrefix("keep-alive:") ||
+            $0.hasPrefix("proxy-authorization:") ||
+            $0.hasPrefix("proxy-authenticate:") ||
+            $0.hasPrefix("transfer-encoding:") ||
+            $0.hasPrefix("trailer:")
+        })
         XCTAssertTrue(headerLines.contains("x-kept: yes"), "End-to-end headers must still reach the server")
     }
 
