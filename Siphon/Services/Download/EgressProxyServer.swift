@@ -236,7 +236,12 @@ public final class EgressProxyServer: @unchecked Sendable {
 
         // Bolt Performance Optimization: Use Substring views directly from split(whereSeparator: \.isNewline) and split(separator: " ") without calling .map(String.init) to eliminate per-line heap allocations for header strings on every proxy request.
         let lines = headerString.split(whereSeparator: \.isNewline)
-        guard let firstLine = lines.first?.trimmingCharacters(in: .whitespacesAndNewlines), !firstLine.isEmpty else {
+        guard let rawFirstLine = lines.first else {
+            sendResponse(client: client, status: "400 Bad Request", body: "Empty request\n", close: true)
+            return
+        }
+        let firstLine = rawFirstLine.trimmingWhitespace()
+        guard !firstLine.isEmpty else {
             sendResponse(client: client, status: "400 Bad Request", body: "Empty request\n", close: true)
             return
         }
@@ -314,10 +319,12 @@ public final class EgressProxyServer: @unchecked Sendable {
             let query = components?.percentEncodedQuery.map { "?\($0)" } ?? ""
             relativePath = (path.isEmpty ? "/" : path) + query
         } else {
-            var hostHeaderValue: String?
+            var hostHeaderValue: Substring?
             for line in lines.dropFirst() {
-                if line.lowercased().hasPrefix("host:") {
-                    hostHeaderValue = String(line.dropFirst(5)).trimmingCharacters(in: .whitespacesAndNewlines)
+                let trimmedLine = line.trimmingWhitespace()
+                if let colon = trimmedLine.firstIndex(of: ":"),
+                   trimmedLine[..<colon].caseInsensitiveCompare("host") == .orderedSame {
+                    hostHeaderValue = trimmedLine[trimmedLine.index(after: colon)...].trimmingWhitespace()
                     break
                 }
             }
@@ -353,11 +360,17 @@ public final class EgressProxyServer: @unchecked Sendable {
                 // requests to any host, so a kept-alive connection would carry the
                 // next request (and its cookies) to the wrong server. One request
                 // per connection: drop the hop-by-hop headers and ask to close.
-                var forwardedHeaders = "\(method) \(relativePath) HTTP/1.1\r\n"
+                var forwardedHeaders = ""
+                forwardedHeaders.reserveCapacity(headerData.count + 64)
+                forwardedHeaders.append(method)
+                forwardedHeaders.append(" ")
+                forwardedHeaders.append(relativePath)
+                forwardedHeaders.append(" HTTP/1.1\r\n")
                 for line in lines.dropFirst() where !line.isEmpty && !Self.isHopByHopHeader(line) {
-                    forwardedHeaders += "\(line)\r\n"
+                    forwardedHeaders.append(contentsOf: line)
+                    forwardedHeaders.append("\r\n")
                 }
-                forwardedHeaders += "Connection: close\r\n\r\n"
+                forwardedHeaders.append("Connection: close\r\n\r\n")
 
                 var payload = Data(forwardedHeaders.utf8)
                 payload.append(remainingData)
@@ -519,12 +532,12 @@ public final class EgressProxyServer: @unchecked Sendable {
 
     private static func isHopByHopHeader(_ line: Substring) -> Bool {
         guard let colon = line.firstIndex(of: ":") else { return false }
-        let name = String(line[..<colon]).trimmingCharacters(in: .whitespaces).lowercased()
-        return hopByHopHeaders.contains(name)
+        let headerName = line[..<colon].trimmingWhitespace()
+        return hopByHopHeaders.contains(where: { $0.caseInsensitiveCompare(headerName) == .orderedSame })
     }
 
-    private static func parseHostAndPort(_ string: String, defaultPort: Int) -> (host: String, port: Int)? {
-        let trimmed = string.trimmingCharacters(in: .whitespacesAndNewlines)
+    private static func parseHostAndPort(_ string: Substring, defaultPort: Int) -> (host: String, port: Int)? {
+        let trimmed = string.trimmingWhitespace()
         guard !trimmed.isEmpty else { return nil }
 
         if trimmed.hasPrefix("[") {
@@ -532,7 +545,7 @@ public final class EgressProxyServer: @unchecked Sendable {
             let host = String(trimmed[trimmed.index(after: trimmed.startIndex)..<closeIndex])
             let after = trimmed[trimmed.index(after: closeIndex)...]
             if after.hasPrefix(":") {
-                let portStr = String(after.dropFirst())
+                let portStr = after.dropFirst()
                 guard let port = Int(portStr), (1...65535).contains(port) else { return nil }
                 return (host, port)
             }
@@ -548,6 +561,29 @@ public final class EgressProxyServer: @unchecked Sendable {
             return (String(parts[0]), defaultPort)
         }
         return nil
+    }
+
+    private static func parseHostAndPort(_ string: String, defaultPort: Int) -> (host: String, port: Int)? {
+        parseHostAndPort(Substring(string), defaultPort: defaultPort)
+    }
+}
+
+private extension Substring {
+    func trimmingWhitespace() -> Substring {
+        var start = startIndex
+        while start < endIndex && self[start].isWhitespace {
+            start = index(after: start)
+        }
+        var end = endIndex
+        while end > start {
+            let prev = index(before: end)
+            if self[prev].isWhitespace {
+                end = prev
+            } else {
+                break
+            }
+        }
+        return self[start..<end]
     }
 }
 
