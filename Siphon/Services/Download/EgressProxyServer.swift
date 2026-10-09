@@ -361,7 +361,8 @@ public final class EgressProxyServer: @unchecked Sendable {
                 // next request (and its cookies) to the wrong server. One request
                 // per connection: drop the hop-by-hop headers and ask to close.
                 var forwardedHeaders = ""
-                forwardedHeaders.reserveCapacity(headerData.count + 64)
+                let estimatedCapacity = lines.reduce(0) { $0 + $1.count + 2 } + 64
+                forwardedHeaders.reserveCapacity(estimatedCapacity)
                 forwardedHeaders.append(method)
                 forwardedHeaders.append(" ")
                 forwardedHeaders.append(relativePath)
