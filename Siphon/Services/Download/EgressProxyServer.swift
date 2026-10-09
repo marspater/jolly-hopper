@@ -514,7 +514,7 @@ public final class EgressProxyServer: @unchecked Sendable {
     }
 
     private static let hopByHopHeaders: Set<String> = [
-        "connection", "proxy-connection", "keep-alive", "proxy-authenticate", "proxy-authorization", "te", "trailer", "trailers", "transfer-encoding", "upgrade"
+        "connection", "proxy-connection", "keep-alive", "proxy-authenticate", "proxy-authorization", "te", "trailer", "trailers", "upgrade"
     ]
 
     private static func isHopByHopHeader(_ line: Substring) -> Bool {

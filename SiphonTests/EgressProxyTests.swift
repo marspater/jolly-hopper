@@ -197,9 +197,9 @@ final class EgressProxyTests: XCTestCase {
             $0.hasPrefix("keep-alive:") ||
             $0.hasPrefix("proxy-authorization:") ||
             $0.hasPrefix("proxy-authenticate:") ||
-            $0.hasPrefix("transfer-encoding:") ||
             $0.hasPrefix("trailer:")
         })
+        XCTAssertTrue(headerLines.contains("transfer-encoding: chunked"), "Payload framing headers must remain intact when forwarding raw streams")
         XCTAssertTrue(headerLines.contains("x-kept: yes"), "End-to-end headers must still reach the server")
     }
 
