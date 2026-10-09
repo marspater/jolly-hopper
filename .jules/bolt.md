@@ -74,3 +74,7 @@
 ## 2026-10-15 - Eliminating NSString Bridging in High-Frequency String Sanitization
 **Learning:** In Swift string operations using `NSRegularExpression`, passing `(string as NSString).length` and calling `nsString.substring(with: match.range)` creates repetitive Objective-C bridging allocations. Using `string.utf16.count` for `NSRange` and native Swift Range slicing (`String(string[swiftRange])`) eliminates intermediate `NSString` heap allocations.
 **Action:** Replace `as NSString` length and substring calls with `utf16.count` and native Swift Substring/Range slicing in high-frequency string processing functions.
+
+## 2026-10-16 - Zero-Allocation Buffer Pointer Inspection for IP Address Validation
+**Learning:** Passing raw binary buffers (such as socket addresses or `in6_addr` IPv6 structures) into validation helpers via `Array($0)`, `[UInt8](repeating: 0, count: 16)`, or array slicing (`Array(bytes[12..<16])`) causes repetitive heap array allocations on every resolved socket address check in network loops. Accepting `UnsafeRawBufferPointer` directly and unpacking scalar bytes into registers eliminates all heap allocations during address validation.
+**Action:** Use `UnsafeRawBufferPointer` and scalar parameter overloads for raw binary address buffer checks instead of copying buffer bytes into Swift `[UInt8]` arrays.
