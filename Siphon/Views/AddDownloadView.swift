@@ -431,6 +431,7 @@ struct AddDownloadView: View {
                                     HStack(spacing: 6) {
                                         Image(systemName: selectedFormatId == nil ? "checkmark.circle.fill" : "circle")
                                             .foregroundColor(selectedFormatId == nil ? SiphonTheme.accentText : .secondary)
+                                            .accessibilityHidden(true)
                                         Text(languageService.s("auto_recommended"))
                                             .font(.siphonSecondaryMedium)
                                     }
@@ -440,6 +441,8 @@ struct AddDownloadView: View {
                                     .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusSmall, style: .continuous))
                                 }
                                 .buttonStyle(.plain)
+                                .accessibilityElement(children: .combine)
+                                .accessibilityAddTraits(selectedFormatId == nil ? [.isButton, .isSelected] : [.isButton])
 
                                 Spacer()
                             }
@@ -454,6 +457,7 @@ struct AddDownloadView: View {
                                             HStack(spacing: 8) {
                                                 Image(systemName: selectedFormatId == fmt.formatId ? "checkmark.circle.fill" : "circle")
                                                     .foregroundColor(selectedFormatId == fmt.formatId ? SiphonTheme.accentText : .secondary)
+                                                    .accessibilityHidden(true)
 
                                                 SiphonTagBadge(text: fmt.formatId, tintColor: .primary, isMonospaced: true)
 
@@ -474,6 +478,8 @@ struct AddDownloadView: View {
                                             .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusSmall, style: .continuous))
                                         }
                                         .buttonStyle(.plain)
+                                        .accessibilityElement(children: .combine)
+                                        .accessibilityAddTraits(selectedFormatId == fmt.formatId ? [.isButton, .isSelected] : [.isButton])
                                     }
                                 }
                             }
