@@ -145,10 +145,8 @@ struct SiphonApp: App {
             hasAppliedBackgroundMode = true
             if startInBackground {
                 NSApp.setActivationPolicy(.accessory)
-                for window in NSApp.windows {
-                    if window.canBecomeMain {
-                        window.close()
-                    }
+                for window in NSApp.windows where window.canBecomeMain {
+                    window.close()
                 }
             } else {
                 NSApp.setActivationPolicy(.regular)

@@ -212,11 +212,8 @@ public final class EgressProxyServer: @unchecked Sendable {
             }
 
             // Look for header boundary: \r\n\r\n or \n\n
-            if let headerEndRange = buffer.range(of: Data("\r\n\r\n".utf8)) {
-                let headerData = buffer.subdata(in: 0..<headerEndRange.lowerBound)
-                let remainingData = buffer.subdata(in: headerEndRange.upperBound..<buffer.count)
-                self.processRequest(client: client, headerData: headerData, remainingData: remainingData)
-            } else if let headerEndRange = buffer.range(of: Data("\n\n".utf8)) {
+            let boundaryRange = buffer.range(of: Data("\r\n\r\n".utf8)) ?? buffer.range(of: Data("\n\n".utf8))
+            if let headerEndRange = boundaryRange {
                 let headerData = buffer.subdata(in: 0..<headerEndRange.lowerBound)
                 let remainingData = buffer.subdata(in: headerEndRange.upperBound..<buffer.count)
                 self.processRequest(client: client, headerData: headerData, remainingData: remainingData)
@@ -286,22 +283,28 @@ public final class EgressProxyServer: @unchecked Sendable {
             case .failure:
                 self.sendResponse(client: client, status: "502 Bad Gateway", body: "Failed to connect to destination\n", close: true)
             case .success(let upstream):
-                let response = "HTTP/1.1 200 Connection Established\r\n\r\n"
-                client.send(content: Data(response.utf8), completion: .contentProcessed { [weak self] sendError in
-                    guard let self = self, sendError == nil else {
-                        client.cancel()
-                        upstream.cancel()
-                        return
-                    }
-
-                    if !remainingData.isEmpty {
-                        upstream.send(content: remainingData, completion: .contentProcessed { _ in })
-                    }
-
-                    self.bridgeConnections(client: client, upstream: upstream)
-                })
+                self.handleConnectEstablished(client: client, upstream: upstream, remainingData: remainingData)
             }
         }
+    }
+
+    private func handleConnectEstablished(client: NWConnection, upstream: NWConnection, remainingData: Data) {
+        let response = "HTTP/1.1 200 Connection Established\r\n\r\n"
+        client.send(content: Data(response.utf8), completion: .contentProcessed { [weak self] sendError in
+            guard let self = self, sendError == nil else {
+                client.cancel()
+                upstream.cancel()
+                return
+            }
+
+            if !remainingData.isEmpty {
+                upstream.send(content: remainingData, completion: .contentProcessed { _ in
+                    // Remaining data buffered before connection established was forwarded; ignore send errors
+                })
+            }
+
+            self.bridgeConnections(client: client, upstream: upstream)
+        })
     }
 
     private func handleForwardRequest(client: NWConnection, method: String, target: String, lines: [Substring], remainingData: Data) {

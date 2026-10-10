@@ -117,7 +117,7 @@ public enum ExternalDownloadTargetPolicy {
         return bytes
     }
 
-    private static func isGloballyRoutableIPv4(_ a: UInt8, _ second: UInt8, _ third: UInt8, _ fourth: UInt8) -> Bool {
+    private static func isGloballyRoutableIPv4(_ a: UInt8, _ second: UInt8, _ third: UInt8, _ _: UInt8) -> Bool {
         if a == 0 || a == 10 || a == 127 || a >= 224 { return false }
         if a == 100 && (64...127).contains(second) { return false }
         if a == 169 && second == 254 { return false }

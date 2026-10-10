@@ -1,3 +1,5 @@
+/* global chrome */
+
 chrome.runtime.onInstalled.addListener(() => {
     chrome.contextMenus.create({
         id: "download-siphon",

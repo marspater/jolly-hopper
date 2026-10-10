@@ -31,7 +31,12 @@ enum DownloadExecutionState: Equatable {
 /// the download has left its active status.
 final class DownloadEventCoalescer: @unchecked Sendable {
     private let lock = NSLock()
-    private var pendingProgress: (progress: Double, speed: String?, eta: String?)?
+    private struct PendingProgress {
+        let progress: Double
+        let speed: String?
+        let eta: String?
+    }
+    private var pendingProgress: PendingProgress?
     private var pendingLogLines: [String] = []
     private var pendingLogBytes: Int = 0
     private let maxPendingLines = 500
@@ -55,7 +60,7 @@ final class DownloadEventCoalescer: @unchecked Sendable {
 
     func recordProgress(progress: Double, speed: String?, eta: String?) {
         lock.lock()
-        pendingProgress = (progress, speed, eta)
+        pendingProgress = PendingProgress(progress: progress, speed: speed, eta: eta)
         scheduleDrainIfNeeded()
         lock.unlock()
     }
@@ -122,7 +127,7 @@ extension URLSession {
 /// Refuses redirects that leave the public network boundary.
 private final class PublicRedirectPolicy: NSObject, URLSessionTaskDelegate, Sendable {
     func urlSession(
-        _ session: URLSession,
+        _ _: URLSession,
         task _: URLSessionTask,
         willPerformHTTPRedirection _: HTTPURLResponse,
         newRequest request: URLRequest
@@ -372,14 +377,9 @@ final class DownloadExecutor: ObservableObject {
                     if !lines.isEmpty {
                         let combined = lines.joined(separator: "\n") + "\n"
                         Self.appendToLog(for: download, text: combined)
-                        if download.status == .downloading {
-                            for line in lines {
-                                if Self.isPostprocessingOutput(line) {
-                                    self.delegate?.executorDidUpdateStatus(for: download, to: .processing)
-                                    self.delegate?.executorDidRequestBroadcast()
-                                    break
-                                }
-                            }
+                        if download.status == .downloading && lines.contains(where: Self.isPostprocessingOutput) {
+                            self.delegate?.executorDidUpdateStatus(for: download, to: .processing)
+                            self.delegate?.executorDidRequestBroadcast()
                         }
                     }
                 }

@@ -1489,8 +1489,13 @@ class YtdlpService: ObservableObject {
         let decoder = JSONDecoder()
         // A playlist-looking URL (for example a "?p=" post link) can resolve to a
         // single video; only a real playlist may be summarized without formats.
-        struct ResultKind: Decodable { let _type: String? }
-        guard (try? decoder.decode(ResultKind.self, from: data))?._type == "playlist" else {
+        struct ResultKind: Decodable {
+            let type: String?
+            enum CodingKeys: String, CodingKey {
+                case type = "_type"
+            }
+        }
+        guard (try? decoder.decode(ResultKind.self, from: data))?.type == "playlist" else {
             throw YtdlpError.parseError
         }
         let info = try decoder.decode(MediaInfo.self, from: data)
@@ -4238,7 +4243,6 @@ public struct DownloadResult: Sendable {
                       let text = String(data: data, encoding: .utf8) else { return nil }
                 return text
             }.joined(separator: "\n")
-            let lower = decoded.lowercased()
             let hasStream = extractStreamURLFromHTML(decoded) != nil
             let challenge = !hasStream && isBoyfriendTVChallengeHTML(decoded)
             let login = !hasStream && isBoyfriendTVLoginHTML(decoded)
@@ -6333,27 +6337,25 @@ public struct DownloadResult: Sendable {
             }
         }
 
-        if html.isEmpty {
-            if let ytdlp = resolvedYtdlpBinary {
-                var dumpArgs = [ytdlp.path, "--ignore-config", "--dump-pages"]
-                appendSiteSpecificArgs(for: targetURL, to: &dumpArgs)
-                dumpArgs.append(contentsOf: ["--", targetURL])
-                if let output = try? await processRunner.runCommand(dumpArgs) {
-                    let chunks = output.split(whereSeparator: \.isNewline).compactMap { line -> String? in
-                        let trimmed = String(line).trimmingCharacters(in: .whitespaces)
-                        guard !trimmed.starts(with: "#"),
-                              !trimmed.starts(with: "["),
-                              !trimmed.starts(with: "WARNING"),
-                              !trimmed.starts(with: "ERROR"),
-                              let decodedData = Data(base64Encoded: trimmed, options: .ignoreUnknownCharacters) else {
-                            return nil
-                        }
-                        let decodedString = String(decoding: decodedData, as: UTF8.self)
-                        return decodedString.isEmpty ? nil : decodedString
+        if html.isEmpty, let ytdlp = resolvedYtdlpBinary {
+            var dumpArgs = [ytdlp.path, "--ignore-config", "--dump-pages"]
+            appendSiteSpecificArgs(for: targetURL, to: &dumpArgs)
+            dumpArgs.append(contentsOf: ["--", targetURL])
+            if let output = try? await processRunner.runCommand(dumpArgs) {
+                let chunks = output.split(whereSeparator: \.isNewline).compactMap { line -> String? in
+                    let trimmed = String(line).trimmingCharacters(in: .whitespaces)
+                    guard !trimmed.starts(with: "#"),
+                          !trimmed.starts(with: "["),
+                          !trimmed.starts(with: "WARNING"),
+                          !trimmed.starts(with: "ERROR"),
+                          let decodedData = Data(base64Encoded: trimmed, options: .ignoreUnknownCharacters) else {
+                        return nil
                     }
-                    if !chunks.isEmpty {
-                        html = chunks.joined()
-                    }
+                    let decodedString = String(decoding: decodedData, as: UTF8.self)
+                    return decodedString.isEmpty ? nil : decodedString
+                }
+                if !chunks.isEmpty {
+                    html = chunks.joined()
                 }
             }
         }
@@ -6678,17 +6680,15 @@ public struct DownloadResult: Sendable {
         }
 
         // Pattern 2: reversebuffer URLs directly in HTML/JS
-        if parsedSources.isEmpty {
-            if let bufRegex = Self.pussyspaceBufferRegex {
-                let matches = bufRegex.matches(in: streamContent, options: [], range: streamRange)
-                for m in matches where m.numberOfRanges > 1 {
-                    let rawUrl = streamNs.substring(with: m.range(at: 1)).replacingOccurrences(of: "\\/", with: "/")
-                    guard seenUrls.insert(rawUrl).inserted else { continue }
-                    let isHls = rawUrl.contains(".m3u8") || rawUrl.contains("hls")
-                    let height = isHls ? 1080 : 720
-                    let label = isHls ? "HLS Auto" : "\(height)p"
-                    parsedSources.append(PussyspaceSource(label: label, url: rawUrl, height: height))
-                }
+        if parsedSources.isEmpty, let bufRegex = Self.pussyspaceBufferRegex {
+            let matches = bufRegex.matches(in: streamContent, options: [], range: streamRange)
+            for m in matches where m.numberOfRanges > 1 {
+                let rawUrl = streamNs.substring(with: m.range(at: 1)).replacingOccurrences(of: "\\/", with: "/")
+                guard seenUrls.insert(rawUrl).inserted else { continue }
+                let isHls = rawUrl.contains(".m3u8") || rawUrl.contains("hls")
+                let height = isHls ? 1080 : 720
+                let label = isHls ? "HLS Auto" : "\(height)p"
+                parsedSources.append(PussyspaceSource(label: label, url: rawUrl, height: height))
             }
         }
 
