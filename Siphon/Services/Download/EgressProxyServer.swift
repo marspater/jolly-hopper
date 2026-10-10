@@ -316,7 +316,7 @@ public final class EgressProxyServer: @unchecked Sendable {
         } else {
             var hostHeaderValue: String?
             for line in lines.dropFirst() {
-                if line.lowercased().hasPrefix("host:") {
+                if line.prefix(5).compare("host:", options: .caseInsensitive) == .orderedSame {
                     hostHeaderValue = String(line.dropFirst(5)).trimmingCharacters(in: .whitespacesAndNewlines)
                     break
                 }
@@ -513,14 +513,29 @@ public final class EgressProxyServer: @unchecked Sendable {
         })
     }
 
-    private static let hopByHopHeaders: Set<String> = [
+    // Bolt Performance Optimization: Use a static array for hop-by-hop headers to eliminate Set allocations and hash lookups.
+    private static let hopByHopHeaders: [String] = [
         "connection", "proxy-connection", "keep-alive", "proxy-authorization", "te", "upgrade"
     ]
 
+    // Bolt Performance Optimization: Process header names directly using zero-copy Substring whitespace trimming
+    // and case-insensitive comparison (compare(_:options: .caseInsensitive)) to eliminate dynamic String allocations
+    // (String(...), trimmingCharacters(in:), lowercased()) on every header line of every forwarded HTTP request.
     private static func isHopByHopHeader(_ line: Substring) -> Bool {
         guard let colon = line.firstIndex(of: ":") else { return false }
-        let name = String(line[..<colon]).trimmingCharacters(in: .whitespaces).lowercased()
-        return hopByHopHeaders.contains(name)
+        var nameView = line[..<colon]
+        while let first = nameView.first, first.isWhitespace {
+            nameView = nameView.dropFirst()
+        }
+        while let last = nameView.last, last.isWhitespace {
+            nameView = nameView.dropLast()
+        }
+        for header in hopByHopHeaders {
+            if nameView.compare(header, options: .caseInsensitive) == .orderedSame {
+                return true
+            }
+        }
+        return false
     }
 
     private static func parseHostAndPort(_ string: String, defaultPort: Int) -> (host: String, port: Int)? {
