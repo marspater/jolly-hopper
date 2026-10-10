@@ -813,7 +813,10 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertNil(try HeliumCookieReader.export(
             for: URL(string: "https://example.com/video")!,
             root: root,
-            password: { Data("unused".utf8) }
+            password: {
+                XCTFail("Password should not be requested when no cookies match target host")
+                return Data()
+            }
         ))
 
         // yt-dlp's native browser readers continue anonymously when a host has no
@@ -853,7 +856,10 @@ final class YtdlpServiceTests: XCTestCase {
         let file = try XCTUnwrap(ChromiumCookieReader.export(
             host: "example.com",
             from: [(signedOut, nil), (missing, nil), (signedIn, nil)],
-            password: { Data("unused".utf8) }
+            password: {
+                XCTFail("Password should not be requested when matching cookies are plaintext")
+                return Data()
+            }
         ), "A signed-out browser must not hide a signed-in one")
         defer { file.cleanup() }
         XCTAssertTrue(try String(contentsOf: file.fileURL, encoding: .utf8).contains("fixture"))
@@ -861,7 +867,10 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertNil(try ChromiumCookieReader.export(
             host: "example.com",
             from: [(signedOut, nil), (missing, nil)],
-            password: { Data("unused".utf8) }
+            password: {
+                XCTFail("Password should not be requested when no cookies match target host")
+                return Data()
+            }
         ), "No matching cookies anywhere still proceeds anonymously")
     }
 
