@@ -214,19 +214,30 @@ public enum ExternalDownloadTargetPolicy {
         return checkedAtLeastOne
     }
 
+    private static func extractTranslationPrefixIPv4(_ bytes: UnsafeRawBufferPointer) -> (UInt8, UInt8, UInt8, UInt8)? {
+        if bytes[0] == 0x00, bytes[1] == 0x64, bytes[2] == 0xff, bytes[3] == 0x9b,
+           (4..<12).allSatisfy({ bytes[$0] == 0 }) {
+            return (bytes[12], bytes[13], bytes[14], bytes[15]) // NAT64 64:ff9b::/96
+        }
+        if bytes[0] == 0x20, bytes[1] == 0x02 {
+            return (bytes[2], bytes[3], bytes[4], bytes[5]) // 6to4 2002::/16
+        }
+        return nil
+    }
+
+    private static func isSpecialPurposeGlobalUnicastPrefix(_ bytes: UnsafeRawBufferPointer) -> Bool {
+        if bytes[0] == 0x20, bytes[1] == 0x01, bytes[2] < 0x02 { return true } // IETF 2001::/23 (Teredo, benchmarking, ORCHID)
+        if bytes[0] == 0x20, bytes[1] == 0x01, bytes[2] == 0x0d, bytes[3] == 0xb8 { return true } // documentation 2001:db8::/32
+        if bytes[0] == 0x3f, bytes[1] == 0xff, bytes[2] < 0x10 { return true } // documentation 3fff::/20
+        return false
+    }
+
     /// Check raw IPv6 bytes (16 bytes) against private/reserved ranges.
     /// Factored out of `isGloballyRoutableIPv6` to share with DNS resolution.
     private static func isGloballyRoutableIPv6Bytes(_ bytes: UnsafeRawBufferPointer) -> Bool {
         guard bytes.count == 16 else { return false }
 
-        var firstTenZero = true
-        for i in 0..<10 {
-            if bytes[i] != 0 {
-                firstTenZero = false
-                break
-            }
-        }
-
+        let firstTenZero = (0..<10).allSatisfy { bytes[$0] == 0 }
         if firstTenZero, bytes[10] == 0xff, bytes[11] == 0xff {
             return isGloballyRoutableIPv4(bytes[12], bytes[13], bytes[14], bytes[15])
         }
@@ -236,13 +247,8 @@ public enum ExternalDownloadTargetPolicy {
 
         // Translation prefixes carry an IPv4 address that a gateway or relay
         // connects to, so they inherit IPv4 routing rules.
-        if bytes[0] == 0x00, bytes[1] == 0x64, bytes[2] == 0xff, bytes[3] == 0x9b,
-           bytes[4] == 0, bytes[5] == 0, bytes[6] == 0, bytes[7] == 0,
-           bytes[8] == 0, bytes[9] == 0, bytes[10] == 0, bytes[11] == 0 {
-            return isGloballyRoutableIPv4(bytes[12], bytes[13], bytes[14], bytes[15]) // NAT64 64:ff9b::/96
-        }
-        if bytes[0] == 0x20, bytes[1] == 0x02 {
-            return isGloballyRoutableIPv4(bytes[2], bytes[3], bytes[4], bytes[5]) // 6to4 2002::/16
+        if let translated = extractTranslationPrefixIPv4(bytes) {
+            return isGloballyRoutableIPv4(translated.0, translated.1, translated.2, translated.3)
         }
 
         // Fail closed: only global unicast 2000::/3 is publicly routed. This also
@@ -250,11 +256,7 @@ public enum ExternalDownloadTargetPolicy {
         // 100::/64, local-use NAT64 64:ff9b:1::/48, SRv6 SIDs 5f00::/16 and any
         // unallocated or future special-purpose range outside it.
         guard (bytes[0] & 0xe0) == 0x20 else { return false }
-        // Special-purpose blocks inside 2000::/3.
-        if bytes[0] == 0x20, bytes[1] == 0x01, bytes[2] < 0x02 { return false } // IETF 2001::/23 (Teredo, benchmarking, ORCHID)
-        if bytes[0] == 0x20, bytes[1] == 0x01, bytes[2] == 0x0d, bytes[3] == 0xb8 { return false } // documentation 2001:db8::/32
-        if bytes[0] == 0x3f, bytes[1] == 0xff, bytes[2] < 0x10 { return false } // documentation 3fff::/20
-        return true
+        return !isSpecialPurposeGlobalUnicastPrefix(bytes)
     }
 
     private static func isGloballyRoutableIPv6Bytes(_ bytes: [UInt8]) -> Bool {
