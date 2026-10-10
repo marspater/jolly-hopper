@@ -117,11 +117,7 @@ public enum ExternalDownloadTargetPolicy {
         return bytes
     }
 
-    private static func isGloballyRoutableIPv4(_ b: [UInt8]) -> Bool {
-        guard b.count == 4 else { return false }
-        let a = b[0]
-        let second = b[1]
-
+    private static func isGloballyRoutableIPv4(_ a: UInt8, _ second: UInt8, _ third: UInt8, _ fourth: UInt8) -> Bool {
         if a == 0 || a == 10 || a == 127 || a >= 224 { return false }
         if a == 100 && (64...127).contains(second) { return false }
         if a == 169 && second == 254 { return false }
@@ -129,12 +125,17 @@ public enum ExternalDownloadTargetPolicy {
         if a == 192 && second == 168 { return false }
         if a == 198 && (second == 18 || second == 19) { return false }
         // IETF protocol assignments, documentation (TEST-NET-1/2/3), 6to4 relay anycast.
-        if a == 192 && second == 0 && (b[2] == 0 || b[2] == 2) { return false }
-        if a == 198 && second == 51 && b[2] == 100 { return false }
-        if a == 203 && second == 0 && b[2] == 113 { return false }
-        if a == 192 && second == 88 && b[2] == 99 { return false }
+        if a == 192 && second == 0 && (third == 0 || third == 2) { return false }
+        if a == 198 && second == 51 && third == 100 { return false }
+        if a == 203 && second == 0 && third == 113 { return false }
+        if a == 192 && second == 88 && third == 99 { return false }
 
         return true
+    }
+
+    private static func isGloballyRoutableIPv4(_ b: [UInt8]) -> Bool {
+        guard b.count == 4 else { return false }
+        return isGloballyRoutableIPv4(b[0], b[1], b[2], b[3])
     }
 
     private static func isGloballyRoutableIPv6(_ host: String) -> Bool {
@@ -145,14 +146,14 @@ public enum ExternalDownloadTargetPolicy {
             value = String(value[..<zoneIndex])
         }
 
-        var bytes = [UInt8](repeating: 0, count: 16)
+        var sin6Addr = in6_addr()
         let parsed = value.withCString { cString in
-            bytes.withUnsafeMutableBytes { buffer in
-                inet_pton(AF_INET6, cString, buffer.baseAddress)
-            }
+            inet_pton(AF_INET6, cString, &sin6Addr)
         }
         guard parsed == 1 else { return false }
-        return isGloballyRoutableIPv6Bytes(bytes)
+        return withUnsafeBytes(of: sin6Addr) { buffer in
+            isGloballyRoutableIPv6Bytes(buffer)
+        }
     }
 
     /// Resolve all A/AAAA records for `host` and reject if **any** resolved
@@ -185,20 +186,22 @@ public enum ExternalDownloadTargetPolicy {
                 guard let addr = info.pointee.ai_addr else { return false }
                 let sin = addr.withMemoryRebound(to: sockaddr_in.self, capacity: 1) { $0.pointee }
                 let raw = sin.sin_addr.s_addr  // network byte order
-                let b: [UInt8] = [
+                guard isGloballyRoutableIPv4(
                     UInt8(raw & 0xFF),
                     UInt8((raw >> 8) & 0xFF),
                     UInt8((raw >> 16) & 0xFF),
                     UInt8((raw >> 24) & 0xFF)
-                ]
-                guard isGloballyRoutableIPv4(b) else { return false }
+                ) else { return false }
                 checkedAtLeastOne = true
 
             case AF_INET6:
                 guard let addr = info.pointee.ai_addr else { return false }
                 let sin6 = addr.withMemoryRebound(to: sockaddr_in6.self, capacity: 1) { $0.pointee }
-                let bytes = withUnsafeBytes(of: sin6.sin6_addr) { Array($0) }
-                guard isGloballyRoutableIPv6Bytes(bytes) else { return false }
+                var sin6Addr = sin6.sin6_addr
+                let isRoutable = withUnsafeBytes(of: &sin6Addr) { buffer in
+                    isGloballyRoutableIPv6Bytes(buffer)
+                }
+                guard isRoutable else { return false }
                 checkedAtLeastOne = true
 
             default:
@@ -211,26 +214,41 @@ public enum ExternalDownloadTargetPolicy {
         return checkedAtLeastOne
     }
 
+    private static func isTranslationPrefixGloballyRoutable(_ bytes: UnsafeRawBufferPointer) -> Bool? {
+        if bytes[0] == 0x00, bytes[1] == 0x64, bytes[2] == 0xff, bytes[3] == 0x9b,
+           (4..<12).allSatisfy({ bytes[$0] == 0 }) {
+            return isGloballyRoutableIPv4(bytes[12], bytes[13], bytes[14], bytes[15]) // NAT64 64:ff9b::/96
+        }
+        if bytes[0] == 0x20, bytes[1] == 0x02 {
+            return isGloballyRoutableIPv4(bytes[2], bytes[3], bytes[4], bytes[5]) // 6to4 2002::/16
+        }
+        return nil
+    }
+
+    private static func isSpecialPurposeGlobalUnicastPrefix(_ bytes: UnsafeRawBufferPointer) -> Bool {
+        if bytes[0] == 0x20, bytes[1] == 0x01, bytes[2] < 0x02 { return true } // IETF 2001::/23 (Teredo, benchmarking, ORCHID)
+        if bytes[0] == 0x20, bytes[1] == 0x01, bytes[2] == 0x0d, bytes[3] == 0xb8 { return true } // documentation 2001:db8::/32
+        if bytes[0] == 0x3f, bytes[1] == 0xff, bytes[2] < 0x10 { return true } // documentation 3fff::/20
+        return false
+    }
+
     /// Check raw IPv6 bytes (16 bytes) against private/reserved ranges.
     /// Factored out of `isGloballyRoutableIPv6` to share with DNS resolution.
-    private static func isGloballyRoutableIPv6Bytes(_ bytes: [UInt8]) -> Bool {
+    private static func isGloballyRoutableIPv6Bytes(_ bytes: UnsafeRawBufferPointer) -> Bool {
         guard bytes.count == 16 else { return false }
 
-        let firstTenZero = bytes[0..<10].allSatisfy { $0 == 0 }
+        let firstTenZero = (0..<10).allSatisfy { bytes[$0] == 0 }
         if firstTenZero, bytes[10] == 0xff, bytes[11] == 0xff {
-            return isGloballyRoutableIPv4(Array(bytes[12..<16]))
+            return isGloballyRoutableIPv4(bytes[12], bytes[13], bytes[14], bytes[15])
         }
-        if bytes[0..<12].allSatisfy({ $0 == 0 }) {
+        if firstTenZero, bytes[10] == 0, bytes[11] == 0 {
             return false // ::, ::1 and deprecated IPv4-compatible ::/96
         }
 
         // Translation prefixes carry an IPv4 address that a gateway or relay
         // connects to, so they inherit IPv4 routing rules.
-        if bytes[0..<4] == [0x00, 0x64, 0xff, 0x9b], bytes[4..<12].allSatisfy({ $0 == 0 }) {
-            return isGloballyRoutableIPv4(Array(bytes[12..<16])) // NAT64 64:ff9b::/96
-        }
-        if bytes[0] == 0x20, bytes[1] == 0x02 {
-            return isGloballyRoutableIPv4(Array(bytes[2..<6])) // 6to4 2002::/16
+        if let isRoutable = isTranslationPrefixGloballyRoutable(bytes) {
+            return isRoutable
         }
 
         // Fail closed: only global unicast 2000::/3 is publicly routed. This also
@@ -238,11 +256,12 @@ public enum ExternalDownloadTargetPolicy {
         // 100::/64, local-use NAT64 64:ff9b:1::/48, SRv6 SIDs 5f00::/16 and any
         // unallocated or future special-purpose range outside it.
         guard (bytes[0] & 0xe0) == 0x20 else { return false }
-        // Special-purpose blocks inside 2000::/3.
-        if bytes[0] == 0x20, bytes[1] == 0x01, bytes[2] < 0x02 { return false } // IETF 2001::/23 (Teredo, benchmarking, ORCHID)
-        if bytes[0..<4] == [0x20, 0x01, 0x0d, 0xb8] { return false } // documentation 2001:db8::/32
-        if bytes[0] == 0x3f, bytes[1] == 0xff, bytes[2] < 0x10 { return false } // documentation 3fff::/20
-        return true
+        return !isSpecialPurposeGlobalUnicastPrefix(bytes)
+    }
+
+    private static func isGloballyRoutableIPv6Bytes(_ bytes: [UInt8]) -> Bool {
+        guard bytes.count == 16 else { return false }
+        return bytes.withUnsafeBytes { isGloballyRoutableIPv6Bytes($0) }
     }
 }
 
