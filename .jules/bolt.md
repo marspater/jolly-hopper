@@ -78,3 +78,7 @@
 ## 2026-10-16 - Substring Slicing and In-Place Trimming in Proxy Header Parsing
 **Learning:** Calling `.map(String.init)` or `line.lowercased()` on Substring results from `split(whereSeparator: \.isNewline)` creates intermediate String heap allocations for every line in an HTTP header on every proxy request. Using custom `Substring` trimming extensions and `caseInsensitiveCompare` over Substring slices eliminates per-line heap allocations entirely.
 **Action:** Use `Substring` views directly with custom index-based trimming and `caseInsensitiveCompare` instead of converting to `String` or calling `.lowercased()` during HTTP header parsing.
+
+## 2026-10-16 - Zero-Allocation Buffer Pointer Inspection for IP Address Validation
+**Learning:** Passing raw binary buffers (such as socket addresses or `in6_addr` IPv6 structures) into validation helpers via `Array($0)`, `[UInt8](repeating: 0, count: 16)`, or array slicing (`Array(bytes[12..<16])`) causes repetitive heap array allocations on every resolved socket address check in network loops. Accepting `UnsafeRawBufferPointer` directly and unpacking scalar bytes into registers eliminates all heap allocations during address validation.
+**Action:** Use `UnsafeRawBufferPointer` and scalar parameter overloads for raw binary address buffer checks instead of copying buffer bytes into Swift `[UInt8]` arrays.
