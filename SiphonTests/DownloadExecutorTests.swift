@@ -279,6 +279,7 @@ final class DownloadExecutorTests: XCTestCase {
             func executorDidRequestAddToHistory(_ download: Download, skipSave: Bool) {
                 historyDownloads.append(download)
             }
+            func executorDidRequestRecoveryPersist() {}
             func executorDidFinishDownload() {
                 finishedCount += 1
             }
@@ -310,6 +311,7 @@ final class DownloadExecutorTests: XCTestCase {
             }
 
             func executorDidRequestAddToHistory(_ download: Download, skipSave: Bool) {}
+            func executorDidRequestRecoveryPersist() {}
 
             func executorDidFinishDownload() {
                 finishedCount += 1
@@ -363,6 +365,7 @@ final class DownloadExecutorTests: XCTestCase {
             }
 
             func executorDidRequestAddToHistory(_ download: Download, skipSave: Bool) {}
+            func executorDidRequestRecoveryPersist() {}
             func executorDidFinishDownload() {}
             func executorDidRequestBroadcast() {}
         }
@@ -473,6 +476,7 @@ final class DownloadExecutorTests: XCTestCase {
                 download.status = status
             }
             func executorDidRequestAddToHistory(_ download: Download, skipSave: Bool) {}
+            func executorDidRequestRecoveryPersist() {}
             func executorDidFinishDownload() {}
             func executorDidRequestBroadcast() {}
         }
@@ -509,6 +513,7 @@ final class DownloadExecutorTests: XCTestCase {
                 download.status = status
             }
             func executorDidRequestAddToHistory(_ download: Download, skipSave: Bool) {}
+            func executorDidRequestRecoveryPersist() {}
             func executorDidFinishDownload() {}
             func executorDidRequestBroadcast() {}
         }
@@ -605,6 +610,7 @@ final class DownloadExecutorTests: XCTestCase {
             download.status = status
         }
         func executorDidRequestAddToHistory(_ download: Download, skipSave: Bool) {}
+        func executorDidRequestRecoveryPersist() {}
         func executorDidFinishDownload() {}
         func executorDidRequestBroadcast() {}
     }
