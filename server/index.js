@@ -264,14 +264,10 @@ if (require.main === module) {
   const host = listenHost();
   const server = createServer();
 
-  server.listen(port, host, () => {
-    console.log(`Siphon companion service running on http://${host}:${port}`);
-  });
+  server.listen(port, host);
 
   const shutdown = () => {
-    console.log('Received shutdown signal, closing server...');
     server.close(() => {
-      console.log('Server closed successfully.');
       process.exit(0);
     });
     // Node 18 keeps idle keep-alive sockets open, which would stall close().
