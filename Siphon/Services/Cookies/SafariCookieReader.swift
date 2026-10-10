@@ -66,7 +66,7 @@ enum SafariCookieReader {
                 guard at >= 0, at < end, end <= totalCount else { return nil }
                 guard let nullOffset = (at..<end).first(where: { baseAddress[$0] == 0 }) else { return nil }
                 let slice = UnsafeBufferPointer(start: baseAddress + at, count: nullOffset - at)
-                return String(decoding: slice, as: UTF8.self)
+                return String(bytes: slice, encoding: .utf8)
             }
 
             guard totalCount >= 4,

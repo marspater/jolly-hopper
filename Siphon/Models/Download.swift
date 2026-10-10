@@ -1646,7 +1646,13 @@ struct MediaFormat: Codable, Identifiable, Hashable {
                 self = flag ? .protected : .clear
             } else {
                 let value = try container.decode(String.self)
-                self = value == "maybe" ? .maybe : (value.isEmpty ? .clear : .protected)
+                if value == "maybe" {
+                    self = .maybe
+                } else if value.isEmpty {
+                    self = .clear
+                } else {
+                    self = .protected
+                }
             }
         }
 

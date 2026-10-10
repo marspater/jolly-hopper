@@ -79,7 +79,7 @@ public final class UpdateDownloader: NSObject, URLSessionDownloadDelegate, @unch
 
     private final class RedirectPolicy: NSObject, URLSessionTaskDelegate {
         func urlSession(
-            _ session: URLSession,
+            _ _: URLSession,
             task _: URLSessionTask,
             willPerformHTTPRedirection _: HTTPURLResponse,
             newRequest request: URLRequest
@@ -272,7 +272,7 @@ public final class UpdateDownloader: NSObject, URLSessionDownloadDelegate, @unch
     }
 
     public func urlSession(
-        _ session: URLSession,
+        _ _: URLSession,
         task _: URLSessionTask,
         willPerformHTTPRedirection _: HTTPURLResponse,
         newRequest request: URLRequest,
