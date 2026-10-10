@@ -214,13 +214,13 @@ public enum ExternalDownloadTargetPolicy {
         return checkedAtLeastOne
     }
 
-    private static func extractTranslationPrefixIPv4(_ bytes: UnsafeRawBufferPointer) -> (UInt8, UInt8, UInt8, UInt8)? {
+    private static func isTranslationPrefixGloballyRoutable(_ bytes: UnsafeRawBufferPointer) -> Bool? {
         if bytes[0] == 0x00, bytes[1] == 0x64, bytes[2] == 0xff, bytes[3] == 0x9b,
            (4..<12).allSatisfy({ bytes[$0] == 0 }) {
-            return (bytes[12], bytes[13], bytes[14], bytes[15]) // NAT64 64:ff9b::/96
+            return isGloballyRoutableIPv4(bytes[12], bytes[13], bytes[14], bytes[15]) // NAT64 64:ff9b::/96
         }
         if bytes[0] == 0x20, bytes[1] == 0x02 {
-            return (bytes[2], bytes[3], bytes[4], bytes[5]) // 6to4 2002::/16
+            return isGloballyRoutableIPv4(bytes[2], bytes[3], bytes[4], bytes[5]) // 6to4 2002::/16
         }
         return nil
     }
@@ -247,8 +247,8 @@ public enum ExternalDownloadTargetPolicy {
 
         // Translation prefixes carry an IPv4 address that a gateway or relay
         // connects to, so they inherit IPv4 routing rules.
-        if let translated = extractTranslationPrefixIPv4(bytes) {
-            return isGloballyRoutableIPv4(translated.0, translated.1, translated.2, translated.3)
+        if let isRoutable = isTranslationPrefixGloballyRoutable(bytes) {
+            return isRoutable
         }
 
         // Fail closed: only global unicast 2000::/3 is publicly routed. This also
