@@ -32,16 +32,25 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Run source-security analyzers. The CLI's default suite also runs
-        # unconfigured linters, metrics, and dependency tools on this repo.
-        tool: [opengrep, cppcheck]
+        # Run the default suite alongside specific source-security analyzers.
+        tool: [default, opengrep, cppcheck]
 
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Run Codacy Analysis CLI
+      - name: Run default Codacy analysis suite
+        if: matrix.tool == 'default'
+        uses: codacy/codacy-analysis-cli-action@d43360362776a6789b47b99ae8973510854e2d3d # master 2026-03-25 (newer than tag v4.4.7)
+        with:
+          verbose: true
+          output: codacy-results.sarif
+          format: sarif
+          fail-if-incomplete: true
+
+      - name: Run specific Codacy analyzer
         id: codacy
+        if: matrix.tool != 'default'
         uses: codacy/codacy-analysis-cli-action@d43360362776a6789b47b99ae8973510854e2d3d # master 2026-03-25 (newer than tag v4.4.7)
         with:
           verbose: true
