@@ -151,12 +151,6 @@ function createReleaseFetcher(fetchImpl, cacheTtlMs, failureRetryMs) {
   }
 }
 
-function sendResponse(res, statusCode, headers, body) {
-  const mergedHeaders = headers ? { ...DEFAULT_SECURITY_HEADERS, ...headers } : DEFAULT_SECURITY_HEADERS;
-  res.writeHead(statusCode, mergedHeaders);
-  res.end(body);
-}
-
 function sendJson(res, statusCode, data) {
   const payload = JSON.stringify(data);
   // Bolt Performance Optimization: Single-pass header object creation combining default security headers with JSON content headers
