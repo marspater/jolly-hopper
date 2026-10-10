@@ -84,6 +84,7 @@ struct MenuBarView: View {
             Image(systemName: "link")
                 .font(.system(size: 12, weight: .medium))
                 .foregroundColor(isFieldFocused && appearsActive ? SiphonTheme.accentText : .secondary)
+                .accessibilityHidden(true)
 
             TextField(languageService.s("url_hint"), text: $url)
                 .textFieldStyle(.plain)
@@ -101,6 +102,7 @@ struct MenuBarView: View {
                     Image(systemName: "xmark.circle.fill")
                         .font(.system(size: 12))
                         .foregroundColor(.secondary)
+                        .accessibilityHidden(true)
                 }
                 .buttonStyle(.plain)
                 .help(languageService.s("clear"))
@@ -116,6 +118,7 @@ struct MenuBarView: View {
                 Image(systemName: pasteFeedback.isShowing ? "checkmark" : "doc.on.clipboard")
                     .font(.system(size: 12))
                     .foregroundColor(pasteFeedback.isShowing ? SiphonTheme.statusCompletedText : .secondary)
+                    .accessibilityHidden(true)
             }
             .buttonStyle(.plain)
             .help(languageService.s("paste_from_clipboard"))
@@ -332,6 +335,7 @@ struct MenuBarView: View {
                 HStack(spacing: 5) {
                     Image(systemName: "macwindow")
                         .font(.system(size: 11, weight: .semibold))
+                        .accessibilityHidden(true)
                     Text(languageService.s("show_main_window"))
                         .font(.siphonMetadataMedium)
                         .lineLimit(1)
@@ -361,6 +365,7 @@ struct MenuBarView: View {
                 HStack(spacing: 4) {
                     Image(systemName: "power")
                         .font(.system(size: 11, weight: .bold))
+                        .accessibilityHidden(true)
                     Text(languageService.s("quit"))
                         .font(.siphonMetadataSemibold)
                         .lineLimit(1)
