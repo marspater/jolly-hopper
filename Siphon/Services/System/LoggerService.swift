@@ -86,6 +86,7 @@ class LoggerService: ObservableObject {
             "--netrc-location": "\"<LOCATION_REDACTED>\"",
             "--config-location": "\"<LOCATION_REDACTED>\"",
             "--exec": "\"<EXEC_REDACTED>\"",
+            "--extractor-args": "\"<ARGS_REDACTED>\"",
             "--postprocessor-args": "\"<ARGS_REDACTED>\"",
             "--downloader-args": "\"<ARGS_REDACTED>\"",
             "--external-downloader-args": "\"<ARGS_REDACTED>\""
