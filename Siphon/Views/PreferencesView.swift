@@ -586,6 +586,7 @@ struct PreferencesView: View {
                 HStack {
                     Image(systemName: selectedCustomPresetIdString == preset.id.uuidString ? "largecircle.fill.circle" : "circle")
                         .foregroundColor(selectedCustomPresetIdString == preset.id.uuidString ? SiphonTheme.accentText : .secondary)
+                        .accessibilityHidden(true)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(preset.name)
                             .fontWeight(.medium)
