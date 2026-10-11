@@ -5887,6 +5887,7 @@ final class YtdlpServiceTests: XCTestCase {
             "--ffmpeg-location", "/usr/local/bin/ffmpeg",
             "--netrc-cmd", "echo password",
             "--exec", "rm -rf /",
+            "--extractor-args", "generic:fragment_query=check=secret_token_123",
             "--postprocessor-args", "VideoConvertor:-y -c:v libx264",
             "https://example.com/video"
         ]
@@ -5895,10 +5896,12 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertTrue(sanitized.contains("--ffmpeg-location \"<LOCATION_REDACTED>\""))
         XCTAssertTrue(sanitized.contains("--netrc-cmd \"<COMMAND_REDACTED>\""))
         XCTAssertTrue(sanitized.contains("--exec \"<EXEC_REDACTED>\""))
+        XCTAssertTrue(sanitized.contains("--extractor-args \"<ARGS_REDACTED>\""))
         XCTAssertTrue(sanitized.contains("--postprocessor-args \"<ARGS_REDACTED>\""))
         XCTAssertFalse(sanitized.contains("/usr/local/bin/ffmpeg"))
         XCTAssertFalse(sanitized.contains("echo password"))
         XCTAssertFalse(sanitized.contains("rm -rf /"))
+        XCTAssertFalse(sanitized.contains("secret_token_123"))
     }
 
     func testParseArgumentString() {
