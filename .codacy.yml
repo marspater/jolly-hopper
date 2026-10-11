@@ -10,8 +10,6 @@ engines:
     enabled: false
   tailor:
     enabled: false
-    exclude_paths:
-      - "**.swift"
   rubocop:
     enabled: false
   jshint:
@@ -19,7 +17,6 @@ engines:
 
 exclude_paths:
   - "**.md"
-  - "**.swift"
   - ".jules/**"
   - ".github/**"
   - "SiphonTests/**"
