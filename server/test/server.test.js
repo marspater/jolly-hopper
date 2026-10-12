@@ -71,6 +71,19 @@ describe('Siphon Companion Server', () => {
     assert.equal(res.headers.get('content-security-policy'), "default-src 'none'; frame-ancestors 'none'");
     assert.equal(res.headers.get('cross-origin-resource-policy'), 'same-origin');
     assert.equal(res.headers.get('x-permitted-cross-domain-policies'), 'none');
+    assert.equal(res.headers.get('permissions-policy'), 'accelerometer=(), camera=(), geolocation=(), microphone=()');
+  });
+
+  test('unsupported HTTP methods return 405 Method Not Allowed', async () => {
+    const postRes = await fetch(`${baseUrl}/health`, { method: 'POST' });
+    assert.equal(postRes.status, 405);
+    const postData = await postRes.json();
+    assert.equal(postData.error, 'Method Not Allowed');
+
+    const putRes = await fetch(`${baseUrl}/api/latest`, { method: 'PUT' });
+    assert.equal(putRes.status, 405);
+    const putData = await putRes.json();
+    assert.equal(putData.error, 'Method Not Allowed');
   });
 
   test('GET /health returns 200 with status ok', async () => {
