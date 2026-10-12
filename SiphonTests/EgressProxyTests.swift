@@ -184,9 +184,9 @@ final class EgressProxyTests: XCTestCase {
         let response = try await sendThroughProxy(
             port: proxyPort,
             "GET http://127.0.0.1:\(serverPort)/ HTTP/1.1\r\nHost: 127.0.0.1:\(serverPort)\r\n" +
-            "Connection: keep-alive\r\nProxy-Connection: keep-alive\r\nKeep-Alive: timeout=5\r\n" +
+            "Connection: keep-alive, X-Temporary\r\nX-Temporary: internal-value\r\nConnection: X-Other\r\nX-Other: secret\r\nProxy-Connection: keep-alive\r\nKeep-Alive: timeout=5\r\n" +
             "Proxy-Authorization: Basic c2VjcmV0\r\nProxy-Authenticate: Basic realm=\"proxy\"\r\n" +
-            "Trailer: Max-Forwards\r\nTrailers: Max-Forwards\r\nTransfer-Encoding: chunked\r\n" +
+            "Trailer: Max-Forwards\r\nTrailers: Max-Forwards\r\n" +
             "X-Kept: yes\r\n\r\n"
         )
         XCTAssertTrue(response.hasPrefix("HTTP/1.1 200"), "Expected 200, got: \(response)")
@@ -202,7 +202,88 @@ final class EgressProxyTests: XCTestCase {
             $0.hasPrefix("trailers:") ||
             $0.hasPrefix("transfer-encoding:")
         })
+        XCTAssertFalse(headerLines.contains { $0.hasPrefix("x-temporary:") || $0.hasPrefix("x-other:") })
         XCTAssertTrue(headerLines.contains("x-kept: yes"), "End-to-end headers must still reach the server")
+    }
+
+    func testProxyDoesNotForwardPipelinedRequestOrItsHeaders() async throws {
+        let server = MockHTTPServer()
+        let serverPort = try server.start { _ in (200, [:], Data("OK".utf8)) }
+        defer { server.stop() }
+        let proxy = EgressProxyServer(targetValidator: { _, port in port == Int(serverPort) })
+        let proxyPort = try await proxy.start()
+        defer { proxy.stop() }
+
+        for (method, body, hasLength) in [("GET", "", false), ("POST", "", true), ("POST", "first-body", true)] {
+            let length = hasLength ? "Content-Length: \(body.utf8.count)\r\n" : ""
+            let first = "\(method) http://127.0.0.1:\(serverPort)/first HTTP/1.1\r\nHost: wrong.example\r\n" + length + "\r\n" + body
+            let second = "GET http://other.example/second HTTP/1.1\r\nHost: other.example\r\nCookie: second-origin-secret\r\n\r\n"
+            let response = try await sendThroughProxy(port: proxyPort, first + second)
+            XCTAssertTrue(response.hasPrefix("HTTP/1.1 200"), response)
+            XCTAssertFalse(server.lastRequestText.contains("second-origin-secret"))
+            XCTAssertFalse(server.lastRequestText.contains("other.example"))
+            XCTAssertTrue(server.lastRequestText.contains("Host: 127.0.0.1:\(serverPort)\r\n"))
+            XCTAssertTrue(server.lastRequestText.hasSuffix("\r\n\r\n" + body))
+        }
+        XCTAssertEqual(server.hitCount, 3)
+    }
+
+    func testProxyStreamsExactlyOneFragmentedBodyAfterClientHalfClose() async throws {
+        let body = String(repeating: "payload", count: 10000)
+        let server = MockHTTPServer()
+        let serverPort = try server.start(waitForEOF: true) { _ in (200, [:], Data("FULL RESPONSE".utf8)) }
+        defer { server.stop() }
+        let proxy = EgressProxyServer(targetValidator: { _, port in port == Int(serverPort) })
+        let proxyPort = try await proxy.start()
+        defer { proxy.stop() }
+        let header = "POST http://127.0.0.1:\(serverPort)/upload HTTP/1.1\r\nHost: 127.0.0.1:\(serverPort)\r\nContent-Length: \(body.utf8.count)\r\n\r\n"
+        let second = "GET http://other.example/ HTTP/1.1\r\nHost: other.example\r\nCookie: secret\r\n\r\n"
+        let response = try await sendThroughProxy(port: proxyPort, fragments: [header, String(body.prefix(20000)), String(body.dropFirst(20000)) + second], halfClose: true)
+        XCTAssertTrue(response.hasSuffix("FULL RESPONSE"), response)
+        XCTAssertTrue(server.lastRequestText.hasSuffix("\r\n\r\n" + body))
+        XCTAssertFalse(server.lastRequestText.contains("Cookie: secret"))
+    }
+
+    func testProxyRejectsUnsupportedOrAmbiguousForwardRequestsBeforeConnecting() async throws {
+        let server = MockHTTPServer()
+        let serverPort = try server.start { _ in (200, [:], Data()) }
+        defer { server.stop() }
+        let proxy = EgressProxyServer(targetValidator: { _, _ in true })
+        let proxyPort = try await proxy.start()
+        defer { proxy.stop() }
+        for (scheme, headers, status) in [
+            ("http", "Transfer-Encoding: chunked\r\n", "501"),
+            ("http", "transfer-encoding: identity\r\n", "501"),
+            ("http", "Transfer-Encoding: chunked\r\nContent-Length: 4\r\n", "400"),
+            ("http", "Content-Length: 1\r\nContent-Length: 1\r\n", "400"),
+            ("http", "Content-Length: -1\r\n", "400"),
+            ("http", "Content-Length: +1\r\n", "400"),
+            ("http", "Content-Length: 999999999999999999999999\r\n", "400"),
+            ("http", "Connection: Content-Length\r\nContent-Length: 4\r\n", "400"),
+            ("https", "", "400"),
+            ("ftp", "", "400")
+        ] {
+            let response = try await sendThroughProxy(port: proxyPort,
+                "POST \(scheme)://127.0.0.1:\(serverPort)/ HTTP/1.1\r\nHost: 127.0.0.1:\(serverPort)\r\n" + headers + "\r\n0\r\n\r\n")
+            XCTAssertTrue(response.hasPrefix("HTTP/1.1 " + status), response)
+        }
+        XCTAssertEqual(server.hitCount, 0)
+    }
+
+    func testConnectHalfCloseStillDeliversFullReverseStream() async throws {
+        let body = String(repeating: "response", count: 10000)
+        let server = MockHTTPServer()
+        let serverPort = try server.start(waitForEOF: true) { _ in (200, [:], Data(body.utf8)) }
+        defer { server.stop() }
+        let proxy = EgressProxyServer(targetValidator: { _, port in port == Int(serverPort) })
+        let proxyPort = try await proxy.start()
+        defer { proxy.stop() }
+        let response = try await sendThroughProxy(port: proxyPort, fragments: [
+            "CONNECT 127.0.0.1:\(serverPort) HTTP/1.1\r\nHost: 127.0.0.1:\(serverPort)\r\n\r\n",
+            "GET / HTTP/1.1\r\nHost: mock\r\n\r\n"
+        ], halfClose: true)
+        XCTAssertTrue(response.hasPrefix("HTTP/1.1 200 Connection Established"), response)
+        XCTAssertTrue(response.hasSuffix(body), "Reverse stream must drain after client EOF")
     }
 
     func testBoundaryProxyIsAddedOnlyToUnproxiedYtdlpRuns() {
@@ -309,6 +390,10 @@ final class EgressProxyTests: XCTestCase {
 /// Sends `request` straight to the proxy over a raw socket and returns the
 /// whole response, so a test cannot pass unless the proxy itself answers.
 private func sendThroughProxy(port: UInt16, _ request: String) async throws -> String {
+    try await sendThroughProxy(port: port, fragments: [request])
+}
+
+private func sendThroughProxy(port: UInt16, fragments: [String], halfClose: Bool = false) async throws -> String {
     let connection = NWConnection(host: "127.0.0.1", port: NWEndpoint.Port(rawValue: port)!, using: .tcp)
     defer { connection.cancel() }
     let response = LockedValue(Data())
@@ -321,6 +406,23 @@ private func sendThroughProxy(port: UInt16, _ request: String) async throws -> S
             } else {
                 continuation.resume(returning: String(decoding: response.get(), as: UTF8.self))
             }
+        }
+        DispatchQueue.global().asyncAfter(deadline: .now() + 10) {
+            finish(NSError(domain: "EgressProxyTests", code: 1, userInfo: [NSLocalizedDescriptionKey: "Proxy response timed out"]))
+        }
+        @Sendable func sendFragment(_ index: Int) {
+            guard index < fragments.count else {
+                if halfClose {
+                    connection.send(content: nil, contentContext: .finalMessage, isComplete: true,
+                                    completion: .contentProcessed { error in
+                        if let error { finish(error) }
+                    })
+                }
+                return
+            }
+            connection.send(content: Data(fragments[index].utf8), completion: .contentProcessed { error in
+                if let error { finish(error) } else { sendFragment(index + 1) }
+            })
         }
         @Sendable func receiveAll() {
             connection.receive(minimumIncompleteLength: 1, maximumLength: 65536) { content, _, isComplete, error in
@@ -335,9 +437,8 @@ private func sendThroughProxy(port: UInt16, _ request: String) async throws -> S
         connection.stateUpdateHandler = { state in
             switch state {
             case .ready:
-                connection.send(content: Data(request.utf8), completion: .contentProcessed { error in
-                    if let error { finish(error) } else { receiveAll() }
-                })
+                receiveAll()
+                sendFragment(0)
             case .waiting(let error), .failed(let error):
                 finish(error)
             default:
@@ -376,39 +477,57 @@ private final class MockHTTPServer: @unchecked Sendable {
     var hitCount: Int { lock.withLock { hits } }
     var lastRequestText: String { lock.withLock { lastRequest } }
 
-    func start(handler: @escaping @Sendable (String) -> (statusCode: Int, headers: [String: String], body: Data)) throws -> UInt16 {
+    func start(waitForEOF: Bool = false, handler: @escaping @Sendable (String) -> (statusCode: Int, headers: [String: String], body: Data)) throws -> UInt16 {
         let params = NWParameters.tcp
         params.requiredLocalEndpoint = NWEndpoint.hostPort(host: "127.0.0.1", port: .any)
         let l = try NWListener(using: params)
         l.newConnectionHandler = { [weak self] connection in
             guard let self = self else { return }
             connection.start(queue: self.queue)
-            connection.receive(minimumIncompleteLength: 1, maximumLength: 4096) { data, _, _, _ in
-                guard let data = data, let text = String(data: data, encoding: .utf8) else {
-                    connection.cancel()
-                    return
-                }
-                let firstLine = text.components(separatedBy: "\r\n").first ?? ""
-                let parts = firstLine.split(separator: " ")
-                let path = parts.count > 1 ? String(parts[1]) : "/"
+            @Sendable func receiveRequest(_ accumulated: Data) {
+                connection.receive(minimumIncompleteLength: 1, maximumLength: 65536) { data, _, complete, error in
+                    var buffer = accumulated
+                    if let data { buffer.append(data) }
+                    guard error == nil else { connection.cancel(); return }
+                    let text = String(decoding: buffer, as: UTF8.self)
+                    if waitForEOF {
+                        if !complete { receiveRequest(buffer); return }
+                    } else {
+                        guard let boundary = buffer.range(of: Data("\r\n\r\n".utf8)) else {
+                            if complete { connection.cancel() } else { receiveRequest(buffer) }
+                            return
+                        }
+                        let header = String(decoding: buffer[..<boundary.lowerBound], as: UTF8.self)
+                        let length = header.components(separatedBy: "\r\n").first { $0.lowercased().hasPrefix("content-length:") }
+                            .flatMap { Int($0.split(separator: ":", maxSplits: 1)[1].trimmingCharacters(in: .whitespaces)) } ?? 0
+                        if buffer.count < boundary.upperBound + length {
+                            if complete { connection.cancel() } else { receiveRequest(buffer) }
+                            return
+                        }
+                    }
+                    let firstLine = text.components(separatedBy: "\r\n").first ?? ""
+                    let parts = firstLine.split(separator: " ")
+                    let path = parts.count > 1 ? String(parts[1]) : "/"
 
-                self.lock.withLock {
-                    self.hits += 1
-                    self.lastRequest = text
-                }
+                    self.lock.withLock {
+                        self.hits += 1
+                        self.lastRequest = text
+                    }
 
-                let result = handler(path)
-                var response = "HTTP/1.1 \(result.statusCode) OK\r\nContent-Length: \(result.body.count)\r\nConnection: close\r\n"
-                for (k, v) in result.headers {
-                    response += "\(k): \(v)\r\n"
+                    let result = handler(path)
+                    var response = "HTTP/1.1 \(result.statusCode) OK\r\nContent-Length: \(result.body.count)\r\nConnection: close\r\n"
+                    for (k, v) in result.headers {
+                        response += "\(k): \(v)\r\n"
+                    }
+                    response += "\r\n"
+                    var responseData = Data(response.utf8)
+                    responseData.append(result.body)
+                    connection.send(content: responseData, completion: .contentProcessed { _ in
+                        connection.cancel()
+                    })
                 }
-                response += "\r\n"
-                var responseData = Data(response.utf8)
-                responseData.append(result.body)
-                connection.send(content: responseData, completion: .contentProcessed { _ in
-                    connection.cancel()
-                })
             }
+            receiveRequest(Data())
         }
         let semaphore = DispatchSemaphore(value: 0)
         final class PortBox: @unchecked Sendable {
