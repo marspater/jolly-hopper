@@ -559,6 +559,37 @@ final class MediaInfoTests: XCTestCase {
         }
     }
 
+    func testResolveSelectedFormats_WithCustomFormatId() {
+        let info = MediaInfo(id: "Vh4O04Bpovw", title: "Fixture", formats: youTubeFormats(includingHLSAudio: false))
+
+        // Dual format custom ID
+        var dualOptions = DownloadOptions.default
+        dualOptions.selectedFormatId = "137+140"
+        let dualResolved = info.resolveSelectedFormats(options: dualOptions).map(\.formatId)
+        XCTAssertEqual(dualResolved, ["137", "140"])
+
+        // Single video-only custom ID pairs with best audio when fileType is video
+        var singleVideoOptions = DownloadOptions.default
+        singleVideoOptions.fileType = .mp4
+        singleVideoOptions.selectedFormatId = "137"
+        let singleVideoResolved = info.resolveSelectedFormats(options: singleVideoOptions).map(\.formatId)
+        XCTAssertEqual(singleVideoResolved, ["137", "140"])
+
+        // Single audio custom ID returns audio format directly
+        var singleAudioOptions = DownloadOptions.default
+        singleAudioOptions.fileType = .m4a
+        singleAudioOptions.selectedFormatId = "140"
+        let singleAudioResolved = info.resolveSelectedFormats(options: singleAudioOptions).map(\.formatId)
+        XCTAssertEqual(singleAudioResolved, ["140"])
+
+        // Non-existent custom ID falls back to standard resolution
+        var invalidOptions = DownloadOptions.default
+        invalidOptions.selectedFormatId = "nonexistent_id"
+        invalidOptions.videoResolution = .r1080p
+        let fallbackResolved = info.resolveSelectedFormats(options: invalidOptions).map(\.formatId)
+        XCTAssertEqual(fallbackResolved, ["137", "140"])
+    }
+
     // MARK: - MediaFormat.audioQualityScore Tests
 
     func testAudioQualityScore_VideoFormat_ReturnsZero() {
