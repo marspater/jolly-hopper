@@ -642,6 +642,10 @@ class DownloadManager: ObservableObject {
             LoggerService.shared.log("Refusing to open non-media file via NSWorkspace: \(path.path)", level: .warning)
             return
         }
+        if PlaybackSourceResolver.prefersNativePlayer(path) {
+            PlaybackWindowManager.shared.open(.localFile(path))
+            return
+        }
         if !NSWorkspace.shared.open(path) {
             LoggerService.shared.log("Could not open \(path.lastPathComponent); it may have been moved or deleted.", level: .warning)
             NSSound.beep()

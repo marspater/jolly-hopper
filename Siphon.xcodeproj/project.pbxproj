@@ -90,6 +90,18 @@
 		E00010AD /* HeroDropURLView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E00000AD /* HeroDropURLView.swift */; };
 		E00010AE /* RecentDownloadRowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E00000AE /* RecentDownloadRowView.swift */; };
 		E00010AF /* RadiantSiphonLogoView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E00000AF /* RadiantSiphonLogoView.swift */; };
+		F0021001 /* PlaybackSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0020001 /* PlaybackSource.swift */; };
+		F0021002 /* PlaybackError.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0020002 /* PlaybackError.swift */; };
+		F0021003 /* PlaybackService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0020003 /* PlaybackService.swift */; };
+		F0021004 /* PlaybackWindowManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0020004 /* PlaybackWindowManager.swift */; };
+		F0021005 /* HLSPlaybackGateway.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0020005 /* HLSPlaybackGateway.swift */; };
+		F0021006 /* DRMConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0020006 /* DRMConfiguration.swift */; };
+		F0021007 /* DRMCertificateProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0020007 /* DRMCertificateProvider.swift */; };
+		F0021008 /* DRMLicenseClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0020008 /* DRMLicenseClient.swift */; };
+		F0021009 /* FairPlayDRMService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0020009 /* FairPlayDRMService.swift */; };
+		F002100A /* PlayerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F002000A /* PlayerView.swift */; };
+		F002100B /* PlaybackTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F002000B /* PlaybackTests.swift */; };
+		F002100C /* FairPlayDRMServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F002000C /* FairPlayDRMServiceTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -180,6 +192,18 @@
 		E00000B3 /* EgressProxyServer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EgressProxyServer.swift; sourceTree = "<group>"; };
 		E00000B4 /* EgressProxyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EgressProxyTests.swift; sourceTree = "<group>"; };
 		E0000043 /* SiphonTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SiphonTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		F0020001 /* PlaybackSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Siphon/Models/PlaybackSource.swift"; sourceTree = SOURCE_ROOT; };
+		F0020002 /* PlaybackError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Siphon/Services/Playback/PlaybackError.swift"; sourceTree = SOURCE_ROOT; };
+		F0020003 /* PlaybackService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Siphon/Services/Playback/PlaybackService.swift"; sourceTree = SOURCE_ROOT; };
+		F0020004 /* PlaybackWindowManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Siphon/Services/Playback/PlaybackWindowManager.swift"; sourceTree = SOURCE_ROOT; };
+		F0020005 /* HLSPlaybackGateway.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Siphon/Services/Playback/HLSPlaybackGateway.swift"; sourceTree = SOURCE_ROOT; };
+		F0020006 /* DRMConfiguration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Siphon/Services/Playback/DRM/DRMConfiguration.swift"; sourceTree = SOURCE_ROOT; };
+		F0020007 /* DRMCertificateProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Siphon/Services/Playback/DRM/DRMCertificateProvider.swift"; sourceTree = SOURCE_ROOT; };
+		F0020008 /* DRMLicenseClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Siphon/Services/Playback/DRM/DRMLicenseClient.swift"; sourceTree = SOURCE_ROOT; };
+		F0020009 /* FairPlayDRMService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Siphon/Services/Playback/DRM/FairPlayDRMService.swift"; sourceTree = SOURCE_ROOT; };
+		F002000A /* PlayerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Siphon/Views/Playback/PlayerView.swift"; sourceTree = SOURCE_ROOT; };
+		F002000B /* PlaybackTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SiphonTests/PlaybackTests.swift"; sourceTree = SOURCE_ROOT; };
+		F002000C /* FairPlayDRMServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SiphonTests/FairPlayDRMServiceTests.swift"; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -213,6 +237,7 @@
 		E0003002 /* Siphon */ = {
 			isa = PBXGroup;
 			children = (
+				F0023000 /* Playback */,
 				E0003011 /* Utilities */,
 				E0000001 /* SiphonApp.swift */,
 				E0003004 /* Models */,
@@ -230,6 +255,8 @@
 		E0003020 /* SiphonTests */ = {
 			isa = PBXGroup;
 			children = (
+				F002000C /* FairPlayDRMServiceTests.swift */,
+				F002000B /* PlaybackTests.swift */,
 				E0000091 /* ImageUtilitiesTests.swift */,
 				E0000040 /* DownloadManagerTests.swift */,
 				E0000041 /* MediaInfoTests.swift */,
@@ -414,6 +441,23 @@
 			path = Constants;
 			sourceTree = "<group>";
 		};
+		F0023000 /* Playback */ = {
+			isa = PBXGroup;
+			children = (
+				F0020001 /* PlaybackSource.swift */,
+				F0020002 /* PlaybackError.swift */,
+				F0020003 /* PlaybackService.swift */,
+				F0020004 /* PlaybackWindowManager.swift */,
+				F0020005 /* HLSPlaybackGateway.swift */,
+				F0020006 /* DRMConfiguration.swift */,
+				F0020007 /* DRMCertificateProvider.swift */,
+				F0020008 /* DRMLicenseClient.swift */,
+				F0020009 /* FairPlayDRMService.swift */,
+				F002000A /* PlayerView.swift */,
+			);
+			name = Playback;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -540,6 +584,16 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				F0021001 /* PlaybackSource.swift in Sources */,
+				F0021002 /* PlaybackError.swift in Sources */,
+				F0021003 /* PlaybackService.swift in Sources */,
+				F0021004 /* PlaybackWindowManager.swift in Sources */,
+				F0021005 /* HLSPlaybackGateway.swift in Sources */,
+				F0021006 /* DRMConfiguration.swift in Sources */,
+				F0021007 /* DRMCertificateProvider.swift in Sources */,
+				F0021008 /* DRMLicenseClient.swift in Sources */,
+				F0021009 /* FairPlayDRMService.swift in Sources */,
+				F002100A /* PlayerView.swift in Sources */,
 				E0001092 /* ImageUtilities.swift in Sources */,
 				E0001050 /* Font+Geist.swift in Sources */,
 				E0001003 /* Download.swift in Sources */,
@@ -595,6 +649,8 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				F002100C /* FairPlayDRMServiceTests.swift in Sources */,
+				F002100B /* PlaybackTests.swift in Sources */,
 				E0001091 /* ImageUtilitiesTests.swift in Sources */,
 				E0001040 /* DownloadManagerTests.swift in Sources */,
 				E0001041 /* MediaInfoTests.swift in Sources */,

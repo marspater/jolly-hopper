@@ -92,6 +92,129 @@ Update installation captures an immutable release candidate before its first asy
 
 The installer copies and verifies a complete replacement beside the installed app, then exchanges the two directory names using `renameatx_np(RENAME_SWAP)`. Both replacement and rollback are single filesystem operations. A process interruption leaves a complete old or new app at the installed path and the other complete bundle at the sibling backup path. Unsupported exchanges fail with the original app intact; there is no delete-and-copy fallback. A rollback failure retains the original backup and reports its path. Abrupt interruptions may leave a hidden backup for manual cleanup; this does not promise storage durability after a hardware or filesystem failure.
 
+## Native playback
+
+Playback is owned by `PlaybackWindowManager` and `PlaybackService`, separately
+from download execution and history. All existing Play actions route through
+`DownloadManager.openFile`: AVFoundation-supported local containers open in the
+native player, while other containers keep their default-app behavior. File →
+Open Media and Play Stream provide explicit local and clear-HLS entry points.
+Open Stream File imports a locally selected, versioned JSON descriptor for clear
+or explicitly configured FairPlay HLS.
+Playback failure does not change a completed download's status.
+
+`PlaybackService` retains the player/item, status observations, current setup
+task, gateway and content-key service. Replacement, cancellation and window
+closure detach the item, invalidate observations and cancel owned work. A
+generation identifier rejects late callbacks from previous sources.
+
+Remote streams require HTTPS. Since AVURLAsset has no documented per-asset
+proxy configuration, `HLSPlaybackGateway` serves rewritten manifests and media
+on an ephemeral loopback listener. Only registered, random routes are served.
+Every upstream fetch goes through `EgressProxyServer`, including redirects,
+preserving connection-time public-address checks. The gateway rewrites variant,
+rendition, segment, initialization and clear-key references; only explicitly
+configured FairPlay `skd://` identifiers remain intact. Unsupported protection,
+content steering, interstitial asset references and unresolved playlist
+variables fail closed. Responses are bounded to 64 MiB and four concurrent
+gateway connections. This first implementation buffers each segment; very large
+segments and low-latency HLS need a separate transport extension.
+
+Local playlists and managed offline packages are rejected: treating either as
+an ordinary file would skip source validation and license ownership.
+
+### FairPlay provider integration status
+
+`DRMConfiguration` describes an explicitly trusted provider, including a
+certificate endpoint, license endpoint, and a mapping from exact SKD key URIs
+to UTF-8 content IDs. The current license adapter supports only raw binary SPC
+POST and raw `application/octet-stream` CKC responses. Optional Authorization
+is license-only, ephemeral and never persisted or logged; browser cookies and
+shared URLSession credentials are disabled. Certificate/license redirects stay
+on their configured HTTPS origin. HTTP errors, empty bodies and oversized
+responses fail without fabricated keys or automatic authorization retries.
+
+The retained AVContentKeySession is configured before the asset reaches the
+player. Its delegate handles new and renewing key requests, generates SPC using
+AVContentKeyRequest, obtains CKC, and submits either a response or a terminal
+error. Cancellation resolves callback bridges once and discards late SPC
+callbacks; closing playback cancels pending licenses and expires the session.
+Apple's APIs are documented in
+[AVContentKeySession](https://developer.apple.com/documentation/avfoundation/avcontentkeysession)
+and [AVContentKeyRequest](https://developer.apple.com/documentation/avfoundation/avcontentkeyrequest).
+
+The Play Stream URL field admits clear HLS only. Open Stream File accepts a
+provider-supplied descriptor of at most 64 KiB. Its server destinations appear
+before playback; license Authorization is entered separately in a secure field,
+used only for that playback session, and cleared when the presentation closes.
+The importer rejects unknown fields (including embedded authorization/cookies),
+unsupported versions, ambiguous clear/DRM combinations and unsupported license
+formats. Importing a file does not fetch a stream, certificate or license.
+
+Real FairPlay decoding, key rotation/renewal and license expiry remain unverified
+until an authorized provider contract and encrypted test asset are available. JSON/Base64 license adapters, authentication refresh and
+provider-approved retries must follow that contract; they are not inferred.
+Persistable keys and AVFoundation-managed offline downloads remain a separate
+release. Existing yt-dlp DRM-download restrictions are unchanged.
+
+### Stream descriptor format
+
+Use File → Open Stream File to select a JSON descriptor. Clear HLS needs only:
+
+```json
+{
+  "version": 1,
+  "manifestURL": "https://media.example/master.m3u8",
+  "protection": "clear"
+}
+```
+
+For an authorized provider that accepts the supported raw-binary license
+contract, the descriptor is:
+
+```json
+{
+  "version": 1,
+  "manifestURL": "https://media.example/master.m3u8",
+  "protection": "fairplay",
+  "certificateURL": "https://cert.example/app.der",
+  "licenseServerURL": "https://license.example/key",
+  "licenseFormat": "raw-spc-ckc",
+  "contentIDsByKeyURI": {
+    "skd://asset": "provider-defined-content-id"
+  }
+}
+```
+
+The `.example` URLs above are placeholders, not working FairPlay services.
+Use the provider's exact certificate URL, license endpoint and SKD/content-ID
+mapping. Do not put Authorization headers, cookies or passwords in the file.
+The secure field accepts the complete Authorization value supplied by the
+provider (for example, the required scheme followed by its token). Neither
+the descriptor nor the entered authorization is copied into history, defaults
+or application logs.
+
+`FairPlayKeyRequest` is a small test seam implemented by the real
+AVContentKeyRequest. Mock tests exercise concurrent exchanges, a new request
+for the same key during renewal, duplicate delivery, license denial, missing
+certificate/identifier, invalid response sizes and late CKC after cancellation.
+A terminal failure expires the session and cancels its other pending requests;
+only one playback failure is published. These mocks verify coordination, not
+real SPC cryptography or CKC decoding.
+
+Playback tests cover local asset loading/replacement, source rejection, key-ID
+mapping, certificate/license transport, response limits, redirect policy,
+gateway rewriting/ranges, the real proxy's loopback rejection and callback
+cancellation. To run the optional public clear-HLS playback/seek test:
+
+```bash
+TEST_RUNNER_SIPHON_RUN_PLAYBACK_LIVE_TESTS=1 xcodebuild test \
+  -project Siphon.xcodeproj -scheme Siphon -destination 'platform=macOS' \
+  -configuration Debug -only-testing:SiphonTests/PlaybackTests \
+  MACOSX_DEPLOYMENT_TARGET=15.0 \
+  CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO
+```
+
 ## YtdlpService boundary
 
 `YtdlpService` remains the public facade for extraction, site-specific handling, dependency paths, and download orchestration. Splitting its site/runtime responsibilities is deliberately postponed; callers should continue to depend on the facade rather than reaching into implementation details.

@@ -13,6 +13,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     @MainActor
     func handleApplicationWillTerminate(bypassTestGuard: Bool = false) {
         guard bypassTestGuard || !NotificationService.isRunningTests else { return }
+        PlaybackWindowManager.shared.close()
         downloadManager?.handleAppTermination()
     }
 
@@ -106,6 +107,18 @@ struct SiphonApp: App {
                     AddDownloadWindowManager.shared.showAddDownloadWindow(downloadManager: downloadManager, appState: appState, languageService: languageService)
                 }
                 .keyboardShortcut("n", modifiers: .command)
+            }
+            CommandGroup(after: .newItem) {
+                Button(languageService.s("playback_open_media") + "…") {
+                    PlaybackWindowManager.shared.chooseLocalFile()
+                }
+                .keyboardShortcut("o", modifiers: .command)
+                Button(languageService.s("playback_play_stream") + "…") {
+                    PlaybackWindowManager.shared.showStreamWindow()
+                }
+                Button(languageService.s("playback_open_stream_file") + "…") {
+                    PlaybackWindowManager.shared.chooseStreamFile()
+                }
             }
             CommandGroup(replacing: .appSettings) {
                 Button(languageService.s("settings") + "…") {
