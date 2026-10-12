@@ -37,13 +37,34 @@ public final class UpdateChecker: ObservableObject {
     private let downloader = UpdateDownloader()
     private let installer = UpdateInstaller()
     private let manifestVerifier: UpdateManifestVerifier
+    private let fetchManifestData: @Sendable (URL) async throws -> Data
+
+    struct ReleaseCandidate: Sendable {
+        let version: String
+        let assetName: String
+        let downloadURL: URL?
+        let checksum: String?
+        let checksumURL: URL?
+        let manifestURL: URL?
+        let signatureURL: URL?
+        let requiresSignature: Bool
+    }
+
+    var releaseCandidate: ReleaseCandidate {
+        ReleaseCandidate(version: latestVersion ?? "", assetName: downloadAssetName ?? "",
+                         downloadURL: downloadURL, checksum: expectedChecksum, checksumURL: checksumURL,
+                         manifestURL: manifestURL, signatureURL: manifestSigURL,
+                         requiresSignature: requireSignedManifest || Self.releaseRequiresSignedManifest(latestVersion))
+    }
 
     public init(
         manifestVerifier: UpdateManifestVerifier = UpdateManifestVerifier(),
-        requireSignedManifest: Bool = false
+        requireSignedManifest: Bool = false,
+        fetchManifestData: @escaping @Sendable (URL) async throws -> Data = { try await UpdateDownloader.fetchData(from: $0) }
     ) {
         self.manifestVerifier = manifestVerifier
         self.requireSignedManifest = requireSignedManifest
+        self.fetchManifestData = fetchManifestData
     }
 
     /// The last release published without a signed manifest. Every newer release
@@ -90,7 +111,7 @@ public final class UpdateChecker: ObservableObject {
     }
 
     public func checkForUpdates(manual: Bool = false) async {
-        guard !isChecking else { return }
+        guard !isChecking, updateOperationID == nil, !needsRestart else { return }
         isChecking = true
         defer { isChecking = false }
 
@@ -226,7 +247,9 @@ public final class UpdateChecker: ObservableObject {
     }
 
     public func downloadAndInstallUpdate() async {
-        guard updateOperationID == nil else { return }
+        guard updateOperationID == nil, !isChecking, !needsRestart else { return }
+        let candidate = releaseCandidate
+        var verifiedChecksum = candidate.checksum
         let operationID = UUID()
         updateOperationID = operationID
         defer {
@@ -235,7 +258,7 @@ public final class UpdateChecker: ObservableObject {
             }
         }
 
-        guard let url = downloadURL, UpdateDownloader.isTrustedGitHubURL(url) else {
+        guard let url = candidate.downloadURL, UpdateDownloader.isTrustedGitHubURL(url) else {
             if let pageURL = releasePageURL {
                 NSWorkspace.shared.open(pageURL)
             }
@@ -243,8 +266,8 @@ public final class UpdateChecker: ObservableObject {
         }
 
         // 1. Fetch and verify signed release manifest if available or required
-        if manifestURL != nil || manifestSigURL != nil || requireSignedManifest || Self.releaseRequiresSignedManifest(latestVersion) {
-            guard let mURL = manifestURL, let sURL = manifestSigURL else {
+        if candidate.manifestURL != nil || candidate.signatureURL != nil || candidate.requiresSignature {
+            guard let mURL = candidate.manifestURL, let sURL = candidate.signatureURL else {
                 let message = "A signed release manifest and signature are required to verify this update."
                 updateError = UpdateDownloadError.checksumUnavailable(message).localizedDescription
                 LoggerService.shared.log(message, level: .error)
@@ -256,25 +279,25 @@ public final class UpdateChecker: ObservableObject {
                 return
             }
             do {
-                let manifestData = try await UpdateDownloader.fetchData(from: mURL)
-                let signatureData = try await UpdateDownloader.fetchData(from: sURL)
+                let manifestData = try await fetchManifestData(mURL)
+                let signatureData = try await fetchManifestData(sURL)
                 guard updateOperationID == operationID else { return }
 
-                let verifiedChecksum = try manifestVerifier.verify(
+                let manifestChecksum = try manifestVerifier.verify(
                     manifestData: manifestData,
                     signatureData: signatureData,
-                    expectedVersion: latestVersion ?? "",
-                    targetAssetName: downloadAssetName ?? ""
+                    expectedVersion: candidate.version,
+                    targetAssetName: candidate.assetName
                 )
                 guard updateOperationID == operationID else { return }
 
-                if let currentChecksum = expectedChecksum, currentChecksum.lowercased() != verifiedChecksum.lowercased() {
+                if let currentChecksum = verifiedChecksum, currentChecksum.lowercased() != manifestChecksum.lowercased() {
                     let message = "GitHub asset digest does not match the signed release manifest."
                     updateError = UpdateDownloadError.checksumUnavailable(message).localizedDescription
                     LoggerService.shared.log(message, level: .error)
                     return
                 }
-                expectedChecksum = verifiedChecksum
+                verifiedChecksum = manifestChecksum
             } catch is CancellationError {
                 return
             } catch {
@@ -286,7 +309,7 @@ public final class UpdateChecker: ObservableObject {
         }
 
         // 2. Fetch checksum in background if available
-        if let cURL = checksumURL {
+        if let cURL = candidate.checksumURL {
             guard UpdateDownloader.isTrustedGitHubURL(cURL) else {
                 updateError = UpdateDownloadError.invalidURL.localizedDescription
                 LoggerService.shared.log("Refusing untrusted checksum URL for app update.", level: .error)
@@ -295,16 +318,16 @@ public final class UpdateChecker: ObservableObject {
             do {
                 let manifestChecksum = try await UpdateDownloader.fetchExpectedChecksum(
                     from: cURL,
-                    targetAssetName: downloadAssetName ?? ""
+                    targetAssetName: candidate.assetName
                 )
                 guard updateOperationID == operationID else { return }
-                if let apiChecksum = expectedChecksum, apiChecksum != manifestChecksum {
+                if let apiChecksum = verifiedChecksum, apiChecksum.lowercased() != manifestChecksum.lowercased() {
                     let message = "GitHub asset digest does not match the published checksum manifest."
                     updateError = UpdateDownloadError.checksumUnavailable(message).localizedDescription
                     LoggerService.shared.log(message, level: .error)
                     return
                 }
-                expectedChecksum = manifestChecksum
+                verifiedChecksum = manifestChecksum
             } catch is CancellationError {
                 return
             } catch {
@@ -315,7 +338,7 @@ public final class UpdateChecker: ObservableObject {
             }
         }
 
-        guard let expectedChecksum, !expectedChecksum.isEmpty else {
+        guard let verifiedChecksum, !verifiedChecksum.isEmpty else {
             let message = "The selected GitHub release asset has no verifiable SHA-256 digest."
             updateError = UpdateDownloadError.checksumUnavailable(message).localizedDescription
             LoggerService.shared.log("Refusing app update without a pinned SHA-256 digest.", level: .error)
@@ -352,7 +375,7 @@ public final class UpdateChecker: ObservableObject {
 
             try await installer.install(
                 packageURL: downloadedPkgURL,
-                expectedChecksum: expectedChecksum,
+                expectedChecksum: verifiedChecksum,
                 expectedTeamID: nil,
                 allowAdHoc: true
             )

@@ -80,6 +80,12 @@ Raw cookies are never accepted through the custom URL. Browser source identifier
 
 Releases newer than `UpdateChecker.lastUnsignedRelease` must carry `release-manifest.json` and `release-manifest.json.sig`, signed offline with the Ed25519 key whose public half is pinned in `UpdateManifestVerifier`. Create both with `swift scripts/sign-release-manifest.swift sign <key> <version> <assets>` and upload them with the release assets; a release without them is refused rather than verified by checksum alone.
 
+### App update installation
+
+Update installation captures an immutable release candidate before its first asynchronous fetch. Manifest and checksum verification use only that candidate; update checks and repeated installations are excluded while preparation or installation is active.
+
+The installer copies and verifies a complete replacement beside the installed app, then exchanges the two directory names using `renameatx_np(RENAME_SWAP)`. Both replacement and rollback are single filesystem operations. A process interruption leaves a complete old or new app at the installed path and the other complete bundle at the sibling backup path. Unsupported exchanges fail with the original app intact; there is no delete-and-copy fallback. A rollback failure retains the original backup and reports its path. Abrupt interruptions may leave a hidden backup for manual cleanup; this does not promise storage durability after a hardware or filesystem failure.
+
 ## YtdlpService boundary
 
 `YtdlpService` remains the public facade for extraction, site-specific handling, dependency paths, and download orchestration. Splitting its site/runtime responsibilities is deliberately postponed; callers should continue to depend on the facade rather than reaching into implementation details.
