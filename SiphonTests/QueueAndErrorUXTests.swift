@@ -2002,6 +2002,27 @@ final class QueueAndErrorUXTests: XCTestCase {
         XCTAssertNil(state.browserCookieSourceToDownload)
     }
 
+    func testBrowserSessionIncludesEffectivePortForLookupBatchAndClear() throws {
+        let state = AppState()
+        for (scheme, defaultPort, alternatePort) in [("https", 443, 8443), ("http", 80, 8080)] {
+            let base = "\(scheme)://secure.example.com"
+            state.setBrowserSession(for: try XCTUnwrap(URL(string: base)), rawCookies: "session=secret", rawUserAgent: nil)
+            XCTAssertEqual(state.browserSession(for: base + ":\(defaultPort)/video")?.originPort, defaultPort)
+            XCTAssertNil(state.browserSession(for: base + ":\(alternatePort)/video"))
+            state.clearBrowserSessionIfOriginChanged(to: base + ":\(defaultPort)/video")
+            XCTAssertNotNil(state.browserSession(for: base))
+            XCTAssertNil(state.consumeBrowserSession(for: [base, base + ":\(alternatePort)/other"]))
+            XCTAssertNil(state.browserSessionOriginPort)
+
+            state.setBrowserSession(for: try XCTUnwrap(URL(string: base + ":\(defaultPort)/source")), rawCookies: nil, rawUserAgent: "Fixture")
+            XCTAssertNotNil(state.consumeBrowserSession(for: [base + "/a", base + ":\(defaultPort)/b"]))
+            state.setBrowserSession(for: try XCTUnwrap(URL(string: base)), rawCookies: "session=secret", rawUserAgent: nil)
+            state.clearBrowserSessionIfOriginChanged(to: base + ":\(alternatePort)/video")
+            XCTAssertNil(state.rawCookiesToDownload)
+            XCTAssertNil(state.browserSessionOriginPort)
+        }
+    }
+
     func testExternalTargetSurvivesBrowserCredentialClears() throws {
         let state = AppState()
         let sheetURL = "https://public.example.com/video/a"

@@ -1,12 +1,15 @@
 {
     "manifest_version": 3,
+    "minimum_chrome_version": "102",
     "name": "__MSG_extension_name__",
     "version": "1.1",
     "default_locale": "en",
     "description": "__MSG_extension_description__",
     "permissions": [
         "contextMenus",
-        "tabs"
+        "tabs",
+        "storage",
+        "alarms"
     ],
     "action": {
         "default_title": "__MSG_context_download__",
