@@ -142,18 +142,16 @@ enum ChromiumCookieReader {
     // Helper extracting the inner buffer call to avoid nesting more than 2 closure expressions (swift:S3087)
     private static func decryptBlock(
         keyBytes: UnsafeRawBufferPointer,
-        keyCount: Int,
         iv: [UInt8],
         ciphertext: Data,
         output: UnsafeMutableRawBufferPointer,
-        capacity: Int,
         count: inout Int
     ) -> CCCryptorStatus {
         var localCount = 0
         let status = ciphertext.withUnsafeBytes { input in
             CCCrypt(CCOperation(kCCDecrypt), CCAlgorithm(kCCAlgorithmAES), CCOptions(kCCOptionPKCS7Padding),
-                    keyBytes.baseAddress, keyCount, iv, input.baseAddress, ciphertext.count,
-                    output.baseAddress, capacity, &localCount)
+                    keyBytes.baseAddress, keyBytes.count, iv, input.baseAddress, ciphertext.count,
+                    output.baseAddress, output.count, &localCount)
         }
         count = localCount
         return status
@@ -166,17 +164,14 @@ enum ChromiumCookieReader {
         let ciphertext = Data(encrypted.dropFirst(3))
         let iv = [UInt8](repeating: 32, count: kCCBlockSizeAES128)
         var plaintext = Data(count: ciphertext.count + kCCBlockSizeAES128)
-        let capacity = plaintext.count
         var count = 0
         let status = plaintext.withUnsafeMutableBytes { output in
             key.withUnsafeBytes { keyBytes in
                 decryptBlock(
                     keyBytes: keyBytes,
-                    keyCount: key.count,
                     iv: iv,
                     ciphertext: ciphertext,
                     output: output,
-                    capacity: capacity,
                     count: &count
                 )
             }

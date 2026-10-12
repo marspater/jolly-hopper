@@ -4,15 +4,15 @@ import ServiceManagement
 @MainActor
 class LoginItemHelper {
     static let shared = LoginItemHelper()
-    
+
     private init() {
         // Private initializer for singleton instance
     }
-    
+
     var isEnabled: Bool {
         SMAppService.mainApp.status == .enabled
     }
-    
+
     func setEnabled(_ enabled: Bool) {
         do {
             if enabled {

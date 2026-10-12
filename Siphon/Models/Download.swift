@@ -28,7 +28,7 @@ class Download: ObservableObject, Identifiable {
     var options: DownloadOptions
     // Owned by this job; retained across pause/resume, never shared by filename.
     var scratchDirectory: URL?
-    
+
     @Published var title: String
     @Published var duration: String?
     @Published var thumbnailURL: URL?
@@ -57,7 +57,7 @@ class Download: ObservableObject, Identifiable {
     @Published var log: String = ""
     @Published var mediaInfo: MediaInfo?
     @Published var diagnostics: DownloadDiagnostics = DownloadDiagnostics()
-    
+
     let sourceDomain: String
 
     var displayProgress: String {
@@ -108,7 +108,7 @@ class Download: ObservableObject, Identifiable {
         }
         return title
     }
-    
+
     // Bolt Performance Optimization: Extract source domain once during initialization to avoid repeated URL parsing and regex evaluations during SwiftUI render passes
     static func extractSourceDomain(from url: String) -> String {
         guard let urlObj = URL(string: url), let host = urlObj.host?.lowercased() else {
@@ -139,15 +139,15 @@ class Download: ObservableObject, Identifiable {
         } else if matchesDomain("dailymotion.com") {
             return "Dailymotion"
         }
-        
+
         let cleaned = host.hasPrefix("www.") ? String(host.dropFirst(4)) : host
         guard let first = cleaned.first else { return cleaned }
         return String(first).uppercased() + cleaned.dropFirst()
     }
-    
+
     func formatSubtitle(lang: LanguageService) -> String {
         var parts: [String] = [sourceDomain]
-        
+
         if options.fileType.isVideo {
             if let res = options.videoResolution, res != .best, res != .worst {
                 parts.append(res.rawValue.replacingOccurrences(of: "r", with: ""))
@@ -173,13 +173,12 @@ class Download: ObservableObject, Identifiable {
                 }
             }
         }
-        
+
         parts.append(options.fileType.rawValue)
-        
+
         if let dur = duration, !dur.isEmpty {
             parts.append(dur)
         }
-        
 
         if options.downloadSubtitles {
             let count = options.subtitleLanguages.count
@@ -193,7 +192,7 @@ class Download: ObservableObject, Identifiable {
 
         return parts.joined(separator: " • ")
     }
-    
+
     enum ErrorActionType: Equatable {
         case fixInSettings
         case retry
@@ -222,7 +221,7 @@ class Download: ObservableObject, Identifiable {
         guard let error = errorMessage ?? (status == .failed ? lang.s("generic_error_desc") : nil) else {
             return nil
         }
-        
+
         let lower = error.lowercased()
         let rawError = log.isEmpty ? error : log
 
@@ -235,10 +234,10 @@ class Download: ObservableObject, Identifiable {
                 rawError: rawError
             )
         }
-        
+
         let isYouTube = url.lowercased().contains("youtube.com") || url.lowercased().contains("youtu.be")
         let isYouTubeSignIn = isYouTube && lower.contains("sign in to confirm")
-        
+
         // Missing dependency, not an unavailable video (its text says "not found").
         if lower.contains("yt-dlp executable not found") {
             return ErrorUXInfo(
@@ -322,7 +321,7 @@ class Download: ObservableObject, Identifiable {
             )
         }
     }
-    
+
     init(url: String, options: DownloadOptions, title: String = "___FETCHING___", id: UUID = UUID(), createdAt: Date = Date()) {
         self.id = id
         self.url = url
@@ -334,7 +333,6 @@ class Download: ObservableObject, Identifiable {
         self.progress = 0
     }
 }
-
 
 enum DownloadStatus: String, Codable {
     case fetching = "fetching"
@@ -376,7 +374,7 @@ enum DownloadStatus: String, Codable {
         var container = encoder.singleValueContainer()
         try container.encode(rawValue)
     }
-    
+
     func title(lang: LanguageService) -> String {
         switch self {
         case .fetching: return lang.s("fetching")
@@ -390,7 +388,7 @@ enum DownloadStatus: String, Codable {
         case .fileExists: return lang.s("file_exists_status")
         }
     }
-    
+
     var color: String {
         switch self {
         case .queued: return "orange"
@@ -405,7 +403,6 @@ enum DownloadStatus: String, Codable {
         }
     }
 }
-
 
 enum HDRAction: String, Codable, CaseIterable, Identifiable {
     case preserveHDR = "preserve_hdr"
@@ -443,7 +440,7 @@ public struct DownloadDiagnostics: Codable, Hashable {
     public var exitStatus: String?
     public var commandLine: String?
     public var timestamp: Date = Date()
-    
+
     public var hdrSummary: String? {
         var tags: [String] = []
         if let dr = dynamicRange, !dr.isEmpty && dr.lowercased() != "sdr" {
@@ -618,7 +615,7 @@ struct DownloadOptions: Codable {
         self.additionalArguments = try container.decodeIfPresent(String.self, forKey: .additionalArguments)
         self.enforcePublicNetworkBoundary = try container.decodeIfPresent(Bool.self, forKey: .enforcePublicNetworkBoundary) ?? false
     }
-    
+
     static var defaultOptions: DownloadOptions {
         let saveFolderURL: URL
         if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil || NSClassFromString("XCTestCase") != nil {
@@ -716,7 +713,6 @@ struct DownloadOptions: Codable {
     }
 }
 
-
 enum MediaFileType: String, Codable, CaseIterable, Identifiable {
     case mp4 = "MP4"
     case webm = "WebM"
@@ -726,33 +722,32 @@ enum MediaFileType: String, Codable, CaseIterable, Identifiable {
     case flac = "FLAC"
     case wav = "WAV"
     case m4a = "M4A"
-    
+
     var id: String { rawValue }
-    
+
     var isVideo: Bool {
         switch self {
         case .mp4, .webm, .mkv: return true
         default: return false
         }
     }
-    
+
     var isAudio: Bool {
         !isVideo
     }
-    
+
     var fileExtension: String {
         rawValue.lowercased()
     }
-    
+
     static var videoTypes: [MediaFileType] {
         [.mp4, .webm, .mkv]
     }
-    
+
     static var audioTypes: [MediaFileType] {
         [.mp3, .opus, .flac, .wav, .m4a]
     }
 }
-
 
 enum AudioQuality: String, Codable, CaseIterable, Identifiable {
     case best
@@ -760,16 +755,16 @@ enum AudioQuality: String, Codable, CaseIterable, Identifiable {
     case q256 = "256kbps"
     case q192 = "192kbps"
     case q128 = "128kbps"
-    
+
     var id: String { rawValue }
-    
+
     func title(lang: LanguageService) -> String {
         if self == .best {
             return lang.s("res_best")
         }
         return rawValue
     }
-    
+
     var ytdlpValue: String {
         switch self {
         case .best: return "0"
@@ -781,7 +776,6 @@ enum AudioQuality: String, Codable, CaseIterable, Identifiable {
     }
 }
 
-
 struct VideoFormat: Codable, Identifiable, Hashable {
     let id: String
     let ext: String
@@ -789,7 +783,7 @@ struct VideoFormat: Codable, Identifiable, Hashable {
     let fps: Double?
     let vcodec: String?
     let filesize: Int64?
-    
+
     var displayName: String {
         var parts: [String] = []
         if let res = resolution { parts.append(res) }
@@ -799,14 +793,13 @@ struct VideoFormat: Codable, Identifiable, Hashable {
     }
 }
 
-
 struct AudioFormat: Codable, Identifiable, Hashable {
     let id: String
     let ext: String
     let abr: Int?
     let acodec: String?
     let filesize: Int64?
-    
+
     var displayName: String {
         var parts: [String] = []
         if let abr = abr { parts.append("\(abr)kbps") }
@@ -814,7 +807,6 @@ struct AudioFormat: Codable, Identifiable, Hashable {
         return parts.isEmpty ? id : parts.joined(separator: " • ")
     }
 }
-
 
 enum VideoResolution: String, Codable, CaseIterable, Identifiable {
     case best
@@ -826,9 +818,9 @@ enum VideoResolution: String, Codable, CaseIterable, Identifiable {
     case r360p
     case r240p
     case worst
-    
+
     var id: String { rawValue }
-    
+
     func title(lang: LanguageService) -> String {
         switch self {
         case .best: return lang.s("res_best")
@@ -842,7 +834,7 @@ enum VideoResolution: String, Codable, CaseIterable, Identifiable {
         case .worst: return lang.s("res_worst")
         }
     }
-    
+
     var ytdlpValue: String {
         switch self {
         case .best: return "bestvideo*+bestaudio/best"
@@ -856,7 +848,7 @@ enum VideoResolution: String, Codable, CaseIterable, Identifiable {
         case .worst: return "worstvideo*+worstaudio/worst"
         }
     }
-    
+
     var ytdlpCombinedValue: String {
         switch self {
         case .best: return "bestvideo*+bestaudio/best"
@@ -886,8 +878,8 @@ enum VideoResolution: String, Codable, CaseIterable, Identifiable {
 }
 
 enum ResolutionFallbackPolicy: String, Codable, CaseIterable, Identifiable {
-    case strictCeiling = "strictCeiling"
-    case allowHigher = "allowHigher"
+    case strictCeiling
+    case allowHigher
 
     var id: String { rawValue }
 
@@ -902,14 +894,14 @@ enum ResolutionFallbackPolicy: String, Codable, CaseIterable, Identifiable {
 }
 
 enum VideoCodec: String, Codable, CaseIterable, Identifiable {
-    case auto = "auto"
-    case h264 = "h264"
-    case h265 = "h265"
-    case vp9 = "vp9"
-    case av1 = "av1"
-    
+    case auto
+    case h264
+    case h265
+    case vp9
+    case av1
+
     var id: String { rawValue }
-    
+
     private var formattedTitleName: String {
         switch self {
         case .auto: return "Best Available"
@@ -923,7 +915,7 @@ enum VideoCodec: String, Codable, CaseIterable, Identifiable {
     func title(lang _: LanguageService) -> String {
         formattedTitleName
     }
-    
+
     var ytdlpFilter: String? {
         switch self {
         case .auto: return nil
@@ -933,7 +925,7 @@ enum VideoCodec: String, Codable, CaseIterable, Identifiable {
         case .av1: return "[vcodec^=av01]"
         }
     }
-    
+
     var compatibilityNote: String? {
         switch self {
         case .h264: return "Best compatibility with all devices"
@@ -945,16 +937,15 @@ enum VideoCodec: String, Codable, CaseIterable, Identifiable {
     }
 }
 
-
 enum ConversionCodec: String, Codable, CaseIterable, Identifiable {
-    case none = "none"
-    case h264 = "h264"
-    case h265 = "h265"
-    case vp9 = "vp9"
-    case av1 = "av1"
-    
+    case none
+    case h264
+    case h265
+    case vp9
+    case av1
+
     var id: String { rawValue }
-    
+
     func title(lang _: LanguageService) -> String {
         switch self {
         case .none: return "None (Do not convert)"
@@ -966,16 +957,15 @@ enum ConversionCodec: String, Codable, CaseIterable, Identifiable {
     }
 }
 
-
 enum AudioCodec: String, Codable, CaseIterable, Identifiable {
-    case auto = "auto"
-    case aac = "aac"
-    case opus = "opus"
-    case mp3 = "mp3"
-    case flac = "flac"
-    
+    case auto
+    case aac
+    case opus
+    case mp3
+    case flac
+
     var id: String { rawValue }
-    
+
     func title(lang: LanguageService) -> String {
         switch self {
         case .auto: return lang.s("codec_auto")
@@ -985,7 +975,7 @@ enum AudioCodec: String, Codable, CaseIterable, Identifiable {
         case .flac: return "FLAC"
         }
     }
-    
+
     var ytdlpFilter: String? {
         switch self {
         case .auto: return nil
@@ -997,14 +987,13 @@ enum AudioCodec: String, Codable, CaseIterable, Identifiable {
     }
 }
 
-
 enum SubtitleFormat: String, Codable, CaseIterable, Identifiable {
-    case srt = "srt"
-    case vtt = "vtt"
-    case ass = "ass"
-    
+    case srt
+    case vtt
+    case ass
+
     var id: String { rawValue }
-    
+
     var displayName: String {
         switch self {
         case .srt: return "SRT"
@@ -1012,21 +1001,20 @@ enum SubtitleFormat: String, Codable, CaseIterable, Identifiable {
         case .ass: return "ASS (Advanced)"
         }
     }
-    
+
     var ytdlpValue: String {
         rawValue
     }
 }
-
 
 enum DownloadPreset: String, Codable, CaseIterable, Identifiable {
     case bestQuality = "best_quality"
     case maxCompatibility = "max_compatibility"
     case smallestSize = "smallest_size"
     case audioOnly = "audio_only"
-    
+
     var id: String { rawValue }
-    
+
     func title(lang: LanguageService) -> String {
         switch self {
         case .bestQuality: return lang.s("preset_best_quality")
@@ -1035,7 +1023,7 @@ enum DownloadPreset: String, Codable, CaseIterable, Identifiable {
         case .audioOnly: return lang.s("preset_audio_only")
         }
     }
-    
+
     func description(lang: LanguageService) -> String {
         switch self {
         case .bestQuality: return lang.s("preset_best_quality_desc")
@@ -1044,7 +1032,7 @@ enum DownloadPreset: String, Codable, CaseIterable, Identifiable {
         case .audioOnly: return lang.s("preset_audio_only_desc")
         }
     }
-    
+
     var videoCodec: VideoCodec {
         switch self {
         case .bestQuality: return .auto
@@ -1053,7 +1041,7 @@ enum DownloadPreset: String, Codable, CaseIterable, Identifiable {
         case .audioOnly: return .auto
         }
     }
-    
+
     var audioCodec: AudioCodec {
         switch self {
         case .bestQuality: return .auto
@@ -1062,7 +1050,7 @@ enum DownloadPreset: String, Codable, CaseIterable, Identifiable {
         case .audioOnly: return .aac
         }
     }
-    
+
     var videoResolution: VideoResolution {
         switch self {
         case .bestQuality: return .best
@@ -1071,7 +1059,7 @@ enum DownloadPreset: String, Codable, CaseIterable, Identifiable {
         case .audioOnly: return .worst
         }
     }
-    
+
     var fileType: MediaFileType {
         switch self {
         case .bestQuality: return .mp4
@@ -1081,7 +1069,6 @@ enum DownloadPreset: String, Codable, CaseIterable, Identifiable {
         }
     }
 }
-
 
 struct CustomPresetConfiguration: Equatable, Sendable {
     var name: String
@@ -1094,30 +1081,6 @@ struct CustomPresetConfiguration: Equatable, Sendable {
     var subtitleFormat: SubtitleFormat = .srt
     var sponsorBlock: Bool = false
     var splitChapters: Bool = false
-
-    init(
-        name: String,
-        videoCodec: VideoCodec,
-        audioCodec: AudioCodec,
-        videoResolution: VideoResolution,
-        fileType: MediaFileType,
-        downloadSubtitles: Bool = false,
-        subtitleLanguage: String = "",
-        subtitleFormat: SubtitleFormat = .srt,
-        sponsorBlock: Bool = false,
-        splitChapters: Bool = false
-    ) {
-        self.name = name
-        self.videoCodec = videoCodec
-        self.audioCodec = audioCodec
-        self.videoResolution = videoResolution
-        self.fileType = fileType
-        self.downloadSubtitles = downloadSubtitles
-        self.subtitleLanguage = subtitleLanguage
-        self.subtitleFormat = subtitleFormat
-        self.sponsorBlock = sponsorBlock
-        self.splitChapters = splitChapters
-    }
 }
 
 struct CustomPreset: Codable, Identifiable, Equatable {
@@ -1135,7 +1098,7 @@ struct CustomPreset: Codable, Identifiable, Equatable {
     var sponsorBlock: Bool?
 
     var splitChapters: Bool?
-    
+
     enum CodingKeys: String, CodingKey {
         case id, name, videoCodec, audioCodec, videoResolution, fileType, subtitleLanguage, subtitleFormat, sponsorBlock, splitChapters
         case downloadSubtitles = "embedSubtitles"
@@ -1154,7 +1117,7 @@ struct CustomPreset: Codable, Identifiable, Equatable {
         self.sponsorBlock = configuration.sponsorBlock
         self.splitChapters = configuration.splitChapters
     }
-    
+
     init(name: String, videoCodec: VideoCodec, audioCodec: AudioCodec, videoResolution: VideoResolution, fileType: MediaFileType, downloadSubtitles: Bool = false, subtitleLanguage: String = "", subtitleFormat: SubtitleFormat = .srt, sponsorBlock: Bool = false, splitChapters: Bool = false) {
         self.init(configuration: CustomPresetConfiguration(
             name: name,
@@ -1169,7 +1132,7 @@ struct CustomPreset: Codable, Identifiable, Equatable {
             splitChapters: splitChapters
         ))
     }
-    
+
     static func loadAll() -> [CustomPreset] {
         guard let data = UserDefaults.standard.data(forKey: UserDefaultsKeys.customPresets) else {
             return []
@@ -1182,7 +1145,7 @@ struct CustomPreset: Codable, Identifiable, Equatable {
 
         return presets
     }
-    
+
     static func saveAll(_ presets: [CustomPreset]) {
         do {
             let data = try JSONEncoder().encode(presets)
@@ -1192,10 +1155,6 @@ struct CustomPreset: Codable, Identifiable, Equatable {
         }
     }
 }
-
-
-
-
 
 struct MediaInfo: Codable {
     let id: String
@@ -1218,7 +1177,7 @@ struct MediaInfo: Codable {
     let originalUrl: String?
     let formatProtocol: String?
     let manifestUrl: String?
-    
+
     // Bolt Performance Optimization: Pre-calculate max format height and HDR summary once upon initialization
     // to prevent repetitive O(N) format array iterations and string parsing during SwiftUI view redraws.
     let maxFormatHeight: Int?
@@ -1251,7 +1210,7 @@ struct MediaInfo: Codable {
         case formatProtocol = "protocol"
         case manifestUrl = "manifest_url"
     }
-    
+
     init(
         id: String,
         title: String,
@@ -1397,20 +1356,20 @@ struct MediaInfo: Codable {
             manifestUrl: nil
         )
     }
-    
+
     var durationString: String? {
         guard let duration = duration else { return nil }
         let hours = Int(duration) / 3600
         let minutes = (Int(duration) % 3600) / 60
         let seconds = Int(duration) % 60
-        
+
         if hours > 0 {
             return String(format: "%d:%02d:%02d", hours, minutes, seconds)
         } else {
             return String(format: "%d:%02d", minutes, seconds)
         }
     }
-    
+
     var thumbnailURL: URL? {
         if let thumbnail = thumbnail, !thumbnail.isEmpty {
             let lower = thumbnail.lowercased()
@@ -1418,11 +1377,11 @@ struct MediaInfo: Codable {
                 return URL(string: thumbnail)
             }
         }
-        
+
         if id.count == 11 {
             return URL(string: "https://i.ytimg.com/vi/\(id)/mqdefault.jpg")
         }
-        
+
         return nil
     }
 
@@ -1445,9 +1404,9 @@ struct MediaInfo: Codable {
     func resolveSelectedFormats(options: DownloadOptions) -> [MediaFormat] {
         let formats = downloadableFormats
         guard !formats.isEmpty else { return [] }
-        
+
         // Bolt Performance Optimization: Lazily filter and sort audio formats at most once across resolution branches
-        var cachedBestAudio: MediaFormat?? = nil
+        var cachedBestAudio: MediaFormat??
         let getBestAudio: () -> MediaFormat? = {
             if let cached = cachedBestAudio {
                 return cached
@@ -1468,12 +1427,12 @@ struct MediaInfo: Codable {
            let matched = resolveCustomFormatSelection(customId: customId, in: formats, options: options, getBestAudio: getBestAudio) {
             return matched
         }
-        
+
         // 2. If audio-only download:
         if options.fileType.isAudio, let best = getBestAudio() {
             return [best]
         }
-        
+
         // 3. Video formats: filter by hard constraints (codec & resolution), then rank deterministically
         let candidateVideos = formats.filter { !$0.isAudioOnly }
         let sortedVideos = rankCandidateVideos(candidateVideos, options: options)
@@ -1563,12 +1522,12 @@ struct MediaInfo: Codable {
         if !resolved.isEmpty {
             return resolved.contains(where: { $0.isFragmented })
         }
-        
+
         if let customId = options.selectedFormatId?.lowercased(),
            customId.contains("dash") || customId.contains("m3u8") || customId.contains("hls") {
             return true
         }
-        
+
         return isFragmented
     }
 
@@ -1618,16 +1577,14 @@ public extension String {
     /// Decodes named, decimal (e.g. &#039; or &#39;), and hexadecimal (e.g. &#x27;) HTML entities into plain text.
     func decodingHTMLEntities() -> String {
         guard self.contains("&") else { return self }
-        
+
         var result = self
-        
+
         // Fast replace common named entities using static cached tuples
-        for (entity, char) in String.namedHTMLEntities {
-            if result.contains(entity) {
-                result = result.replacingOccurrences(of: entity, with: char)
-            }
+        for (entity, char) in String.namedHTMLEntities where result.contains(entity) {
+            result = result.replacingOccurrences(of: entity, with: char)
         }
-        
+
         // Bolt Performance Optimization: Perform numeric entity replacements using a single NSMutableString allocation
         if result.contains("&#") {
             let mutable = NSMutableString(string: result)
@@ -1656,7 +1613,7 @@ public extension String {
 
             result = mutable as String
         }
-        
+
         return result
     }
 }
@@ -1825,17 +1782,17 @@ struct MediaFormat: Codable, Identifiable, Hashable {
         } else if (formatNote ?? "").localizedCaseInsensitiveContains("dolby") || (formatNote ?? "").localizedCaseInsensitiveContains("dv") {
             tags.append("Dolby Vision")
         }
-        
+
         if let depth = bitDepth, depth >= 10 {
             tags.append("\(depth)-bit")
         } else if (formatNote ?? "").localizedCaseInsensitiveContains("10bit") || (formatNote ?? "").localizedCaseInsensitiveContains("10-bit") {
             tags.append("10-bit")
         }
-        
+
         if let cs = colorSpace, cs.lowercased().contains("2020") {
             tags.append("BT.2020")
         }
-        
+
         return tags.isEmpty ? nil : tags.joined(separator: " • ")
     }
 
@@ -1850,12 +1807,12 @@ struct MediaFormat: Codable, Identifiable, Hashable {
         }
         return false
     }
-    
+
     // Bolt Performance Optimization: Zero-allocation backward string scan for height resolution digits and case-insensitive pattern matching to eliminate CharacterSet, Array, and String allocations during high-frequency format sorting passes
     var parsedHeight: Int? {
         if let res = resolution {
-            var endIdx: String.Index? = nil
-            var startIdx: String.Index? = nil
+            var endIdx: String.Index?
+            var startIdx: String.Index?
             var curr = res.endIndex
 
             while curr > res.startIndex {
@@ -1899,7 +1856,7 @@ struct MediaFormat: Codable, Identifiable, Hashable {
     }
 
     // MARK: - Deterministic Format Ranking & Selection
-    
+
     struct AudioRank {
         let langPref: Int
         let matchesCodec: Bool
@@ -1975,7 +1932,7 @@ struct MediaFormat: Codable, Identifiable, Hashable {
         // 8. Channels
         return ra.channels > rb.channels
     }
-    
+
     struct VideoRank {
         let matchesCodec: Bool
         let meetsResolution: Bool
@@ -1986,7 +1943,7 @@ struct MediaFormat: Codable, Identifiable, Hashable {
         let fps: Double
         let size: Int64
     }
-    
+
     func videoRank(options: DownloadOptions) -> VideoRank {
         let matchesCodec: Bool = {
             guard let req = options.videoCodec, req != .auto else { return true }
@@ -2023,11 +1980,11 @@ struct MediaFormat: Codable, Identifiable, Hashable {
             size: sz
         )
     }
-    
+
     static func compareVideoFormats(_ a: MediaFormat, _ b: MediaFormat, options: DownloadOptions) -> Bool {
         let ra = a.videoRank(options: options)
         let rb = b.videoRank(options: options)
-        
+
         // 1. Hard constraint: requested codec match
         if ra.matchesCodec != rb.matchesCodec {
             return ra.matchesCodec
@@ -2070,7 +2027,7 @@ struct MediaFormat: Codable, Identifiable, Hashable {
         var score: Double = 0
         let h = parsedHeight ?? 0
         score += Double(h) * 10000.0
-        
+
         if let bitrate = tbr ?? vbr ?? abr {
             score += bitrate
         }
@@ -2106,49 +2063,49 @@ struct MediaFormat: Codable, Identifiable, Hashable {
     func audioQualityScore(options: DownloadOptions) -> Double {
         guard acodec != "none" else { return 0.0 }
         var score: Double = 0.0
-        
+
         // Huge preference for original track over dubbed foreign language tracks
         if isOriginalOrPrimaryAudio {
             score += 10_000_000.0
         } else {
             score -= 5_000_000.0
         }
-        
+
         if let lp = languagePreference {
             score += Double(lp) * 100_000.0
         }
-        
+
         if let pref = preference {
             score += Double(pref) * 10_000.0
         }
-        
+
         if let sp = sourcePreference {
             score += Double(sp) * 1_000.0
         }
-        
+
         // Codec match preference if requested
         if let requestedCodec = options.audioCodec, requestedCodec != .auto,
            let ac = acodec?.lowercased(), ac.contains(requestedCodec.rawValue.lowercased()) {
             score += 500_000.0
         }
-        
+
         // Bitrate
         if let bitrate = abr ?? tbr {
             score += bitrate * 10.0
         }
-        
+
         // Channels
         if let channels = audioChannels {
             score += Double(channels) * 5.0
         }
-        
+
         if needsTesting == true {
             score -= 1_000_000.0
         }
-        
+
         return score
     }
-    
+
     var isVideoOnly: Bool {
         if acodec == "none" { return true }
         if let note = formatNote?.lowercased(), note.contains("video only") {
@@ -2156,7 +2113,7 @@ struct MediaFormat: Codable, Identifiable, Hashable {
         }
         return false
     }
-    
+
     var isAudioOnly: Bool {
         if vcodec == "none" { return true }
         let lowerExt = ext.lowercased()
@@ -2201,14 +2158,13 @@ struct ChapterInfo: Codable {
     let startTime: Double
     let endTime: Double
     let title: String
-    
+
     enum CodingKeys: String, CodingKey {
         case startTime = "start_time"
         case endTime = "end_time"
         case title
     }
 }
-
 
 struct HistoricDownload: Codable, Identifiable {
     let id: UUID
@@ -2228,7 +2184,6 @@ struct HistoricDownload: Codable, Identifiable {
     let requiresAdvancedArgumentsReview: Bool?
     let hasPartialFailure: Bool?
     let options: DownloadOptions
-
 
     enum CodingKeys: String, CodingKey {
         case id, url, title, filePath, filePaths, downloadDate, fileType, status, thumbnailURL, duration, errorMessage, log, progress, scratchDirectoryPath, browserCookieSource, requiresAdvancedArgumentsReview, hasPartialFailure, options
