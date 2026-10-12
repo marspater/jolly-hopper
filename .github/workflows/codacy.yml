@@ -28,29 +28,23 @@ jobs:
 
     name: Codacy Security Scan (${{ matrix.tool }})
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
-        # Run the default suite alongside specific source-security analyzers.
-        tool: [default, opengrep, cppcheck]
+        # Explicit source-security analyzers, one per parallel job. Do not run
+        # the tokenless "default" suite: it ignores .codacy.yml engine toggles,
+        # pulls ~25 analyzer images serially (~7 min), and always reports an
+        # incomplete analysis (Trivy has no default patterns, legacy ESLint and
+        # Tailor crash on this repo). Linting is covered by Codacy's GitHub app.
+        tool: [opengrep, cppcheck, flawfinder]
 
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Run default Codacy analysis suite
-        if: matrix.tool == 'default'
-        uses: codacy/codacy-analysis-cli-action@d43360362776a6789b47b99ae8973510854e2d3d # master 2026-03-25 (newer than tag v4.4.7)
-        with:
-          verbose: true
-          output: codacy-results.sarif
-          format: sarif
-          fail-if-incomplete: true
-
-      - name: Run specific Codacy analyzer
+      - name: Run Codacy analyzer
         id: codacy
-        if: matrix.tool != 'default'
         uses: codacy/codacy-analysis-cli-action@d43360362776a6789b47b99ae8973510854e2d3d # master 2026-03-25 (newer than tag v4.4.7)
         with:
           verbose: true
