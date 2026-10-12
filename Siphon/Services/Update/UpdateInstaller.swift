@@ -5,6 +5,7 @@
 
 import Foundation
 import AppKit
+import Darwin
 
 public enum UpdateInstallError: LocalizedError, Sendable {
     case packageNotFound(URL)
@@ -50,7 +51,7 @@ public final class UpdateInstaller: Sendable {
     }
 
     /// Installs a downloaded package file (.dmg, .zip, or .app) into the running application bundle location.
-    /// Swift owns all lifecycle phases: stage -> mount -> locate -> verify -> backup -> replace -> rollback -> relaunch.
+    /// Swift owns staging, verification, atomic exchange, rollback, and relaunch.
     public func install(
         packageURL: URL,
         expectedChecksum: String? = nil,
@@ -154,7 +155,7 @@ public final class UpdateInstaller: Sendable {
             throw UpdateInstallError.verificationFailed(error.localizedDescription)
         }
 
-        // 5. Backup current app and perform atomic replacement with verification and rollback
+        // 5. Prepare a verified sibling and atomically exchange it with the current app.
         let currentAppURL = Bundle.main.bundleURL
         try Self.replaceAppBundle(
             currentAppURL: currentAppURL,
@@ -165,7 +166,9 @@ public final class UpdateInstaller: Sendable {
         )
     }
 
-    /// Performs an atomic backup, replacement, post-copy bundle verification, and rollback if failed.
+    /// Copies and verifies a complete sibling before atomically exchanging the
+    /// two names. At interruption the installed path contains the old or new
+    /// complete bundle; the other bundle remains at the sibling backup path.
     public static func replaceAppBundle(
         currentAppURL: URL,
         stagedAppURL: URL,
@@ -173,59 +176,70 @@ public final class UpdateInstaller: Sendable {
         allowAdHoc: Bool = false,
         fileManager fm: FileManager = .default
     ) throws {
-        let backupURL = currentAppURL.deletingLastPathComponent().appendingPathComponent(".Siphon_Backup_\(UUID().uuidString).app")
-        var didMoveCurrentToBackup = false
-
-        do {
-            try fm.moveItem(at: currentAppURL, to: backupURL)
-            didMoveCurrentToBackup = true
-
-            try fm.copyItem(at: stagedAppURL, to: currentAppURL)
-
+        try replaceVerifiedAppBundle(currentAppURL: currentAppURL, stagedAppURL: stagedAppURL, fileManager: fm) { bundleURL in
             try UpdateVerifier.verifyAppBundle(
-                bundleURL: currentAppURL,
+                bundleURL: bundleURL,
                 expectedTeamID: expectedTeamID,
                 allowAdHoc: allowAdHoc
             )
+        }
+    }
 
-            if fm.fileExists(atPath: backupURL.path) {
+    /// Internal seams allow filesystem/verification failure tests without
+    /// weakening the production verifier or requiring signed fixture apps.
+    static func replaceVerifiedAppBundle(
+        currentAppURL: URL,
+        stagedAppURL: URL,
+        fileManager fm: FileManager = .default,
+        exchange: (URL, URL) throws -> Void = exchangeAppBundles,
+        verify: (URL) throws -> Void
+    ) throws {
+        let backupURL = currentAppURL.deletingLastPathComponent().appendingPathComponent(".Siphon_Backup_\(UUID().uuidString).app")
+        var exchanged = false
+        var preserveBackup = false
+        defer {
+            if !preserveBackup && fm.fileExists(atPath: backupURL.path) {
                 do {
                     try fm.removeItem(at: backupURL)
                 } catch {
-                    Self.log("Update installed, but the temporary backup could not be removed: \(error.localizedDescription)", level: .warning)
+                    Self.log("Updater could not remove temporary bundle \(backupURL.lastPathComponent): \(error.localizedDescription)", level: .warning)
                 }
             }
+        }
+
+        do {
+            // Copy on the destination filesystem, leaving the installed app
+            // intact throughout staging and verification.
+            try fm.copyItem(at: stagedAppURL, to: backupURL)
+            try verify(backupURL)
+            try exchange(currentAppURL, backupURL)
+            exchanged = true
+            try verify(currentAppURL)
         } catch {
             let replacementError = error
-            var rollbackFailures: [String] = []
-
-            if didMoveCurrentToBackup {
-                if fm.fileExists(atPath: currentAppURL.path) {
-                    do {
-                        try fm.removeItem(at: currentAppURL)
-                    } catch {
-                        rollbackFailures.append("could not remove failed replacement: \(error.localizedDescription)")
-                    }
-                }
-
-                if fm.fileExists(atPath: backupURL.path) {
-                    do {
-                        try fm.moveItem(at: backupURL, to: currentAppURL)
-                    } catch {
-                        rollbackFailures.append("could not restore backup: \(error.localizedDescription)")
-                    }
-                } else {
-                    rollbackFailures.append("backup bundle was missing")
+            if exchanged {
+                do {
+                    // Rollback is also a single exchange, never delete+move.
+                    try exchange(currentAppURL, backupURL)
+                } catch {
+                    preserveBackup = true
+                    throw UpdateInstallError.rollbackFailed(
+                        "Replacement failed: \(replacementError.localizedDescription). Rollback failed: \(error.localizedDescription). Original bundle retained at \(backupURL.path)."
+                    )
                 }
             }
-
-            if !rollbackFailures.isEmpty {
-                throw UpdateInstallError.rollbackFailed(
-                    "Replacement failed: \(replacementError.localizedDescription). Rollback errors: \(rollbackFailures.joined(separator: "; "))."
-                )
-            }
-
             throw UpdateInstallError.replacementFailed("Failed to replace application: \(replacementError.localizedDescription)")
+        }
+    }
+
+    static func exchangeAppBundles(_ currentAppURL: URL, _ replacementURL: URL) throws {
+        let result = currentAppURL.withUnsafeFileSystemRepresentation { currentPath in
+            replacementURL.withUnsafeFileSystemRepresentation { replacementPath in
+                renameatx_np(AT_FDCWD, currentPath, AT_FDCWD, replacementPath, UInt32(RENAME_SWAP))
+            }
+        }
+        guard result == 0 else {
+            throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno))
         }
     }
 
