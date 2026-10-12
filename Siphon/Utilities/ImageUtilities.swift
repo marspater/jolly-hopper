@@ -65,10 +65,10 @@ public enum ImageUtilities {
 
         let scaledWidth = sourceSize.width * scale
         let scaledHeight = sourceSize.height * scale
-        let x = (targetSize - scaledWidth) / 2.0
-        let y = (targetSize - scaledHeight) / 2.0
+        let originX = (targetSize - scaledWidth) / 2.0
+        let originY = (targetSize - scaledHeight) / 2.0
 
-        let destRect = NSRect(x: x, y: y, width: scaledWidth, height: scaledHeight)
+        let destRect = NSRect(x: originX, y: originY, width: scaledWidth, height: scaledHeight)
         let srcRect = NSRect(origin: .zero, size: sourceSize)
 
         image.draw(in: destRect, from: srcRect, operation: .copy, fraction: 1.0)

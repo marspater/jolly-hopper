@@ -55,7 +55,7 @@ class Download: ObservableObject, Identifiable {
     @Published var hasPartialFailure = false
     @Published var errorMessage: String?
     @Published var log: String = ""
-    @Published var mediaInfo: MediaInfo? = nil
+    @Published var mediaInfo: MediaInfo?
     @Published var diagnostics: DownloadDiagnostics = DownloadDiagnostics()
     
     let sourceDomain: String
@@ -1463,26 +1463,10 @@ struct MediaInfo: Codable {
         }
 
         // 1. If explicit selectedFormatId is specified (can be single like "137" or combined like "137+140"):
-        if let customId = options.selectedFormatId?.trimmingCharacters(in: .whitespacesAndNewlines), !customId.isEmpty {
-            // Bolt Performance Optimization: Use Substring `split` to avoid allocating intermediate String arrays.
-            let ids = customId.split(separator: "+").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
-            let matched = ids.compactMap { id in formats.first(where: { $0.formatId == id }) }
-            if matched.count == ids.count && !matched.isEmpty {
-                if matched.count == 2 {
-                    let hasVideo = matched.contains(where: { !$0.isAudioOnly })
-                    let hasAudio = matched.contains(where: { $0.isAudioOnly || $0.vcodec == "none" || $0.vcodec == nil })
-                    if hasVideo && hasAudio {
-                        return matched
-                    }
-                } else if matched.count == 1 {
-                    let single = matched[0]
-                    if single.isVideoOnly && options.fileType.isVideo,
-                       let bestAudio = getBestAudio() {
-                        return [single, bestAudio]
-                    }
-                    return matched
-                }
-            }
+        if let customId = options.selectedFormatId?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !customId.isEmpty,
+           let matched = resolveCustomFormatSelection(customId: customId, in: formats, options: options, getBestAudio: getBestAudio) {
+            return matched
         }
         
         // 2. If audio-only download:
@@ -1492,6 +1476,56 @@ struct MediaInfo: Codable {
         
         // 3. Video formats: filter by hard constraints (codec & resolution), then rank deterministically
         let candidateVideos = formats.filter { !$0.isAudioOnly }
+        let sortedVideos = rankCandidateVideos(candidateVideos, options: options)
+
+        if let bestVideo = sortedVideos.first {
+            if bestVideo.isVideoOnly, let bestAudio = getBestAudio() {
+                return [bestVideo, bestAudio]
+            }
+            return [bestVideo]
+        }
+
+        return []
+    }
+
+    private func resolveCustomFormatSelection(
+        customId: String,
+        in formats: [MediaFormat],
+        options: DownloadOptions,
+        getBestAudio: () -> MediaFormat?
+    ) -> [MediaFormat]? {
+        // Bolt Performance Optimization: Use Substring `split` to avoid allocating intermediate String arrays.
+        let ids = customId.split(separator: "+").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+        let matched = ids.compactMap { id in formats.first(where: { $0.formatId == id }) }
+        guard matched.count == ids.count, !matched.isEmpty else { return nil }
+
+        if matched.count == 2 {
+            return isValidDualFormatPair(matched) ? matched : nil
+        }
+        if matched.count == 1 {
+            return resolveSingleCustomFormat(matched[0], options: options, getBestAudio: getBestAudio)
+        }
+        return nil
+    }
+
+    private func isValidDualFormatPair(_ matched: [MediaFormat]) -> Bool {
+        let hasVideo = matched.contains(where: { !$0.isAudioOnly })
+        let hasAudio = matched.contains(where: { $0.isAudioOnly || $0.vcodec == "none" || $0.vcodec == nil })
+        return hasVideo && hasAudio
+    }
+
+    private func resolveSingleCustomFormat(
+        _ single: MediaFormat,
+        options: DownloadOptions,
+        getBestAudio: () -> MediaFormat?
+    ) -> [MediaFormat] {
+        if single.isVideoOnly, options.fileType.isVideo, let bestAudio = getBestAudio() {
+            return [single, bestAudio]
+        }
+        return [single]
+    }
+
+    private func rankCandidateVideos(_ candidateVideos: [MediaFormat], options: DownloadOptions) -> [MediaFormat] {
         let eligibleVideos = candidateVideos.filter { video in
             guard let maxH = options.videoResolution?.maxHeight else { return true }
             if let h = video.parsedHeight {
@@ -1499,27 +1533,17 @@ struct MediaInfo: Codable {
             }
             return false
         }
-        let sortedVideos: [MediaFormat]
         if !eligibleVideos.isEmpty {
-            sortedVideos = eligibleVideos.sorted { MediaFormat.compareVideoFormats($0, $1, options: options) }
+            return eligibleVideos.sorted { MediaFormat.compareVideoFormats($0, $1, options: options) }
         } else if options.resolutionFallbackPolicy == .allowHigher {
             // User explicitly configured policy to allow higher resolution exceeding ceiling
-            sortedVideos = candidateVideos.sorted { MediaFormat.compareVideoFormats($0, $1, options: options) }
+            return candidateVideos.sorted { MediaFormat.compareVideoFormats($0, $1, options: options) }
         } else {
             // Strict ceiling (default): When no format with known height <= ceiling exists,
             // permit candidates with unknown/unspecified height (uncertain), but strictly reject formats with known height > ceiling
             let unknownHeightVideos = candidateVideos.filter { $0.parsedHeight == nil }
-            sortedVideos = unknownHeightVideos.sorted { MediaFormat.compareVideoFormats($0, $1, options: options) }
+            return unknownHeightVideos.sorted { MediaFormat.compareVideoFormats($0, $1, options: options) }
         }
-        
-        if let bestVideo = sortedVideos.first {
-            if bestVideo.isVideoOnly, let bestAudio = getBestAudio() {
-                return [bestVideo, bestAudio]
-            }
-            return [bestVideo]
-        }
-        
-        return []
     }
 
     func formatResolutionExceedsCeiling(options: DownloadOptions) -> (exceeded: Bool, requestedHeight: Int?, actualHeight: Int?) {
