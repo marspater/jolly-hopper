@@ -1,13 +1,5 @@
 ---
 engines:
-  eslint:
-    enabled: false
-  eslint-8:
-    enabled: false
-  checkov:
-    enabled: false
-  trivy:
-    enabled: false
   markdownlint:
     enabled: false
   remark-lint:
