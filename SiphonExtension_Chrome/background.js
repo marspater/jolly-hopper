@@ -45,16 +45,20 @@ async function closeDeepLinkTab(tabId, record) {
 }
 
 async function reconcileDeepLinkTabs(closeAll = false) {
-    const records = await chrome.storage.session.get(null);
-    for (const [key, record] of Object.entries(records)) {
-        if (!key.startsWith(DEEP_LINK_TAB_PREFIX)) continue;
-        const tabId = Number(key.slice(DEEP_LINK_TAB_PREFIX.length));
-        if (!Number.isInteger(tabId) || !Number.isFinite(record.deadline)) continue;
-        if (closeAll || record.deadline <= Date.now()) {
-            await closeDeepLinkTab(tabId, record);
-        } else {
-            await chrome.alarms.create(key, { when: record.deadline });
+    try {
+        const records = await chrome.storage.session.get(null);
+        for (const [key, record] of Object.entries(records)) {
+            if (!key.startsWith(DEEP_LINK_TAB_PREFIX)) continue;
+            const tabId = Number(key.slice(DEEP_LINK_TAB_PREFIX.length));
+            if (!Number.isInteger(tabId) || !Number.isFinite(record.deadline)) continue;
+            if (closeAll || record.deadline <= Date.now()) {
+                await closeDeepLinkTab(tabId, record);
+            } else {
+                await chrome.alarms.create(key, { when: record.deadline });
+            }
         }
+    } catch (error) {
+        reportCleanupFailure(error);
     }
 }
 
