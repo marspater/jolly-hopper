@@ -3784,7 +3784,7 @@ public struct DownloadResult: Sendable {
         // that as a new client on every request. Automatic discovery is only used
         // when no usable browser was selected.
         if result.isEmpty {
-            let installedSet = Set(installed.lazy.map { $0.lowercased() })
+            let installedSet = Set(installed.map { $0.lowercased() })
             for browser in ["chrome", "brave", "edge", "vivaldi", "chromium", "firefox", "opera", "safari", "helium", "chromium-based"]
                 where installedSet.contains(browser) {
                 appendBrowser(browser)

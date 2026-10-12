@@ -51,7 +51,7 @@ public enum SupportedBrowser: String, CaseIterable, Identifiable, Sendable {
     }
 
     /// Pre-compiled set of all supported browser raw values to eliminate heap allocation during validation passes.
-    nonisolated public static let allowedRawValues: Set<String> = Set(allCases.lazy.map(\.rawValue))
+    nonisolated public static let allowedRawValues: Set<String> = Set(allCases.map(\.rawValue))
 }
 
 public actor BrowserUtils {
