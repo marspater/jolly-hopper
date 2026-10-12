@@ -2323,12 +2323,12 @@ final class YtdlpServiceTests: XCTestCase {
         state.addCandidatePath(ghostFile.path)
 
         let candidates = state.getCandidatePaths()
-        let fm = FileManager.default
+        let fileManager = FileManager.default
         var finalURL: URL? = nil
         for candidate in candidates.reversed() {
             let rawURL = candidate.hasPrefix("/") ? URL(fileURLWithPath: candidate) : sessionFolder.appendingPathComponent(candidate)
             let resolved = rawURL.standardizedFileURL.resolvingSymlinksInPath()
-            if fm.fileExists(atPath: resolved.path),
+            if fileManager.fileExists(atPath: resolved.path),
                let values = try? resolved.resourceValues(forKeys: [.isRegularFileKey]),
                values.isRegularFile == true,
                YtdlpService.isMediaFilePath(resolved.path),
@@ -2339,7 +2339,7 @@ final class YtdlpServiceTests: XCTestCase {
         }
 
         XCTAssertNil(finalURL, "Resolution must fail when candidate does not exist")
-        XCTAssertTrue(fm.fileExists(atPath: unrelatedFile.path), "Unrelated B.mp4 must remain untouched")
+        XCTAssertTrue(fileManager.fileExists(atPath: unrelatedFile.path), "Unrelated B.mp4 must remain untouched")
         let unrelatedContent = try String(contentsOf: unrelatedFile, encoding: .utf8)
         XCTAssertEqual(unrelatedContent, "UNRELATED_USER_FILE")
     }

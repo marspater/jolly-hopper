@@ -174,15 +174,15 @@ final class UpdateVerifierTests: XCTestCase {
     }
 
     private func makeReplacementFixtures() throws -> (current: URL, staged: URL) {
-        let fm = FileManager.default
-        let root = fm.temporaryDirectory.appendingPathComponent("updater_transaction_\(UUID().uuidString)")
+        let fileManager = FileManager.default
+        let root = fileManager.temporaryDirectory.appendingPathComponent("updater_transaction_\(UUID().uuidString)")
         let current = root.appendingPathComponent("Current.app")
         let staged = root.appendingPathComponent("Staged.app")
         for (url, version) in [(current, "old"), (staged, "new")] {
-            try fm.createDirectory(at: url, withIntermediateDirectories: true)
+            try fileManager.createDirectory(at: url, withIntermediateDirectories: true)
             try Data(version.utf8).write(to: url.appendingPathComponent("version.txt"))
         }
-        addTeardownBlock { try fm.removeItem(at: root) }
+        addTeardownBlock { try fileManager.removeItem(at: root) }
         return (current, staged)
     }
 

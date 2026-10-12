@@ -382,9 +382,9 @@ class LoggerService: ObservableObject {
         }
 
         return try await Task.detached(priority: .userInitiated) { [fileURL] () -> URL in
-            let fm = FileManager.default
+            let fileManager = FileManager.default
             let exportFilename = "Siphon_Exported_Logs_\(Int(Date().timeIntervalSince1970)).log"
-            let exportURL = fm.temporaryDirectory.appendingPathComponent(exportFilename)
+            let exportURL = fileManager.temporaryDirectory.appendingPathComponent(exportFilename)
 
             let rawData: Data
             if let handle = try? FileHandle(forReadingFrom: fileURL) {
@@ -400,9 +400,9 @@ class LoggerService: ObservableObject {
                 throw NSError(domain: "LoggerService", code: 1, userInfo: [NSLocalizedDescriptionKey: "Failed to encode sanitized logs"])
             }
 
-            if !fm.createFile(atPath: exportURL.path, contents: data, attributes: [.posixPermissions: 0o600]) {
+            if !fileManager.createFile(atPath: exportURL.path, contents: data, attributes: [.posixPermissions: 0o600]) {
                 try sanitized.write(to: exportURL, atomically: true, encoding: .utf8)
-                try? fm.setAttributes([.posixPermissions: 0o600], ofItemAtPath: exportURL.path)
+                try? fileManager.setAttributes([.posixPermissions: 0o600], ofItemAtPath: exportURL.path)
             }
 
             return exportURL

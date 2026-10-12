@@ -295,13 +295,13 @@ public final class AppState: ObservableObject {
     @Published public var showAddDownloadSheet: Bool = false
     @Published public var selectedNavItem: NavigationItem = .home
     @Published public var urlToDownload: String = ""
-    @Published public private(set) var rawCookiesToDownload: String? = nil
-    @Published public private(set) var rawUserAgentToDownload: String? = nil
-    @Published public private(set) var browserCookieSourceToDownload: String? = nil
-    @Published public private(set) var browserSessionOriginScheme: String? = nil
-    @Published public private(set) var browserSessionOriginHost: String? = nil
-    @Published public private(set) var browserSessionOriginPort: Int? = nil
-    @Published public private(set) var externalTargetURL: String? = nil
+    @Published public private(set) var rawCookiesToDownload: String?
+    @Published public private(set) var rawUserAgentToDownload: String?
+    @Published public private(set) var browserCookieSourceToDownload: String?
+    @Published public private(set) var browserSessionOriginScheme: String?
+    @Published public private(set) var browserSessionOriginHost: String?
+    @Published public private(set) var browserSessionOriginPort: Int?
+    @Published public private(set) var externalTargetURL: String?
 
     @Published var ytdlpVersion: String?
     @Published var showWhatsNew: Bool = false

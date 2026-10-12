@@ -86,13 +86,13 @@ public final class SecureCookieFile: @unchecked Sendable {
     /// Validates that the cookie file exists, is a regular file with restricted permissions,
     /// and contains a valid Netscape header.
     public func validate() throws {
-        let fm = FileManager.default
+        let fileManager = FileManager.default
         var isDir: ObjCBool = false
-        guard fm.fileExists(atPath: fileURL.path, isDirectory: &isDir), !isDir.boolValue else {
+        guard fileManager.fileExists(atPath: fileURL.path, isDirectory: &isDir), !isDir.boolValue else {
             throw SecureCookieError.fileNotFound(fileURL)
         }
 
-        let attrs = try fm.attributesOfItem(atPath: fileURL.path)
+        let attrs = try fileManager.attributesOfItem(atPath: fileURL.path)
         if let type = attrs[.type] as? FileAttributeType, type != .typeRegular {
             throw SecureCookieError.notARegularFile(fileURL)
         }
@@ -192,10 +192,10 @@ public final class SecureCookieFile: @unchecked Sendable {
                     let key = sanitizeCookieToken(parts[0].trimmingCharacters(in: .whitespacesAndNewlines))
                     let value = sanitizeCookieToken(parts[1].trimmingCharacters(in: .whitespacesAndNewlines))
                     if !key.isEmpty && !value.isEmpty {
-                        for d in uniqueDomains {
-                            let mapKey = CookieKey(domain: d.lowercased(), path: "/", name: key)
+                        for domain in uniqueDomains {
+                            let mapKey = CookieKey(domain: domain.lowercased(), path: "/", name: key)
                             cookieMap[mapKey] = CookieEntry(
-                                domain: d,
+                                domain: domain,
                                 includeSubdomains: true,
                                 path: "/",
                                 isSecure: requireSecureTransport,
