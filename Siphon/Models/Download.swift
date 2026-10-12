@@ -1497,23 +1497,32 @@ struct MediaInfo: Codable {
         // Bolt Performance Optimization: Use Substring `split` to avoid allocating intermediate String arrays.
         let ids = customId.split(separator: "+").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
         let matched = ids.compactMap { id in formats.first(where: { $0.formatId == id }) }
-        guard matched.count == ids.count && !matched.isEmpty else { return nil }
+        guard matched.count == ids.count, !matched.isEmpty else { return nil }
 
         if matched.count == 2 {
-            let hasVideo = matched.contains(where: { !$0.isAudioOnly })
-            let hasAudio = matched.contains(where: { $0.isAudioOnly || $0.vcodec == "none" || $0.vcodec == nil })
-            if hasVideo && hasAudio {
-                return matched
-            }
-        } else if matched.count == 1 {
-            let single = matched[0]
-            if single.isVideoOnly && options.fileType.isVideo,
-               let bestAudio = getBestAudio() {
-                return [single, bestAudio]
-            }
-            return matched
+            return isValidDualFormatPair(matched) ? matched : nil
+        }
+        if matched.count == 1 {
+            return resolveSingleCustomFormat(matched[0], options: options, getBestAudio: getBestAudio)
         }
         return nil
+    }
+
+    private func isValidDualFormatPair(_ matched: [MediaFormat]) -> Bool {
+        let hasVideo = matched.contains(where: { !$0.isAudioOnly })
+        let hasAudio = matched.contains(where: { $0.isAudioOnly || $0.vcodec == "none" || $0.vcodec == nil })
+        return hasVideo && hasAudio
+    }
+
+    private func resolveSingleCustomFormat(
+        _ single: MediaFormat,
+        options: DownloadOptions,
+        getBestAudio: () -> MediaFormat?
+    ) -> [MediaFormat] {
+        if single.isVideoOnly, options.fileType.isVideo, let bestAudio = getBestAudio() {
+            return [single, bestAudio]
+        }
+        return [single]
     }
 
     private func rankCandidateVideos(_ candidateVideos: [MediaFormat], options: DownloadOptions) -> [MediaFormat] {
