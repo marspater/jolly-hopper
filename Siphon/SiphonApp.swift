@@ -59,13 +59,13 @@ struct SiphonApp: App {
     @AppStorage("startInBackground") private var startInBackground: Bool = false
     @AppStorage(UserDefaultsKeys.theme) private var theme: String = "system"
     @State private var hasAppliedBackgroundMode = false
-    
+
     init() {
         GeistFontRegistrar.registerFonts()
         NotificationService.shared.setup()
         CookieManager.purgeOrphanedTempCookieFiles()
     }
-    
+
     var body: some Scene {
         WindowGroup {
             ContentView()
@@ -117,7 +117,7 @@ struct SiphonApp: App {
                     )
                 }
                 .keyboardShortcut(",", modifiers: .command)
-                
+
                 if DependencyChecksums.managedYtdlpEnabled {
                     Button(languageService.s("ytdlp_update")) {
                         Task {
@@ -133,12 +133,12 @@ struct SiphonApp: App {
             }
         }
     }
-    
+
     private func setupMenuBarIfNeeded() {
         appDelegate.downloadManager = downloadManager
         MenuBarManager.shared.setup(languageService: languageService, downloadManager: downloadManager)
     }
-    
+
     private func applyBackgroundModeIfNeeded() {
         guard !hasAppliedBackgroundMode else { return }
         DispatchQueue.main.async {
@@ -153,13 +153,13 @@ struct SiphonApp: App {
             }
         }
     }
-    
+
     private func handleIncomingURL(_ url: URL) {
         guard url.scheme == "siphon" || url.scheme == "luma" else { return }
-        
+
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
-        
+
         guard url.host == "download" || url.host == "fast-download" else {
             for window in NSApp.windows where window.canBecomeMain {
                 if window.isMiniaturized {
@@ -169,13 +169,13 @@ struct SiphonApp: App {
             }
             return
         }
-        
+
         let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
         let queryItems = components?.queryItems
         let videoUrl = queryItems?.first(where: { $0.name == "url" })?.value
         let rawUserAgent = queryItems?.first(where: { $0.name == "ua" })?.value
         let rawBrowserSource = queryItems?.first(where: { $0.name == "browser" })?.value
-        
+
         let rejectTarget = {
             LoggerService.shared.log(
                 "Rejected external download target outside the public network boundary: \(LoggerService.sanitizeURLForLog(videoUrl ?? "<missing>"))",
@@ -258,7 +258,7 @@ struct SiphonApp: App {
             appState.urlToDownload = rawVideoUrl
             appState.showAddDownloadSheet = true
         }
-        
+
         for window in NSApp.windows where window.canBecomeMain {
             if window.isMiniaturized {
                 window.deminiaturize(nil)

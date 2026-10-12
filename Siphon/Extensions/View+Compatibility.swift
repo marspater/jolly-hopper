@@ -34,7 +34,7 @@ public struct RenderingCapabilities: Sendable, Equatable {
     public var animationMinimumInterval: TimeInterval {
         1.0 / Double(preferredAnimationFrameRate)
     }
-    
+
     public init(
         supportsEDR: Bool,
         supportsP3: Bool,
@@ -55,9 +55,9 @@ public struct RenderingCapabilities: Sendable, Equatable {
 @MainActor
 public final class AdaptiveRenderingEnvironment: ObservableObject {
     public static let shared = AdaptiveRenderingEnvironment()
-    
+
     @Published public private(set) var capabilities: RenderingCapabilities
-    
+
     public var reduceMotion: Bool {
         capabilities.reduceMotion
     }
@@ -74,7 +74,7 @@ public final class AdaptiveRenderingEnvironment: ObservableObject {
     public var shouldAnimateAmbient: Bool {
         isAppActive
     }
-    
+
     private init() {
         self.capabilities = Self.detectCapabilities()
         NotificationCenter.default.addObserver(
@@ -114,11 +114,11 @@ public final class AdaptiveRenderingEnvironment: ObservableObject {
             }
         }
     }
-    
+
     public func refresh() {
         self.capabilities = Self.detectCapabilities()
     }
-    
+
     public static func detectCapabilities() -> RenderingCapabilities {
         detectCapabilities(for: NSScreen.main)
     }
@@ -214,7 +214,7 @@ private final class SiphonScreenObserverView: NSView {
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
-        NotificationCenter.default.removeObserver(self)
+        NotificationCenter.default.removeObserver(self, name: NSWindow.didChangeScreenNotification, object: nil)
 
         if let window {
             NotificationCenter.default.addObserver(
@@ -375,7 +375,7 @@ public enum SiphonTheme {
         startPoint: .topLeading,
         endPoint: .bottomTrailing
     )
-    
+
     // Semantic Status Colors (Display P3 with graceful sRGB fallback).
     // Use these saturated values for fills, rings, tints and motion only.
     public static let statusDownloading = accent
@@ -424,7 +424,7 @@ public enum SiphonTheme {
     public static func accentForeground(for colorScheme: ColorScheme) -> Color {
         colorScheme == .dark ? accentTextDark : accentTextLight
     }
-    
+
     // MARK: - AppKit Theme Synchronization
     @MainActor
     public static func applyTheme(_ theme: String) {
@@ -437,7 +437,7 @@ public enum SiphonTheme {
         default:
             appearance = nil
         }
-        
+
         NSApp.appearance = appearance
         for window in NSApp.windows {
             window.appearance = appearance
@@ -445,7 +445,7 @@ public enum SiphonTheme {
             window.invalidateShadow()
         }
     }
-    
+
     // Standard Spacing Scale (4pt/8pt rhythm)
     public static let spacing2: CGFloat = 2
     public static let spacing4: CGFloat = 4
@@ -458,7 +458,7 @@ public enum SiphonTheme {
     public static let spacing20: CGFloat = 20
     public static let spacing24: CGFloat = 24
     public static let spacing32: CGFloat = 32
-    
+
     // MARK: - Semantic Adaptive Surfaces & Tokens
     public static var surface: Color {
         Color(nsColor: .controlBackgroundColor)
@@ -517,7 +517,7 @@ public enum SiphonTheme {
         public static let tintCallout: Double = 0.10
         public static let borderCallout: Double = 0.25
     }
-    
+
     // Elevated Card & Tile Backgrounds (Unified macOS Translucent Glass)
     @ViewBuilder
     public static func cardBackground(cornerRadius: CGFloat = radiusCard, isHovered: Bool = false) -> some View {
@@ -528,7 +528,7 @@ public enum SiphonTheme {
                 .fill(Color.primary.opacity(isHovered ? Opacity.fillCardHover : Opacity.fillCard))
         }
     }
-    
+
     // MARK: - Semantic Adaptive Borders
     @ViewBuilder
     public static func borderSubtle(cornerRadius: CGFloat = radiusControl, isHovered: Bool = false, accentColor: Color? = nil) -> some View {
@@ -605,7 +605,7 @@ public enum SiphonTheme {
         }
         .drawingGroup()
     }
-    
+
     // Pill / Badge Backgrounds (Capsule)
     @ViewBuilder
     public static func pillBackground(isSelected: Bool = false, isHovered: Bool = false) -> some View {
@@ -622,7 +622,7 @@ public enum SiphonTheme {
                 )
         }
     }
-    
+
     @ViewBuilder
     public static func tintedPillBackground(
         tint: Color,
@@ -666,7 +666,7 @@ public enum SiphonTheme {
                 )
         }
     }
-    
+
     // Control / Button Backgrounds (Tactile glass surfaces)
     @ViewBuilder
     public static func controlBackground(cornerRadius: CGFloat = radiusControl, isHovered: Bool = false) -> some View {
@@ -691,7 +691,7 @@ public enum SiphonTheme {
                 )
         }
     }
-    
+
     @ViewBuilder
     public static func controlBorder(cornerRadius: CGFloat = radiusControl, isHovered: Bool = false) -> some View {
         RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
@@ -758,7 +758,7 @@ public enum SiphonTheme {
             )
             .shadow(color: isFocused ? accent.opacity(0.18) : .clear, radius: isFocused ? 4 : 0)
     }
-    
+
     // Settings & Diagnostics Subtle Divider
     @ViewBuilder
     public static var subtleDivider: some View {
@@ -835,16 +835,16 @@ public struct SiphonSpinner: View {
     public var size: CGFloat
     public var color: Color
     public var lineWidth: CGFloat
-    
+
     @State private var isSpinning = false
     @ObservedObject private var renderingEnvironment = AdaptiveRenderingEnvironment.shared
-    
+
     public init(size: CGFloat = 14, color: Color = .white, lineWidth: CGFloat = 2) {
         self.size = size
         self.color = color
         self.lineWidth = lineWidth
     }
-    
+
     public var body: some View {
         Circle()
             .trim(from: 0.15, to: 0.85)
@@ -978,10 +978,10 @@ public struct SiphonInteractiveGlassModifier: ViewModifier {
     public var isDestructive: Bool
     public var isSelected: Bool
     public var tintColor: Color?
-    
+
     @State private var isHovered = false
     @ObservedObject private var renderingEnvironment = AdaptiveRenderingEnvironment.shared
-    
+
     public init(
         cornerRadius: CGFloat = SiphonTheme.radiusControl,
         isDestructive: Bool = false,
@@ -993,10 +993,10 @@ public struct SiphonInteractiveGlassModifier: ViewModifier {
         self.isSelected = isSelected
         self.tintColor = tintColor
     }
-    
+
     public func body(content: Content) -> some View {
         let effectiveTint = isDestructive ? SiphonTheme.statusFailed : (tintColor ?? SiphonTheme.accent)
-        
+
         content
             .background {
                 SiphonInteractiveGlassBackground(
@@ -1029,14 +1029,14 @@ public struct SiphonInteractiveGlassModifier: ViewModifier {
 public struct BouncyButtonStyle: ButtonStyle {
     public var scaleAmount: CGFloat = 0.97
     public var hoverScale: CGFloat = 1.015
-    
+
     @State private var isHovered = false
-    
+
     public init(scaleAmount: CGFloat = 0.97, hoverScale: CGFloat = 1.015) {
         self.scaleAmount = scaleAmount
         self.hoverScale = hoverScale
     }
-    
+
     private func buttonScale(isPressed: Bool) -> CGFloat {
         if isPressed {
             return scaleAmount
@@ -1071,11 +1071,11 @@ public struct SiphonPrimaryButtonStyle: ButtonStyle {
     public var cornerRadius: CGFloat = SiphonTheme.radiusControl
     @State private var isHovered = false
     @Environment(\.isEnabled) private var isEnabled
-    
+
     public init(cornerRadius: CGFloat = SiphonTheme.radiusControl) {
         self.cornerRadius = cornerRadius
     }
-    
+
     private func buttonScale(isPressed: Bool) -> CGFloat {
         if !isEnabled {
             return 1.0
@@ -1121,11 +1121,11 @@ public struct SiphonSecondaryButtonStyle: ButtonStyle {
     public var cornerRadius: CGFloat = SiphonTheme.radiusControl
     @State private var isHovered = false
     @Environment(\.isEnabled) private var isEnabled
-    
+
     public init(cornerRadius: CGFloat = SiphonTheme.radiusControl) {
         self.cornerRadius = cornerRadius
     }
-    
+
     private func buttonScale(isPressed: Bool) -> CGFloat {
         if isPressed {
             return 0.97
@@ -1161,11 +1161,11 @@ public struct SiphonGhostButtonStyle: ButtonStyle {
     @State private var isHovered = false
     @Environment(\.isEnabled) private var isEnabled
     @Environment(\.siphonRenderingCapabilities) private var renderingCapabilities
-    
+
     public init(cornerRadius: CGFloat = SiphonTheme.radiusControl) {
         self.cornerRadius = cornerRadius
     }
-    
+
     public func makeBody(configuration: Configuration) -> some View {
         let showBorders = renderingCapabilities.increaseContrast
         configuration.label
@@ -1195,11 +1195,11 @@ public struct SiphonIconButtonStyle: ButtonStyle {
     @State private var isHovered = false
     @Environment(\.isEnabled) private var isEnabled
     @Environment(\.siphonRenderingCapabilities) private var renderingCapabilities
-    
+
     public init(size: CGFloat = 26) {
         self.size = size
     }
-    
+
     private func buttonScale(isPressed: Bool) -> CGFloat {
         if isPressed {
             return 0.92
@@ -1334,13 +1334,13 @@ struct SiphonStatusBadge: View {
     let status: DownloadStatus
     let title: String
     let foregroundColor: Color
-    
+
     init(status: DownloadStatus, title: String, foregroundColor: Color) {
         self.status = status
         self.title = title
         self.foregroundColor = foregroundColor
     }
-    
+
     public var body: some View {
         HStack(spacing: 5) {
             switch status {
@@ -1365,7 +1365,7 @@ struct SiphonStatusBadge: View {
                 Image(systemName: "exclamationmark.circle.fill")
                     .font(.system(size: 11, weight: .semibold))
             }
-            
+
             Text(title)
                 .font(.siphonMetadataSemibold)
         }
@@ -1403,11 +1403,11 @@ struct SiphonStatusBadge: View {
 
 public struct SiphonTagBadge: View {
     public let text: String
-    public var systemImage: String? = nil
+    public var systemImage: String?
     public var tintColor: Color = .secondary
     public var isHdr: Bool = false
     public var isMonospaced: Bool = false
-    
+
     public init(
         text: String,
         systemImage: String? = nil,
@@ -1421,14 +1421,14 @@ public struct SiphonTagBadge: View {
         self.isHdr = isHdr
         self.isMonospaced = isMonospaced
     }
-    
+
     public var body: some View {
         HStack(spacing: 4) {
             if let icon = systemImage {
                 Image(systemName: icon)
                     .font(.system(size: 9, weight: .semibold))
             }
-            
+
             Text(text)
                 .font(isMonospaced ? .siphonMicroMonoSemibold : .siphonMicroSemibold)
         }
@@ -1462,9 +1462,9 @@ public struct SiphonEmptyStateView: View {
     public let icon: String
     public let title: String
     public let message: String
-    public var actionTitle: String? = nil
-    public var action: (() -> Void)? = nil
-    
+    public var actionTitle: String?
+    public var action: (() -> Void)?
+
     public init(
         icon: String,
         title: String,
@@ -1478,7 +1478,7 @@ public struct SiphonEmptyStateView: View {
         self.actionTitle = actionTitle
         self.action = action
     }
-    
+
     public var body: some View {
         VStack(spacing: SiphonTheme.spacing16) {
             ZStack {
@@ -1489,7 +1489,7 @@ public struct SiphonEmptyStateView: View {
                     .font(.system(size: 32, weight: .regular))
                     .foregroundColor(.secondary.opacity(0.7))
             }
-            
+
             VStack(spacing: SiphonTheme.spacing6) {
                 Text(title)
                     .font(.siphonHeadline)
@@ -1500,7 +1500,7 @@ public struct SiphonEmptyStateView: View {
                     .multilineTextAlignment(.center)
                     .frame(maxWidth: 320)
             }
-            
+
             if let actionTitle = actionTitle, let action = action {
                 Button(action: action) {
                     HStack(spacing: SiphonTheme.spacing6) {

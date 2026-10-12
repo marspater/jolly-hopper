@@ -4,12 +4,12 @@ import SwiftUI
 @MainActor
 class LoggerService: ObservableObject {
     static let shared = LoggerService()
-    
+
     @Published var logs: [String] = []
     let logFileURL: URL
     private let maxLogEntries = 1000
     private let fileQueue = DispatchQueue(label: "com.siphon.loggerQueue", qos: .utility)
-    
+
     private static let dateFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
@@ -37,7 +37,7 @@ class LoggerService: ObservableObject {
     nonisolated private static let exportKeyHeaderRegex = try? NSRegularExpression(pattern: "(?i)((?:x-[a-z0-9\\-]*api-key|x-[a-z0-9\\-]*token|x-[a-z0-9\\-]*auth[a-z0-9\\-]*):\\s*)[^\\s\\r\\n]+", options: [])
     nonisolated private static let exportSecretQueryRegex = try? NSRegularExpression(pattern: "(?i)([?&](?:token|auth|key|api_key|password|pass|secret|sig|signature|access_token|session|sessionid|sess|jwt|apikey|private_key|client_secret|pcode|oauth_token)=)[^&\\s\\r\\n]+", options: [])
     nonisolated private static let exportHomeDirRegex = try? NSRegularExpression(pattern: "/Users/([a-zA-Z0-9._-]+)/", options: [])
-    
+
     nonisolated static func sanitizeURLForLog(_ urlString: String) -> String {
         guard let url = URL(string: urlString) else { return urlString }
         var components = URLComponents(url: url, resolvingAgainstBaseURL: false)
@@ -50,7 +50,7 @@ class LoggerService: ObservableObject {
 
     nonisolated static func sanitizeCommandForLog(_ args: [String]) -> String {
         var sanitizedArgs: [String] = []
-        var skipNextForRedaction: String? = nil
+        var skipNextForRedaction: String?
 
         let sensitiveValueFlags: [String: String] = [
             "--cookies": "\"<COOKIE_FILE>\"",
@@ -126,12 +126,10 @@ class LoggerService: ObservableObject {
 
             // Check --flag=value syntax
             var handledInline = false
-            for (flag, placeholder) in sensitiveValueFlags {
-                if arg.hasPrefix(flag + "=") {
-                    sanitizedArgs.append("\(flag)=\(placeholder)")
-                    handledInline = true
-                    break
-                }
+            for (flag, placeholder) in sensitiveValueFlags where arg.hasPrefix(flag + "=") {
+                sanitizedArgs.append("\(flag)=\(placeholder)")
+                handledInline = true
+                break
             }
             if handledInline { continue }
 
@@ -171,17 +169,17 @@ class LoggerService: ObservableObject {
         if FileManager.default.fileExists(atPath: logFileURL.path) {
             try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: logFileURL.path)
         }
-        
+
         loadInitialLogs()
     }
-    
+
     private func loadInitialLogs() {
         let fileURL = logFileURL
         let maxEntries = maxLogEntries
         Task.detached {
             guard let handle = FileHandle(forReadingAtPath: fileURL.path) else { return }
             defer { try? handle.close() }
-            
+
             let fileSize = (try? handle.seekToEnd()) ?? 0
             guard fileSize > 0 else { return }
 
@@ -260,24 +258,24 @@ class LoggerService: ObservableObject {
         let timestamp = Self.dateFormatter.string(from: Date())
         let sanitizedMessage = Self.sanitizeDiagnosticText(message)
         let entry = "[\(timestamp)] [\(level.rawValue)] \(sanitizedMessage)"
-        
+
         // Bolt Performance Optimization: Amortize O(N) array element shifts during high-frequency logging
         // by batch-trimming oldest entries when the buffer exceeds maxLogEntries + 50 instead of shifting on every single log call.
         logs.append(entry)
         if logs.count > maxLogEntries + 50 {
             logs.removeFirst(logs.count - maxLogEntries)
         }
-        
+
         let fileURL = logFileURL
         let maxEntries = maxLogEntries
         fileQueue.async {
             Self.appendToLogFile(entry + "\n", at: fileURL, maxEntries: maxEntries)
         }
     }
-    
+
     nonisolated private static func appendToLogFile(_ string: String, at logFileURL: URL, maxEntries: Int) {
         guard let data = string.data(using: .utf8) else { return }
-        
+
         if FileManager.default.fileExists(atPath: logFileURL.path) {
             if let attrs = try? FileManager.default.attributesOfItem(atPath: logFileURL.path),
                let size = attrs[.size] as? Int64, size > 2 * 1024 * 1024 {
@@ -301,12 +299,12 @@ class LoggerService: ObservableObject {
             }
         }
     }
-    
+
     nonisolated private static func trimLogFile(at logFileURL: URL, maxEntries: Int) {
         autoreleasepool {
             guard let handle = FileHandle(forReadingAtPath: logFileURL.path) else { return }
             defer { try? handle.close() }
-            
+
             let fileSize = (try? handle.seekToEnd()) ?? 0
             guard fileSize > 0 else { return }
 
@@ -325,7 +323,7 @@ class LoggerService: ObservableObject {
             }
         }
     }
-    
+
     func clearLogs() {
         logs.removeAll()
         let fileURL = logFileURL
@@ -337,15 +335,15 @@ class LoggerService: ObservableObject {
         }
         log("Logs cleared", level: .info)
     }
-    
+
     nonisolated static func sanitizeLogContentForExport(_ content: String) -> String {
         var sanitized = content
-        
+
         // 1. Redact Bearer / Basic / Token authorization headers
         if let regex = Self.exportAuthRegex {
             sanitized = regex.stringByReplacingMatches(in: sanitized, options: [], range: NSRange(location: 0, length: sanitized.utf16.count), withTemplate: "$1<REDACTED_AUTH>")
         }
-        
+
         // 2. Redact cookie headers or cookie parameter lines
         if let regex = Self.exportCookieHeaderRegex {
             sanitized = regex.stringByReplacingMatches(in: sanitized, options: [], range: NSRange(location: 0, length: sanitized.utf16.count), withTemplate: "$1<REDACTED_COOKIES>")
@@ -355,17 +353,17 @@ class LoggerService: ObservableObject {
         if let regex = Self.exportKeyHeaderRegex {
             sanitized = regex.stringByReplacingMatches(in: sanitized, options: [], range: NSRange(location: 0, length: sanitized.utf16.count), withTemplate: "$1<REDACTED_KEY>")
         }
-        
+
         // 4. Redact common query secrets in URLs
         if let regex = Self.exportSecretQueryRegex {
             sanitized = regex.stringByReplacingMatches(in: sanitized, options: [], range: NSRange(location: 0, length: sanitized.utf16.count), withTemplate: "$1<REDACTED>")
         }
-        
+
         // 4. Redact username from /Users/<username>/
         if let regex = Self.exportHomeDirRegex {
             sanitized = regex.stringByReplacingMatches(in: sanitized, options: [], range: NSRange(location: 0, length: sanitized.utf16.count), withTemplate: "/Users/<USER>/")
         }
-        
+
         return sanitized
     }
 
@@ -408,7 +406,7 @@ class LoggerService: ObservableObject {
             return exportURL
         }.value
     }
-    
+
     enum LogLevel: String {
         case debug = "DEBUG"
         case info = "INFO"

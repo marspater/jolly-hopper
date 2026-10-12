@@ -1,0 +1,20 @@
+disabled_rules:
+  - incompatible_concurrency_annotation # Siphon targets Swift 6 strict concurrency
+  - file_length
+  - type_body_length
+  - function_body_length
+  - cyclomatic_complexity
+  - large_tuple
+  - trailing_whitespace
+  - identifier_name
+  - todo
+  - unneeded_escaping
+  - optional_data_string_conversion
+
+excluded:
+  - SiphonTests
+  - server
+  - scripts
+  - Casks
+  - .build
+  - DerivedData

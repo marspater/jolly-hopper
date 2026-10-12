@@ -340,10 +340,7 @@ public final class UpdateInstaller: Sendable {
         guard depth <= 8 else { return nil }
 
         let candidate = directory.standardizedFileURL
-        guard visited.insert(candidate.path).inserted,
-              let values = try? candidate.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey]),
-              values.isDirectory == true,
-              values.isSymbolicLink != true else {
+        guard visited.insert(candidate.path).inserted, isDirectoryBundle(candidate) else {
             return nil
         }
 
@@ -359,23 +356,29 @@ public final class UpdateInstaller: Sendable {
             return nil
         }
 
-        for item in contents where item.pathExtension.lowercased() == "app" {
-            if let itemValues = try? item.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey]),
-               itemValues.isDirectory == true,
-               itemValues.isSymbolicLink != true,
-               Self.isApp(item, withBundleID: bundleID) {
-                return item.standardizedFileURL
-            }
+        if let matchingApp = findAppInContents(contents, bundleID: bundleID) {
+            return matchingApp
         }
 
-        for item in contents {
-            guard let itemValues = try? item.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey]),
-                  itemValues.isDirectory == true,
-                  itemValues.isSymbolicLink != true else {
-                continue
-            }
+        for item in contents where isDirectoryBundle(item) {
             if let nested = locateAppBundle(in: item, bundleID: bundleID, depth: depth + 1, visited: &visited) {
                 return nested
+            }
+        }
+        return nil
+    }
+
+    private func isDirectoryBundle(_ url: URL) -> Bool {
+        guard let values = try? url.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey]) else {
+            return false
+        }
+        return values.isDirectory == true && values.isSymbolicLink != true
+    }
+
+    private func findAppInContents(_ contents: [URL], bundleID: String) -> URL? {
+        for item in contents where item.pathExtension.lowercased() == "app" {
+            if isDirectoryBundle(item), Self.isApp(item, withBundleID: bundleID) {
+                return item.standardizedFileURL
             }
         }
         return nil
