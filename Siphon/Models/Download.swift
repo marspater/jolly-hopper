@@ -1463,10 +1463,10 @@ struct MediaInfo: Codable {
         }
 
         // 1. If explicit selectedFormatId is specified (can be single like "137" or combined like "137+140"):
-        if let customId = options.selectedFormatId?.trimmingCharacters(in: .whitespacesAndNewlines), !customId.isEmpty {
-            if let matched = resolveCustomFormatSelection(customId: customId, in: formats, options: options, getBestAudio: getBestAudio) {
-                return matched
-            }
+        if let customId = options.selectedFormatId?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !customId.isEmpty,
+           let matched = resolveCustomFormatSelection(customId: customId, in: formats, options: options, getBestAudio: getBestAudio) {
+            return matched
         }
         
         // 2. If audio-only download:
