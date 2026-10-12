@@ -615,25 +615,39 @@ public final class EgressProxyServer: @unchecked Sendable {
         let hasTransferEncoding: Bool
     }
 
-    private static func forwardRequestHeaders(_ lines: [Substring]) -> ForwardHeaders? {
-        var headers: [(name: String, value: Substring, line: Substring)] = []
-        var nominated = Set<String>()
-        for line in lines.dropFirst() {
+    private struct RequestHeader {
+        let name: String
+        let value: Substring
+        let line: Substring
+
+        init?(_ line: Substring) {
             guard let colon = line.firstIndex(of: ":") else { return nil }
             let name = line[..<colon]
             guard !name.isEmpty, name.allSatisfy({ httpTokenCharacters.contains($0) }) else { return nil }
             let value = line[line.index(after: colon)...].trimmingWhitespace()
             guard value.unicodeScalars.allSatisfy({ $0.value == 9 || ($0.value >= 32 && $0.value != 127) }) else { return nil }
-            let lowerName = name.lowercased()
-            headers.append((lowerName, value, line))
-            if lowerName == "connection" {
-                for part in value.split(separator: ",", omittingEmptySubsequences: false) {
-                    let token = part.trimmingWhitespace().lowercased()
-                    guard !token.isEmpty, token.allSatisfy({ httpTokenCharacters.contains($0) }) else { return nil }
-                    nominated.insert(token)
-                }
+            self.name = name.lowercased()
+            self.value = value
+            self.line = line
+        }
+    }
+
+    private static func connectionHeaders(in headers: [RequestHeader]) -> Set<String>? {
+        var nominated = Set<String>()
+        for header in headers where header.name == "connection" {
+            for part in header.value.split(separator: ",", omittingEmptySubsequences: false) {
+                let token = part.trimmingWhitespace().lowercased()
+                guard !token.isEmpty, token.allSatisfy({ httpTokenCharacters.contains($0) }) else { return nil }
+                nominated.insert(token)
             }
         }
+        return nominated
+    }
+
+    private static func forwardRequestHeaders(_ lines: [Substring]) -> ForwardHeaders? {
+        let headers = lines.dropFirst().compactMap(RequestHeader.init)
+        guard headers.count == lines.count - 1,
+              let nominated = connectionHeaders(in: headers) else { return nil }
         // Routing/framing fields cannot safely be made hop-by-hop.
         guard nominated.isDisjoint(with: ["host", "content-length", "transfer-encoding"]),
               headers.filter({ $0.name == "host" }).count <= 1 else { return nil }
