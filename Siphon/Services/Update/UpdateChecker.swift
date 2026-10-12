@@ -276,77 +276,18 @@ public final class UpdateChecker: ObservableObject {
     private func verifyUpdateChecksum(candidate: ReleaseCandidate, operationID: UUID) async -> String? {
         var verifiedChecksum = candidate.checksum
 
-        // 1. Fetch and verify signed release manifest if available or required
         if candidate.manifestURL != nil || candidate.signatureURL != nil || candidate.requiresSignature {
-            guard let mURL = candidate.manifestURL, let sURL = candidate.signatureURL else {
-                let message = "A signed release manifest and signature are required to verify this update."
-                updateError = UpdateDownloadError.checksumUnavailable(message).localizedDescription
-                LoggerService.shared.log(message, level: .error)
+            guard let manifest = await verifySignedReleaseManifest(candidate: candidate, operationID: operationID, existingChecksum: verifiedChecksum) else {
                 return nil
             }
-            guard UpdateDownloader.isTrustedGitHubURL(mURL) && UpdateDownloader.isTrustedGitHubURL(sURL) else {
-                updateError = UpdateDownloadError.invalidURL.localizedDescription
-                LoggerService.shared.log("Refusing untrusted manifest URL for app update.", level: .error)
-                return nil
-            }
-            do {
-                let manifestData = try await fetchManifestData(mURL)
-                let signatureData = try await fetchManifestData(sURL)
-                guard updateOperationID == operationID else { return nil }
-
-                let manifestChecksum = try manifestVerifier.verify(
-                    manifestData: manifestData,
-                    signatureData: signatureData,
-                    expectedVersion: candidate.version,
-                    targetAssetName: candidate.assetName
-                )
-                guard updateOperationID == operationID else { return nil }
-
-                if let currentChecksum = verifiedChecksum, currentChecksum.lowercased() != manifestChecksum.lowercased() {
-                    let message = "GitHub asset digest does not match the signed release manifest."
-                    updateError = UpdateDownloadError.checksumUnavailable(message).localizedDescription
-                    LoggerService.shared.log(message, level: .error)
-                    return nil
-                }
-                verifiedChecksum = manifestChecksum
-            } catch is CancellationError {
-                return nil
-            } catch {
-                guard updateOperationID == operationID else { return nil }
-                updateError = error.localizedDescription
-                LoggerService.shared.log("Signed manifest verification failed: \(error.localizedDescription)", level: .error)
-                return nil
-            }
+            verifiedChecksum = manifest
         }
 
-        // 2. Fetch checksum in background if available
-        if let cURL = candidate.checksumURL {
-            guard UpdateDownloader.isTrustedGitHubURL(cURL) else {
-                updateError = UpdateDownloadError.invalidURL.localizedDescription
-                LoggerService.shared.log("Refusing untrusted checksum URL for app update.", level: .error)
+        if let checksumURL = candidate.checksumURL {
+            guard let published = await fetchAndVerifyChecksumManifest(url: checksumURL, candidate: candidate, operationID: operationID, existingChecksum: verifiedChecksum) else {
                 return nil
             }
-            do {
-                let manifestChecksum = try await UpdateDownloader.fetchExpectedChecksum(
-                    from: cURL,
-                    targetAssetName: candidate.assetName
-                )
-                guard updateOperationID == operationID else { return nil }
-                if let apiChecksum = verifiedChecksum, apiChecksum.lowercased() != manifestChecksum.lowercased() {
-                    let message = "GitHub asset digest does not match the published checksum manifest."
-                    updateError = UpdateDownloadError.checksumUnavailable(message).localizedDescription
-                    LoggerService.shared.log(message, level: .error)
-                    return nil
-                }
-                verifiedChecksum = manifestChecksum
-            } catch is CancellationError {
-                return nil
-            } catch {
-                guard updateOperationID == operationID else { return nil }
-                updateError = error.localizedDescription
-                LoggerService.shared.log("Update checksum verification could not be prepared: \(error.localizedDescription)", level: .error)
-                return nil
-            }
+            verifiedChecksum = published
         }
 
         guard let finalChecksum = verifiedChecksum, !finalChecksum.isEmpty else {
@@ -356,6 +297,77 @@ public final class UpdateChecker: ObservableObject {
             return nil
         }
         return finalChecksum
+    }
+
+    private func verifySignedReleaseManifest(candidate: ReleaseCandidate, operationID: UUID, existingChecksum: String?) async -> String? {
+        guard let mURL = candidate.manifestURL, let sURL = candidate.signatureURL else {
+            let message = "A signed release manifest and signature are required to verify this update."
+            updateError = UpdateDownloadError.checksumUnavailable(message).localizedDescription
+            LoggerService.shared.log(message, level: .error)
+            return nil
+        }
+        guard UpdateDownloader.isTrustedGitHubURL(mURL) && UpdateDownloader.isTrustedGitHubURL(sURL) else {
+            updateError = UpdateDownloadError.invalidURL.localizedDescription
+            LoggerService.shared.log("Refusing untrusted manifest URL for app update.", level: .error)
+            return nil
+        }
+        do {
+            let manifestData = try await fetchManifestData(mURL)
+            let signatureData = try await fetchManifestData(sURL)
+            guard updateOperationID == operationID else { return nil }
+
+            let manifestChecksum = try manifestVerifier.verify(
+                manifestData: manifestData,
+                signatureData: signatureData,
+                expectedVersion: candidate.version,
+                targetAssetName: candidate.assetName
+            )
+            guard updateOperationID == operationID else { return nil }
+
+            if let current = existingChecksum, current.lowercased() != manifestChecksum.lowercased() {
+                let message = "GitHub asset digest does not match the signed release manifest."
+                updateError = UpdateDownloadError.checksumUnavailable(message).localizedDescription
+                LoggerService.shared.log(message, level: .error)
+                return nil
+            }
+            return manifestChecksum
+        } catch is CancellationError {
+            return nil
+        } catch {
+            guard updateOperationID == operationID else { return nil }
+            updateError = error.localizedDescription
+            LoggerService.shared.log("Signed manifest verification failed: \(error.localizedDescription)", level: .error)
+            return nil
+        }
+    }
+
+    private func fetchAndVerifyChecksumManifest(url: URL, candidate: ReleaseCandidate, operationID: UUID, existingChecksum: String?) async -> String? {
+        guard UpdateDownloader.isTrustedGitHubURL(url) else {
+            updateError = UpdateDownloadError.invalidURL.localizedDescription
+            LoggerService.shared.log("Refusing untrusted checksum URL for app update.", level: .error)
+            return nil
+        }
+        do {
+            let manifestChecksum = try await UpdateDownloader.fetchExpectedChecksum(
+                from: url,
+                targetAssetName: candidate.assetName
+            )
+            guard updateOperationID == operationID else { return nil }
+            if let apiChecksum = existingChecksum, apiChecksum.lowercased() != manifestChecksum.lowercased() {
+                let message = "GitHub asset digest does not match the published checksum manifest."
+                updateError = UpdateDownloadError.checksumUnavailable(message).localizedDescription
+                LoggerService.shared.log(message, level: .error)
+                return nil
+            }
+            return manifestChecksum
+        } catch is CancellationError {
+            return nil
+        } catch {
+            guard updateOperationID == operationID else { return nil }
+            updateError = error.localizedDescription
+            LoggerService.shared.log("Update checksum verification could not be prepared: \(error.localizedDescription)", level: .error)
+            return nil
+        }
     }
 
     private func performUpdateDownloadAndInstall(url: URL, verifiedChecksum: String, operationID: UUID) async {
@@ -372,11 +384,7 @@ public final class UpdateChecker: ObservableObject {
             }
 
             guard updateOperationID == operationID else {
-                do {
-                    try FileManager.default.removeItem(at: downloadedPkgURL)
-                } catch {
-                    LoggerService.shared.log("Failed to remove cancelled update package: \(error.localizedDescription)", level: .warning)
-                }
+                cleanupCancelledPackage(downloadedPkgURL)
                 return
             }
 
@@ -393,25 +401,33 @@ public final class UpdateChecker: ObservableObject {
             isInstalling = false
             needsRestart = true
             LoggerService.shared.log("Update installed successfully.", level: .info)
-        } catch UpdateDownloadError.downloadCancelled {
-            guard updateOperationID == operationID else { return }
-            isDownloading = false
-            isInstalling = false
-            updateProgress = 0
+        } catch {
+            handleInstallFailure(error, operationID: operationID)
+        }
+    }
+
+    private func cleanupCancelledPackage(_ url: URL) {
+        do {
+            try FileManager.default.removeItem(at: url)
+        } catch {
+            LoggerService.shared.log("Failed to remove cancelled update package: \(error.localizedDescription)", level: .warning)
+        }
+    }
+
+    private func handleInstallFailure(_ error: Error, operationID: UUID) {
+        guard updateOperationID == operationID else { return }
+        isDownloading = false
+        isInstalling = false
+        updateProgress = 0
+        switch error {
+        case UpdateDownloadError.downloadCancelled:
             updateError = nil
             LoggerService.shared.log("App update download was cancelled.", level: .info)
-        } catch is CancellationError {
-            guard updateOperationID == operationID else { return }
+        case is CancellationError:
             downloader.cancel()
-            isDownloading = false
-            isInstalling = false
-            updateProgress = 0
             updateError = nil
             LoggerService.shared.log("App update task was cancelled.", level: .info)
-        } catch {
-            guard updateOperationID == operationID else { return }
-            isDownloading = false
-            isInstalling = false
+        default:
             updateError = error.localizedDescription
             LoggerService.shared.log("Update download or install failed: \(error.localizedDescription)", level: .error)
         }
