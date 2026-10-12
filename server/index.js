@@ -40,11 +40,12 @@ const DEFAULT_SECURITY_HEADERS = Object.freeze({
 
 // Bolt Performance Optimization: Pre-compute static response objects with frozen merged headers and pre-serialized payloads
 // to eliminate dynamic JSON serialization, byte length calculation, and intermediate header object allocations on every request.
-function createStaticResponse(statusCode, contentType, body) {
+function createStaticResponse(statusCode, contentType, body, extraHeaders = {}) {
   const payload = typeof body === 'string' || Buffer.isBuffer(body) ? body : JSON.stringify(body);
   const contentLength = Buffer.isBuffer(payload) ? payload.length : Buffer.byteLength(payload);
   const headers = Object.freeze({
     ...DEFAULT_SECURITY_HEADERS,
+    ...extraHeaders,
     'Content-Type': contentType,
     'Content-Length': contentLength
   });
@@ -53,7 +54,7 @@ function createStaticResponse(statusCode, contentType, body) {
 
 const STATIC_RESPONSES = Object.freeze({
   BAD_REQUEST: createStaticResponse(400, 'application/json', { error: 'Bad Request' }),
-  METHOD_NOT_ALLOWED: createStaticResponse(405, 'application/json', { error: 'Method Not Allowed' }),
+  METHOD_NOT_ALLOWED: createStaticResponse(405, 'application/json', { error: 'Method Not Allowed' }, { 'Allow': 'GET, HEAD' }),
   NOT_FOUND: createStaticResponse(404, 'application/json', { error: 'Not Found' }),
   INTERNAL_ERROR: createStaticResponse(500, 'application/json', { error: 'Internal Server Error' }),
   SERVICE_UNAVAILABLE: createStaticResponse(503, 'application/json', { error: 'Release metadata temporarily unavailable' }),
