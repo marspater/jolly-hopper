@@ -52,6 +52,12 @@ The normal cleanup path releases the queue slot, removes task/controller ownersh
 - Terminal shutdown (`DownloadManager.shutdown()`) records `isCleanShutdown = true`, preventing false-positive recovery prompts across clean application exits.
 - If the application process terminates abruptly (crash, SIGKILL, power loss), the uncompleted snapshot remains marked as interrupted. On subsequent launch, `DownloadManager.initialize(...)` detects the interrupted jobs and prompts the user in `ContentView` to restore them back to `.queued` state (preserving per-job scratch directories) or discard them cleanly.
 
+### Recovery and partial-job warnings
+
+Recovered jobs whose advanced arguments were removed are held paused until the user re-enters them or explicitly continues without them. A non-secret review marker survives both recovery and history persistence; argument values remain ephemeral. Recovery write failures appear as a non-blocking warning with a retry action and clear after a successful write. Held restored jobs are committed to history before the interrupted snapshot is replaced.
+
+Partially failed playlists retain their completed output paths but enter Failed with a retry action. Playlist retries skip existing files rather than overwriting completed entries, unless the user explicitly chose overwrite. Partial-failure markers survive history restoration, including migration of older completed-with-error records.
+
 ### Dependency update exclusion
 
 yt-dlp replacement is serialized against download execution:
@@ -74,7 +80,7 @@ Browser extensions enter through `SiphonApp.handleIncomingURL`. The custom URL i
 
 Fast-download deep links hand their sanitized browser identifier and user agent straight to the job; only the Add Download sheet path stores deep-link state in `AppState`, and its external-target marker is cleared when the sheet closes, not when credentials are consumed.
 
-Raw cookies are never accepted through the custom URL. Browser source identifiers and user agents are sanitized, and browser-session state is scoped to the validated target origin.
+Raw cookies are never accepted through the custom URL. Browser source identifiers and user agents are sanitized, and browser-session state is scoped to the validated target origin (scheme, hostname, and effective port). Chrome handoff cleanup stores per-tab deadlines in session storage and uses alarms, so service-worker suspension does not lose pending helper tabs; tabs navigated to another page are retained.
 
 ### App update trust
 

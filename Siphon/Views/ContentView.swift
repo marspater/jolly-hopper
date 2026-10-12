@@ -39,6 +39,9 @@ struct ContentView: View {
     var body: some View {
         ZStack {
             mainLayout
+                .safeAreaInset(edge: .top, spacing: 0) {
+                    if downloadManager.queueRecoveryWriteFailed { recoveryPersistenceWarning }
+                }
                 .background(MainWindowConfigurator())
                 .onAppear {
                     SiphonTheme.applyTheme(theme)
@@ -143,6 +146,22 @@ struct ContentView: View {
     }
     
     @ViewBuilder
+    private var recoveryPersistenceWarning: some View {
+        HStack(alignment: .top, spacing: SiphonTheme.spacing12) {
+            Label(languageService.s("queue_recovery_write_failed"), systemImage: "exclamationmark.triangle")
+                .font(.siphonSecondaryMedium)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: SiphonTheme.spacing8)
+            Button(languageService.s("queue_recovery_retry_save")) {
+                downloadManager.persistQueueRecoveryState()
+            }
+            .buttonStyle(.bordered)
+            .tint(nil)
+        }
+        .siphonCallout(tint: SiphonTheme.statusQueued)
+        .padding(SiphonTheme.spacing12)
+    }
+
     private var mainLayout: some View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
             SidebarView()

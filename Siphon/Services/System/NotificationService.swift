@@ -205,7 +205,7 @@ final class NotificationService: NSObject, @unchecked Sendable, UNUserNotificati
         let cleanFilename = filename.decodingHTMLEntities()
         let lang = languageService ?? LanguageService()
         let content = UNMutableNotificationContent()
-        content.title = lang.s("download_completed_title")
+        content.title = lang.s(partial ? "some_items_failed" : "download_completed_title")
         content.body = String(format: lang.s(partial ? "download_partial_body" : "download_completed_body"), cleanFilename)
         content.sound = .default
         content.categoryIdentifier = "download"

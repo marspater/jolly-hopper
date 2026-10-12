@@ -2022,6 +2022,9 @@ public struct DownloadResult: Sendable {
 
         if options.forceOverwrite == true {
             args.append("--force-overwrites")
+        } else if isPlaylist {
+            // Playlist retries revisit all entries; finished files must survive.
+            args.append("--no-overwrites")
         }
 
         let speedLimit = UserDefaults.standard.integer(forKey: UserDefaultsKeys.downloadSpeedLimit)

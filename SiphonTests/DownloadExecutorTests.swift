@@ -584,10 +584,24 @@ final class DownloadExecutorTests: XCTestCase {
 
         await executor.executeDownload(download, queue: DownloadQueue(), ytdlpVersion: "test", languageService: lang)
 
-        XCTAssertEqual(download.status, .completed, "Finished entries are kept")
+        XCTAssertEqual(download.status, .failed, "Partial jobs must appear in Failed with retry available")
+        XCTAssertTrue(download.hasPartialFailure)
+        XCTAssertEqual(download.filePaths.map(\.path), ["/tmp/One [a1].mp4"], "Finished entries are kept")
+        XCTAssertNotEqual(download.progress, 1.0, "A partial job must not be forced to 100%")
         XCTAssertEqual(download.errorMessage, "[youtube] c3: Private video")
         XCTAssertEqual(download.diagnostics.exitStatus, "Completed with failed items")
         XCTAssertEqual(download.errorUXInfo(lang: lang)?.headline, lang.s("some_items_failed"))
+        XCTAssertEqual(download.errorUXInfo(lang: lang)?.actionType, .retry)
+        let manager = DownloadManager()
+        manager.ytdlpService.isUpdating = true
+        defer { manager.shutdown() }
+        manager.downloads = [download]
+        XCTAssertEqual(manager.failedDownloads.map(\.id), [download.id])
+        XCTAssertTrue(manager.completedDownloads.isEmpty)
+        manager.retryDownload(download)
+        XCTAssertEqual(download.status, .queued)
+        XCTAssertEqual(download.filePaths.map(\.path), ["/tmp/One [a1].mp4"])
+        XCTAssertEqual(download.options.forceOverwrite, false)
     }
 
     func testErrorMessageDoesNotMisclassifySubstrings() {
