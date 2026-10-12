@@ -51,6 +51,8 @@ class Download: ObservableObject, Identifiable {
         return filePaths.map { $0.path }
     }
 
+    @Published var requiresAdvancedArgumentsReview = false
+    @Published var hasPartialFailure = false
     @Published var errorMessage: String?
     @Published var log: String = ""
     @Published var mediaInfo: MediaInfo? = nil
@@ -224,12 +226,12 @@ class Download: ObservableObject, Identifiable {
         let lower = error.lowercased()
         let rawError = log.isEmpty ? error : log
 
-        // A completed playlist that lost some entries; retrying can't bring back private/removed items.
-        if status == .completed {
+        // Partial jobs retain finished files and remain actionable for retry.
+        if hasPartialFailure || status == .completed {
             return ErrorUXInfo(
                 headline: lang.s("some_items_failed"),
                 description: error,
-                actionType: .noAction,
+                actionType: .retry,
                 rawError: rawError
             )
         }
@@ -2199,11 +2201,13 @@ struct HistoricDownload: Codable, Identifiable {
     let progress: Double
     let scratchDirectoryPath: String?
     let browserCookieSource: String?
+    let requiresAdvancedArgumentsReview: Bool?
+    let hasPartialFailure: Bool?
     let options: DownloadOptions
 
 
     enum CodingKeys: String, CodingKey {
-        case id, url, title, filePath, filePaths, downloadDate, fileType, status, thumbnailURL, duration, errorMessage, log, progress, scratchDirectoryPath, browserCookieSource, options
+        case id, url, title, filePath, filePaths, downloadDate, fileType, status, thumbnailURL, duration, errorMessage, log, progress, scratchDirectoryPath, browserCookieSource, requiresAdvancedArgumentsReview, hasPartialFailure, options
     }
 
     @MainActor
@@ -2242,6 +2246,9 @@ struct HistoricDownload: Codable, Identifiable {
         default:
             self.browserCookieSource = nil
         }
+        self.requiresAdvancedArgumentsReview = download.status != .completed && (download.requiresAdvancedArgumentsReview ||
+            download.options.additionalArguments?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false)
+        self.hasPartialFailure = download.hasPartialFailure
         var sanitizedOptions = download.options
         sanitizedOptions.rawCookies = nil
         sanitizedOptions.rawUserAgent = nil
@@ -2265,6 +2272,8 @@ struct HistoricDownload: Codable, Identifiable {
         self.progress = try container.decode(Double.self, forKey: .progress)
         self.scratchDirectoryPath = try container.decodeIfPresent(String.self, forKey: .scratchDirectoryPath)
         self.browserCookieSource = try container.decodeIfPresent(String.self, forKey: .browserCookieSource)
+        self.requiresAdvancedArgumentsReview = try container.decodeIfPresent(Bool.self, forKey: .requiresAdvancedArgumentsReview)
+        self.hasPartialFailure = try container.decodeIfPresent(Bool.self, forKey: .hasPartialFailure)
         self.options = try container.decode(DownloadOptions.self, forKey: .options)
 
         // Legacy deserialization fallback: read single filePath only if filePaths is not present
@@ -2293,6 +2302,8 @@ struct HistoricDownload: Codable, Identifiable {
         try container.encode(fileType, forKey: .fileType)
         try container.encodeIfPresent(scratchDirectoryPath, forKey: .scratchDirectoryPath)
         try container.encodeIfPresent(browserCookieSource, forKey: .browserCookieSource)
+        try container.encodeIfPresent(requiresAdvancedArgumentsReview, forKey: .requiresAdvancedArgumentsReview)
+        try container.encodeIfPresent(hasPartialFailure, forKey: .hasPartialFailure)
         try container.encodeIfPresent(thumbnailURL, forKey: .thumbnailURL)
         try container.encodeIfPresent(duration, forKey: .duration)
     }
@@ -2316,7 +2327,10 @@ struct HistoricDownload: Codable, Identifiable {
             id: self.id,
             createdAt: self.downloadDate
         )
-        download.status = self.status
+        download.requiresAdvancedArgumentsReview = self.requiresAdvancedArgumentsReview ?? false
+        download.hasPartialFailure = self.hasPartialFailure ?? (self.status == .completed && self.errorMessage != nil)
+        let restoredStatus = download.hasPartialFailure && self.status == .completed ? DownloadStatus.failed : self.status
+        download.status = download.requiresAdvancedArgumentsReview ? .paused : restoredStatus
         download.progress = self.progress
         if let path = self.scratchDirectoryPath {
             let scratchDirectory = URL(fileURLWithPath: path)

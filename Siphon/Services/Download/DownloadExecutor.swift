@@ -424,10 +424,11 @@ final class DownloadExecutor: ObservableObject {
                 download.filePaths = [primary]
             }
             // Keep finished playlist entries, but don't report the job as a clean success.
+            download.hasPartialFailure = downloadResult.partialFailure != nil
             download.errorMessage = downloadResult.partialFailure
-            download.diagnostics.exitStatus = downloadResult.partialFailure == nil ? "Completed (0)" : "Completed with failed items"
-            delegate?.executorDidUpdateStatus(for: download, to: .completed)
-            download.progress = 1.0
+            download.diagnostics.exitStatus = download.hasPartialFailure ? "Completed with failed items" : "Completed (0)"
+            delegate?.executorDidUpdateStatus(for: download, to: download.hasPartialFailure ? .failed : .completed)
+            if !download.hasPartialFailure { download.progress = 1.0 }
 
             if download.options.embedThumbnail, let finalURL = download.primaryFilePath, let thumbURL = download.thumbnailURL {
                 Self.attachFinderIcon(from: thumbURL, to: finalURL)
@@ -443,7 +444,7 @@ final class DownloadExecutor: ObservableObject {
             }
             delegate?.executorDidRequestBroadcast()
 
-            LoggerService.shared.log("Download completed successfully: \(download.displayTitle.isEmpty ? LoggerService.sanitizeURLForLog(download.url) : download.displayTitle)", level: .info)
+            LoggerService.shared.log("Download finished: \(download.displayTitle.isEmpty ? LoggerService.sanitizeURLForLog(download.url) : download.displayTitle)", level: download.hasPartialFailure ? .warning : .info)
 
             delegate?.executorDidRequestAddToHistory(download, skipSave: false)
 
