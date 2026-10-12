@@ -329,85 +329,89 @@ struct HeroDropURLView: View {
 
     private func handleDrop(providers: [NSItemProvider]) -> Bool {
         for provider in providers {
-            let dropType = Self.dropType(of: provider)
-            // 1. Handle file drops (.txt batch files)
-            if dropType == .fileURL {
-                provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, _ in
-                    var fileURL: URL? = nil
-                    if let url = item as? URL {
-                        fileURL = url
-                    } else if let data = item as? Data, let path = String(data: data, encoding: .utf8) {
-                        fileURL = URL(string: path)
-                    }
-
-                    // Only .txt lists are read; any other file gets the same feedback as an empty list.
-                    let urls: [String] = {
-                        guard let fURL = fileURL, fURL.pathExtension.lowercased() == "txt",
-                              let content = try? String(contentsOf: fURL, encoding: .utf8) else { return [] }
-                        return DownloadURLValidator.extractURLs(from: content)
-                    }()
-                    Task { @MainActor in
-                        if urls.isEmpty {
-                            feedback.show(languageService.s("no_valid_urls"), isSuccess: false, icon: "exclamationmark.circle.fill")
-                        } else {
-                            startDownloads(urls: urls)
-                            feedback.show(String(format: languageService.s("hero_started_downloads"), urls.count), isSuccess: true, icon: "checkmark.circle.fill")
-                        }
-                    }
-                }
+            guard let dropType = Self.dropType(of: provider) else { continue }
+            switch dropType {
+            case .fileURL:
+                handleFileDrop(provider)
                 return true
-            }
-
-            // 2. Handle direct URL drops
-            if dropType == .url {
-                provider.loadItem(forTypeIdentifier: UTType.url.identifier, options: nil) { item, _ in
-                    let urlString: String? = {
-                        if let url = item as? URL { return url.absoluteString }
-                        if let data = item as? Data { return String(data: data, encoding: .utf8) }
-                        if let str = item as? String { return str }
-                        return nil
-                    }()
-
-                    if let raw = urlString {
-                        Task { @MainActor in
-                            if case .valid(_, let original) = DownloadURLValidator.validate(raw) {
-                                inputURL = original
-                                submitURL()
-                            } else {
-                                feedback.show(languageService.s("hero_invalid_url"), isSuccess: false, icon: "exclamationmark.circle.fill")
-                            }
-                        }
-                    }
-                }
+            case .url:
+                handleDirectURLDrop(provider)
                 return true
-            }
-
-            // 3. Handle plain text drops
-            if dropType == .utf8PlainText {
-                provider.loadItem(forTypeIdentifier: UTType.utf8PlainText.identifier, options: nil) { item, _ in
-                    if let text = item as? String {
-                        let urls = DownloadURLValidator.extractURLs(from: text)
-                        if urls.count > 1 {
-                            Task { @MainActor in
-                                startDownloads(urls: urls)
-                                feedback.show(String(format: languageService.s("hero_started_downloads"), urls.count), isSuccess: true, icon: "checkmark.circle.fill")
-                            }
-                        } else if let single = urls.first {
-                            Task { @MainActor in
-                                inputURL = single
-                                submitURL()
-                            }
-                        } else {
-                            Task { @MainActor in
-                                feedback.show(languageService.s("hero_invalid_url"), isSuccess: false, icon: "exclamationmark.circle.fill")
-                            }
-                        }
-                    }
-                }
+            case .utf8PlainText:
+                handlePlainTextDrop(provider)
                 return true
+            default:
+                continue
             }
         }
         return false
+    }
+
+    private func handleFileDrop(_ provider: NSItemProvider) {
+        provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, _ in
+            let fileURL: URL? = {
+                if let url = item as? URL { return url }
+                if let data = item as? Data, let path = String(data: data, encoding: .utf8) {
+                    return URL(string: path)
+                }
+                return nil
+            }()
+
+            // Only .txt lists are read; any other file gets the same feedback as an empty list.
+            let urls: [String] = {
+                guard let fURL = fileURL, fURL.pathExtension.lowercased() == "txt",
+                      let content = try? String(contentsOf: fURL, encoding: .utf8) else { return [] }
+                return DownloadURLValidator.extractURLs(from: content)
+            }()
+            Task { @MainActor in
+                if urls.isEmpty {
+                    feedback.show(languageService.s("no_valid_urls"), isSuccess: false, icon: "exclamationmark.circle.fill")
+                } else {
+                    startDownloads(urls: urls)
+                    feedback.show(String(format: languageService.s("hero_started_downloads"), urls.count), isSuccess: true, icon: "checkmark.circle.fill")
+                }
+            }
+        }
+    }
+
+    private func handleDirectURLDrop(_ provider: NSItemProvider) {
+        provider.loadItem(forTypeIdentifier: UTType.url.identifier, options: nil) { item, _ in
+            let urlString: String? = {
+                if let url = item as? URL { return url.absoluteString }
+                if let data = item as? Data { return String(data: data, encoding: .utf8) }
+                if let str = item as? String { return str }
+                return nil
+            }()
+
+            if let raw = urlString {
+                Task { @MainActor in
+                    if case .valid(_, let original) = DownloadURLValidator.validate(raw) {
+                        inputURL = original
+                        submitURL()
+                    } else {
+                        feedback.show(languageService.s("hero_invalid_url"), isSuccess: false, icon: "exclamationmark.circle.fill")
+                    }
+                }
+            }
+        }
+    }
+
+    private func handlePlainTextDrop(_ provider: NSItemProvider) {
+        provider.loadItem(forTypeIdentifier: UTType.utf8PlainText.identifier, options: nil) { item, _ in
+            guard let text = item as? String else { return }
+            let urls = DownloadURLValidator.extractURLs(from: text)
+            Task { @MainActor in
+                if urls.count > 1 {
+                    startDownloads(urls: urls)
+                    feedback.show(String(format: languageService.s("hero_started_downloads"), urls.count), isSuccess: true, icon: "checkmark.circle.fill")
+                } else if let single = urls.first {
+                    inputURL = single
+                    submitURL()
+                } else {
+                    feedback.show(languageService.s("hero_invalid_url"), isSuccess: false, icon: "exclamationmark.circle.fill")
+                }
+            }
+        }
     }
 
     private func startDownloads(urls: [String]) {

@@ -14,6 +14,8 @@ engines:
     enabled: false
   jshint:
     enabled: false
+  pmd:
+    enabled: false
 
 exclude_paths:
   - "**.md"
@@ -22,5 +24,6 @@ exclude_paths:
   - "SiphonTests/**"
   - "scripts/**"
   - "Casks/**"
+  - "server/test/**"
   # Binary media fixtures; Codacy reads segment0.ts as TypeScript and crashes.
   - "server/fixtures/**"

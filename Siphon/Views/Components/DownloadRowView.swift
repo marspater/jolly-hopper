@@ -38,12 +38,12 @@ struct DownloadListView: View {
     let emptyDetail: String
     var emptyIcon: String = "tray.fill"
     let showStop: Bool
-    
+
     @EnvironmentObject var downloadManager: DownloadManager
     @EnvironmentObject var languageService: LanguageService
     @EnvironmentObject var appState: AppState
     @State private var scrollActivity = ListScrollActivity()
-    
+
     var body: some View {
         Group {
             if downloads.isEmpty {
@@ -65,7 +65,7 @@ struct DownloadListView: View {
             }
         }
     }
-    
+
     /// The sidebar starts hidden, so the list names itself.
     private var header: some View {
         HStack(alignment: .firstTextBaseline, spacing: SiphonTheme.spacing8) {
@@ -104,7 +104,7 @@ struct DownloadRowView: View {
     @EnvironmentObject var updateChecker: UpdateChecker
     @Environment(\.colorScheme) private var colorScheme
     let showStop: Bool
-    
+
     @State private var isHovering = false
     @State private var showLog = false
     @State private var recoveredArguments = ""
@@ -115,12 +115,12 @@ struct DownloadRowView: View {
     /// nil until checked; unknown counts as present so actions don't flicker.
     @State private var primaryFileIsPresent: Bool?
     @Environment(\.listScrollActivity) private var scrollActivity
-    
+
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .top, spacing: 14) {
                 thumbnailView
-                
+
                 VStack(alignment: .leading, spacing: 4) {
                     // Line 1: Title
                     Text(download.status == .fetching ? languageService.s("fetching") : download.displayTitle)
@@ -130,7 +130,7 @@ struct DownloadRowView: View {
                         .fixedSize(horizontal: false, vertical: true)
                         .layoutPriority(1)
                         .help(download.displayTitle)
-                    
+
                     // Line 2: Subtitle (Domain • Quality • Format • Duration)
                     Text(download.formatSubtitle(lang: languageService))
                         .font(.siphonSecondaryMedium)
@@ -138,12 +138,12 @@ struct DownloadRowView: View {
                         .lineLimit(1)
                         .truncationMode(.tail)
                         .help(download.formatSubtitle(lang: languageService))
-                    
+
                     // Line 3: Status / Progress / Metrics
                     if download.status == .downloading || download.status == .processing || download.status == .fetching {
                         HStack(spacing: 8) {
                             statusBadge
-                            
+
                             if download.status == .downloading {
                                 HStack(spacing: 8) {
                                     let safePercent: Int = {
@@ -154,7 +154,7 @@ struct DownloadRowView: View {
                                     Text("\(safePercent)%")
                                         .font(.siphonSecondaryMonoSemibold)
                                         .foregroundColor(SiphonTheme.accentText)
-                                    
+
                                     if let speed = download.speed, !speed.isEmpty {
                                         Text("•")
                                             .foregroundColor(.secondary.opacity(0.4))
@@ -162,7 +162,7 @@ struct DownloadRowView: View {
                                             .font(.siphonMetadataMonoMedium)
                                             .foregroundColor(.secondary)
                                     }
-                                    
+
                                     if let eta = download.eta, !eta.isEmpty {
                                         Text("•")
                                             .foregroundColor(.secondary.opacity(0.4))
@@ -178,7 +178,7 @@ struct DownloadRowView: View {
                     } else {
                         HStack(spacing: 8) {
                             statusBadge
-                            
+
                             if download.status == .paused && download.progress > 0 {
                                 Text("\(Int(download.progress * 100))%")
                                     .font(.siphonMetadataMonoSemibold)
@@ -197,9 +197,9 @@ struct DownloadRowView: View {
                 .frame(minHeight: 68, alignment: .topLeading)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .layoutPriority(1)
-                
+
                 Spacer(minLength: SiphonTheme.spacing8)
-                
+
                 actionButtons
                     .frame(minWidth: download.status == .fileExists ? 0 : 62, alignment: .trailing)
                     .padding(.top, 1)
@@ -254,7 +254,7 @@ struct DownloadRowView: View {
             primaryFileIsPresent.refreshPresence(of: download)
         }
     }
-    
+
     private var recoveredArgumentsSection: some View {
         VStack(alignment: .leading, spacing: SiphonTheme.spacing8) {
             Label(languageService.s("recovery_arguments_warning"), systemImage: "exclamationmark.triangle")
@@ -294,10 +294,10 @@ struct DownloadRowView: View {
                             .font(.siphonStandardSemibold)
                             .foregroundColor(SiphonTheme.statusForeground(for: .failed, colorScheme: colorScheme))
                             .lineLimit(1)
-                        
+
                         Text("—")
                             .foregroundColor(SiphonTheme.statusForeground(for: .failed, colorScheme: colorScheme).opacity(0.55))
-                        
+
                         Text(info.description)
                             .font(.siphonSecondary)
                             .foregroundColor(.secondary)
@@ -305,7 +305,7 @@ struct DownloadRowView: View {
                             .truncationMode(.tail)
                             .layoutPriority(1)
                     }
-                    
+
                     HStack(spacing: 8) {
                         switch info.actionType {
                         case .fixInSettings:
@@ -323,7 +323,7 @@ struct DownloadRowView: View {
                             }
                             .buttonStyle(.borderedProminent)
                             .controlSize(.small)
-                            
+
                         case .retry:
                             Button {
                                 downloadManager.retryDownload(download)
@@ -334,7 +334,7 @@ struct DownloadRowView: View {
                             .buttonStyle(.bordered)
                             .controlSize(.small)
                             .tint(nil)
-                            
+
                         case .changeFolder:
                             Button {
                                 // Retry keeps the job's own folder, so changing the
@@ -355,11 +355,11 @@ struct DownloadRowView: View {
                             .buttonStyle(.bordered)
                             .controlSize(.small)
                             .tint(nil)
-                            
+
                         case .noAction:
                             EmptyView()
                         }
-                        
+
                         Button {
                             withAnimation(SiphonAnimation.snappySpring) {
                                 showRawError.toggle()
@@ -376,7 +376,7 @@ struct DownloadRowView: View {
                         }
                         .buttonStyle(.plain)
                     }
-                    
+
                     if showRawError {
                         VStack(alignment: .leading, spacing: 4) {
                             Text(info.rawError)
@@ -392,7 +392,7 @@ struct DownloadRowView: View {
                                 .overlay(
                                     SiphonTheme.controlBorder(cornerRadius: SiphonTheme.radiusSmall)
                                 )
-                            
+
                             HStack {
                                 Button {
                                     NSPasteboard.general.clearContents()
@@ -411,9 +411,9 @@ struct DownloadRowView: View {
                                 .foregroundColor(errorCopyFeedback.isShowing ? SiphonTheme.statusCompletedText : SiphonTheme.accentText)
                                 .help(languageService.s("copy_error"))
                                 .accessibilityLabel(errorCopyFeedback.isShowing ? languageService.s("copied") : languageService.s("copy_error"))
-                                
+
                                 Spacer()
-                                
+
                                 Button {
                                     showLog = true
                                 } label: {
@@ -439,7 +439,7 @@ struct DownloadRowView: View {
             }
         }
     }
-    
+
     private var thumbnailView: some View {
         Group {
             if canPreviewMedia {
@@ -483,7 +483,7 @@ struct DownloadRowView: View {
     private var thumbnailContent: some View {
         ZStack(alignment: .bottomTrailing) {
             Group {
-                if let url = download.thumbnailURL, let scheme = url.scheme?.lowercased(), (scheme == "http" || scheme == "https") {
+                if let url = download.thumbnailURL, let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https" {
                     ThumbnailImage(url: url) { phase in
                         switch phase {
                         case .success(let image):
@@ -542,7 +542,7 @@ struct DownloadRowView: View {
             }
         }
     }
-    
+
     private var thumbnailPlaceholder: some View {
         Rectangle()
             .fill(Color.primary.opacity(SiphonTheme.Opacity.fillPlaceholder))
@@ -607,7 +607,7 @@ struct FileThumbnailView: View {
         }
     }
 }
-    
+
     private var statusBadge: some View {
         SiphonStatusBadge(
             status: download.status,
@@ -628,7 +628,7 @@ struct FileThumbnailView: View {
     private var badgeForegroundColor: Color {
         SiphonTheme.statusForeground(for: download.status, colorScheme: colorScheme)
     }
-    
+
     /// The trailing "More Actions" menu shared by every row state.
     private func moreActionsMenu<Items: View>(@ViewBuilder _ items: () -> Items) -> some View {
         Menu(content: items) {
@@ -662,7 +662,7 @@ struct FileThumbnailView: View {
                     .help(languageService.s("play"))
                     .accessibilityLabel(languageService.s("play"))
                 }
-                
+
                 moreActionsMenu {
                     if download.filePaths.count > 1 {
                         Menu {
@@ -697,14 +697,14 @@ struct FileThumbnailView: View {
                             Label(languageService.s("play"), systemImage: "play.fill")
                         }
                     }
-                    
+
                     if !download.filePaths.isEmpty {
                         Button {
                             downloadManager.showInFinder(download.filePaths)
                         } label: {
                             Label(languageService.s("show_in_finder"), systemImage: "folder")
                         }
-                        
+
                         Button {
                             NSPasteboard.general.clearContents()
                             let pathsString = download.filePathStrings.joined(separator: "\n")
@@ -713,34 +713,34 @@ struct FileThumbnailView: View {
                             Label(download.filePaths.count > 1 ? languageService.s("copy_all_paths") : languageService.s("copy_file_path"), systemImage: "doc.on.doc")
                         }
                     }
-                    
+
                     Button {
                         showDiagnostics = true
                     } label: {
                         Label(languageService.s("view_diagnostics"), systemImage: "cpu")
                     }
-                    
+
                     Button {
                         appState.reopenInAddSheet(download)
                     } label: {
                         Label(languageService.s("redownload"), systemImage: "arrow.down.circle")
                     }
-                    
+
                     Button {
                         NSPasteboard.general.clearContents()
                         NSPasteboard.general.setString(download.url, forType: .string)
                     } label: {
                         Label(languageService.s("copy_url"), systemImage: "link")
                     }
-                    
+
                     Button {
                         showLog = true
                     } label: {
                         Label(languageService.s("log"), systemImage: "doc.text")
                     }
-                    
+
                     Divider()
-                    
+
                     Button(role: .destructive) {
                         downloadManager.removeDownload(download)
                     } label: {
@@ -748,7 +748,7 @@ struct FileThumbnailView: View {
                     }
                 }
             }
-            
+
             // Downloading / Fetching / Processing: one visible Pause action + More menu
             if download.status == .downloading || download.status == .fetching || download.status == .processing {
                 Button {
@@ -761,27 +761,27 @@ struct FileThumbnailView: View {
                 .foregroundColor(SiphonTheme.statusForeground(for: .queued, colorScheme: colorScheme))
                 .help(languageService.s("pause"))
                 .accessibilityLabel(languageService.s("pause"))
-                
+
                 moreActionsMenu {
                     Button {
                         downloadManager.pauseDownload(download)
                     } label: {
                         Label(languageService.s("pause"), systemImage: "pause.fill")
                     }
-                    
+
                     Button {
                         downloadManager.stopDownload(download)
                     } label: {
                         Label(languageService.s("stop"), systemImage: "stop.fill")
                     }
-                    
+
                     Button {
                         NSPasteboard.general.clearContents()
                         NSPasteboard.general.setString(download.url, forType: .string)
                     } label: {
                         Label(languageService.s("copy_url"), systemImage: "link")
                     }
-                    
+
                     Button {
                         showLog = true
                     } label: {
@@ -789,7 +789,7 @@ struct FileThumbnailView: View {
                     }
                 }
             }
-            
+
             // Queued state: Pause + Reorder + More Menu
             if download.status == .queued {
                 Button {
@@ -802,7 +802,7 @@ struct FileThumbnailView: View {
                 .foregroundColor(SiphonTheme.statusForeground(for: .queued, colorScheme: colorScheme))
                 .help(languageService.s("pause"))
                 .accessibilityLabel(languageService.s("pause"))
-                
+
                 let canMoveUp = downloadManager.canMoveDownloadUp(download)
                 let canMoveDown = downloadManager.canMoveDownloadDown(download)
                 moreActionsMenu {
@@ -812,30 +812,30 @@ struct FileThumbnailView: View {
                         Label(languageService.s("move_to_top"), systemImage: "arrow.up.to.line")
                     }
                     .disabled(!canMoveUp)
-                    
+
                     Button {
                         downloadManager.moveDownloadUp(download)
                     } label: {
                         Label(languageService.s("move_up"), systemImage: "arrow.up")
                     }
                     .disabled(!canMoveUp)
-                    
+
                     Button {
                         downloadManager.moveDownloadDown(download)
                     } label: {
                         Label(languageService.s("move_down"), systemImage: "arrow.down")
                     }
                     .disabled(!canMoveDown)
-                    
+
                     Button {
                         downloadManager.moveDownloadToBottom(download)
                     } label: {
                         Label(languageService.s("move_to_bottom"), systemImage: "arrow.down.to.line")
                     }
                     .disabled(!canMoveDown)
-                    
+
                     Divider()
-                    
+
                     Button {
                         downloadManager.stopDownload(download)
                     } label: {
@@ -843,7 +843,7 @@ struct FileThumbnailView: View {
                     }
                 }
             }
-            
+
             // Paused state: Resume + More Menu
             if download.status == .paused {
                 Button {
@@ -857,22 +857,22 @@ struct FileThumbnailView: View {
                 .foregroundColor(SiphonTheme.accentText)
                 .help(languageService.s("resume"))
                 .accessibilityLabel(languageService.s("resume"))
-                
+
                 moreActionsMenu {
                     Button {
                         downloadManager.resumeDownload(download)
                     } label: {
                         Label(languageService.s("resume"), systemImage: "play.fill")
                     }
-                    
+
                     Button {
                         downloadManager.stopDownload(download)
                     } label: {
                         Label(languageService.s("stop"), systemImage: "stop.fill")
                     }
-                    
+
                     Divider()
-                    
+
                     Button(role: .destructive) {
                         downloadManager.removeDownload(download)
                     } label: {
@@ -880,7 +880,7 @@ struct FileThumbnailView: View {
                     }
                 }
             }
-            
+
             // Failed / Stopped state: Retry + More Menu
             if download.status == .failed || download.status == .stopped {
                 Button {
@@ -893,35 +893,35 @@ struct FileThumbnailView: View {
                 .foregroundColor(SiphonTheme.statusForeground(for: .queued, colorScheme: colorScheme))
                 .help(languageService.s("retry"))
                 .accessibilityLabel(languageService.s("retry"))
-                
+
                 moreActionsMenu {
                     Button {
                         downloadManager.retryDownload(download)
                     } label: {
                         Label(languageService.s("retry"), systemImage: "arrow.clockwise")
                     }
-                    
+
                     Button {
                         appState.reopenInAddSheet(download)
                     } label: {
                         Label(languageService.s("redownload"), systemImage: "arrow.down.circle")
                     }
-                    
+
                     Button {
                         NSPasteboard.general.clearContents()
                         NSPasteboard.general.setString(download.url, forType: .string)
                     } label: {
                         Label(languageService.s("copy_url"), systemImage: "link")
                     }
-                    
+
                     Button {
                         showLog = true
                     } label: {
                         Label(languageService.s("log"), systemImage: "doc.text")
                     }
-                    
+
                     Divider()
-                    
+
                     Button(role: .destructive) {
                         downloadManager.removeDownload(download)
                     } label: {
@@ -929,7 +929,7 @@ struct FileThumbnailView: View {
                     }
                 }
             }
-            
+
             // FileExists state
             if download.status == .fileExists {
                 Button {
@@ -946,7 +946,7 @@ struct FileThumbnailView: View {
                 .buttonStyle(.siphonGhost)
                 .help(languageService.s("overwrite"))
                 .accessibilityLabel(languageService.s("overwrite"))
-                
+
                 Button {
                     downloadManager.resumeWithNewName(download)
                 } label: {
@@ -975,7 +975,7 @@ struct FileThumbnailView: View {
             }
         }
     }
-    
+
     @ViewBuilder
     private var rowContextMenu: some View {
         if download.status == .completed {
@@ -989,7 +989,7 @@ struct FileThumbnailView: View {
                 } label: {
                     Label(languageService.s("quick_look_chapters"), systemImage: "eye")
                 }
-                
+
                 Menu {
                     ForEach(download.filePaths, id: \.self) { chapter in
                         Button(chapter.lastPathComponent) {
@@ -1005,7 +1005,7 @@ struct FileThumbnailView: View {
                 } label: {
                     Label(languageService.s("quick_look"), systemImage: "eye")
                 }
-                
+
                 Button {
                     downloadManager.openFile(path)
                 } label: {
@@ -1028,29 +1028,29 @@ struct FileThumbnailView: View {
                     Label(download.filePaths.count > 1 ? languageService.s("copy_all_paths") : languageService.s("copy_file_path"), systemImage: "doc.on.doc")
                 }
             }
-            
+
             Divider()
         }
-        
+
         Button {
             showDiagnostics = true
         } label: {
             Label(languageService.s("view_diagnostics"), systemImage: "cpu")
         }
-        
+
         if download.status == .downloading || download.status == .fetching || download.status == .processing {
             Button {
                 downloadManager.pauseDownload(download)
             } label: {
                 Label(languageService.s("pause"), systemImage: "pause.fill")
             }
-            
+
             Button {
                 downloadManager.stopDownload(download)
             } label: {
                 Label(languageService.s("stop"), systemImage: "stop.fill")
             }
-            
+
             Divider()
         } else if download.status == .paused {
             Button {
@@ -1058,13 +1058,13 @@ struct FileThumbnailView: View {
             } label: {
                 Label(languageService.s("resume"), systemImage: "play.fill")
             }
-            
+
             Button {
                 downloadManager.stopDownload(download)
             } label: {
                 Label(languageService.s("stop"), systemImage: "stop.fill")
             }
-            
+
             Divider()
         } else if download.status == .queued {
             Button {
@@ -1072,31 +1072,31 @@ struct FileThumbnailView: View {
             } label: {
                 Label(languageService.s("pause"), systemImage: "pause.fill")
             }
-            
+
             Button {
                 downloadManager.moveDownloadToTop(download)
             } label: {
                 Label(languageService.s("move_to_top"), systemImage: "arrow.up.to.line")
             }
-            
+
             Button {
                 downloadManager.moveDownloadUp(download)
             } label: {
                 Label(languageService.s("move_up"), systemImage: "arrow.up")
             }
-            
+
             Button {
                 downloadManager.moveDownloadDown(download)
             } label: {
                 Label(languageService.s("move_down"), systemImage: "arrow.down")
             }
-            
+
             Button {
                 downloadManager.moveDownloadToBottom(download)
             } label: {
                 Label(languageService.s("move_to_bottom"), systemImage: "arrow.down.to.line")
             }
-            
+
             Divider()
         } else if download.status == .fileExists {
             Button {
@@ -1104,7 +1104,7 @@ struct FileThumbnailView: View {
             } label: {
                 Label(languageService.s("overwrite"), systemImage: "square.and.arrow.down.on.square.fill")
             }
-            
+
             Button {
                 downloadManager.resumeWithNewName(download)
             } label: {
@@ -1116,13 +1116,13 @@ struct FileThumbnailView: View {
             } label: {
                 Label(languageService.s("show_in_finder"), systemImage: "folder")
             }
-            
+
             Button {
                 downloadManager.stopDownload(download)
             } label: {
                 Label(languageService.s("stop"), systemImage: "stop.fill")
             }
-            
+
             Divider()
         } else if download.status == .failed || download.status == .stopped {
             Button {
@@ -1130,32 +1130,32 @@ struct FileThumbnailView: View {
             } label: {
                 Label(languageService.s("retry"), systemImage: "arrow.clockwise")
             }
-            
+
             Divider()
         }
-        
+
         Button {
             NSPasteboard.general.clearContents()
             NSPasteboard.general.setString(download.url, forType: .string)
         } label: {
             Label(languageService.s("copy_url"), systemImage: "link")
         }
-        
+
         Button {
             showLog = true
         } label: {
             Label(languageService.s("log"), systemImage: "doc.text")
         }
-        
+
         Divider()
-        
+
         Button(role: .destructive) {
             downloadManager.removeDownload(download)
         } label: {
             Label(languageService.s("remove"), systemImage: "trash")
         }
     }
-    
+
     private var logSheet: some View {
         VStack(spacing: 0) {
             // Header
@@ -1274,7 +1274,7 @@ struct LinearProgressBar: View {
                                 lineWidth: 0.5
                             )
                     )
-                
+
                 // Glowing progress fill
                 Capsule()
                     .fill(SiphonTheme.primaryGradient)
