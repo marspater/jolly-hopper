@@ -214,6 +214,10 @@ public final class EgressProxyServer: @unchecked Sendable {
             // Look for header boundary: \r\n\r\n or \n\n
             let boundaryRange = buffer.range(of: Data("\r\n\r\n".utf8)) ?? buffer.range(of: Data("\n\n".utf8))
             if let headerEndRange = boundaryRange {
+                guard headerEndRange.lowerBound <= 32768 else {
+                    self.sendResponse(client: client, status: "400 Bad Request", body: "Header too large\n", close: true)
+                    return
+                }
                 let headerData = buffer.subdata(in: 0..<headerEndRange.lowerBound)
                 let remainingData = buffer.subdata(in: headerEndRange.upperBound..<buffer.count)
                 self.processRequest(client: client, headerData: headerData, remainingData: remainingData)
@@ -244,7 +248,9 @@ public final class EgressProxyServer: @unchecked Sendable {
         }
 
         let parts = firstLine.split(separator: " ")
-        guard parts.count >= 2 else {
+        guard parts.count == 3, ["HTTP/1.0", "HTTP/1.1"].contains(String(parts[2])),
+              parts[0].allSatisfy({ Self.httpTokenCharacters.contains($0) }),
+              parts[1].utf8.allSatisfy({ $0 > 32 && $0 != 127 }) else {
             sendResponse(client: client, status: "400 Bad Request", body: "Invalid request line\n", close: true)
             return
         }
@@ -307,87 +313,149 @@ public final class EgressProxyServer: @unchecked Sendable {
         })
     }
 
-    private func handleForwardRequest(client: NWConnection, method: String, target: String, lines: [Substring], remainingData: Data) {
+    private struct ForwardTarget {
         let host: String
         let port: Int
         let relativePath: String
+        let authority: String
+    }
 
-        if let url = URL(string: target), let urlHost = url.host {
-            host = urlHost
-            port = url.port ?? (url.scheme?.lowercased() == "https" ? 443 : 80)
-            // Keep the path as the client encoded it; URL.path would decode
-            // %20/%2F and forward an invalid or different request line.
-            let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
-            let path = components?.percentEncodedPath ?? ""
-            let query = components?.percentEncodedQuery.map { "?\($0)" } ?? ""
-            relativePath = (path.isEmpty ? "/" : path) + query
-        } else {
-            var hostHeaderValue: Substring?
-            for line in lines.dropFirst() {
-                let trimmedLine = line.trimmingWhitespace()
-                if let colon = trimmedLine.firstIndex(of: ":"),
-                   trimmedLine[..<colon].caseInsensitiveCompare("host") == .orderedSame {
-                    hostHeaderValue = trimmedLine[trimmedLine.index(after: colon)...].trimmingWhitespace()
-                    break
+    private struct ForwardRequestRejection: Error {
+        let status: String
+        let body: String
+
+        init(_ body: String, status: String = "400 Bad Request") {
+            self.status = status
+            self.body = body + "\n"
+        }
+    }
+
+    private func handleForwardRequest(client: NWConnection, method: String, target: String, lines: [Substring], remainingData: Data) {
+        do {
+            let request = try Self.validatedForwardHeaders(lines)
+            let destination = try Self.parseForwardTarget(target, lines: lines)
+            let addresses = try authorizeForwardTarget(destination)
+            let bufferedBody = remainingData.prefix(request.bodyLength)
+            let payload = Self.forwardPayload(method: method, target: destination, request: request, body: bufferedBody)
+            let remainingBodyLength = request.bodyLength - bufferedBody.count
+
+            connectUpstream(addresses: addresses[...], port: destination.port) { [weak self] upstreamResult in
+                guard let self else { client.cancel(); return }
+                switch upstreamResult {
+                case .failure:
+                    self.sendResponse(client: client, status: "502 Bad Gateway", body: "Failed to connect to destination\n", close: true)
+                case .success(let upstream):
+                    self.sendForwardPayload(client: client, upstream: upstream, payload: payload, remainingBodyLength: remainingBodyLength)
                 }
             }
-            guard let hostVal = hostHeaderValue, let (h, p) = Self.parseHostAndPort(hostVal, defaultPort: 80) else {
-                sendResponse(client: client, status: "400 Bad Request", body: "Missing Host header\n", close: true)
-                return
-            }
-            host = h
-            port = p
-            relativePath = target
+        } catch {
+            sendResponse(client: client, status: error.status, body: error.body, close: true)
         }
+    }
 
-        guard let addresses = approvedAddresses(host: host, port: port) else {
+    private static func validatedForwardHeaders(_ lines: [Substring]) throws(ForwardRequestRejection) -> ForwardHeaders {
+        guard let request = forwardRequestHeaders(lines) else {
+            throw ForwardRequestRejection("Invalid HTTP request framing")
+        }
+        guard !request.hasTransferEncoding else {
+            throw ForwardRequestRejection("Transfer-Encoding request bodies are unsupported", status: "501 Not Implemented")
+        }
+        return request
+    }
+
+    private static func parseForwardTarget(_ target: String, lines: [Substring]) throws(ForwardRequestRejection) -> ForwardTarget {
+        if let url = URL(string: target), let host = url.host {
+            return try absoluteForwardTarget(url, host: host)
+        }
+        guard target.hasPrefix("/"), !target.hasPrefix("//") else {
+            throw ForwardRequestRejection("Invalid request target")
+        }
+        return try originForwardTarget(target, lines: lines)
+    }
+
+    private static func absoluteForwardTarget(_ url: URL, host: String) throws(ForwardRequestRejection) -> ForwardTarget {
+        guard url.scheme?.lowercased() == "http", url.user == nil, url.password == nil, url.fragment == nil else {
+            throw ForwardRequestRejection("Use CONNECT for HTTPS")
+        }
+        let port = url.port ?? 80
+        guard (1...65535).contains(port) else { throw ForwardRequestRejection("Invalid port") }
+        // URL.path would decode %20/%2F and change the wire request target.
+        let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+        let path = components?.percentEncodedPath ?? ""
+        let query = components?.percentEncodedQuery.map { "?\($0)" } ?? ""
+        return ForwardTarget(host: host, port: port, relativePath: (path.isEmpty ? "/" : path) + query,
+                             authority: host + (url.port.map { ":\($0)" } ?? ""))
+    }
+
+    private static func originForwardTarget(_ target: String, lines: [Substring]) throws(ForwardRequestRejection) -> ForwardTarget {
+        for line in lines.dropFirst() {
+            guard let header = RequestHeader(line), header.name == "host" else { continue }
+            guard let endpoint = parseHostAndPort(header.value, defaultPort: 80) else { break }
+            return ForwardTarget(host: endpoint.host, port: endpoint.port, relativePath: target, authority: String(header.value))
+        }
+        throw ForwardRequestRejection("Missing Host header")
+    }
+
+    private func authorizeForwardTarget(_ target: ForwardTarget) throws(ForwardRequestRejection) -> [String] {
+        guard let addresses = approvedAddresses(host: target.host, port: target.port) else {
             Task { @MainActor in
-                LoggerService.shared.log("Egress proxy blocked HTTP target outside public network: \(host):\(port)", level: .warning)
+                LoggerService.shared.log("Egress proxy blocked HTTP target outside public network: \(target.host):\(target.port)", level: .warning)
             }
-            sendResponse(client: client, status: "403 Forbidden", body: "Blocked: Private or reserved destination\n", close: true)
+            throw ForwardRequestRejection("Blocked: Private or reserved destination", status: "403 Forbidden")
+        }
+        return addresses
+    }
+
+    private static func forwardPayload(method: String, target: ForwardTarget, request: ForwardHeaders, body: Data) -> Data {
+        // Canonicalize routing/framing fields; serialize exactly one request.
+        var headers = ""
+        headers.reserveCapacity(request.forwardedLines.reduce(0) { $0 + $1.count + 2 } + 64)
+        headers.append("\(method) \(target.relativePath) HTTP/1.1\r\n")
+        for line in request.forwardedLines {
+            headers.append(contentsOf: line)
+            headers.append("\r\n")
+        }
+        headers.append("Host: \(target.authority)\r\n")
+        if request.hasContentLength { headers.append("Content-Length: \(request.bodyLength)\r\n") }
+        headers.append("Connection: close\r\n\r\n")
+        var payload = Data(headers.utf8)
+        payload.append(body)
+        return payload
+    }
+
+    private func sendForwardPayload(client: NWConnection, upstream: NWConnection, payload: Data, remainingBodyLength: Int) {
+        upstream.send(content: payload, completion: .contentProcessed { [weak self] sendError in
+            guard let self, sendError == nil else { client.cancel(); upstream.cancel(); return }
+            // Response bytes stream freely; request bytes stop at Content-Length.
+            self.pipe(from: upstream, to: client, completion: { client.cancel(); upstream.cancel() })
+            self.forwardBody(client: client, upstream: upstream, remaining: remainingBodyLength)
+        })
+    }
+
+    private func forwardBody(client: NWConnection, upstream: NWConnection, remaining: Int) {
+        guard remaining > 0 else {
+            upstream.send(content: nil, contentContext: .finalMessage, isComplete: true,
+                          completion: .contentProcessed { error in
+                if error != nil { client.cancel(); upstream.cancel() }
+            })
             return
         }
-
-        connectUpstream(addresses: addresses[...], port: port) { [weak self] upstreamResult in
-            guard let self = self else {
+        client.receive(minimumIncompleteLength: 1, maximumLength: min(65536, remaining)) { [weak self] content, _, isComplete, error in
+            guard let self, error == nil, let content, !content.isEmpty else {
                 client.cancel()
+                upstream.cancel()
                 return
             }
-
-            switch upstreamResult {
-            case .failure:
-                self.sendResponse(client: client, status: "502 Bad Gateway", body: "Failed to connect to destination\n", close: true)
-            case .success(let upstream):
-                // After this request the connection is a raw pipe to this one
-                // upstream. HTTP clients reuse a proxy connection for plain-HTTP
-                // requests to any host, so a kept-alive connection would carry the
-                // next request (and its cookies) to the wrong server. One request
-                // per connection: drop the hop-by-hop headers and ask to close.
-                var forwardedHeaders = ""
-                let estimatedCapacity = lines.reduce(0) { $0 + $1.count + 2 } + 64
-                forwardedHeaders.reserveCapacity(estimatedCapacity)
-                forwardedHeaders.append(method)
-                forwardedHeaders.append(" ")
-                forwardedHeaders.append(relativePath)
-                forwardedHeaders.append(" HTTP/1.1\r\n")
-                for line in lines.dropFirst() where !line.isEmpty && !Self.isHopByHopHeader(line) {
-                    forwardedHeaders.append(contentsOf: line)
-                    forwardedHeaders.append("\r\n")
+            let body = content.prefix(remaining)
+            let left = remaining - body.count
+            upstream.send(content: Data(body), completion: .contentProcessed { sendError in
+                guard sendError == nil, !isComplete || left == 0 else {
+                    client.cancel()
+                    upstream.cancel()
+                    return
                 }
-                forwardedHeaders.append("Connection: close\r\n\r\n")
-
-                var payload = Data(forwardedHeaders.utf8)
-                payload.append(remainingData)
-
-                upstream.send(content: payload, completion: .contentProcessed { [weak self] sendError in
-                    guard let self = self, sendError == nil else {
-                        client.cancel()
-                        upstream.cancel()
-                        return
-                    }
-                    self.bridgeConnections(client: client, upstream: upstream)
-                })
-            }
+                self.forwardBody(client: client, upstream: upstream, remaining: left)
+            })
         }
     }
 
@@ -493,31 +561,38 @@ public final class EgressProxyServer: @unchecked Sendable {
     }
 
     private func bridgeConnections(client: NWConnection, upstream: NWConnection) {
-        pipe(from: client, to: upstream)
-        pipe(from: upstream, to: client)
+        let firstFinished = AtomicBox(false)
+        let finish: @Sendable () -> Void = {
+            if !firstFinished.compareAndSet(expected: false, newValue: true) {
+                client.cancel()
+                upstream.cancel()
+            }
+        }
+        pipe(from: client, to: upstream, completion: finish)
+        pipe(from: upstream, to: client, completion: finish)
     }
 
-    private func pipe(from source: NWConnection, to destination: NWConnection) {
+    /// EOF finishes only this direction after its final bytes have drained.
+    private func pipe(from source: NWConnection, to destination: NWConnection, completion: @escaping @Sendable () -> Void) {
         source.receive(minimumIncompleteLength: 1, maximumLength: 65536) { [weak self] content, _, isComplete, error in
-            guard let self = self else {
+            guard let self, error == nil else {
                 source.cancel()
                 destination.cancel()
                 return
             }
-
-            if let data = content, !data.isEmpty {
-                destination.send(content: data, completion: .contentProcessed { sendError in
-                    if sendError == nil && !isComplete && error == nil {
-                        self.pipe(from: source, to: destination)
-                    } else {
-                        source.cancel()
-                        destination.cancel()
-                    }
-                })
-            } else {
-                source.cancel()
-                destination.cancel()
-            }
+            destination.send(content: content, contentContext: isComplete ? .finalMessage : .defaultMessage,
+                             isComplete: true, completion: .contentProcessed { sendError in
+                guard sendError == nil else {
+                    source.cancel()
+                    destination.cancel()
+                    return
+                }
+                if isComplete {
+                    completion()
+                } else {
+                    self.pipe(from: source, to: destination, completion: completion)
+                }
+            })
         }
     }
 
@@ -534,10 +609,66 @@ public final class EgressProxyServer: @unchecked Sendable {
         "connection", "proxy-connection", "keep-alive", "proxy-authenticate", "proxy-authorization", "te", "trailer", "trailers", "transfer-encoding", "upgrade"
     ]
 
-    private static func isHopByHopHeader(_ line: Substring) -> Bool {
-        guard let colon = line.firstIndex(of: ":") else { return false }
-        let headerName = line[..<colon].trimmingWhitespace()
-        return hopByHopHeaders.contains(where: { $0.caseInsensitiveCompare(headerName) == .orderedSame })
+    private static let httpTokenCharacters = Set("!#$%&'*+-.^_`|~0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
+
+    private struct ForwardHeaders {
+        let forwardedLines: [Substring]
+        let bodyLength: Int
+        let hasContentLength: Bool
+        let hasTransferEncoding: Bool
+    }
+
+    private struct RequestHeader {
+        let name: String
+        let value: Substring
+        let line: Substring
+
+        init?(_ line: Substring) {
+            guard let colon = line.firstIndex(of: ":") else { return nil }
+            let name = line[..<colon]
+            guard !name.isEmpty, name.allSatisfy({ httpTokenCharacters.contains($0) }) else { return nil }
+            let value = line[line.index(after: colon)...].trimmingWhitespace()
+            guard value.unicodeScalars.allSatisfy({ $0.value == 9 || ($0.value >= 32 && $0.value != 127) }) else { return nil }
+            self.name = name.lowercased()
+            self.value = value
+            self.line = line
+        }
+    }
+
+    private static func connectionHeaders(in headers: [RequestHeader]) -> Set<String>? {
+        var nominated = Set<String>()
+        for header in headers where header.name == "connection" {
+            for part in header.value.split(separator: ",", omittingEmptySubsequences: false) {
+                let token = part.trimmingWhitespace().lowercased()
+                guard !token.isEmpty, token.allSatisfy({ httpTokenCharacters.contains($0) }) else { return nil }
+                nominated.insert(token)
+            }
+        }
+        return nominated
+    }
+
+    private static func forwardRequestHeaders(_ lines: [Substring]) -> ForwardHeaders? {
+        let headers = lines.dropFirst().compactMap(RequestHeader.init)
+        guard headers.count == lines.count - 1,
+              let nominated = connectionHeaders(in: headers) else { return nil }
+        // Routing/framing fields cannot safely be made hop-by-hop.
+        guard nominated.isDisjoint(with: ["host", "content-length", "transfer-encoding"]),
+              headers.filter({ $0.name == "host" }).count <= 1 else { return nil }
+        let lengths = headers.filter { $0.name == "content-length" }
+        guard lengths.count <= 1 else { return nil }
+        var bodyLength = 0
+        if let length = lengths.first?.value {
+            guard !length.isEmpty, length.allSatisfy({ $0 >= "0" && $0 <= "9" }), let parsed = Int(length) else { return nil }
+            bodyLength = parsed
+        }
+        let hasTransferEncoding = headers.contains { $0.name == "transfer-encoding" }
+        guard !(hasTransferEncoding && !lengths.isEmpty) else { return nil }
+        let forwarded = headers.filter {
+            !hopByHopHeaders.contains($0.name) && !nominated.contains($0.name) &&
+            $0.name != "host" && $0.name != "content-length"
+        }.map(\.line)
+        return ForwardHeaders(forwardedLines: forwarded, bodyLength: bodyLength,
+                              hasContentLength: !lengths.isEmpty, hasTransferEncoding: hasTransferEncoding)
     }
 
     private static func parseHostAndPort(_ string: Substring, defaultPort: Int) -> (host: String, port: Int)? {
