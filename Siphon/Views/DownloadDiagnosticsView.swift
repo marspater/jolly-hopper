@@ -253,13 +253,34 @@ struct DownloadDiagnosticsView: View {
                     .foregroundColor(SiphonTheme.accentText)
                 }
                 
-                TextField(languageService.s("search_logs"), text: $logSearchText)
-                    .textFieldStyle(.plain)
-                    .font(.siphonMetadata)
-                    .padding(.horizontal, SiphonTheme.spacing8)
-                    .padding(.vertical, 6)
-                    .background(SiphonTheme.cardBackground(cornerRadius: SiphonTheme.radiusControl))
-                    .overlay(SiphonTheme.cardBorder(cornerRadius: SiphonTheme.radiusControl))
+                HStack(spacing: SiphonTheme.spacing6) {
+                    Image(systemName: "magnifyingglass")
+                        .font(.system(size: 11))
+                        .foregroundColor(.secondary)
+                        .accessibilityHidden(true)
+
+                    TextField(languageService.s("search_logs"), text: $logSearchText)
+                        .textFieldStyle(.plain)
+                        .font(.siphonMetadata)
+                        .accessibilityLabel(languageService.s("search_logs"))
+
+                    if !logSearchText.isEmpty {
+                        Button {
+                            logSearchText = ""
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.system(size: 11))
+                                .foregroundColor(.secondary)
+                        }
+                        .buttonStyle(.plain)
+                        .help(languageService.s("clear"))
+                        .accessibilityLabel(languageService.s("clear"))
+                    }
+                }
+                .padding(.horizontal, SiphonTheme.spacing8)
+                .padding(.vertical, 6)
+                .background(SiphonTheme.cardBackground(cornerRadius: SiphonTheme.radiusControl))
+                .overlay(SiphonTheme.cardBorder(cornerRadius: SiphonTheme.radiusControl))
                 
                 ScrollView {
                     Text(filteredLogs)
