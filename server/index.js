@@ -34,7 +34,8 @@ const DEFAULT_SECURITY_HEADERS = Object.freeze({
   'Referrer-Policy': 'no-referrer',
   'Content-Security-Policy': "default-src 'none'; frame-ancestors 'none'",
   'Cross-Origin-Resource-Policy': 'same-origin',
-  'X-Permitted-Cross-Domain-Policies': 'none'
+  'X-Permitted-Cross-Domain-Policies': 'none',
+  'Permissions-Policy': 'accelerometer=(), camera=(), geolocation=(), microphone=()'
 });
 
 // Bolt Performance Optimization: Pre-compute static response objects with frozen merged headers and pre-serialized payloads
@@ -52,6 +53,7 @@ function createStaticResponse(statusCode, contentType, body) {
 
 const STATIC_RESPONSES = Object.freeze({
   BAD_REQUEST: createStaticResponse(400, 'application/json', { error: 'Bad Request' }),
+  METHOD_NOT_ALLOWED: createStaticResponse(405, 'application/json', { error: 'Method Not Allowed' }),
   NOT_FOUND: createStaticResponse(404, 'application/json', { error: 'Not Found' }),
   INTERNAL_ERROR: createStaticResponse(500, 'application/json', { error: 'Internal Server Error' }),
   SERVICE_UNAVAILABLE: createStaticResponse(503, 'application/json', { error: 'Release metadata temporarily unavailable' }),
@@ -220,6 +222,11 @@ function createServer({
   const getLatestRelease = createReleaseFetcher(fetchImpl, cacheTtlMs, failureRetryMs);
   return http.createServer(async (req, res) => {
     try {
+      if (req.method !== 'GET' && req.method !== 'HEAD') {
+        sendStaticResponse(res, STATIC_RESPONSES.METHOD_NOT_ALLOWED);
+        return;
+      }
+
       let url;
       try {
         url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
