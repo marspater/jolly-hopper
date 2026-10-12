@@ -77,6 +77,9 @@ jobs:
       - name: Test companion server
         run: npm test --prefix server
 
+      - name: Test Chrome handoff lifecycle
+        run: node --test scripts/test_chrome_handoff.js
+
       - name: Test original MP4 capture script
         run: node scripts/test_capture_original_mp4.js
 

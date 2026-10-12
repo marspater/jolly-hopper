@@ -14,44 +14,96 @@ chrome.runtime.onInstalled.addListener(() => {
     });
 });
 
-// The helper tab only carries the siphon:// link. Close it once Siphon takes
-// focus (the browser window loses it), so a first-run "Open Siphon?" prompt stays
-// up until the user answers it; the timeout only cleans up a declined prompt.
+// Session storage and alarms survive Manifest V3 worker suspension. Each tab
+// gets its own record, so concurrent handoffs cannot overwrite another tab.
 const DEEP_LINK_TAB_TIMEOUT_MS = 60000;
-const deepLinkTabs = new Set();
+const DEEP_LINK_TAB_PREFIX = "siphon-deep-link-tab:";
 
-function closeDeepLinkTab(tabId) {
-    if (!deepLinkTabs.delete(tabId)) return;
-    chrome.tabs.remove(tabId).catch((error) => {
-        console.debug("Failed to close temporary Siphon deep-link tab:", error);
-    });
+function tabKey(tabId) {
+    return DEEP_LINK_TAB_PREFIX + tabId;
 }
+
+async function forgetDeepLinkTab(tabId) {
+    await chrome.storage.session.remove(tabKey(tabId));
+    await chrome.alarms.clear(tabKey(tabId));
+}
+
+async function closeDeepLinkTab(tabId, record) {
+    let tab;
+    try {
+        tab = await chrome.tabs.get(tabId);
+    } catch {
+        await forgetDeepLinkTab(tabId);
+        return;
+    }
+    // A navigated helper tab belongs to the user now. Never close it.
+    const isBlankHelper = !tab.pendingUrl && (!tab.url || tab.url === "about:blank");
+    if (tab.pendingUrl === record.url || tab.url === record.url || isBlankHelper) {
+        await chrome.tabs.remove(tabId);
+    }
+    await forgetDeepLinkTab(tabId);
+}
+
+async function reconcileDeepLinkTabs(closeAll = false) {
+    try {
+        const records = await chrome.storage.session.get(null);
+        for (const [key, record] of Object.entries(records)) {
+            if (!key.startsWith(DEEP_LINK_TAB_PREFIX)) continue;
+            const tabId = Number(key.slice(DEEP_LINK_TAB_PREFIX.length));
+            if (!Number.isInteger(tabId) || !Number.isFinite(record.deadline)) continue;
+            if (closeAll || record.deadline <= Date.now()) {
+                await closeDeepLinkTab(tabId, record);
+            } else {
+                await chrome.alarms.create(key, { when: record.deadline });
+            }
+        }
+    } catch (error) {
+        reportCleanupFailure(error);
+    }
+}
+
+function reportCleanupFailure(error) {
+    console.warn("Temporary Siphon tab cleanup failed:", error);
+}
+
+chrome.alarms.onAlarm.addListener(async (alarm) => {
+    if (!alarm.name.startsWith(DEEP_LINK_TAB_PREFIX)) return;
+    try {
+        const records = await chrome.storage.session.get(alarm.name);
+        const record = records[alarm.name];
+        if (record) await reconcileDeepLinkTabs();
+    } catch (error) {
+        reportCleanupFailure(error);
+    }
+});
 
 if (chrome.windows?.onFocusChanged) {
     chrome.windows.onFocusChanged.addListener((windowId) => {
-        if (windowId !== chrome.windows.WINDOW_ID_NONE) return;
-        for (const tabId of deepLinkTabs) {
-            closeDeepLinkTab(tabId);
+        if (windowId === chrome.windows.WINDOW_ID_NONE) {
+            reconcileDeepLinkTabs(true).catch(reportCleanupFailure);
         }
     });
 }
 
 chrome.tabs.onRemoved.addListener((tabId) => {
-    deepLinkTabs.delete(tabId);
+    forgetDeepLinkTab(tabId).catch(reportCleanupFailure);
 });
 
-function openDeepLink(deepLink) {
-    chrome.tabs.create({ url: deepLink, active: true }, (createdTab) => {
-        if (chrome.runtime.lastError) {
-            console.warn("Failed to open Siphon deep link:", chrome.runtime.lastError.message);
-            return;
-        }
-        if (createdTab?.id) {
-            deepLinkTabs.add(createdTab.id);
-            setTimeout(() => closeDeepLinkTab(createdTab.id), DEEP_LINK_TAB_TIMEOUT_MS);
-        }
-    });
+async function openDeepLink(deepLink) {
+    try {
+        const tab = await chrome.tabs.create({ url: deepLink, active: true });
+        if (!Number.isInteger(tab?.id)) return;
+        const record = { url: deepLink, deadline: Date.now() + DEEP_LINK_TAB_TIMEOUT_MS };
+        await chrome.storage.session.set({ [tabKey(tab.id)]: record });
+        await chrome.alarms.create(tabKey(tab.id), { when: record.deadline });
+    } catch (error) {
+        console.warn("Failed to open Siphon deep link:", error);
+    }
 }
+
+// Classic extension workers cannot use top-level await. Reconciliation
+// handles errors internally and never delays synchronous event registration.
+void reconcileDeepLinkTabs();
 
 // Players built on Media Source Extensions expose a blob: srcUrl, which Siphon
 // cannot fetch. Use the first web address among the link, media and page URLs.
@@ -101,7 +153,7 @@ async function triggerDownload(url, host = "download") {
 
     // Browser credentials never enter the custom URL. Siphon reads Chrome's
     // cookie database directly after receiving the non-secret browser identifier.
-    openDeepLink(deepLink);
+    await openDeepLink(deepLink);
 }
 
 if (chrome.action?.onClicked) {
