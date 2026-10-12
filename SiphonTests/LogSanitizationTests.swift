@@ -53,6 +53,13 @@ final class LogSanitizationTests: XCTestCase {
         XCTAssertTrue(sanitized.contains("--login-with-token \"<TOKEN>\""))
     }
 
+    func testSanitizeExtractorArgsCommandFlag() {
+        let args = ["yt-dlp", "--extractor-args", "generic:fragment_query=check=secret_token_12345", "https://example.com/video"]
+        let sanitized = LoggerService.sanitizeCommandForLog(args)
+        XCTAssertFalse(sanitized.contains("secret_token_12345"))
+        XCTAssertTrue(sanitized.contains("--extractor-args \"<ARGS_REDACTED>\""))
+    }
+
     func testSanitizeProxyAuthAndConfigFileCommandFlags() {
         let args = [
             "yt-dlp",
