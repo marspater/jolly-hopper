@@ -11,7 +11,7 @@ class DownloadManager: ObservableObject {
     // Bolt Performance Optimization: Maintain O(1) Set lookup cache for download IDs to avoid linear scans
     @Published var downloads: [Download] = [] {
         didSet {
-            downloadIDs = Set(downloads.map { $0.id })
+            downloadIDs = Set(downloads.lazy.map(\.id))
         }
     }
     private(set) var downloadIDs: Set<UUID> = []
@@ -212,7 +212,7 @@ class DownloadManager: ObservableObject {
 
     func discardInterruptedJobs() {
         let jobsToDiscard = pendingRecoveryJobs
-        let discardedIDs = Set(jobsToDiscard.map(\.id))
+        let discardedIDs = Set(jobsToDiscard.lazy.map(\.id))
         pendingRecoveryJobs.removeAll()
         recoverableJobsCount = 0
         showQueueRecoveryAlert = false
@@ -245,7 +245,7 @@ class DownloadManager: ObservableObject {
             }
         }
         if !pendingRecoveryJobs.isEmpty {
-            let activeIDs = Set(activeJobs.map(\.id))
+            let activeIDs = Set(activeJobs.lazy.map(\.id))
             let remainingPending = pendingRecoveryJobs.filter { !activeIDs.contains($0.id) }
             activeJobs.append(contentsOf: remainingPending)
         }
@@ -532,7 +532,7 @@ class DownloadManager: ObservableObject {
     func clearDownloads(_ items: [Download]) {
         if items.isEmpty { return }
 
-        let itemIds = Set(items.map { $0.id })
+        let itemIds = Set(items.lazy.map(\.id))
 
         // Bolt Performance Optimization: Batch array mutations and broadcast once
         for item in items {
