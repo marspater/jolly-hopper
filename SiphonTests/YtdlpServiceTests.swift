@@ -444,6 +444,7 @@ final class YtdlpServiceTests: XCTestCase {
         options.customFilename = "Playlist Title" // the Add sheet pre-fills the playlist's title
         let summary = MediaInfo(id: "PLfixture", title: "Playlist Title", playlist: "PLfixture")
         service.processRunner = MockYtdlpProcessRunner(mockDownload: { args in
+            XCTAssertTrue(args.contains("--no-overwrites"), "Retry must preserve finished playlist files")
             let index = try XCTUnwrap(args.firstIndex(of: "-o"))
             XCTAssertEqual(args[index + 1], "%(title)s [%(id)s].%(ext)s",
                            "One fixed name makes yt-dlp skip every entry after the first; the id keeps same-titled entries apart")

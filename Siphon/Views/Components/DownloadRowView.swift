@@ -107,6 +107,7 @@ struct DownloadRowView: View {
     
     @State private var isHovering = false
     @State private var showLog = false
+    @State private var recoveredArguments = ""
     @State private var showDiagnostics = false
     @StateObject private var logCopyFeedback = TransientFeedbackState()
     @StateObject private var errorCopyFeedback = TransientFeedbackState()
@@ -204,6 +205,7 @@ struct DownloadRowView: View {
                     .padding(.top, 1)
                     .animation(SiphonAnimation.snappySpring, value: download.status)
             }
+            if download.requiresAdvancedArgumentsReview { recoveredArgumentsSection }
         }
         .padding(SiphonTheme.spacing14)
         .background(
@@ -253,6 +255,32 @@ struct DownloadRowView: View {
         }
     }
     
+    private var recoveredArgumentsSection: some View {
+        VStack(alignment: .leading, spacing: SiphonTheme.spacing8) {
+            Label(languageService.s("recovery_arguments_warning"), systemImage: "exclamationmark.triangle")
+                .font(.siphonSecondaryMedium)
+                .fixedSize(horizontal: false, vertical: true)
+            TextField(languageService.s("recovery_arguments_placeholder"), text: $recoveredArguments)
+                .textFieldStyle(.roundedBorder)
+                .font(.siphonSecondaryMonoMedium)
+            HStack(spacing: SiphonTheme.spacing8) {
+                Button(languageService.s("recovery_arguments_resume")) {
+                    downloadManager.reviewRecoveredArguments(for: download, arguments: recoveredArguments)
+                    recoveredArguments = ""
+                }
+                .disabled(recoveredArguments.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                Button(languageService.s("recovery_arguments_continue")) {
+                    downloadManager.reviewRecoveredArguments(for: download, arguments: nil)
+                    recoveredArguments = ""
+                }
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .tint(nil)
+        }
+        .siphonCallout(tint: SiphonTheme.statusQueued)
+    }
+
     private var errorSection: some View {
         Group {
             if let info = download.errorUXInfo(lang: languageService) {
@@ -824,6 +852,7 @@ struct FileThumbnailView: View {
                     Image(systemName: "play.circle.fill")
                         .font(.system(size: 18, weight: .semibold))
                 }
+                .disabled(download.requiresAdvancedArgumentsReview)
                 .buttonStyle(.siphonIcon(size: 28))
                 .foregroundColor(SiphonTheme.accentText)
                 .help(languageService.s("resume"))

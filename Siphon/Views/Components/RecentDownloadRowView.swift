@@ -9,6 +9,7 @@ struct RecentDownloadRowView: View {
     @ObservedObject var download: Download
     @EnvironmentObject var downloadManager: DownloadManager
     @EnvironmentObject var languageService: LanguageService
+    @EnvironmentObject var appState: AppState
     @Environment(\.colorScheme) private var colorScheme
     @State private var isHovered: Bool = false
     @State private var primaryFileIsPresent: Bool?
@@ -251,6 +252,17 @@ struct RecentDownloadRowView: View {
 
     @ViewBuilder
     private var primaryActionView: some View {
+        if download.requiresAdvancedArgumentsReview {
+            Button {
+                appState.selectedNavItem = .queued
+            } label: {
+                Image(systemName: "exclamationmark.triangle")
+                    .foregroundStyle(SiphonTheme.statusQueuedText)
+            }
+            .buttonStyle(.siphonIcon(size: 24))
+            .help(languageService.s("recovery_arguments_review"))
+            .accessibilityLabel(languageService.s("recovery_arguments_review"))
+        } else {
         switch download.status {
         case .downloading, .fetching, .processing:
             Button {
@@ -269,6 +281,7 @@ struct RecentDownloadRowView: View {
             revealButton { downloadManager.revealExistingFile(for: download) }
         default:
             Color.clear.accessibilityHidden(true)
+        }
         }
     }
 

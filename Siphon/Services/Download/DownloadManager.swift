@@ -22,6 +22,7 @@ class DownloadManager: ObservableObject {
     let recoveryStore: QueueRecoveryStore
     @Published var showQueueRecoveryAlert: Bool = false
     @Published var recoverableJobsCount: Int = 0
+    @Published private(set) var queueRecoveryWriteFailed = false
     var pendingRecoveryJobs: [Download] = []
     private var executor: DownloadExecutor!
     private var cancellables = Set<AnyCancellable>()
@@ -192,7 +193,7 @@ class DownloadManager: ObservableObject {
         showQueueRecoveryAlert = false
 
         for job in jobsToRecover {
-            job.status = .queued
+            job.status = job.requiresAdvancedArgumentsReview ? .paused : .queued
             job.errorMessage = nil
             if let existingIndex = downloads.firstIndex(where: { $0.id == job.id }) {
                 // History may contain a stale copy of the same job. Recovery is
@@ -202,7 +203,9 @@ class DownloadManager: ObservableObject {
             } else {
                 downloads.append(job)
             }
+            if job.requiresAdvancedArgumentsReview { addToHistory(job, skipSave: true) }
         }
+        saveHistory()
         // Atomically replace the interrupted snapshot with the restored
         // queued state. Deleting first creates a crash window with no recovery file.
         persistQueueRecoveryState()
@@ -249,7 +252,7 @@ class DownloadManager: ObservableObject {
             let remainingPending = pendingRecoveryJobs.filter { !activeIDs.contains($0.id) }
             activeJobs.append(contentsOf: remainingPending)
         }
-        recoveryStore.persist(activeJobs: activeJobs)
+        queueRecoveryWriteFailed = !recoveryStore.persist(activeJobs: activeJobs)
     }
 
     func addDownload(url: String, options: DownloadOptions, mediaInfo: MediaInfo? = nil) {
@@ -297,7 +300,8 @@ class DownloadManager: ObservableObject {
         isProcessingQueue = true
         defer { isProcessingQueue = false }
 
-        let nextDownloads = queue.scheduleNextDownloads(from: downloads)
+        let eligibleDownloads = downloads.filter { !$0.requiresAdvancedArgumentsReview }
+        let nextDownloads = queue.scheduleNextDownloads(from: eligibleDownloads)
         for download in nextDownloads {
             startDownloadTask(download)
         }
@@ -359,7 +363,8 @@ class DownloadManager: ObservableObject {
     }
 
     func retryDownload(_ download: Download) {
-        guard download.status == .failed || download.status == .stopped || download.status == .fileExists else { return }
+        guard !download.requiresAdvancedArgumentsReview,
+              download.status == .failed || download.status == .stopped || download.status == .fileExists else { return }
         download.options.forceOverwrite = false
         download.progress = 0
         download.errorMessage = nil
@@ -371,13 +376,29 @@ class DownloadManager: ObservableObject {
         processQueue()
     }
 
+    /// Explicitly acknowledge removed arguments before a restored job can run.
+    func reviewRecoveredArguments(for download: Download, arguments: String?) {
+        guard download.requiresAdvancedArgumentsReview,
+              download.status == .paused || download.status == .failed || download.status == .stopped || download.status == .fileExists else { return }
+        let trimmed = arguments?.trimmingCharacters(in: .whitespacesAndNewlines)
+        download.options.additionalArguments = trimmed?.isEmpty == false ? trimmed : nil
+        download.requiresAdvancedArgumentsReview = false
+        download.options.forceOverwrite = false
+        download.errorMessage = nil
+        download.mediaInfo = nil
+        updateStatus(for: download, to: .queued)
+        addToHistory(download)
+        objectWillChange.send()
+        processQueue()
+    }
+
     func pauseDownload(_ download: Download) {
         executor.pauseDownload(download, queue: queue)
         saveHistory()
     }
 
     func resumeDownload(_ download: Download) {
-        guard download.status == .paused else { return }
+        guard download.status == .paused, !download.requiresAdvancedArgumentsReview else { return }
         updateStatus(for: download, to: .queued)
         objectWillChange.send()
         processQueue()
@@ -427,6 +448,7 @@ class DownloadManager: ObservableObject {
     }
 
     func resumeWithOverwrite(_ download: Download) {
+        guard !download.requiresAdvancedArgumentsReview else { return }
         download.options.forceOverwrite = true
         // .fileExists pruned the formats. Reusing that copy turns a video-only
         // selectedFormatId into a silent download and keeps stale signed URLs.
@@ -437,6 +459,7 @@ class DownloadManager: ObservableObject {
     }
     
     func resumeWithNewName(_ download: Download) {
+        guard !download.requiresAdvancedArgumentsReview else { return }
         let (candidateName, _) = planUniqueOutputPath(for: download, forceIncrement: true)
         download.options.customFilename = candidateName
         download.options.forceOverwrite = false
@@ -460,9 +483,9 @@ class DownloadManager: ObservableObject {
             DownloadExecutor.cleanupTemporaryFiles(for: download)
         }
         if pendingRecoveryJobs.isEmpty {
-            recoveryStore.markCleanShutdown()
+            queueRecoveryWriteFailed = !recoveryStore.markCleanShutdown()
         } else {
-            recoveryStore.persist(activeJobs: pendingRecoveryJobs)
+            queueRecoveryWriteFailed = !recoveryStore.persist(activeJobs: pendingRecoveryJobs)
         }
     }
 
