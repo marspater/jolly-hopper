@@ -6,6 +6,8 @@ engines:
     enabled: false
   checkov:
     enabled: false
+  trivy:
+    enabled: false
   markdownlint:
     enabled: false
   remark-lint:
