@@ -1,5 +1,11 @@
 ---
 engines:
+  eslint:
+    enabled: false
+  eslint-8:
+    enabled: false
+  checkov:
+    enabled: false
   markdownlint:
     enabled: false
   remark-lint:
