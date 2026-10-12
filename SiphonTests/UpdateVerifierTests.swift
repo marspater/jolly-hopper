@@ -6,6 +6,7 @@
 import XCTest
 import CryptoKit
 import os
+import Darwin
 @testable import Siphon
 
 final class UpdateVerifierTests: XCTestCase {
@@ -170,6 +171,131 @@ final class UpdateVerifierTests: XCTestCase {
         let files = (try? FileManager.default.contentsOfDirectory(atPath: tempDir.path)) ?? []
         let backups = files.filter { $0.contains("Backup") }
         XCTAssertTrue(backups.isEmpty, "Temporary backup must be cleaned up after rollback")
+    }
+
+    private func makeReplacementFixtures() throws -> (current: URL, staged: URL) {
+        let fm = FileManager.default
+        let root = fm.temporaryDirectory.appendingPathComponent("updater_transaction_\(UUID().uuidString)")
+        let current = root.appendingPathComponent("Current.app")
+        let staged = root.appendingPathComponent("Staged.app")
+        for (url, version) in [(current, "old"), (staged, "new")] {
+            try fm.createDirectory(at: url, withIntermediateDirectories: true)
+            try Data(version.utf8).write(to: url.appendingPathComponent("version.txt"))
+        }
+        addTeardownBlock { try fm.removeItem(at: root) }
+        return (current, staged)
+    }
+
+    private func fixtureVersion(_ app: URL) throws -> String {
+        try String(contentsOf: app.appendingPathComponent("version.txt"), encoding: .utf8)
+    }
+
+    func testReplacementPreparesCompleteSiblingBeforeAtomicExchange() throws {
+        let fixture = try makeReplacementFixtures()
+        var verifiedPaths: [URL] = []
+        var backup: URL?
+        try UpdateInstaller.replaceVerifiedAppBundle(currentAppURL: fixture.current, stagedAppURL: fixture.staged,
+            exchange: { current, replacement in
+                XCTAssertEqual(try self.fixtureVersion(current), "old")
+                XCTAssertEqual(try self.fixtureVersion(replacement), "new")
+                XCTAssertEqual(current.deletingLastPathComponent(), replacement.deletingLastPathComponent())
+                backup = replacement
+                try UpdateInstaller.exchangeAppBundles(current, replacement)
+                // An interruption here leaves both complete bundles present.
+                XCTAssertEqual(try self.fixtureVersion(current), "new")
+                XCTAssertEqual(try self.fixtureVersion(replacement), "old")
+            }, verify: { verifiedPaths.append($0); XCTAssertEqual(try self.fixtureVersion($0), "new") })
+        XCTAssertEqual(verifiedPaths.count, 2)
+        XCTAssertEqual(verifiedPaths.last, fixture.current)
+        XCTAssertEqual(try fixtureVersion(fixture.current), "new")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: try XCTUnwrap(backup).path))
+        XCTAssertEqual(try fixtureVersion(fixture.staged), "new", "Source staging must remain unchanged")
+    }
+
+    func testReplacementRestoresOriginalWithAtomicRollback() throws {
+        let fixture = try makeReplacementFixtures()
+        var exchanges = 0
+        XCTAssertThrowsError(try UpdateInstaller.replaceVerifiedAppBundle(currentAppURL: fixture.current, stagedAppURL: fixture.staged,
+            exchange: { current, replacement in
+                exchanges += 1
+                try UpdateInstaller.exchangeAppBundles(current, replacement)
+            }, verify: { url in
+                if url == fixture.current { throw UpdateInstallError.verificationFailed("Injected post-swap failure") }
+            }))
+        XCTAssertEqual(exchanges, 2)
+        XCTAssertEqual(try fixtureVersion(fixture.current), "old")
+        let names = try FileManager.default.contentsOfDirectory(atPath: fixture.current.deletingLastPathComponent().path)
+        XCTAssertFalse(names.contains { $0.hasPrefix(".Siphon_Backup_") })
+    }
+
+    func testFailedAtomicExchangeLeavesOriginalInstalled() throws {
+        let fixture = try makeReplacementFixtures()
+        XCTAssertThrowsError(try UpdateInstaller.replaceVerifiedAppBundle(currentAppURL: fixture.current, stagedAppURL: fixture.staged,
+            exchange: { _, _ in throw NSError(domain: NSPOSIXErrorDomain, code: Int(ENOTSUP)) }, verify: { XCTAssertEqual(try self.fixtureVersion($0), "new") }))
+        XCTAssertEqual(try fixtureVersion(fixture.current), "old")
+        let names = try FileManager.default.contentsOfDirectory(atPath: fixture.current.deletingLastPathComponent().path)
+        XCTAssertFalse(names.contains { $0.hasPrefix(".Siphon_Backup_") })
+    }
+
+    func testFailedRollbackPreservesCompleteOriginalBackup() throws {
+        let fixture = try makeReplacementFixtures()
+        var exchanges = 0
+        var backup: URL?
+        XCTAssertThrowsError(try UpdateInstaller.replaceVerifiedAppBundle(currentAppURL: fixture.current, stagedAppURL: fixture.staged,
+            exchange: { current, replacement in
+                exchanges += 1
+                backup = replacement
+                if exchanges == 2 { throw NSError(domain: NSPOSIXErrorDomain, code: Int(EACCES)) }
+                try UpdateInstaller.exchangeAppBundles(current, replacement)
+            }, verify: { url in
+                if url == fixture.current { throw UpdateInstallError.verificationFailed("Injected post-swap failure") }
+            })) { error in
+                guard case UpdateInstallError.rollbackFailed = error else { XCTFail("Expected rollback failure, got \(error)"); return }
+            }
+        XCTAssertEqual(try fixtureVersion(fixture.current), "new")
+        XCTAssertEqual(try fixtureVersion(try XCTUnwrap(backup)), "old")
+    }
+
+    @MainActor
+    func testInstallationUsesReleaseSnapshotWhileManifestFetchIsSuspended() async throws {
+        let key = Curve25519.Signing.PrivateKey()
+        let checksum = String(repeating: "a", count: 64)
+        let root = "https://github.com/marspater/jolly-hopper/releases/download/v5.5.0/"
+        let manifestURL = URL(string: root + "release-manifest.json")!
+        let signatureURL = URL(string: root + "release-manifest.json.sig")!
+        let manifest = try JSONEncoder().encode(ReleaseManifest(version: "5.5.0", assets: ["Siphon.dmg": checksum]))
+        let signature = try key.signature(for: manifest)
+        let gate = UpdateManifestFetchGate()
+        let started = expectation(description: "Manifest fetch suspended")
+        let fetched = OSAllocatedUnfairLock(initialState: [URL]())
+        let checker = UpdateChecker(manifestVerifier: UpdateManifestVerifier(publicKey: key.publicKey), fetchManifestData: { url in
+            fetched.withLock { $0.append(url) }
+            if url == manifestURL {
+                started.fulfill()
+                await gate.wait()
+                return manifest
+            }
+            if url == signatureURL { return signature }
+            throw URLError(.badURL)
+        })
+        // Stop after manifest verification, before any package download/install.
+        checker.configureUpdateSources(downloadURL: URL(string: root + "Siphon.dmg"), downloadAssetName: "Siphon.dmg",
+            expectedChecksum: checksum, checksumURL: URL(string: "http://untrusted.example/checksums"),
+            manifestURL: manifestURL, manifestSigURL: signatureURL, latestVersion: "5.5.0")
+        let install = Task { await checker.downloadAndInstallUpdate() }
+        await fulfillment(of: [started], timeout: 2)
+        let nextChecksum = String(repeating: "b", count: 64)
+        checker.configureUpdateSources(downloadURL: URL(string: root + "Next.dmg"), downloadAssetName: "Next.dmg",
+            expectedChecksum: nextChecksum, latestVersion: "6.0.0")
+        await checker.checkForUpdates()
+        XCTAssertFalse(checker.isChecking, "Checks must not run during installation preparation")
+        await gate.resume()
+        await install.value
+        XCTAssertEqual(fetched.withLock { $0 }, [manifestURL, signatureURL])
+        XCTAssertEqual(checker.updateError, UpdateDownloadError.invalidURL.localizedDescription,
+                       "Original manifest must verify before reaching its rejected checksum URL")
+        XCTAssertEqual(checker.releaseCandidate.checksum, nextChecksum, "Verification must not overwrite another release's digest")
+        XCTAssertEqual(checker.latestVersion, "6.0.0")
     }
 
     func testIsTrustedGitHubURLStrictValidation() {
@@ -682,4 +808,20 @@ private final class HoldingUpdateURLProtocol: URLProtocol, @unchecked Sendable {
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
     override func startLoading() { /* Delegate events are delivered explicitly by the test. */ }
     override func stopLoading() {}
+}
+
+private actor UpdateManifestFetchGate {
+    private var released = false
+    private var continuation: CheckedContinuation<Void, Never>?
+
+    func wait() async {
+        guard !released else { return }
+        await withCheckedContinuation { continuation = $0 }
+    }
+
+    func resume() {
+        released = true
+        continuation?.resume()
+        continuation = nil
+    }
 }
