@@ -77,11 +77,13 @@ describe('Siphon Companion Server', () => {
   test('unsupported HTTP methods return 405 Method Not Allowed', async () => {
     const postRes = await fetch(`${baseUrl}/health`, { method: 'POST' });
     assert.equal(postRes.status, 405);
+    assert.equal(postRes.headers.get('allow'), 'GET, HEAD');
     const postData = await postRes.json();
     assert.equal(postData.error, 'Method Not Allowed');
 
     const putRes = await fetch(`${baseUrl}/api/latest`, { method: 'PUT' });
     assert.equal(putRes.status, 405);
+    assert.equal(putRes.headers.get('allow'), 'GET, HEAD');
     const putData = await putRes.json();
     assert.equal(putData.error, 'Method Not Allowed');
   });
