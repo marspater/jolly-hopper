@@ -1132,7 +1132,7 @@ final class DownloadManagerTests: XCTestCase {
         manager.downloads.append(download)
 
         let expectation = expectation(description: "objectWillChange emitted")
-        let cancellable = manager.objectWillChange.sink {
+        let cancellable = manager.objectWillChange.first().sink {
             expectation.fulfill()
         }
 

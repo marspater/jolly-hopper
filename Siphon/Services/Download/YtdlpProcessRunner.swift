@@ -845,7 +845,7 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
                         return
                     }
 
-                    let fm = FileManager.default
+                    let fileManager = FileManager.default
                     var verifiedFinalPaths: [String] = []
                     var finishedEntryCount = 0
 
@@ -853,7 +853,7 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
                     for directPath in outputState.getFinalPaths() {
                         let rawURL = directPath.hasPrefix("/") ? URL(fileURLWithPath: directPath) : saveFolder.appendingPathComponent(directPath)
                         let resolved = rawURL.standardizedFileURL.resolvingSymlinksInPath()
-                        if fm.fileExists(atPath: resolved.path),
+                        if fileManager.fileExists(atPath: resolved.path),
                            let values = try? resolved.resourceValues(forKeys: [.isRegularFileKey]),
                            values.isRegularFile == true,
                            YtdlpService.isMediaFilePath(resolved.path),
@@ -871,7 +871,7 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
                             let rawURL = candidate.hasPrefix("/") ? URL(fileURLWithPath: candidate) : saveFolder.appendingPathComponent(candidate)
                             let resolved = rawURL.standardizedFileURL.resolvingSymlinksInPath()
 
-                            if fm.fileExists(atPath: resolved.path),
+                            if fileManager.fileExists(atPath: resolved.path),
                                let values = try? resolved.resourceValues(forKeys: [.isRegularFileKey]),
                                values.isRegularFile == true,
                                YtdlpService.isMediaFilePath(resolved.path),

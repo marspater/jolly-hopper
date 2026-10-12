@@ -58,8 +58,8 @@ public final class UpdateInstaller: Sendable {
         expectedTeamID: String? = nil,
         allowAdHoc: Bool = true
     ) async throws {
-        let fm = FileManager.default
-        guard fm.fileExists(atPath: packageURL.path) else {
+        let fileManager = FileManager.default
+        guard fileManager.fileExists(atPath: packageURL.path) else {
             throw UpdateInstallError.packageNotFound(packageURL)
         }
 
@@ -83,12 +83,12 @@ public final class UpdateInstaller: Sendable {
         }
 
         // 2. Prepare staging directory
-        let stagingDir = fm.temporaryDirectory.appendingPathComponent("Siphon_Install_\(UUID().uuidString)")
-        try fm.createDirectory(at: stagingDir, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+        let stagingDir = fileManager.temporaryDirectory.appendingPathComponent("Siphon_Install_\(UUID().uuidString)")
+        try fileManager.createDirectory(at: stagingDir, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
         defer {
-            for cleanupURL in [stagingDir, packageURL] where fm.fileExists(atPath: cleanupURL.path) {
+            for cleanupURL in [stagingDir, packageURL] where fileManager.fileExists(atPath: cleanupURL.path) {
                 do {
-                    try fm.removeItem(at: cleanupURL)
+                    try fileManager.removeItem(at: cleanupURL)
                 } catch {
                     Self.log("Updater cleanup failed for \(cleanupURL.lastPathComponent): \(error.localizedDescription)", level: .warning)
                 }
@@ -96,11 +96,11 @@ public final class UpdateInstaller: Sendable {
         }
 
         // 3. Extract or mount package to locate .app
-        var mountedMountPoint: String? = nil
+        var mountedMountPoint: String?
         defer {
-            if let mp = mountedMountPoint {
+            if let mountPoint = mountedMountPoint {
                 do {
-                    try unmountDMG(mountPoint: mp)
+                    try unmountDMG(mountPoint: mountPoint)
                 } catch {
                     Self.log("Failed to unmount update disk image during cleanup: \(error.localizedDescription)", level: .warning)
                 }
@@ -119,7 +119,7 @@ public final class UpdateInstaller: Sendable {
             }
             // Copy .app out of read-only mount point into writeable staging dir
             let targetStagedApp = stagingDir.appendingPathComponent(appInMount.lastPathComponent)
-            try fm.copyItem(at: appInMount, to: targetStagedApp)
+            try fileManager.copyItem(at: appInMount, to: targetStagedApp)
             stagedAppURL = targetStagedApp
 
             // Unmount DMG now that it's copied to staging. If it fails, keep the
@@ -138,7 +138,7 @@ public final class UpdateInstaller: Sendable {
             stagedAppURL = appInStaging
         } else if ext == "app" {
             let targetStagedApp = stagingDir.appendingPathComponent(packageURL.lastPathComponent)
-            try fm.copyItem(at: packageURL, to: targetStagedApp)
+            try fileManager.copyItem(at: packageURL, to: targetStagedApp)
             stagedAppURL = targetStagedApp
         } else {
             throw UpdateInstallError.extractionFailed("Unsupported package extension: .\(ext)")
@@ -162,7 +162,7 @@ public final class UpdateInstaller: Sendable {
             stagedAppURL: stagedAppURL,
             expectedTeamID: expectedTeamID,
             allowAdHoc: allowAdHoc,
-            fileManager: fm
+            fileManager: fileManager
         )
     }
 
@@ -174,9 +174,9 @@ public final class UpdateInstaller: Sendable {
         stagedAppURL: URL,
         expectedTeamID: String? = nil,
         allowAdHoc: Bool = false,
-        fileManager fm: FileManager = .default
+        fileManager: FileManager = .default
     ) throws {
-        try replaceVerifiedAppBundle(currentAppURL: currentAppURL, stagedAppURL: stagedAppURL, fileManager: fm) { bundleURL in
+        try replaceVerifiedAppBundle(currentAppURL: currentAppURL, stagedAppURL: stagedAppURL, fileManager: fileManager) { bundleURL in
             try UpdateVerifier.verifyAppBundle(
                 bundleURL: bundleURL,
                 expectedTeamID: expectedTeamID,
@@ -190,7 +190,7 @@ public final class UpdateInstaller: Sendable {
     static func replaceVerifiedAppBundle(
         currentAppURL: URL,
         stagedAppURL: URL,
-        fileManager fm: FileManager = .default,
+        fileManager: FileManager = .default,
         exchange: (URL, URL) throws -> Void = exchangeAppBundles,
         verify: (URL) throws -> Void
     ) throws {
@@ -198,9 +198,9 @@ public final class UpdateInstaller: Sendable {
         var exchanged = false
         var preserveBackup = false
         defer {
-            if !preserveBackup && fm.fileExists(atPath: backupURL.path) {
+            if !preserveBackup && fileManager.fileExists(atPath: backupURL.path) {
                 do {
-                    try fm.removeItem(at: backupURL)
+                    try fileManager.removeItem(at: backupURL)
                 } catch {
                     Self.log("Updater could not remove temporary bundle \(backupURL.lastPathComponent): \(error.localizedDescription)", level: .warning)
                 }
@@ -210,7 +210,7 @@ public final class UpdateInstaller: Sendable {
         do {
             // Copy on the destination filesystem, leaving the installed app
             // intact throughout staging and verification.
-            try fm.copyItem(at: stagedAppURL, to: backupURL)
+            try fileManager.copyItem(at: stagedAppURL, to: backupURL)
             try verify(backupURL)
             try exchange(currentAppURL, backupURL)
             exchanged = true

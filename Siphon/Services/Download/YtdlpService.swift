@@ -550,29 +550,29 @@ class YtdlpService: ObservableObject {
     }
 
     func transactionalInstall(from source: URL, to destination: URL, validate: (URL) async -> Bool) async throws -> Bool {
-        let fm = FileManager.default
+        let fileManager = FileManager.default
         let backupDestination = destination.deletingLastPathComponent().appendingPathComponent(destination.lastPathComponent + ".backup_\(UUID().uuidString)")
-        try? fm.removeItem(at: backupDestination)
+        try? fileManager.removeItem(at: backupDestination)
 
-        let hadOldBinary = fm.fileExists(atPath: destination.path)
+        let hadOldBinary = fileManager.fileExists(atPath: destination.path)
         if hadOldBinary {
-            try fm.moveItem(at: destination, to: backupDestination)
+            try fileManager.moveItem(at: destination, to: backupDestination)
         }
 
         do {
-            try fm.moveItem(at: source, to: destination)
+            try fileManager.moveItem(at: source, to: destination)
             let isValid = await validate(destination)
             if isValid {
                 if hadOldBinary {
-                    try? fm.removeItem(at: backupDestination)
+                    try? fileManager.removeItem(at: backupDestination)
                 }
                 return true
             } else {
                 // Post-validation failed: remove new binary and restore backup
-                try? fm.removeItem(at: destination)
+                try? fileManager.removeItem(at: destination)
                 if hadOldBinary {
                     do {
-                        try fm.moveItem(at: backupDestination, to: destination)
+                        try fileManager.moveItem(at: backupDestination, to: destination)
                     } catch {
                         LoggerService.shared.log("CRITICAL: Failed to restore backup from \(backupDestination.path) to \(destination.path): \(error.localizedDescription)", level: .error)
                         throw TransactionalInstallError.rollbackFailed(destination: destination.path, underlyingError: error)
@@ -583,9 +583,9 @@ class YtdlpService: ObservableObject {
         } catch let error as TransactionalInstallError {
             throw error
         } catch {
-            if hadOldBinary && !fm.fileExists(atPath: destination.path) {
+            if hadOldBinary && !fileManager.fileExists(atPath: destination.path) {
                 do {
-                    try fm.moveItem(at: backupDestination, to: destination)
+                    try fileManager.moveItem(at: backupDestination, to: destination)
                 } catch {
                     LoggerService.shared.log("CRITICAL: Failed to restore backup from \(backupDestination.path) to \(destination.path): \(error.localizedDescription)", level: .error)
                     throw TransactionalInstallError.rollbackFailed(destination: destination.path, underlyingError: error)
@@ -2494,17 +2494,17 @@ public struct DownloadResult: Sendable {
         try Task.checkCancellation()
         guard processController?.isCancelled != true else { throw CancellationError() }
         let ffmpeg = URL(fileURLWithPath: ffmpegDir).appendingPathComponent("ffmpeg")
-        let fm = FileManager.default
+        let fileManager = FileManager.default
         let directory = gif.deletingLastPathComponent()
         let base = gif.deletingPathExtension().lastPathComponent
         var destination = directory.appendingPathComponent(base + ".mp4")
         var copy = 1
-        while fm.fileExists(atPath: destination.path) {
+        while fileManager.fileExists(atPath: destination.path) {
             copy += 1
             destination = directory.appendingPathComponent("\(base) (\(copy)).mp4")
         }
         let partial = directory.appendingPathComponent(".\(UUID().uuidString).mp4.partial")
-        defer { try? fm.removeItem(at: partial) }
+        defer { try? fileManager.removeItem(at: partial) }
         do {
             _ = try await processRunner.runCommand([
                 ffmpeg.path, "-nostdin", "-v", "error", "-y", "-i", gif.path,
@@ -2512,14 +2512,14 @@ public struct DownloadResult: Sendable {
                 "-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "18", "-preset", "medium",
                 "-movflags", "+faststart", "-f", "mp4", partial.path
             ], processController: processController)
-            try fm.moveItem(at: partial, to: destination)
+            try fileManager.moveItem(at: partial, to: destination)
         } catch {
             if error is CancellationError { throw error }
             try Task.checkCancellation()
             LoggerService.shared.log("GIF to video conversion failed: \(error.localizedDescription)", level: .error)
             throw YtdlpError.downloadFailed(LanguageService.s("gif_conversion_failed"))
         }
-        try? fm.removeItem(at: gif)
+        try? fileManager.removeItem(at: gif)
         return destination
     }
 
@@ -2574,11 +2574,11 @@ public struct DownloadResult: Sendable {
     func embedThumbnailWithFfmpeg(imageFile: URL, mediaFile: URL, ffmpegDir: String, processController: DownloadProcessController? = nil) async throws -> Bool {
         try Task.checkCancellation()
         let ext = mediaFile.pathExtension.lowercased()
-        let fm = FileManager.default
-        guard fm.fileExists(atPath: mediaFile.path), fm.fileExists(atPath: imageFile.path) else { return false }
+        let fileManager = FileManager.default
+        guard fileManager.fileExists(atPath: mediaFile.path), fileManager.fileExists(atPath: imageFile.path) else { return false }
 
         let ffmpegBin = URL(fileURLWithPath: ffmpegDir).appendingPathComponent("ffmpeg")
-        guard fm.isExecutableFile(atPath: ffmpegBin.path) else { return false }
+        guard fileManager.isExecutableFile(atPath: ffmpegBin.path) else { return false }
 
         let tempOutput = mediaFile.deletingLastPathComponent().appendingPathComponent("thumb_temp_\(UUID().uuidString).\(ext)")
 
@@ -2620,8 +2620,8 @@ public struct DownloadResult: Sendable {
         }
 
         defer {
-            if fm.fileExists(atPath: tempOutput.path) {
-                do { try fm.removeItem(at: tempOutput) }
+            if fileManager.fileExists(atPath: tempOutput.path) {
+                do { try fileManager.removeItem(at: tempOutput) }
                 catch { LoggerService.shared.log("Could not remove thumbnail staging file: \(error.localizedDescription)", level: .warning) }
             }
         }
@@ -2629,16 +2629,16 @@ public struct DownloadResult: Sendable {
             _ = try await processRunner.runCommand([ffmpegBin.path] + procArgs, processController: processController)
             try Task.checkCancellation()
             guard processController?.isCancelled != true else { throw CancellationError() }
-            if fm.fileExists(atPath: tempOutput.path), ((try? tempOutput.resourceValues(forKeys: [.fileSizeKey]))?.fileSize ?? 0) > 0 {
+            if fileManager.fileExists(atPath: tempOutput.path), ((try? tempOutput.resourceValues(forKeys: [.fileSizeKey]))?.fileSize ?? 0) > 0 {
                 let backupURL = mediaFile.deletingLastPathComponent().appendingPathComponent("thumb_orig_\(UUID().uuidString).\(ext)")
-                try fm.moveItem(at: mediaFile, to: backupURL)
+                try fileManager.moveItem(at: mediaFile, to: backupURL)
                 do {
-                    try fm.moveItem(at: tempOutput, to: mediaFile)
+                    try fileManager.moveItem(at: tempOutput, to: mediaFile)
                 } catch {
-                    try fm.moveItem(at: backupURL, to: mediaFile)
+                    try fileManager.moveItem(at: backupURL, to: mediaFile)
                     throw error
                 }
-                do { try fm.removeItem(at: backupURL) }
+                do { try fileManager.removeItem(at: backupURL) }
                 catch { LoggerService.shared.log("Could not remove thumbnail backup: \(error.localizedDescription)", level: .warning) }
                 return true
             }
