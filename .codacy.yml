@@ -16,6 +16,10 @@ engines:
     enabled: false
   eslint:
     enabled: false
+  checkov:
+    enabled: false
+  trivy:
+    enabled: false
 
 exclude_paths:
   - "**.md"
