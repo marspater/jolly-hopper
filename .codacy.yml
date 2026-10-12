@@ -14,8 +14,6 @@ engines:
     enabled: false
   jshint:
     enabled: false
-  checkov:
-    enabled: false
 
 exclude_paths:
   - "**.md"
