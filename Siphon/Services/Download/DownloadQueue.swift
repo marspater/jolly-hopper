@@ -111,7 +111,7 @@ final class DownloadQueue: ObservableObject {
         in folder: URL,
         fileManager: FileManager = .default
     ) -> URL? {
-        let keys = Set(collisionExtensions(for: options).map { filenameCollisionKey("\(baseName).\($0)") })
+        let keys = Set(collisionExtensions(for: options).lazy.map { filenameCollisionKey("\(baseName).\($0)") })
         let files = (try? fileManager.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)) ?? []
         return files.first {
             YtdlpService.isMediaFilePath($0.path) && keys.contains(filenameCollisionKey($0.lastPathComponent))

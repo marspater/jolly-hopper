@@ -499,7 +499,7 @@ public final class AppState: ObservableObject {
     }
 
     public func consumeExternalTarget(for urls: [String]) -> Bool {
-        let cleanUrls = Set(urls.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) })
+        let cleanUrls = Set(urls.lazy.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) })
         if let target = externalTargetURL, cleanUrls.contains(target) {
             externalTargetURL = nil
             return true
