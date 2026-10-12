@@ -12,6 +12,7 @@ struct QueueRecoveryRecord: Codable, Identifiable, Sendable {
     let url: String
     let title: String
     let createdAt: Date
+    let requiresAdvancedArgumentsReview: Bool?
     let options: DownloadOptions
     let status: DownloadStatus
     let progress: Double
@@ -31,6 +32,8 @@ struct QueueRecoveryRecord: Codable, Identifiable, Sendable {
 
         self.browserCookieSource = AppState.normalizedBrowserCookieSource(download.options.browserCookieSource)
 
+        self.requiresAdvancedArgumentsReview = download.requiresAdvancedArgumentsReview ||
+            download.options.additionalArguments?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
         var sanitizedOptions = download.options
         sanitizedOptions.rawCookies = nil
         sanitizedOptions.rawUserAgent = nil
@@ -67,6 +70,7 @@ struct QueueRecoveryRecord: Codable, Identifiable, Sendable {
             id: self.id,
             createdAt: self.createdAt
         )
+        download.requiresAdvancedArgumentsReview = self.requiresAdvancedArgumentsReview ?? false
         download.status = self.status
         download.progress = self.progress
         if let path = self.scratchDirectoryPath {

@@ -254,6 +254,97 @@ final class QueueRecoveryStoreTests: XCTestCase {
         XCTAssertTrue(manager.recoveryStore.loadInterruptedJobs().isEmpty)
         XCTAssertFalse(manager.historyStore.loadHistory().contains(where: { $0.id == id }))
     }
+    func testRemovedAdvancedArgumentsRequireReviewAndSurviveAnotherRestart() throws {
+        var options = DownloadOptions.default
+        options.additionalArguments = "--add-header Authorization: secret"
+        let job = Download(url: "https://example.com/recover", options: options, title: "Review")
+        job.status = .downloading
+        XCTAssertTrue(QueueRecoveryStore(fileURL: recoveryFileURL).persist(activeJobs: [job]))
+        let persisted = try String(contentsOf: recoveryFileURL, encoding: .utf8)
+        XCTAssertFalse(persisted.contains("Authorization"))
+        XCTAssertFalse(persisted.contains("secret"))
+        let manager = DownloadManager(recoveryFileURL: recoveryFileURL)
+        manager.ytdlpService.isUpdating = true
+        manager.initialize(languageService: LanguageService())
+        manager.recoverInterruptedJobs()
+        let restored = try XCTUnwrap(manager.downloads.first)
+        XCTAssertTrue(restored.requiresAdvancedArgumentsReview)
+        XCTAssertEqual(restored.status, .paused)
+        manager.resumeDownload(restored)
+        manager.retryDownload(restored)
+        XCTAssertEqual(restored.status, .paused)
+        manager.shutdown()
+
+        let restarted = DownloadManager(recoveryFileURL: recoveryFileURL)
+        restarted.ytdlpService.isUpdating = true
+        defer { restarted.shutdown() }
+        restarted.initialize(languageService: LanguageService())
+        let held = try XCTUnwrap(restarted.downloads.first)
+        XCTAssertTrue(held.requiresAdvancedArgumentsReview)
+        XCTAssertEqual(held.status, .paused)
+        restarted.reviewRecoveredArguments(for: held, arguments: nil)
+        XCTAssertFalse(held.requiresAdvancedArgumentsReview)
+        XCTAssertNil(held.options.additionalArguments)
+        XCTAssertEqual(held.status, .queued)
+    }
+
+    func testReenteredArgumentsRemainEphemeralAndFutureRecoveryRequiresReview() throws {
+        let manager = DownloadManager(recoveryFileURL: recoveryFileURL)
+        manager.ytdlpService.isUpdating = true
+        defer { manager.shutdown() }
+        let held = Download(url: "https://example.com/recover", options: .default)
+        held.status = .paused
+        held.requiresAdvancedArgumentsReview = true
+        manager.downloads = [held]
+        manager.reviewRecoveredArguments(for: held, arguments: " --add-header Authorization: new-secret ")
+        XCTAssertEqual(held.options.additionalArguments, "--add-header Authorization: new-secret")
+        XCTAssertFalse(held.requiresAdvancedArgumentsReview)
+        XCTAssertEqual(held.status, .queued)
+        let recovered = try XCTUnwrap(manager.recoveryStore.loadInterruptedJobs().first)
+        XCTAssertTrue(recovered.requiresAdvancedArgumentsReview)
+        XCTAssertNil(recovered.options.additionalArguments)
+        XCTAssertFalse(try String(contentsOf: recoveryFileURL, encoding: .utf8).contains("new-secret"))
+    }
+
+    func testRecoveryWriteFailureIsVisibleAndClearsAfterSuccessfulRetry() throws {
+        let blocker = tempDir.appendingPathComponent("blocked")
+        try Data("not a directory".utf8).write(to: blocker)
+        let manager = DownloadManager(recoveryFileURL: blocker.appendingPathComponent("recovery.json"))
+        manager.ytdlpService.isUpdating = true
+        defer { manager.shutdown() }
+        manager.addDownload(url: "https://example.com/queued", options: .default)
+        XCTAssertTrue(manager.queueRecoveryWriteFailed)
+        XCTAssertEqual(manager.downloads.first?.status, .queued, "Persistence failure must not stop downloads")
+        try FileManager.default.removeItem(at: blocker)
+        try FileManager.default.createDirectory(at: blocker, withIntermediateDirectories: true)
+        manager.persistQueueRecoveryState()
+        XCTAssertFalse(manager.queueRecoveryWriteFailed)
+        XCTAssertEqual(manager.recoveryStore.loadInterruptedJobs().map(\.id), manager.downloads.map(\.id))
+    }
+
+    func testHistoryPreservesPartialFailureAndReadsLegacyRecords() throws {
+        let job = Download(url: "https://example.com/playlist", options: .default, title: "Playlist")
+        job.status = .failed
+        job.hasPartialFailure = true
+        job.errorMessage = "Some entries unavailable"
+        job.filePaths = [URL(fileURLWithPath: "/tmp/finished.mp4")]
+        let data = try JSONEncoder().encode(HistoricDownload(download: job))
+        let restored = try JSONDecoder().decode(HistoricDownload.self, from: data).toDownload()
+        XCTAssertEqual(restored.status, .failed)
+        XCTAssertTrue(restored.hasPartialFailure)
+        XCTAssertEqual(restored.filePaths, job.filePaths)
+        XCTAssertEqual(restored.errorUXInfo(lang: LanguageService())?.actionType, .retry)
+        var legacy = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        legacy.removeValue(forKey: "requiresAdvancedArgumentsReview")
+        legacy.removeValue(forKey: "hasPartialFailure")
+        legacy["status"] = DownloadStatus.completed.rawValue
+        let legacyData = try JSONSerialization.data(withJSONObject: legacy)
+        let old = try JSONDecoder().decode(HistoricDownload.self, from: legacyData).toDownload()
+        XCTAssertEqual(old.status, .failed, "Legacy completed-with-errors jobs must become actionable")
+        XCTAssertTrue(old.hasPartialFailure)
+        XCTAssertFalse(old.requiresAdvancedArgumentsReview)
+    }
+
     func testRecoveryPreservesOwnedScratchDirectoryBrowserSourceAndCreationDate() throws {
         let store = QueueRecoveryStore(fileURL: recoveryFileURL)
         let scratch = ScratchDirectoryPolicy.makeURL()
