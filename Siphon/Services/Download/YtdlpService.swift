@@ -13,9 +13,9 @@ struct DependencyChecksums {
     /// The fork repository is private, so its `yt-dlp_macos` is mirrored to a
     /// public `ytdlp-<version>` prerelease of this repository. To bump, mirror
     /// the new fork asset there and change version, URL and SHA-256 together.
-    static let ytdlpVersion = "2026.10.06.1"
-    static let ytdlpURL = URL(string: "https://github.com/marspater/jolly-hopper/releases/download/ytdlp-2026.10.06.1/yt-dlp_macos") ?? URL(fileURLWithPath: "/")
-    static let ytdlpExecutableSHA256 = "d7e3950941f980895b2b8e5280303373e4b23baacdca51878539fbb19bf9b48a"
+    static let ytdlpVersion = "2026.10.12.1"
+    static let ytdlpURL = URL(string: "https://github.com/marspater/jolly-hopper/releases/download/ytdlp-2026.10.12.1/yt-dlp_macos") ?? URL(fileURLWithPath: "/")
+    static let ytdlpExecutableSHA256 = "770375c36f63c72da6d9ec04959886e99c3d316f22728dc9be1ae57515339efb"
 
     #if arch(arm64)
     static let ffmpegURL = URL(string: "https://github.com/eugeneware/ffmpeg-static/releases/download/b6.1.1/ffmpeg-darwin-arm64.gz") ?? URL(fileURLWithPath: "/")
