@@ -11,9 +11,9 @@ public enum NavigationItem: String, CaseIterable, Identifiable, Sendable {
     case queued
     case completed
     case failed
-    
+
     public var id: String { rawValue }
-    
+
     func title(lang: LanguageService) -> String {
         switch self {
         case .home: return lang.s("home")
@@ -23,7 +23,7 @@ public enum NavigationItem: String, CaseIterable, Identifiable, Sendable {
         case .failed: return lang.s("failed")
         }
     }
-    
+
     public var icon: String {
         switch self {
         case .home: return "house.fill"

@@ -100,7 +100,7 @@ actor DependencyInstaller {
     static func adHocSignBinary(at url: URL) throws {
         guard !NotificationService.isRunningTests else { return }
         guard FileManager.default.isExecutableFile(atPath: url.path) else { return }
-        
+
         // If the binary already has a valid code signature, skip re-signing to avoid mutating
         // Mach-O binaries and invalidating upstream SHA-256 hashes.
         if isBinarySigned(at: url) {
@@ -763,9 +763,6 @@ class YtdlpService: ObservableObject {
         await downloadYtdlp()
     }
 
-
-
-
     func downloadYtdlp() async {
         do {
             _ = try await updateYtdlp()
@@ -924,8 +921,6 @@ class YtdlpService: ObservableObject {
         }
     }
 
-
-
     func getVersion() async {
         guard let path = ytdlpPath else { return }
 
@@ -936,9 +931,6 @@ class YtdlpService: ObservableObject {
             LoggerService.shared.log("Failed to get yt-dlp version: \(error)", level: .warning)
         }
     }
-
-
-
 
     private func isPlaylistURL(_ urlString: String) -> Bool {
         guard let components = URLComponents(string: urlString) else {
@@ -985,7 +977,7 @@ class YtdlpService: ObservableObject {
         guard let path = ytdlpPath else {
             throw YtdlpError.notFound
         }
-        
+
         let normalizedURL = normalizeURLForYtdlp(url)
         // Try the flat summary first: --dump-json on a playlist URL fully extracts
         // every entry (about 1.4 s per YouTube video) before failing to decode.
@@ -1145,7 +1137,7 @@ class YtdlpService: ObservableObject {
                 }
                 btvArgs.append("--")
                 btvArgs.append(btvMedia.streamURL)
-                
+
                 var parsedInfo: MediaInfo? = nil
                 do {
                     let output = try await runCommand(btvArgs)
@@ -1343,7 +1335,7 @@ class YtdlpService: ObservableObject {
         if let proxy = proxy, !proxy.isEmpty {
             args.append(contentsOf: ["--proxy", proxy])
         }
-        
+
         var secureCookieFile: SecureCookieFile? = nil
         defer {
             secureCookieFile?.cleanup()
@@ -1380,7 +1372,7 @@ class YtdlpService: ObservableObject {
         appendSiteSpecificArgs(for: url, rawUserAgent: rawUserAgent, to: &args)
         args.append("--")
         args.append(url)
-        
+
         do {
             let output = try await runCommand(args)
             guard let data = output.data(using: .utf8) else { throw YtdlpError.parseError }
@@ -1439,7 +1431,7 @@ class YtdlpService: ObservableObject {
         if let proxy = proxy, !proxy.isEmpty {
             args.append(contentsOf: ["--proxy", proxy])
         }
-        
+
         var secureCookieFile: SecureCookieFile? = nil
         defer {
             secureCookieFile?.cleanup()
@@ -1520,7 +1512,6 @@ class YtdlpService: ObservableObject {
         )
     }
 
-
     func fetchPlaylistInfo(
         url: String,
         rawCookies: String? = nil,
@@ -1543,7 +1534,7 @@ class YtdlpService: ObservableObject {
         if let proxy = proxy, !proxy.isEmpty {
             args.append(contentsOf: ["--proxy", proxy])
         }
-        
+
         var secureCookieFile: SecureCookieFile? = nil
         defer {
             secureCookieFile?.cleanup()
@@ -1610,9 +1601,6 @@ class YtdlpService: ObservableObject {
 
         return results
     }
-
-
-
 
 public struct DownloadResult: Sendable {
     public let files: [URL]
@@ -1908,7 +1896,7 @@ public struct DownloadResult: Sendable {
         if ffmpegPath == nil || !FileManager.default.fileExists(atPath: ffmpegPath?.path ?? "") {
             await findFfmpeg()
         }
-        
+
         let appSupport = Self.getAppSupportDirectory()
         let ffmpegDir: String
         if let loc = ffmpegPath?.deletingLastPathComponent().path, FileManager.default.fileExists(atPath: loc + "/ffmpeg") {
@@ -2110,7 +2098,7 @@ public struct DownloadResult: Sendable {
             )
             logCookieUsage(for: normalizedURL, usingBrowserCookies: usingBrowserCookies)
         }
-        
+
         // Prepare local scratch thumbnail if available to guarantee embedding for direct stream downloads
         let thumbnailCandidateURL = customThumbnailURL ?? mediaInfo?.thumbnail
         let scratchThumbnailURL = scratchDirectory.appendingPathComponent("custom_cover.jpg")
@@ -2136,14 +2124,14 @@ public struct DownloadResult: Sendable {
         args.append(contentsOf: ["--progress-template", "download:SIPHON_PROG:%(progress._percent_str)s|%(progress._speed_str)s|%(progress._eta_str)s"])
         args.append("--")
         args.append(targetURL)
-        
+
         let sanitizedCommand = LoggerService.sanitizeCommandForLog(args)
         for warning in codecFallbackWarnings {
             onOutput("\(warning)\n")
         }
         onOutput("[COMMAND] \(sanitizedCommand)\n")
         LoggerService.shared.log(sanitizedCommand, level: .command)
-        
+
         // Structured bounded recovery state machine
         enum DownloadRecoveryStrategy: Hashable {
             case freshExtraction
@@ -2695,8 +2683,6 @@ public struct DownloadResult: Sendable {
                lower.contains("hlsnative")
     }
 
-
-
     /// Generic page extractors (og:video, <video> tags) return one format with no height.
     /// Any `[height<=N]` selector rejects it, so such a lone format is taken as-is.
     static func isSingleUnprobedFormat(_ info: MediaInfo?) -> Bool {
@@ -3001,7 +2987,7 @@ public struct DownloadResult: Sendable {
             }
         }
     }
-    
+
     private func isRecuURL(_ urlOrHost: String) -> Bool {
         let host = (URL(string: urlOrHost)?.host ?? urlOrHost).lowercased()
         return host == "recu.me" || host.hasSuffix(".recu.me")
@@ -4327,7 +4313,7 @@ public struct DownloadResult: Sendable {
                 return html
             }
         }
-        
+
         func fetchPage(_ request: URLRequest, stage: String) async throws -> String? {
             try Task.checkCancellation()
             do {
@@ -4358,7 +4344,7 @@ public struct DownloadResult: Sendable {
             appendSiteSpecificArgs(for: targetUrl, to: &rawArgs)
             rawArgs.append("--")
             rawArgs.append(targetUrl)
-            
+
             let rawHtml = try await dumpPage(rawArgs, stage: "main-session")
             if hasBoyfriendTVMediaData(rawHtml) { html = rawHtml }
         }
@@ -4516,7 +4502,7 @@ public struct DownloadResult: Sendable {
                 break
             }
         }
-        
+
         // Extract Title
         var title = "BoyfriendTV Video"
         if let titleRange = html.range(of: "<title>(.*?)</title>", options: [.regularExpression, .caseInsensitive]) {
@@ -4531,7 +4517,7 @@ public struct DownloadResult: Sendable {
                 title = rawTitle.decodingHTMLEntities()
             }
         }
-        
+
         // Ads may precede the real player. Inspect all embeds, and only follow
         // BoyfriendTV embeds for this video rather than arbitrary iframe targets.
         var embedUrl: String? = nil
@@ -4593,10 +4579,10 @@ public struct DownloadResult: Sendable {
                 }
             }
         }
-        
+
         // Stream URL extraction from main page
         var streamUrl = extractStreamURLFromHTML(html)
-        
+
         // If stream URL is not found on main page, fetch candidate embed URL pages
         if streamUrl == nil && !candidateEmbeds.isEmpty {
             for embed in candidateEmbeds {
@@ -4628,7 +4614,7 @@ public struct DownloadResult: Sendable {
                         appendSiteSpecificArgs(for: embed, to: &embedArgs)
                         embedArgs.append("--")
                         embedArgs.append(embed)
-                        
+
                         let embedHtml = try await dumpPage(embedArgs, stage: "embed-browser")
                         if let extracted = extractStreamURLFromHTML(embedHtml) {
                             streamUrl = extracted
@@ -4699,11 +4685,11 @@ public struct DownloadResult: Sendable {
                 }
             }
         }
-        
+
         if let validStreamUrl = streamUrl {
             return BoyfriendTVExtractedMedia(streamURL: validStreamUrl, embedURL: embedUrl ?? targetUrl, title: title, thumbnailURL: thumbnailUrl)
         }
-        
+
         if safariCookieAccessDenied && (effectiveBrowserSource == "safari" || browserLabels.allSatisfy { $0 == "safari" }) {
             throw YtdlpError.safariCookiesFullDiskAccessRequired
         }
@@ -5056,7 +5042,7 @@ public struct DownloadResult: Sendable {
         guard streamURL.contains("_TPL_") || streamURL.contains("_TPL") else {
             return streamURL
         }
-        
+
         var targetTag = "1080p"
         if let range = streamURL.range(of: "multi=([^/&]+)", options: .regularExpression) {
             // Bolt Performance Optimization: Use Substring `split` to avoid allocating intermediate String arrays.
@@ -5080,7 +5066,7 @@ public struct DownloadResult: Sendable {
                 }
             }
             tagMap.sort(by: { $0.height > $1.height })
-            
+
             // Choose tag based on options
             if let chosenFormatId = options.selectedFormatId, let chosenHeight = Int(chosenFormatId) {
                 if let match = tagMap.first(where: { $0.height == chosenHeight }) {
@@ -5102,7 +5088,7 @@ public struct DownloadResult: Sendable {
                 targetTag = best.tag
             }
         }
-        
+
         let cleanTag = targetTag.hasPrefix("_") ? String(targetTag.dropFirst()) : targetTag
         var resolved = streamURL
         if resolved.contains("_TPL_") {
@@ -5132,9 +5118,9 @@ public struct DownloadResult: Sendable {
     private func resolveGuywhMediaInfo(url: String, rawCookies: String? = nil) async -> GuywhExtractedMedia? {
         let targetUrl = normalizeURLForYtdlp(url)
         guard let pageURL = URL(string: targetUrl) else { return nil }
-        
+
         var html = ""
-        
+
         // 1. Try URLSession direct fetch with standard browser headers
         if processRunner is DefaultYtdlpProcessRunner {
             var request = URLRequest(url: pageURL)
@@ -5145,7 +5131,7 @@ public struct DownloadResult: Sendable {
             if let raw = rawCookies, !raw.isEmpty {
                 request.setValue(raw, forHTTPHeaderField: "Cookie")
             }
-            
+
             if let (data, response) = try? await EgressBoundary.session.boundedData(for: request),
                let httpResponse = response as? HTTPURLResponse,
                (200...299).contains(httpResponse.statusCode),
@@ -5153,7 +5139,7 @@ public struct DownloadResult: Sendable {
                 html = fetched
             }
         }
-        
+
         // 2. Fallback to yt-dlp dump-pages if direct fetch failed
         if html.isEmpty {
             let ytdlpBinary = resolvedYtdlpBinary
@@ -5179,9 +5165,9 @@ public struct DownloadResult: Sendable {
                 }
             }
         }
-        
+
         guard !html.isEmpty else { return nil }
-        
+
         // Extract Title
         var title = "Guywh Video"
         for regex in Self.guywhTitleRegexes {
@@ -5198,7 +5184,7 @@ public struct DownloadResult: Sendable {
                 }
             }
         }
-        
+
         // Extract Thumbnail
         var thumbnailURL: String? = nil
         for regex in Self.guywhThumbRegexes {
@@ -5212,11 +5198,11 @@ public struct DownloadResult: Sendable {
                 }
             }
         }
-        
+
         // Extract Stream URL & Quality
         var streamURL: String? = nil
         var quality: String? = nil
-        
+
         for regex in Self.guywhStreamRegexes {
             if let match = regex.firstMatch(in: html, options: [], range: NSRange(location: 0, length: (html as NSString).length)),
                match.numberOfRanges > 1 {
@@ -5228,7 +5214,7 @@ public struct DownloadResult: Sendable {
                 }
             }
         }
-        
+
         // Extract Quality Text if present
         if html.contains("video_url_fhd: '1'") || html.contains("video_url_fhd: 1") {
             quality = "1080p"
@@ -5241,7 +5227,7 @@ public struct DownloadResult: Sendable {
             else if qStr.contains("480") { quality = "480p" }
             else if qStr.contains("360") { quality = "360p" }
         }
-        
+
         // Extract Embed URL or generate standard embed URL
         var embedURL = targetUrl
         let targetAndHtml = targetUrl + "\n" + html
@@ -5255,7 +5241,7 @@ public struct DownloadResult: Sendable {
                 break
             }
         }
-        
+
         // If stream URL was not in main page, attempt embed page fetch
         if streamURL == nil, let embedPageURL = URL(string: embedURL), (processRunner is DefaultYtdlpProcessRunner) {
             var embedReq = URLRequest(url: embedPageURL)
@@ -5279,9 +5265,9 @@ public struct DownloadResult: Sendable {
                 }
             }
         }
-        
+
         guard let validStreamURL = streamURL else { return nil }
-        
+
         return GuywhExtractedMedia(
             streamURL: validStreamURL,
             embedURL: embedURL,
@@ -5311,7 +5297,7 @@ public struct DownloadResult: Sendable {
     private func sanitizeGFFStreamURL(_ raw: String) -> String? {
         var candidate = raw.replacingOccurrences(of: "\\/", with: "/").trimmingCharacters(in: .whitespacesAndNewlines)
         if candidate.isEmpty { return nil }
-        
+
         // Base64 decoded check (e.g. kt_player base64 encoded strings)
         if !candidate.contains("://") && !candidate.hasPrefix("//") && !candidate.hasPrefix("/"),
            let decodedData = Data(base64Encoded: candidate, options: .ignoreUnknownCharacters),
@@ -5319,17 +5305,17 @@ public struct DownloadResult: Sendable {
            decodedStr.hasPrefix("http") || decodedStr.hasPrefix("//") || decodedStr.hasPrefix("/") {
             candidate = decodedStr
         }
-        
+
         if candidate.hasPrefix("//") {
             candidate = "https:" + candidate
         } else if candidate.hasPrefix("/") {
             candidate = "https://gayforfans.com" + candidate
         }
-        
+
         guard candidate.hasPrefix("http://") || candidate.hasPrefix("https://") else {
             return nil
         }
-        
+
         // Exclude image / preview thumbnails / short trailers if full stream exists
         let lower = candidate.lowercased()
         if lower.contains(".jpg") || lower.contains(".png") || lower.contains(".webp") || lower.contains(".gif") {
@@ -5341,10 +5327,10 @@ public struct DownloadResult: Sendable {
     private func resolveGFFMediaInfo(url: String, rawCookies: String? = nil) async -> GFFExtractedMedia? {
         let targetUrl = normalizeURLForYtdlp(url)
         guard let pageURL = URL(string: targetUrl) else { return nil }
-        
+
         LoggerService.shared.log("[GFF] Extracting media for: \(LoggerService.sanitizeURLForLog(targetUrl))", level: .info)
         var html = ""
-        
+
         let ytdlpBinary = resolvedYtdlpBinary
 
         // 1. Try raw session cookies if provided (e.g. from browser extension)
@@ -5355,7 +5341,7 @@ public struct DownloadResult: Sendable {
             appendSiteSpecificArgs(for: targetUrl, to: &rawArgs)
             rawArgs.append("--")
             rawArgs.append(targetUrl)
-            
+
             var dumpOutput: String? = nil
             do {
                 dumpOutput = try await processRunner.runCommand(rawArgs)
@@ -5366,7 +5352,7 @@ public struct DownloadResult: Sendable {
             } catch {
                 LoggerService.shared.log("[GFF] Non-YtdlpError during raw cookie dump-pages: \(error.localizedDescription)", level: .debug)
             }
-            
+
             if let output = dumpOutput, !output.isEmpty {
                 var rawChunks: [String] = []
                 for line in output.split(whereSeparator: \.isNewline) {
@@ -5424,7 +5410,7 @@ public struct DownloadResult: Sendable {
                 appendSiteSpecificArgs(for: targetUrl, to: &args)
                 args.append("--")
                 args.append(targetUrl)
-                
+
                 var dumpOutput: String? = nil
                 do {
                     dumpOutput = try await processRunner.runCommand(args)
@@ -5435,7 +5421,7 @@ public struct DownloadResult: Sendable {
                 } catch {
                     // Ignore general process errors
                 }
-                
+
                 if let output = dumpOutput, !output.isEmpty {
                     var browserChunks: [String] = []
                     for line in output.split(whereSeparator: \.isNewline) {
@@ -5481,7 +5467,7 @@ public struct DownloadResult: Sendable {
             if let raw = rawCookies, !raw.isEmpty {
                 request.setValue(raw, forHTTPHeaderField: "Cookie")
             }
-            
+
             if let (data, response) = try? await EgressBoundary.session.boundedData(for: request),
                let httpResponse = response as? HTTPURLResponse,
                (200...299).contains(httpResponse.statusCode),
@@ -5490,12 +5476,12 @@ public struct DownloadResult: Sendable {
                 LoggerService.shared.log("[GFF] Fetched page HTML via URLSession direct request (length: \(fetched.count) bytes)", level: .info)
             }
         }
-        
+
         guard !html.isEmpty else {
             LoggerService.shared.log("[GFF] Unable to retrieve HTML page dump for: \(LoggerService.sanitizeURLForLog(targetUrl))", level: .warning)
             return nil
         }
-        
+
         // Extract Title
         var title = "GayForFans Video"
         for regex in Self.gffTitleRegexes {
@@ -5517,7 +5503,7 @@ public struct DownloadResult: Sendable {
                 }
             }
         }
-        
+
         // Extract Thumbnail
         var thumbnailURL: String? = nil
         for regex in Self.gffThumbRegexes {
@@ -5531,11 +5517,11 @@ public struct DownloadResult: Sendable {
                 }
             }
         }
-        
+
         // Extract Stream URL & Quality
         var streamURL: String? = nil
         var quality: String? = nil
-        
+
         for regex in Self.gffStreamRegexes {
             if let match = regex.firstMatch(in: html, options: [], range: NSRange(location: 0, length: (html as NSString).length)),
                match.numberOfRanges > 1 {
@@ -5546,7 +5532,7 @@ public struct DownloadResult: Sendable {
                 }
             }
         }
-        
+
         // Extract Quality Text if present
         if html.contains("video_url_fhd: '1'") || html.contains("video_url_fhd: 1") || html.contains("video_url_fhd:\"1\"") {
             quality = "1080p"
@@ -5559,7 +5545,7 @@ public struct DownloadResult: Sendable {
             else if qStr.contains("480") { quality = "480p" }
             else if qStr.contains("360") { quality = "360p" }
         }
-        
+
         // Extract Candidate Embed URLs
         var candidateEmbeds: [String] = []
         for regex in Self.gffEmbedRegexes {
@@ -5586,7 +5572,7 @@ public struct DownloadResult: Sendable {
                 }
             }
         }
-        
+
         var embedURL = candidateEmbeds.first ?? targetUrl
 
         // If stream URL was not in main page, attempt embed page fetch across candidate embeds
@@ -5604,7 +5590,7 @@ public struct DownloadResult: Sendable {
                         appendSiteSpecificArgs(for: embed, to: &embedArgs)
                         embedArgs.append("--")
                         embedArgs.append(embed)
-                        
+
                         var embedDump: String? = nil
                         do {
                             embedDump = try await processRunner.runCommand(embedArgs)
@@ -5615,7 +5601,7 @@ public struct DownloadResult: Sendable {
                         } catch {
                             LoggerService.shared.log("[GFF] Non-YtdlpError during embed dump-pages: \(error.localizedDescription)", level: .debug)
                         }
-                        
+
                         if let output = embedDump, !output.isEmpty {
                             var embedChunks: [String] = []
                             for line in output.split(whereSeparator: \.isNewline) {
@@ -5697,12 +5683,12 @@ public struct DownloadResult: Sendable {
                 }
             }
         }
-        
+
         guard let validStreamURL = streamURL else {
             LoggerService.shared.log("[GFF] Failed to extract valid stream URL from page or embed targets (HTML length: \(html.count))", level: .warning)
             return nil
         }
-        
+
         LoggerService.shared.log("[GFF] Successfully extracted stream: \(LoggerService.sanitizeURLForLog(validStreamURL)) (Quality: \(quality ?? "auto"))", level: .info)
         return GFFExtractedMedia(
             streamURL: validStreamURL,
@@ -6785,7 +6771,7 @@ public struct DownloadResult: Sendable {
                 return !Self.trackingNamesGroupA.contains(name) && !Self.trackingPrefixes.contains { name.hasPrefix($0) }
             }
             if components.queryItems?.isEmpty == true { components.queryItems = nil }
-            
+
             let path = components.path
             // Extract video ID from path or query across all language/subdomain variations
             let videoId: String? = {
@@ -7474,7 +7460,7 @@ public struct DownloadResult: Sendable {
                 if let urlArg = args.last {
                     recordCookieDenial(browser: browser, url: urlArg, errorOutput: output)
                 }
-                
+
                 LoggerService.shared.log(
                     "Selected browser cookie source '\(browser)' is unavailable. Retrying without browser cookies; unrelated browser profiles will not be probed.",
                     level: .info
@@ -7720,7 +7706,7 @@ public struct DownloadResult: Sendable {
         var current = ""
         var inQuotes = false
         var quoteChar: Character = "\""
-        
+
         for char in argString {
             if char == "\"" || char == "'" {
                 if inQuotes && char == quoteChar {
@@ -7789,11 +7775,11 @@ public struct DownloadResult: Sendable {
         }
         var seenDomains = Set<String>()
         let uniqueDomains = domains.filter { seenDomains.insert($0).inserted }
-        
+
         var lines = ["# Netscape HTTP Cookie File"]
         let pairs = cookieHeader.split(separator: ";")
         let expiry = Int(Date().addingTimeInterval(86400 * 30).timeIntervalSince1970)
-        
+
         for pair in pairs {
             let trimmedPair = pair.trimmingCharacters(in: .whitespacesAndNewlines)
             let parts = trimmedPair.split(separator: "=", maxSplits: 1)
@@ -7807,7 +7793,7 @@ public struct DownloadResult: Sendable {
                 }
             }
         }
-        
+
         let content = lines.joined(separator: "\n") + "\n"
         guard let data = content.data(using: .utf8) else { return nil }
 
@@ -7834,8 +7820,6 @@ public struct DownloadResult: Sendable {
         return secureFile.detach()
     }
 }
-
-
 
 enum YtdlpError: LocalizedError {
     case notFound

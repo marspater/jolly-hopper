@@ -42,21 +42,21 @@ struct PreferencesView: View {
     @AppStorage(UserDefaultsKeys.startInBackground) private var startInBackground: Bool = false
     @AppStorage(UserDefaultsKeys.downloadSpeedLimit) private var downloadSpeedLimit: Int = 0
     @AppStorage(UserDefaultsKeys.customYtdlpPath) private var customYtdlpPath: String = ""
-    
+
     @EnvironmentObject var languageService: LanguageService
     @EnvironmentObject var updateChecker: UpdateChecker
     @EnvironmentObject var downloadManager: DownloadManager
     @EnvironmentObject var appState: AppState
     @Environment(\.colorScheme) private var colorScheme
     @State private var showLanguageChangeAlert = false
-    @State private var previousLanguage: Language? = nil
+    @State private var previousLanguage: Language?
     @State private var installedBrowsers: [SupportedBrowser] = []
     @ObservedObject private var logger = LoggerService.shared
     @State private var customPresets: [CustomPreset] = []
     @State private var showCreatePresetSheet = false
     @State private var newPresetName = ""
     @AppStorage(UserDefaultsKeys.selectedCustomPresetId) private var selectedCustomPresetIdString: String = ""
-    
+
     // Preset form state
     @State private var presetFileType: MediaFileType = .mp4
     @State private var presetVideoResolution: VideoResolution = .r1080p
@@ -67,11 +67,11 @@ struct PreferencesView: View {
     @State private var presetSubtitleFormat: SubtitleFormat = .srt
     @State private var presetSponsorBlock: Bool = false
     @State private var presetSplitChapters: Bool = false
-    @State private var editingPreset: CustomPreset? = nil
+    @State private var editingPreset: CustomPreset?
     @State private var hasFullDiskAccess: Bool = YtdlpService.hasFullDiskAccess
     @State private var isCheckingPermission: Bool = false
-    @State private var permissionCheckMessage: String? = nil
-    
+    @State private var permissionCheckMessage: String?
+
     private var presetFilteredResolutions: [VideoResolution] {
         if presetVideoCodec == .h264 {
             return VideoResolution.allCases.filter { res in
@@ -80,7 +80,7 @@ struct PreferencesView: View {
         }
         return VideoResolution.allCases
     }
-    
+
     enum PreferenceTab: Int, Hashable {
         case general, download, advanced, about
     }
@@ -90,9 +90,9 @@ struct PreferencesView: View {
     init(initialTab: PreferenceTab = .general) {
         _selectedTab = State(initialValue: initialTab)
     }
-    
+
     @Environment(\.dismiss) var dismiss
-    
+
     @Namespace private var tabNamespace
     @Environment(\.siphonRenderingCapabilities) private var renderingCapabilities
 
@@ -285,7 +285,7 @@ struct PreferencesView: View {
                 .toggleStyle(.switch)
                 .accessibilityLabel(languageService.s("launch_at_login"))
             }
-            
+
             if LoginItemHelper.shared.isEnabled {
                 HStack {
                     VStack(alignment: .leading, spacing: 3) {
@@ -303,7 +303,7 @@ struct PreferencesView: View {
                 }
                 .padding(.leading, 12)
             }
-            
+
             HStack {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(languageService.s("notifications"))
@@ -324,7 +324,7 @@ struct PreferencesView: View {
                     .toggleStyle(.switch)
                     .accessibilityLabel(languageService.s("notifications"))
             }
-            
+
             HStack {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(languageService.s("show_menubar_icon"))
@@ -376,7 +376,7 @@ struct PreferencesView: View {
                         .truncationMode(.middle)
                         .help(defaultSaveFolder.isEmpty ? "~/Downloads" : defaultSaveFolder)
                         .layoutPriority(1)
-                    
+
                     Spacer(minLength: SiphonTheme.spacing4)
 
                     if !defaultSaveFolder.isEmpty {
@@ -503,9 +503,6 @@ struct PreferencesView: View {
         }
     }
 
-    
-
-    
     private var downloadTab: some View {
         Form {
             downloadPresetsSection
@@ -565,7 +562,7 @@ struct PreferencesView: View {
                     customPresetRow(preset)
                 }
             }
-            
+
             Button {
                 showCreatePresetSheet = true
             } label: {
@@ -607,9 +604,9 @@ struct PreferencesView: View {
             .buttonStyle(.plain)
             .accessibilityElement(children: .combine)
             .accessibilityAddTraits(selectedCustomPresetIdString == preset.id.uuidString ? [.isButton, .isSelected] : [.isButton])
-            
+
             Spacer()
-            
+
             HStack(spacing: 12) {
                 Button {
                     startEditingPreset(preset)
@@ -620,7 +617,7 @@ struct PreferencesView: View {
                 .buttonStyle(.borderless)
                 .help(languageService.s("edit_preset"))
                 .accessibilityLabel(languageService.s("edit_preset"))
-                
+
                 Button {
                     deleteCustomPreset(preset)
                 } label: {
@@ -643,7 +640,7 @@ struct PreferencesView: View {
                 }
             }
             .tint(nil)
-            
+
             Picker(languageService.s("video_quality"), selection: $defaultVideoResolution) {
                 ForEach(VideoResolution.allCases) { res in
                     Text(res.title(lang: languageService)).tag(res.rawValue)
@@ -657,7 +654,7 @@ struct PreferencesView: View {
                 }
             }
             .tint(nil)
-            
+
             HStack {
                 Spacer()
                 Button {
@@ -682,14 +679,14 @@ struct PreferencesView: View {
                 }
             }
             .tint(nil)
-            
+
             Picker(languageService.s("preferred_audio_codec"), selection: $defaultAudioCodec) {
                 ForEach(AudioCodec.allCases) { codec in
                     Text(codec.title(lang: languageService)).tag(codec.rawValue)
                 }
             }
             .tint(nil)
-            
+
             Text(languageService.s("codec_fallback_note"))
                 .font(.siphonMetadata)
                 .foregroundColor(.secondary)
@@ -725,18 +722,18 @@ struct PreferencesView: View {
                 .foregroundColor(.secondary)
         }
     }
-    
+
     private var createPresetSheet: some View {
         VStack(spacing: 16) {
             Text(editingPreset == nil ? languageService.s("create_preset") : languageService.s("edit_preset"))
                 .font(.siphonHeadline)
-            
+
             TextField(languageService.s("preset_name"), text: $newPresetName)
                 .textFieldStyle(.roundedBorder)
                 .frame(width: 350)
-            
+
             SiphonTheme.subtleDivider
-            
+
             Form {
                 presetFormatSection
                 presetCodecSection
@@ -744,14 +741,14 @@ struct PreferencesView: View {
                 presetAdvancedSection
             }
             .siphonFormStyle()
-            
+
             HStack(spacing: 16) {
                 Button(languageService.s("cancel")) {
                     showCreatePresetSheet = false
                     resetPresetForm()
                 }
                 .buttonStyle(.plain)
-                
+
                 Button(languageService.s("save")) {
                     createCustomPreset()
                     showCreatePresetSheet = false
@@ -774,7 +771,7 @@ struct PreferencesView: View {
                 }
             }
             .tint(nil)
-            
+
             Picker(languageService.s("video_quality"), selection: $presetVideoResolution) {
                 ForEach(presetFilteredResolutions) { res in
                     Text(res.title(lang: languageService)).tag(res)
@@ -792,14 +789,14 @@ struct PreferencesView: View {
                 }
             }
             .tint(nil)
-            
+
             Picker(languageService.s("audio_codec"), selection: $presetAudioCodec) {
                 ForEach(AudioCodec.allCases) { codec in
                     Text(codec.title(lang: languageService)).tag(codec)
                 }
             }
             .tint(nil)
-            
+
             if presetVideoCodec == .h264 {
                 HStack {
                     Image(systemName: "info.circle.fill")
@@ -816,7 +813,7 @@ struct PreferencesView: View {
     private var presetSubtitleSection: some View {
         Section(languageService.s("subtitles")) {
             Toggle(languageService.s("download_subtitles"), isOn: $presetEmbedSubtitles)
-            
+
             if presetEmbedSubtitles {
                 Picker(languageService.s("subtitle_output"), selection: Binding(
                     get: { presetSubtitleLang.hasPrefix("embed:") },
@@ -829,12 +826,12 @@ struct PreferencesView: View {
                     Text(languageService.s("subtitle_embedded")).tag(true)
                 }
                 .pickerStyle(.segmented)
-                
+
                 VStack(alignment: .leading, spacing: 4) {
                     Text(languageService.s("languages"))
                         .font(.siphonMetadata)
                         .foregroundColor(.secondary)
-                    
+
                     TextField(languageService.s("subtitle_lang_hint"), text: Binding(
                         get: { presetSubtitleLang.replacingOccurrences(of: "embed:", with: "") },
                         set: { newLang in
@@ -855,14 +852,14 @@ struct PreferencesView: View {
             }
         }
     }
-    
+
     private var presetAdvancedSection: some View {
         Section(languageService.s("extra_settings")) {
             Toggle(languageService.s("split_chapters"), isOn: $presetSplitChapters)
             Toggle(languageService.s("sponsorblock"), isOn: $presetSponsorBlock)
         }
     }
-    
+
     private func resetPresetForm() {
         newPresetName = ""
         presetFileType = .mp4
@@ -874,7 +871,7 @@ struct PreferencesView: View {
         presetSponsorBlock = false
         presetSplitChapters = false
     }
-    
+
     private func startEditingPreset(_ preset: CustomPreset) {
         editingPreset = preset
         newPresetName = preset.name
@@ -889,21 +886,21 @@ struct PreferencesView: View {
         presetSplitChapters = preset.splitChapters ?? false
         showCreatePresetSheet = true
     }
-    
+
     private func applyPreset(_ preset: DownloadPreset) {
         defaultVideoCodec = preset.videoCodec.rawValue
         defaultAudioCodec = preset.audioCodec.rawValue
         defaultVideoResolution = preset.videoResolution.rawValue
         defaultFileType = preset.fileType.rawValue.lowercased()
     }
-    
+
     private func applyCustomPreset(_ preset: CustomPreset) {
         defaultVideoCodec = preset.videoCodec.rawValue
         defaultAudioCodec = preset.audioCodec.rawValue
         defaultVideoResolution = preset.videoResolution.rawValue
         defaultFileType = preset.fileType.rawValue.lowercased()
     }
-    
+
     private func createCustomPreset() {
         if let editing = editingPreset {
             if let index = customPresets.firstIndex(where: { $0.id == editing.id }) {
@@ -935,12 +932,12 @@ struct PreferencesView: View {
             let preset = CustomPreset(configuration: config)
             customPresets.append(preset)
         }
-        
+
         CustomPreset.saveAll(customPresets)
         resetPresetForm()
         showCreatePresetSheet = false
     }
-    
+
     private func deleteCustomPreset(_ preset: CustomPreset) {
         if selectedCustomPresetIdString == preset.id.uuidString {
             selectedCustomPresetIdString = ""
@@ -948,7 +945,7 @@ struct PreferencesView: View {
         customPresets.removeAll { $0.id == preset.id }
         CustomPreset.saveAll(customPresets)
     }
-    
+
     private func resetFormatToDefaults() {
         defaultFileType = "mp4"
         defaultVideoResolution = "r1080p"
@@ -957,15 +954,13 @@ struct PreferencesView: View {
         defaultAudioCodec = "aac"
         defaultAdditionalArguments = ""
     }
-    
 
-    
     private var advancedTab: some View {
         Form {
             Section("SponsorBlock") {
                 Toggle(languageService.s("sponsorblock_desc"), isOn: $sponsorBlock)
             }
-            
+
             if DependencyChecksums.managedYtdlpEnabled {
                 ytdlpUpdateSection
             } else {
@@ -1098,7 +1093,7 @@ struct PreferencesView: View {
                 Text(languageService.s("browser_hint"))
                     .font(.siphonMetadata)
                     .foregroundColor(.secondary)
-                
+
                 if browserForCookies == "safari" {
                     safariWarningView
                 } else if browserForCookies == "helium" || browserForCookies == "chromium-based" {
@@ -1147,7 +1142,7 @@ struct PreferencesView: View {
                     .foregroundColor(SiphonTheme.statusQueuedText)
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                
+
                 HStack(spacing: 8) {
                     Button(languageService.s("open_system_settings")) {
                         if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles") {
@@ -1229,9 +1224,7 @@ struct PreferencesView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .siphonCallout(tint: statusColor)
     }
-    
 
-    
     private var aboutTab: some View {
         VStack(spacing: 0) {
             VStack(spacing: SiphonTheme.spacing8) {
@@ -1365,9 +1358,7 @@ struct PreferencesView: View {
             .padding(.bottom, 12)
         }
     }
-    
 
-    
     private func selectFolder() {
         let panel = NSOpenPanel()
         panel.canChooseDirectories = true
@@ -1375,12 +1366,12 @@ struct PreferencesView: View {
         panel.allowsMultipleSelection = false
         panel.canCreateDirectories = true
         panel.prompt = languageService.s("save")
-        
+
         if panel.runModal() == .OK, let url = panel.url {
             defaultSaveFolder = url.path
         }
     }
-    
+
     private func selectYtdlp() {
         guard downloadManager.activeExecutionCount == 0 else { return }
         let panel = NSOpenPanel()
@@ -1414,8 +1405,6 @@ struct PreferencesView: View {
         }
     }
 }
-
-
 
 #Preview {
     PreferencesView()

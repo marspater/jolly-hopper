@@ -35,7 +35,7 @@ struct ContentView: View {
     @State private var columnVisibility: NavigationSplitViewVisibility = .detailOnly
     @AppStorage("showMenuBarIcon") private var showMenuBarIcon: Bool = true
     @AppStorage(UserDefaultsKeys.theme) private var theme: String = "system"
-    
+
     var body: some View {
         ZStack {
             mainLayout
@@ -144,7 +144,7 @@ struct ContentView: View {
         default: return []
         }
     }
-    
+
     @ViewBuilder
     private var recoveryPersistenceWarning: some View {
         HStack(alignment: .top, spacing: SiphonTheme.spacing12) {
@@ -230,7 +230,7 @@ struct ContentView: View {
                 .help(languageService.s("clear_history_help"))
                 .accessibilityLabel(languageService.s("clear_history"))
             }
-            
+
             Button {
                 appState.showAddDownloadSheet = true
             } label: {
@@ -259,12 +259,12 @@ struct SidebarView: View {
 
             List {
                 sidebarButton(item: .home)
-                
+
                 Section(languageService.s("downloading")) {
                     sidebarButton(item: .downloading, badgeCount: downloadManager.downloadingCount, badgeColor: SiphonTheme.statusDownloadingText)
                     sidebarButton(item: .queued, badgeCount: downloadManager.queuedCount, badgeColor: SiphonTheme.statusQueuedText)
                 }
-                
+
                 Section(languageService.s("history")) {
                     sidebarButton(item: .completed, badgeCount: downloadManager.completedCount, badgeColor: SiphonTheme.statusCompletedText)
                     sidebarButton(item: .failed, badgeCount: downloadManager.failedCount, badgeColor: SiphonTheme.statusFailedText)
@@ -276,7 +276,7 @@ struct SidebarView: View {
         .safeAreaInset(edge: .bottom) {
             VStack(spacing: SiphonTheme.spacing10) {
                 SponsorView()
-                
+
                 Button {
                     PreferencesWindowManager.shared.showPreferencesWindow(
                         languageService: languageService,
@@ -325,7 +325,7 @@ struct SidebarView: View {
             Spacer()
         }
     }
-    
+
     @ViewBuilder
     private func sidebarButton(item: NavigationItem, badgeCount: Int = 0, badgeColor: Color = SiphonTheme.accentText) -> some View {
         let isSelected = appState.selectedNavItem == item
@@ -374,7 +374,7 @@ struct DetailView: View {
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var downloadManager: DownloadManager
     @EnvironmentObject var languageService: LanguageService
-    
+
     var body: some View {
         ZStack {
             switch appState.selectedNavItem {
@@ -400,7 +400,7 @@ struct HomeView: View {
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var downloadManager: DownloadManager
     @EnvironmentObject var languageService: LanguageService
-    
+
     var body: some View {
         ScrollView {
             VStack(spacing: SiphonTheme.spacing20) {
@@ -409,7 +409,7 @@ struct HomeView: View {
                     Text(languageService.s("ready_to_download"))
                         .font(.siphonHomeTitle)
                         .foregroundColor(.primary)
-                    
+
                     Text(languageService.s("ready_to_download_subtitle"))
                         .font(.siphonStandard)
                         .foregroundColor(.secondary)
@@ -417,21 +417,21 @@ struct HomeView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, SiphonTheme.spacing24)
                 .padding(.top, SiphonTheme.spacing16)
-                
+
                 // Hero Drop URL Zone
                 HeroDropURLView()
                     .padding(.horizontal, SiphonTheme.spacing24)
-                
+
                 // Status Bar with Liquid Water & Circular Progress Rings
                 StatusBarView()
                     .padding(.horizontal, SiphonTheme.spacing24)
-                
+
                 // Recent Downloads Section
                 recentDownloadsSection
                     .padding(.horizontal, SiphonTheme.spacing24)
-                
+
                 Spacer(minLength: SiphonTheme.spacing12)
-                
+
                 // Footer
                 HStack {
                     if let version = appState.ytdlpVersion {
@@ -444,9 +444,9 @@ struct HomeView: View {
                         }
                         .foregroundColor(.secondary)
                     }
-                    
+
                     Spacer()
-                    
+
                     HStack(spacing: 4) {
                         Text(languageService.s("play_videos_your_way"))
                             .font(.siphonMetadata)
@@ -482,9 +482,9 @@ struct HomeView: View {
             .allowsHitTesting(false)
         )
     }
-    
+
     // MARK: - Recent Downloads Section
-    
+
     @ViewBuilder
     private var recentDownloadsSection: some View {
         VStack(spacing: SiphonTheme.spacing10) {
@@ -492,9 +492,9 @@ struct HomeView: View {
                 Text(languageService.s("recent_downloads"))
                     .font(.siphonPrimarySemibold)
                     .foregroundColor(.primary)
-                
+
                 Spacer()
-                
+
                 Button {
                     appState.selectedNavItem = downloadManager.mostRelevantNavigationItem
                 } label: {
@@ -509,7 +509,7 @@ struct HomeView: View {
                 .buttonStyle(.plain)
                 .help(languageService.s("see_all"))
             }
-            
+
             if downloadManager.downloads.isEmpty {
                 VStack(spacing: 8) {
                     Image(systemName: "arrow.down.circle")
@@ -745,7 +745,7 @@ struct SponsorView: View {
     @EnvironmentObject var languageService: LanguageService
     @Environment(\.colorScheme) var colorScheme
     @State private var isHovered = false
-    
+
     var body: some View {
         Button {
             if let url = URL(string: "https://github.com/marspater/jolly-hopper") {
