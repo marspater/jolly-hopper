@@ -101,8 +101,9 @@ async function openDeepLink(deepLink) {
     }
 }
 
-// Recreate missing alarms, or clean overdue tabs, on every worker activation.
-reconcileDeepLinkTabs().catch(reportCleanupFailure);
+// Classic extension workers cannot use top-level await. Reconciliation
+// handles errors internally and never delays synchronous event registration.
+void reconcileDeepLinkTabs();
 
 // Players built on Media Source Extensions expose a blob: srcUrl, which Siphon
 // cannot fetch. Use the first web address among the link, media and page URLs.
