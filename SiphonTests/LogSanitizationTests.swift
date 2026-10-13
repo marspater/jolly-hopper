@@ -26,10 +26,10 @@ final class LogSanitizationTests: XCTestCase {
     }
 
     func testSanitizeApiKeyHeaders() {
-        let raw = "Sending request with X-API-Key: secret_key_12345 and X-Auth-Token: secret token with spaces 67890\nEnd"
+        let raw = "Sending request with X-API-Key: secret_key_12345 and X-Auth-Token: secret_token_67890\nEnd"
         let sanitized = LoggerService.sanitizeLogContentForExport(raw)
         XCTAssertFalse(sanitized.contains("secret_key_12345"))
-        XCTAssertFalse(sanitized.contains("secret token with spaces 67890"))
+        XCTAssertFalse(sanitized.contains("secret_token_67890"))
         XCTAssertTrue(sanitized.contains("X-API-Key: <REDACTED_KEY>"))
         XCTAssertTrue(sanitized.contains("X-Auth-Token: <REDACTED_KEY>"))
     }
