@@ -3210,29 +3210,72 @@ public struct DownloadResult: Sendable {
     private struct RecuPageState: Decodable {
         let challenge: Bool
         let token: String?
+        let needsSignIn: Bool
         let html: String?
         let userAgent: String?
     }
 
-    final class RecuNavigationDelegate: NSObject, WKNavigationDelegate {
+    final class RecuNavigationDelegate: NSObject, WKNavigationDelegate, WKUIDelegate {
+        nonisolated static func isAllowedHost(_ host: String) -> Bool {
+            let h = host.lowercased()
+            return h == "recu.me" || h.hasSuffix(".recu.me") ||
+                   h == "challenges.cloudflare.com" || h.hasSuffix(".challenges.cloudflare.com") ||
+                   h == "cloudflare.com" || h.hasSuffix(".cloudflare.com") ||
+                   h == "cloudflareinsights.com" || h.hasSuffix(".cloudflareinsights.com")
+        }
+
         func webView(
-            _ _: WKWebView,
+            _ webView: WKWebView,
             decidePolicyFor navigationAction: WKNavigationAction,
             decisionHandler: @escaping @MainActor (WKNavigationActionPolicy) -> Void
         ) {
-            guard let targetFrame = navigationAction.targetFrame else {
-                decisionHandler(.cancel)
-                return
-            }
-            // Cloudflare's check runs in a subframe; only the page itself stays on Recu.
-            guard targetFrame.isMainFrame else {
+            let url = navigationAction.request.url
+            let scheme = url?.scheme?.lowercased() ?? ""
+            let host = url?.host?.lowercased() ?? ""
+
+            // Standard browser schemes used by challenge scripts, Web Workers, and blob/data URIs.
+            if ["about", "data", "blob", "javascript"].contains(scheme) {
                 decisionHandler(.allow)
                 return
             }
-            let url = navigationAction.request.url
-            let host = url?.host?.lowercased() ?? ""
-            let isRecu = url?.scheme?.lowercased() == "https" && (host == "recu.me" || host.hasSuffix(".recu.me"))
-            decisionHandler(isRecu ? .allow : .cancel)
+
+            guard scheme == "https" || scheme == "http" else {
+                decisionHandler(.cancel)
+                return
+            }
+
+            // Cloudflare's check runs in subframes; only the top page itself navigates Recu or Cloudflare.
+            if let targetFrame = navigationAction.targetFrame, !targetFrame.isMainFrame {
+                decisionHandler(.allow)
+                return
+            }
+
+            if Self.isAllowedHost(host) {
+                if navigationAction.targetFrame == nil {
+                    webView.load(navigationAction.request)
+                    decisionHandler(.cancel)
+                    return
+                }
+                decisionHandler(.allow)
+                return
+            }
+
+            decisionHandler(.cancel)
+        }
+
+        func webView(
+            _ webView: WKWebView,
+            createWebViewWith configuration: WKWebViewConfiguration,
+            for navigationAction: WKNavigationAction,
+            windowFeatures: WKWindowFeatures
+        ) -> WKWebView? {
+            if navigationAction.targetFrame == nil,
+               let url = navigationAction.request.url,
+               let host = url.host,
+               Self.isAllowedHost(host) {
+                webView.load(navigationAction.request)
+            }
+            return nil
         }
     }
 
@@ -3283,11 +3326,21 @@ public struct DownloadResult: Sendable {
 
     private func recuPageState(_ webView: WKWebView, videoID: String) async -> RecuPageState? {
         let script = """
-        const button = document.querySelector('#play_button[data-token]');
-        const matches = !!button && button.getAttribute('data-video-id') === videoID;
+        const playBtn = document.querySelector('#play_button');
+        const hasPlayBtn = !!playBtn;
+        const playBtnToken = playBtn ? playBtn.getAttribute('data-token') : null;
+        const playBtnVideoId = playBtn ? playBtn.getAttribute('data-video-id') : null;
+        const matches = hasPlayBtn && !!playBtnToken && playBtnVideoId === videoID;
+
+        const hasSignInButton = !!document.querySelector('#top-signin-signin-button, a[href*="/account/signin"]');
+        const isSignInPage = window.location.pathname.startsWith('/account/signin');
+        // When signed out, #play_button exists with data-video-id but has NO data-token, or the page displays sign-in controls.
+        const needsSignIn = isSignInPage || hasSignInButton || (hasPlayBtn && !playBtnToken && playBtnVideoId === videoID);
+
         return JSON.stringify({
             challenge: !!document.getElementById('challenge-error-text') || /^just a moment/i.test(document.title),
-            token: matches ? button.getAttribute('data-token') : null,
+            token: matches ? playBtnToken : null,
+            needsSignIn: needsSignIn,
             html: matches ? document.documentElement.outerHTML : null,
             userAgent: navigator.userAgent
         });
@@ -3360,9 +3413,13 @@ public struct DownloadResult: Sendable {
         let configuration = WKWebViewConfiguration()
         configuration.websiteDataStore = recuWebDataStore
         configuration.mediaTypesRequiringUserActionForPlayback = .all
+        configuration.defaultWebpagePreferences.allowsContentJavaScript = true
+        configuration.preferences.javaScriptCanOpenWindowsAutomatically = true
         let webView = WKWebView(frame: NSRect(x: 0, y: 0, width: 1000, height: 760), configuration: configuration)
+        webView.customUserAgent = Self.safariUserAgent
         let navigationDelegate = RecuNavigationDelegate()
         webView.navigationDelegate = navigationDelegate
+        webView.uiDelegate = navigationDelegate
         webView.load(URLRequest(url: pageURL))
 
         var window: NSWindow?
@@ -3377,6 +3434,7 @@ public struct DownloadResult: Sendable {
         var deadline = Date().addingTimeInterval(15)
         var lastToken: String?
         var reloadedStaleToken = false
+        var redirectedToSignIn = false
 
         func presentWindow(reason: String) {
             guard window == nil else { return }
@@ -3410,6 +3468,26 @@ public struct DownloadResult: Sendable {
                 presentWindow(reason: "challenge")
                 continue
             }
+
+            if state.needsSignIn && state.token == nil {
+                if !redirectedToSignIn {
+                    redirectedToSignIn = true
+                    if let currentWindow = window {
+                        currentWindow.orderFrontRegardless()
+                        NSApp.requestUserAttention(.criticalRequest)
+                    } else {
+                        presentWindow(reason: "sign-in-required")
+                    }
+                    deadline = Date().addingTimeInterval(300)
+                    if let currentURL = webView.url, !currentURL.path.starts(with: "/account/signin"),
+                       let signInURL = Self.recuSignInURL(for: pageURL) {
+                        LoggerService.shared.log("[ProtectedSite] stage=browser-session result=redirecting-to-signin", level: .info)
+                        webView.load(URLRequest(url: signInURL))
+                    }
+                }
+                continue
+            }
+
             // A token is single-use for this loop: navigation leaves the old page
             // readable until the next one commits.
             guard let token = state.token, let html = state.html, token != lastToken else { continue }
@@ -3421,12 +3499,14 @@ public struct DownloadResult: Sendable {
                 LoggerService.shared.log("[ProtectedSite] stage=api result=stream-found", level: .debug)
                 return RecuBrowserSession(pageHTML: html, playlistURL: playlistURL, userAgent: state.userAgent)
             case .signInRequired:
+                redirectedToSignIn = true
                 if let currentWindow = window {
                     currentWindow.orderFrontRegardless()
                     NSApp.requestUserAttention(.criticalRequest)
                 } else {
                     presentWindow(reason: "sign-in-required")
                 }
+                deadline = Date().addingTimeInterval(300)
                 if let signInURL = Self.recuSignInURL(for: pageURL) {
                     webView.load(URLRequest(url: signInURL))
                 }
