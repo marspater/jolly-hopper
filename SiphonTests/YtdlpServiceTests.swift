@@ -3703,6 +3703,18 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertNil(YtdlpService.recuSegmentCheck(for: "https://cdn.example.test/index.m3u8?uid=ab12;3,4&request_id=a&expires=1"))
     }
 
+    func testRecuNavigationDelegateAllowsCloudflareAndRecuHosts() {
+        XCTAssertTrue(YtdlpService.RecuNavigationDelegate.isAllowedHost("recu.me"))
+        XCTAssertTrue(YtdlpService.RecuNavigationDelegate.isAllowedHost("sub.recu.me"))
+        XCTAssertTrue(YtdlpService.RecuNavigationDelegate.isAllowedHost("challenges.cloudflare.com"))
+        XCTAssertTrue(YtdlpService.RecuNavigationDelegate.isAllowedHost("cloudflare.com"))
+        XCTAssertTrue(YtdlpService.RecuNavigationDelegate.isAllowedHost("static.cloudflareinsights.com"))
+
+        XCTAssertFalse(YtdlpService.RecuNavigationDelegate.isAllowedHost("evil.com"))
+        XCTAssertFalse(YtdlpService.RecuNavigationDelegate.isAllowedHost("recu.me.evil.com"))
+        XCTAssertFalse(YtdlpService.RecuNavigationDelegate.isAllowedHost("cloudflare.com.evil.com"))
+    }
+
     func testRecuMetadataResolvesThroughBrowserSessionWithoutBrowserCookies() async throws {
         let pageURL = "https://recu.me/polarny05/video/112873588/play"
         let stream = "https://cdn.example.test/master.m3u8?token=signed&expires=123"
