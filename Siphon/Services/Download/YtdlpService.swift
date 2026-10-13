@@ -3264,9 +3264,20 @@ public struct DownloadResult: Sendable {
         window.delegate = delegate
         window.title = title
         window.contentView = webView
+        window.level = .floating
         window.center()
         window.makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
+        window.orderFrontRegardless()
+        if #available(macOS 14.0, *) {
+            NSApp.activate()
+        } else {
+            NSApp.activate(ignoringOtherApps: true)
+        }
+        NSApp.requestUserAttention(.criticalRequest)
+        NotificationService.shared.sendAppUpdateNotification(
+            title: title,
+            body: LanguageService.s("site_verification_needed")
+        )
         return window
     }
 
@@ -3410,7 +3421,12 @@ public struct DownloadResult: Sendable {
                 LoggerService.shared.log("[ProtectedSite] stage=api result=stream-found", level: .debug)
                 return RecuBrowserSession(pageHTML: html, playlistURL: playlistURL, userAgent: state.userAgent)
             case .signInRequired:
-                presentWindow(reason: "sign-in-required")
+                if let currentWindow = window {
+                    currentWindow.orderFrontRegardless()
+                    NSApp.requestUserAttention(.criticalRequest)
+                } else {
+                    presentWindow(reason: "sign-in-required")
+                }
                 if let signInURL = Self.recuSignInURL(for: pageURL) {
                     webView.load(URLRequest(url: signInURL))
                 }
