@@ -9,10 +9,12 @@ import XCTest
 final class LogSanitizationTests: XCTestCase {
 
     func testSanitizeAuthorizationHeaders() {
-        let raw = "Request outgoing: Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.xyz.123\nDone"
+        let raw = "Request outgoing: Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.xyz.123\nHeader 2: Authorization: Key secret_auth_key_98765!@#\nHeader 3: Authorization: CustomScheme token_with_spaces_and_special_chars\nDone"
         let sanitized = LoggerService.sanitizeLogContentForExport(raw)
         XCTAssertFalse(sanitized.contains("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9"))
-        XCTAssertTrue(sanitized.contains("<REDACTED_AUTH>"))
+        XCTAssertFalse(sanitized.contains("secret_auth_key_98765"))
+        XCTAssertFalse(sanitized.contains("token_with_spaces_and_special_chars"))
+        XCTAssertTrue(sanitized.contains("Authorization: <REDACTED_AUTH>"))
     }
 
     func testSanitizeCookieHeaders() {
@@ -24,10 +26,10 @@ final class LogSanitizationTests: XCTestCase {
     }
 
     func testSanitizeApiKeyHeaders() {
-        let raw = "Sending request with X-API-Key: secret_key_12345 and X-Auth-Token: secret_token_67890\nEnd"
+        let raw = "Sending request with X-API-Key: secret_key_12345 and X-Auth-Token: secret token with spaces 67890\nEnd"
         let sanitized = LoggerService.sanitizeLogContentForExport(raw)
         XCTAssertFalse(sanitized.contains("secret_key_12345"))
-        XCTAssertFalse(sanitized.contains("secret_token_67890"))
+        XCTAssertFalse(sanitized.contains("secret token with spaces 67890"))
         XCTAssertTrue(sanitized.contains("X-API-Key: <REDACTED_KEY>"))
         XCTAssertTrue(sanitized.contains("X-Auth-Token: <REDACTED_KEY>"))
     }
