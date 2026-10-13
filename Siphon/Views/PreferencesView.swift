@@ -190,6 +190,7 @@ struct PreferencesView: View {
             hasFullDiskAccess = access
             if access {
                 permissionCheckMessage = nil
+                downloadManager.ytdlpService.resetCookieDenial(for: "safari")
             }
         }
         .onChange(of: browserForCookies) { _, _ in
@@ -197,6 +198,7 @@ struct PreferencesView: View {
             hasFullDiskAccess = access
             if access {
                 permissionCheckMessage = nil
+                downloadManager.ytdlpService.resetCookieDenial(for: "safari")
             }
         }
         .sheet(isPresented: $showCreatePresetSheet) {
@@ -1205,6 +1207,9 @@ struct PreferencesView: View {
         isCheckingPermission = true
         let granted = YtdlpService.hasFullDiskAccess
         hasFullDiskAccess = granted
+        if granted {
+            downloadManager.ytdlpService.resetCookieDenial(for: "safari")
+        }
         isCheckingPermission = false
         withAnimation(SiphonAnimation.snappySpring) {
             if granted {
