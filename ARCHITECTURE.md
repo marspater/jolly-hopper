@@ -225,7 +225,7 @@ cancellation. To run the optional public clear-HLS playback/seek test:
 TEST_RUNNER_SIPHON_RUN_PLAYBACK_LIVE_TESTS=1 xcodebuild test \
   -project Siphon.xcodeproj -scheme Siphon -destination 'platform=macOS' \
   -configuration Debug -only-testing:SiphonTests/PlaybackTests \
-  MACOSX_DEPLOYMENT_TARGET=15.0 \
+  MACOSX_DEPLOYMENT_TARGET=27.0 \
   CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO
 ```
 
@@ -236,7 +236,7 @@ TEST_RUNNER_SIPHON_RUN_FAIRPLAY_LIVE_TESTS=1 xcodebuild test \
   -project Siphon.xcodeproj -scheme Siphon -destination 'platform=macOS' \
   -configuration Debug \
   -only-testing:SiphonTests/PlaybackTests/testLiveFairPlayLoadsPlaysAndSeeks \
-  MACOSX_DEPLOYMENT_TARGET=15.0 \
+  MACOSX_DEPLOYMENT_TARGET=27.0 \
   CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO
 ```
 
@@ -258,7 +258,7 @@ xcodebuild test \
   -scheme Siphon \
   -destination 'platform=macOS' \
   -configuration Debug \
-  MACOSX_DEPLOYMENT_TARGET=15.0 \
+  MACOSX_DEPLOYMENT_TARGET=27.0 \
   CODE_SIGN_IDENTITY="" \
   CODE_SIGNING_REQUIRED=NO \
   CODE_SIGNING_ALLOWED=NO

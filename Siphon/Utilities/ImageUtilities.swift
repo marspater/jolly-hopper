@@ -40,7 +40,7 @@ public enum ImageUtilities {
     }
 
     /// Configures video-frame thumbnail generation to preserve source color
-    /// parameters. macOS 15+ can retain HDR metadata instead of silently
+    /// parameters, so HDR metadata is retained instead of silently
     /// tone-mapping every generated frame to SDR.
     static func configureImageGenerator(_ generator: AVAssetImageGenerator) {
         generator.appliesPreferredTrackTransform = true

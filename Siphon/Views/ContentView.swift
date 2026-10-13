@@ -207,9 +207,7 @@ struct ContentView: View {
 
         // Actions sit at the trailing edge, apart from the navigation buttons.
         // On macOS .primaryAction is leading, which crowded the two groups.
-        if #available(macOS 26.0, *) {
-            ToolbarSpacer(.flexible)
-        }
+        ToolbarSpacer(.flexible)
 
         ToolbarItemGroup(placement: .automatic) {
             if (appState.selectedNavItem == .downloading || appState.selectedNavItem == .queued || appState.selectedNavItem == .home) &&
@@ -605,7 +603,7 @@ struct StatusBarView: View {
         }
         .frame(maxWidth: .infinity)
         .frame(height: 48)
-        // Glass on macOS 26 does not clip; keep segment fills inside the corners.
+        // Glass does not clip; keep segment fills inside the corners.
         .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusStatusGroup, style: .continuous))
         .siphonGlassSurface(cornerRadius: SiphonTheme.radiusStatusGroup)
     }

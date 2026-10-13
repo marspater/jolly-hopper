@@ -17,7 +17,6 @@ struct DependencyChecksums {
     static let ytdlpURL = URL(string: "https://github.com/marspater/jolly-hopper/releases/download/ytdlp-2026.10.12.1/yt-dlp_macos") ?? URL(fileURLWithPath: "/")
     static let ytdlpExecutableSHA256 = "770375c36f63c72da6d9ec04959886e99c3d316f22728dc9be1ae57515339efb"
 
-    #if arch(arm64)
     static let ffmpegURL = URL(string: "https://github.com/eugeneware/ffmpeg-static/releases/download/b6.1.1/ffmpeg-darwin-arm64.gz") ?? URL(fileURLWithPath: "/")
     static let ffmpegArchiveSHA256 = "8923876afa8db5585022d7860ec7e589af192f441c56793971276d450ed3bbfa"
     static let ffmpegExecutableSHA256 = "a90e3db6a3fd35f6074b013f948b1aa45b31c6375489d39e572bea3f18336584"
@@ -25,15 +24,6 @@ struct DependencyChecksums {
     static let ffprobeURL = URL(string: "https://github.com/eugeneware/ffmpeg-static/releases/download/b6.1.1/ffprobe-darwin-arm64.gz") ?? URL(fileURLWithPath: "/")
     static let ffprobeArchiveSHA256 = "d986a8ec7b030899fe66a8a288ed809a3543338705a3ce178cfb85869c5d80be"
     static let ffprobeExecutableSHA256 = "bb2db6f5d8cef919da12fbf592119a987202a8c060a886f3cab091f9cab90b64"
-    #else
-    static let ffmpegURL = URL(string: "https://github.com/eugeneware/ffmpeg-static/releases/download/b6.1.1/ffmpeg-darwin-x64.gz") ?? URL(fileURLWithPath: "/")
-    static let ffmpegArchiveSHA256 = "929b375c1182d956c51f7ac25e0b2b0411fb01f6f407aa15c9758efeb4242106"
-    static let ffmpegExecutableSHA256 = "ebdddc936f61e14049a2d4b549a412b8a40deeff6540e58a9f2a2da9e6b18894"
-
-    static let ffprobeURL = URL(string: "https://github.com/eugeneware/ffmpeg-static/releases/download/b6.1.1/ffprobe-darwin-x64.gz") ?? URL(fileURLWithPath: "/")
-    static let ffprobeArchiveSHA256 = "d4da574d6e2e197bd259b47d69cf262df9e312af24ad960444f6d806d3d4c186"
-    static let ffprobeExecutableSHA256 = "fa3add0ce901f7241abe0dfc0155d958fc834aca3f8ce61f87cc712ae669c1e0"
-    #endif
 }
 
 actor DependencyInstaller {
@@ -2809,19 +2799,11 @@ public struct DownloadResult: Sendable {
             case .av1:
                 videoConvertorArgs.append(contentsOf: ["-c:v", "libsvtav1", "-preset", "8", "-crf", "28", "-strict", "experimental"])
             case .h265:
-                #if arch(arm64)
                 videoConvertorArgs.append(contentsOf: ["-c:v", "hevc_videotoolbox", "-strict", "experimental"])
-                #else
-                videoConvertorArgs.append(contentsOf: ["-c:v", "libx265", "-strict", "experimental"])
-                #endif
             case .vp9:
                 videoConvertorArgs.append(contentsOf: ["-c:v", "libvpx-vp9", "-strict", "experimental"])
             case .h264:
-                #if arch(arm64)
                 videoConvertorArgs.append(contentsOf: ["-c:v", "h264_videotoolbox", "-strict", "experimental"])
-                #else
-                videoConvertorArgs.append(contentsOf: ["-c:v", "libx264", "-strict", "experimental"])
-                #endif
             case .none:
                 break
             }

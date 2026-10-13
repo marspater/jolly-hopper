@@ -129,8 +129,7 @@ truth only when the value is genuinely reused or has semantic meaning.
   rasterized on the CPU at the card's full size, which stalled fast scrolling
   of long lists.
 - Interactive status/navigation surfaces may use `siphonGlassSurface()`, which
-  opts into native `Glass.regular.interactive()` on macOS 26+ and preserves the
-  adaptive Siphon material fallback on macOS 15–25.
+  uses native `Glass.regular.interactive()`.
 - Inset fields use `SiphonTheme.fieldBackground` and `fieldBorder`.
 - Controls use the shared Siphon button styles or the native macOS bordered
   styles when they better express platform behavior.

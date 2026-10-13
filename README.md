@@ -6,7 +6,7 @@ A high-performance, native macOS media extractor & downloader powered by `yt-dlp
   <img src="assets/app_screenshot.png?v=4" alt="Siphon main window" width="880" style="border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.3);" />
   <p>
     <a href="https://github.com/marspater/jolly-hopper/releases/latest"><img src="https://img.shields.io/badge/version-v5.5.0-6366f1?style=flat&labelColor=18181b&logo=swift&logoColor=white" alt="Version 5.5.0" /></a>
-    <a href="https://github.com/marspater/jolly-hopper/releases/latest"><img src="https://img.shields.io/badge/platform-macOS%2015%2B-0284c7?style=flat&labelColor=18181b&logo=apple&logoColor=white" alt="Platform macOS 15+" /></a>
+    <a href="https://github.com/marspater/jolly-hopper/releases/latest"><img src="https://img.shields.io/badge/platform-macOS%2027%2B%20%C2%B7%20Apple%20silicon-0284c7?style=flat&labelColor=18181b&logo=apple&logoColor=white" alt="Platform macOS 15+" /></a>
     <a href="https://github.com/marspater/jolly-hopper/blob/main/SUPPORTED_SITES.md"><img src="https://img.shields.io/badge/sites-1000%2B-10b981?style=flat&labelColor=18181b&logo=safari&logoColor=white" alt="Supported Sites" /></a>
     <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0-8b5cf6?style=flat&labelColor=18181b" alt="License GPL-3.0" /></a>
   </p>
@@ -81,13 +81,13 @@ Extensions hand Siphon only the page URL and which browser to read cookies from,
 
 - **Language**: Swift 6.0 (Strict Concurrency & Sendable thread safety), SwiftUI, AppKit
 - **Extraction Engine**: Custom `yt-dlp` process coordinator
-- **Media Transcoder**: Native `FFmpeg` & `FFprobe` 6.1.1 (`arm64` / `x86_64`)
+- **Media Transcoder**: Native `FFmpeg` & `FFprobe` 6.1.1 (`arm64`)
 - **Logging & Diagnostics**: Centralized structured `LoggerService` & os_log tracing
-- **Target OS**: macOS 15.0 (Sequoia) through macOS 27+
+- **Target OS**: macOS 27+ on Apple silicon (arm64 only)
 
 ## 🔧 Building from Source
 
-Requires Xcode 16 or later on macOS 15 or later. Open `Siphon.xcodeproj` and run the **Siphon** scheme, or run the test suite from the command line:
+Requires Xcode 27 or later on an Apple silicon Mac running macOS 27 or later. Open `Siphon.xcodeproj` and run the **Siphon** scheme, or run the test suite from the command line:
 
 ```bash
 xcodebuild test -project Siphon.xcodeproj -scheme Siphon -destination 'platform=macOS' \
@@ -102,14 +102,13 @@ Pull requests and `main` pushes use GitHub-hosted runners:
 
 | Runner | Checks |
 | --- | --- |
-| macOS 15, Apple silicon, Xcode 26.3 | Full Debug/Release XCTest suites at the deployment floor |
-| macOS 26, Intel, Xcode 26.6 | Full Debug/Release XCTest suites on x86_64 |
+| macOS 27, Apple silicon (`xcode-27`), Xcode 27.0 | Full Debug/Release XCTest suites at the deployment floor |
 | Ubuntu 24.04, Node 24 | Companion server, browser handoff, capture scripts, syntax and credential-boundary checks |
 | Ubuntu 24.04 | Independent Opengrep, Cppcheck and Flawfinder security analysis |
 
-Native jobs also verify bundle versions and universal Release app/helper binaries.
+The native job also verifies bundle versions and that Release app/helper binaries are arm64-only.
 XCTest and security reports are retained as artifacts for seven days. Debug and
-Release run sequentially on each Mac; live playback stays opt-in through the
+Release run sequentially on the Mac; live playback stays opt-in through the
 native workflow's `live_playback` manual input.
 
 Private repositories need [GitHub Code Security](https://docs.github.com/en/code-security/reference/code-scanning/troubleshoot-analysis-errors/private-repository-enablement) enabled before CodeQL/SARIF

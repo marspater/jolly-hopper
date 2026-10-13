@@ -21,23 +21,12 @@ permissions:
 
 jobs:
   build:
-    name: Native tests (${{ matrix.arch }}, macOS ${{ matrix.macos }})
-    runs-on: ${{ matrix.runner }}
+    name: Native tests (arm64, macOS 27)
+    # Apple silicon only. GitHub's Xcode 27 image runs macOS 27 on arm64.
+    runs-on: xcode-27
     timeout-minutes: 90
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - runner: macos-15
-            macos: '15'
-            arch: arm64
-            xcode: '26.3'
-          - runner: macos-26-intel
-            macos: '26'
-            arch: x86_64
-            xcode: '26.6'
     env:
-      DEVELOPER_DIR: /Applications/Xcode_${{ matrix.xcode }}.app/Contents/Developer
+      DEVELOPER_DIR: /Applications/Xcode_27.0.app/Contents/Developer
       TEST_RUNNER_SIPHON_RUN_PLAYBACK_LIVE_TESTS: ${{ inputs.live_playback && '1' || '0' }}
       TEST_RUNNER_SIPHON_RUN_FAIRPLAY_LIVE_TESTS: ${{ inputs.live_playback && '1' || '0' }}
 
@@ -48,7 +37,8 @@ jobs:
       - name: Verify toolchain and bundle versions
         run: |
           set -euo pipefail
-          test "$(uname -m)" = '${{ matrix.arch }}'
+          test "$(uname -m)" = arm64
+          test "$(sw_vers -productVersion | cut -d. -f1)" = 27
           xcodebuild -version
           xcrun swift --version
           bash scripts/verify_bundle.sh
@@ -64,7 +54,7 @@ jobs:
             -derivedDataPath "$RUNNER_TEMP/siphon-derived" \
             -resultBundlePath "$RUNNER_TEMP/test-results/Debug.xcresult" \
             -parallel-testing-enabled NO \
-            MACOSX_DEPLOYMENT_TARGET=15.0 \
+            MACOSX_DEPLOYMENT_TARGET=27.0 \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO
@@ -82,27 +72,26 @@ jobs:
             -derivedDataPath "$RUNNER_TEMP/siphon-derived" \
             -resultBundlePath "$RUNNER_TEMP/test-results/Release.xcresult" \
             -parallel-testing-enabled NO \
-            MACOSX_DEPLOYMENT_TARGET=15.0 \
+            MACOSX_DEPLOYMENT_TARGET=27.0 \
             ENABLE_TESTABILITY=YES \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO
 
-      - name: Verify universal Release binaries
+      - name: Verify arm64 Release binaries
         if: ${{ !cancelled() && steps.release.outcome == 'success' }}
         run: |
           set -euo pipefail
           APP="$RUNNER_TEMP/siphon-derived/Build/Products/Release/Siphon.app"
           for BINARY in "$APP/Contents/MacOS/Siphon" "$APP/Contents/Helpers/siphon-pgrp"; do
-            lipo "$BINARY" -verify_arch arm64
-            lipo "$BINARY" -verify_arch x86_64
+            test "$(lipo -archs "$BINARY")" = arm64
           done
 
       - name: Save XCTest reports
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: xctest-${{ matrix.arch }}-macos-${{ matrix.macos }}
+          name: xctest-arm64-macos-27
           path: ${{ runner.temp }}/test-results/*.xcresult
           retention-days: 7
           if-no-files-found: warn

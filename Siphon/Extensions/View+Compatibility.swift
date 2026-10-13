@@ -819,14 +819,7 @@ public struct SiphonGlassSurfaceModifier: ViewModifier {
     public func body(content: Content) -> some View {
         let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
 
-        if #available(macOS 26.0, *) {
-            content.glassEffect(.regular.interactive(), in: shape)
-        } else {
-            content
-                .background(shape.fill(.ultraThinMaterial))
-                .overlay(SiphonTheme.cardBorder(cornerRadius: cornerRadius))
-                .clipShape(shape)
-        }
+        content.glassEffect(.regular.interactive(), in: shape)
     }
 }
 
@@ -1526,8 +1519,7 @@ extension View {
         modifier(SiphonWindowBackgroundModifier())
     }
 
-    /// Uses native interactive Liquid Glass on macOS 26+ with the existing
-    /// adaptive material treatment as a fallback.
+    /// Uses native interactive Liquid Glass.
     public func siphonGlassSurface(cornerRadius: CGFloat = SiphonTheme.radiusCard) -> some View {
         modifier(SiphonGlassSurfaceModifier(cornerRadius: cornerRadius))
     }

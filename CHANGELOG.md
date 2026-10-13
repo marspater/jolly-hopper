@@ -4,6 +4,7 @@
 
 ### Changes
 
+- **Breaking:** Siphon now requires macOS 27 or later on Apple silicon. Intel Macs and macOS 15–26 are no longer supported; release builds and managed FFmpeg/FFprobe are arm64-only, and CI runs on GitHub's macOS 27 arm64 image.
 - Supported local media opens in Siphon's native player. File → Open Media and Play Stream add local playback and clear HTTPS HLS with seeking, cancellation and a protected network gateway. Other containers retain default-app playback.
 - Added FairPlay certificate/license transport and AVContentKeySession integration for an explicitly configured raw-binary provider. File → Open Stream File imports validated clear/FairPlay descriptors; license authorization is entered separately and remains ephemeral. Protected playback and seeking are verified against EZDRM's public demo, with an importable example and opt-in live regression test. Key renewal, expiry and production-provider validation remain pending.
 

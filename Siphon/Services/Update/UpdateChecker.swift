@@ -81,11 +81,7 @@ public final class UpdateChecker: ObservableObject {
     /// The release's installer archive. Release assets follow one contract,
     /// `Siphon-<tag>[-<arch>].dmg|zip`; any other archive (symbols, helpers) is ignored.
     nonisolated static func installerAsset(in assets: [[String: Any]], tag: String) -> [String: Any]? {
-        #if arch(arm64)
         let archSuffixes = ["-arm64", "-aarch64", "-universal", ""]
-        #else
-        let archSuffixes = ["-x86_64", "-intel", "-universal", ""]
-        #endif
         let lowerTag = tag.lowercased()
         let accepted = archSuffixes.flatMap { arch in
             ["dmg", "zip"].map { "siphon-\(lowerTag)\(arch).\($0)" }

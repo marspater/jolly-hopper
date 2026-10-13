@@ -12,7 +12,7 @@ esac
 
 xcodebuild build -project "$ROOT_DIR/Siphon.xcodeproj" -scheme Siphon \
     -configuration Debug -destination 'platform=macOS' -derivedDataPath "$BUILD_DIR" \
-    MACOSX_DEPLOYMENT_TARGET=15.0 ENABLE_DEBUG_DYLIB=NO CODE_SIGN_IDENTITY=- \
+    MACOSX_DEPLOYMENT_TARGET=27.0 ENABLE_DEBUG_DYLIB=NO CODE_SIGN_IDENTITY=- \
     CODE_SIGNING_REQUIRED=YES CODE_SIGNING_ALLOWED=YES
 APP="$BUILD_DIR/Build/Products/Debug/Siphon.app"
 codesign --verify --deep --strict "$APP"

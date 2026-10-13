@@ -348,15 +348,7 @@ struct HeroDropURLView: View {
     }
 
     private func handleFileDrop(_ provider: NSItemProvider) {
-        provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, _ in
-            let fileURL: URL? = {
-                if let url = item as? URL { return url }
-                if let data = item as? Data, let path = String(data: data, encoding: .utf8) {
-                    return URL(string: path)
-                }
-                return nil
-            }()
-
+        _ = provider.loadObject(ofClass: URL.self) { fileURL, _ in
             // Only .txt lists are read; any other file gets the same feedback as an empty list.
             let urls: [String] = {
                 guard let fURL = fileURL, fURL.pathExtension.lowercased() == "txt",
@@ -375,15 +367,8 @@ struct HeroDropURLView: View {
     }
 
     private func handleDirectURLDrop(_ provider: NSItemProvider) {
-        provider.loadItem(forTypeIdentifier: UTType.url.identifier, options: nil) { item, _ in
-            let urlString: String? = {
-                if let url = item as? URL { return url.absoluteString }
-                if let data = item as? Data { return String(data: data, encoding: .utf8) }
-                if let str = item as? String { return str }
-                return nil
-            }()
-
-            if let raw = urlString {
+        _ = provider.loadObject(ofClass: URL.self) { url, _ in
+            if let raw = url?.absoluteString {
                 Task { @MainActor in
                     if case .valid(_, let original) = DownloadURLValidator.validate(raw) {
                         inputURL = original
@@ -397,8 +382,8 @@ struct HeroDropURLView: View {
     }
 
     private func handlePlainTextDrop(_ provider: NSItemProvider) {
-        provider.loadItem(forTypeIdentifier: UTType.utf8PlainText.identifier, options: nil) { item, _ in
-            guard let text = item as? String else { return }
+        _ = provider.loadObject(ofClass: String.self) { text, _ in
+            guard let text else { return }
             let urls = DownloadURLValidator.extractURLs(from: text)
             Task { @MainActor in
                 if urls.count > 1 {

@@ -18,7 +18,7 @@ jobs:
     # Private repositories require GitHub Code Security. Opt in after enabling it.
     if: ${{ !github.event.repository.private || vars.ENABLE_CODE_SCANNING == 'true' }}
     name: Analyze (${{ matrix.language }})
-    runs-on: ${{ matrix.language == 'swift' && 'macos-26' || 'ubuntu-24.04' }}
+    runs-on: ${{ matrix.language == 'swift' && 'xcode-27' || 'ubuntu-24.04' }}
     timeout-minutes: ${{ matrix.language == 'swift' && 120 || 30 }}
     permissions:
       actions: read
@@ -34,7 +34,7 @@ jobs:
           - language: javascript-typescript
             build-mode: none
     env:
-      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+      DEVELOPER_DIR: /Applications/Xcode_27.0.app/Contents/Developer
 
     steps:
     - name: Checkout repository
@@ -55,7 +55,7 @@ jobs:
           -scheme Siphon \
           -destination 'generic/platform=macOS' \
           -configuration Debug \
-          MACOSX_DEPLOYMENT_TARGET=15.0 \
+          MACOSX_DEPLOYMENT_TARGET=27.0 \
           CODE_SIGN_IDENTITY="" \
           CODE_SIGNING_REQUIRED=NO \
           CODE_SIGNING_ALLOWED=NO

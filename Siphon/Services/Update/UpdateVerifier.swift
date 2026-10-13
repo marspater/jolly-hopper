@@ -119,17 +119,9 @@ public struct UpdateVerifier: Sendable {
 
         // 2. Verify architecture compatibility
         if let archs = bundle.executableArchitectures {
-            let arm64Arch = NSNumber(value: NSBundleExecutableArchitectureARM64)
-            let x8664Arch = NSNumber(value: NSBundleExecutableArchitectureX86_64)
-            #if arch(arm64)
-            guard archs.contains(arm64Arch) else {
+            guard archs.contains(NSNumber(value: NSBundleExecutableArchitectureARM64)) else {
                 throw UpdateVerificationError.architectureMismatch(expected: "arm64")
             }
-            #else
-            guard archs.contains(x8664Arch) else {
-                throw UpdateVerificationError.architectureMismatch(expected: "x86_64")
-            }
-            #endif
         }
 
         // 3. Security.framework code signing verification

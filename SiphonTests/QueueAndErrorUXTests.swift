@@ -2074,7 +2074,11 @@ final class QueueAndErrorUXTests: XCTestCase {
         let web = try XCTUnwrap(URL(string: "https://www.example.com/watch?v=1"))
         XCTAssertEqual(HeroDropURLView.dropType(of: NSItemProvider(object: web as NSURL)), .url)
         // A text drag from another app carries only plain text on its pasteboard.
-        let batch = NSItemProvider(item: "https://www.example.com/a\nhttps://www.example.com/b" as NSString, typeIdentifier: UTType.utf8PlainText.identifier)
+        let batch = NSItemProvider()
+        batch.registerDataRepresentation(forTypeIdentifier: UTType.utf8PlainText.identifier, visibility: .all) { completion in
+            completion(Data("https://www.example.com/a\nhttps://www.example.com/b".utf8), nil)
+            return nil
+        }
         XCTAssertEqual(HeroDropURLView.dropType(of: batch), .utf8PlainText)
     }
 

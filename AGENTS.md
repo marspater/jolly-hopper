@@ -26,7 +26,7 @@ A clean or disposable environment must **not** be inferred from the presence of 
 
 ## Repository baseline
 
-Siphon is a native macOS 15+ yt-dlp/FFmpeg downloader written in Swift 6 (strict concurrency) with SwiftUI/AppKit and built with Xcode. `origin/main` is the canonical remote source of truth.
+Siphon is a native macOS 27+, Apple silicon-only (arm64) yt-dlp/FFmpeg downloader written in Swift 6 (strict concurrency) with SwiftUI/AppKit and built with Xcode. `origin/main` is the canonical remote source of truth.
 
 Read before touching the matching area: `ARCHITECTURE.md` (runtime ownership, cancellation, recovery, update exclusion, URL ingress), `DESIGN_LANGUAGE.md` (UI tokens, motion, glass, accessibility), `PRODUCTION_QA.md` (visual QA matrix).
 
@@ -43,7 +43,7 @@ Where things live:
 Repository-specific guardrails:
 
 - User-facing strings go through `LanguageService.s("key")`; add keys to its translation table.
-- Managed dependency binaries are pinned in `DependencyChecksums` (`YtdlpService.swift`). Bumping yt-dlp means updating version, URL, and SHA-256 together; FFmpeg/FFprobe updates require both archive and executable digests for each supported architecture. Never bypass managed-binary verification. Preserve the explicit user-provided yt-dlp mode, which validates executability/version rather than a pinned checksum; use `resolvedYtdlpBinary` instead of reconstructing binary paths in individual callers.
+- Managed dependency binaries are pinned in `DependencyChecksums` (`YtdlpService.swift`). Bumping yt-dlp means updating version, URL, and SHA-256 together; FFmpeg/FFprobe updates require both archive and executable digests for arm64. Never bypass managed-binary verification. Preserve the explicit user-provided yt-dlp mode, which validates executability/version rather than a pinned checksum; use `resolvedYtdlpBinary` instead of reconstructing binary paths in individual callers.
 - Browser extensions must never put cookies or other credentials in deep links, and the Chrome manifest must not request `cookies`/`host_permissions`. External targets must pass `ExternalDownloadTargetPolicy`. CI enforces both.
 - External-target validation is only admission control. Preserve the connection-time public-network boundary through subprocesses, site-specific resolvers, WebKit, and redirects; user arguments must not override it. For updater changes, preserve signed-manifest verification and atomic replacement/rollback as described in `ARCHITECTURE.md`.
 - Do not add `allow-unsigned-executable-memory` or `disable-library-validation` to `Siphon/Siphon.entitlements` (CI-enforced).
@@ -80,7 +80,7 @@ xcodebuild test \
   -scheme Siphon \
   -destination 'platform=macOS' \
   -configuration Debug \
-  MACOSX_DEPLOYMENT_TARGET=15.0 \
+  MACOSX_DEPLOYMENT_TARGET=27.0 \
   CODE_SIGN_IDENTITY="" \
   CODE_SIGNING_REQUIRED=NO \
   CODE_SIGNING_ALLOWED=NO
