@@ -73,6 +73,10 @@ struct PreferencesView: View {
     @State private var permissionCheckMessage: String?
     @State private var isClearingRecu: Bool = false
     @State private var showRecuClearedFeedback: Bool = false
+    @State private var isClearingBoyfriendTV: Bool = false
+    @State private var showBoyfriendTVClearedFeedback: Bool = false
+    @State private var isClearingGayteam: Bool = false
+    @State private var showGayteamClearedFeedback: Bool = false
     @State private var isClearingAllSites: Bool = false
     @State private var showAllSitesClearedFeedback: Bool = false
     @State private var showClearAllSitesConfirmation: Bool = false
@@ -219,7 +223,9 @@ struct PreferencesView: View {
             Text(languageService.s("language_changed_message"))
         }
         .alert(languageService.s("clear_all_sites_confirm_title"), isPresented: $showClearAllSitesConfirmation) {
-            Button(languageService.s("cancel"), role: .cancel) {}
+            Button(languageService.s("cancel"), role: .cancel) {
+                // Dialog dismissal is handled automatically by SwiftUI
+            }
             Button(languageService.s("clear_all"), role: .destructive) {
                 clearAllSitesCookies()
             }
@@ -1244,64 +1250,101 @@ struct PreferencesView: View {
         .siphonCallout(tint: statusColor)
     }
 
+    @ViewBuilder
+    private func siteCookieRow(
+        titleKey: String,
+        descKey: String,
+        isClearing: Bool,
+        showCleared: Bool,
+        clearAction: @escaping () -> Void
+    ) -> some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(languageService.s(titleKey))
+                    .fontWeight(.medium)
+                Text(languageService.s(descKey))
+                    .font(.siphonMetadata)
+                    .foregroundColor(.secondary)
+            }
+            Spacer()
+            if isClearing {
+                ProgressView()
+                    .controlSize(.small)
+            } else if showCleared {
+                HStack(spacing: 4) {
+                    Image(systemName: "checkmark")
+                        .foregroundColor(SiphonTheme.statusCompletedText)
+                    Text(languageService.s("cleared"))
+                        .font(.siphonMetadataSemibold)
+                        .foregroundColor(SiphonTheme.statusCompletedText)
+                }
+            } else {
+                Button(languageService.s("clear")) {
+                    clearAction()
+                }
+                .tint(nil)
+                .accessibilityLabel("\(languageService.s("clear")) \(languageService.s(titleKey))")
+            }
+        }
+    }
+
     private var siteCookiesSection: some View {
         Section(languageService.s("site_sessions")) {
-            HStack {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(languageService.s("recu_cookies_title"))
-                        .fontWeight(.medium)
-                    Text(languageService.s("recu_cookies_desc"))
-                        .font(.siphonMetadata)
-                        .foregroundColor(.secondary)
-                }
-                Spacer()
-                if isClearingRecu {
-                    ProgressView()
-                        .controlSize(.small)
-                } else if showRecuClearedFeedback {
-                    HStack(spacing: 4) {
-                        Image(systemName: "checkmark")
-                            .foregroundColor(SiphonTheme.statusCompletedText)
-                        Text(languageService.s("cleared"))
-                            .font(.siphonMetadataSemibold)
-                            .foregroundColor(SiphonTheme.statusCompletedText)
-                    }
-                } else {
-                    Button(languageService.s("clear")) {
-                        clearRecuCookies()
-                    }
-                    .tint(nil)
-                    .accessibilityLabel("\(languageService.s("clear")) \(languageService.s("recu_cookies_title"))")
-                }
-            }
+            siteCookieRow(
+                titleKey: "recu_cookies_title",
+                descKey: "recu_cookies_desc",
+                isClearing: isClearingRecu,
+                showCleared: showRecuClearedFeedback,
+                clearAction: clearRecuCookies
+            )
 
-            HStack {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(languageService.s("all_sites_cookies_title"))
-                        .fontWeight(.medium)
-                    Text(languageService.s("all_sites_cookies_desc"))
-                        .font(.siphonMetadata)
-                        .foregroundColor(.secondary)
+            siteCookieRow(
+                titleKey: "boyfriendtv_cookies_title",
+                descKey: "boyfriendtv_cookies_desc",
+                isClearing: isClearingBoyfriendTV,
+                showCleared: showBoyfriendTVClearedFeedback,
+                clearAction: clearBoyfriendTVCookies
+            )
+
+            siteCookieRow(
+                titleKey: "gayteam_cookies_title",
+                descKey: "gayteam_cookies_desc",
+                isClearing: isClearingGayteam,
+                showCleared: showGayteamClearedFeedback,
+                clearAction: clearGayteamCookies
+            )
+
+            allSitesCookieRow
+        }
+    }
+
+    private var allSitesCookieRow: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(languageService.s("all_sites_cookies_title"))
+                    .fontWeight(.medium)
+                Text(languageService.s("all_sites_cookies_desc"))
+                    .font(.siphonMetadata)
+                    .foregroundColor(.secondary)
+            }
+            Spacer()
+            if isClearingAllSites {
+                ProgressView()
+                    .controlSize(.small)
+            } else if showAllSitesClearedFeedback {
+                HStack(spacing: 4) {
+                    Image(systemName: "checkmark")
+                        .foregroundColor(SiphonTheme.statusCompletedText)
+                    Text(languageService.s("cleared"))
+                        .font(.siphonMetadataSemibold)
+                        .foregroundColor(SiphonTheme.statusCompletedText)
                 }
-                Spacer()
-                if isClearingAllSites {
-                    ProgressView()
-                        .controlSize(.small)
-                } else if showAllSitesClearedFeedback {
-                    HStack(spacing: 4) {
-                        Image(systemName: "checkmark")
-                            .foregroundColor(SiphonTheme.statusCompletedText)
-                        Text(languageService.s("cleared"))
-                            .font(.siphonMetadataSemibold)
-                            .foregroundColor(SiphonTheme.statusCompletedText)
-                    }
-                } else {
-                    Button(languageService.s("clear_all")) {
-                        showClearAllSitesConfirmation = true
-                    }
-                    .tint(nil)
-                    .accessibilityLabel(languageService.s("clear_all"))
+            } else {
+                Button(languageService.s("clear_all")) {
+                    showClearAllSitesConfirmation = true
                 }
+                .tint(nil)
+                .accessibilityLabel(languageService.s("clear_all"))
             }
         }
     }
@@ -1318,6 +1361,38 @@ struct PreferencesView: View {
             try? await Task.sleep(nanoseconds: 2_500_000_000)
             withAnimation(SiphonAnimation.snappySpring) {
                 showRecuClearedFeedback = false
+            }
+        }
+    }
+
+    private func clearBoyfriendTVCookies() {
+        guard !isClearingBoyfriendTV else { return }
+        isClearingBoyfriendTV = true
+        Task {
+            await downloadManager.ytdlpService.clearBoyfriendTVWebData()
+            isClearingBoyfriendTV = false
+            withAnimation(SiphonAnimation.snappySpring) {
+                showBoyfriendTVClearedFeedback = true
+            }
+            try? await Task.sleep(nanoseconds: 2_500_000_000)
+            withAnimation(SiphonAnimation.snappySpring) {
+                showBoyfriendTVClearedFeedback = false
+            }
+        }
+    }
+
+    private func clearGayteamCookies() {
+        guard !isClearingGayteam else { return }
+        isClearingGayteam = true
+        Task {
+            await downloadManager.ytdlpService.clearGayteamWebData()
+            isClearingGayteam = false
+            withAnimation(SiphonAnimation.snappySpring) {
+                showGayteamClearedFeedback = true
+            }
+            try? await Task.sleep(nanoseconds: 2_500_000_000)
+            withAnimation(SiphonAnimation.snappySpring) {
+                showGayteamClearedFeedback = false
             }
         }
     }

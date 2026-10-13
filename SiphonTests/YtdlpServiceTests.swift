@@ -3713,6 +3713,17 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertFalse(YtdlpService.RecuNavigationDelegate.isAllowedHost("evil.com"))
         XCTAssertFalse(YtdlpService.RecuNavigationDelegate.isAllowedHost("recu.me.evil.com"))
         XCTAssertFalse(YtdlpService.RecuNavigationDelegate.isAllowedHost("cloudflare.com.evil.com"))
+
+        // Scheme security: internal safe schemes allowed, javascript rejected
+        XCTAssertTrue(YtdlpService.RecuNavigationDelegate.allowsNavigation(to: URL(string: "about:blank"), targetFrame: nil))
+        XCTAssertTrue(YtdlpService.RecuNavigationDelegate.allowsNavigation(to: URL(string: "data:text/html,test"), targetFrame: nil))
+        XCTAssertFalse(YtdlpService.RecuNavigationDelegate.allowsNavigation(to: URL(string: "javascript:alert(1)"), targetFrame: nil))
+
+        // Host security
+        XCTAssertTrue(YtdlpService.RecuNavigationDelegate.allowsNavigation(to: URL(string: "https://recu.me/test"), targetFrame: nil))
+        XCTAssertTrue(YtdlpService.RecuNavigationDelegate.allowsNavigation(to: URL(string: "https://challenges.cloudflare.com/cdn-cgi/challenge"), targetFrame: nil))
+        XCTAssertFalse(YtdlpService.RecuNavigationDelegate.allowsNavigation(to: URL(string: "https://evil.com/phish"), targetFrame: nil))
+        XCTAssertFalse(YtdlpService.RecuNavigationDelegate.allowsNavigation(to: nil, targetFrame: nil))
     }
 
     func testRecuMetadataResolvesThroughBrowserSessionWithoutBrowserCookies() async throws {
@@ -6212,5 +6223,29 @@ final class YtdlpServiceTests: XCTestCase {
         service.websiteDataStoreRemover = { _ in }
         await service.clearRecuWebData()
         XCTAssertTrue(service.recuWebDataStores.isEmpty)
+    }
+
+    func testClearBoyfriendTVWebDataRemovesStoresAndIdentifiers() async throws {
+        let removedUUIDs = TestBox<[UUID]>([])
+        service.websiteDataStoreRemover = { uuid in
+            removedUUIDs.value.append(uuid)
+        }
+        await service.clearBoyfriendTVWebData()
+        let bftvUUID = try XCTUnwrap(UUID(uuidString: YtdlpService.boyfriendTVDataStoreIdentifier))
+        let bftvBoundaryUUID = try XCTUnwrap(UUID(uuidString: YtdlpService.boyfriendTVBoundaryDataStoreIdentifier))
+        XCTAssertTrue(removedUUIDs.value.contains(bftvUUID))
+        XCTAssertTrue(removedUUIDs.value.contains(bftvBoundaryUUID))
+    }
+
+    func testClearGayteamWebDataRemovesStoresAndIdentifiers() async throws {
+        let removedUUIDs = TestBox<[UUID]>([])
+        service.websiteDataStoreRemover = { uuid in
+            removedUUIDs.value.append(uuid)
+        }
+        await service.clearGayteamWebData()
+        let gtUUID = try XCTUnwrap(UUID(uuidString: YtdlpService.gayteamDataStoreIdentifier))
+        let gtBoundaryUUID = try XCTUnwrap(UUID(uuidString: YtdlpService.gayteamBoundaryDataStoreIdentifier))
+        XCTAssertTrue(removedUUIDs.value.contains(gtUUID))
+        XCTAssertTrue(removedUUIDs.value.contains(gtBoundaryUUID))
     }
 }
