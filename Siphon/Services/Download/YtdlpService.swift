@@ -3168,9 +3168,11 @@ public struct DownloadResult: Sendable {
         return check
     }
 
+    nonisolated static let recuSignInPath = "/account/signin"
+
     /// Mirrors Recu's own sign-in redirect, which returns to the video afterwards.
     nonisolated static func recuSignInURL(for pageURL: URL) -> URL? {
-        URL(string: "https://recu.me/account/signin?url=\(Data(pageURL.path.utf8).base64EncodedString())")
+        URL(string: "https://recu.me\(recuSignInPath)?url=\(Data(pageURL.path.utf8).base64EncodedString())")
     }
 
     enum RecuAPIOutcome: Equatable {
@@ -3224,55 +3226,50 @@ public struct DownloadResult: Sendable {
                    h == "cloudflareinsights.com" || h.hasSuffix(".cloudflareinsights.com")
         }
 
+        nonisolated static func allowsNavigation(
+            to url: URL?,
+            targetFrame: WKFrameInfo?
+        ) -> Bool {
+            guard let url, let scheme = url.scheme?.lowercased() else { return false }
+            if let targetFrame, !targetFrame.isMainFrame {
+                return ["https", "http", "about", "data", "blob"].contains(scheme)
+            }
+            if ["about", "data", "blob"].contains(scheme) {
+                return true
+            }
+            guard scheme == "https" || scheme == "http", let host = url.host?.lowercased() else {
+                return false
+            }
+            return isAllowedHost(host)
+        }
+
         func webView(
             _ webView: WKWebView,
             decidePolicyFor navigationAction: WKNavigationAction,
             decisionHandler: @escaping @MainActor (WKNavigationActionPolicy) -> Void
         ) {
-            let url = navigationAction.request.url
-            let scheme = url?.scheme?.lowercased() ?? ""
-            let host = url?.host?.lowercased() ?? ""
-
-            // Standard browser schemes used by challenge scripts, Web Workers, and blob/data URIs.
-            if ["about", "data", "blob", "javascript"].contains(scheme) {
-                decisionHandler(.allow)
-                return
-            }
-
-            guard scheme == "https" || scheme == "http" else {
+            guard Self.allowsNavigation(to: navigationAction.request.url, targetFrame: navigationAction.targetFrame) else {
                 decisionHandler(.cancel)
                 return
             }
 
-            // Cloudflare's check runs in subframes; only the top page itself navigates Recu or Cloudflare.
-            if let targetFrame = navigationAction.targetFrame, !targetFrame.isMainFrame {
-                decisionHandler(.allow)
+            if navigationAction.targetFrame == nil {
+                webView.load(navigationAction.request)
+                decisionHandler(.cancel)
                 return
             }
 
-            if Self.isAllowedHost(host) {
-                if navigationAction.targetFrame == nil {
-                    webView.load(navigationAction.request)
-                    decisionHandler(.cancel)
-                    return
-                }
-                decisionHandler(.allow)
-                return
-            }
-
-            decisionHandler(.cancel)
+            decisionHandler(.allow)
         }
 
         func webView(
             _ webView: WKWebView,
-            createWebViewWith configuration: WKWebViewConfiguration,
+            createWebViewWith _: WKWebViewConfiguration,
             for navigationAction: WKNavigationAction,
-            windowFeatures: WKWindowFeatures
+            windowFeatures _: WKWindowFeatures
         ) -> WKWebView? {
             if navigationAction.targetFrame == nil,
-               let url = navigationAction.request.url,
-               let host = url.host,
-               Self.isAllowedHost(host) {
+               Self.allowsNavigation(to: navigationAction.request.url, targetFrame: navigationAction.targetFrame) {
                 webView.load(navigationAction.request)
             }
             return nil
@@ -3479,7 +3476,7 @@ public struct DownloadResult: Sendable {
                         presentWindow(reason: "sign-in-required")
                     }
                     deadline = Date().addingTimeInterval(300)
-                    if let currentURL = webView.url, !currentURL.path.starts(with: "/account/signin"),
+                    if let currentURL = webView.url, !currentURL.path.starts(with: Self.recuSignInPath),
                        let signInURL = Self.recuSignInURL(for: pageURL) {
                         LoggerService.shared.log("[ProtectedSite] stage=browser-session result=redirecting-to-signin", level: .info)
                         webView.load(URLRequest(url: signInURL))
@@ -7556,14 +7553,13 @@ public struct DownloadResult: Sendable {
         }
         // This is an advisory cookie-read probe, not a query of macOS's FDA toggle.
         // Missing files and a different running app identity can both make it inconclusive.
+        // This is an advisory cookie-read probe: only the actual Safari cookie
+        // database file is tested with a read operation. We do not treat parent
+        // directories or unrelated Safari files as evidence that cookies are readable.
         let homeDir = FileManager.default.homeDirectoryForCurrentUser.path
         let candidatePaths = [
             "\(homeDir)/Library/Containers/com.apple.Safari/Data/Library/Cookies/Cookies.binarycookies",
-            "\(homeDir)/Library/Containers/com.apple.Safari/Data/Library/Cookies",
-            "\(homeDir)/Library/Safari/Bookmarks.plist",
-            "\(homeDir)/Library/Safari",
-            "\(homeDir)/Library/Cookies/Cookies.binarycookies",
-            "\(homeDir)/Library/Cookies"
+            "\(homeDir)/Library/Cookies/Cookies.binarycookies"
         ]
         var lastErrno: Int32 = 0
         for path in candidatePaths {
