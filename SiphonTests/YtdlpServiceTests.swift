@@ -59,6 +59,12 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertTrue(delegate.responds(to: selector), "WebKit must invoke the host restriction callback")
     }
 
+    func testRecuNavigationPolicyIsRegisteredWithWebKit() {
+        let delegate = YtdlpService.RecuNavigationDelegate()
+        let selector = NSSelectorFromString("webView:decidePolicyForNavigationAction:decisionHandler:")
+        XCTAssertTrue(delegate.responds(to: selector), "WebKit must invoke the host restriction callback")
+    }
+
     func testBrowserNavigationPolicyAllowsBothBoyfriendTVDomainsAndChallengeFrame() {
         typealias Policy = YtdlpService.BoyfriendTVNavigationDelegate
         func allows(_ url: String, mainFrame: Bool?) -> Bool {
