@@ -96,6 +96,27 @@ xcodebuild test -project Siphon.xcodeproj -scheme Siphon -destination 'platform=
 
 Siphon downloads its pinned builds of `yt-dlp` (the Siphon fork, [marspater/yt-dlp](https://github.com/marspater/yt-dlp)), `FFmpeg` and `FFprobe` on first launch and verifies each against its SHA-256 before use. Contributor and agent rules live in [AGENTS.md](AGENTS.md).
 
+## Continuous integration
+
+Pull requests and `main` pushes use GitHub-hosted runners:
+
+| Runner | Checks |
+| --- | --- |
+| macOS 15, Apple silicon, Xcode 26.3 | Full Debug/Release XCTest suites at the deployment floor |
+| macOS 26, Intel, Xcode 26.6 | Full Debug/Release XCTest suites on x86_64 |
+| Ubuntu 24.04, Node 24 | Companion server, browser handoff, capture scripts, syntax and credential-boundary checks |
+| Ubuntu 24.04 | Independent Opengrep, Cppcheck and Flawfinder security analysis |
+
+Native jobs also verify bundle versions and universal Release app/helper binaries.
+XCTest and security reports are retained as artifacts for seven days. Debug and
+Release run sequentially on each Mac; live playback stays opt-in through the
+native workflow's `live_playback` manual input.
+
+Private repositories need [GitHub Code Security](https://docs.github.com/en/code-security/reference/code-scanning/troubleshoot-analysis-errors/private-repository-enablement) enabled before CodeQL/SARIF
+integration can run. Set the repository Actions variable `ENABLE_CODE_SCANNING`
+to `true` after enabling that service. Codacy's analyzers and report artifacts
+run independently of that integration.
+
 ## 🧭 Architecture
 
 Runtime ownership, cancellation guarantees, dependency-update exclusion, and browser-extension ingress are documented in [ARCHITECTURE.md](ARCHITECTURE.md).

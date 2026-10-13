@@ -15,8 +15,10 @@ concurrency:
 
 jobs:
   analyze:
+    # Private repositories require GitHub Code Security. Opt in after enabling it.
+    if: ${{ !github.event.repository.private || vars.ENABLE_CODE_SCANNING == 'true' }}
     name: Analyze (${{ matrix.language }})
-    runs-on: ${{ matrix.language == 'swift' && 'macos-latest' || 'ubuntu-latest' }}
+    runs-on: ${{ matrix.language == 'swift' && 'macos-26' || 'ubuntu-24.04' }}
     timeout-minutes: ${{ matrix.language == 'swift' && 120 || 30 }}
     permissions:
       actions: read
@@ -31,6 +33,8 @@ jobs:
             build-mode: manual
           - language: javascript-typescript
             build-mode: none
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
 
     steps:
     - name: Checkout repository
