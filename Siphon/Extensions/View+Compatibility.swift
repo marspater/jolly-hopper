@@ -1488,6 +1488,7 @@ public struct SiphonEmptyStateView: View {
                 Image(systemName: icon)
                     .font(.system(size: 32, weight: .regular))
                     .foregroundColor(.secondary.opacity(0.7))
+                    .accessibilityHidden(true)
             }
 
             VStack(spacing: SiphonTheme.spacing6) {
@@ -1506,6 +1507,7 @@ public struct SiphonEmptyStateView: View {
                     HStack(spacing: SiphonTheme.spacing6) {
                         Image(systemName: "plus.circle.fill")
                             .font(.system(size: 13, weight: .semibold))
+                            .accessibilityHidden(true)
                         Text(actionTitle)
                             .font(.siphonStandardSemibold)
                     }
