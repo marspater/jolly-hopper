@@ -511,7 +511,7 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
                 outputDrained.whenDrained(within: drainTimeout, onTimeout: {
                     Self.stopOutputHolders(processGroup: processGroup)
                     pipe.fileHandleForReading.readabilityHandler = nil
-                }) {
+                }, {
                     try? pipe.fileHandleForReading.close()
                     // Before any early return: a controller left in .running would
                     // signal the stale PID on a later cancel, after the OS may reuse it.
@@ -531,7 +531,7 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
                     } else {
                         safeContinuation.resume(throwing: YtdlpError.commandFailed(output))
                     }
-                }
+                })
             }
 
             do {
@@ -586,10 +586,8 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
     }
 
     private static func extractCleanError(from errorOutput: String) -> String {
-        for line in errorOutput.lazy.split(whereSeparator: \.isNewline).reversed() {
-            if line.contains("ERROR:") {
-                return String(line).replacingOccurrences(of: "ERROR: ", with: "")
-            }
+        for line in errorOutput.lazy.split(whereSeparator: \.isNewline).reversed() where line.contains("ERROR:") {
+            return String(line).replacingOccurrences(of: "ERROR: ", with: "")
         }
         return errorOutput
     }
@@ -684,7 +682,7 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
                     if let percentVal = Double(percentStr), !percentVal.isNaN && !percentVal.isInfinite {
                         let safePercent = max(0.0, min(1.0, percentVal / 100.0))
 
-                        var speedStr: String? = nil
+                        var speedStr: String?
                         if let dlRange = line.range(of: "DL:") {
                             let afterDl = line[dlRange.upperBound...]
                             if let token = Self.parseAriaToken(from: afterDl) {
@@ -692,7 +690,7 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
                             }
                         }
 
-                        var etaStr: String? = nil
+                        var etaStr: String?
                         if let etaRange = line.range(of: "ETA:") {
                             let afterEta = line[etaRange.upperBound...]
                             if let token = Self.parseAriaToken(from: afterEta) {

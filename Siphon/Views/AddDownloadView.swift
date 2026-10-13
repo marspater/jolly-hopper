@@ -25,7 +25,6 @@ struct AddDownloadView: View {
     @State private var mediaInfo: MediaInfo?
     @State private var errorMessage: String?
 
-
     @State private var saveFolder: URL = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Downloads")
     @State private var fileType: MediaFileType = .mp4
     @State private var videoResolution: VideoResolution = .best
@@ -38,10 +37,9 @@ struct AddDownloadView: View {
     @State private var selectedAudioCodec: String = "auto"
     @State private var selectedHDRAction: String = HDRAction.preserveHDR.rawValue
     @State private var customPresets: [CustomPreset] = []
-    @State private var selectedPresetName: String? = nil
+    @State private var selectedPresetName: String?
     @State private var presetSubtitleLanguage: String = ""
     @AppStorage(UserDefaultsKeys.resolutionFallbackPolicy) private var resolutionFallbackPolicyRaw: String = ResolutionFallbackPolicy.strictCeiling.rawValue
-
 
     @State private var downloadSubtitles: Bool = false
     @StateObject private var pasteFeedback = TransientFeedbackState()
@@ -56,7 +54,7 @@ struct AddDownloadView: View {
 
     @State private var showFileExistsAlert: Bool = false
     @State private var isCheckingExistingFile: Bool = false
-    @State private var pendingDownloadOptions: DownloadOptions? = nil
+    @State private var pendingDownloadOptions: DownloadOptions?
     @State private var existingFilePath: String = ""
 
     @State private var showOptionalSettings: Bool = false
@@ -69,14 +67,14 @@ struct AddDownloadView: View {
     @State private var downloadMode: DownloadMode = .single
     @State private var inputMode: InputMode = .single
     @State private var batchUrlsText: String = ""
-    @State private var selectedFormatId: String? = nil
+    @State private var selectedFormatId: String?
     @State private var showStreamInspector: Bool = false
-    @State private var fetchTask: Task<Void, Never>? = nil
-    @State private var playlistTask: Task<Void, Never>? = nil
+    @State private var fetchTask: Task<Void, Never>?
+    @State private var playlistTask: Task<Void, Never>?
 
     enum InputMode: String, CaseIterable, Identifiable {
-        case single = "single"
-        case batch = "batch"
+        case single
+        case batch
         var id: String { rawValue }
     }
 
@@ -449,7 +447,8 @@ struct AddDownloadView: View {
 
                             ScrollView {
                                 VStack(spacing: 4) {
-                                    let displayFormats = formats.filter { $0.needsTesting != true }.isEmpty ? formats : formats.filter { $0.needsTesting != true }
+                                    let testedFormats = formats.filter { $0.needsTesting != true }
+                                    let displayFormats = testedFormats.isEmpty ? formats : testedFormats
                                     ForEach(displayFormats) { fmt in
                                         Button {
                                             selectedFormatId = fmt.formatId
@@ -494,7 +493,6 @@ struct AddDownloadView: View {
         }
     }
 
-
     private var urlSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 6) {
@@ -517,7 +515,7 @@ struct AddDownloadView: View {
                         .onSubmit {
                             fetchInfo()
                         }
-                    
+
                     if !urlInput.isEmpty {
                         Button {
                             urlInput = ""
@@ -693,8 +691,11 @@ struct AddDownloadView: View {
                         Toggle(isOn: Binding(
                             get: { selectedPlaylistIds.contains(item.id) },
                             set: { isSelected in
-                                if isSelected { selectedPlaylistIds.insert(item.id) }
-                                else { selectedPlaylistIds.remove(item.id) }
+                                if isSelected {
+                                    selectedPlaylistIds.insert(item.id)
+                                } else {
+                                    selectedPlaylistIds.remove(item.id)
+                                }
                             }
                         )) {
                             HStack(spacing: 12) {
@@ -830,7 +831,7 @@ struct AddDownloadView: View {
                 }
                 .menuStyle(.borderlessButton)
                 .menuIndicator(.hidden)
-                
+
                 // Video / Audio Capsule Switcher
                 SiphonSegmentedPicker(
                     selection: Binding(
@@ -856,8 +857,11 @@ struct AddDownloadView: View {
                                 .font(.siphonMetadataMedium)
                                 .foregroundColor(.secondary)
                             Picker("", selection: $fileType) {
-                                if isVideoTab { ForEach(MediaFileType.videoTypes) { type in Text(type.rawValue).tag(type) } }
-                                else { ForEach(MediaFileType.audioTypes) { type in Text(type.rawValue).tag(type) } }
+                                if isVideoTab {
+                                    ForEach(MediaFileType.videoTypes) { type in Text(type.rawValue).tag(type) }
+                                } else {
+                                    ForEach(MediaFileType.audioTypes) { type in Text(type.rawValue).tag(type) }
+                                }
                             }
                             .tint(nil)
                             .labelsHidden()
@@ -865,7 +869,7 @@ struct AddDownloadView: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .accessibilityLabel(languageService.s("file_type"))
                         }
-                        
+
                         VStack(alignment: .leading, spacing: 5) {
                             Text(isVideoTab ? languageService.s("quality") : languageService.s("audio_quality"))
                                 .font(.siphonMetadataMedium)
@@ -1372,7 +1376,7 @@ struct AddDownloadView: View {
                     .multilineTextAlignment(.leading)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
-            
+
             let isFDAError = error.contains("Full Disk Access") || error.contains("Privacy & Security")
             let isAuthOrCookieError = error.contains("Settings") || error.contains("Browser Cookies") || error.contains("cookies") || error.contains("sign in") || error.contains("login")
             if isFDAError || isAuthOrCookieError {
@@ -1515,22 +1519,18 @@ struct AddDownloadView: View {
                 var foundLangs: Set<String> = []
 
                 if let manual = info.subtitles {
-                    for key in manual.keys {
-                        if !foundLangs.contains(key) {
-                            let name = manual[key]?.first?.name ?? key
-                            subs.append(SubtitleOption(id: key, name: name, isAuto: false))
-                            foundLangs.insert(key)
-                        }
+                    for key in manual.keys where !foundLangs.contains(key) {
+                        let name = manual[key]?.first?.name ?? key
+                        subs.append(SubtitleOption(id: key, name: name, isAuto: false))
+                        foundLangs.insert(key)
                     }
                 }
 
                 if let auto = info.automaticCaptions {
-                    for key in auto.keys {
-                        if !foundLangs.contains(key) {
-                            let name = auto[key]?.first?.name ?? key
-                            subs.append(SubtitleOption(id: key, name: name, isAuto: true))
-                            foundLangs.insert(key)
-                        }
+                    for key in auto.keys where !foundLangs.contains(key) {
+                        let name = auto[key]?.first?.name ?? key
+                        subs.append(SubtitleOption(id: key, name: name, isAuto: true))
+                        foundLangs.insert(key)
                     }
                 }
 
@@ -1553,7 +1553,7 @@ struct AddDownloadView: View {
                             } else if vcodec.hasPrefix("av01"), !codecs.contains("av1") {
                                 codecs.insert("av1")
                                 codecOptions.append(CodecOption(id: "av1", name: "AV1"))
-                            } else if (vcodec.hasPrefix("hev1") || vcodec.hasPrefix("hvc1")), !codecs.contains("h265") {
+                            } else if vcodec.hasPrefix("hev1") || vcodec.hasPrefix("hvc1"), !codecs.contains("h265") {
                                 codecs.insert("h265")
                                 codecOptions.append(CodecOption(id: "h265", name: "H.265 (HEVC)"))
                             }
@@ -1779,7 +1779,7 @@ struct AddDownloadView: View {
         panel.canCreateDirectories = false
         panel.canChooseFiles = true
         panel.allowedContentTypes = [.plainText, .text, .item]
-        
+
         if panel.runModal() == .OK, let selectedURL = panel.url {
             Task {
                 if let content = await Task.detached(priority: .userInitiated, operation: {
@@ -1892,9 +1892,13 @@ struct AddDownloadView: View {
 
     private func formatNumber(_ number: Int) -> String {
         let formatter = Self.countFormatter
-        if number >= 1_000_000_000 { return "\(formatter.string(from: NSNumber(value: Double(number) / 1_000_000_000)) ?? "")B" }
-        else if number >= 1_000_000 { return "\(formatter.string(from: NSNumber(value: Double(number) / 1_000_000)) ?? "")M" }
-        else if number >= 1_000 { return "\(formatter.string(from: NSNumber(value: Double(number) / 1_000)) ?? "")K" }
+        if number >= 1_000_000_000 {
+            return "\(formatter.string(from: NSNumber(value: Double(number) / 1_000_000_000)) ?? "")B"
+        } else if number >= 1_000_000 {
+            return "\(formatter.string(from: NSNumber(value: Double(number) / 1_000_000)) ?? "")M"
+        } else if number >= 1_000 {
+            return "\(formatter.string(from: NSNumber(value: Double(number) / 1_000)) ?? "")K"
+        }
         return "\(number)"
     }
 

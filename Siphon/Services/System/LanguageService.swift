@@ -2,9 +2,9 @@ import SwiftUI
 
 enum Language: String, CaseIterable, Identifiable {
     case english = "en"
-    
+
     var id: String { self.rawValue }
-    
+
     var displayName: String {
         return "English"
     }
@@ -14,7 +14,7 @@ enum Language: String, CaseIterable, Identifiable {
 class LanguageService: ObservableObject {
     public static let shared = LanguageService()
     @AppStorage("selectedLanguage") var selectedLanguage: Language = .english
-    
+
     nonisolated static func s(_ key: String) -> String {
         if let translated = staticTranslations[key] {
             return translated

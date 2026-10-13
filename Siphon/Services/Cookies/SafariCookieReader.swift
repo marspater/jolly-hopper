@@ -26,9 +26,9 @@ enum SafariCookieReader {
     /// `Cookies.binarycookies`: "cook", a big-endian page count and page sizes, then
     /// pages of little-endian records. A record's strings sit at offsets inside it, and
     /// its dates count seconds from 2001-01-01. Malformed pages and records are skipped.
-    // Bolt Performance Optimization: Process binary cookie data using direct `withUnsafeBytes` buffer
-    // pointer indexing and bitwise arithmetic to avoid O(N) heap array allocations ([UInt8](data))
-    // and closure iterator overhead ((0..<4).reduce) during binary cookie parsing.
+    /// Bolt Performance Optimization: Process binary cookie data using direct `withUnsafeBytes` buffer
+    /// pointer indexing and bitwise arithmetic to avoid O(N) heap array allocations ([UInt8](data))
+    /// and closure iterator overhead ((0..<4).reduce) during binary cookie parsing.
     static func parse(_ data: Data) -> [HTTPCookie] {
         return data.withUnsafeBytes { buffer -> [HTTPCookie] in
             guard let baseAddress = buffer.baseAddress?.assumingMemoryBound(to: UInt8.self) else { return [] }

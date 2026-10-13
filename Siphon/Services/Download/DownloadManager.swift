@@ -3,8 +3,6 @@ import AppKit
 import Combine
 import SwiftUI
 
-
-
 @MainActor
 class DownloadManager: ObservableObject {
 
@@ -165,8 +163,6 @@ class DownloadManager: ObservableObject {
         return .completed
     }
 
-
-
     func initialize(languageService: LanguageService) {
         // Each new main window runs this again. While the app is running, the
         // recovery snapshot lists live jobs, so a second pass would offer to
@@ -267,7 +263,6 @@ class DownloadManager: ObservableObject {
         processQueue()
     }
 
-
     func addDownloads(urls: [String], options: DownloadOptions) {
         let newDownloads = urls.map { Download(url: $0, options: options) }
         downloads.append(contentsOf: newDownloads)
@@ -323,13 +318,9 @@ class DownloadManager: ObservableObject {
         }
         processQueue()
 
-        while download.status == .queued ||
-              download.status == .fetching ||
-              download.status == .downloading ||
-              download.status == .processing ||
-              executor.hasActiveTask(for: download.id) {
+        while isDownloadActive(download) {
             // After shutdown nothing will ever admit a queued download.
-            if Task.isCancelled || (isShuttingDown && !executor.hasActiveTask(for: download.id)) {
+            if shouldAbortDownloadWait(for: download.id) {
                 return
             }
             do {
@@ -341,6 +332,19 @@ class DownloadManager: ObservableObject {
                 return
             }
         }
+    }
+
+    private func isDownloadActive(_ download: Download) -> Bool {
+        switch download.status {
+        case .queued, .fetching, .downloading, .processing:
+            return true
+        default:
+            return executor.hasActiveTask(for: download.id)
+        }
+    }
+
+    private func shouldAbortDownloadWait(for downloadID: UUID) -> Bool {
+        Task.isCancelled || (isShuttingDown && !executor.hasActiveTask(for: downloadID))
     }
 
     func executeDownload(_ download: Download) async {
@@ -457,7 +461,7 @@ class DownloadManager: ObservableObject {
         objectWillChange.send()
         processQueue()
     }
-    
+
     func resumeWithNewName(_ download: Download) {
         guard !download.requiresAdvancedArgumentsReview else { return }
         let (candidateName, _) = planUniqueOutputPath(for: download, forceIncrement: true)
@@ -509,7 +513,7 @@ class DownloadManager: ObservableObject {
     func unreserveOutputPath(_ path: String) {
         queue.unreserveOutputPath(path)
     }
-    
+
     func stopAllDownloads(preservePaused: Bool = false, suppressNotification: Bool = false) {
         let queuedToStop = downloads.filter {
             $0.status == .queued || (!preservePaused && $0.status == .paused)
@@ -529,20 +533,17 @@ class DownloadManager: ObservableObject {
         persistQueueRecoveryState()
     }
 
-
     func retryFailedDownloads() {
         for download in failedDownloads {
             retryDownload(download)
         }
     }
 
-
     func clearQueuedDownloads() {
         let queued = queuedDownloads
         guard !queued.isEmpty else { return }
         clearDownloads(queued)
     }
-
 
     func clearCompletedDownloads() {
         clearDownloads(completedDownloads)
@@ -570,7 +571,6 @@ class DownloadManager: ObservableObject {
         saveHistory()
         persistQueueRecoveryState()
     }
-
 
     func removeDownload(_ download: Download) {
         clearDownloads([download])
@@ -633,9 +633,6 @@ class DownloadManager: ObservableObject {
         }
         objectWillChange.send()
     }
-
-
-
 
     func openFile(_ path: URL) {
         guard YtdlpService.isMediaFilePath(path.path) else {
