@@ -5,7 +5,7 @@
 ### Changes
 
 - Supported local media opens in Siphon's native player. File → Open Media and Play Stream add local playback and clear HTTPS HLS with seeking, cancellation and a protected network gateway. Other containers retain default-app playback.
-- Added FairPlay certificate/license transport and AVContentKeySession integration for an explicitly configured raw-binary provider. File → Open Stream File imports validated clear/FairPlay descriptors; license authorization is entered separately and remains ephemeral. Real FairPlay playback still requires an authorized provider and encrypted test stream for validation.
+- Added FairPlay certificate/license transport and AVContentKeySession integration for an explicitly configured raw-binary provider. File → Open Stream File imports validated clear/FairPlay descriptors; license authorization is entered separately and remains ephemeral. Protected playback and seeking are verified against EZDRM's public demo, with an importable example and opt-in live regression test. Key renewal, expiry and production-provider validation remain pending.
 
 - Siphon again downloads a pinned, SHA-256-verified yt-dlp: the Siphon fork 2026.10.12.1, which keeps its DRM-format and byte-range download fixes. The user-provided yt-dlp path in Settings is no longer used.
 - Double-clicking a finished download's card, or its row in Recent downloads, plays the video.
@@ -18,6 +18,7 @@
 
 ### Fixes
 
+- Native player controls keep playback state synchronized, and failures after playback starts release the current session without affecting a replacement item.
 - Recent on Home stays newest-first when the queue is reordered.
 - Output reservations cover every video container for a file name, and overwrite only exempts the original name.
 - No AppleScript notification fallback after notifications were denied.

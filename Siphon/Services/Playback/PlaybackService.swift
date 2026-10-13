@@ -16,6 +16,7 @@ final class PlaybackService: ObservableObject {
     private var setupTask: Task<Void, Error>?
     private var itemObservation: NSKeyValueObservation?
     private var controlObservation: NSKeyValueObservation?
+    private var failureObservation: NSObjectProtocol?
     private var drmService: FairPlayDRMService?
     private var httpClient: PlaybackHTTPClient?
     private var gateway: HLSPlaybackGateway?
@@ -88,7 +89,10 @@ final class PlaybackService: ObservableObject {
                 guard let self, self.generation == current else { return }
                 switch item.status {
                 case .readyToPlay:
-                    if self.wantsPlayback { player.play() }
+                    if self.wantsPlayback {
+                        self.wantsPlayback = false
+                        player.play()
+                    }
                     self.updateState()
                 case .failed: self.fail(.playerFailed)
                 default: break
@@ -101,12 +105,20 @@ final class PlaybackService: ObservableObject {
                 self.updateState()
             }
         }
+        failureObservation = NotificationCenter.default.addObserver(
+            forName: AVPlayerItem.failedToPlayToEndTimeNotification, object: item, queue: nil
+        ) { [weak self] _ in
+            Task { @MainActor in
+                guard let self, self.generation == current else { return }
+                self.fail(.playerFailed)
+            }
+        }
         self.player = player
     }
 
     func play() {
         guard state != .idle, state != .failed else { return }
-        wantsPlayback = true
+        wantsPlayback = player?.currentItem?.status != .readyToPlay
         hasStarted = true
         player?.play()
         updateState()
@@ -128,8 +140,12 @@ final class PlaybackService: ObservableObject {
     private func updateState() {
         guard state != .failed, let player, player.currentItem?.status == .readyToPlay else { return }
         switch player.timeControlStatus {
-        case .playing: state = .playing
-        case .waitingToPlayAtSpecifiedRate: state = .buffering
+        case .playing:
+            hasStarted = true
+            state = .playing
+        case .waitingToPlayAtSpecifiedRate:
+            hasStarted = true
+            state = .buffering
         case .paused: state = hasStarted ? .paused : .ready
         @unknown default: state = .ready
         }
@@ -150,6 +166,8 @@ final class PlaybackService: ObservableObject {
         controlObservation?.invalidate()
         itemObservation = nil
         controlObservation = nil
+        if let failureObservation { NotificationCenter.default.removeObserver(failureObservation) }
+        failureObservation = nil
         player?.pause()
         player?.replaceCurrentItem(with: nil)
         player = nil

@@ -49,20 +49,113 @@ final class PlaybackTests: XCTestCase {
     }
 
     @MainActor
+    func testNativePlayerControlsUpdatePlaybackState() async throws {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".wav")
+        try Self.waveData().write(to: url)
+        defer { try? FileManager.default.removeItem(at: url) }
+        let service = PlaybackService()
+        defer { service.stop() }
+        try await service.load(.localFile(url))
+        let ready = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            MainActor.assumeIsolated { service.state == .ready || service.state == .failed }
+        }, object: nil)
+        await fulfillment(of: [ready], timeout: 10)
+        XCTAssertEqual(service.state, .ready)
+        let player = try XCTUnwrap(service.player)
+        player.isMuted = true
+        // AVPlayerView controls call the player directly, bypassing service.play/pause.
+        player.play()
+        let playing = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            MainActor.assumeIsolated { service.state == .playing || service.state == .failed }
+        }, object: nil)
+        await fulfillment(of: [playing], timeout: 5)
+        XCTAssertEqual(service.state, .playing)
+        player.pause()
+        let paused = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            MainActor.assumeIsolated { service.state == .paused }
+        }, object: nil)
+        await fulfillment(of: [paused], timeout: 5)
+        XCTAssertEqual(service.state, .paused)
+    }
+
+    @MainActor
+    func testPlaybackFailureIgnoresReplacedItemAndStopsCurrentItem() async throws {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".wav")
+        try Self.waveData().write(to: url)
+        defer { try? FileManager.default.removeItem(at: url) }
+        let service = PlaybackService()
+        defer { service.stop() }
+        try await service.load(.localFile(url))
+        let oldItem = try XCTUnwrap(service.player?.currentItem)
+        // Queue a failure callback, then replace the item before the actor processes it.
+        NotificationCenter.default.post(name: AVPlayerItem.failedToPlayToEndTimeNotification, object: oldItem)
+        try await service.load(.localFile(url))
+        NotificationCenter.default.post(name: AVPlayerItem.failedToPlayToEndTimeNotification, object: oldItem)
+        let ready = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            MainActor.assumeIsolated { service.state == .ready || service.state == .failed }
+        }, object: nil)
+        await fulfillment(of: [ready], timeout: 10)
+        XCTAssertEqual(service.state, .ready, "A stale item must not fail its replacement")
+        let item = try XCTUnwrap(service.player?.currentItem)
+        // AVFoundation may deliver this notification from a background thread.
+        await Task.detached {
+            NotificationCenter.default.post(name: AVPlayerItem.failedToPlayToEndTimeNotification, object: item)
+        }.value
+        let failed = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            MainActor.assumeIsolated { service.state == .failed }
+        }, object: nil)
+        await fulfillment(of: [failed], timeout: 5)
+        XCTAssertEqual(service.state, .failed)
+        XCTAssertNil(service.player, "Runtime failure must release playback resources")
+        XCTAssertEqual(service.errorMessage, PlaybackError.playerFailed.localizedDescription)
+        service.stop()
+        NotificationCenter.default.post(name: AVPlayerItem.failedToPlayToEndTimeNotification, object: item)
+        try await service.load(.localFile(url))
+        let replacementReady = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            MainActor.assumeIsolated { service.state == .ready || service.state == .failed }
+        }, object: nil)
+        await fulfillment(of: [replacementReady], timeout: 10)
+        XCTAssertEqual(service.state, .ready)
+        XCTAssertNil(service.errorMessage)
+    }
+
+    @MainActor
     func testLiveClearHLSLoadsPlaysAndSeeks() async throws {
         guard ProcessInfo.processInfo.environment["SIPHON_RUN_PLAYBACK_LIVE_TESTS"] == "1" else {
             throw XCTSkip("Set SIPHON_RUN_PLAYBACK_LIVE_TESTS=1 to exercise Apple's public clear-HLS fixture.")
         }
+        let url = URL(string: "https://devstreaming-cdn.apple.com/videos/streaming/examples/img_bipbop_adv_example_ts/master.m3u8")!
+        try await verifyLivePlayback(.hls(manifestURL: url, drm: nil))
+    }
+
+    @MainActor
+    func testLiveFairPlayLoadsPlaysAndSeeks() async throws {
+        // Decode the shipped example even when live network validation is disabled.
+        let descriptorURL = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+            .deletingLastPathComponent().appendingPathComponent("examples/ezdrm-fairplay.json")
+        let source = try PlaybackSourceDescriptor.read(from: descriptorURL)
+        guard ProcessInfo.processInfo.environment["SIPHON_RUN_FAIRPLAY_LIVE_TESTS"] == "1" else {
+            throw XCTSkip("Set SIPHON_RUN_FAIRPLAY_LIVE_TESTS=1 to exercise EZDRM's public FairPlay demo.")
+        }
+        try await verifyLivePlayback(source)
+    }
+
+    @MainActor
+    private func verifyLivePlayback(_ source: PlaybackSource) async throws {
         let service = PlaybackService()
         defer { service.stop() }
-        let url = URL(string: "https://devstreaming-cdn.apple.com/videos/streaming/examples/img_bipbop_adv_example_ts/master.m3u8")!
-        try await service.load(.hls(manifestURL: url, drm: nil))
+        try await service.load(source)
         let ready = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
             MainActor.assumeIsolated { service.state == .ready || service.state == .failed }
         }, object: nil)
         await fulfillment(of: [ready], timeout: 45)
         XCTAssertEqual(service.state, .ready, service.errorMessage ?? "")
         guard service.state == .ready else { return }
+        let asset = try XCTUnwrap(service.player?.currentItem?.asset)
+        let protected = try await asset.load(.hasProtectedContent)
+        if case .hls(_, let drm) = source {
+            XCTAssertEqual(protected, drm != nil, "The fixture's actual protection must match the requested test")
+        }
         service.player?.isMuted = true
         service.play()
         let playing = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
@@ -72,11 +165,13 @@ final class PlaybackTests: XCTestCase {
         XCTAssertEqual(service.state, .playing, service.errorMessage ?? "")
         service.seek(to: 20)
         let sought = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
-            MainActor.assumeIsolated { service.player?.currentTime().seconds ?? 0 >= 19 || service.state == .failed }
+            MainActor.assumeIsolated {
+                (service.state == .playing && (service.player?.currentTime().seconds ?? 0) > 20.25) || service.state == .failed
+            }
         }, object: nil)
         await fulfillment(of: [sought], timeout: 30)
-        XCTAssertGreaterThanOrEqual(service.player?.currentTime().seconds ?? 0, 19)
-        XCTAssertNotEqual(service.state, .failed, service.errorMessage ?? "")
+        XCTAssertGreaterThan(service.player?.currentTime().seconds ?? 0, 20.25)
+        XCTAssertEqual(service.state, .playing, service.errorMessage ?? "")
         service.pause()
         XCTAssertEqual(service.state, .paused)
     }

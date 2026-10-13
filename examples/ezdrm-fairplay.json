@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "manifestURL": "https://na-fps.ezdrm.com/demo/ezdrm/master.m3u8",
+  "protection": "fairplay",
+  "certificateURL": "https://fps.ezdrm.com/demo/video/eleisure.cer",
+  "licenseServerURL": "https://fps.ezdrm.com/api/licenses/b99ed9e5-c641-49d1-bfa8-43692b686ddb",
+  "licenseFormat": "raw-spc-ckc",
+  "contentIDsByKeyURI": {
+    "skd://fps.ezdrm.com/;b99ed9e5-c641-49d1-bfa8-43692b686ddb": "b99ed9e5-c641-49d1-bfa8-43692b686ddb"
+  }
+}

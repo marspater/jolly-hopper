@@ -19,7 +19,7 @@ A high-performance, native macOS media extractor & downloader powered by `yt-dlp
 
 ## ✨ Highlights & Features
 
-- ▶️ **Native playback**: Play supported local media inside Siphon, or use File → Play Stream for clear HTTPS HLS. Other containers retain default-app playback. Open Stream File accepts an authorized FairPlay provider's configuration, with license authorization entered separately. Protected playback still needs provider validation; see [playback architecture and validation](ARCHITECTURE.md#native-playback).
+- ▶️ **Native playback**: Play supported local media inside Siphon, or use File → Play Stream for clear HTTPS HLS. Other containers retain default-app playback. Open Stream File accepts an authorized FairPlay provider's configuration, with license authorization entered separately. Protected playback and seeking are verified against a [public FairPlay demo](examples/ezdrm-fairplay.json); see [playback architecture and validation](ARCHITECTURE.md#native-playback) for provider requirements and remaining limits.
 - 💾 **Durable queue recovery**: Queued and running jobs are persisted atomically across state changes so interrupted work can be recovered with one click after unexpected exits or crashes.
 - 🔐 **Credential-free browser handoff**: Safari, Chrome-family, and Firefox integrations pass browser identity without putting raw cookies into custom URLs. Session state is scoped to validated origins and private-network deep links are rejected.
 - ♻️ **Reliable pause, resume, and cancellation**: Per-download scratch storage preserves resumable partial data, while executor ownership remains intact until process teardown actually finishes.

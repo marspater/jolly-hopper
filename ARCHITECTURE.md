@@ -107,6 +107,9 @@ Playback failure does not change a completed download's status.
 task, gateway and content-key service. Replacement, cancellation and window
 closure detach the item, invalidate observations and cancel owned work. A
 generation identifier rejects late callbacks from previous sources.
+Native player controls update service state through time-control observation.
+Item failures during playback also stop and release the current session; their
+notification observer is removed on replacement and teardown.
 
 Remote streams require HTTPS. Since AVURLAsset has no documented per-asset
 proxy configuration, `HLSPlaybackGateway` serves rewritten manifests and media
@@ -151,9 +154,12 @@ The importer rejects unknown fields (including embedded authorization/cookies),
 unsupported versions, ambiguous clear/DRM combinations and unsupported license
 formats. Importing a file does not fetch a stream, certificate or license.
 
-Real FairPlay decoding, key rotation/renewal and license expiry remain unverified
-until an authorized provider contract and encrypted test asset are available. JSON/Base64 license adapters, authentication refresh and
-provider-approved retries must follow that contract; they are not inferred.
+Real FairPlay playback and seeking were verified on macOS against EZDRM's
+public encrypted demo on 2026-10-13. The live test checks AVFoundation's
+protected-content flag, advancing playback before and after seeking, and pause.
+Key rotation/renewal, license expiry and production-provider behavior remain
+unverified. JSON/Base64 license adapters, authentication refresh and
+provider-approved retries require the provider's contract; they are not inferred.
 Persistable keys and AVFoundation-managed offline downloads remain a separate
 release. Existing yt-dlp DRM-download restrictions are unchanged.
 
@@ -194,6 +200,14 @@ provider (for example, the required scheme followed by its token). Neither
 the descriptor nor the entered authorization is copied into history, defaults
 or application logs.
 
+For a working public demo, import
+[examples/ezdrm-fairplay.json](examples/ezdrm-fairplay.json), leave authorization
+empty and press Play Stream. The certificate, license URL and encrypted HLS
+asset are published in [Shaka's official demo configurations](https://github.com/shaka-project/shaka-player/blob/main/demo/common/assets.js);
+EZDRM describes its [public FairPlay demonstration](https://www.ezdrm.com/demonstration-of-shaka-player-security-ezdrm).
+Its content ID is the GUID after `;` in the SKD URI. The demo's continued
+availability is controlled by the provider; it is not a production service.
+
 `FairPlayKeyRequest` is a small test seam implemented by the real
 AVContentKeyRequest. Mock tests exercise concurrent exchanges, a new request
 for the same key during renewal, duplicate delivery, license denial, missing
@@ -214,6 +228,21 @@ TEST_RUNNER_SIPHON_RUN_PLAYBACK_LIVE_TESTS=1 xcodebuild test \
   MACOSX_DEPLOYMENT_TARGET=15.0 \
   CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO
 ```
+
+To exercise the real public FairPlay demo, set the separate opt-in flag:
+
+```bash
+TEST_RUNNER_SIPHON_RUN_FAIRPLAY_LIVE_TESTS=1 xcodebuild test \
+  -project Siphon.xcodeproj -scheme Siphon -destination 'platform=macOS' \
+  -configuration Debug \
+  -only-testing:SiphonTests/PlaybackTests/testLiveFairPlayLoadsPlaysAndSeeks \
+  MACOSX_DEPLOYMENT_TARGET=15.0 \
+  CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO
+```
+
+Normal CI skips live network tests, but still decodes and validates the shipped
+FairPlay descriptor. Run native suites sequentially with the installed app
+closed, as described in the local-workspace rules.
 
 ## YtdlpService boundary
 
