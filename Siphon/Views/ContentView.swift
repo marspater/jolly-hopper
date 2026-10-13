@@ -503,6 +503,7 @@ struct HomeView: View {
                             .font(.siphonSecondaryMedium)
                         Image(systemName: "chevron.right")
                             .font(.system(size: 10, weight: .semibold))
+                            .accessibilityHidden(true)
                     }
                     .foregroundColor(.secondary)
                 }
@@ -515,6 +516,7 @@ struct HomeView: View {
                     Image(systemName: "arrow.down.circle")
                         .font(.system(size: 24, weight: .light))
                         .foregroundColor(.secondary.opacity(0.7))
+                        .accessibilityHidden(true)
                     Text(languageService.s("no_recent_downloads"))
                         .font(.siphonStandardMedium)
                         .foregroundColor(.primary)
