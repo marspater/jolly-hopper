@@ -3172,7 +3172,12 @@ public struct DownloadResult: Sendable {
 
     /// Mirrors Recu's own sign-in redirect, which returns to the video afterwards.
     nonisolated static func recuSignInURL(for pageURL: URL) -> URL? {
-        URL(string: "https://recu.me\(recuSignInPath)?url=\(Data(pageURL.path.utf8).base64EncodedString())")
+        guard var components = URLComponents(url: pageURL, resolvingAgainstBaseURL: false) else {
+            return nil
+        }
+        components.path = recuSignInPath
+        components.percentEncodedQuery = "url=\(Data(pageURL.path.utf8).base64EncodedString())"
+        return components.url
     }
 
     enum RecuAPIOutcome: Equatable {
@@ -3231,9 +3236,6 @@ public struct DownloadResult: Sendable {
             targetFrame: WKFrameInfo?
         ) -> Bool {
             guard let url, let scheme = url.scheme?.lowercased() else { return false }
-            if let targetFrame, !targetFrame.isMainFrame {
-                return ["https", "http", "about", "data", "blob"].contains(scheme)
-            }
             if ["about", "data", "blob"].contains(scheme) {
                 return true
             }
@@ -3248,7 +3250,8 @@ public struct DownloadResult: Sendable {
             decidePolicyFor navigationAction: WKNavigationAction,
             decisionHandler: @escaping @MainActor (WKNavigationActionPolicy) -> Void
         ) {
-            guard Self.allowsNavigation(to: navigationAction.request.url, targetFrame: navigationAction.targetFrame) else {
+            guard let url = navigationAction.request.url,
+                  Self.allowsNavigation(to: url, targetFrame: navigationAction.targetFrame) else {
                 decisionHandler(.cancel)
                 return
             }
@@ -3269,7 +3272,8 @@ public struct DownloadResult: Sendable {
             windowFeatures _: WKWindowFeatures
         ) -> WKWebView? {
             if navigationAction.targetFrame == nil,
-               Self.allowsNavigation(to: navigationAction.request.url, targetFrame: navigationAction.targetFrame) {
+               let url = navigationAction.request.url,
+               Self.allowsNavigation(to: url, targetFrame: navigationAction.targetFrame) {
                 webView.load(navigationAction.request)
             }
             return nil
