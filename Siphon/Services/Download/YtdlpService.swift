@@ -2982,6 +2982,15 @@ public struct DownloadResult: Sendable {
         }
     }
 
+    func resetCookieDenial(for browser: String? = nil) {
+        if let browser {
+            deniedCookieSources.remove(browser)
+            deniedCookieSources = deniedCookieSources.filter { !$0.hasPrefix("\(browser):") }
+        } else {
+            deniedCookieSources.removeAll()
+        }
+    }
+
     nonisolated static func cookiesFromBrowserArgument(for browser: String) -> String {
         return browser
     }
@@ -7454,16 +7463,23 @@ public struct DownloadResult: Sendable {
         let homeDir = FileManager.default.homeDirectoryForCurrentUser.path
         let candidatePaths = [
             "\(homeDir)/Library/Containers/com.apple.Safari/Data/Library/Cookies/Cookies.binarycookies",
-            "\(homeDir)/Library/Cookies/Cookies.binarycookies"
+            "\(homeDir)/Library/Containers/com.apple.Safari/Data/Library/Cookies",
+            "\(homeDir)/Library/Safari/Bookmarks.plist",
+            "\(homeDir)/Library/Safari",
+            "\(homeDir)/Library/Cookies/Cookies.binarycookies",
+            "\(homeDir)/Library/Cookies"
         ]
+        var lastErrno: Int32 = 0
         for path in candidatePaths {
             let fd = Darwin.open(path, O_RDONLY)
             if fd >= 0 {
                 Darwin.close(fd)
                 return true
             }
+            lastErrno = errno
         }
 
+        LoggerService.shared.log("[Permissions] Full Disk Access check inconclusive or denied (lastErrno=\(lastErrno))", level: .debug)
         return false
     }
 
