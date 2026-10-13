@@ -6135,4 +6135,45 @@ final class YtdlpServiceTests: XCTestCase {
         let str = buffer.getString()
         XCTAssertEqual(str.count, 50)
     }
+
+    func testClearRecuWebDataRemovesStoresAndIdentifiers() async throws {
+        let removedUUIDs = TestBox<[UUID]>([])
+        service.websiteDataStoreRemover = { uuid in
+            removedUUIDs.value.append(uuid)
+        }
+        await service.clearRecuWebData()
+        let recuUUID = try XCTUnwrap(UUID(uuidString: YtdlpService.recuDataStoreIdentifier))
+        let recuBoundaryUUID = try XCTUnwrap(UUID(uuidString: YtdlpService.recuBoundaryDataStoreIdentifier))
+        XCTAssertTrue(removedUUIDs.value.contains(recuUUID))
+        XCTAssertTrue(removedUUIDs.value.contains(recuBoundaryUUID))
+    }
+
+    func testClearAllProtectedSitesWebDataRemovesAllIdentifiers() async throws {
+        let removedUUIDs = TestBox<[UUID]>([])
+        service.websiteDataStoreRemover = { uuid in
+            removedUUIDs.value.append(uuid)
+        }
+        await service.clearAllProtectedSitesWebData()
+        let expectedIdentifiers = [
+            YtdlpService.recuDataStoreIdentifier,
+            YtdlpService.recuBoundaryDataStoreIdentifier,
+            YtdlpService.boyfriendTVDataStoreIdentifier,
+            YtdlpService.boyfriendTVBoundaryDataStoreIdentifier,
+            YtdlpService.gayteamDataStoreIdentifier,
+            YtdlpService.gayteamBoundaryDataStoreIdentifier
+        ].compactMap { UUID(uuidString: $0) }
+
+        XCTAssertEqual(removedUUIDs.value.count, expectedIdentifiers.count)
+        for expected in expectedIdentifiers {
+            XCTAssertTrue(removedUUIDs.value.contains(expected))
+        }
+    }
+
+    func testClearRecuWebDataClearsInMemoryStores() async throws {
+        _ = service.recuWebDataStore
+        XCTAssertFalse(service.recuWebDataStores.isEmpty)
+        service.websiteDataStoreRemover = { _ in }
+        await service.clearRecuWebData()
+        XCTAssertTrue(service.recuWebDataStores.isEmpty)
+    }
 }

@@ -360,6 +360,17 @@ class YtdlpService: ObservableObject {
 
     var processRunner: YtdlpProcessRunning
     var updateYtdlpHandler: (() async throws -> String)?
+
+    public static let boyfriendTVDataStoreIdentifier = "F2F923A6-E203-4927-88BB-CCB9DF9DF651"
+    public static let boyfriendTVBoundaryDataStoreIdentifier = "550F3EA0-3E13-4475-B62F-146DC44E6700"
+    public static let recuDataStoreIdentifier = "6F1E2B7C-3A4D-4E5F-9A8B-7C6D5E4F3A2B"
+    public static let recuBoundaryDataStoreIdentifier = "0C494988-0FFE-497D-904A-DCC4E85842B7"
+    public static let gayteamDataStoreIdentifier = "3B8E6C1D-7F2A-4E95-B0C4-9D1A6E5F2C83"
+    public static let gayteamBoundaryDataStoreIdentifier = "A4D2F7E9-1C6B-4A38-8E5D-2F9B7C3A6D14"
+
+    // Test seam for WebKit website data store removal.
+    var websiteDataStoreRemover: ((UUID) async throws -> Void)?
+
     // Persistent, so a BoyfriendTV sign-in survives relaunches. Safari keeps the
     // site's login in a session cookie it never writes to disk, so browser-cookie
     // import cannot see it; the user signs in once in Siphon's window instead.
@@ -368,8 +379,8 @@ class YtdlpService: ObservableObject {
     var boyfriendTVWebDataStore: WKWebsiteDataStore {
         webDataStore(in: &boyfriendTVWebDataStores) {
             let identifier = EgressBoundary.proxyURL == nil
-                ? "F2F923A6-E203-4927-88BB-CCB9DF9DF651"
-                : "550F3EA0-3E13-4475-B62F-146DC44E6700"
+                ? Self.boyfriendTVDataStoreIdentifier
+                : Self.boyfriendTVBoundaryDataStoreIdentifier
             return WKWebsiteDataStore(forIdentifier: UUID(uuidString: identifier)!)
         }
     }
@@ -381,12 +392,12 @@ class YtdlpService: ObservableObject {
     var installedBrowsersProvider: (() async -> [String])?
     // Persistent, so the user's recu.me clearance and sign-in survive relaunches.
     // Boundary-enforced jobs keep theirs in a second store, signed in separately.
-    private var recuWebDataStores: [String: WKWebsiteDataStore] = [:]
-    private var recuWebDataStore: WKWebsiteDataStore {
+    var recuWebDataStores: [String: WKWebsiteDataStore] = [:]
+    var recuWebDataStore: WKWebsiteDataStore {
         webDataStore(in: &recuWebDataStores) {
             let identifier = EgressBoundary.proxyURL == nil
-                ? "6F1E2B7C-3A4D-4E5F-9A8B-7C6D5E4F3A2B"
-                : "0C494988-0FFE-497D-904A-DCC4E85842B7"
+                ? Self.recuDataStoreIdentifier
+                : Self.recuBoundaryDataStoreIdentifier
             return WKWebsiteDataStore(forIdentifier: UUID(uuidString: identifier)!)
         }
     }
@@ -397,10 +408,76 @@ class YtdlpService: ObservableObject {
     private var gayteamWebDataStore: WKWebsiteDataStore {
         webDataStore(in: &gayteamWebDataStores) {
             let identifier = EgressBoundary.proxyURL == nil
-                ? "3B8E6C1D-7F2A-4E95-B0C4-9D1A6E5F2C83"
-                : "A4D2F7E9-1C6B-4A38-8E5D-2F9B7C3A6D14"
+                ? Self.gayteamDataStoreIdentifier
+                : Self.gayteamBoundaryDataStoreIdentifier
             return WKWebsiteDataStore(forIdentifier: UUID(uuidString: identifier)!)
         }
+    }
+
+    private func clearWebsiteDataStores(
+        activeStores: [WKWebsiteDataStore],
+        identifiers: [String],
+        siteName: String
+    ) async {
+        for store in activeStores {
+            await store.removeData(ofTypes: WKWebsiteDataStore.allWebsiteDataTypes(), modifiedSince: .distantPast)
+        }
+        for identifier in identifiers {
+            guard let uuid = UUID(uuidString: identifier) else { continue }
+            if let remover = websiteDataStoreRemover {
+                try? await remover(uuid)
+            } else {
+                try? await WKWebsiteDataStore.remove(forIdentifier: uuid)
+                Self.removeWebsiteDataStoreDirectory(for: identifier)
+            }
+        }
+        LoggerService.shared.log("[ProtectedSite] Cleared \(siteName) cookies, session tokens, and cache.", level: .info)
+    }
+
+    static func removeWebsiteDataStoreDirectory(for identifier: String) {
+        let bundleID = Bundle.main.bundleIdentifier ?? "com.marspater.siphon"
+        let baseDir = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/WebKit/\(bundleID)/WebsiteDataStore")
+        let storeDirLower = baseDir.appendingPathComponent(identifier.lowercased())
+        let storeDirUpper = baseDir.appendingPathComponent(identifier.uppercased())
+        try? FileManager.default.removeItem(at: storeDirLower)
+        try? FileManager.default.removeItem(at: storeDirUpper)
+    }
+
+    func clearRecuWebData() async {
+        let stores = Array(recuWebDataStores.values)
+        recuWebDataStores.removeAll()
+        await clearWebsiteDataStores(
+            activeStores: stores,
+            identifiers: [Self.recuDataStoreIdentifier, Self.recuBoundaryDataStoreIdentifier],
+            siteName: "recu.me"
+        )
+    }
+
+    func clearBoyfriendTVWebData() async {
+        let stores = Array(boyfriendTVWebDataStores.values)
+        boyfriendTVWebDataStores.removeAll()
+        await clearWebsiteDataStores(
+            activeStores: stores,
+            identifiers: [Self.boyfriendTVDataStoreIdentifier, Self.boyfriendTVBoundaryDataStoreIdentifier],
+            siteName: "boyfriend.tv"
+        )
+    }
+
+    func clearGayteamWebData() async {
+        let stores = Array(gayteamWebDataStores.values)
+        gayteamWebDataStores.removeAll()
+        await clearWebsiteDataStores(
+            activeStores: stores,
+            identifiers: [Self.gayteamDataStoreIdentifier, Self.gayteamBoundaryDataStoreIdentifier],
+            siteName: "gayteam"
+        )
+    }
+
+    func clearAllProtectedSitesWebData() async {
+        await clearRecuWebData()
+        await clearBoyfriendTVWebData()
+        await clearGayteamWebData()
     }
     // Test seam for Safari's saved cookies. Production reads Safari's cookie store.
     var safariCookiesProvider: () -> [HTTPCookie] = { SafariCookieReader.cookies() }
