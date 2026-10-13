@@ -3168,16 +3168,21 @@ public struct DownloadResult: Sendable {
         return check
     }
 
-    nonisolated static let recuSignInPath = "/account/signin"
-
     /// Mirrors Recu's own sign-in redirect, which returns to the video afterwards.
-    nonisolated static func recuSignInURL(for pageURL: URL) -> URL? {
+    nonisolated static func recuSignInURL(
+        for pageURL: URL,
+        signInPath: String = "/account/signin"
+    ) -> URL? {
         guard var components = URLComponents(url: pageURL, resolvingAgainstBaseURL: false) else {
             return nil
         }
-        components.path = recuSignInPath
+        components.path = signInPath
         components.percentEncodedQuery = "url=\(Data(pageURL.path.utf8).base64EncodedString())"
         return components.url
+    }
+
+    nonisolated static func isRecuSignInURL(_ url: URL?, signInPath: String = "/account/signin") -> Bool {
+        url?.path.starts(with: signInPath) == true
     }
 
     enum RecuAPIOutcome: Equatable {
@@ -3222,7 +3227,7 @@ public struct DownloadResult: Sendable {
         let userAgent: String?
     }
 
-    final class RecuNavigationDelegate: NSObject, WKNavigationDelegate, WKUIDelegate {
+    final class RecuNavigationDelegate: NSObject, WKNavigationDelegate {
         nonisolated static func isAllowedHost(_ host: String) -> Bool {
             let h = host.lowercased()
             return h == "recu.me" || h.hasSuffix(".recu.me") ||
@@ -3233,7 +3238,7 @@ public struct DownloadResult: Sendable {
 
         nonisolated static func allowsNavigation(
             to url: URL?,
-            targetFrame: WKFrameInfo?
+            targetFrame _: WKFrameInfo? = nil
         ) -> Bool {
             guard let url, let scheme = url.scheme?.lowercased() else { return false }
             if ["about", "data", "blob"].contains(scheme) {
@@ -3250,33 +3255,25 @@ public struct DownloadResult: Sendable {
             decidePolicyFor navigationAction: WKNavigationAction,
             decisionHandler: @escaping @MainActor (WKNavigationActionPolicy) -> Void
         ) {
-            guard let url = navigationAction.request.url,
-                  Self.allowsNavigation(to: url, targetFrame: navigationAction.targetFrame) else {
+            guard let url = navigationAction.request.url else {
                 decisionHandler(.cancel)
                 return
             }
 
-            if navigationAction.targetFrame == nil {
-                webView.load(navigationAction.request)
+            let scheme = url.scheme?.lowercased() ?? ""
+            if ["about", "data", "blob"].contains(scheme) {
+                decisionHandler(.allow)
+                return
+            }
+
+            guard (scheme == "https" || scheme == "http"),
+                  let host = url.host?.lowercased(),
+                  Self.isAllowedHost(host) else {
                 decisionHandler(.cancel)
                 return
             }
 
             decisionHandler(.allow)
-        }
-
-        func webView(
-            _ webView: WKWebView,
-            createWebViewWith _: WKWebViewConfiguration,
-            for navigationAction: WKNavigationAction,
-            windowFeatures _: WKWindowFeatures
-        ) -> WKWebView? {
-            if navigationAction.targetFrame == nil,
-               let url = navigationAction.request.url,
-               Self.allowsNavigation(to: url, targetFrame: navigationAction.targetFrame) {
-                webView.load(navigationAction.request)
-            }
-            return nil
         }
     }
 
@@ -3420,7 +3417,6 @@ public struct DownloadResult: Sendable {
         webView.customUserAgent = Self.safariUserAgent
         let navigationDelegate = RecuNavigationDelegate()
         webView.navigationDelegate = navigationDelegate
-        webView.uiDelegate = navigationDelegate
         webView.load(URLRequest(url: pageURL))
 
         var window: NSWindow?
@@ -3480,7 +3476,7 @@ public struct DownloadResult: Sendable {
                         presentWindow(reason: "sign-in-required")
                     }
                     deadline = Date().addingTimeInterval(300)
-                    if let currentURL = webView.url, !currentURL.path.starts(with: Self.recuSignInPath),
+                    if let currentURL = webView.url, !Self.isRecuSignInURL(currentURL),
                        let signInURL = Self.recuSignInURL(for: pageURL) {
                         LoggerService.shared.log("[ProtectedSite] stage=browser-session result=redirecting-to-signin", level: .info)
                         webView.load(URLRequest(url: signInURL))
