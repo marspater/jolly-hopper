@@ -360,6 +360,17 @@ class YtdlpService: ObservableObject {
 
     var processRunner: YtdlpProcessRunning
     var updateYtdlpHandler: (() async throws -> String)?
+
+    public static let boyfriendTVDataStoreIdentifier = "F2F923A6-E203-4927-88BB-CCB9DF9DF651"
+    public static let boyfriendTVBoundaryDataStoreIdentifier = "550F3EA0-3E13-4475-B62F-146DC44E6700"
+    public static let recuDataStoreIdentifier = "6F1E2B7C-3A4D-4E5F-9A8B-7C6D5E4F3A2B"
+    public static let recuBoundaryDataStoreIdentifier = "0C494988-0FFE-497D-904A-DCC4E85842B7"
+    public static let gayteamDataStoreIdentifier = "3B8E6C1D-7F2A-4E95-B0C4-9D1A6E5F2C83"
+    public static let gayteamBoundaryDataStoreIdentifier = "A4D2F7E9-1C6B-4A38-8E5D-2F9B7C3A6D14"
+
+    // Test seam for WebKit website data store removal.
+    var websiteDataStoreRemover: ((UUID) async throws -> Void)?
+
     // Persistent, so a BoyfriendTV sign-in survives relaunches. Safari keeps the
     // site's login in a session cookie it never writes to disk, so browser-cookie
     // import cannot see it; the user signs in once in Siphon's window instead.
@@ -368,8 +379,8 @@ class YtdlpService: ObservableObject {
     var boyfriendTVWebDataStore: WKWebsiteDataStore {
         webDataStore(in: &boyfriendTVWebDataStores) {
             let identifier = EgressBoundary.proxyURL == nil
-                ? "F2F923A6-E203-4927-88BB-CCB9DF9DF651"
-                : "550F3EA0-3E13-4475-B62F-146DC44E6700"
+                ? Self.boyfriendTVDataStoreIdentifier
+                : Self.boyfriendTVBoundaryDataStoreIdentifier
             return WKWebsiteDataStore(forIdentifier: UUID(uuidString: identifier)!)
         }
     }
@@ -381,12 +392,12 @@ class YtdlpService: ObservableObject {
     var installedBrowsersProvider: (() async -> [String])?
     // Persistent, so the user's recu.me clearance and sign-in survive relaunches.
     // Boundary-enforced jobs keep theirs in a second store, signed in separately.
-    private var recuWebDataStores: [String: WKWebsiteDataStore] = [:]
-    private var recuWebDataStore: WKWebsiteDataStore {
+    var recuWebDataStores: [String: WKWebsiteDataStore] = [:]
+    var recuWebDataStore: WKWebsiteDataStore {
         webDataStore(in: &recuWebDataStores) {
             let identifier = EgressBoundary.proxyURL == nil
-                ? "6F1E2B7C-3A4D-4E5F-9A8B-7C6D5E4F3A2B"
-                : "0C494988-0FFE-497D-904A-DCC4E85842B7"
+                ? Self.recuDataStoreIdentifier
+                : Self.recuBoundaryDataStoreIdentifier
             return WKWebsiteDataStore(forIdentifier: UUID(uuidString: identifier)!)
         }
     }
@@ -397,10 +408,76 @@ class YtdlpService: ObservableObject {
     private var gayteamWebDataStore: WKWebsiteDataStore {
         webDataStore(in: &gayteamWebDataStores) {
             let identifier = EgressBoundary.proxyURL == nil
-                ? "3B8E6C1D-7F2A-4E95-B0C4-9D1A6E5F2C83"
-                : "A4D2F7E9-1C6B-4A38-8E5D-2F9B7C3A6D14"
+                ? Self.gayteamDataStoreIdentifier
+                : Self.gayteamBoundaryDataStoreIdentifier
             return WKWebsiteDataStore(forIdentifier: UUID(uuidString: identifier)!)
         }
+    }
+
+    private func clearWebsiteDataStores(
+        activeStores: [WKWebsiteDataStore],
+        identifiers: [String],
+        siteName: String
+    ) async {
+        for store in activeStores {
+            await store.removeData(ofTypes: WKWebsiteDataStore.allWebsiteDataTypes(), modifiedSince: .distantPast)
+        }
+        for identifier in identifiers {
+            guard let uuid = UUID(uuidString: identifier) else { continue }
+            if let remover = websiteDataStoreRemover {
+                try? await remover(uuid)
+            } else {
+                try? await WKWebsiteDataStore.remove(forIdentifier: uuid)
+                Self.removeWebsiteDataStoreDirectory(for: identifier)
+            }
+        }
+        LoggerService.shared.log("[ProtectedSite] Cleared \(siteName) cookies, session tokens, and cache.", level: .info)
+    }
+
+    static func removeWebsiteDataStoreDirectory(for identifier: String) {
+        let bundleID = Bundle.main.bundleIdentifier ?? "com.marspater.siphon"
+        let baseDir = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/WebKit/\(bundleID)/WebsiteDataStore")
+        let storeDirLower = baseDir.appendingPathComponent(identifier.lowercased())
+        let storeDirUpper = baseDir.appendingPathComponent(identifier.uppercased())
+        try? FileManager.default.removeItem(at: storeDirLower)
+        try? FileManager.default.removeItem(at: storeDirUpper)
+    }
+
+    func clearRecuWebData() async {
+        let stores = Array(recuWebDataStores.values)
+        recuWebDataStores.removeAll()
+        await clearWebsiteDataStores(
+            activeStores: stores,
+            identifiers: [Self.recuDataStoreIdentifier, Self.recuBoundaryDataStoreIdentifier],
+            siteName: "recu.me"
+        )
+    }
+
+    func clearBoyfriendTVWebData() async {
+        let stores = Array(boyfriendTVWebDataStores.values)
+        boyfriendTVWebDataStores.removeAll()
+        await clearWebsiteDataStores(
+            activeStores: stores,
+            identifiers: [Self.boyfriendTVDataStoreIdentifier, Self.boyfriendTVBoundaryDataStoreIdentifier],
+            siteName: "boyfriend.tv"
+        )
+    }
+
+    func clearGayteamWebData() async {
+        let stores = Array(gayteamWebDataStores.values)
+        gayteamWebDataStores.removeAll()
+        await clearWebsiteDataStores(
+            activeStores: stores,
+            identifiers: [Self.gayteamDataStoreIdentifier, Self.gayteamBoundaryDataStoreIdentifier],
+            siteName: "gayteam"
+        )
+    }
+
+    func clearAllProtectedSitesWebData() async {
+        await clearRecuWebData()
+        await clearBoyfriendTVWebData()
+        await clearGayteamWebData()
     }
     // Test seam for Safari's saved cookies. Production reads Safari's cookie store.
     var safariCookiesProvider: () -> [HTTPCookie] = { SafariCookieReader.cookies() }
@@ -2905,6 +2982,15 @@ public struct DownloadResult: Sendable {
         }
     }
 
+    func resetCookieDenial(for browser: String? = nil) {
+        if let browser {
+            deniedCookieSources.remove(browser)
+            deniedCookieSources = deniedCookieSources.filter { !$0.hasPrefix("\(browser):") }
+        } else {
+            deniedCookieSources.removeAll()
+        }
+    }
+
     nonisolated static func cookiesFromBrowserArgument(for browser: String) -> String {
         return browser
     }
@@ -3083,8 +3169,20 @@ public struct DownloadResult: Sendable {
     }
 
     /// Mirrors Recu's own sign-in redirect, which returns to the video afterwards.
-    nonisolated static func recuSignInURL(for pageURL: URL) -> URL? {
-        URL(string: "https://recu.me/account/signin?url=\(Data(pageURL.path.utf8).base64EncodedString())")
+    nonisolated static func recuSignInURL(
+        for pageURL: URL,
+        signInPath: String = "/account/signin"
+    ) -> URL? {
+        guard var components = URLComponents(url: pageURL, resolvingAgainstBaseURL: false) else {
+            return nil
+        }
+        components.path = signInPath
+        components.percentEncodedQuery = "url=\(Data(pageURL.path.utf8).base64EncodedString())"
+        return components.url
+    }
+
+    nonisolated static func isRecuSignInURL(_ url: URL?, signInPath: String = "/account/signin") -> Bool {
+        url?.path.starts(with: signInPath) == true
     }
 
     enum RecuAPIOutcome: Equatable {
@@ -3124,29 +3222,58 @@ public struct DownloadResult: Sendable {
     private struct RecuPageState: Decodable {
         let challenge: Bool
         let token: String?
+        let needsSignIn: Bool
         let html: String?
         let userAgent: String?
     }
 
     final class RecuNavigationDelegate: NSObject, WKNavigationDelegate {
+        nonisolated static func isAllowedHost(_ host: String) -> Bool {
+            let h = host.lowercased()
+            return h == "recu.me" || h.hasSuffix(".recu.me") ||
+                   h == "challenges.cloudflare.com" || h.hasSuffix(".challenges.cloudflare.com") ||
+                   h == "cloudflare.com" || h.hasSuffix(".cloudflare.com") ||
+                   h == "cloudflareinsights.com" || h.hasSuffix(".cloudflareinsights.com")
+        }
+
+        nonisolated static func allowsNavigation(
+            to url: URL?,
+            targetFrame _: WKFrameInfo? = nil
+        ) -> Bool {
+            guard let url, let scheme = url.scheme?.lowercased() else { return false }
+            if ["about", "data", "blob"].contains(scheme) {
+                return true
+            }
+            guard scheme == "https" || scheme == "http", let host = url.host?.lowercased() else {
+                return false
+            }
+            return isAllowedHost(host)
+        }
+
         func webView(
-            _ _: WKWebView,
+            _ webView: WKWebView,
             decidePolicyFor navigationAction: WKNavigationAction,
             decisionHandler: @escaping @MainActor (WKNavigationActionPolicy) -> Void
         ) {
-            guard let targetFrame = navigationAction.targetFrame else {
+            guard let url = navigationAction.request.url else {
                 decisionHandler(.cancel)
                 return
             }
-            // Cloudflare's check runs in a subframe; only the page itself stays on Recu.
-            guard targetFrame.isMainFrame else {
+
+            let scheme = url.scheme?.lowercased() ?? ""
+            if ["about", "data", "blob"].contains(scheme) {
                 decisionHandler(.allow)
                 return
             }
-            let url = navigationAction.request.url
-            let host = url?.host?.lowercased() ?? ""
-            let isRecu = url?.scheme?.lowercased() == "https" && (host == "recu.me" || host.hasSuffix(".recu.me"))
-            decisionHandler(isRecu ? .allow : .cancel)
+
+            guard (scheme == "https" || scheme == "http"),
+                  let host = url.host?.lowercased(),
+                  Self.isAllowedHost(host) else {
+                decisionHandler(.cancel)
+                return
+            }
+
+            decisionHandler(.allow)
         }
     }
 
@@ -3178,19 +3305,40 @@ public struct DownloadResult: Sendable {
         window.delegate = delegate
         window.title = title
         window.contentView = webView
+        window.level = .floating
         window.center()
         window.makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
+        window.orderFrontRegardless()
+        if #available(macOS 14.0, *) {
+            NSApp.activate()
+        } else {
+            NSApp.activate(ignoringOtherApps: true)
+        }
+        NSApp.requestUserAttention(.criticalRequest)
+        NotificationService.shared.sendAppUpdateNotification(
+            title: title,
+            body: LanguageService.s("site_verification_needed")
+        )
         return window
     }
 
     private func recuPageState(_ webView: WKWebView, videoID: String) async -> RecuPageState? {
         let script = """
-        const button = document.querySelector('#play_button[data-token]');
-        const matches = !!button && button.getAttribute('data-video-id') === videoID;
+        const playBtn = document.querySelector('#play_button');
+        const hasPlayBtn = !!playBtn;
+        const playBtnToken = playBtn ? playBtn.getAttribute('data-token') : null;
+        const playBtnVideoId = playBtn ? playBtn.getAttribute('data-video-id') : null;
+        const matches = hasPlayBtn && !!playBtnToken && playBtnVideoId === videoID;
+
+        const hasSignInButton = !!document.querySelector('#top-signin-signin-button, a[href*="/account/signin"]');
+        const isSignInPage = window.location.pathname.startsWith('/account/signin');
+        // When signed out, #play_button exists with data-video-id but has NO data-token, or the page displays sign-in controls.
+        const needsSignIn = isSignInPage || hasSignInButton || (hasPlayBtn && !playBtnToken && playBtnVideoId === videoID);
+
         return JSON.stringify({
             challenge: !!document.getElementById('challenge-error-text') || /^just a moment/i.test(document.title),
-            token: matches ? button.getAttribute('data-token') : null,
+            token: matches ? playBtnToken : null,
+            needsSignIn: needsSignIn,
             html: matches ? document.documentElement.outerHTML : null,
             userAgent: navigator.userAgent
         });
@@ -3263,7 +3411,10 @@ public struct DownloadResult: Sendable {
         let configuration = WKWebViewConfiguration()
         configuration.websiteDataStore = recuWebDataStore
         configuration.mediaTypesRequiringUserActionForPlayback = .all
+        configuration.defaultWebpagePreferences.allowsContentJavaScript = true
+        configuration.preferences.javaScriptCanOpenWindowsAutomatically = true
         let webView = WKWebView(frame: NSRect(x: 0, y: 0, width: 1000, height: 760), configuration: configuration)
+        webView.customUserAgent = Self.safariUserAgent
         let navigationDelegate = RecuNavigationDelegate()
         webView.navigationDelegate = navigationDelegate
         webView.load(URLRequest(url: pageURL))
@@ -3280,6 +3431,7 @@ public struct DownloadResult: Sendable {
         var deadline = Date().addingTimeInterval(15)
         var lastToken: String?
         var reloadedStaleToken = false
+        var redirectedToSignIn = false
 
         func presentWindow(reason: String) {
             guard window == nil else { return }
@@ -3313,6 +3465,26 @@ public struct DownloadResult: Sendable {
                 presentWindow(reason: "challenge")
                 continue
             }
+
+            if state.needsSignIn && state.token == nil {
+                if !redirectedToSignIn {
+                    redirectedToSignIn = true
+                    if let currentWindow = window {
+                        currentWindow.orderFrontRegardless()
+                        NSApp.requestUserAttention(.criticalRequest)
+                    } else {
+                        presentWindow(reason: "sign-in-required")
+                    }
+                    deadline = Date().addingTimeInterval(300)
+                    if let currentURL = webView.url, !Self.isRecuSignInURL(currentURL),
+                       let signInURL = Self.recuSignInURL(for: pageURL) {
+                        LoggerService.shared.log("[ProtectedSite] stage=browser-session result=redirecting-to-signin", level: .info)
+                        webView.load(URLRequest(url: signInURL))
+                    }
+                }
+                continue
+            }
+
             // A token is single-use for this loop: navigation leaves the old page
             // readable until the next one commits.
             guard let token = state.token, let html = state.html, token != lastToken else { continue }
@@ -3324,7 +3496,14 @@ public struct DownloadResult: Sendable {
                 LoggerService.shared.log("[ProtectedSite] stage=api result=stream-found", level: .debug)
                 return RecuBrowserSession(pageHTML: html, playlistURL: playlistURL, userAgent: state.userAgent)
             case .signInRequired:
-                presentWindow(reason: "sign-in-required")
+                redirectedToSignIn = true
+                if let currentWindow = window {
+                    currentWindow.orderFrontRegardless()
+                    NSApp.requestUserAttention(.criticalRequest)
+                } else {
+                    presentWindow(reason: "sign-in-required")
+                }
+                deadline = Date().addingTimeInterval(300)
                 if let signInURL = Self.recuSignInURL(for: pageURL) {
                     webView.load(URLRequest(url: signInURL))
                 }
@@ -7374,19 +7553,25 @@ public struct DownloadResult: Sendable {
         }
         // This is an advisory cookie-read probe, not a query of macOS's FDA toggle.
         // Missing files and a different running app identity can both make it inconclusive.
+        // This is an advisory cookie-read probe: only the actual Safari cookie
+        // database file is tested with a read operation. We do not treat parent
+        // directories or unrelated Safari files as evidence that cookies are readable.
         let homeDir = FileManager.default.homeDirectoryForCurrentUser.path
         let candidatePaths = [
             "\(homeDir)/Library/Containers/com.apple.Safari/Data/Library/Cookies/Cookies.binarycookies",
             "\(homeDir)/Library/Cookies/Cookies.binarycookies"
         ]
+        var lastErrno: Int32 = 0
         for path in candidatePaths {
             let fd = Darwin.open(path, O_RDONLY)
             if fd >= 0 {
                 Darwin.close(fd)
                 return true
             }
+            lastErrno = errno
         }
 
+        LoggerService.shared.log("[Permissions] Full Disk Access check inconclusive or denied (lastErrno=\(lastErrno))", level: .debug)
         return false
     }
 
