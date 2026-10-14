@@ -87,14 +87,16 @@ enum SafariCookieReader {
                 guard let recordCount = uint32(pageStart + 4, bigEndian: false),
                       recordCount <= (pageSize - 8) / 4 else { continue }
                 for index in 0..<recordCount {
-                    guard let offset = uint32(pageStart + 8 + 4 * index, bigEndian: false) else { break }
+                    // Validate record offset and field string offsets to prevent integer overflow and out-of-bounds calculation
+                    guard let offset = uint32(pageStart + 8 + 4 * index, bigEndian: false),
+                          offset >= 8, offset < pageSize else { continue }
                     let record = pageStart + offset
                     guard let size = uint32(record, bigEndian: false), size >= 56, record + size <= pageEnd,
                           let flags = uint32(record + 8, bigEndian: false),
-                          let domainAt = uint32(record + 16, bigEndian: false),
-                          let nameAt = uint32(record + 20, bigEndian: false),
-                          let pathAt = uint32(record + 24, bigEndian: false),
-                          let valueAt = uint32(record + 28, bigEndian: false),
+                          let domainAt = uint32(record + 16, bigEndian: false), domainAt < size,
+                          let nameAt = uint32(record + 20, bigEndian: false), nameAt < size,
+                          let pathAt = uint32(record + 24, bigEndian: false), pathAt < size,
+                          let valueAt = uint32(record + 28, bigEndian: false), valueAt < size,
                           let expires = double(record + 40),
                           let domain = string(record + domainAt, end: record + size),
                           let name = string(record + nameAt, end: record + size),

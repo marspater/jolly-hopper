@@ -24,3 +24,8 @@
 **Vulnerability:** Command log sanitizer failed to redact sensitive short options passed with attached values (e.g., `-pPASSWORD`, `-uUSER`, `-2TOKEN`, `-HHEADER`) and URLs enclosed in quotes or flag prefixes (e.g. `--url=https://...`), exposing raw credentials and tokens in debug logs.
 **Learning:** Checking only exact dictionary matches, separate argument pairs, or `hasPrefix("http")` in CLI argument sanitization bypasses attached short-flag syntax and quote/flag-wrapped URL values.
 **Prevention:** When sanitizing command arguments, explicitly match attached short flag prefixes without `=` delimiters and search for scheme substrings (`http://`, `https://`) within quote-wrapped or flag-prefixed options.
+
+## 2026-04-02 - Integer Overflow and Out-of-Bounds Calculation in Binary Cookie Parsing
+**Vulnerability:** Binary cookie record offsets and string field offsets (`domainAt`, `nameAt`, `pathAt`, `valueAt`) read from `Cookies.binarycookies` were not checked against record and page size bounds, allowing malformed files to trigger integer overflow traps.
+**Learning:** Unsafe binary data parsing where offsets are added to a base address can trigger runtime arithmetic overflow panics if offsets exceed `pageSize` or `size`.
+**Prevention:** Always validate that record offsets (`offset < pageSize`) and string field offsets (`domainAt < size`, etc.) are within bounds before performing pointer or index arithmetic.
