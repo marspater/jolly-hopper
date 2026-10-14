@@ -68,7 +68,8 @@ struct QueueRecoveryRecord: Codable, Identifiable, Sendable {
             options: restoredOptions,
             title: self.title,
             id: self.id,
-            createdAt: self.createdAt
+            createdAt: self.createdAt,
+            titleIsDecoded: true
         )
         download.requiresAdvancedArgumentsReview = self.requiresAdvancedArgumentsReview ?? false
         download.status = self.status

@@ -62,12 +62,11 @@ struct SiphonApp: App {
 
     init() {
         GeistFontRegistrar.registerFonts()
-        NotificationService.shared.setup()
         CookieManager.purgeOrphanedTempCookieFiles()
     }
 
     var body: some Scene {
-        WindowGroup {
+        WindowGroup(id: "main") {
             ContentView()
                 .environmentObject(downloadManager)
                 .environmentObject(appState)
@@ -76,7 +75,6 @@ struct SiphonApp: App {
                 .onAppear {
                     appDelegate.downloadManager = downloadManager
                     SiphonTheme.applyTheme(theme)
-                    setupMenuBarIfNeeded()
                     applyBackgroundModeIfNeeded()
                 }
                 .onChange(of: theme) { _, newTheme in
@@ -132,11 +130,6 @@ struct SiphonApp: App {
                 }
             }
         }
-    }
-
-    private func setupMenuBarIfNeeded() {
-        appDelegate.downloadManager = downloadManager
-        MenuBarManager.shared.setup(languageService: languageService, downloadManager: downloadManager)
     }
 
     private func applyBackgroundModeIfNeeded() {

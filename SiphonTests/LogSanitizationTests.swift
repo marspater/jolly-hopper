@@ -7,6 +7,16 @@ import XCTest
 @testable import Siphon
 
 final class LogSanitizationTests: XCTestCase {
+    func testDiagnosticExportRedactsURLsCredentialsAndHomePathsTogether() {
+        let raw = "https://user:password@example.com/video?token=secret#private\nAuthorization: Bearer credential\nCookie: session=private-cookie\n/Users/fixture/Downloads/video.mp4"
+        let safe = LoggerService.sanitizedDiagnosticExport(raw)
+        for secret in ["password", "token=secret", "#private", "credential", "private-cookie", "/Users/fixture/"] {
+            XCTAssertFalse(safe.contains(secret), secret)
+        }
+        XCTAssertTrue(safe.contains("example.com/video"))
+        XCTAssertTrue(safe.contains("/Users/<USER>/Downloads/video.mp4"))
+    }
+
 
     func testSanitizeAuthorizationHeaders() {
         let raw = "Request outgoing: Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.xyz.123\nHeader 2: Authorization: Key secret_auth_key_98765!@#\nHeader 3: Authorization: CustomScheme token_with_spaces_and_special_chars\nDone"

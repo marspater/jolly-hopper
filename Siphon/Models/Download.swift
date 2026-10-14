@@ -37,6 +37,9 @@ class Download: ObservableObject, Identifiable {
     @Published var speed: String?
     @Published var eta: String?
     @Published var filePaths: [URL] = []
+    var hasPlayableOutput: Bool {
+        !filePaths.isEmpty && (status == .completed || (status == .failed && hasPartialFailure))
+    }
     var primaryFilePath: URL? {
         filePaths.first
     }
@@ -322,13 +325,13 @@ class Download: ObservableObject, Identifiable {
         }
     }
 
-    init(url: String, options: DownloadOptions, title: String = "___FETCHING___", id: UUID = UUID(), createdAt: Date = Date()) {
+    init(url: String, options: DownloadOptions, title: String = "___FETCHING___", id: UUID = UUID(), createdAt: Date = Date(), titleIsDecoded: Bool = false) {
         self.id = id
         self.url = url
         self.sourceDomain = Download.extractSourceDomain(from: url)
         self.createdAt = createdAt
         self.options = options
-        self.title = title.decodingHTMLEntities()
+        self.title = titleIsDecoded ? title : title.decodingHTMLEntities()
         self.status = .queued
         self.progress = 0
     }
@@ -1175,6 +1178,7 @@ struct MediaInfo: Codable {
     let playlistCount: Int?
     let webpageUrl: String?
     let originalUrl: String?
+    let extractor: String?
     let formatProtocol: String?
     let manifestUrl: String?
 
@@ -1207,6 +1211,8 @@ struct MediaInfo: Codable {
         case playlistCount = "playlist_count"
         case webpageUrl = "webpage_url"
         case originalUrl = "original_url"
+        case extractor
+        case extractorKey = "extractor_key"
         case formatProtocol = "protocol"
         case manifestUrl = "manifest_url"
     }
@@ -1230,11 +1236,13 @@ struct MediaInfo: Codable {
         playlistCount: Int? = nil,
         webpageUrl: String? = nil,
         originalUrl: String? = nil,
+        extractor: String? = nil,
         formatProtocol: String? = nil,
-        manifestUrl: String? = nil
+        manifestUrl: String? = nil,
+        titleIsDecoded: Bool = false
     ) {
         self.id = id
-        self.title = title.decodingHTMLEntities()
+        self.title = titleIsDecoded ? title : title.decodingHTMLEntities()
         self.description = description?.decodingHTMLEntities()
         self.thumbnail = thumbnail
         self.duration = duration
@@ -1251,6 +1259,7 @@ struct MediaInfo: Codable {
         self.playlistCount = playlistCount
         self.webpageUrl = webpageUrl
         self.originalUrl = originalUrl
+        self.extractor = extractor
         self.formatProtocol = formatProtocol
         self.manifestUrl = manifestUrl
 
@@ -1284,6 +1293,7 @@ struct MediaInfo: Codable {
         self.playlistCount = try container.decodeIfPresent(Int.self, forKey: .playlistCount)
         self.webpageUrl = try container.decodeIfPresent(String.self, forKey: .webpageUrl)
         self.originalUrl = try container.decodeIfPresent(String.self, forKey: .originalUrl)
+        self.extractor = try container.decodeIfPresent(String.self, forKey: .extractor) ?? container.decodeIfPresent(String.self, forKey: .extractorKey)
         self.formatProtocol = try container.decodeIfPresent(String.self, forKey: .formatProtocol)
         self.manifestUrl = try container.decodeIfPresent(String.self, forKey: .manifestUrl)
 
@@ -1328,6 +1338,7 @@ struct MediaInfo: Codable {
     private func encodeNetworkDetails(to container: inout KeyedEncodingContainer<CodingKeys>) throws {
         try container.encodeIfPresent(webpageUrl, forKey: .webpageUrl)
         try container.encodeIfPresent(originalUrl, forKey: .originalUrl)
+        try container.encodeIfPresent(extractor, forKey: .extractor)
         try container.encodeIfPresent(formatProtocol, forKey: .formatProtocol)
         try container.encodeIfPresent(manifestUrl, forKey: .manifestUrl)
     }
@@ -1352,8 +1363,10 @@ struct MediaInfo: Codable {
             playlistCount: self.playlistCount,
             webpageUrl: self.webpageUrl,
             originalUrl: self.originalUrl,
+            extractor: self.extractor,
             formatProtocol: nil,
-            manifestUrl: nil
+            manifestUrl: nil,
+            titleIsDecoded: true
         )
     }
 
@@ -1370,6 +1383,16 @@ struct MediaInfo: Codable {
         }
     }
 
+    private var isYouTubeVideo: Bool {
+        guard id.utf8.count == 11,
+              id.utf8.allSatisfy({ (65...90).contains($0) || (97...122).contains($0) || (48...57).contains($0) || $0 == 45 || $0 == 95 }) else { return false }
+        if let extractor = extractor?.lowercased(), extractor == "youtube" || extractor.hasPrefix("youtube:") { return true }
+        return [webpageUrl, originalUrl].compactMap { $0 }.contains { value in
+            guard let host = URL(string: value)?.host?.lowercased() else { return false }
+            return host == "youtube.com" || host.hasSuffix(".youtube.com") || host == "youtu.be"
+        }
+    }
+
     var thumbnailURL: URL? {
         if let thumbnail = thumbnail, !thumbnail.isEmpty {
             let lower = thumbnail.lowercased()
@@ -1378,7 +1401,7 @@ struct MediaInfo: Codable {
             }
         }
 
-        if id.count == 11 {
+        if isYouTubeVideo {
             return URL(string: "https://i.ytimg.com/vi/\(id)/mqdefault.jpg")
         }
 
@@ -1541,7 +1564,7 @@ struct MediaInfo: Codable {
         if id.hasPrefix("http://") || id.hasPrefix("https://") {
             return id
         }
-        if id.count == 11 {
+        if isYouTubeVideo {
             return "https://www.youtube.com/watch?v=\(id)"
         }
         return id
@@ -1550,8 +1573,7 @@ struct MediaInfo: Codable {
 
 // MARK: - HTML Entity Decoding Extension
 public extension String {
-    nonisolated private static let decimalRegex = try? NSRegularExpression(pattern: "&#([0-9]{1,7});", options: [])
-    nonisolated private static let hexRegex = try? NSRegularExpression(pattern: "&#[xX]([0-9a-fA-F]{1,6});", options: [])
+    nonisolated private static let htmlEntityRegex = try? NSRegularExpression(pattern: "&(?:#[xX][0-9a-fA-F]{1,6}|#[0-9]{1,7}|[A-Za-z]+);")
 
     // Bolt Performance Optimization: Cached static array of named HTML entities to avoid re-allocation on every invocation
     private static let namedHTMLEntities: [(String, String)] = [
@@ -1578,43 +1600,26 @@ public extension String {
     func decodingHTMLEntities() -> String {
         guard self.contains("&") else { return self }
 
-        var result = self
-
-        // Fast replace common named entities using static cached tuples
-        for (entity, char) in String.namedHTMLEntities where result.contains(entity) {
-            result = result.replacingOccurrences(of: entity, with: char)
-        }
-
-        // Bolt Performance Optimization: Perform numeric entity replacements using a single NSMutableString allocation
-        if result.contains("&#") {
-            let mutable = NSMutableString(string: result)
-
-            // Replace numeric decimal entities (e.g., &#039; or &#39; or &#160;)
-            if let regex = String.decimalRegex {
-                let matches = regex.matches(in: mutable as String, options: [], range: NSRange(location: 0, length: mutable.length))
-                for match in matches.reversed() {
-                    let codeStr = mutable.substring(with: match.range(at: 1))
-                    if let codePoint = UInt32(codeStr), let scalar = UnicodeScalar(codePoint) {
-                        mutable.replaceCharacters(in: match.range, with: String(scalar))
-                    }
-                }
+        guard let regex = String.htmlEntityRegex else { return self }
+        let result = NSMutableString(string: self)
+        let matches = regex.matches(in: self, range: NSRange(location: 0, length: result.length))
+        for match in matches.reversed() {
+            let entity = result.substring(with: match.range)
+            let replacement: String?
+            if entity.hasPrefix("&#") {
+                let number = entity.dropFirst(2).dropLast()
+                let isHex = number.first == "x" || number.first == "X"
+                let digits = isHex ? number.dropFirst() : number
+                replacement = UInt32(digits, radix: isHex ? 16 : 10)
+                    .flatMap(UnicodeScalar.init).map(String.init)
+            } else {
+                replacement = String.namedHTMLEntities.first { $0.0 == entity }?.1
             }
-
-            // Replace numeric hexadecimal entities (e.g., &#x27; or &#X27;)
-            if let regex = String.hexRegex {
-                let matches = regex.matches(in: mutable as String, options: [], range: NSRange(location: 0, length: mutable.length))
-                for match in matches.reversed() {
-                    let hexStr = mutable.substring(with: match.range(at: 1))
-                    if let codePoint = UInt32(hexStr, radix: 16), let scalar = UnicodeScalar(codePoint) {
-                        mutable.replaceCharacters(in: match.range, with: String(scalar))
-                    }
-                }
+            if let replacement {
+                result.replaceCharacters(in: match.range, with: replacement)
             }
-
-            result = mutable as String
         }
-
-        return result
+        return result as String
     }
 }
 
@@ -1808,27 +1813,20 @@ struct MediaFormat: Codable, Identifiable, Hashable {
         return false
     }
 
-    // Bolt Performance Optimization: Zero-allocation backward string scan for height resolution digits and case-insensitive pattern matching to eliminate CharacterSet, Array, and String allocations during high-frequency format sorting passes
+    private static let resolutionHeightRegex = try? NSRegularExpression(
+        pattern: #"(?:[0-9]+\s*[x×]\s*([0-9]+)|([0-9]+)\s*p)"#, options: .caseInsensitive)
+
     var parsedHeight: Int? {
         if let res = resolution {
-            var endIdx: String.Index?
-            var startIdx: String.Index?
-            var curr = res.endIndex
-
-            while curr > res.startIndex {
-                curr = res.index(before: curr)
-                let char = res[curr]
-                if char.isNumber {
-                    if endIdx == nil {
-                        endIdx = res.index(after: curr)
+            if let match = Self.resolutionHeightRegex?.firstMatch(in: res, range: NSRange(res.startIndex..., in: res)) {
+                for group in 1...2 {
+                    if let range = Range(match.range(at: group), in: res), let height = Int(res[range]), height > 0 {
+                        return height
                     }
-                    startIdx = curr
-                } else if endIdx != nil {
-                    break
                 }
             }
-            if let start = startIdx, let end = endIdx, let h = Int(res[start..<end]) {
-                return h
+            if let height = Int(res.trimmingCharacters(in: .whitespacesAndNewlines)), height > 0 {
+                return height
             }
         }
 
@@ -1887,11 +1885,11 @@ struct MediaFormat: Codable, Identifiable, Hashable {
         return AudioRank(
             langPref: lPref,
             matchesCodec: matchesCodec,
-            quality: quality ?? -1,
+            quality: quality.flatMap { $0.isFinite ? $0 : nil } ?? -1,
             isAAC: ac.hasPrefix("mp4a") || ac == "aac",
             preference: pref,
             tested: isTested,
-            bitrate: br,
+            bitrate: br.isFinite ? br : 0,
             channels: ch
         )
     }
@@ -1926,7 +1924,7 @@ struct MediaFormat: Codable, Identifiable, Hashable {
             return ra.tested
         }
         // 7. Bitrate
-        if abs(ra.bitrate - rb.bitrate) > 0.5 {
+        if ra.bitrate != rb.bitrate {
             return ra.bitrate > rb.bitrate
         }
         // 8. Channels
@@ -1975,8 +1973,8 @@ struct MediaFormat: Codable, Identifiable, Hashable {
             height: h,
             isAppleNativeCodec: isAppleNative,
             tested: isTested,
-            bitrate: br,
-            fps: f,
+            bitrate: br.isFinite ? br : 0,
+            fps: f.isFinite ? f : 0,
             size: sz
         )
     }
@@ -2012,7 +2010,7 @@ struct MediaFormat: Codable, Identifiable, Hashable {
             return ra.tested
         }
         // 6. Bitrate
-        if abs(ra.bitrate - rb.bitrate) > 5.0 {
+        if ra.bitrate != rb.bitrate {
             return ra.bitrate > rb.bitrate
         }
         // 7. FPS
@@ -2304,7 +2302,8 @@ struct HistoricDownload: Codable, Identifiable {
             options: restoredOptions,
             title: self.title,
             id: self.id,
-            createdAt: self.downloadDate
+            createdAt: self.downloadDate,
+            titleIsDecoded: true
         )
         download.requiresAdvancedArgumentsReview = self.requiresAdvancedArgumentsReview ?? false
         download.hasPartialFailure = self.hasPartialFailure ?? (self.status == .completed && self.errorMessage != nil)

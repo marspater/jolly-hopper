@@ -66,7 +66,7 @@ struct RecentDownloadRowView: View {
         }
         .onTapGesture(count: 2) {
             // Double-clicking a finished row plays it, like Play on its card.
-            if download.status == .completed, let path = download.primaryFilePath, primaryFileIsPresent != false {
+            if download.hasPlayableOutput, let path = download.primaryFilePath, primaryFileIsPresent != false {
                 downloadManager.openFile(path)
             }
         }
@@ -276,6 +276,8 @@ struct RecentDownloadRowView: View {
             .help(languageService.s("stop_download"))
             .accessibilityLabel(languageService.s("stop_download"))
         case .completed where download.primaryFilePath != nil && primaryFileIsPresent != false:
+            revealButton { downloadManager.showInFinder(download.filePaths) }
+        case .failed where download.hasPlayableOutput && primaryFileIsPresent != false:
             revealButton { downloadManager.showInFinder(download.filePaths) }
         case .fileExists:
             revealButton { downloadManager.revealExistingFile(for: download) }
