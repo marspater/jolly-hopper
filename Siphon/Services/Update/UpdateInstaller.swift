@@ -176,7 +176,8 @@ public final class UpdateInstaller: Sendable {
         allowAdHoc: Bool = false,
         fileManager: FileManager = .default
     ) throws {
-        try replaceVerifiedAppBundle(currentAppURL: currentAppURL, stagedAppURL: stagedAppURL, fileManager: fileManager) { bundleURL in
+        try replaceVerifiedAppBundle(currentAppURL: currentAppURL, stagedAppURL: stagedAppURL, fileManager: fileManager,
+                                     retainBackup: currentAppURL.standardizedFileURL == Bundle.main.bundleURL.standardizedFileURL) { bundleURL in
             try UpdateVerifier.verifyAppBundle(
                 bundleURL: bundleURL,
                 expectedTeamID: expectedTeamID,
@@ -191,6 +192,7 @@ public final class UpdateInstaller: Sendable {
         currentAppURL: URL,
         stagedAppURL: URL,
         fileManager: FileManager = .default,
+        retainBackup: Bool = false,
         exchange: (URL, URL) throws -> Void = exchangeAppBundles,
         verify: (URL) throws -> Void
     ) throws {
@@ -215,6 +217,11 @@ public final class UpdateInstaller: Sendable {
             try exchange(currentAppURL, backupURL)
             exchanged = true
             try verify(currentAppURL)
+            if retainBackup {
+                // ponytail: keep one recovery bundle per update; prune on a later launch if disk use warrants it.
+                preserveBackup = true
+                Self.log("Previous app bundle retained for restart/recovery at \(backupURL.path).", level: .info)
+            }
         } catch {
             let replacementError = error
             if exchanged {

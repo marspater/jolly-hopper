@@ -7,6 +7,42 @@ import XCTest
 @testable import Siphon
 
 final class LogSanitizationTests: XCTestCase {
+    func testJSONSecretsMayContainOppositeQuotesAndEscapedDelimiters() {
+        let input = #"{"token":"it's a \"private\" token", "password":'say "hello"', "note":"visible"}"#
+        let sanitized = LoggerService.sanitizeDiagnosticText(input)
+        XCTAssertFalse(sanitized.contains("private"))
+        XCTAssertFalse(sanitized.contains("hello"))
+        XCTAssertTrue(sanitized.contains("visible"))
+    }
+
+    func testTailDropsAnIncompleteUTF8LineWhenReadingFromAnOffset() throws {
+        let data = Data("prefix 😀 cut here\ncomplete 🚀\nlast line\n".utf8)
+        let offset = try XCTUnwrap(data.firstIndex(of: 0xF0)) + 1
+        let tail = data[offset...]
+        XCTAssertEqual(LoggerService.extractTailLines(from: tail, maxEntries: 1000, discardFirstLine: true), ["complete 🚀", "last line"])
+        XCTAssertEqual(LoggerService.extractTailLines(from: Data("partial only".utf8), maxEntries: 1000, discardFirstLine: true), [])
+    }
+
+    @MainActor
+    func testClearingLogsDoesNotResurrectTheStartupSnapshot() async throws {
+        let file = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try Data("old startup entry\n".utf8).write(to: file)
+        defer { try? FileManager.default.removeItem(at: file) }
+        let gate = InitialLogReadGate()
+        let logger = LoggerService(logFileURL: file, initialLogReader: {
+            await gate.wait()
+            return ["old startup entry"]
+        })
+        logger.clearLogs()
+        await gate.release()
+        await logger.initialLogLoadTask?.value
+        XCTAssertFalse(logger.logs.contains { $0.contains("old startup entry") })
+        XCTAssertTrue(logger.logs.contains { $0.contains("Logs cleared") })
+        let exported = try await logger.exportLogs()
+        defer { try? FileManager.default.removeItem(at: exported) }
+        XCTAssertFalse(try String(contentsOf: exported, encoding: .utf8).contains("old startup entry"))
+    }
+
     func testDiagnosticExportRedactsURLsCredentialsAndHomePathsTogether() {
         let raw = "https://user:password@example.com/video?token=secret#private\nAuthorization: Bearer credential\nCookie: session=private-cookie\n/Users/fixture/Downloads/video.mp4"
         let safe = LoggerService.sanitizedDiagnosticExport(raw)
@@ -162,5 +198,21 @@ final class LogSanitizationTests: XCTestCase {
         XCTAssertFalse(content.contains("/Users/developer_test/"))
         XCTAssertFalse(content.contains("abc12345secret"))
         XCTAssertTrue(content.contains("/Users/<USER>/"))
+    }
+}
+
+private actor InitialLogReadGate {
+    private var released = false
+    private var continuation: CheckedContinuation<Void, Never>?
+
+    func wait() async {
+        guard !released else { return }
+        await withCheckedContinuation { continuation = $0 }
+    }
+
+    func release() {
+        released = true
+        continuation?.resume()
+        continuation = nil
     }
 }
