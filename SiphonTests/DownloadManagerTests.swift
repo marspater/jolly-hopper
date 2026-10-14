@@ -267,6 +267,9 @@ final class DownloadManagerTests: XCTestCase {
         XCTAssertEqual(lang.s("download_new_name"), "Download with new name")
         XCTAssertEqual(lang.s("file_exists_status"), "File Exists")
         XCTAssertEqual(lang.s("playlist_detected"), "Playlist Detected")
+        XCTAssertEqual(lang.s("site_sessions"), "Site Sessions & Cache")
+        XCTAssertEqual(lang.s("recu_cookies_title"), "Recu.me")
+        XCTAssertEqual(lang.s("cleared"), "Cleared")
     }
 
     func testCustomFilenameCollisionResolution() async {

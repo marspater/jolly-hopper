@@ -59,6 +59,12 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertTrue(delegate.responds(to: selector), "WebKit must invoke the host restriction callback")
     }
 
+    func testRecuNavigationPolicyIsRegisteredWithWebKit() {
+        let delegate = YtdlpService.RecuNavigationDelegate()
+        let selector = NSSelectorFromString("webView:decidePolicyForNavigationAction:decisionHandler:")
+        XCTAssertTrue(delegate.responds(to: selector), "WebKit must invoke the host restriction callback")
+    }
+
     func testBrowserNavigationPolicyAllowsBothBoyfriendTVDomainsAndChallengeFrame() {
         typealias Policy = YtdlpService.BoyfriendTVNavigationDelegate
         func allows(_ url: String, mainFrame: Bool?) -> Bool {
@@ -3703,6 +3709,29 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertNil(YtdlpService.recuSegmentCheck(for: "https://cdn.example.test/index.m3u8?uid=ab12;3,4&request_id=a&expires=1"))
     }
 
+    func testRecuNavigationDelegateAllowsCloudflareAndRecuHosts() {
+        XCTAssertTrue(YtdlpService.RecuNavigationDelegate.isAllowedHost("recu.me"))
+        XCTAssertTrue(YtdlpService.RecuNavigationDelegate.isAllowedHost("sub.recu.me"))
+        XCTAssertTrue(YtdlpService.RecuNavigationDelegate.isAllowedHost("challenges.cloudflare.com"))
+        XCTAssertTrue(YtdlpService.RecuNavigationDelegate.isAllowedHost("cloudflare.com"))
+        XCTAssertTrue(YtdlpService.RecuNavigationDelegate.isAllowedHost("static.cloudflareinsights.com"))
+
+        XCTAssertFalse(YtdlpService.RecuNavigationDelegate.isAllowedHost("evil.com"))
+        XCTAssertFalse(YtdlpService.RecuNavigationDelegate.isAllowedHost("recu.me.evil.com"))
+        XCTAssertFalse(YtdlpService.RecuNavigationDelegate.isAllowedHost("cloudflare.com.evil.com"))
+
+        // Scheme security: internal safe schemes allowed, javascript rejected
+        XCTAssertTrue(YtdlpService.RecuNavigationDelegate.allowsNavigation(to: URL(string: "about:blank"), targetFrame: nil))
+        XCTAssertTrue(YtdlpService.RecuNavigationDelegate.allowsNavigation(to: URL(string: "data:text/html,test"), targetFrame: nil))
+        XCTAssertFalse(YtdlpService.RecuNavigationDelegate.allowsNavigation(to: URL(string: "javascript:alert(1)"), targetFrame: nil))
+
+        // Host security
+        XCTAssertTrue(YtdlpService.RecuNavigationDelegate.allowsNavigation(to: URL(string: "https://recu.me/test"), targetFrame: nil))
+        XCTAssertTrue(YtdlpService.RecuNavigationDelegate.allowsNavigation(to: URL(string: "https://challenges.cloudflare.com/cdn-cgi/challenge"), targetFrame: nil))
+        XCTAssertFalse(YtdlpService.RecuNavigationDelegate.allowsNavigation(to: URL(string: "https://evil.com/phish"), targetFrame: nil))
+        XCTAssertFalse(YtdlpService.RecuNavigationDelegate.allowsNavigation(to: nil, targetFrame: nil))
+    }
+
     func testRecuMetadataResolvesThroughBrowserSessionWithoutBrowserCookies() async throws {
         let pageURL = "https://recu.me/polarny05/video/112873588/play"
         let stream = "https://cdn.example.test/master.m3u8?token=signed&expires=123"
@@ -4515,6 +4544,31 @@ final class YtdlpServiceTests: XCTestCase {
         // macOS denies the file to every site until relaunch; a second host must
         // not pay for another failing yt-dlp run.
         XCTAssertEqual(cookieRuns.value, 1)
+    }
+
+    func testResetCookieDenialAllowsRetryingSafariCookies() async throws {
+        UserDefaults.standard.set("safari", forKey: UserDefaultsKeys.browserForCookies)
+        YtdlpService.hasFullDiskAccessOverride = false
+        defer {
+            UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.browserForCookies)
+            YtdlpService.hasFullDiskAccessOverride = nil
+        }
+        let cookieRuns = TestBox(0)
+        service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
+            if args.contains("--cookies-from-browser") {
+                cookieRuns.value += 1
+                throw YtdlpError.commandFailed("ERROR: [Cookies] Failed to extract cookies from Safari: [Errno 1] Operation not permitted: '/Users/test/Library/Containers/com.apple.Safari/Data/Library/Cookies/Cookies.binarycookies'")
+            }
+            return #"{"id":"1","title":"Sample","formats":[{"format_id":"720p","height":720,"ext":"mp4","protocol":"https"}]}"#
+        })
+
+        _ = try await service.fetchInfo(url: "https://example.com/videos/a")
+        XCTAssertEqual(cookieRuns.value, 1)
+
+        // Simulating the user granting access and checking permission
+        service.resetCookieDenial(for: "safari")
+        _ = try await service.fetchInfo(url: "https://other.example.org/videos/b", browserCookieSource: "safari")
+        XCTAssertEqual(cookieRuns.value, 2)
     }
 
     func testSafariCookieFailureFallsBackToUnauthenticatedDownloadForPublicVideos() async throws {
@@ -6134,5 +6188,70 @@ final class YtdlpServiceTests: XCTestCase {
         // getString should return only the data before overflow
         let str = buffer.getString()
         XCTAssertEqual(str.count, 50)
+    }
+
+    func testClearRecuWebDataRemovesStoresAndIdentifiers() async throws {
+        let removedUUIDs = TestBox<[UUID]>([])
+        service.websiteDataStoreRemover = { uuid in
+            removedUUIDs.value.append(uuid)
+        }
+        await service.clearRecuWebData()
+        let recuUUID = try XCTUnwrap(UUID(uuidString: YtdlpService.recuDataStoreIdentifier))
+        let recuBoundaryUUID = try XCTUnwrap(UUID(uuidString: YtdlpService.recuBoundaryDataStoreIdentifier))
+        XCTAssertTrue(removedUUIDs.value.contains(recuUUID))
+        XCTAssertTrue(removedUUIDs.value.contains(recuBoundaryUUID))
+    }
+
+    func testClearAllProtectedSitesWebDataRemovesAllIdentifiers() async throws {
+        let removedUUIDs = TestBox<[UUID]>([])
+        service.websiteDataStoreRemover = { uuid in
+            removedUUIDs.value.append(uuid)
+        }
+        await service.clearAllProtectedSitesWebData()
+        let expectedIdentifiers = [
+            YtdlpService.recuDataStoreIdentifier,
+            YtdlpService.recuBoundaryDataStoreIdentifier,
+            YtdlpService.boyfriendTVDataStoreIdentifier,
+            YtdlpService.boyfriendTVBoundaryDataStoreIdentifier,
+            YtdlpService.gayteamDataStoreIdentifier,
+            YtdlpService.gayteamBoundaryDataStoreIdentifier
+        ].compactMap { UUID(uuidString: $0) }
+
+        XCTAssertEqual(removedUUIDs.value.count, expectedIdentifiers.count)
+        for expected in expectedIdentifiers {
+            XCTAssertTrue(removedUUIDs.value.contains(expected))
+        }
+    }
+
+    func testClearRecuWebDataClearsInMemoryStores() async throws {
+        _ = service.recuWebDataStore
+        XCTAssertFalse(service.recuWebDataStores.isEmpty)
+        service.websiteDataStoreRemover = { _ in }
+        await service.clearRecuWebData()
+        XCTAssertTrue(service.recuWebDataStores.isEmpty)
+    }
+
+    func testClearBoyfriendTVWebDataRemovesStoresAndIdentifiers() async throws {
+        let removedUUIDs = TestBox<[UUID]>([])
+        service.websiteDataStoreRemover = { uuid in
+            removedUUIDs.value.append(uuid)
+        }
+        await service.clearBoyfriendTVWebData()
+        let bftvUUID = try XCTUnwrap(UUID(uuidString: YtdlpService.boyfriendTVDataStoreIdentifier))
+        let bftvBoundaryUUID = try XCTUnwrap(UUID(uuidString: YtdlpService.boyfriendTVBoundaryDataStoreIdentifier))
+        XCTAssertTrue(removedUUIDs.value.contains(bftvUUID))
+        XCTAssertTrue(removedUUIDs.value.contains(bftvBoundaryUUID))
+    }
+
+    func testClearGayteamWebDataRemovesStoresAndIdentifiers() async throws {
+        let removedUUIDs = TestBox<[UUID]>([])
+        service.websiteDataStoreRemover = { uuid in
+            removedUUIDs.value.append(uuid)
+        }
+        await service.clearGayteamWebData()
+        let gtUUID = try XCTUnwrap(UUID(uuidString: YtdlpService.gayteamDataStoreIdentifier))
+        let gtBoundaryUUID = try XCTUnwrap(UUID(uuidString: YtdlpService.gayteamBoundaryDataStoreIdentifier))
+        XCTAssertTrue(removedUUIDs.value.contains(gtUUID))
+        XCTAssertTrue(removedUUIDs.value.contains(gtBoundaryUUID))
     }
 }

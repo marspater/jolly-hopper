@@ -71,6 +71,15 @@ struct PreferencesView: View {
     @State private var hasFullDiskAccess: Bool = YtdlpService.hasFullDiskAccess
     @State private var isCheckingPermission: Bool = false
     @State private var permissionCheckMessage: String?
+    @State private var isClearingRecu: Bool = false
+    @State private var showRecuClearedFeedback: Bool = false
+    @State private var isClearingBoyfriendTV: Bool = false
+    @State private var showBoyfriendTVClearedFeedback: Bool = false
+    @State private var isClearingGayteam: Bool = false
+    @State private var showGayteamClearedFeedback: Bool = false
+    @State private var isClearingAllSites: Bool = false
+    @State private var showAllSitesClearedFeedback: Bool = false
+    @State private var showClearAllSitesConfirmation: Bool = false
 
     private var presetFilteredResolutions: [VideoResolution] {
         if presetVideoCodec == .h264 {
@@ -185,6 +194,7 @@ struct PreferencesView: View {
             hasFullDiskAccess = access
             if access {
                 permissionCheckMessage = nil
+                downloadManager.ytdlpService.resetCookieDenial(for: "safari")
             }
         }
         .onChange(of: browserForCookies) { _, _ in
@@ -192,6 +202,7 @@ struct PreferencesView: View {
             hasFullDiskAccess = access
             if access {
                 permissionCheckMessage = nil
+                downloadManager.ytdlpService.resetCookieDenial(for: "safari")
             }
         }
         .sheet(isPresented: $showCreatePresetSheet) {
@@ -210,6 +221,16 @@ struct PreferencesView: View {
             }
         } message: {
             Text(languageService.s("language_changed_message"))
+        }
+        .alert(languageService.s("clear_all_sites_confirm_title"), isPresented: $showClearAllSitesConfirmation) {
+            Button(languageService.s("cancel"), role: .cancel) {
+                // Dialog dismissal is handled automatically by SwiftUI
+            }
+            Button(languageService.s("clear_all"), role: .destructive) {
+                clearAllSitesCookies()
+            }
+        } message: {
+            Text(languageService.s("clear_all_sites_confirm_message"))
         }
     }
     @ViewBuilder
@@ -967,6 +988,7 @@ struct PreferencesView: View {
                 ytdlpSourceSection
             }
             browserCookiesSection
+            siteCookiesSection
             debugLogsSection
         }
         .siphonFormStyle()
@@ -1191,6 +1213,9 @@ struct PreferencesView: View {
         isCheckingPermission = true
         let granted = YtdlpService.hasFullDiskAccess
         hasFullDiskAccess = granted
+        if granted {
+            downloadManager.ytdlpService.resetCookieDenial(for: "safari")
+        }
         isCheckingPermission = false
         withAnimation(SiphonAnimation.snappySpring) {
             if granted {
@@ -1223,6 +1248,169 @@ struct PreferencesView: View {
         .padding(8)
         .frame(maxWidth: .infinity, alignment: .leading)
         .siphonCallout(tint: statusColor)
+    }
+
+    @ViewBuilder
+    private func siteCookieRow(
+        titleKey: String,
+        descKey: String,
+        isClearing: Bool,
+        showCleared: Bool,
+        clearAction: @escaping () -> Void
+    ) -> some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(languageService.s(titleKey))
+                    .fontWeight(.medium)
+                Text(languageService.s(descKey))
+                    .font(.siphonMetadata)
+                    .foregroundColor(.secondary)
+            }
+            Spacer()
+            if isClearing {
+                ProgressView()
+                    .controlSize(.small)
+            } else if showCleared {
+                HStack(spacing: 4) {
+                    Image(systemName: "checkmark")
+                        .foregroundColor(SiphonTheme.statusCompletedText)
+                    Text(languageService.s("cleared"))
+                        .font(.siphonMetadataSemibold)
+                        .foregroundColor(SiphonTheme.statusCompletedText)
+                }
+            } else {
+                Button(languageService.s("clear")) {
+                    clearAction()
+                }
+                .tint(nil)
+                .accessibilityLabel("\(languageService.s("clear")) \(languageService.s(titleKey))")
+            }
+        }
+    }
+
+    private var siteCookiesSection: some View {
+        Section(languageService.s("site_sessions")) {
+            siteCookieRow(
+                titleKey: "recu_cookies_title",
+                descKey: "recu_cookies_desc",
+                isClearing: isClearingRecu,
+                showCleared: showRecuClearedFeedback,
+                clearAction: clearRecuCookies
+            )
+
+            siteCookieRow(
+                titleKey: "boyfriendtv_cookies_title",
+                descKey: "boyfriendtv_cookies_desc",
+                isClearing: isClearingBoyfriendTV,
+                showCleared: showBoyfriendTVClearedFeedback,
+                clearAction: clearBoyfriendTVCookies
+            )
+
+            siteCookieRow(
+                titleKey: "gayteam_cookies_title",
+                descKey: "gayteam_cookies_desc",
+                isClearing: isClearingGayteam,
+                showCleared: showGayteamClearedFeedback,
+                clearAction: clearGayteamCookies
+            )
+
+            allSitesCookieRow
+        }
+    }
+
+    private var allSitesCookieRow: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(languageService.s("all_sites_cookies_title"))
+                    .fontWeight(.medium)
+                Text(languageService.s("all_sites_cookies_desc"))
+                    .font(.siphonMetadata)
+                    .foregroundColor(.secondary)
+            }
+            Spacer()
+            if isClearingAllSites {
+                ProgressView()
+                    .controlSize(.small)
+            } else if showAllSitesClearedFeedback {
+                HStack(spacing: 4) {
+                    Image(systemName: "checkmark")
+                        .foregroundColor(SiphonTheme.statusCompletedText)
+                    Text(languageService.s("cleared"))
+                        .font(.siphonMetadataSemibold)
+                        .foregroundColor(SiphonTheme.statusCompletedText)
+                }
+            } else {
+                Button(languageService.s("clear_all")) {
+                    showClearAllSitesConfirmation = true
+                }
+                .tint(nil)
+                .accessibilityLabel(languageService.s("clear_all"))
+            }
+        }
+    }
+
+    private func clearRecuCookies() {
+        guard !isClearingRecu else { return }
+        isClearingRecu = true
+        Task {
+            await downloadManager.ytdlpService.clearRecuWebData()
+            isClearingRecu = false
+            withAnimation(SiphonAnimation.snappySpring) {
+                showRecuClearedFeedback = true
+            }
+            try? await Task.sleep(nanoseconds: 2_500_000_000)
+            withAnimation(SiphonAnimation.snappySpring) {
+                showRecuClearedFeedback = false
+            }
+        }
+    }
+
+    private func clearBoyfriendTVCookies() {
+        guard !isClearingBoyfriendTV else { return }
+        isClearingBoyfriendTV = true
+        Task {
+            await downloadManager.ytdlpService.clearBoyfriendTVWebData()
+            isClearingBoyfriendTV = false
+            withAnimation(SiphonAnimation.snappySpring) {
+                showBoyfriendTVClearedFeedback = true
+            }
+            try? await Task.sleep(nanoseconds: 2_500_000_000)
+            withAnimation(SiphonAnimation.snappySpring) {
+                showBoyfriendTVClearedFeedback = false
+            }
+        }
+    }
+
+    private func clearGayteamCookies() {
+        guard !isClearingGayteam else { return }
+        isClearingGayteam = true
+        Task {
+            await downloadManager.ytdlpService.clearGayteamWebData()
+            isClearingGayteam = false
+            withAnimation(SiphonAnimation.snappySpring) {
+                showGayteamClearedFeedback = true
+            }
+            try? await Task.sleep(nanoseconds: 2_500_000_000)
+            withAnimation(SiphonAnimation.snappySpring) {
+                showGayteamClearedFeedback = false
+            }
+        }
+    }
+
+    private func clearAllSitesCookies() {
+        guard !isClearingAllSites else { return }
+        isClearingAllSites = true
+        Task {
+            await downloadManager.ytdlpService.clearAllProtectedSitesWebData()
+            isClearingAllSites = false
+            withAnimation(SiphonAnimation.snappySpring) {
+                showAllSitesClearedFeedback = true
+            }
+            try? await Task.sleep(nanoseconds: 2_500_000_000)
+            withAnimation(SiphonAnimation.snappySpring) {
+                showAllSitesClearedFeedback = false
+            }
+        }
     }
 
     private var aboutTab: some View {
