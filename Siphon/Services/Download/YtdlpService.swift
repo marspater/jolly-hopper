@@ -78,49 +78,13 @@ actor DependencyInstaller {
         }
     }
 
-    static func isBinarySigned(at url: URL) -> Bool {
-        guard FileManager.default.isExecutableFile(atPath: url.path) else { return false }
-        let proc = Process()
-        proc.executableURL = URL(fileURLWithPath: "/usr/bin/codesign")
-        // Use '--' to delimit arguments from option flags to prevent CLI option injection if a file path starts with '-'
-        proc.arguments = ["--verify", "--deep", "--strict", "--", url.path]
-        proc.environment = YtdlpService.createSanitizedEnvironment()
-        let nullPipe = Pipe()
-        proc.standardOutput = nullPipe
-        proc.standardError = nullPipe
-        do {
-            try proc.run()
-            proc.waitUntilExit()
-            return proc.terminationStatus == 0
-        } catch {
-            return false
+    static func prepareVerifiedExecutable(at url: URL, expectedSHA256: String, name: String) throws {
+        guard YtdlpService.verifySHA256(fileURL: url, expectedHash: expectedSHA256) else {
+            throw InstallError.sha256Mismatch(file: name, expected: expectedSHA256)
         }
-    }
-
-    static func adHocSignBinary(at url: URL) throws {
-        guard !NotificationService.isRunningTests else { return }
-        guard FileManager.default.isExecutableFile(atPath: url.path) else { return }
-
-        // If the binary already has a valid code signature, skip re-signing to avoid mutating
-        // Mach-O binaries and invalidating upstream SHA-256 hashes.
-        if isBinarySigned(at: url) {
-            return
-        }
-
-        let binaryPath = url.path
-        let proc = Process()
-        proc.executableURL = URL(fileURLWithPath: "/usr/bin/codesign")
-        proc.arguments = ["--force", "--sign", "-", "--", binaryPath]
-        proc.environment = YtdlpService.createSanitizedEnvironment()
-        let errPipe = Pipe()
-        proc.standardError = errPipe
-        try proc.run()
-        proc.waitUntilExit()
-        guard proc.terminationStatus == 0 else {
-            let errData = errPipe.fileHandleForReading.readDataToEndOfFile()
-            let errMsg = String(data: errData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            throw InstallError.executionFailed(binary: url.lastPathComponent, message: "Ad-hoc codesign failed with exit code \(proc.terminationStatus): \(errMsg)")
-        }
+        // Preserve the pinned bytes, including the upstream signature. Permissions
+        // are metadata; ad-hoc signing would invalidate the pinned executable hash.
+        try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: url.path)
     }
 
     func installYtdlp(
@@ -143,15 +107,7 @@ actor DependencyInstaller {
         try await Self.download(downloadURL, named: "yt-dlp", to: tempStaging)
         onProgress?(0.65)
 
-        // 1. Verify SHA-256
-        guard YtdlpService.verifySHA256(fileURL: tempStaging, expectedHash: expectedSHA256) else {
-            try? FileManager.default.removeItem(at: tempStaging)
-            throw InstallError.sha256Mismatch(file: "yt-dlp", expected: expectedSHA256)
-        }
-
-        // 2. Set executable permissions and ad-hoc sign
-        try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: tempStaging.path)
-        try Self.adHocSignBinary(at: tempStaging)
+        try Self.prepareVerifiedExecutable(at: tempStaging, expectedSHA256: expectedSHA256, name: "yt-dlp")
 
         // 3. Dry-run execution test
         let process = Process()
@@ -182,7 +138,6 @@ actor DependencyInstaller {
 
         do {
             try FileManager.default.moveItem(at: tempStaging, to: destination)
-            try Self.adHocSignBinary(at: destination)
             installedSuccessfully = true
             if hadOld {
                 try? FileManager.default.removeItem(at: backupDest)
@@ -254,19 +209,8 @@ actor DependencyInstaller {
             try? FileManager.default.removeItem(at: extractedFfprobe)
         }
 
-        // 4. Verify extracted binary SHA-256
-        guard YtdlpService.verifySHA256(fileURL: extractedFfmpeg, expectedHash: ffmpegExecutableSHA256) else {
-            throw InstallError.sha256Mismatch(file: "FFmpeg executable", expected: ffmpegExecutableSHA256)
-        }
-        guard YtdlpService.verifySHA256(fileURL: extractedFfprobe, expectedHash: ffprobeExecutableSHA256) else {
-            throw InstallError.sha256Mismatch(file: "FFprobe executable", expected: ffprobeExecutableSHA256)
-        }
-
-        // 5. Set executable permissions and ad-hoc sign
-        try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: extractedFfmpeg.path)
-        try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: extractedFfprobe.path)
-        try Self.adHocSignBinary(at: extractedFfmpeg)
-        try Self.adHocSignBinary(at: extractedFfprobe)
+        try Self.prepareVerifiedExecutable(at: extractedFfmpeg, expectedSHA256: ffmpegExecutableSHA256, name: "FFmpeg executable")
+        try Self.prepareVerifiedExecutable(at: extractedFfprobe, expectedSHA256: ffprobeExecutableSHA256, name: "FFprobe executable")
 
         // 6. Test both binaries
         let testVersion: (URL) async throws -> Void = { binURL in
@@ -307,8 +251,6 @@ actor DependencyInstaller {
 
             try FileManager.default.moveItem(at: extractedFfmpeg, to: ffmpegFinal)
             try FileManager.default.moveItem(at: extractedFfprobe, to: ffprobeFinal)
-            try Self.adHocSignBinary(at: ffmpegFinal)
-            try Self.adHocSignBinary(at: ffprobeFinal)
 
             if ffmpegMovedToBackup { try? FileManager.default.removeItem(at: ffmpegBackup) }
             if ffprobeMovedToBackup { try? FileManager.default.removeItem(at: ffprobeBackup) }
@@ -490,6 +432,7 @@ class YtdlpService: ObservableObject {
     // When the user closes a site's window, jobs already queued for that site stop
     // without opening one each. A later retry opens it again.
     private var sessionWindowClosedAt: [String: Date] = [:]
+    var waitingWebKitSessionCount: Int { webKitSessionWaiters.count }
 
     init(processRunner: YtdlpProcessRunning = DefaultYtdlpProcessRunner()) {
         self.processRunner = processRunner
@@ -537,6 +480,10 @@ class YtdlpService: ObservableObject {
     private func cancelWebKitSessionWait(_ id: UUID) {
         guard let index = webKitSessionWaiters.firstIndex(where: { $0.id == id }) else { return }
         webKitSessionWaiters.remove(at: index).continuation.resume(throwing: CancellationError())
+    }
+
+    func recordSessionWindowClosed(for site: String) {
+        sessionWindowClosedAt[site] = Date()
     }
 
     private func mayOpenSessionWindow(for site: String, requestedAt: Date) -> Bool {
@@ -827,7 +774,6 @@ class YtdlpService: ObservableObject {
         if FileManager.default.fileExists(atPath: ytdlpInSupport.path) {
             if await Self.verifySHA256Detached(fileURL: ytdlpInSupport, expectedHash: DependencyChecksums.ytdlpExecutableSHA256) {
                 ytdlpPath = ytdlpInSupport
-                try? DependencyInstaller.adHocSignBinary(at: ytdlpInSupport)
                 isAvailable = true
                 try? FileManager.default.removeItem(at: invalidBackup)
                 return
@@ -915,8 +861,6 @@ class YtdlpService: ObservableObject {
     private func setFfmpegPaths(ffmpeg: URL, ffprobe: URL, source: String) {
         ffmpegPath = ffmpeg
         ffprobePath = ffprobe
-        try? DependencyInstaller.adHocSignBinary(at: ffmpeg)
-        try? DependencyInstaller.adHocSignBinary(at: ffprobe)
         LoggerService.shared.log("Selected \(source) FFmpeg path: \(ffmpeg.path)", level: .info)
         LoggerService.shared.log("Selected \(source) FFprobe path: \(ffprobe.path)", level: .info)
     }
@@ -1112,7 +1056,7 @@ class YtdlpService: ObservableObject {
         return !mediaHosts.isEmpty && mediaHosts.allSatisfy { $0 == "assets.twinkaboo.com" }
     }
 
-    private func fetchSingleVideoInfo(
+    func fetchSingleVideoInfo(
         path: String,
         url: String,
         forceBrowserCookies: Bool = false,
@@ -1478,7 +1422,8 @@ class YtdlpService: ObservableObject {
                     forceBrowserCookies: true,
                     rawCookies: rawCookies,
                     rawUserAgent: rawUserAgent,
-                    browserCookieSource: browserCookieSource
+                    browserCookieSource: browserCookieSource,
+                    proxy: proxy
                 )
             }
             throw mapSiteSpecificError(
@@ -2482,59 +2427,61 @@ public struct DownloadResult: Sendable {
             }
         }
 
-        // Direct streams often have no poster. Use a decoded frame for their cover.
-        if (options.embedThumbnail || options.downloadThumbnail), options.fileType.isVideo,
-           !FileManager.default.fileExists(atPath: scratchThumbnailURL.path) {
-            try await generateVideoThumbnail(mediaFile: finalFileURL, destination: scratchThumbnailURL,
-                                             ffmpegDir: ffmpegDir, processController: processController)
-        }
+        let providedThumbnail = FileManager.default.fileExists(atPath: scratchThumbnailURL.path) ? scratchThumbnailURL : nil
+        let scratchFiles = options.embedThumbnail
+            ? ((try? FileManager.default.contentsOfDirectory(at: scratchDirectory, includingPropertiesForKeys: nil)) ?? [])
+            : []
+        let otherThumbnails = scratchFiles.filter { ["jpg", "jpeg", "png", "webp"].contains($0.pathExtension.lowercased()) }
 
-        // Post-download cover art fallback: embed a local cover if it is missing.
-        if options.embedThumbnail && FileManager.default.fileExists(atPath: scratchThumbnailURL.path) {
-            let hasThumb = try await hasAttachedThumbnail(mediaFile: finalFileURL, ffmpegDir: ffmpegDir, processController: processController)
-            if !hasThumb {
-                let embedded = try await embedThumbnailWithFfmpeg(imageFile: scratchThumbnailURL, mediaFile: finalFileURL, ffmpegDir: ffmpegDir, processController: processController)
-                if !embedded {
-                    onOutput("[WARNING] Thumbnail embedding was requested, but FFmpeg could not embed the cover art into \(finalFileURL.lastPathComponent).\n")
-                    LoggerService.shared.log("Thumbnail embedding failed for \(finalFileURL.lastPathComponent)", level: .warning)
-                }
+        for (index, file) in allFileURLs.enumerated() {
+            try Task.checkCancellation()
+            let coverURL = providedThumbnail ?? scratchDirectory.appendingPathComponent("cover_\(index).jpg")
+            // Without a supplied poster, each chapter/playlist entry gets its own frame.
+            if (options.embedThumbnail || options.downloadThumbnail), options.fileType.isVideo,
+               !FileManager.default.fileExists(atPath: coverURL.path) {
+                try await generateVideoThumbnail(mediaFile: file, destination: coverURL,
+                                                 ffmpegDir: ffmpegDir, processController: processController)
             }
-        }
 
-        // Attach Finder custom file icon for native macOS Finder / Downloads thumbnail display
-        if options.embedThumbnail {
-            var possibleThumbnailURLs: [URL] = []
-            if FileManager.default.fileExists(atPath: scratchThumbnailURL.path) {
-                possibleThumbnailURLs.append(scratchThumbnailURL)
-            }
-            let scratchFiles = (try? FileManager.default.contentsOfDirectory(at: scratchDirectory, includingPropertiesForKeys: nil)) ?? []
-            for file in scratchFiles {
-                let ext = file.pathExtension.lowercased()
-                if ["jpg", "jpeg", "png", "webp"].contains(ext) {
-                    possibleThumbnailURLs.append(file)
-                }
-            }
-            for thumbURL in possibleThumbnailURLs {
-                if let img = DownloadExecutor.loadThumbnailImage(at: thumbURL) {
-                    let squareIcon = Self.createAspectFitIcon(from: img)
-                    let setSuccess = NSWorkspace.shared.setIcon(squareIcon, forFile: finalFileURL.path, options: [])
-                    if setSuccess {
-                        LoggerService.shared.log("Attached custom Finder thumbnail icon to \(finalFileURL.lastPathComponent)", level: .info)
-                        break
+            // WebM has no cover-art video stream; it still receives a Finder icon.
+            if options.embedThumbnail, file.pathExtension.lowercased() != "webm",
+               FileManager.default.fileExists(atPath: coverURL.path) {
+                let hasThumb = try await hasAttachedThumbnail(mediaFile: file, ffmpegDir: ffmpegDir, processController: processController)
+                if !hasThumb {
+                    let embedded = try await embedThumbnailWithFfmpeg(imageFile: coverURL, mediaFile: file, ffmpegDir: ffmpegDir, processController: processController)
+                    if !embedded {
+                        onOutput("[WARNING] Thumbnail embedding was requested, but FFmpeg could not embed the cover art into \(file.lastPathComponent).\n")
+                        LoggerService.shared.log("Thumbnail embedding failed for \(file.lastPathComponent)", level: .warning)
                     }
                 }
             }
-        }
 
-        // If user requested downloading thumbnail as a standalone file, save to folder
-        if options.downloadThumbnail && FileManager.default.fileExists(atPath: scratchThumbnailURL.path) {
-            let standaloneThumbURL = finalFileURL.deletingPathExtension().appendingPathExtension("jpg")
-            if !FileManager.default.fileExists(atPath: standaloneThumbURL.path) {
-                try? FileManager.default.copyItem(at: scratchThumbnailURL, to: standaloneThumbURL)
+            if options.embedThumbnail {
+                for thumbURL in [coverURL] + otherThumbnails {
+                    if let img = DownloadExecutor.loadThumbnailImage(at: thumbURL) {
+                        let squareIcon = Self.createAspectFitIcon(from: img)
+                        if NSWorkspace.shared.setIcon(squareIcon, forFile: file.path, options: []) {
+                            LoggerService.shared.log("Attached custom Finder thumbnail icon to \(file.lastPathComponent)", level: .info)
+                            break
+                        }
+                    }
+                }
+            }
+
+            if options.downloadThumbnail && FileManager.default.fileExists(atPath: coverURL.path) {
+                let standaloneThumbURL = file.deletingPathExtension().appendingPathExtension("jpg")
+                if !FileManager.default.fileExists(atPath: standaloneThumbURL.path) {
+                    do { try FileManager.default.copyItem(at: coverURL, to: standaloneThumbURL) }
+                    catch { LoggerService.shared.log("Could not save thumbnail: \(error.localizedDescription)", level: .warning) }
+                }
             }
         }
 
         return DownloadResult(files: allFileURLs, primaryFile: finalFileURL, partialFailure: finalResult.partialFailure)
+    }
+
+    static func jpegThumbnailData(_ data: Data) -> Data? {
+        NSBitmapImageRep(data: data)?.representation(using: .jpeg, properties: [:])
     }
 
     private func downloadThumbnailLocally(from urlString: String, to destinationURL: URL,
@@ -2546,8 +2493,9 @@ public struct DownloadResult: Sendable {
             request.setValue(referer, forHTTPHeaderField: "Referer")
         }
 
-        guard let data = await DownloadExecutor.fetchThumbnailData(for: request) else { return false }
-        return (try? data.write(to: destinationURL, options: .atomic)) != nil
+        guard let data = await DownloadExecutor.fetchThumbnailData(for: request),
+              let jpeg = Self.jpegThumbnailData(data) else { return false }
+        return (try? jpeg.write(to: destinationURL, options: .atomic)) != nil
     }
 
     nonisolated static func isGIF(_ file: URL) -> Bool { file.pathExtension.lowercased() == "gif" }
@@ -2639,6 +2587,7 @@ public struct DownloadResult: Sendable {
     func embedThumbnailWithFfmpeg(imageFile: URL, mediaFile: URL, ffmpegDir: String, processController: DownloadProcessController? = nil) async throws -> Bool {
         try Task.checkCancellation()
         let ext = mediaFile.pathExtension.lowercased()
+        guard ext != "webm" else { return false }
         let fileManager = FileManager.default
         guard fileManager.fileExists(atPath: mediaFile.path), fileManager.fileExists(atPath: imageFile.path) else { return false }
 
@@ -2647,11 +2596,13 @@ public struct DownloadResult: Sendable {
 
         let tempOutput = mediaFile.deletingLastPathComponent().appendingPathComponent("thumb_temp_\(UUID().uuidString).\(ext)")
 
+        let coverAttachment = ext == "mkv" ? tempOutput.deletingPathExtension().appendingPathExtension("jpg") : nil
         var procArgs = [
             "-nostdin",
             "-y",
             "-i", mediaFile.path,
-            "-i", imageFile.path
+            "-i", imageFile.path,
+            "-map_metadata", "0"
         ]
 
         if ext == "mp4" || ext == "m4v" || ext == "mov" {
@@ -2664,19 +2615,16 @@ public struct DownloadResult: Sendable {
                 "-movflags", "+faststart",
                 tempOutput.path
             ])
-        } else if ext == "mkv" || ext == "webm" {
-            procArgs.append(contentsOf: [
-                "-map", "0",
-                "-map", "1",
-                "-c", "copy",
-                "-disposition:v:1", "attached_pic",
-                tempOutput.path
-            ])
+        } else if let coverAttachment {
+            // Matroska cover art is an attachment, not a second video track.
+            procArgs = ["-nostdin", "-y", "-i", mediaFile.path, "-map_metadata", "0",
+                        "-map", "0", "-c", "copy", "-attach", coverAttachment.path, tempOutput.path]
         } else if ext == "mp3" || ext == "m4a" || ext == "flac" {
             procArgs.append(contentsOf: [
                 "-map", "0:a",
                 "-map", "1",
                 "-c", "copy",
+                "-c:v:0", "mjpeg",
                 "-disposition:v:0", "attached_pic",
                 tempOutput.path
             ])
@@ -2685,12 +2633,23 @@ public struct DownloadResult: Sendable {
         }
 
         defer {
-            if fileManager.fileExists(atPath: tempOutput.path) {
-                do { try fileManager.removeItem(at: tempOutput) }
+            for file in [tempOutput] + [coverAttachment].compactMap({ $0 }) where fileManager.fileExists(atPath: file.path) {
+                do { try fileManager.removeItem(at: file) }
                 catch { LoggerService.shared.log("Could not remove thumbnail staging file: \(error.localizedDescription)", level: .warning) }
             }
         }
         do {
+            if let coverAttachment {
+                guard let jpeg = Self.jpegThumbnailData(try Data(contentsOf: imageFile)) else { return false }
+                try jpeg.write(to: coverAttachment, options: .atomic)
+                let ffprobe = URL(fileURLWithPath: ffmpegDir).appendingPathComponent("ffprobe")
+                let attachments = try await processRunner.runCommand([
+                    ffprobe.path, "-v", "error", "-select_streams", "t", "-show_entries", "stream=index", "-of", "csv=p=0", mediaFile.path
+                ], processController: processController)
+                let index = attachments.split(whereSeparator: \.isNewline).count
+                procArgs.insert(contentsOf: ["-metadata:s:t:\(index)", "mimetype=image/jpeg",
+                                            "-metadata:s:t:\(index)", "filename=cover.jpg"], at: procArgs.count - 1)
+            }
             _ = try await processRunner.runCommand([ffmpegBin.path] + procArgs, processController: processController)
             try Task.checkCancellation()
             guard processController?.isCancelled != true else { throw CancellationError() }
@@ -3014,7 +2973,7 @@ public struct DownloadResult: Sendable {
         if isCookieDenied(browser: browser, url: url) { return false }
         if force || !args.contains("--cookies-from-browser") {
             let cookieArg = Self.cookiesFromBrowserArgument(for: browser)
-            args.append(contentsOf: ["--cookies-from-browser", cookieArg])
+            args.insert(contentsOf: ["--cookies-from-browser", cookieArg], at: args.firstIndex(of: "--") ?? args.endIndex)
         }
         return true
     }
@@ -3400,7 +3359,7 @@ public struct DownloadResult: Sendable {
     /// WebKit session: hidden while that session's clearance and sign-in are valid, and
     /// shown in a window only when the user must complete Cloudflare's check or sign in.
     /// Siphon never completes either step itself.
-    private func loadRecuBrowserSession(pageURL: URL, videoID: String) async throws -> RecuBrowserSession {
+    private func loadRecuBrowserSession(pageURL: URL, videoID: String, requestedAt: Date) async throws -> RecuBrowserSession {
         if let loader = recuBrowserSessionLoader {
             return try await loader(pageURL, videoID)
         }
@@ -3433,8 +3392,11 @@ public struct DownloadResult: Sendable {
         var reloadedStaleToken = false
         var redirectedToSignIn = false
 
-        func presentWindow(reason: String) {
+        func presentWindow(reason: String) throws {
             guard window == nil else { return }
+            guard mayOpenSessionWindow(for: "recu.me", requestedAt: requestedAt) else {
+                throw YtdlpError.downloadFailed(LanguageService.s("verification_window_closed"))
+            }
             LoggerService.shared.log("[ProtectedSite] stage=browser-session result=\(reason); waiting for the user", level: .info)
             window = presentBrowserSessionWindow(
                 webView,
@@ -3450,11 +3412,12 @@ public struct DownloadResult: Sendable {
             try Task.checkCancellation()
 
             if windowDelegate.didClose {
-                throw YtdlpError.downloadFailed("The recu.me window was closed before verification or sign-in finished.")
+                recordSessionWindowClosed(for: "recu.me")
+                throw YtdlpError.downloadFailed(LanguageService.s("verification_window_closed"))
             }
             if Date() > deadline {
                 guard window != nil else {
-                    presentWindow(reason: "page-timeout")
+                    try presentWindow(reason: "page-timeout")
                     continue
                 }
                 throw YtdlpError.downloadFailed("Recu.me verification or sign-in did not finish within 5 minutes.")
@@ -3462,7 +3425,7 @@ public struct DownloadResult: Sendable {
 
             guard let state = await recuPageState(webView, videoID: videoID) else { continue }
             if state.challenge {
-                presentWindow(reason: "challenge")
+                try presentWindow(reason: "challenge")
                 continue
             }
 
@@ -3473,7 +3436,7 @@ public struct DownloadResult: Sendable {
                         currentWindow.orderFrontRegardless()
                         NSApp.requestUserAttention(.criticalRequest)
                     } else {
-                        presentWindow(reason: "sign-in-required")
+                        try presentWindow(reason: "sign-in-required")
                     }
                     deadline = Date().addingTimeInterval(300)
                     if let currentURL = webView.url, !Self.isRecuSignInURL(currentURL),
@@ -3501,7 +3464,7 @@ public struct DownloadResult: Sendable {
                     currentWindow.orderFrontRegardless()
                     NSApp.requestUserAttention(.criticalRequest)
                 } else {
-                    presentWindow(reason: "sign-in-required")
+                    try presentWindow(reason: "sign-in-required")
                 }
                 deadline = Date().addingTimeInterval(300)
                 if let signInURL = Self.recuSignInURL(for: pageURL) {
@@ -3526,7 +3489,14 @@ public struct DownloadResult: Sendable {
               let pageURL = URL(string: "https://recu.me/\(identity.model)/video/\(identity.videoID)/play") else {
             throw YtdlpError.downloadFailed("Unsupported protected-site URL. Expected /<model>/video/<id>/play.")
         }
-        let session = try await loadRecuBrowserSession(pageURL: pageURL, videoID: identity.videoID)
+        let requestedAt = Date()
+        let session = try await withExclusiveWebKitSession {
+            try Task.checkCancellation()
+            guard mayOpenSessionWindow(for: "recu.me", requestedAt: requestedAt) else {
+                throw YtdlpError.downloadFailed(LanguageService.s("verification_window_closed"))
+            }
+            return try await loadRecuBrowserSession(pageURL: pageURL, videoID: identity.videoID, requestedAt: requestedAt)
+        }
         let lastPageHTML = session.pageHTML
 
         let title: String = {
@@ -3749,7 +3719,7 @@ public struct DownloadResult: Sendable {
             try Task.checkCancellation()
 
             if windowDelegate.didClose {
-                sessionWindowClosedAt[siteHost] = Date()
+                recordSessionWindowClosed(for: siteHost)
                 throw YtdlpError.downloadFailed("The \(siteHost) window was closed before a video started.")
             }
             // Players start within a moment of each other; keep the order they started in.
@@ -4367,7 +4337,7 @@ public struct DownloadResult: Sendable {
         let finalResult: String
         if windowDelegate.didClose {
             finalResult = "window-closed"
-            sessionWindowClosedAt["boyfriendtv"] = Date()
+            recordSessionWindowClosed(for: "boyfriendtv")
         } else if let lastHTML {
             finalResult = isBoyfriendTVChallengeHTML(lastHTML) ? "challenge-timeout" : "page-timeout"
         } else {

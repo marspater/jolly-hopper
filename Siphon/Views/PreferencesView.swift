@@ -54,6 +54,7 @@ struct PreferencesView: View {
     @ObservedObject private var logger = LoggerService.shared
     @State private var customPresets: [CustomPreset] = []
     @State private var showCreatePresetSheet = false
+    @State private var showUpdateRestartAlert = false
     @State private var newPresetName = ""
     @AppStorage(UserDefaultsKeys.selectedCustomPresetId) private var selectedCustomPresetIdString: String = ""
 
@@ -179,7 +180,14 @@ struct PreferencesView: View {
         .onChange(of: theme) { _, newTheme in
             SiphonTheme.applyTheme(newTheme)
         }
+        .onChange(of: showMenuBarIcon) { _, visible in
+            MenuBarManager.shared.setVisible(visible)
+        }
+        .onChange(of: updateChecker.needsRestart) { _, ready in
+            showUpdateRestartAlert = ready
+        }
         .onAppear {
+            showUpdateRestartAlert = updateChecker.needsRestart
             SiphonTheme.applyTheme(theme)
             previousLanguage = languageService.selectedLanguage
             customPresets = CustomPreset.loadAll()
@@ -208,9 +216,9 @@ struct PreferencesView: View {
         .sheet(isPresented: $showCreatePresetSheet, onDismiss: resetPresetForm) {
             createPresetSheet
         }
-        .alert(languageService.s("update_ready_title"), isPresented: $updateChecker.needsRestart) {
-            Button(languageService.s("ok")) {
-                updateChecker.needsRestart = false
+        .alert(languageService.s("update_ready_title"), isPresented: $showUpdateRestartAlert) {
+            Button(languageService.s("restart_siphon")) {
+                updateChecker.restartApp()
             }
         } message: {
             Text(languageService.s("update_ready_message"))

@@ -212,6 +212,28 @@ final class UpdateVerifierTests: XCTestCase {
         XCTAssertEqual(try fixtureVersion(fixture.staged), "new", "Source staging must remain unchanged")
     }
 
+    func testReplacementRetainsTheRunningBundleForRestartAndRecovery() throws {
+        let fixture = try makeReplacementFixtures()
+        var backup: URL?
+        try UpdateInstaller.replaceVerifiedAppBundle(currentAppURL: fixture.current, stagedAppURL: fixture.staged,
+            retainBackup: true, exchange: { current, replacement in
+                backup = replacement
+                try UpdateInstaller.exchangeAppBundles(current, replacement)
+            }, verify: { _ in })
+        XCTAssertEqual(try fixtureVersion(fixture.current), "new")
+        XCTAssertEqual(try fixtureVersion(XCTUnwrap(backup)), "old")
+    }
+
+    func testInstallerAssetAcceptsEitherVersionPrefixWithoutChoosingOtherReleases() {
+        let plain: [[String: Any]] = [["name": "Siphon-5.5.0.dmg"]]
+        let prefixed: [[String: Any]] = [["name": "Siphon-v5.5.0.dmg"]]
+        for tag in ["5.5.0", "v5.5.0", "V5.5.0"] {
+            XCTAssertEqual(UpdateChecker.installerAsset(in: plain, tag: tag)?["name"] as? String, "Siphon-5.5.0.dmg")
+            XCTAssertEqual(UpdateChecker.installerAsset(in: prefixed, tag: tag)?["name"] as? String, "Siphon-v5.5.0.dmg")
+        }
+        XCTAssertNil(UpdateChecker.installerAsset(in: plain + prefixed, tag: "5.6.0"))
+    }
+
     func testReplacementRestoresOriginalWithAtomicRollback() throws {
         let fixture = try makeReplacementFixtures()
         var exchanges = 0
@@ -268,7 +290,12 @@ final class UpdateVerifierTests: XCTestCase {
         let gate = UpdateManifestFetchGate()
         let started = expectation(description: "Manifest fetch suspended")
         let fetched = OSAllocatedUnfairLock(initialState: [URL]())
-        let checker = UpdateChecker(manifestVerifier: UpdateManifestVerifier(publicKey: key.publicKey), fetchManifestData: { url in
+        let packageDownloader = UpdateDownloader(sessionFactory: { delegate in
+            let configuration = URLSessionConfiguration.ephemeral
+            configuration.protocolClasses = [OfflineUpdateURLProtocol.self]
+            return URLSession(configuration: configuration, delegate: delegate, delegateQueue: nil)
+        })
+        let checker = UpdateChecker(downloader: packageDownloader, manifestVerifier: UpdateManifestVerifier(publicKey: key.publicKey), fetchManifestData: { url in
             fetched.withLock { $0.append(url) }
             if url == manifestURL {
                 started.fulfill()
@@ -278,7 +305,7 @@ final class UpdateVerifierTests: XCTestCase {
             if url == signatureURL { return signature }
             throw URLError(.badURL)
         })
-        // Stop after manifest verification, before any package download/install.
+        // The optional unsigned checksum URL must not block a verified signed manifest.
         checker.configureUpdateSources(downloadURL: URL(string: root + "Siphon.dmg"), downloadAssetName: "Siphon.dmg",
             expectedChecksum: checksum, checksumURL: URL(string: "http://untrusted.example/checksums"),
             manifestURL: manifestURL, manifestSigURL: signatureURL, latestVersion: "5.5.0")
@@ -292,8 +319,8 @@ final class UpdateVerifierTests: XCTestCase {
         await gate.resume()
         await install.value
         XCTAssertEqual(fetched.withLock { $0 }, [manifestURL, signatureURL])
-        XCTAssertEqual(checker.updateError, UpdateDownloadError.invalidURL.localizedDescription,
-                       "Original manifest must verify before reaching its rejected checksum URL")
+        XCTAssertTrue(checker.updateError?.contains(URLError(.notConnectedToInternet).localizedDescription) == true,
+                      "The signed manifest must reach the injected package downloader without fetching the optional checksum URL")
         XCTAssertEqual(checker.releaseCandidate.checksum, nextChecksum, "Verification must not overwrite another release's digest")
         XCTAssertEqual(checker.latestVersion, "6.0.0")
     }
@@ -801,6 +828,13 @@ final class UpdateVerifierTests: XCTestCase {
         XCTAssertNotNil(checker.updateError)
         XCTAssertTrue(checker.updateError?.contains("Signature verification failed") == true || checker.updateError?.contains("signature") == true)
     }
+}
+
+private final class OfflineUpdateURLProtocol: URLProtocol, @unchecked Sendable {
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override func startLoading() { client?.urlProtocol(self, didFailWithError: URLError(.notConnectedToInternet)) }
+    override func stopLoading() {}
 }
 
 private final class HoldingUpdateURLProtocol: URLProtocol, @unchecked Sendable {

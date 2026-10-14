@@ -34,6 +34,7 @@ class LanguageService: ObservableObject {
         "converting_gif_to_video": "Converting GIF to video...",
         "gif_conversion_failed": "The GIF was downloaded but could not be converted to video. Siphon kept the GIF file.",
         "checking_media_integrity": "Checking downloaded audio and video...",
+        "verification_window_closed": "The verification window was closed before sign-in finished. Retry to open it again.",
         "media_integrity_failed": "The downloaded file could not be decoded. It may be corrupted or still encrypted. Siphon kept the file for inspection and did not mark the download as completed.",
         "queue_recovery_write_failed": "Queue recovery could not be saved. Downloads can continue, but unfinished jobs may be lost if the app closes unexpectedly.",
         "queue_recovery_retry_save": "Retry Saving",
