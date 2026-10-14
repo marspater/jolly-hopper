@@ -287,6 +287,7 @@ struct AddDownloadView: View {
                         Image(systemName: "list.bullet.rectangle.portrait.fill")
                             .font(.siphonStandardSemibold)
                             .foregroundColor(SiphonTheme.accentText)
+                            .accessibilityHidden(true)
                         Text(languageService.s("paste_multiple_urls"))
                             .font(.siphonPrimarySemibold)
                     }
@@ -333,6 +334,7 @@ struct AddDownloadView: View {
                         HStack(spacing: 5) {
                             Image(systemName: "doc.badge.plus")
                                 .font(.siphonSecondary)
+                                .accessibilityHidden(true)
                             Text(languageService.s("import_file"))
                                 .font(.siphonSecondaryMedium)
                         }
@@ -499,6 +501,7 @@ struct AddDownloadView: View {
                 Image(systemName: "link")
                     .font(.siphonStandardSemibold)
                     .foregroundColor(SiphonTheme.accentText)
+                    .accessibilityHidden(true)
                 Text(languageService.s("video_url"))
                     .font(.siphonPrimarySemibold)
             }
@@ -523,6 +526,7 @@ struct AddDownloadView: View {
                             Image(systemName: "xmark.circle.fill")
                                 .font(.system(size: 12))
                                 .foregroundColor(.secondary)
+                                .accessibilityHidden(true)
                         }
                         .buttonStyle(.plain)
                         .help(languageService.s("clear"))
@@ -575,6 +579,7 @@ struct AddDownloadView: View {
                                 .font(.siphonSecondarySemibold)
                             Image(systemName: "arrow.right")
                                 .font(.system(size: 11, weight: .bold))
+                                .accessibilityHidden(true)
                         }
                     }
                     .frame(minWidth: 74, alignment: .center)
@@ -753,6 +758,7 @@ struct AddDownloadView: View {
                     Image(systemName: "slider.horizontal.3")
                         .font(.siphonStandardSemibold)
                         .foregroundColor(SiphonTheme.accentText)
+                        .accessibilityHidden(true)
                     Text(languageService.s("format_and_quality"))
                         .font(.siphonPrimarySemibold)
                 }
@@ -811,6 +817,7 @@ struct AddDownloadView: View {
                         Image(systemName: "bolt.fill")
                             .font(.siphonMetadata)
                             .foregroundColor(SiphonTheme.statusForeground(for: .queued, colorScheme: colorScheme))
+                            .accessibilityHidden(true)
                         if let presetName = selectedPresetName {
                             Text("\(languageService.s("quick_presets")): \(presetName)")
                                 .lineLimit(1)
@@ -820,6 +827,7 @@ struct AddDownloadView: View {
                         }
                         Image(systemName: "chevron.down")
                             .font(.siphonMicroSemibold)
+                            .accessibilityHidden(true)
                     }
                     .font(.siphonMetadataSemibold)
                     .foregroundColor(.primary)
@@ -980,6 +988,7 @@ struct AddDownloadView: View {
                 Image(systemName: "folder.fill")
                     .font(.siphonStandardSemibold)
                     .foregroundColor(SiphonTheme.accentText)
+                    .accessibilityHidden(true)
                 Text(languageService.s("save_folder"))
                     .font(.siphonPrimarySemibold)
             }
@@ -990,6 +999,7 @@ struct AddDownloadView: View {
                     Image(systemName: "folder")
                         .font(.siphonSecondary)
                         .foregroundColor(.secondary)
+                        .accessibilityHidden(true)
                     Text(saveFolder.path)
                         .font(.siphonMetadataMonoMedium)
                         .lineLimit(1)
@@ -1089,6 +1099,7 @@ struct AddDownloadView: View {
                                 .font(.siphonSecondary)
                                 .foregroundColor(.secondary)
                                 .frame(width: 14)
+                                .accessibilityHidden(true)
 
                             TextField(languageService.s("custom_filename_hint"), text: $customFilename)
                                 .focused($focusedField, equals: .filename)
@@ -1305,6 +1316,7 @@ struct AddDownloadView: View {
                         .font(.siphonSecondary)
                         .foregroundColor(.secondary)
                         .frame(width: 14)
+                        .accessibilityHidden(true)
 
                     TextField(languageService.s("additional_arguments_hint"), text: $additionalArguments)
                         .focused($focusedField, equals: .arguments)
