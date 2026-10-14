@@ -336,6 +336,10 @@ class LoggerService: ObservableObject {
         log("Logs cleared", level: .info)
     }
 
+    nonisolated static func sanitizedDiagnosticExport(_ text: String) -> String {
+        sanitizeLogContentForExport(sanitizeDiagnosticText(text))
+    }
+
     nonisolated static func sanitizeLogContentForExport(_ content: String) -> String {
         var sanitized = content
 

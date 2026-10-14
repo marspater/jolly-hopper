@@ -252,7 +252,7 @@ class DownloadManager: ObservableObject {
     }
 
     func addDownload(url: String, options: DownloadOptions, mediaInfo: MediaInfo? = nil) {
-        let download = Download(url: url, options: options, title: mediaInfo?.title ?? "___FETCHING___")
+        let download = Download(url: url, options: options, title: mediaInfo?.title ?? "___FETCHING___", titleIsDecoded: true)
         if let info = mediaInfo {
             download.mediaInfo = info
             download.thumbnailURL = info.thumbnailURL

@@ -1521,7 +1521,7 @@ struct AddDownloadView: View {
                     rawCookies: session?.rawCookies,
                     rawUserAgent: session?.rawUserAgent,
                     browserCookieSource: session?.browserCookieSource,
-                    proxy: try await previewProxy(for: cleanURL)
+                    proxy: try await previewProxy()
                 )
                 guard !Task.isCancelled else { return }
                 mediaInfo = info
@@ -1599,9 +1599,8 @@ struct AddDownloadView: View {
 
     /// Deep-link targets are probed through the egress proxy too: the preview
     /// runs before the user confirms, and its info JSON is reused for the download.
-    private func previewProxy(for url: String) async throws -> String? {
-        let clean = url.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard appState.externalTargetURL == clean else { return nil }
+    private func previewProxy() async throws -> String? {
+        guard appState.hasExternalTarget else { return nil }
         return try await downloadManager.ytdlpService.egressProxyURL()
     }
 
@@ -1617,7 +1616,7 @@ struct AddDownloadView: View {
                     rawCookies: session?.rawCookies,
                     rawUserAgent: session?.rawUserAgent,
                     browserCookieSource: session?.browserCookieSource,
-                    proxy: try await previewProxy(for: urlInput)
+                    proxy: try await previewProxy()
                 )
                 guard !Task.isCancelled else { return }
                 playlistItems = items
@@ -1806,7 +1805,7 @@ struct AddDownloadView: View {
 
     private func proceedWithBatchDownload(urls: [String], options: DownloadOptions) {
         var finalOptions = options
-        if appState.consumeExternalTarget(for: urls) {
+        if appState.hasExternalTarget {
             finalOptions.enforcePublicNetworkBoundary = true
         }
         if let session = appState.consumeBrowserSession(for: urls) {
@@ -1826,7 +1825,7 @@ struct AddDownloadView: View {
         finalOptions.forceOverwrite = forceOverwrite
 
         let cleanURL = urlInput.trimmingCharacters(in: .whitespacesAndNewlines)
-        let isExternal = appState.consumeExternalTarget(for: cleanURL)
+        let isExternal = appState.hasExternalTarget
         if isExternal {
             finalOptions.enforcePublicNetworkBoundary = true
         }
@@ -1840,9 +1839,6 @@ struct AddDownloadView: View {
         } else {
             let selectedItems = playlistItems.filter { selectedPlaylistIds.contains($0.id) }
             let urls = selectedItems.map { $0.resolvedURL }
-            if isExternal || appState.consumeExternalTarget(for: urls) {
-                finalOptions.enforcePublicNetworkBoundary = true
-            }
             if let session = appState.consumeBrowserSession(for: urls) {
                 finalOptions.rawCookies = session.rawCookies
                 finalOptions.rawUserAgent = session.rawUserAgent

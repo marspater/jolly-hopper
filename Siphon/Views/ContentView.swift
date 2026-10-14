@@ -9,6 +9,7 @@ struct MainWindowConfigurator: NSViewRepresentable {
         let view = NSView()
         DispatchQueue.main.async {
             guard let window = view.window else { return }
+            window.identifier = NSUserInterfaceItemIdentifier("SiphonMainWindow")
             window.title = ""
             window.titleVisibility = .hidden
             window.isOpaque = false
@@ -32,6 +33,7 @@ struct ContentView: View {
     @EnvironmentObject var updateChecker: UpdateChecker
     @State private var showUpdateAlert = false
     @State private var confirmClearHistory = false
+    @Environment(\.openWindow) private var openWindow
     @State private var columnVisibility: NavigationSplitViewVisibility = .detailOnly
     @AppStorage("showMenuBarIcon") private var showMenuBarIcon: Bool = true
     @AppStorage(UserDefaultsKeys.theme) private var theme: String = "system"
@@ -45,6 +47,9 @@ struct ContentView: View {
                 .background(MainWindowConfigurator())
                 .onAppear {
                     SiphonTheme.applyTheme(theme)
+                    MenuBarManager.shared.setup(languageService: languageService, downloadManager: downloadManager) {
+                        openWindow(id: "main")
+                    }
                 }
                 .onChange(of: theme) { _, newTheme in
                     SiphonTheme.applyTheme(newTheme)
