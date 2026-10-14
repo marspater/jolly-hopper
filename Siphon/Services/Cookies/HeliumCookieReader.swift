@@ -8,8 +8,17 @@ import SQLite3
 /// Supports universal Chromium browsers (Helium, Chromium, Chrome, Brave, Edge, Arc, Vivaldi, Opera)
 /// on macOS using each browser's respective Keychain storage key and standard on-disk SQLite cookie database.
 enum ChromiumCookieReader {
-    // Bolt Performance Optimization: Pre-compile static CharacterSet to eliminate repeated character set allocations and avoid per-row Array<String> heap allocations during cookie database extraction.
-    nonisolated private static let invalidControlCharSet = CharacterSet(charactersIn: "\t\r\n\0")
+    // Bolt Performance Optimization: Pre-compile static cryptographic constants and salt buffers to eliminate heap allocations during PBKDF key derivation and AES decryption.
+    nonisolated private static let pbkdfSalt = Array("saltysalt".utf8)
+    nonisolated private static let v10Header = Data("v10".utf8)
+    nonisolated private static let aesIV = [UInt8](repeating: 32, count: kCCBlockSizeAES128)
+
+    // Bolt Performance Optimization: Check control scalar values directly in CPU registers on native UnicodeScalarView to eliminate Foundation CharacterSet allocations and NSString bridging per cookie row.
+    nonisolated private static func containsInvalidControlChar(_ string: String) -> Bool {
+        string.unicodeScalars.contains { scalar in
+            scalar.value == 0x09 || scalar.value == 0x0A || scalar.value == 0x0D || scalar.value == 0x00
+        }
+    }
 
     struct ChromiumBrowserTarget: Sendable {
         let name: String
@@ -103,7 +112,8 @@ enum ChromiumCookieReader {
         let domain = domain.lowercased()
         let host = host.lowercased()
         if domain.hasPrefix(".") {
-            return host == String(domain.dropFirst()) || host.hasSuffix(domain)
+            // Bolt Performance Optimization: Compare host directly with Substring (domain.dropFirst()) to avoid intermediate String heap allocation.
+            return host == domain.dropFirst() || host.hasSuffix(domain)
         }
         return host == domain
     }
@@ -126,12 +136,11 @@ enum ChromiumCookieReader {
 
     static func deriveKey(password: Data) throws -> Data {
         var key = Data(count: kCCKeySizeAES128)
-        let salt = Array("saltysalt".utf8)
         let status = key.withUnsafeMutableBytes { keyBytes in
             password.withUnsafeBytes { passwordBytes in
                 CCKeyDerivationPBKDF(CCPBKDFAlgorithm(kCCPBKDF2),
                     passwordBytes.bindMemory(to: Int8.self).baseAddress, password.count,
-                    salt, salt.count, CCPseudoRandomAlgorithm(kCCPRFHmacAlgSHA1),
+                    pbkdfSalt, pbkdfSalt.count, CCPseudoRandomAlgorithm(kCCPRFHmacAlgSHA1),
                     1003, keyBytes.bindMemory(to: UInt8.self).baseAddress, kCCKeySizeAES128)
             }
         }
@@ -158,18 +167,17 @@ enum ChromiumCookieReader {
     }
 
     static func decrypt(_ encrypted: Data, key: Data, domain: String, version: Int) throws -> String {
-        guard encrypted.starts(with: Data("v10".utf8)) else {
+        guard encrypted.starts(with: v10Header) else {
             throw failure("Unsupported encrypted cookie format. Use the browser extension for this browser version.")
         }
         let ciphertext = Data(encrypted.dropFirst(3))
-        let iv = [UInt8](repeating: 32, count: kCCBlockSizeAES128)
         var plaintext = Data(count: ciphertext.count + kCCBlockSizeAES128)
         var count = 0
         let status = plaintext.withUnsafeMutableBytes { output in
             key.withUnsafeBytes { keyBytes in
                 decryptBlock(
                     keyBytes: keyBytes,
-                    iv: iv,
+                    iv: aesIV,
                     ciphertext: ciphertext,
                     output: output,
                     count: &count
@@ -326,10 +334,10 @@ enum ChromiumCookieReader {
             }
             let name = string(1)
             let path = string(4)
-            guard domain.rangeOfCharacter(from: Self.invalidControlCharSet) == nil,
-                  name.rangeOfCharacter(from: Self.invalidControlCharSet) == nil,
-                  path.rangeOfCharacter(from: Self.invalidControlCharSet) == nil,
-                  value.rangeOfCharacter(from: Self.invalidControlCharSet) == nil else {
+            guard !containsInvalidControlChar(domain),
+                  !containsInvalidControlChar(name),
+                  !containsInvalidControlChar(path),
+                  !containsInvalidControlChar(value) else {
                 throw failure("Cookie contains invalid control characters.")
             }
             let httpOnly = sqlite3_column_int(statement, 7) != 0 ? "#HttpOnly_" : ""
