@@ -1323,12 +1323,16 @@ extension View {
 }
 
 // MARK: - Segmented Capsule Picker
-/// Two-to-few option capsule switch. The selected option rides a
+/// Siphon's only segmented control. The selected option rides a
 /// primary-gradient bubble that slides between segments.
 struct SiphonSegmentedPicker<Value: Hashable>: View {
     @Binding var selection: Value
     let options: [(value: Value, title: String)]
     var horizontalPadding: CGFloat = SiphonTheme.spacing12
+    /// SF Symbol shown before an option's title.
+    var icon: (Value) -> String? = { _ in nil }
+    /// Full-width bar of equal segments, 38 pt tall (Settings tabs).
+    var isLarge = false
 
     @Namespace private var bubble
     @Environment(\.siphonRenderingCapabilities) private var renderingCapabilities
@@ -1343,26 +1347,37 @@ struct SiphonSegmentedPicker<Value: Hashable>: View {
                         selection = option.value
                     }
                 } label: {
-                    Text(option.title)
-                        .font(.siphonMetadataSemibold)
-                        .foregroundColor(isSelected ? .white : .secondary)
-                        .padding(.horizontal, horizontalPadding)
-                        .padding(.vertical, SiphonTheme.spacing4)
-                        .background {
-                            if isSelected {
-                                Capsule()
-                                    .fill(SiphonTheme.primaryGradient)
-                                    .shadow(color: SiphonTheme.accent.opacity(0.30), radius: 3, y: 1)
-                                    .matchedGeometryEffect(id: "bubble", in: bubble)
-                            }
+                    HStack(spacing: 5) {
+                        if let symbol = icon(option.value) {
+                            Image(systemName: symbol)
+                                .font(.system(size: 11, weight: .semibold))
+                                .accessibilityHidden(true)
                         }
-                        .contentShape(Capsule())
+                        Text(option.title)
+                            .font(isLarge ? .siphonSecondarySemibold : .siphonMetadataSemibold)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.82)
+                    }
+                    .foregroundColor(isSelected ? .white : .secondary)
+                    .padding(.horizontal, horizontalPadding)
+                    .padding(.vertical, SiphonTheme.spacing4)
+                    .frame(maxWidth: isLarge ? .infinity : nil, maxHeight: isLarge ? .infinity : nil)
+                    .background {
+                        if isSelected {
+                            Capsule()
+                                .fill(SiphonTheme.primaryGradient)
+                                .shadow(color: SiphonTheme.accent.opacity(0.30), radius: 3, y: 1)
+                                .matchedGeometryEffect(id: "bubble", in: bubble)
+                        }
+                    }
+                    .contentShape(Capsule())
                 }
                 .buttonStyle(.bouncy)
                 .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : [.isButton])
             }
         }
         .padding(SiphonTheme.spacing2)
+        .frame(height: isLarge ? 38 : nil)
         .background(SiphonTheme.pillBackground(isSelected: false))
         .clipShape(Capsule())
         .overlay(SiphonTheme.pillBorder(isSelected: false, showBorders: renderingCapabilities.increaseContrast))

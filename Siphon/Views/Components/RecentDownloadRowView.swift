@@ -265,16 +265,31 @@ struct RecentDownloadRowView: View {
         } else {
         switch download.status {
         case .downloading, .fetching, .processing:
+            // Pause keeps partial data, matching the Downloading list; Stop
+            // stays in the Downloading list's More menu.
             Button {
-                downloadManager.stopDownload(download)
+                downloadManager.pauseDownload(download)
             } label: {
-                Image(systemName: "stop.circle.fill")
+                Image(systemName: "pause.circle.fill")
                     .font(.system(size: 14))
-                    .foregroundColor(SiphonTheme.statusDownloadingText)
+                    .foregroundColor(SiphonTheme.statusQueuedText)
+                    .accessibilityHidden(true)
             }
             .buttonStyle(.siphonIcon(size: 24))
-            .help(languageService.s("stop_download"))
-            .accessibilityLabel(languageService.s("stop_download"))
+            .help(languageService.s("pause"))
+            .accessibilityLabel(languageService.s("pause"))
+        case .paused:
+            Button {
+                downloadManager.resumeDownload(download)
+            } label: {
+                Image(systemName: "play.circle.fill")
+                    .font(.system(size: 14))
+                    .foregroundColor(SiphonTheme.accentText)
+                    .accessibilityHidden(true)
+            }
+            .buttonStyle(.siphonIcon(size: 24))
+            .help(languageService.s("resume"))
+            .accessibilityLabel(languageService.s("resume"))
         case .completed where download.primaryFilePath != nil && primaryFileIsPresent != false:
             revealButton { downloadManager.showInFinder(download.filePaths) }
         case .fileExists:
