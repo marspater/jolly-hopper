@@ -28,9 +28,12 @@ final class DebugLogWindowManager: NSObject, NSWindowDelegate {
         window.isOpaque = false
         window.backgroundColor = .clear
         window.titlebarAppearsTransparent = true
+        // The view draws its own header; the hidden title still names the
+        // window in the Window menu and Mission Control.
+        window.titleVisibility = .hidden
         window.center()
         window.isReleasedWhenClosed = false
-        window.title = "Debug Logs"
+        window.title = LanguageService.shared.s("debug_logs")
         window.minSize = NSSize(width: 550, height: 350)
         window.contentViewController = hostingController
         window.delegate = self

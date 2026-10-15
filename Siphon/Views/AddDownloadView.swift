@@ -8,6 +8,9 @@ struct AddDownloadView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.appearsActive) private var appearsActive
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var scrollViewportHeight: CGFloat = 0
+    @State private var scrollContentHeight: CGFloat = 0
     @FocusState private var focusedField: InputField?
 
     private enum InputField: Hashable {
@@ -112,6 +115,14 @@ struct AddDownloadView: View {
         SiphonAnimation.fluidSpring
     }
 
+    /// Fetched cards drop 8 pt into place. `.move(edge: .top)` would slide them
+    /// their full height, across the URL card. Reduce Motion keeps only the fade.
+    private var revealTransition: AnyTransition {
+        reduceMotion
+            ? .opacity
+            : .opacity.combined(with: .offset(y: -8)).combined(with: .scale(scale: 0.98, anchor: .top))
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             header
@@ -124,30 +135,45 @@ struct AddDownloadView: View {
                             urlSection
 
                             if let info = mediaInfo {
-                                if !showPlaylistSelector {
-                                    mediaInfoSection(info)
+                                VStack(alignment: .leading, spacing: 20) {
+                                    if !showPlaylistSelector {
+                                        mediaInfoSection(info)
 
-                                    if info.playlist != nil {
-                                        playlistDetectedBanner
+                                        if info.playlist != nil {
+                                            playlistDetectedBanner
+                                        }
+                                    } else {
+                                        playlistSelectorSection
                                     }
-                                } else {
-                                    playlistSelectorSection
-                                }
 
-                                formatSection
-                                saveSection
-                                optionalSettingsSection
-                                    .id("optionalSettings")
+                                    formatSection
+                                    saveSection
+                                    optionalSettingsSection
+                                        .id("optionalSettings")
+                                }
+                                .transition(revealTransition)
                             }
 
                             if let error = errorMessage {
                                 errorSection(error)
+                                    .transition(revealTransition)
                             }
                         } else {
                             batchSection
                         }
                     }
                     .padding(SiphonTheme.spacing20)
+                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height in
+                        scrollContentHeight = height
+                        fitWindowToContent()
+                    }
+                }
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height in
+                    // Later viewport changes come from the window animating and
+                    // must not restart the resize; only the first one fits.
+                    let isFirstMeasure = scrollViewportHeight == 0
+                    scrollViewportHeight = height
+                    if isFirstMeasure { fitWindowToContent() }
                 }
                 .onChange(of: showOptionalSettings) { _, expanded in
                     if expanded {
@@ -162,11 +188,10 @@ struct AddDownloadView: View {
             SiphonTheme.subtleDivider
             footer
         }
-        // The pre-fetch state contains only the URL input. Starting at the same
-        // height as the fully-expanded inspector leaves a visually inert window;
-        // the scroll view keeps metadata and advanced options resilient once they
-        // are available.
-        .frame(minWidth: 500, idealWidth: 540, maxWidth: 680, minHeight: 420, idealHeight: 440, maxHeight: .infinity)
+        // The pre-fetch state contains only the URL input, so the window opens
+        // compact and grows as details appear; the scroll view takes over once
+        // the window reaches the screen's height.
+        .frame(minWidth: 500, idealWidth: 540, maxWidth: 680, minHeight: AddDownloadWindowManager.compactHeight, maxHeight: .infinity)
         .siphonAdaptiveRendering()
         .siphonWindowBackground()
         .onAppear {
@@ -1522,6 +1547,11 @@ struct AddDownloadView: View {
         .padding()
     }
 
+    private func fitWindowToContent() {
+        guard scrollViewportHeight > 0 else { return }
+        AddDownloadWindowManager.shared.growToFit(overflow: scrollContentHeight - scrollViewportHeight)
+    }
+
     private func fetchInfo(debounce: Bool = false) {
         let cleanURL = urlInput.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !cleanURL.isEmpty else { return }
@@ -1545,7 +1575,9 @@ struct AddDownloadView: View {
                     proxy: try await previewProxy()
                 )
                 guard !Task.isCancelled else { return }
-                mediaInfo = info
+                withAnimation(SiphonAnimation.fluidSpring) {
+                    mediaInfo = info
+                }
                 customFilename = info.title
 
                 var subs: [SubtitleOption] = []
@@ -1601,7 +1633,9 @@ struct AddDownloadView: View {
 
             } catch {
                 if !Task.isCancelled {
-                    errorMessage = formatErrorMessage(error)
+                    withAnimation(SiphonAnimation.fluidSpring) {
+                        errorMessage = formatErrorMessage(error)
+                    }
                 }
             }
             if !Task.isCancelled {
@@ -1638,7 +1672,9 @@ struct AddDownloadView: View {
                 downloadMode = .playlist
             } catch {
                 if !Task.isCancelled {
-                    errorMessage = formatErrorMessage(error)
+                    withAnimation(SiphonAnimation.fluidSpring) {
+                        errorMessage = formatErrorMessage(error)
+                    }
                 }
             }
             if !Task.isCancelled {

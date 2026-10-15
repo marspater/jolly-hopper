@@ -115,6 +115,10 @@ truth only when the value is genuinely reused or has semantic meaning.
 
 ### Surfaces and depth
 
+- Auxiliary windows hide the system title (`titleVisibility = .hidden`) but
+  keep it set, localized, for the Window menu, and draw one in-content header
+  below the title bar. They rely on the window's own close button and corners:
+  no second close button or hand-drawn border.
 - Root windows and utility surfaces use `siphonWindowBackground()`. It supplies
   the material, the faint brand wash and the Siphon accent tint for native
   controls, so feature views do not re-tint toggles or pickers or add their own
@@ -123,7 +127,13 @@ truth only when the value is genuinely reused or has semantic meaning.
   native push buttons and pop-up menus set `.tint(nil)`; tinted, their label is
   accent text on tinted glass, which is hard to read in Dark Mode. Dark Mode
   uses regular rather than ultra-thin material, so a bright window behind does
-  not wash text out.
+  not wash text out. With Reduce Transparency it draws the opaque
+  `surfaceElevated` color instead.
+- Only the window root and floating bars (`siphonGlassSurface()`) carry a blur
+  material. Cards, pills, controls and fields inside a window use translucent
+  fills (`SiphonTheme.surfaceRaised`, control and field colors), never another
+  `Material`: blur on blur muddies Dark Mode mid-tones and makes the
+  compositor sample the backdrop once per layer while scrolling.
 - Content cards use `SiphonTheme.cardBackground` and matching border helpers.
   Gradient borders draw through `.drawingGroup()`: as plain layers they are
   rasterized on the CPU at the card's full size, which stalled fast scrolling
@@ -131,13 +141,22 @@ truth only when the value is genuinely reused or has semantic meaning.
 - Interactive status/navigation surfaces may use `siphonGlassSurface()`, which
   opts into native `Glass.regular.interactive()` on macOS 26+ and preserves the
   adaptive Siphon material fallback on macOS 15–25.
+- Small glass buttons use `siphonInteractiveGlass()`: native `Glass.regular`
+  on macOS 26+, tinted on hover and when selected, and the custom fill, border
+  and hover treatment on macOS 15–25. Do not add `.interactive()` there: on
+  macOS it swallows pointer tracking, so hover and the button style's press
+  scale stop.
 - Inset fields use `SiphonTheme.fieldBackground` and `fieldBorder`.
 - Controls use the shared Siphon button styles or the native macOS bordered
   styles when they better express platform behavior.
 - Tinted inline notices (permission hints, errors, info banners) use
   `siphonCallout(tint:)` with a saturated status or accent tint.
-- Two-option capsule switches (Single/Batch, Video/Audio) use
-  `SiphonSegmentedPicker`; do not hand-roll gradient bubbles.
+- Every segmented choice uses `SiphonSegmentedPicker`: compact capsules for
+  inline choices (Single/Batch, Theme, Diagnostics tabs) and `isLarge` with
+  icons for the full-width Settings tab bar. Do not use
+  `.pickerStyle(.segmented)` or hand-roll gradient bubbles.
+- Text sets a Siphon font (`.font(.siphon…)`); `.fontWeight` alone falls back
+  to SF Pro.
 - All corners are `.continuous`; do not use the deprecated `.cornerRadius(_:)`.
 - Keep the hierarchy shallow: root surface → card → inset field/control. Avoid
   stacking multiple opaque fills, dark scrims, or unrelated blurs.
@@ -153,6 +172,12 @@ truth only when the value is genuinely reused or has semantic meaning.
   close to the view that changes.
 - Siphon's fluid and bouncy motion remains enabled while the app is active; pause
   frame-scheduled ambient work when the app is inactive.
+- Reduce Motion: `shouldAnimateAmbient` turns ambient logo and wave motion off;
+  hover and press keep their tint, border and shadow changes but drop scale and
+  lift (`siphonMotionScale`, `siphonCardHover`); page switches and revealed cards
+  only fade.
+- A button's `ButtonStyle` owns its scale. Surface modifiers such as
+  `siphonInteractiveGlass()` only tint, so one interaction runs one spring.
 - Avoid animating layout at the root of a large screen or combining several
   competing spring timings for one interaction.
 - Custom frame-scheduled animation uses a 60 Hz baseline and may step up to

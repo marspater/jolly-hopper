@@ -2171,3 +2171,27 @@ final class QueueAndErrorUXTests: XCTestCase {
     }
 }
 
+final class AddDownloadWindowSizingTests: XCTestCase {
+    private let screen = NSRect(x: 0, y: 25, width: 1440, height: 875)
+
+    func testGrowKeepsTopEdgeFixed() throws {
+        let frame = NSRect(x: 100, y: 500, width: 520, height: 281)
+        let grown = try XCTUnwrap(AddDownloadWindowManager.grownFrame(frame, by: 104, within: screen))
+        XCTAssertEqual(grown.height, 385)
+        XCTAssertEqual(grown.maxY, frame.maxY)
+        XCTAssertEqual(grown.minX, frame.minX)
+    }
+
+    func testGrowClampsToVisibleFrame() throws {
+        let frame = NSRect(x: 100, y: 200, width: 520, height: 600)
+        let grown = try XCTUnwrap(AddDownloadWindowManager.grownFrame(frame, by: 900, within: screen))
+        XCTAssertEqual(grown.height, screen.height)
+        XCTAssertEqual(grown.minY, screen.minY)
+    }
+
+    func testNoGrowthForNegativeOrSubpixelOverflow() {
+        let frame = NSRect(x: 100, y: 500, width: 520, height: 700)
+        XCTAssertNil(AddDownloadWindowManager.grownFrame(frame, by: -120, within: screen))
+        XCTAssertNil(AddDownloadWindowManager.grownFrame(frame, by: 0.4, within: screen))
+    }
+}

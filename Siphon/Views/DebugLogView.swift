@@ -26,18 +26,6 @@ struct DebugLogView: View {
                 )
 
                 Spacer()
-
-                Button {
-                    DebugLogWindowManager.shared.closeWindow()
-                } label: {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 11, weight: .bold))
-                        .foregroundColor(.secondary)
-                }
-                .buttonStyle(.siphonIcon(size: 24))
-                .help(languageService.s("close"))
-                .accessibilityLabel(languageService.s("close"))
-                .keyboardShortcut(.cancelAction)
             }
             .padding(.horizontal, SiphonTheme.spacing16)
             .padding(.top, SiphonTheme.spacing16)
@@ -124,11 +112,6 @@ struct DebugLogView: View {
         .frame(minWidth: 550, idealWidth: 620, minHeight: 350, idealHeight: 420)
         .siphonAdaptiveRendering()
         .siphonWindowBackground()
-        .overlay(
-            RoundedRectangle(cornerRadius: SiphonTheme.radiusSheet, style: .continuous)
-                .stroke(Color.primary.opacity(SiphonTheme.Opacity.borderHairline), lineWidth: 1)
-                .ignoresSafeArea()
-        )
         .preferredColorScheme(activeColorScheme)
     }
 

@@ -25,6 +25,10 @@ struct HeroDropURLView: View {
         isFieldFocused && appearsActive && !appState.showAddDownloadSheet
     }
 
+    // Concentric corners: the URL field's radius is the card radius minus the inset.
+    private let cardInset: CGFloat = 14
+    private var fieldRadius: CGFloat { SiphonTheme.radiusHero - cardInset }
+
     private var showBorders: Bool {
         renderingCapabilities.increaseContrast
     }
@@ -206,11 +210,11 @@ struct HeroDropURLView: View {
                 .padding(.horizontal, SiphonTheme.spacing12)
                 .frame(minHeight: 44)
                 .background(
-                    SiphonTheme.fieldBackground(cornerRadius: SiphonTheme.radiusCard, isFocused: showsFieldFocus)
+                    SiphonTheme.fieldBackground(cornerRadius: fieldRadius, isFocused: showsFieldFocus)
                 )
-                .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusCard, style: .continuous))
+                .clipShape(RoundedRectangle(cornerRadius: fieldRadius, style: .continuous))
                 .overlay(
-                    SiphonTheme.fieldBorder(cornerRadius: SiphonTheme.radiusCard, isFocused: showsFieldFocus)
+                    SiphonTheme.fieldBorder(cornerRadius: fieldRadius, isFocused: showsFieldFocus)
                 )
 
                 // Inline Real-Time Status & Validation Feedback
@@ -237,12 +241,11 @@ struct HeroDropURLView: View {
                 .frame(height: 16)
                 .padding(.horizontal, 4)
             }
-            .padding(.horizontal, 22)
-            .padding(.vertical, 18)
+            .padding(cardInset)
         }
         .frame(maxWidth: .infinity)
         .frame(height: 168)
-        .scaleEffect(isTargeted ? 1.012 : 1.0)
+        .siphonMotionScale(isTargeted ? 1.012 : 1.0)
         .shadow(
             color: SiphonTheme.accent.opacity(isTargeted ? 0.24 : 0.04),
             radius: isTargeted ? 18 : 5,
