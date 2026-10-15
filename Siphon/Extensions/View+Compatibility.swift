@@ -11,14 +11,6 @@ extension View {
     }
 }
 
-extension Section where Parent == Text, Footer == EmptyView, Content: View {
-    /// Form and sidebar section with a Geist header. `Section("title")` draws
-    /// its header in the system font, or in the window's regular body font.
-    init(siphonHeader title: String, font: Font = .siphonStandardSemibold, @ViewBuilder content: () -> Content) {
-        self.init(content: content, header: { Text(title).font(font) })
-    }
-}
-
 // MARK: - Adaptive Rendering Environment & Display Capabilities
 public struct RenderingCapabilities: Sendable, Equatable {
     public let supportsEDR: Bool
@@ -1753,5 +1745,16 @@ extension View {
                 tintColor: tintColor
             )
         )
+    }
+}
+
+// MARK: - Section Header
+// Kept at the end of the file: static analyzers misread this constrained
+// result-builder initializer and attribute the following declarations to it.
+extension Section where Parent == Text, Footer == EmptyView, Content: View {
+    /// Form and sidebar section with a Geist header. `Section("title")` draws
+    /// its header in the system font, or in the window's regular body font.
+    init(siphonHeader title: String, font: Font = .siphonStandardSemibold, @ViewBuilder content: () -> Content) {
+        self.init(content: content, header: { Text(title).font(font) })
     }
 }
