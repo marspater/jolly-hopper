@@ -6,6 +6,8 @@
 
 - Siphon again downloads a pinned, SHA-256-verified yt-dlp: the Siphon fork 2026.10.12.1, which keeps its DRM-format and byte-range download fixes. The user-provided yt-dlp path in Settings is no longer used.
 - Double-clicking a finished download's card, or its row in Recent downloads, plays the video.
+- Cards, fields, pills and buttons inside a window no longer add a second blur over the window's glass, so Dark Mode greys stay clean and scrolling composites less. With Reduce Transparency, windows draw an opaque background.
+- On macOS 26 and later, small glass buttons (Check for Updates, About links, sidebar Settings) use native Liquid Glass with an accent tint on hover. The URL hero card's corners are now concentric with its URL field.
 
 ### Security
 
