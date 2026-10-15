@@ -64,71 +64,74 @@ function mockBrowser(extension = "Chrome") {
     return { records, tabs, alarms, startWorker, advance: (ms) => { now += ms; }, fireAlarm: (name) => events.alarm.fire({ name }), loseFocus: () => events.focus.fire(-1), remove: (id) => events.removed.fire(id) };
 }
 
-test("alarm closes a helper after worker restart, including a declined blank tab", async () => {
-    const browser = mockBrowser();
-    await browser.startWorker().openDeepLink(handoff);
-    await flush();
-    assert.equal(browser.records[prefix + 1].deadline, 160000);
-    browser.tabs.get(1).url = "about:blank";
-    browser.startWorker();
-    await flush();
-    browser.advance(60000);
-    await browser.fireAlarm(prefix + 1);
-    await flush();
-    assert.equal(browser.tabs.size, 0);
-    assert.equal(Object.keys(browser.records).length, 0);
-    assert.equal(browser.alarms.size, 0);
-});
+for (const extension of ["Chrome", "Firefox", "Safari"]) {
+    test(`${extension}: alarm closes a helper after worker restart, including a declined blank tab`, async () => {
+        const browser = mockBrowser(extension);
+        await browser.startWorker().openDeepLink(handoff);
+        await flush();
+        assert.equal(browser.records[prefix + 1].deadline, 160000);
+        browser.tabs.get(1).url = "about:blank";
+        browser.startWorker();
+        await flush();
+        browser.advance(60000);
+        await browser.fireAlarm(prefix + 1);
+        await flush();
+        assert.equal(browser.tabs.size, 0);
+        assert.equal(Object.keys(browser.records).length, 0);
+        assert.equal(browser.alarms.size, 0);
+    });
 
-test("activation recreates lost alarms without closing tabs before the deadline", async () => {
-    const browser = mockBrowser();
-    await browser.startWorker().openDeepLink(handoff);
-    browser.alarms.clear();
-    browser.startWorker();
-    await flush();
-    assert.equal(browser.alarms.get(prefix + 1).when, 160000);
-    await browser.fireAlarm(prefix + 1);
-    await flush();
-    assert.equal(browser.tabs.size, 1);
-});
+    test(`${extension}: activation recreates lost alarms without closing tabs before the deadline`, async () => {
+        const browser = mockBrowser(extension);
+        await browser.startWorker().openDeepLink(handoff);
+        browser.alarms.clear();
+        browser.startWorker();
+        await flush();
+        assert.equal(browser.alarms.get(prefix + 1).when, 160000);
+        await browser.fireAlarm(prefix + 1);
+        await flush();
+        assert.equal(browser.tabs.size, 1);
+    });
 
-test("concurrent handoffs survive restart and focus loss cleans both", async () => {
-    const browser = mockBrowser();
-    const worker = browser.startWorker();
-    await Promise.all([worker.openDeepLink(handoff), worker.openDeepLink(handoff + "2")]);
-    assert.equal(Object.keys(browser.records).length, 2);
-    browser.startWorker();
-    await flush();
-    await browser.loseFocus();
-    await flush();
-    assert.equal(browser.tabs.size, 0);
-    assert.equal(Object.keys(browser.records).length, 0);
-});
+    test(`${extension}: concurrent handoffs survive restart and focus loss cleans both`, async () => {
+        const browser = mockBrowser(extension);
+        const worker = browser.startWorker();
+        await Promise.all([worker.openDeepLink(handoff), worker.openDeepLink(handoff + "2")]);
+        assert.equal(Object.keys(browser.records).length, 2);
+        browser.startWorker();
+        await flush();
+        await browser.loseFocus();
+        await flush();
+        assert.equal(browser.tabs.size, 0);
+        assert.equal(Object.keys(browser.records).length, 0);
+    });
 
-test("cleanup never closes a helper that navigated to another page", async () => {
-    const browser = mockBrowser();
-    await browser.startWorker().openDeepLink(handoff);
-    browser.tabs.get(1).url = "https://example.com/important";
-    browser.advance(60000);
-    await browser.fireAlarm(prefix + 1);
-    await flush();
-    assert.equal(browser.tabs.size, 1);
-    assert.equal(Object.keys(browser.records).length, 0);
-});
+    test(`${extension}: cleanup never closes a helper that navigated to another page`, async () => {
+        const browser = mockBrowser(extension);
+        await browser.startWorker().openDeepLink(handoff);
+        browser.tabs.get(1).url = "https://example.com/important";
+        browser.advance(60000);
+        await browser.fireAlarm(prefix + 1);
+        await flush();
+        assert.equal(browser.tabs.size, 1);
+        assert.equal(Object.keys(browser.records).length, 0);
+    });
 
-test("activation reconciles overdue and already-removed tabs", async () => {
-    const browser = mockBrowser();
-    const worker = browser.startWorker();
-    await worker.openDeepLink(handoff);
-    await worker.openDeepLink(handoff + "2");
-    browser.tabs.delete(2);
-    browser.advance(60000);
-    browser.startWorker();
-    await flush();
-    assert.equal(browser.tabs.size, 0);
-    assert.equal(Object.keys(browser.records).length, 0);
-    assert.equal(browser.alarms.size, 0);
-});
+    test(`${extension}: activation reconciles overdue and already-removed tabs`, async () => {
+        const browser = mockBrowser(extension);
+        const worker = browser.startWorker();
+        await worker.openDeepLink(handoff);
+        await worker.openDeepLink(handoff + "2");
+        browser.tabs.delete(2);
+        browser.advance(60000);
+        browser.startWorker();
+        await flush();
+        assert.equal(browser.tabs.size, 0);
+        assert.equal(Object.keys(browser.records).length, 0);
+        assert.equal(browser.alarms.size, 0);
+    });
+
+}
 
 for (const extension of ["Firefox", "Safari"]) {
     test(`${extension}: toolbar handoff is durable and never closes a navigated tab`, async () => {
