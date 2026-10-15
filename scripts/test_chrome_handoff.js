@@ -11,7 +11,7 @@ const flush = async () => {
     for (let i = 0; i < 4; i++) await new Promise(setImmediate);
 };
 
-function mockBrowser() {
+function mockBrowser(extension = "Chrome") {
     const records = {};
     const tabs = new Map();
     const alarms = new Map();
@@ -54,8 +54,11 @@ function mockBrowser() {
                 async remove(id) { tabs.delete(id); await events.removed.fire(id); }
             }
         };
-        const context = vm.createContext({ chrome, console, navigator: { userAgent: "Chrome" }, Date: class extends Date { static now() { return now; } } });
-        vm.runInContext(source, context);
+        const context = vm.createContext({ chrome, browser: chrome, console, navigator: { userAgent: "Chrome" }, Date: class extends Date { static now() { return now; } } });
+        const workerSource = extension === "Chrome" ? source : fs.readFileSync(path.join(__dirname, `../SiphonExtension_${extension}/background.js`), "utf8");
+        vm.runInContext(workerSource, context);
+        context.actionEvent = chrome.action.onClicked;
+        context.menuEvent = chrome.contextMenus.onClicked;
         return context;
     }
     return { records, tabs, alarms, startWorker, advance: (ms) => { now += ms; }, fireAlarm: (name) => events.alarm.fire({ name }), loseFocus: () => events.focus.fire(-1), remove: (id) => events.removed.fire(id) };
@@ -126,3 +129,40 @@ test("activation reconciles overdue and already-removed tabs", async () => {
     assert.equal(Object.keys(browser.records).length, 0);
     assert.equal(browser.alarms.size, 0);
 });
+
+for (const extension of ["Firefox", "Safari"]) {
+    test(`${extension}: toolbar handoff is durable and never closes a navigated tab`, async () => {
+        const browser = mockBrowser(extension);
+        const worker = browser.startWorker();
+        await worker.actionEvent.fire({ url: "https://example.com/video" });
+        await flush();
+        const link = new URL(browser.tabs.get(1).url);
+        assert.equal(link.protocol, "siphon:");
+        assert.equal(link.searchParams.get("browser"), extension.toLowerCase());
+        assert.equal(link.searchParams.get("cookies"), null);
+        browser.tabs.get(1).url = "https://example.com/important";
+        browser.startWorker();
+        await flush();
+        browser.advance(60000);
+        await browser.fireAlarm(prefix + 1);
+        await flush();
+        assert.equal(browser.tabs.size, 1);
+        assert.equal(Object.keys(browser.records).length, 0);
+        const manifest = JSON.parse(fs.readFileSync(path.join(__dirname, `../SiphonExtension_${extension}/manifest.json`)));
+        assert.ok(manifest.action);
+        assert.ok(manifest.permissions.includes("storage"));
+        assert.ok(manifest.permissions.includes("alarms"));
+    });
+    test(`${extension}: context handoff closes only its own helper after focus loss`, async () => {
+        const browser = mockBrowser(extension);
+        const worker = browser.startWorker();
+        await worker.menuEvent.fire({ menuItemId: "download-siphon", srcUrl: "blob:video", pageUrl: "https://example.com/page" }, {});
+        await flush();
+        assert.equal(new URL(browser.tabs.get(1).url).searchParams.get("url"), "https://example.com/page");
+        browser.startWorker();
+        await flush();
+        await browser.loseFocus();
+        await flush();
+        assert.equal(browser.tabs.size, 0);
+    });
+}
