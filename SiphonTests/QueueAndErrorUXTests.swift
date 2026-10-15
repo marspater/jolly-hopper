@@ -1979,7 +1979,13 @@ final class QueueAndErrorUXTests: XCTestCase {
             "http://[::ffff:7f00:1]/video",
             "http://[0:0:0:0:0:ffff:7f00:1]/video",
             "http://[fd00::1]/video",
+            "http://LOCALHOST./video",
+            "http://media.localhost/video",
             "http://printer.local/video",
+            "http://media.localdomain/video",
+            "http://media.internal/video",
+            "http://media.lan/video",
+            "https://does-not-exist.invalid/video",
             "http://intranet/video"
         ]
 
