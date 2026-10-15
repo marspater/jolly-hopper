@@ -367,8 +367,6 @@ enum ChromiumCookieReader {
         try file.validate()
         return file
     }
-
-
 }
 
 /// Backward compatibility alias for HeliumCookieReader

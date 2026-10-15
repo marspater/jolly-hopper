@@ -179,8 +179,11 @@ public final class UpdateInstaller: Sendable {
               }) else { return false }
         let appURL = Bundle.main.bundleURL
         Task.detached(priority: .utility) {
-            do { try Self.pruneRecoveryBackups(nextTo: appURL) }
-            catch { Self.log("Updater backup cleanup failed: \(error.localizedDescription)", level: .warning) }
+            do {
+                try Self.pruneRecoveryBackups(nextTo: appURL)
+            } catch {
+                Self.log("Updater backup cleanup failed: \(error.localizedDescription)", level: .warning)
+            }
         }
         return true
     }
@@ -268,8 +271,11 @@ public final class UpdateInstaller: Sendable {
             if retainBackup {
                 preserveBackup = true
                 // Bundle dates otherwise describe the old installation, not retention order.
-                do { try fileManager.setAttributes([.modificationDate: Date()], ofItemAtPath: backupURL.path) }
-                catch { Self.log("Could not date the recovery bundle: \(error.localizedDescription)", level: .warning) }
+                do {
+                    try fileManager.setAttributes([.modificationDate: Date()], ofItemAtPath: backupURL.path)
+                } catch {
+                    Self.log("Could not date the recovery bundle: \(error.localizedDescription)", level: .warning)
+                }
                 Self.log("Previous app bundle retained for restart/recovery at \(backupURL.path).", level: .info)
             }
         } catch {
