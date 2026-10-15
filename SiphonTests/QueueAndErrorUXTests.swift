@@ -2318,12 +2318,14 @@ final class AddDownloadWindowSizingTests: XCTestCase {
         let chrome = 140 - (window.frame.height - window.contentLayoutRect.height)
         windows.updateLayout(.init(contentHeight: 260, chromeHeight: chrome, advancedVisible: false, allowsShrink: true), animated: false)
         let width = window.frame.width
+        // The window never grows past the screen (677 pt on CI's display).
+        let batchHeight = min(680, window.screen?.visibleFrame.height ?? 680)
         for _ in 0..<3 {
             windows.updateLayout(.init(contentHeight: 540, chromeHeight: chrome, advancedVisible: true, allowsShrink: false), animated: false)
-            XCTAssertEqual(window.frame.height, 680, accuracy: 1, "Batch must grow even when Advanced is restored")
+            XCTAssertEqual(window.frame.height, batchHeight, accuracy: 1, "Batch must grow even when Advanced is restored")
             XCTAssertEqual(window.frame.width, width + AddDownloadWindowManager.advancedPaneWidth + 1, accuracy: 1)
             windows.updateLayout(.init(contentHeight: 540, chromeHeight: chrome, advancedVisible: true, allowsShrink: false), animated: false)
-            XCTAssertEqual(window.frame.height, 680, accuracy: 1, "The viewport's resize must not add overflow again")
+            XCTAssertEqual(window.frame.height, batchHeight, accuracy: 1, "The viewport's resize must not add overflow again")
             var manual = window.frame
             manual.size.height = 620
             window.setFrame(manual, display: true)

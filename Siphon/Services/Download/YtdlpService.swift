@@ -2590,7 +2590,14 @@ public struct DownloadResult: Sendable {
         } else {
             // Preserve audio, subtitles, chapters and attachments. Cover art is
             // restored below; it must not be sent through the video encoder.
-            args += ["-map", "0:V:0", "-map", "0:a?", "-map", "0:s?", "-map", "0:t?", "-c", "copy"]
+            args += ["-map", "0:V:0", "-map", "0:a?", "-map", "0:s?", "-c", "copy"]
+            // A single-file format can arrive in another container. Only
+            // Matroska stores attachments; MP4/WebM need their own text codec.
+            switch targetExtension {
+            case "mkv": args += ["-map", "0:t?"]
+            case "webm": args += ["-c:s", "webvtt"]
+            default: args += ["-c:s", "mov_text"]
+            }
             if needsRecode { args += Self.videoConversionArguments(options: options) }
         }
         args.append(partial.path)
@@ -2946,14 +2953,16 @@ public struct DownloadResult: Sendable {
             videoConvertorArgs.append(contentsOf: ["-c:v", "libx264", "-strict", "experimental"])
             #endif
         case .none:
-            if isConvertToSDR {
+            if isConvertToSDR && resolvedOutputFileExtension(for: options) == "webm" {
+                // WebM accepts only VP8/VP9/AV1 video.
+                videoConvertorArgs += ["-c:v", "libvpx-vp9"]
+            } else if isConvertToSDR {
                 #if arch(arm64)
                 videoConvertorArgs += ["-c:v", "h264_videotoolbox"]
                 #else
                 videoConvertorArgs += ["-c:v", "libx264"]
                 #endif
             }
-            break
         }
 
         return videoConvertorArgs
@@ -3276,7 +3285,7 @@ public struct DownloadResult: Sendable {
         let userAgent: String?
     }
 
-    final class RecuNavigationDelegate: NSObject, WKNavigationDelegate, WKUIDelegate {
+    final class RecuNavigationDelegate: NSObject, WKNavigationDelegate {
         private var lastToken: String?
 
         /// A sign-in redirect may render the same token in a new document.
@@ -3291,20 +3300,6 @@ public struct DownloadResult: Sendable {
             lastToken = nil
         }
 
-        func webView(
-            _ webView: WKWebView,
-            createWebViewWith _: WKWebViewConfiguration,
-            for navigationAction: WKNavigationAction,
-            windowFeatures _: WKWindowFeatures
-        ) -> WKWebView? {
-            // Keep allowed sign-in/player links in the owned session. Never
-            // create an untracked browser or admit a host outside the policy.
-            if navigationAction.targetFrame == nil, Self.allowsNavigation(to: navigationAction.request.url) {
-                webView.load(navigationAction.request)
-            }
-            return nil
-        }
-
         nonisolated static func isAllowedHost(_ host: String) -> Bool {
             let h = host.lowercased()
             return h == "recu.me" || h.hasSuffix(".recu.me") ||
@@ -3313,10 +3308,7 @@ public struct DownloadResult: Sendable {
                    h == "cloudflareinsights.com" || h.hasSuffix(".cloudflareinsights.com")
         }
 
-        nonisolated static func allowsNavigation(
-            to url: URL?,
-            targetFrame _: WKFrameInfo? = nil
-        ) -> Bool {
+        nonisolated static func allowsNavigation(to url: URL?) -> Bool {
             guard let url, let scheme = url.scheme?.lowercased() else { return false }
             if ["about", "data", "blob"].contains(scheme) {
                 return true
@@ -3337,6 +3329,8 @@ public struct DownloadResult: Sendable {
                 return
             }
             if navigationAction.targetFrame == nil {
+                // Reuse this policy-checked session for new-window links.
+                // No UI delegate or separate popup WebView is needed.
                 webView.load(navigationAction.request)
                 decisionHandler(.cancel)
                 return
@@ -3490,7 +3484,6 @@ public struct DownloadResult: Sendable {
         webView.customUserAgent = Self.safariUserAgent
         let navigationDelegate = RecuNavigationDelegate()
         webView.navigationDelegate = navigationDelegate
-        webView.uiDelegate = navigationDelegate
         webView.load(URLRequest(url: pageURL))
 
         var window: NSWindow?
@@ -3552,14 +3545,13 @@ public struct DownloadResult: Sendable {
             }
             // Starting the player can remove #play_button. Completion must
             // depend on the captured request, not on that button remaining.
-            if let html = sessionPageHTML {
-                if let stream = messageHandler.streams.first(where: {
+            if let html = sessionPageHTML,
+               let stream = messageHandler.streams.first(where: {
                     guard let url = URL(string: $0.url), let frame = URL(string: $0.frameURL) else { return false }
                     return url.scheme == "https" && url.pathExtension.lowercased() == "m3u8"
                         && frame.host == pageURL.host && frame.path == pageURL.path
-                }) {
-                    return RecuBrowserSession(pageHTML: html, playlistURL: stream.url, userAgent: sessionUserAgent)
-                }
+               }) {
+                return RecuBrowserSession(pageHTML: html, playlistURL: stream.url, userAgent: sessionUserAgent)
             }
 
             if state.needsSignIn && state.token == nil {

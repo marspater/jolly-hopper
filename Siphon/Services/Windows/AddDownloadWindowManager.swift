@@ -73,16 +73,7 @@ final class AddDownloadWindowManager: NSObject, NSWindowDelegate {
         // An unchanged form is resize feedback or a user's manual resize.
         // Do not resize the window in response to itself.
         guard lastLayout != layout else { return }
-        let titleBarHeight = max(0, window.frame.height - window.contentLayoutRect.height)
-        let desiredHeight = ceil(layout.contentHeight + layout.chromeHeight + titleBarHeight)
-        var frame = Self.grownFrame(window.frame, by: desiredHeight - window.frame.height,
-                                    within: window.screen?.visibleFrame, allowShrink: layout.allowsShrink) ?? window.frame
-        if layout.advancedVisible != advancedVisible {
-            if layout.advancedVisible { collapsedWidth = window.frame.width }
-            let width = collapsedWidth ?? window.frame.width
-            frame = Self.sidePanelFrame(frame, width: layout.advancedVisible ? width + Self.advancedPaneWidth + 1 : width,
-                                        within: window.screen?.visibleFrame)
-        }
+        let frame = targetFrame(for: layout, in: window)
         window.minSize.width = 500
         if abs(frame.width - window.frame.width) > 0.5 || abs(frame.height - window.frame.height) > 0.5 {
             // This native resize settles before the next MainActor layout
@@ -94,6 +85,20 @@ final class AddDownloadWindowManager: NSObject, NSWindowDelegate {
         window.minSize.width = advancedVisible ? 500 + Self.advancedPaneWidth + 1 : 500
         if !advancedVisible { collapsedWidth = nil }
         lastLayout = layout
+    }
+
+    private func targetFrame(for layout: Layout, in window: NSWindow) -> NSRect {
+        let titleBarHeight = max(0, window.frame.height - window.contentLayoutRect.height)
+        let desiredHeight = ceil(layout.contentHeight + layout.chromeHeight + titleBarHeight)
+        var frame = Self.grownFrame(window.frame, by: desiredHeight - window.frame.height,
+                                    within: window.screen?.visibleFrame, allowShrink: layout.allowsShrink) ?? window.frame
+        if layout.advancedVisible != advancedVisible {
+            if layout.advancedVisible { collapsedWidth = window.frame.width }
+            let width = collapsedWidth ?? window.frame.width
+            frame = Self.sidePanelFrame(frame, width: layout.advancedVisible ? width + Self.advancedPaneWidth + 1 : width,
+                                        within: window.screen?.visibleFrame)
+        }
+        return frame
     }
 
     /// `frame` taller by `overflow` with its top edge fixed, clamped to
@@ -133,7 +138,7 @@ final class AddDownloadWindowManager: NSObject, NSWindowDelegate {
 }
 
 private final class AddDownloadWindow: NSWindow {
-    override func animationResizeTime(_ newFrame: NSRect) -> TimeInterval {
+    override func animationResizeTime(_: NSRect) -> TimeInterval {
         SiphonAnimation.panelRevealDuration
     }
 }
