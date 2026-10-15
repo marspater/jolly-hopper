@@ -17,12 +17,15 @@ struct DownloadDiagnosticsView: View {
 
             SiphonTheme.subtleDivider
 
-            Picker("", selection: $selectedTab) {
-                Text(languageService.s("runtime_and_process")).tag(0)
-                Text(languageService.s("media_and_color")).tag(1)
-                Text(languageService.s("command_and_logs")).tag(2)
-            }
-            .pickerStyle(.segmented)
+            SiphonSegmentedPicker(
+                selection: $selectedTab,
+                options: [
+                    (0, languageService.s("runtime_and_process")),
+                    (1, languageService.s("media_and_color")),
+                    (2, languageService.s("command_and_logs"))
+                ]
+            )
+            .accessibilityElement(children: .contain)
             .padding(.horizontal, SiphonTheme.spacing20)
             .padding(.vertical, SiphonTheme.spacing12)
             .accessibilityLabel(languageService.s("view_diagnostics"))
@@ -135,29 +138,29 @@ struct DownloadDiagnosticsView: View {
         }
         switch download.status {
         case .completed:
-            return "Completed (0)"
+            return languageService.s("diag_exit_completed")
         case .failed:
-            return "Failed"
+            return languageService.s("diag_exit_failed")
         default:
-            return "Running"
+            return languageService.s("diag_exit_running")
         }
     }
 
     private var runtimeTab: some View {
         VStack(spacing: 12) {
-            diagnosticSection(title: "Process Execution") {
-                diagnosticRow(label: "Process ID (PID)", value: download.diagnostics.pid.map { "\($0)" } ?? (download.status == .downloading || download.status == .processing ? "Active Subprocess" : "Terminated"))
-                diagnosticRow(label: "Exit Status", value: diagnosticExitStatus)
-                diagnosticRow(label: "yt-dlp Engine", value: download.diagnostics.ytdlpVersion ?? "yt-dlp (System/AppSupport)")
-                diagnosticRow(label: "FFmpeg Pipeline", value: download.diagnostics.ffmpegVersion ?? "FFmpeg (Static build)")
+            diagnosticSection(title: languageService.s("diag_process_execution")) {
+                diagnosticRow(label: languageService.s("diag_process_id"), value: download.diagnostics.pid.map { "\($0)" } ?? (download.status == .downloading || download.status == .processing ? languageService.s("diag_active_subprocess") : languageService.s("diag_terminated")))
+                diagnosticRow(label: languageService.s("diag_exit_status"), value: diagnosticExitStatus)
+                diagnosticRow(label: languageService.s("diag_ytdlp_engine"), value: download.diagnostics.ytdlpVersion ?? languageService.s("diag_ytdlp_fallback"))
+                diagnosticRow(label: languageService.s("diag_ffmpeg_pipeline"), value: download.diagnostics.ffmpegVersion ?? languageService.s("diag_ffmpeg_fallback"))
             }
 
-            diagnosticSection(title: "Network & Timing") {
-                diagnosticRow(label: "Source URL", value: download.url, isMonospace: true)
-                diagnosticRow(label: "Resolved Domain", value: download.sourceDomain)
-                diagnosticRow(label: "Peak Download Speed", value: download.diagnostics.peakSpeed ?? download.speed ?? "N/A")
-                diagnosticRow(label: "Duration", value: download.duration ?? "N/A")
-                diagnosticRow(label: "HTTP Retry Count", value: "\(download.diagnostics.httpRetries)")
+            diagnosticSection(title: languageService.s("diag_network_timing")) {
+                diagnosticRow(label: languageService.s("diag_source_url"), value: download.url, isMonospace: true)
+                diagnosticRow(label: languageService.s("diag_resolved_domain"), value: download.sourceDomain)
+                diagnosticRow(label: languageService.s("diag_peak_speed"), value: download.diagnostics.peakSpeed ?? download.speed ?? languageService.s("diag_not_available"))
+                diagnosticRow(label: languageService.s("diag_duration"), value: download.duration ?? languageService.s("diag_not_available"))
+                diagnosticRow(label: languageService.s("diag_http_retries"), value: "\(download.diagnostics.httpRetries)")
             }
         }
     }
@@ -166,26 +169,26 @@ struct DownloadDiagnosticsView: View {
 
     private var mediaAndColorTab: some View {
         VStack(spacing: 12) {
-            diagnosticSection(title: "Stream & Formats") {
-                diagnosticRow(label: "Selected Format ID", value: download.diagnostics.formatId ?? download.options.selectedFormatId ?? languageService.s("not_detected"))
-                diagnosticRow(label: "Video Codec", value: download.diagnostics.videoCodec ?? download.options.videoCodec?.title(lang: languageService) ?? "Auto")
-                diagnosticRow(label: "Audio Codec", value: download.diagnostics.audioCodec ?? download.options.audioCodec?.title(lang: languageService) ?? "Auto")
-                diagnosticRow(label: "Container", value: (download.diagnostics.container ?? download.options.fileType.rawValue).uppercased())
-                diagnosticRow(label: "Resolution & FPS", value: download.diagnostics.resolution ?? download.options.videoResolution?.title(lang: languageService) ?? "Best")
+            diagnosticSection(title: languageService.s("diag_stream_formats")) {
+                diagnosticRow(label: languageService.s("diag_format_id"), value: download.diagnostics.formatId ?? download.options.selectedFormatId ?? languageService.s("not_detected"))
+                diagnosticRow(label: languageService.s("diag_video_codec"), value: download.diagnostics.videoCodec ?? download.options.videoCodec?.title(lang: languageService) ?? languageService.s("diag_auto"))
+                diagnosticRow(label: languageService.s("diag_audio_codec"), value: download.diagnostics.audioCodec ?? download.options.audioCodec?.title(lang: languageService) ?? languageService.s("diag_auto"))
+                diagnosticRow(label: languageService.s("diag_container"), value: (download.diagnostics.container ?? download.options.fileType.rawValue).uppercased())
+                diagnosticRow(label: languageService.s("diag_resolution_fps"), value: download.diagnostics.resolution ?? download.options.videoResolution?.title(lang: languageService) ?? languageService.s("diag_best"))
             }
 
-            diagnosticSection(title: "Color Space & Dynamic Range (EDR)") {
-                diagnosticRow(label: "Dynamic Range", value: download.diagnostics.dynamicRange ?? (download.mediaInfo?.formats?.first(where: { $0.isHDR }) != nil ? "HDR" : languageService.s("not_detected")))
-                diagnosticRow(label: "Color Primaries / Space", value: download.diagnostics.colorSpace ?? languageService.s("not_detected"))
-                diagnosticRow(label: "Bit Depth", value: download.diagnostics.bitDepth.map { "\($0)-bit per channel" } ?? languageService.s("not_detected"))
-                diagnosticRow(label: "HDR Action Policy", value: download.options.hdrAction?.title(lang: languageService) ?? "Preserve HDR")
+            diagnosticSection(title: languageService.s("diag_color_section")) {
+                diagnosticRow(label: languageService.s("diag_dynamic_range"), value: download.diagnostics.dynamicRange ?? (download.mediaInfo?.formats?.first(where: { $0.isHDR }) != nil ? "HDR" : languageService.s("not_detected")))
+                diagnosticRow(label: languageService.s("diag_color_space"), value: download.diagnostics.colorSpace ?? languageService.s("not_detected"))
+                diagnosticRow(label: languageService.s("diag_bit_depth"), value: download.diagnostics.bitDepth.map { String(format: languageService.s("diag_bit_depth_value"), $0) } ?? languageService.s("not_detected"))
+                diagnosticRow(label: languageService.s("diag_hdr_policy"), value: download.options.hdrAction?.title(lang: languageService) ?? languageService.s("diag_preserve_hdr"))
             }
 
             if !download.filePaths.isEmpty {
-                diagnosticSection(title: download.filePaths.count > 1 ? "Local File Targets (\(download.filePaths.count) files)" : "Local File Target") {
+                diagnosticSection(title: download.filePaths.count > 1 ? String(format: languageService.s("diag_file_targets"), download.filePaths.count) : languageService.s("diag_file_target")) {
                     ForEach(Array(download.filePaths.enumerated()), id: \.element) { idx, file in
-                        diagnosticRow(label: download.filePaths.count > 1 ? "File \(idx + 1)" : "Destination Path", value: file.path, isMonospace: true)
-                        diagnosticRow(label: download.filePaths.count > 1 ? "Status \(idx + 1)" : "File Exists", value: FileManager.default.fileExists(atPath: file.path) ? "Yes (Valid)" : "No (Temporary/Moved)")
+                        diagnosticRow(label: download.filePaths.count > 1 ? String(format: languageService.s("diag_file_n"), idx + 1) : languageService.s("diag_destination_path"), value: file.path, isMonospace: true)
+                        diagnosticRow(label: download.filePaths.count > 1 ? String(format: languageService.s("diag_status_n"), idx + 1) : languageService.s("diag_file_exists"), value: FileManager.default.fileExists(atPath: file.path) ? languageService.s("diag_file_present") : languageService.s("diag_file_missing"))
                     }
                 }
             }
@@ -406,7 +409,7 @@ struct DownloadDiagnosticsView: View {
         }
         let matches = download.log.split(whereSeparator: \.isNewline)
             .filter { $0.localizedCaseInsensitiveContains(logSearchText) }
-        return matches.isEmpty ? "No matches for '\(logSearchText)'" : matches.joined(separator: "\n")
+        return matches.isEmpty ? String(format: languageService.s("diag_no_matches"), logSearchText) : matches.joined(separator: "\n")
     }
 
     private func copyToClipboard(_ text: String, label: String) {
@@ -431,6 +434,6 @@ struct DownloadDiagnosticsView: View {
         - **Exit Status**: \(download.diagnostics.exitStatus ?? "N/A")
         - **Path(s)**: \(download.filePathStrings.isEmpty ? "N/A" : download.filePathStrings.joined(separator: ", "))
         """
-        copyToClipboard(report, label: "Markdown report copied!")
+        copyToClipboard(report, label: languageService.s("diag_report_copied"))
     }
 }
