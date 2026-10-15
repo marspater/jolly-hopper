@@ -977,14 +977,16 @@ class YtdlpService: ObservableObject {
         proxy: String? = nil
     ) async throws -> MediaInfo {
         // Site resolvers make their own requests; the binding routes those too.
-        try await EgressBoundary.$proxyURL.withValue(proxy ?? EgressBoundary.proxyURL) {
-            try await fetchInfoWithinBoundary(
-                url: url,
-                rawCookies: rawCookies,
-                rawUserAgent: rawUserAgent,
-                browserCookieSource: browserCookieSource,
-                proxy: proxy
-            )
+        try await EgressBoundary.$ytdlpExecutablePath.withValue(resolvedYtdlpBinary?.path) {
+            try await EgressBoundary.$proxyURL.withValue(proxy ?? EgressBoundary.proxyURL) {
+                try await fetchInfoWithinBoundary(
+                    url: url,
+                    rawCookies: rawCookies,
+                    rawUserAgent: rawUserAgent,
+                    browserCookieSource: browserCookieSource,
+                    proxy: proxy
+                )
+            }
         }
     }
 
@@ -1735,16 +1737,18 @@ public struct DownloadResult: Sendable {
             }
         }
         let boundaryProxy = options.enforcePublicNetworkBoundary ? try await egressProxyURL() : nil
-        return try await EgressBoundary.$proxyURL.withValue(boundaryProxy) {
-            try await downloadWithinBoundary(
-                url: url,
-                options: options,
-                mediaInfo: mediaInfo,
-                processController: processController,
-                temporaryDirectory: temporaryDirectory,
-                onProgress: onProgress,
-                onOutput: onOutput
-            )
+        return try await EgressBoundary.$ytdlpExecutablePath.withValue(resolvedYtdlpBinary?.path) {
+            try await EgressBoundary.$proxyURL.withValue(boundaryProxy) {
+                try await downloadWithinBoundary(
+                    url: url,
+                    options: options,
+                    mediaInfo: mediaInfo,
+                    processController: processController,
+                    temporaryDirectory: temporaryDirectory,
+                    onProgress: onProgress,
+                    onOutput: onOutput
+                )
+            }
         }
     }
 
@@ -1973,10 +1977,11 @@ public struct DownloadResult: Sendable {
 
         args.append(contentsOf: buildFormatArgs(url: url, options: options, mediaInfo: mediaInfo, deferPostprocessing: bestCamDecryptionKey != nil))
         let codecFallbackWarnings = codecFallbackOutputWarnings(options: options)
-        if options.downloadSubtitles && !options.subtitleLanguages.isEmpty {
+        if options.downloadSubtitles {
             let subFormat = options.subtitleFormat?.ytdlpValue ?? "srt"
             args.append(contentsOf: ["--sub-format", "\(subFormat)/best"])
-            let safeLangs = options.subtitleLanguages.filter { Self.isSafeSubtitleLanguage($0) }
+            let requestedLanguages = options.subtitleLanguages.isEmpty ? ["en"] : options.subtitleLanguages
+            let safeLangs = requestedLanguages.filter { Self.isSafeSubtitleLanguage($0) }
             if !safeLangs.isEmpty {
                 let langList = safeLangs.joined(separator: ",")
                 args.append(contentsOf: ["--sub-langs", langList])
@@ -7703,6 +7708,7 @@ public struct DownloadResult: Sendable {
     }
 
     private func runCommand(_ args: [String]) async throws -> String {
+        let args = EgressBoundary.applying(to: args, downloaderPath: resolvedYtdlpBinary?.path)
         try Task.checkCancellation()
         do {
             return try await runTransportCommand(args)

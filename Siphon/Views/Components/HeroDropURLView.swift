@@ -374,18 +374,27 @@ struct HeroDropURLView: View {
         }
     }
 
+    nonisolated static func droppedURL(from data: Data) -> String? {
+        if let plist = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any],
+           let url = plist["URL"] as? String {
+            return DownloadURLValidator.extractURLs(from: url).first
+        }
+        guard let text = String(data: data, encoding: .utf8) else { return nil }
+        return DownloadURLValidator.extractURLs(from: text.replacingOccurrences(of: "\0", with: "\n")).first
+    }
+
     private func handleDirectURLDrop(_ provider: NSItemProvider) {
         provider.loadItem(forTypeIdentifier: UTType.url.identifier, options: nil) { item, _ in
             let urlString: String? = {
                 if let url = item as? URL { return url.absoluteString }
-                if let data = item as? Data { return String(data: data, encoding: .utf8) }
+                if let data = item as? Data { return Self.droppedURL(from: data) }
                 if let str = item as? String { return str }
                 return nil
             }()
 
             if let raw = urlString {
                 Task { @MainActor in
-                    if case .valid(_, let original) = DownloadURLValidator.validate(raw) {
+                    if let original = DownloadURLValidator.extractURLs(from: raw.replacingOccurrences(of: "\0", with: "\n")).first {
                         inputURL = original
                         submitURL()
                     } else {
