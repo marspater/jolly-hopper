@@ -57,14 +57,8 @@ final class AddDownloadWindowManager: NSObject, NSWindowDelegate {
     /// inside the screen's visible frame. It never shrinks a window the user
     /// made larger.
     func growToFit(overflow: CGFloat) {
-        guard overflow > 0.5, let window = windowController?.window else { return }
-        var frame = window.frame
-        frame.size.height += overflow
-        frame.origin.y -= overflow
-        if let visible = window.screen?.visibleFrame {
-            frame.size.height = min(frame.size.height, visible.height)
-            frame.origin.y = max(frame.origin.y, visible.minY)
-        }
+        guard let window = windowController?.window,
+              let frame = Self.grownFrame(window.frame, by: overflow, within: window.screen?.visibleFrame) else { return }
         guard !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else {
             window.setFrame(frame, display: true)
             return
@@ -74,6 +68,20 @@ final class AddDownloadWindowManager: NSObject, NSWindowDelegate {
             context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
             window.animator().setFrame(frame, display: true)
         }
+    }
+
+    /// `frame` taller by `overflow` with its top edge fixed, clamped to
+    /// `visible`; nil when there is nothing to grow.
+    nonisolated static func grownFrame(_ frame: NSRect, by overflow: CGFloat, within visible: NSRect?) -> NSRect? {
+        guard overflow > 0.5 else { return nil }
+        var grown = frame
+        grown.size.height += overflow
+        grown.origin.y -= overflow
+        if let visible {
+            grown.size.height = min(grown.size.height, visible.height)
+            grown.origin.y = max(grown.origin.y, visible.minY)
+        }
+        return grown
     }
 
     func closeWindow() {
