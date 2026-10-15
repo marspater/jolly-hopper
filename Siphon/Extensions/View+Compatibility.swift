@@ -72,7 +72,7 @@ public final class AdaptiveRenderingEnvironment: ObservableObject {
     @Published public var isAppActive: Bool = true
 
     public var shouldAnimateAmbient: Bool {
-        isAppActive
+        isAppActive && !capabilities.reduceMotion
     }
 
     private init() {
@@ -1034,7 +1034,6 @@ public struct SiphonInteractiveGlassModifier: ViewModifier {
                     )
                 )
                 .shadow(color: Color.black.opacity(isHovered ? 0.16 : 0.08), radius: isHovered ? 4 : 2, y: 1)
-                .scaleEffect(isHovered ? 1.012 : 1.0)
                 .animation(SiphonAnimation.hoverSpring, value: isHovered)
                 .animation(SiphonAnimation.fluidSpring, value: isSelected)
                 .onHover { hovering in
@@ -1068,7 +1067,7 @@ public struct BouncyButtonStyle: ButtonStyle {
 
     public func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .scaleEffect(buttonScale(isPressed: configuration.isPressed))
+            .siphonMotionScale(buttonScale(isPressed: configuration.isPressed))
             .animation(SiphonAnimation.buttonPressSpring, value: configuration.isPressed)
             .animation(SiphonAnimation.buttonHoverSpring, value: isHovered)
             .onHover { isHovered = $0 }
@@ -1129,7 +1128,7 @@ public struct SiphonPrimaryButtonStyle: ButtonStyle {
                     .stroke(isEnabled ? Color.white.opacity(0.25) : Color.primary.opacity(SiphonTheme.Opacity.fillGhostHover), lineWidth: 1)
             )
             .shadow(color: isEnabled ? SiphonTheme.accent.opacity(isHovered ? 0.35 : 0.20) : .clear, radius: isHovered ? 8 : 4, y: 2)
-            .scaleEffect(buttonScale(isPressed: configuration.isPressed))
+            .siphonMotionScale(buttonScale(isPressed: configuration.isPressed))
             .animation(SiphonAnimation.buttonPressSpring, value: configuration.isPressed)
             .animation(SiphonAnimation.buttonHoverSpring, value: isHovered)
             .onHover { isHovered = $0 }
@@ -1167,7 +1166,7 @@ public struct SiphonSecondaryButtonStyle: ButtonStyle {
             .overlay(
                 SiphonTheme.controlBorder(cornerRadius: cornerRadius, isHovered: isHovered)
             )
-            .scaleEffect(buttonScale(isPressed: configuration.isPressed))
+            .siphonMotionScale(buttonScale(isPressed: configuration.isPressed))
             .animation(SiphonAnimation.buttonPressSpring, value: configuration.isPressed)
             .animation(SiphonAnimation.buttonHoverSpring, value: isHovered)
             .opacity(isEnabled ? 1.0 : 0.45)
@@ -1201,7 +1200,7 @@ public struct SiphonGhostButtonStyle: ButtonStyle {
                 RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                     .stroke(Color.secondary.opacity(showBorders ? 0.65 : 0.0), lineWidth: 1)
             )
-            .scaleEffect(configuration.isPressed ? 0.97 : 1.0)
+            .siphonMotionScale(configuration.isPressed ? 0.97 : 1.0)
             .animation(SiphonAnimation.buttonPressSpring, value: configuration.isPressed)
             .animation(SiphonAnimation.buttonHoverSpring, value: isHovered)
             .opacity(isEnabled ? 1.0 : 0.45)
@@ -1241,7 +1240,7 @@ public struct SiphonIconButtonStyle: ButtonStyle {
                 Circle()
                     .stroke(Color.secondary.opacity(showBorders ? 0.65 : 0.0), lineWidth: 1)
             )
-            .scaleEffect(buttonScale(isPressed: configuration.isPressed))
+            .siphonMotionScale(buttonScale(isPressed: configuration.isPressed))
             .animation(SiphonAnimation.buttonPressSpring, value: configuration.isPressed)
             .animation(SiphonAnimation.buttonHoverSpring, value: isHovered)
             .opacity(isEnabled ? 1.0 : 0.45)
@@ -1282,16 +1281,36 @@ public struct SiphonCardHoverModifier: ViewModifier {
     public let isHovered: Bool
     public var tint: Color = SiphonTheme.accent
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     public func body(content: Content) -> some View {
+        let lifts = isHovered && !reduceMotion
         content
-            .scaleEffect(isHovered ? 1.012 : 1.0)
-            .offset(y: isHovered ? -2 : 0)
+            .scaleEffect(lifts ? 1.012 : 1.0)
+            .offset(y: lifts ? -2 : 0)
             .shadow(
                 color: tint.opacity(isHovered ? 0.20 : 0.035),
                 radius: isHovered ? 14 : 4,
                 y: isHovered ? 5 : 2
             )
-            .animation(SiphonAnimation.bouncySpring, value: isHovered)
+            .animation(SiphonAnimation.hoverSpring, value: isHovered)
+    }
+}
+
+/// Scale feedback for hover and press. Under Reduce Motion the view stays at
+/// its size; tint, border and shadow changes still show the state.
+private struct SiphonMotionScaleModifier: ViewModifier {
+    let scale: CGFloat
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    func body(content: Content) -> some View {
+        content.scaleEffect(reduceMotion ? 1.0 : scale)
+    }
+}
+
+extension View {
+    func siphonMotionScale(_ scale: CGFloat) -> some View {
+        modifier(SiphonMotionScaleModifier(scale: scale))
     }
 }
 
