@@ -8,6 +8,7 @@
 - Double-clicking a finished download's card, or its row in Recent downloads, plays the video.
 - Cards, fields, pills and buttons inside a window no longer add a second blur over the window's glass, so Dark Mode greys stay clean and scrolling composites less. With Reduce Transparency, windows draw an opaque background.
 - On macOS 26 and later, small glass buttons (Check for Updates, About links, sidebar Settings) use native Liquid Glass with an accent tint on hover. The URL hero card's corners are now concentric with its URL field.
+- Motion is calmer and more consistent: each hover runs one spring, download cards fade their background and border with the lift, pages fade in with a slight rise, and Add Download's details and errors drop gently into place. With Reduce Motion, the logo stops spinning, hover and press no longer scale or lift, and new content only fades.
 
 ### Security
 

@@ -164,6 +164,12 @@ truth only when the value is genuinely reused or has semantic meaning.
   close to the view that changes.
 - Siphon's fluid and bouncy motion remains enabled while the app is active; pause
   frame-scheduled ambient work when the app is inactive.
+- Reduce Motion: `shouldAnimateAmbient` turns ambient logo and wave motion off;
+  hover and press keep their tint, border and shadow changes but drop scale and
+  lift (`siphonMotionScale`, `siphonCardHover`); page switches and revealed cards
+  only fade.
+- A button's `ButtonStyle` owns its scale. Surface modifiers such as
+  `siphonInteractiveGlass()` only tint, so one interaction runs one spring.
 - Avoid animating layout at the root of a large screen or combining several
   competing spring timings for one interaction.
 - Custom frame-scheduled animation uses a 60 Hz baseline and may step up to
