@@ -9,6 +9,10 @@ import Darwin
 
 public enum ExternalDownloadTargetPolicy {
     public static func isAllowed(_ url: URL) -> Bool {
+        isAllowed(url, resolveDNS: true)
+    }
+
+    private static func isAllowed(_ url: URL, resolveDNS: Bool) -> Bool {
         guard let scheme = url.scheme?.lowercased(),
               ["http", "https"].contains(scheme),
               url.user == nil,
@@ -22,14 +26,9 @@ public enum ExternalDownloadTargetPolicy {
         while host.hasSuffix(".") {
             host.removeLast()
         }
-        guard !host.isEmpty else { return false }
-
-        if host == "localhost" ||
-            host.hasSuffix(".localhost") ||
-            host.hasSuffix(".local") ||
-            host.hasSuffix(".localdomain") ||
-            host.hasSuffix(".internal") ||
-            host.hasSuffix(".lan") {
+        let localDomains = ["localhost", "local", "localdomain", "internal", "lan"]
+        guard !host.isEmpty,
+              !localDomains.contains(where: { host == $0 || host.hasSuffix("." + $0) }) else {
             return false
         }
 
@@ -56,10 +55,15 @@ public enum ExternalDownloadTargetPolicy {
         // Hostname passed static checks. Resolve DNS and verify every
         // returned address is globally routable to prevent SSRF via
         // domains that resolve to private/reserved IP ranges.
-        return resolveAndValidateHost(host)
+        return !resolveDNS || resolveAndValidateHost(host)
     }
 
     public static func isAllowedTarget(host: String, port: Int? = nil) -> Bool {
+        isAllowedTarget(host: host, port: port, resolveDNS: true)
+    }
+
+    // The proxy validates its own single DNS snapshot before connecting to numeric addresses.
+    static func isAllowedTarget(host: String, port: Int?, resolveDNS: Bool) -> Bool {
         var cleanHost = host.trimmingCharacters(in: .whitespacesAndNewlines)
         if cleanHost.hasPrefix("[") && cleanHost.hasSuffix("]") {
             cleanHost = String(cleanHost.dropFirst().dropLast())
@@ -68,7 +72,7 @@ public enum ExternalDownloadTargetPolicy {
         let hostForURL = cleanHost.contains(":") ? "[\(cleanHost)]" : cleanHost
         let portStr = port.map { ":\($0)" } ?? ""
         guard let url = URL(string: "https://\(hostForURL)\(portStr)") else { return false }
-        return isAllowed(url)
+        return isAllowed(url, resolveDNS: resolveDNS)
     }
 
     private static func looksLikeLegacyIPv4Literal(_ host: String) -> Bool {
@@ -139,12 +143,10 @@ public enum ExternalDownloadTargetPolicy {
     }
 
     private static func isGloballyRoutableIPv6(_ host: String) -> Bool {
-        var value = host
+        let value = host
             .trimmingCharacters(in: CharacterSet(charactersIn: "[]"))
             .lowercased()
-        if let zoneIndex = value.firstIndex(of: "%") {
-            value = String(value[..<zoneIndex])
-        }
+        guard !value.contains("%") else { return false }
 
         var sin6Addr = in6_addr()
         let parsed = value.withCString { cString in
@@ -499,27 +501,32 @@ public final class AppState: ObservableObject {
         return credentials
     }
 
+    /// Playlist expansion may canonicalize a known short domain. Preserve browser
+    /// identity for that family, but never re-scope raw cookies to a different origin.
+    public func consumeBrowserSession(forPlaylistURL originalURL: String, itemURLs: [String]) -> BrowserSessionCredentials? {
+        defer { clearBrowserSession() }
+        guard let credentials = browserSession(for: originalURL), !itemURLs.isEmpty,
+              let original = Self.normalizedOrigin(for: originalURL) else { return nil }
+        let targets = itemURLs.compactMap(Self.normalizedOrigin)
+        guard targets.count == itemURLs.count else { return nil }
+        if targets.allSatisfy({ $0 == original }) { return credentials }
+        func isCanonicalYouTubeOrigin(_ origin: BrowserOrigin) -> Bool {
+            origin.scheme == "https" && origin.port == 443 &&
+                (origin.host == "youtu.be" || origin.host == "youtube.com" || origin.host.hasSuffix(".youtube.com"))
+        }
+        guard isCanonicalYouTubeOrigin(original), targets.allSatisfy(isCanonicalYouTubeOrigin) else { return nil }
+        return BrowserSessionCredentials(originScheme: credentials.originScheme, originHost: credentials.originHost,
+            rawCookies: nil, rawUserAgent: credentials.rawUserAgent, browserCookieSource: credentials.browserCookieSource,
+            originPort: credentials.originPort)
+    }
+
     public func setExternalTarget(_ urlString: String) {
         externalTargetURL = urlString.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    public func consumeExternalTarget(for urlString: String) -> Bool {
-        let clean = urlString.trimmingCharacters(in: .whitespacesAndNewlines)
-        if let target = externalTargetURL, target == clean {
-            externalTargetURL = nil
-            return true
-        }
-        return false
-    }
-
-    public func consumeExternalTarget(for urls: [String]) -> Bool {
-        let cleanUrls = Set(urls.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) })
-        if let target = externalTargetURL, cleanUrls.contains(target) {
-            externalTargetURL = nil
-            return true
-        }
-        return false
-    }
+    /// Provenance belongs to the Add Download session, including edited URLs and batches.
+    /// Only dismissal clears it; consuming credentials must never remove the boundary.
+    public var hasExternalTarget: Bool { externalTargetURL != nil }
 
     /// Clears browser credentials only. The external-target marker is security
     /// provenance, not a credential: it must outlive credential clears, or a URL

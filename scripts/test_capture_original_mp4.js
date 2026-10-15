@@ -1,5 +1,15 @@
 const assert = require("node:assert/strict");
-const { originalURLs, init } = require("./capture_original_mp4.js");
+const { originalURLs, init, detectBrowserSource } = require("./capture_original_mp4.js");
+
+for (const [nav, expected] of [
+    [{ userAgent: "Firefox/140.0" }, "firefox"],
+    [{ userAgent: "Chrome/140.0 Safari/537.36" }, "chromium-based"],
+    [{ userAgent: "Chrome/140.0 Safari/537.36", userAgentData: { brands: [{ brand: "Google Chrome" }] } }, "chrome"],
+    [{ userAgent: "Chrome/140.0 Safari/537.36 Arc/1.0" }, "arc"],
+    [{ userAgent: "Chrome/140.0 Safari/537.36", brave: { isBrave() {} } }, "brave"],
+    [{ userAgent: "Safari/605.1" }, "safari"],
+    [{ userAgent: "Unknown browser" }, "none"]
+]) { assert.equal(detectBrowserSource(nav), expected); }
 
 const original = "https://cdn.example.com/video_source.mp4?Policy=sample&Signature=a%2Bb&u=123";
 assert.deepEqual(originalURLs({ files: { source: { url: original } } }), [original]);
