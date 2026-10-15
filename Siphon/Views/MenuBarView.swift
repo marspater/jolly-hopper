@@ -153,28 +153,24 @@ struct MenuBarView: View {
             Spacer()
 
             // Compact Preset Picker
-            Picker("", selection: $selectedPreset) {
-                Section(languageService.s("standard")) {
-                    ForEach(DownloadPreset.allCases) { preset in
-                        if (selectedType == "video" && preset != .audioOnly) || (selectedType == "audio" && preset == .audioOnly) {
-                            Text(preset.title(lang: languageService)).tag(preset.rawValue)
-                        }
-                    }
-                }
-
-                let filtered = customPresets.filter { (selectedType == "video" && $0.fileType.isVideo) || (selectedType == "audio" && $0.fileType.isAudio) }
-                if !filtered.isEmpty {
-                    Section(languageService.s("custom")) {
-                        ForEach(filtered) { preset in
-                            Text(preset.name).tag("custom_" + preset.id.uuidString)
-                        }
-                    }
-                }
-            }
-            .pickerStyle(.menu)
+            SiphonMenuPicker(
+                selection: $selectedPreset,
+                sections: [
+                    (
+                        header: languageService.s("standard"),
+                        options: DownloadPreset.allCases
+                            .filter { selectedType == "video" ? $0 != .audioOnly : $0 == .audioOnly }
+                            .map { preset in (value: preset.rawValue, title: preset.title(lang: languageService)) }
+                    ),
+                    (
+                        header: languageService.s("custom"),
+                        options: customPresets
+                            .filter { selectedType == "video" ? $0.fileType.isVideo : $0.fileType.isAudio }
+                            .map { preset in (value: "custom_" + preset.id.uuidString, title: preset.name) }
+                    )
+                ]
+            )
             .controlSize(.small)
-            .labelsHidden()
-            .tint(nil)
             .accessibilityLabel(languageService.s("menubar_preset"))
         }
     }
