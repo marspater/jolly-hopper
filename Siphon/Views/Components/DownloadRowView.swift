@@ -185,7 +185,7 @@ struct DownloadRowView: View {
                                     .foregroundColor(SiphonTheme.statusForeground(for: .paused, colorScheme: colorScheme))
                             }
 
-                            if download.status == .completed && primaryFileIsPresent == false {
+                            if download.hasPlayableOutput && primaryFileIsPresent == false {
                                 Label(languageService.s("file_missing"), systemImage: "questionmark.folder")
                                     .font(.siphonMetadataMedium)
                                     .foregroundColor(.secondary)
@@ -234,7 +234,7 @@ struct DownloadRowView: View {
         }
         .onTapGesture(count: 2) {
             // Double-clicking a finished card does what its Play button does.
-            if download.status == .completed, let path = download.primaryFilePath, primaryFileIsPresent != false {
+            if download.hasPlayableOutput, let path = download.primaryFilePath, primaryFileIsPresent != false {
                 downloadManager.openFile(path)
             }
         }
@@ -466,7 +466,7 @@ struct DownloadRowView: View {
     }
 
     private var canPreviewMedia: Bool {
-        download.status == .completed && download.primaryFilePath != nil && primaryFileIsPresent != false
+        download.hasPlayableOutput && download.primaryFilePath != nil && primaryFileIsPresent != false
     }
 
     private var thumbnailAccessibilityLabel: String {
@@ -650,6 +650,19 @@ struct FileThumbnailView: View {
 
     private var actionButtons: some View {
         HStack(spacing: SiphonTheme.spacing6) {
+            if download.status == .failed && download.hasPlayableOutput,
+               let path = download.primaryFilePath, primaryFileIsPresent != false {
+                Button {
+                    downloadManager.openFile(path)
+                } label: {
+                    Image(systemName: "play.circle.fill")
+                        .font(.system(size: 18, weight: .semibold))
+                }
+                .buttonStyle(.siphonIcon(size: 28))
+                .foregroundColor(SiphonTheme.accentText)
+                .help(languageService.s("play"))
+                .accessibilityLabel(languageService.s("play"))
+            }
             // Completed state: one visible contextual action + exhaustive More menu
             if download.status == .completed {
                 if let path = download.primaryFilePath, primaryFileIsPresent != false {
@@ -866,6 +879,7 @@ struct FileThumbnailView: View {
                     } label: {
                         Label(languageService.s("resume"), systemImage: "play.fill")
                     }
+                    .disabled(download.requiresAdvancedArgumentsReview)
 
                     Button {
                         downloadManager.stopDownload(download)
@@ -980,7 +994,7 @@ struct FileThumbnailView: View {
 
     @ViewBuilder
     private var rowContextMenu: some View {
-        if download.status == .completed {
+        if download.hasPlayableOutput {
             if download.filePaths.count > 1 {
                 Menu {
                     ForEach(download.filePaths, id: \.self) { chapter in
@@ -1060,6 +1074,7 @@ struct FileThumbnailView: View {
             } label: {
                 Label(languageService.s("resume"), systemImage: "play.fill")
             }
+            .disabled(download.requiresAdvancedArgumentsReview)
 
             Button {
                 downloadManager.stopDownload(download)
@@ -1202,7 +1217,7 @@ struct FileThumbnailView: View {
                     .overlay(SiphonTheme.cardBorder(cornerRadius: SiphonTheme.radiusControl))
 
                 ReadOnlyLogView(
-                    text: download.log.isEmpty ? languageService.s("no_log") : download.log,
+                    text: download.log.isEmpty ? languageService.s("no_log") : LoggerService.sanitizedDiagnosticExport(download.log),
                     fontSize: 11
                 )
                 .padding(SiphonTheme.spacing8)
@@ -1215,7 +1230,7 @@ struct FileThumbnailView: View {
                 Button {
                     let pasteboard = NSPasteboard.general
                     pasteboard.clearContents()
-                    pasteboard.setString(download.log, forType: .string)
+                    pasteboard.setString(LoggerService.sanitizedDiagnosticExport(download.log), forType: .string)
                     logCopyFeedback.show(languageService.s("copied"), isSuccess: true, duration: 1.5, animation: SiphonAnimation.snappySpring)
                 } label: {
                     HStack(spacing: 6) {

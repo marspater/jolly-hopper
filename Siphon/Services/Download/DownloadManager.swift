@@ -127,14 +127,12 @@ class DownloadManager: ObservableObject {
             switch download.status {
             case .downloading, .fetching, .processing:
                 downloading += 1
-            case .queued, .paused:
+            case .queued, .paused, .fileExists:
                 queued += 1
             case .completed:
                 completed += 1
             case .failed, .stopped:
                 failed += 1
-            default:
-                break
             }
         }
         return (downloading, queued, completed, failed)
@@ -252,7 +250,7 @@ class DownloadManager: ObservableObject {
     }
 
     func addDownload(url: String, options: DownloadOptions, mediaInfo: MediaInfo? = nil) {
-        let download = Download(url: url, options: options, title: mediaInfo?.title ?? "___FETCHING___")
+        let download = Download(url: url, options: options, title: mediaInfo?.title ?? "___FETCHING___", titleIsDecoded: true)
         if let info = mediaInfo {
             download.mediaInfo = info
             download.thumbnailURL = info.thumbnailURL
@@ -465,7 +463,7 @@ class DownloadManager: ObservableObject {
     func resumeWithNewName(_ download: Download) {
         guard !download.requiresAdvancedArgumentsReview else { return }
         let (candidateName, _) = planUniqueOutputPath(for: download, forceIncrement: true)
-        download.options.customFilename = candidateName
+        download.resolvedOutputBaseName = candidateName
         download.options.forceOverwrite = false
         download.mediaInfo = nil
         updateStatus(for: download, to: .queued)
@@ -648,7 +646,7 @@ class DownloadManager: ObservableObject {
     /// Reveals the file that blocked a `.fileExists` download, or its folder.
     func revealExistingFile(for download: Download) {
         // Same base name the executor checked for the collision.
-        let baseName = YtdlpService.sanitizeFilename(download.options.customFilename ?? download.title)
+        let baseName = YtdlpService.sanitizeFilename(download.outputBaseName)
         let options = download.options
         let folder = options.saveFolder
         Task {

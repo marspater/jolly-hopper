@@ -7,7 +7,7 @@ final class AddDownloadWindowManager: NSObject, NSWindowDelegate {
 
     private var windowController: NSWindowController?
 
-    func showAddDownloadWindow(downloadManager: DownloadManager, appState: AppState, languageService: LanguageService) {
+    func showAddDownloadWindow(downloadManager: DownloadManager, appState: AppState, languageService: LanguageService, updateChecker: UpdateChecker) {
         if let existingController = windowController, let existingWindow = existingController.window {
             existingWindow.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
@@ -18,6 +18,7 @@ final class AddDownloadWindowManager: NSObject, NSWindowDelegate {
             .environmentObject(downloadManager)
             .environmentObject(appState)
             .environmentObject(languageService)
+            .environmentObject(updateChecker)
 
         let hostingController = NSHostingController(rootView: addDownloadView)
 
