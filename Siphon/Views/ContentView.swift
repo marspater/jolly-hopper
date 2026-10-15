@@ -160,7 +160,7 @@ struct ContentView: View {
             Button(languageService.s("queue_recovery_retry_save")) {
                 downloadManager.persistQueueRecoveryState()
             }
-            .buttonStyle(.bordered)
+            .buttonStyle(.siphonSecondary)
             .tint(nil)
         }
         .siphonCallout(tint: SiphonTheme.statusQueued)
@@ -265,12 +265,12 @@ struct SidebarView: View {
             List {
                 sidebarButton(item: .home)
 
-                Section(languageService.s("downloading")) {
+                Section(siphonHeader: languageService.s("downloading"), font: .siphonMetadataSemibold) {
                     sidebarButton(item: .downloading, badgeCount: downloadManager.downloadingCount, badgeColor: SiphonTheme.statusDownloadingText)
                     sidebarButton(item: .queued, badgeCount: downloadManager.queuedCount, badgeColor: SiphonTheme.statusQueuedText)
                 }
 
-                Section(languageService.s("history")) {
+                Section(siphonHeader: languageService.s("history"), font: .siphonMetadataSemibold) {
                     sidebarButton(item: .completed, badgeCount: downloadManager.completedCount, badgeColor: SiphonTheme.statusCompletedText)
                     sidebarButton(item: .failed, badgeCount: downloadManager.failedCount, badgeColor: SiphonTheme.statusFailedText)
                 }
@@ -895,6 +895,8 @@ struct WhatsNewSheetView: View {
             .padding(.vertical, SiphonTheme.spacing16)
         }
         .frame(width: 540, height: 520)
+        // This sheet draws its own card surface instead of siphonWindowBackground().
+        .font(.siphonStandard)
         .background(
             SiphonTheme.cardBackground(cornerRadius: SiphonTheme.radiusCard)
                 .ignoresSafeArea()

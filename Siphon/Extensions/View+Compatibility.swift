@@ -774,6 +774,9 @@ public struct SiphonWindowBackgroundModifier: ViewModifier {
 
     public func body(content: Content) -> some View {
         content
+            // Default for every Text, label and field in the window, so nothing
+            // falls back to SF Pro; views still set their own Siphon font on top.
+            .font(.siphonStandard)
             .tint(SiphonTheme.accent)
             .background(windowSurface)
             .background {
@@ -1090,6 +1093,10 @@ public struct SiphonPrimaryButtonStyle: ButtonStyle {
     public var cornerRadius: CGFloat = SiphonTheme.radiusControl
     @State private var isHovered = false
     @Environment(\.isEnabled) private var isEnabled
+    /// `.controlSize(.small)` gives the compact size used in rows and callouts.
+    @Environment(\.controlSize) private var controlSize
+
+    private var isCompact: Bool { controlSize == .small || controlSize == .mini }
 
     public init(cornerRadius: CGFloat = SiphonTheme.radiusControl) {
         self.cornerRadius = cornerRadius
@@ -1109,11 +1116,11 @@ public struct SiphonPrimaryButtonStyle: ButtonStyle {
 
     public func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.siphonStandardSemibold)
+            .font(isCompact ? .siphonMetadataSemibold : .siphonStandardSemibold)
             .foregroundColor(isEnabled ? .white : .secondary)
-            .frame(minHeight: 18, alignment: .center)
-            .padding(.horizontal, SiphonTheme.spacing16)
-            .padding(.vertical, 6)
+            .frame(minHeight: isCompact ? 14 : 18, alignment: .center)
+            .padding(.horizontal, isCompact ? SiphonTheme.spacing10 : SiphonTheme.spacing16)
+            .padding(.vertical, isCompact ? 3 : 6)
             .background {
                 // Disabled primary actions drop to a neutral well so the
                 // gradient only ever advertises an action that can succeed.
@@ -1140,6 +1147,10 @@ public struct SiphonSecondaryButtonStyle: ButtonStyle {
     public var cornerRadius: CGFloat = SiphonTheme.radiusControl
     @State private var isHovered = false
     @Environment(\.isEnabled) private var isEnabled
+    /// `.controlSize(.small)` gives the compact size used in rows and callouts.
+    @Environment(\.controlSize) private var controlSize
+
+    private var isCompact: Bool { controlSize == .small || controlSize == .mini }
 
     public init(cornerRadius: CGFloat = SiphonTheme.radiusControl) {
         self.cornerRadius = cornerRadius
@@ -1157,11 +1168,11 @@ public struct SiphonSecondaryButtonStyle: ButtonStyle {
 
     public func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.siphonStandardMedium)
+            .font(isCompact ? .siphonMetadataMedium : .siphonStandardMedium)
             .foregroundColor(.primary)
-            .frame(minHeight: 18, alignment: .center)
-            .padding(.horizontal, SiphonTheme.spacing14)
-            .padding(.vertical, 6)
+            .frame(minHeight: isCompact ? 14 : 18, alignment: .center)
+            .padding(.horizontal, isCompact ? SiphonTheme.spacing10 : SiphonTheme.spacing14)
+            .padding(.vertical, isCompact ? 3 : 6)
             .background(SiphonTheme.controlBackground(cornerRadius: cornerRadius, isHovered: isHovered))
             .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
             .overlay(
@@ -1320,6 +1331,112 @@ extension View {
     /// border and lift share one transaction.
     public func siphonCardHover(isHovered: Bool, tint: Color = SiphonTheme.accent) -> some View {
         modifier(SiphonCardHoverModifier(isHovered: isHovered, tint: tint))
+    }
+}
+
+// MARK: - Menu Picker
+/// Label chrome for a Siphon pop-up: content, an up/down chevron and the
+/// control surface. Use inside `Menu { } label:` with `siphonMenuStyle()`.
+struct SiphonMenuLabel<Content: View>: View {
+    @ViewBuilder var content: Content
+
+    @Environment(\.controlSize) private var controlSize
+    @Environment(\.isEnabled) private var isEnabled
+
+    private var isCompact: Bool { controlSize == .small || controlSize == .mini }
+
+    var body: some View {
+        HStack(spacing: SiphonTheme.spacing6) {
+            content
+                .lineLimit(1)
+            Image(systemName: "chevron.up.chevron.down")
+                .font(.system(size: isCompact ? 8 : 9, weight: .semibold))
+                .foregroundColor(.secondary)
+                .accessibilityHidden(true)
+        }
+        .font(isCompact ? .siphonMetadata : .siphonStandard)
+        .foregroundColor(.primary)
+        .padding(.horizontal, isCompact ? SiphonTheme.spacing8 : SiphonTheme.spacing10)
+        .padding(.vertical, isCompact ? 2 : 4)
+        .background(SiphonTheme.controlBackground(cornerRadius: SiphonTheme.radiusSmall))
+        .overlay(SiphonTheme.controlBorder(cornerRadius: SiphonTheme.radiusSmall))
+        .contentShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusSmall, style: .continuous))
+        .opacity(isEnabled ? 1.0 : 0.45)
+    }
+}
+
+extension View {
+    /// Menu presentation whose label SwiftUI draws as authored. The default,
+    /// `.borderlessButton` and `.borderedButton` menu styles hand the label to an
+    /// AppKit button that ignores SwiftUI fonts and renders SF Pro.
+    func siphonMenuStyle() -> some View {
+        menuStyle(.button)
+            .buttonStyle(.plain)
+            .menuIndicator(.hidden)
+    }
+}
+
+/// Siphon's pop-up choice. A `.menu` Picker hands its title to an AppKit pop-up
+/// button that ignores SwiftUI fonts, so the chosen value rendered in SF Pro;
+/// this draws the closed state in Geist and keeps native menu items, with a
+/// checkmark on the current choice.
+struct SiphonMenuPicker<Value: Hashable>: View {
+    typealias Option = (value: Value, title: String)
+
+    private let label: String?
+    @Binding private var selection: Value
+    private let sections: [(header: String?, options: [Option])]
+
+    /// `label` adds a leading title, laid out like a Form row.
+    init(_ label: String? = nil, selection: Binding<Value>, options: [Option]) {
+        self.init(label, selection: selection, sections: [(nil, options)])
+    }
+
+    init(_ label: String? = nil, selection: Binding<Value>, sections: [(header: String?, options: [Option])]) {
+        self.label = label
+        _selection = selection
+        self.sections = sections.filter { !$0.options.isEmpty }
+    }
+
+    private var currentTitle: String {
+        sections.lazy.flatMap(\.options).first { $0.value == selection }?.title ?? ""
+    }
+
+    var body: some View {
+        if let label {
+            LabeledContent(label) { menu }
+        } else {
+            menu
+        }
+    }
+
+    private var menu: some View {
+        Menu {
+            Picker(label ?? "", selection: $selection) {
+                ForEach(sections.indices, id: \.self) { index in
+                    let section = sections[index]
+                    if let header = section.header {
+                        Section(header) { items(section.options) }
+                    } else {
+                        items(section.options)
+                    }
+                }
+            }
+            .pickerStyle(.inline)
+            .labelsHidden()
+        } label: {
+            SiphonMenuLabel { Text(currentTitle) }
+        }
+        .siphonMenuStyle()
+        .fixedSize()
+        .accessibilityLabel(label ?? "")
+        .accessibilityValue(currentTitle)
+    }
+
+    private func items(_ options: [Option]) -> some View {
+        ForEach(options.indices, id: \.self) { index in
+            Text(options[index].title).tag(options[index].value)
+        }
     }
 }
 
@@ -1579,7 +1696,8 @@ public struct SiphonEmptyStateView: View {
 
 // MARK: - Window & Glass Surface Modifiers
 extension View {
-    /// Uses the app's glass surface while respecting Reduce Transparency.
+    /// Uses the app's glass surface while respecting Reduce Transparency, and
+    /// sets Siphon's default font for the whole window.
     public func siphonWindowBackground() -> some View {
         modifier(SiphonWindowBackgroundModifier())
     }
@@ -1627,5 +1745,16 @@ extension View {
                 tintColor: tintColor
             )
         )
+    }
+}
+
+// MARK: - Section Header
+// Kept at the end of the file: static analyzers misread this constrained
+// result-builder initializer and attribute the following declarations to it.
+extension Section where Parent == Text, Footer == EmptyView, Content: View {
+    /// Form and sidebar section with a Geist header. `Section("title")` draws
+    /// its header in the system font, or in the window's regular body font.
+    init(siphonHeader title: String, font: Font = .siphonStandardSemibold, @ViewBuilder content: () -> Content) {
+        self.init(content: content, header: { Text(title).font(font) })
     }
 }
