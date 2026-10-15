@@ -80,6 +80,9 @@ jobs:
       - name: Test Chrome handoff lifecycle
         run: node --test scripts/test_chrome_handoff.js
 
+      - name: Test native launcher shutdown ordering
+        run: node --test scripts/test_build_and_run.js
+
       - name: Test original MP4 capture script
         run: node scripts/test_capture_original_mp4.js
 

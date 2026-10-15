@@ -137,7 +137,7 @@ final class DownloadQueue: ObservableObject {
         forceIncrement: Bool = false,
         fileManager: FileManager = .default
     ) -> (resolvedBaseName: String, candidatePath: String) {
-        let rawBaseName = download.options.customFilename ?? download.title
+        let rawBaseName = download.options.customFilename ?? download.displayTitle
         let sanitizedBase = YtdlpService.sanitizeFilename(rawBaseName)
         let folder = download.options.saveFolder
         let ext = YtdlpService.resolvedOutputFileExtension(for: download.options)
@@ -148,24 +148,38 @@ final class DownloadQueue: ObservableObject {
         // --force-overwrites would clobber an unrelated file.
         let overwritesOriginal = download.options.forceOverwrite == true
 
+        let originalName = download.resolvedOutputBaseName ?? sanitizedBase
+        var candidateName = originalName
         var counter = 1
-        var candidateName = sanitizedBase
         if forceIncrement {
+            counter = Self.nextOutputSuffix(after: originalName, baseName: sanitizedBase)
             candidateName = "\(sanitizedBase) (\(counter))"
-            counter += 1
+            counter = counter == Int.max ? 1 : counter + 1
+        }
+
+        func isUnavailable(_ baseName: String) -> Bool {
+            if isOutputReserved(baseName: baseName, in: folder, options: download.options) { return true }
+            if overwritesOriginal && baseName == originalName { return false }
+            let path = folder.appendingPathComponent("\(baseName).\(ext)").path
+            return Self.mediaFileCollides(baseName: baseName, options: download.options, existingMediaFileKeys: existingFiles) ||
+                fileManager.fileExists(atPath: path)
         }
         var candidatePath = folder.appendingPathComponent("\(candidateName).\(ext)").path
 
-        while isOutputReserved(baseName: candidateName, in: folder, options: download.options) ||
-              (!(overwritesOriginal && candidateName == sanitizedBase) &&
-               (Self.mediaFileCollides(baseName: candidateName, options: download.options, existingMediaFileKeys: existingFiles) ||
-                fileManager.fileExists(atPath: candidatePath))) {
+        while isUnavailable(candidateName) {
             candidateName = "\(sanitizedBase) (\(counter))"
             candidatePath = folder.appendingPathComponent("\(candidateName).\(ext)").path
-            counter += 1
+            counter = counter == Int.max ? 1 : counter + 1
         }
 
         return (candidateName, candidatePath)
+    }
+
+    private static func nextOutputSuffix(after name: String, baseName: String) -> Int {
+        let prefix = baseName + " ("
+        guard name.hasPrefix(prefix), name.hasSuffix(")"),
+              let suffix = Int(name.dropFirst(prefix.count).dropLast()), suffix > 0, suffix < Int.max else { return 1 }
+        return suffix + 1
     }
 
     @discardableResult
@@ -180,7 +194,9 @@ final class DownloadQueue: ObservableObject {
             fileManager: fileManager
         )
         reserveOutputPath(candidatePath)
-        download.options.customFilename = candidateName
+        if download.title != Download.fetchingPlaceholder || download.options.customFilename != nil {
+            download.resolvedOutputBaseName = candidateName
+        }
         return (candidateName, candidatePath)
     }
 
@@ -205,7 +221,7 @@ final class DownloadQueue: ObservableObject {
     /// Rows shown on the Queue tab. Up/Down reorder relative to these only, so
     /// a move never swaps with a hidden active, finished, or failed download.
     static func isQueueTabMember(_ download: Download) -> Bool {
-        download.status == .queued || download.status == .paused
+        download.status == .queued || download.status == .paused || download.status == .fileExists
     }
 
     @discardableResult

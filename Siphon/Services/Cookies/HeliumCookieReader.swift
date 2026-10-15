@@ -199,8 +199,8 @@ enum ChromiumCookieReader {
 
     /// Returns nil when no readable profile has cookies for the target host.
     /// A browser with no matching cookies falls through to the next one, so an
-    /// installed but signed-out Chrome does not hide a signed-in Arc. A browser whose
-    /// matching cookies cannot be decrypted fails the export even when another has none.
+    /// installed but signed-out Chrome does not hide a signed-in Arc. Keychain
+    /// access failures remain errors; malformed individual rows are skipped.
     static func export(
         for target: URL,
         root: URL = defaultHeliumRoot,
@@ -239,7 +239,7 @@ enum ChromiumCookieReader {
         var foundReadableProfile = false
         for candidate in candidateRoots {
             // The key is read only for a cookie that matches the host, so a failure after
-            // that is a Keychain or decryption error, not a missing or locked profile.
+            // that is a Keychain/derivation error, not a missing or locked profile.
             var readKey = false
             do {
                 let candidatePassword: () throws -> Data = {
@@ -265,8 +265,7 @@ enum ChromiumCookieReader {
             }
         }
 
-        // A browser that holds cookies for this host but cannot decrypt them must fail the
-        // export instead of being masked by another browser that simply has none.
+        // A Keychain/derivation failure must not be masked by a signed-out browser.
         if let cookieError {
             throw cookieError
         }
@@ -310,9 +309,9 @@ enum ChromiumCookieReader {
             throw failure("Unsupported cookie database schema.")
         }
         defer { sqlite3_finalize(statement) }
-        func string(_ column: Int32) -> String {
+        func string(_ column: Int32) -> String? {
             guard let text = sqlite3_column_text(statement, column) else { return "" }
-            return String(cString: text)
+            return String(data: Data(bytes: text, count: Int(sqlite3_column_bytes(statement, column))), encoding: .utf8)
         }
         var key: Data?
         var lines = ["# Netscape HTTP Cookie File"]
@@ -321,24 +320,33 @@ enum ChromiumCookieReader {
             let status = sqlite3_step(statement)
             if status == SQLITE_DONE { break }
             guard status == SQLITE_ROW else { throw failure("Could not read the browser cookie database.") }
-            let domain = string(0)
-            guard matches(host: host, domain: domain) else { continue }
+            guard let domain = string(0), let name = string(1), let path = string(4),
+                  matches(host: host, domain: domain) else { continue }
             let expiry = sqlite3_column_int(statement, 8) == 0 ? 0 :
                 sqlite3_column_int64(statement, 5) / 1_000_000 - 11_644_473_600
             guard expiry == 0 || expiry > Int64(Date().timeIntervalSince1970) else { continue }
-            var value = string(2)
+            var value = string(2) ?? ""
             let encryptedCount = Int(sqlite3_column_bytes(statement, 3))
             if encryptedCount > 0, let bytes = sqlite3_column_blob(statement, 3) {
                 if key == nil { key = try deriveKey(password: password()) }
-                value = try decrypt(Data(bytes: bytes, count: encryptedCount), key: key!, domain: domain, version: version)
+                do {
+                    value = try decrypt(Data(bytes: bytes, count: encryptedCount), key: key!, domain: domain, version: version)
+                } catch {
+                    // Keychain/derivation failures above remain fatal; one invalid row
+                    // must not discard the remaining verified cookies.
+                    Task { @MainActor in
+                        LoggerService.shared.log("Skipping an unverifiable Chromium cookie row.", level: .warning)
+                    }
+                    continue
+                }
+            } else if string(2) == nil {
+                continue
             }
-            let name = string(1)
-            let path = string(4)
-            guard !containsInvalidControlChar(domain),
+            guard !name.isEmpty, !containsInvalidControlChar(domain),
                   !containsInvalidControlChar(name),
                   !containsInvalidControlChar(path),
                   !containsInvalidControlChar(value) else {
-                throw failure("Cookie contains invalid control characters.")
+                continue
             }
             let httpOnly = sqlite3_column_int(statement, 7) != 0 ? "#HttpOnly_" : ""
             let subdomains = domain.hasPrefix(".") ? "TRUE" : "FALSE"
@@ -358,38 +366,6 @@ enum ChromiumCookieReader {
         let file = SecureCookieFile(fileURL: url)
         try file.validate()
         return file
-    }
-
-    static func prepare(_ args: [String], rootOverride: URL? = nil) throws -> (args: [String], cookieFile: SecureCookieFile?) {
-        guard let index = args.firstIndex(of: "--cookies-from-browser"), index + 1 < args.count else {
-            return (args, nil)
-        }
-        let browserArg = args[index + 1].lowercased()
-        guard browserArg == "helium" || browserArg == "chromium-based" || browserArg == "arc" else {
-            return (args, nil)
-        }
-        guard let target = args.last.flatMap(URL.init(string:)), ["http", "https"].contains(target.scheme) else {
-            throw failure("Missing HTTP target for cookie extraction.")
-        }
-        let root: URL
-        if let rootOverride {
-            root = rootOverride
-        } else if browserArg == "arc", let arcBrowser = knownChromiumBrowsers.first(where: { $0.name == "Arc" }) {
-            root = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(arcBrowser.relativePath)
-        } else {
-            root = defaultHeliumRoot
-        }
-        var prepared = args
-        guard let file = try export(for: target, root: root) else {
-            let host = target.host ?? "target"
-            Task { @MainActor in
-                LoggerService.shared.log("No \(browserArg) cookies for \(host); continuing without browser cookies.", level: .info)
-            }
-            prepared.removeSubrange(index...index + 1)
-            return (prepared, nil)
-        }
-        prepared.replaceSubrange(index...index + 1, with: ["--cookies", file.path])
-        return (prepared, file)
     }
 }
 

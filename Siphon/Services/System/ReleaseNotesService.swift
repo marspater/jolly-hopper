@@ -144,7 +144,8 @@ final class ReleaseNotesService {
                 LoggerService.shared.log("Release notes response did not contain a tag name.", level: .warning)
                 return nil
             }
-            let cleanTag = tagName.replacingOccurrences(of: "v", with: "")
+            let trimmedTag = tagName.trimmingCharacters(in: .whitespacesAndNewlines)
+            let cleanTag = trimmedTag.lowercased().hasPrefix("v") ? String(trimmedTag.dropFirst()) : trimmedTag
             if cleanTag.compare(version, options: .numeric) == .orderedAscending {
                 return nil
             }

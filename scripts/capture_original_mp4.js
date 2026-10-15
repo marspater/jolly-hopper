@@ -24,6 +24,22 @@
         return [...urls];
     }
 
+    function detectBrowserSource(nav) {
+        const ua = nav.userAgent || "";
+        const brands = (nav.userAgentData?.brands || []).map(item => item.brand.toLowerCase()).join(" ");
+        if (/Edg\//.test(ua)) return "edge";
+        if (/Firefox\//.test(ua)) return "firefox";
+        if (/OPR\//.test(ua)) return "opera";
+        if (/Vivaldi\//i.test(ua) || brands.includes("vivaldi")) return "vivaldi";
+        if (/Helium\//i.test(ua) || brands.includes("helium")) return "helium";
+        if (/Arc\//i.test(ua) || brands.includes("arc")) return "arc";
+        if (brands.includes("brave") || typeof nav.brave?.isBrave === "function") return "brave";
+        if (brands.includes("google chrome")) return "chrome";
+        if (/Chrome\/|Chromium\//.test(ua) || brands.includes("chromium")) return "chromium-based";
+        if (/Safari/i.test(ua)) return "safari";
+        return "none";
+    }
+
     async function inspectResponse(response, active, collect) {
         if (!active || !(response?.headers?.get?.("content-type") || "").includes("json")) return;
         try {
@@ -55,7 +71,7 @@
         doc.body.append(panel);
 
         let active = true;
-        const browser = /Edg\//.test(nav.userAgent || "") ? "edge" : "safari";
+        const browser = detectBrowserSource(nav);
         const seen = new Set();
         const collect = (value) => {
             if (!active) return;
@@ -113,7 +129,7 @@
     }
 
     if (typeof module !== "undefined" && module.exports) {
-        module.exports = { originalURLs, init };
+        module.exports = { originalURLs, init, detectBrowserSource };
     } else {
         init();
     }
