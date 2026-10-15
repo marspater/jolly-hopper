@@ -322,6 +322,7 @@ class LanguageService: ObservableObject {
         "clear_all_sites_confirm_message": "This will remove stored cookies, Cloudflare verification, and web cache for all embedded sites. You will need to sign in or verify again on next download.",
         "video_codec": "Video Codec",
         "audio_codec": "Audio Codec",
+        "subtitle_language_codes": "Language codes (for example: en, fr)",
         "post_processing": "Post-Processing",
         "hdr_dynamic_range": "HDR / Dynamic Range",
         "codec_auto": "Auto (Best Available)",

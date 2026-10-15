@@ -8,6 +8,54 @@ import Network
 @testable import Siphon
 
 final class EgressProxyTests: XCTestCase {
+    func testProxyRejectsBareAndUnicodeHeaderNewlinesBeforeResolving() async throws {
+        let lookups = LockedValue(0)
+        let proxy = EgressProxyServer(targetValidator: { _, _ in true }, addressResolver: { _ in
+            lookups.mutate { $0 += 1 }
+            return ["127.0.0.1"]
+        })
+        let port = try await proxy.start()
+        defer { proxy.stop() }
+        for newline in ["\r", "\u{000B}", "\u{000C}", "\u{0085}", "\u{2028}", "\u{2029}"] {
+            let response = try await sendThroughProxy(port: port,
+                "GET http://example.com/video HTTP/1.1\r\nHost: example.com\r\nUser-Agent: Original\(newline)X-Injected: value\r\n\r\n")
+            XCTAssertTrue(response.hasPrefix("HTTP/1.1 400"), response)
+        }
+        XCTAssertEqual(lookups.get(), 0)
+    }
+
+    func testDefaultProxyResolvesOnceAndRejectsPrivateOrNonNumericResults() {
+        let lookups = LockedValue(0)
+        let proxy = EgressProxyServer(addressResolver: { _ in
+            lookups.mutate { $0 += 1 }
+            return ["8.8.8.8"]
+        })
+        XCTAssertEqual(proxy.approvedAddresses(host: "does-not-resolve.invalid", port: 443), ["8.8.8.8"])
+        XCTAssertEqual(lookups.get(), 1)
+        for address in ["127.0.0.1", "10.0.0.1", "public-looking.example"] {
+            let blocked = EgressProxyServer(addressResolver: { _ in [address] })
+            XCTAssertNil(blocked.approvedAddresses(host: "example.com", port: 443))
+        }
+    }
+
+    func testExplicitCustomDownloaderGetsTheBoundaryAndSessionsRetire() async throws {
+        EgressBoundary.$proxyURL.withValue("http://127.0.0.1:4321") {
+            EgressBoundary.$ytdlpExecutablePath.withValue("/custom/downloader") {
+                let args = ["/custom/downloader", "--dump-json", "--", "https://example.com/video"]
+                XCTAssertEqual(EgressBoundary.applying(to: args), [args[0], "--proxy", "http://127.0.0.1:4321"] + args.dropFirst())
+                XCTAssertEqual(EgressBoundary.applying(to: ["/custom/ffmpeg", "-version"]), ["/custom/ffmpeg", "-version"])
+            }
+        }
+        let proxy = EgressProxyServer()
+        let port = try await proxy.start()
+        let route = "http://127.0.0.1:\(port)"
+        let first = EgressBoundary.$proxyURL.withValue(route) { EgressBoundary.session }
+        proxy.stop()
+        let second = EgressBoundary.$proxyURL.withValue(route) { EgressBoundary.session }
+        XCTAssertFalse(first === second)
+        EgressBoundary.retireSession(for: port)
+    }
+
     func testConcurrentStartsShareOneListenerAndRestartAfterStop() async throws {
         let proxy = EgressProxyServer()
         async let first = proxy.start()
@@ -325,12 +373,14 @@ final class EgressProxyTests: XCTestCase {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("boundary_\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: dir) }
-        let script = dir.appendingPathComponent("yt-dlp")
+        let script = dir.appendingPathComponent("custom-downloader")
         try "#!/bin/sh\necho \"$@\"\n".write(to: script, atomically: true, encoding: .utf8)
         try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: script.path)
 
         let output = try await EgressBoundary.$proxyURL.withValue("http://127.0.0.1:4321") {
-            try await DefaultYtdlpProcessRunner().runCommand([script.path, "--dump-pages", "--", "https://example.com/v"])
+            try await EgressBoundary.$ytdlpExecutablePath.withValue(script.path) {
+                try await DefaultYtdlpProcessRunner().runCommand([script.path, "--dump-pages", "--", "https://example.com/v"])
+            }
         }
         XCTAssertEqual(output.trimmingCharacters(in: .whitespacesAndNewlines), "--proxy http://127.0.0.1:4321 --dump-pages -- https://example.com/v")
     }

@@ -221,7 +221,7 @@ final class DownloadQueue: ObservableObject {
     /// Rows shown on the Queue tab. Up/Down reorder relative to these only, so
     /// a move never swaps with a hidden active, finished, or failed download.
     static func isQueueTabMember(_ download: Download) -> Bool {
-        download.status == .queued || download.status == .paused
+        download.status == .queued || download.status == .paused || download.status == .fileExists
     }
 
     @discardableResult
