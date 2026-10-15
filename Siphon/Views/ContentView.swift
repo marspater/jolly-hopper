@@ -379,21 +379,32 @@ struct DetailView: View {
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var downloadManager: DownloadManager
     @EnvironmentObject var languageService: LanguageService
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    /// The new page rises 6 pt as it fades in; the old one only fades.
+    private var pageTransition: AnyTransition {
+        reduceMotion
+            ? .opacity
+            : .asymmetric(insertion: .opacity.combined(with: .offset(y: 6)), removal: .opacity)
+    }
 
     var body: some View {
         ZStack {
-            switch appState.selectedNavItem {
-            case .home:
-                HomeView()
-            case .downloading:
-                DownloadListView(downloads: downloadManager.downloadingDownloads, emptyMessage: languageService.s("empty_downloading"), emptyDetail: languageService.s("empty_downloading_detail"), emptyIcon: "arrow.down.circle", showStop: true)
-            case .queued:
-                DownloadListView(downloads: downloadManager.queuedDownloads, emptyMessage: languageService.s("empty_queued"), emptyDetail: languageService.s("empty_queued_detail"), emptyIcon: "clock", showStop: true)
-            case .completed:
-                DownloadListView(downloads: downloadManager.completedDownloads, emptyMessage: languageService.s("empty_completed"), emptyDetail: languageService.s("empty_completed_detail"), emptyIcon: "checkmark.circle", showStop: false)
-            case .failed:
-                DownloadListView(downloads: downloadManager.failedDownloads, emptyMessage: languageService.s("empty_failed"), emptyDetail: languageService.s("empty_failed_detail"), emptyIcon: "exclamationmark.triangle", showStop: false)
+            Group {
+                switch appState.selectedNavItem {
+                case .home:
+                    HomeView()
+                case .downloading:
+                    DownloadListView(downloads: downloadManager.downloadingDownloads, emptyMessage: languageService.s("empty_downloading"), emptyDetail: languageService.s("empty_downloading_detail"), emptyIcon: "arrow.down.circle", showStop: true)
+                case .queued:
+                    DownloadListView(downloads: downloadManager.queuedDownloads, emptyMessage: languageService.s("empty_queued"), emptyDetail: languageService.s("empty_queued_detail"), emptyIcon: "clock", showStop: true)
+                case .completed:
+                    DownloadListView(downloads: downloadManager.completedDownloads, emptyMessage: languageService.s("empty_completed"), emptyDetail: languageService.s("empty_completed_detail"), emptyIcon: "checkmark.circle", showStop: false)
+                case .failed:
+                    DownloadListView(downloads: downloadManager.failedDownloads, emptyMessage: languageService.s("empty_failed"), emptyDetail: languageService.s("empty_failed_detail"), emptyIcon: "exclamationmark.triangle", showStop: false)
+                }
             }
+            .transition(pageTransition)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .animation(SiphonAnimation.fluidSpring, value: appState.selectedNavItem)
