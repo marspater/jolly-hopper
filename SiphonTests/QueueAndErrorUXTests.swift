@@ -2195,3 +2195,76 @@ final class AddDownloadWindowSizingTests: XCTestCase {
         XCTAssertNil(AddDownloadWindowManager.grownFrame(frame, by: 0.4, within: screen))
     }
 }
+
+/// Guards against controls that render SF Pro instead of Geist. Each pattern
+/// below was confirmed on macOS 27 to ignore SwiftUI fonts (AppKit draws it) or
+/// to bypass the window's default Siphon font.
+final class SiphonFontCoverageTests: XCTestCase {
+    private struct Finding: CustomStringConvertible {
+        let file: String
+        let line: Int
+        let rule: String
+        var description: String { "\(file):\(line): \(rule)" }
+    }
+
+    private func sourceFiles() throws -> [(name: String, lines: [String])] {
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("Siphon")
+        guard let enumerator = FileManager.default.enumerator(at: root, includingPropertiesForKeys: nil) else {
+            throw XCTSkip("Siphon sources are not available next to the test bundle")
+        }
+        var files: [(String, [String])] = []
+        for case let url as URL in enumerator where url.pathExtension == "swift" {
+            let text = try String(contentsOf: url, encoding: .utf8)
+            files.append((url.path.replacingOccurrences(of: root.path + "/", with: ""), text.components(separatedBy: "\n")))
+        }
+        XCTAssertFalse(files.isEmpty, "found no Swift sources under \(root.path)")
+        return files
+    }
+
+    func testNoControlsThatRenderSystemFont() throws {
+        let banned: [(pattern: String, rule: String)] = [
+            (".pickerStyle(.menu)", "use SiphonMenuPicker: a .menu Picker draws its value in SF Pro"),
+            (".buttonStyle(.bordered)", "use .siphonSecondary: .bordered draws its title in SF Pro"),
+            (".buttonStyle(.borderedProminent)", "use .siphonPrimary: .borderedProminent draws its title in SF Pro"),
+            (".buttonStyle(.link)", "use .plain with accentText: .link draws its title in SF Pro"),
+            (".menuStyle(.borderlessButton)", "use siphonMenuStyle(): this menu style draws its label in SF Pro"),
+            (".menuStyle(.borderedButton)", "use siphonMenuStyle(): this menu style draws its label in SF Pro"),
+            ("Section(\"", "use Section(siphonHeader:): a string header renders without the Siphon header font"),
+            ("Section(languageService", "use Section(siphonHeader:): a string header renders without the Siphon header font"),
+            ("Section(header: Text(", "use Section(siphonHeader:)")
+        ]
+        let systemTextFont = try NSRegularExpression(
+            pattern: #"\.font\(\.(system|largeTitle|title|title2|title3|headline|subheadline|body|callout|footnote|caption|caption2)\b"#
+        )
+        let picker = try NSRegularExpression(pattern: #"(?<![A-Za-z])Picker\("#)
+        var findings: [Finding] = []
+        for (name, lines) in try sourceFiles() where name != "Extensions/View+Compatibility.swift" {
+            for (index, line) in lines.enumerated() {
+                let code = line.components(separatedBy: "//").first ?? line
+                for entry in banned where code.contains(entry.pattern) {
+                    findings.append(Finding(file: name, line: index + 1, rule: entry.rule))
+                }
+                // A system or semantic font on Text (same line or the next) is SF Pro.
+                let range = NSRange(code.startIndex..., in: code)
+                if systemTextFont.firstMatch(in: code, range: range) != nil {
+                    let previous = index > 0 ? lines[index - 1] : ""
+                    let target = code.trimmingCharacters(in: .whitespaces).hasPrefix(".") ? previous : code
+                    if target.contains("Text(") || target.contains("Label(") {
+                        findings.append(Finding(file: name, line: index + 1, rule: "Text uses a system font; use a .siphon font"))
+                    }
+                }
+                // Pickers must draw their own rows (radio group) or sit inside a Menu (inline).
+                if picker.firstMatch(in: code, range: range) != nil {
+                    let window = lines[index..<min(lines.count, index + 30)].joined(separator: "\n")
+                    if !window.contains(".pickerStyle(.radioGroup)"), !window.contains(".pickerStyle(.inline)") {
+                        findings.append(Finding(file: name, line: index + 1, rule: "use SiphonMenuPicker or SiphonSegmentedPicker"))
+                    }
+                }
+            }
+        }
+        XCTAssertTrue(findings.isEmpty, "Controls that render SF Pro:\n" + findings.map(\.description).joined(separator: "\n"))
+    }
+}
