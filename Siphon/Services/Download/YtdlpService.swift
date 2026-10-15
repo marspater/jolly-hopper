@@ -422,7 +422,7 @@ class YtdlpService: ObservableObject {
         await clearGayteamWebData()
     }
     // Test seam for Safari's saved cookies. Production reads Safari's cookie store.
-    var safariCookiesProvider: () -> [HTTPCookie] = { SafariCookieReader.cookies() }
+    var safariCookiesProvider: @Sendable () -> [HTTPCookie] = { SafariCookieReader.cookies() }
     // Test seam for the player capture session. Production uses WKWebView.
     var browserCaptureLoader: ((URL) async throws -> BrowserCapture)?
     // One WebKit page session at a time. Parallel jobs would each open their own
@@ -1363,6 +1363,7 @@ class YtdlpService: ObservableObject {
         }
 
         let sucuriCookie = await resolveSucuriCookie(for: url)
+        let requestUserAgent = sucuriCookie == nil ? rawUserAgent : Self.sucuriUserAgent
         var additionalCookies: [(name: String, value: String)] = []
         if let sc = sucuriCookie {
             additionalCookies.append((name: sc.name, value: sc.value))
@@ -1374,13 +1375,13 @@ class YtdlpService: ObservableObject {
                 args.append(contentsOf: ["--cookies", cookieFile.path])
                 if sucuriCookie != nil {
                     LoggerService.shared.log("Using temporary Sucuri cookie in consolidated file for \(hostForLog(url)) (cookie values not logged)", level: .info)
-                    args.append(contentsOf: ["--user-agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"])
                 }
                 if let raw = rawCookies, !raw.isEmpty {
                     LoggerService.shared.log("Using session cookies passed from browser extension for \(hostForLog(url))", level: .info)
                 }
             }
-        } else {
+        }
+        if rawCookies?.isEmpty != false {
             let usingBrowserCookies = appendCookieArgs(
                 for: url,
                 to: &args,
@@ -1390,7 +1391,7 @@ class YtdlpService: ObservableObject {
             logCookieUsage(for: url, usingBrowserCookies: usingBrowserCookies)
         }
 
-        appendSiteSpecificArgs(for: url, rawUserAgent: rawUserAgent, to: &args)
+        appendSiteSpecificArgs(for: url, rawUserAgent: requestUserAgent, to: &args)
         args.append("--")
         args.append(url)
 
@@ -1460,6 +1461,7 @@ class YtdlpService: ObservableObject {
         }
 
         let sucuriCookie = await resolveSucuriCookie(for: url)
+        let requestUserAgent = sucuriCookie == nil ? rawUserAgent : Self.sucuriUserAgent
         var additionalCookies: [(name: String, value: String)] = []
         if let sc = sucuriCookie {
             additionalCookies.append((name: sc.name, value: sc.value))
@@ -1471,18 +1473,18 @@ class YtdlpService: ObservableObject {
                 args.append(contentsOf: ["--cookies", cookieFile.path])
                 if sucuriCookie != nil {
                     LoggerService.shared.log("Using temporary Sucuri cookie in consolidated file for \(hostForLog(url)) (cookie values not logged)", level: .info)
-                    args.append(contentsOf: ["--user-agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"])
                 }
                 if let raw = rawCookies, !raw.isEmpty {
                     LoggerService.shared.log("Using session cookies passed from browser extension for \(hostForLog(url))", level: .info)
                 }
             }
-        } else {
+        }
+        if rawCookies?.isEmpty != false {
             let usingBrowserCookies = appendCookieArgs(for: url, to: &args, browserOverride: browserCookieSource)
             logCookieUsage(for: url, usingBrowserCookies: usingBrowserCookies)
         }
 
-        if let exactUA = rawUserAgent?.trimmingCharacters(in: .whitespacesAndNewlines), !exactUA.isEmpty {
+        if let exactUA = requestUserAgent?.trimmingCharacters(in: .whitespacesAndNewlines), !exactUA.isEmpty {
             args.append(contentsOf: ["--user-agent", exactUA])
             args.append(contentsOf: [
                 "--extractor-args",
@@ -1563,6 +1565,7 @@ class YtdlpService: ObservableObject {
         }
 
         let sucuriCookie = await resolveSucuriCookie(for: url)
+        let requestUserAgent = sucuriCookie == nil ? rawUserAgent : Self.sucuriUserAgent
         var additionalCookies: [(name: String, value: String)] = []
         if let sc = sucuriCookie {
             additionalCookies.append((name: sc.name, value: sc.value))
@@ -1574,20 +1577,20 @@ class YtdlpService: ObservableObject {
                 args.append(contentsOf: ["--cookies", cookieFile.path])
                 if sucuriCookie != nil {
                     LoggerService.shared.log("Using temporary Sucuri cookie in consolidated file for \(hostForLog(url)) (cookie values not logged)", level: .info)
-                    args.append(contentsOf: ["--user-agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"])
                 }
                 if let raw = rawCookies, !raw.isEmpty {
                     LoggerService.shared.log("Using session cookies passed from browser extension for \(hostForLog(url))", level: .info)
                 }
             }
-        } else {
+        }
+        if rawCookies?.isEmpty != false {
             let usingBrowserCookies = appendCookieArgs(for: url, to: &args, browserOverride: browserCookieSource)
             logCookieUsage(for: url, usingBrowserCookies: usingBrowserCookies)
         }
 
         let parsedHost = (URL(string: url)?.host ?? url).lowercased()
         let isYouTube = parsedHost == "youtube.com" || parsedHost.hasSuffix(".youtube.com") || parsedHost == "youtu.be" || parsedHost.hasSuffix(".youtu.be")
-        if let exactUA = rawUserAgent?.trimmingCharacters(in: .whitespacesAndNewlines), !exactUA.isEmpty {
+        if let exactUA = requestUserAgent?.trimmingCharacters(in: .whitespacesAndNewlines), !exactUA.isEmpty {
             args.append(contentsOf: ["--user-agent", exactUA])
             args.append(contentsOf: ["--add-header", "Accept-Language:en-US,en;q=0.9"])
             if !isYouTube {
@@ -1968,7 +1971,7 @@ public struct DownloadResult: Sendable {
         // Let yt-dlp inspect HLS encryption before choosing a downloader.
         // Forcing FFmpeg skips its FairPlay/DRM rejection and can copy encrypted samples.
 
-        args.append(contentsOf: buildFormatArgs(url: url, options: options, mediaInfo: mediaInfo))
+        args.append(contentsOf: buildFormatArgs(url: url, options: options, mediaInfo: mediaInfo, deferPostprocessing: bestCamDecryptionKey != nil))
         let codecFallbackWarnings = codecFallbackOutputWarnings(options: options)
         if options.downloadSubtitles && !options.subtitleLanguages.isEmpty {
             let subFormat = options.subtitleFormat?.ytdlpValue ?? "srt"
@@ -1982,7 +1985,7 @@ public struct DownloadResult: Sendable {
             args.append("--write-subs")
             args.append("--write-auto-subs")
 
-            if options.embedSubtitles && options.fileType.isVideo {
+            if options.embedSubtitles && options.fileType.isVideo && bestCamDecryptionKey == nil {
                 args.append("--embed-subs")
                 args.append(contentsOf: ["--convert-subs", subFormat])
             }
@@ -2106,13 +2109,13 @@ public struct DownloadResult: Sendable {
                 args.append(contentsOf: ["--cookies", cookieFile.path])
                 if sucuriCookie != nil {
                     LoggerService.shared.log("Using temporary Sucuri cookie in consolidated file for \(hostForLog(normalizedURL)) (cookie values not logged)", level: .info)
-                    args.append(contentsOf: ["--user-agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"])
                 }
                 if let raw = options.rawCookies, !raw.isEmpty {
                     LoggerService.shared.log("Using session cookies passed from browser extension for \(hostForLog(targetURL))", level: .info)
                 }
             }
-        } else {
+        }
+        if !isRecuURL(normalizedURL), options.rawCookies?.isEmpty != false {
             let usingBrowserCookies = appendCookieArgs(
                 for: normalizedURL,
                 to: &args,
@@ -2130,7 +2133,7 @@ public struct DownloadResult: Sendable {
                                                userAgent: recuUserAgent, referer: recuUserAgent == nil ? nil : customEmbedURL)
         }
 
-        appendSiteSpecificArgs(for: customEmbedURL ?? targetURL, options: options, mediaInfo: mediaInfo, rawUserAgent: recuUserAgent, to: &args)
+        appendSiteSpecificArgs(for: customEmbedURL ?? targetURL, options: options, mediaInfo: mediaInfo, rawUserAgent: sucuriCookie == nil ? recuUserAgent : Self.sucuriUserAgent, to: &args)
         // Recu recordings are signed VOD streams; a skipped segment would leave
         // a corrupt recording. Live streams elsewhere may legitimately rotate
         // unavailable fragments, so keep yt-dlp's default behavior there.
@@ -2395,10 +2398,24 @@ public struct DownloadResult: Sendable {
 
         if let key = bestCamDecryptionKey {
             onOutput("[Siphon Info] Decrypting downloaded stream...\n")
-            let encryptedFile = finalFileURL
-            try await Task.detached(priority: .utility) {
-                try Self.decryptBestCamFile(at: encryptedFile, filename: key)
-            }.value
+            for index in allFileURLs.indices {
+                let encryptedFile = allFileURLs[index]
+                let decryption = Task.detached(priority: .utility) {
+                    try Task.checkCancellation()
+                    try Self.decryptBestCamFile(at: encryptedFile, filename: key)
+                }
+                try await withTaskCancellationHandler {
+                    try await decryption.value
+                } onCancel: {
+                    decryption.cancel()
+                }
+                let processed = try await postprocessDecryptedMedia(
+                    at: encryptedFile, options: options, ffmpegDir: ffmpegDir,
+                    processController: processController
+                )
+                allFileURLs[index] = processed
+                if finalFileURL == encryptedFile { finalFileURL = processed }
+            }
         }
 
         // yt-dlp saves GIF links and GIF pages as .gif; a video download must end as video.
@@ -2533,6 +2550,51 @@ public struct DownloadResult: Sendable {
             throw YtdlpError.downloadFailed(LanguageService.s("gif_conversion_failed"))
         }
         try? fileManager.removeItem(at: gif)
+        return destination
+    }
+
+    func postprocessDecryptedMedia(at source: URL, options: DownloadOptions, ffmpegDir: String,
+                                  processController: DownloadProcessController? = nil) async throws -> URL {
+        let targetExtension = Self.resolvedOutputFileExtension(for: options)
+        let needsRecode = options.fileType.isAudio || (options.conversionCodec ?? .none) != .none || options.hdrAction == .convertToSDR
+        guard needsRecode || source.pathExtension != targetExtension else { return source }
+        try Task.checkCancellation()
+        guard processController?.isCancelled != true else { throw CancellationError() }
+        let destination = source.deletingPathExtension().appendingPathExtension(targetExtension)
+        let partial = source.deletingLastPathComponent().appendingPathComponent(".converted-\(UUID().uuidString).\(targetExtension)")
+        defer { try? FileManager.default.removeItem(at: partial) }
+        var args = [URL(fileURLWithPath: ffmpegDir).appendingPathComponent("ffmpeg").path,
+                    "-nostdin", "-v", "error", "-y", "-i", source.path, "-map_metadata", "0"]
+        if options.fileType.isAudio {
+            args += ["-map", "0:a:0", "-vn"]
+            if ![MediaFileType.flac, .wav].contains(options.fileType), let quality = options.audioQuality, quality != .best {
+                args += ["-b:a", quality.ytdlpValue]
+            } else if options.fileType == .mp3 {
+                args += ["-q:a", "0"]
+            }
+        } else {
+            args += ["-map", "0:v:0", "-map", "0:a?"]
+            args += needsRecode ? Self.videoConversionArguments(options: options) : ["-c", "copy"]
+        }
+        args.append(partial.path)
+        _ = try await processRunner.runCommand(args, processController: processController)
+        try Task.checkCancellation()
+        guard processController?.isCancelled != true else { throw CancellationError() }
+        guard FileManager.default.fileExists(atPath: partial.path) else {
+            throw YtdlpError.downloadFailed(LanguageService.s("media_integrity_failed"))
+        }
+        if FileManager.default.fileExists(atPath: destination.path) {
+            guard destination == source || options.forceOverwrite == true else {
+                throw CocoaError(.fileWriteFileExists)
+            }
+            _ = try FileManager.default.replaceItemAt(destination, withItemAt: partial)
+        } else {
+            try FileManager.default.moveItem(at: partial, to: destination)
+        }
+        if destination != source {
+            do { try FileManager.default.removeItem(at: source) }
+            catch { LoggerService.shared.log("Could not remove the source after conversion: \(error.localizedDescription)", level: .warning) }
+        }
         return destination
     }
 
@@ -2726,7 +2788,7 @@ public struct DownloadResult: Sendable {
         return formats[0].isDownloadable && (formats[0].resolution == nil || formats[0].resolution == "unknown")
     }
 
-    private func buildFormatArgs(url: String? = nil, options: DownloadOptions, mediaInfo: MediaInfo? = nil) -> [String] {
+    private func buildFormatArgs(url: String? = nil, options: DownloadOptions, mediaInfo: MediaInfo? = nil, deferPostprocessing: Bool = false) -> [String] {
         var args: [String] = []
 
         let isSynthesizedDirectStream = mediaInfo?.uploader == "Protected Site" ||
@@ -2745,6 +2807,8 @@ public struct DownloadResult: Sendable {
                                         (url.map(isStarwankURL) ?? false) ||
                                         (url.map(isPussyspaceURL) ?? false) ||
                                         Self.isSingleUnprobedFormat(mediaInfo)
+
+        if deferPostprocessing { return ["-f", "b/best"] }
 
         // 1. Audio downloads: return early with audio extraction and quality options
         if options.fileType.isAudio {
@@ -2836,31 +2900,7 @@ public struct DownloadResult: Sendable {
 
         let needsRecode = (conversionCodec != .none) || isConvertToSDR
         if needsRecode {
-            var videoConvertorArgs: [String] = ["-y"]
-            if isConvertToSDR {
-                videoConvertorArgs.append(contentsOf: ["-vf", "tonemap=hable:desat=0,zscale=t=bt709:m=bt709:r=tv,format=yuv420p"])
-            }
-
-            switch conversionCodec {
-            case .av1:
-                videoConvertorArgs.append(contentsOf: ["-c:v", "libsvtav1", "-preset", "8", "-crf", "28", "-strict", "experimental"])
-            case .h265:
-                #if arch(arm64)
-                videoConvertorArgs.append(contentsOf: ["-c:v", "hevc_videotoolbox", "-strict", "experimental"])
-                #else
-                videoConvertorArgs.append(contentsOf: ["-c:v", "libx265", "-strict", "experimental"])
-                #endif
-            case .vp9:
-                videoConvertorArgs.append(contentsOf: ["-c:v", "libvpx-vp9", "-strict", "experimental"])
-            case .h264:
-                #if arch(arm64)
-                videoConvertorArgs.append(contentsOf: ["-c:v", "h264_videotoolbox", "-strict", "experimental"])
-                #else
-                videoConvertorArgs.append(contentsOf: ["-c:v", "libx264", "-strict", "experimental"])
-                #endif
-            case .none:
-                break
-            }
+            let videoConvertorArgs = Self.videoConversionArguments(options: options)
 
             args.append(contentsOf: [
                 "--recode-video", targetExt,
@@ -2869,6 +2909,38 @@ public struct DownloadResult: Sendable {
         }
 
         return args
+    }
+
+    nonisolated static func videoConversionArguments(options: DownloadOptions) -> [String] {
+        let conversionCodec = options.conversionCodec ?? .none
+        let isConvertToSDR = options.hdrAction == .convertToSDR
+        var videoConvertorArgs: [String] = ["-y"]
+        if isConvertToSDR {
+            videoConvertorArgs.append(contentsOf: ["-vf", "tonemap=hable:desat=0,zscale=t=bt709:m=bt709:r=tv,format=yuv420p"])
+        }
+
+        switch conversionCodec {
+        case .av1:
+            videoConvertorArgs.append(contentsOf: ["-c:v", "libsvtav1", "-preset", "8", "-crf", "28", "-strict", "experimental"])
+        case .h265:
+            #if arch(arm64)
+            videoConvertorArgs.append(contentsOf: ["-c:v", "hevc_videotoolbox", "-strict", "experimental"])
+            #else
+            videoConvertorArgs.append(contentsOf: ["-c:v", "libx265", "-strict", "experimental"])
+            #endif
+        case .vp9:
+            videoConvertorArgs.append(contentsOf: ["-c:v", "libvpx-vp9", "-strict", "experimental"])
+        case .h264:
+            #if arch(arm64)
+            videoConvertorArgs.append(contentsOf: ["-c:v", "h264_videotoolbox", "-strict", "experimental"])
+            #else
+            videoConvertorArgs.append(contentsOf: ["-c:v", "libx264", "-strict", "experimental"])
+            #endif
+        case .none:
+            break
+        }
+
+        return videoConvertorArgs
     }
 
     nonisolated static func resolvedOutputFileExtension(for options: DownloadOptions) -> String {
@@ -3098,6 +3170,7 @@ public struct DownloadResult: Sendable {
         if ua.contains("safari/") && !ua.contains("chrome/") && !ua.contains("chromium/") {
             return "safari:macos"
         }
+        if ua.contains("chrome/") || ua.contains("chromium/") { return "chrome:macos" }
         switch Self.validatedBrowserCookieSource(browserCookieSource) ?? configuredBrowserCookieSource() {
         case "firefox": return "firefox:macos"
         case "safari": return "safari:macos"
@@ -4034,6 +4107,7 @@ public struct DownloadResult: Sendable {
 
         let store = boyfriendTVWebDataStore.httpCookieStore
         for cookie in cookies {
+            guard !Task.isCancelled else { return }
             await withCheckedContinuation { continuation in
                 store.setCookie(cookie) {
                     continuation.resume()
@@ -4059,11 +4133,19 @@ public struct DownloadResult: Sendable {
         }
     }
 
+    private func savedSafariSessionCookies() async -> [HTTPCookie] {
+        let provider = safariCookiesProvider
+        return await Task.detached {
+            Self.boyfriendTVSessionCookies(from: provider())
+        }.value
+    }
+
     private func seedBoyfriendTVSafariSession() async {
-        let cookies = Self.boyfriendTVSessionCookies(from: safariCookiesProvider())
-        guard !cookies.isEmpty else { return }
+        let cookies = await savedSafariSessionCookies()
+        guard !Task.isCancelled, !cookies.isEmpty else { return }
         let store = boyfriendTVWebDataStore.httpCookieStore
         for cookie in cookies {
+            guard !Task.isCancelled else { return }
             await withCheckedContinuation { continuation in
                 store.setCookie(cookie) {
                     continuation.resume()
@@ -4505,8 +4587,9 @@ public struct DownloadResult: Sendable {
         var safariSessionSignedOut = false
         if html.isEmpty, rawCookies?.isEmpty != false, effectiveBrowserSource == "safari",
            let ytdlp = ytdlpBinary, let scope = Self.boyfriendTVCookieScope(for: targetUrl) {
-            let header = Self.boyfriendTVSessionCookies(from: safariCookiesProvider())
-                .filter { Self.boyfriendTVCookieScope(for: $0.domain.trimmingCharacters(in: CharacterSet(charactersIn: "."))) == scope }
+            let cookies = await savedSafariSessionCookies()
+            try Task.checkCancellation()
+            let header = cookies.filter { Self.boyfriendTVCookieScope(for: $0.domain.trimmingCharacters(in: CharacterSet(charactersIn: "."))) == scope }
                 .map { "\($0.name)=\($0.value)" }
                 .joined(separator: "; ")
             if !header.isEmpty, let tempFile = createTempCookiesFileFromHeader(url: targetUrl, cookieHeader: header) {
@@ -6017,6 +6100,10 @@ public struct DownloadResult: Sendable {
     /// Streams the file through the cipher off the main actor. Each chunk is
     /// released per iteration, so memory stays flat for multi-GB videos.
     nonisolated static func decryptBestCamFile(at fileURL: URL, filename: String) throws {
+        let headerHandle = try FileHandle(forReadingFrom: fileURL)
+        let header = try headerHandle.read(upToCount: 12) ?? Data()
+        try headerHandle.close()
+        if header.count >= 8, header[4..<8] == Data("ftyp".utf8) { return }
         let keyHex = BestCamStreamCipher.deriveKeyHex(from: filename)
         guard let keyData = keyHex.data(using: .ascii), keyData.count == 32 else {
             throw YtdlpError.downloadFailed("Invalid stream decryption key")
@@ -6067,6 +6154,7 @@ public struct DownloadResult: Sendable {
         do {
             var hasMoreData = true
             while hasMoreData {
+                try Task.checkCancellation()
                 hasMoreData = try autoreleasepool {
                     guard let chunk = try readHandle.read(upToCount: chunkSize), !chunk.isEmpty else { return false }
                     guard let decrypted = cryptorUpdate(ref, chunk, into: &buffer) else {
@@ -6076,6 +6164,8 @@ public struct DownloadResult: Sendable {
                     return true
                 }
             }
+        } catch is CancellationError {
+            throw CancellationError()
         } catch let error as YtdlpError {
             throw error
         } catch {
@@ -6084,6 +6174,13 @@ public struct DownloadResult: Sendable {
 
         try? readHandle.close()
         try? writeHandle.close()
+        let outputHandle = try FileHandle(forReadingFrom: tempOutputURL)
+        let outputHeader = try outputHandle.read(upToCount: 12) ?? Data()
+        try outputHandle.close()
+        guard outputHeader.count >= 8, outputHeader[4..<8] == Data("ftyp".utf8) else {
+            throw YtdlpError.downloadFailed(LanguageService.s("media_integrity_failed"))
+        }
+        try Task.checkCancellation()
         _ = try FileManager.default.replaceItemAt(fileURL, withItemAt: tempOutputURL)
         replaced = true
     }
@@ -7547,6 +7644,7 @@ public struct DownloadResult: Sendable {
 
     private func isCookieFailureError(_ errorOutput: String) -> Bool {
         let lower = errorOutput.lowercased()
+        if lower.hasPrefix("chromium cookies:") { return true }
         if lower.contains("extracted") && lower.contains("cookies") {
             return false
         }
@@ -7609,7 +7707,13 @@ public struct DownloadResult: Sendable {
         do {
             return try await runTransportCommand(args)
         } catch let error as YtdlpError {
-            if case .commandFailed(let output) = error, isCookieFailureError(output), let idx = args.firstIndex(of: "--cookies-from-browser"), idx + 1 < args.count {
+            try Task.checkCancellation()
+            let output: String
+            switch error {
+            case .commandFailed(let message), .downloadFailed(let message): output = message
+            default: throw error
+            }
+            if isCookieFailureError(output), let idx = args.firstIndex(of: "--cookies-from-browser"), idx + 1 < args.count {
                 let browser = args[idx + 1]
                 LoggerService.shared.log("Browser cookie access failed for '\(browser)' or database missing. Checking alternative browsers...", level: .info)
                 if let urlArg = args.last {
@@ -7664,14 +7768,19 @@ public struct DownloadResult: Sendable {
         return siphonDir
     }
 
+    nonisolated static let sucuriUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+
+    var sucuriCookieResolver: ((String) async -> (name: String, value: String)?)?
+
     private func resolveSucuriCookie(for url: String) async -> (name: String, value: String)? {
         guard let parsedURL = URL(string: url), let host = parsedURL.host?.lowercased() else { return nil }
+        if let sucuriCookieResolver { return await sucuriCookieResolver(url) }
         let sucuriDomains = ["thisvid.com"]
         guard sucuriDomains.contains(where: { host == $0 || host.hasSuffix("." + $0) }) else { return nil }
 
         var request = URLRequest(url: parsedURL)
         request.timeoutInterval = 3.0
-        request.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36", forHTTPHeaderField: "User-Agent")
+        request.setValue(Self.sucuriUserAgent, forHTTPHeaderField: "User-Agent")
 
         do {
             let (data, _) = try await EgressBoundary.session.boundedData(for: request)
@@ -7800,24 +7909,30 @@ public struct DownloadResult: Sendable {
     /// arguments. Siphon sets both and only accepts output inside the save
     /// folder, so an override downloads fine but the job reports failure.
     static func removingOutputLocationArguments(_ arguments: [String]) -> [String] {
-        let separateValue: Set<String> = ["-P", "--paths", "-o", "--output"]
+        removingRestrictedArguments(arguments, options: ["-P", "--paths", "-o", "--output", "--config-locations", "--exec", "--exec-before-download"])
+    }
+
+    private static func removingRestrictedArguments(_ arguments: [String], options: Set<String>) -> [String] {
         var kept: [String] = []
         var index = arguments.startIndex
         while index < arguments.endIndex {
             let argument = arguments[index]
-            if separateValue.contains(argument) {
-                LoggerService.shared.log("Ignoring additional argument \(argument): Siphon controls the output location.", level: .warning)
-                index += 2
-                continue
+            let name = String(argument.prefix { $0 != "=" })
+            let restricted = options.contains(name) || options.contains { option in
+                if option.hasPrefix("--") { return name.count > 2 && option.hasPrefix(name) }
+                return argument.hasPrefix(option)
             }
-            let attachedValue = argument.hasPrefix("--paths=") || argument.hasPrefix("--output=")
-                || (argument.count > 2 && (argument.hasPrefix("-P") || argument.hasPrefix("-o")) && !argument.hasPrefix("--"))
-            if attachedValue {
-                LoggerService.shared.log("Ignoring additional argument \(argument.prefix(2)): Siphon controls the output location.", level: .warning)
+            if argument == "--" {
+                // The job owns the sole end-of-options delimiter.
+                index += 1
+            } else if restricted {
+                LoggerService.shared.log("Ignoring a restricted additional argument.", level: .warning)
+                let hasAttachedValue = argument.contains("=") || (!argument.hasPrefix("--") && argument.count > 2)
+                index += !hasAttachedValue && index + 1 < arguments.endIndex && !arguments[index + 1].hasPrefix("-") ? 2 : 1
             } else {
                 kept.append(argument)
+                index += 1
             }
-            index += 1
         }
         return kept
     }
@@ -7834,56 +7949,46 @@ public struct DownloadResult: Sendable {
         }
     }
 
-    /// Drops `--proxy` (with its value) from user arguments when public-network
-    /// boundary enforcement is active, so deep-link jobs cannot bypass the egress proxy.
+    /// Drops proxy and executable overrides from user arguments when the public-network
+    /// boundary is active, including custom downloader/postprocessor command lines.
     static func removingProxyArguments(_ arguments: [String]) -> [String] {
-        var kept: [String] = []
-        var index = arguments.startIndex
-        while index < arguments.endIndex {
-            let argument = arguments[index]
-            if argument == "--proxy" {
-                LoggerService.shared.log("Ignoring additional argument --proxy: Siphon enforces egress boundary for this job.", level: .warning)
-                index += 2
-                continue
-            }
-            if argument.hasPrefix("--proxy=") {
-                LoggerService.shared.log("Ignoring additional argument --proxy: Siphon enforces egress boundary for this job.", level: .warning)
-            } else {
-                kept.append(argument)
-            }
-            index += 1
-        }
-        return kept
+        removingRestrictedArguments(arguments, options: [
+            "--proxy", "--geo-verification-proxy", "--downloader", "--downloader-args",
+            "--external-downloader", "--external-downloader-args", "--config-locations",
+            "--exec", "--exec-before-download", "--postprocessor-args", "--ppa",
+            "--use-postprocessor", "--plugin-dirs", "--js-runtimes", "--remote-components", "--ffmpeg-location"
+        ])
     }
 
     nonisolated static func parseArgumentString(_ argString: String) -> [String] {
         var args: [String] = []
         var current = ""
-        var inQuotes = false
-        var quoteChar: Character = "\""
-
+        var quote: Character?
+        var escaping = false
+        var started = false
         for char in argString {
-            if char == "\"" || char == "'" {
-                if inQuotes && char == quoteChar {
-                    inQuotes = false
-                } else if !inQuotes {
-                    inQuotes = true
-                    quoteChar = char
-                } else {
-                    current.append(char)
-                }
-            } else if char.isWhitespace && !inQuotes {
-                if !current.isEmpty {
-                    args.append(current)
-                    current = ""
-                }
+            if escaping {
+                // Inside double quotes, retain backslashes before ordinary characters.
+                if quote == "\"", char != "\"", char != "\\" { current.append("\\") }
+                current.append(char)
+                escaping = false
+            } else if char == "\\", quote != "'" {
+                escaping = true
+                started = true
+            } else if let activeQuote = quote {
+                if char == activeQuote { quote = nil } else { current.append(char) }
+            } else if char == "\"" || char == "'" {
+                quote = char
+                started = true
+            } else if char.isWhitespace {
+                if started { args.append(current); current = ""; started = false }
             } else {
                 current.append(char)
+                started = true
             }
         }
-        if !current.isEmpty {
-            args.append(current)
-        }
+        if escaping { current.append("\\") }
+        if started { args.append(current) }
         return args
     }
 
@@ -8196,7 +8301,7 @@ final class ThreadSafeOutputState: @unchecked Sendable {
         // Bound error buffer to prevent unbounded memory growth during long-running error outputs.
         // utf8.count is O(1); count walks every character on each appended line.
         if errorText.utf8.count > 100_000 {
-            errorText = String(errorText.suffix(50_000))
+            errorText = String(decoding: errorText.utf8.suffix(50_000), as: UTF8.self)
         }
         lock.unlock()
     }

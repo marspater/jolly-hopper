@@ -465,7 +465,7 @@ class DownloadManager: ObservableObject {
     func resumeWithNewName(_ download: Download) {
         guard !download.requiresAdvancedArgumentsReview else { return }
         let (candidateName, _) = planUniqueOutputPath(for: download, forceIncrement: true)
-        download.options.customFilename = candidateName
+        download.resolvedOutputBaseName = candidateName
         download.options.forceOverwrite = false
         download.mediaInfo = nil
         updateStatus(for: download, to: .queued)
@@ -648,7 +648,7 @@ class DownloadManager: ObservableObject {
     /// Reveals the file that blocked a `.fileExists` download, or its folder.
     func revealExistingFile(for download: Download) {
         // Same base name the executor checked for the collision.
-        let baseName = YtdlpService.sanitizeFilename(download.options.customFilename ?? download.title)
+        let baseName = YtdlpService.sanitizeFilename(download.outputBaseName)
         let options = download.options
         let folder = options.saveFolder
         Task {
