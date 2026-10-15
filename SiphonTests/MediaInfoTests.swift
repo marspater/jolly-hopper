@@ -2,6 +2,74 @@ import XCTest
 @testable import Siphon
 
 final class MediaInfoTests: XCTestCase {
+    @MainActor
+    func testFormatComparatorsRemainTransitiveAcrossCloseBitrates() {
+        let videos = [
+            MediaFormat(formatId: "x", ext: "mp4", resolution: "1080p", fps: 60, tbr: 1000),
+            MediaFormat(formatId: "y", ext: "mp4", resolution: "1080p", fps: 30, tbr: 1004),
+            MediaFormat(formatId: "z", ext: "mp4", resolution: "1080p", fps: 24, tbr: 1007),
+            MediaFormat(formatId: "nan", ext: "mp4", resolution: "1080p", fps: .nan, tbr: .nan)
+        ]
+        let audio = [
+            MediaFormat(formatId: "x", ext: "m4a", abr: 100, audioChannels: 8),
+            MediaFormat(formatId: "y", ext: "m4a", abr: 100.4, audioChannels: 6),
+            MediaFormat(formatId: "z", ext: "m4a", abr: 100.7, audioChannels: 2),
+            MediaFormat(formatId: "nan", ext: "m4a", abr: .nan, quality: .nan)
+        ]
+        let options = DownloadOptions.default
+        for (formats, compare) in [
+            (videos, { MediaFormat.compareVideoFormats($0, $1, options: options) }),
+            (audio, { MediaFormat.compareAudioFormats($0, $1, options: options) })
+        ] as [([MediaFormat], (MediaFormat, MediaFormat) -> Bool)] {
+            for a in formats {
+                XCTAssertFalse(compare(a, a))
+                for b in formats {
+                    if compare(a, b) { XCTAssertFalse(compare(b, a)) }
+                    for c in formats where compare(a, b) && compare(b, c) {
+                        XCTAssertTrue(compare(a, c), "Ranking cycle: \(a.id), \(b.id), \(c.id)")
+                    }
+                }
+            }
+            XCTAssertEqual(formats.sorted(by: compare).map(\.id), ["z", "y", "x", "nan"])
+        }
+    }
+
+    @MainActor
+    func testFrameRateAndAspectNotesDoNotBypassResolutionCeiling() {
+        for (resolution, height) in [("1080p60", 1080), ("720p30", 720), ("1920x1080 (16:9)", 1080), ("1920×1080", 1080), ("720", 720)] {
+            XCTAssertEqual(MediaFormat(formatId: "v", ext: "mp4", resolution: resolution).parsedHeight, height)
+        }
+        XCTAssertNil(MediaFormat(formatId: "v", ext: "mp4", resolution: "unknown 60 fps").parsedHeight)
+        let info = MediaInfo(id: "test", title: "Ceiling", formats: [
+            MediaFormat(formatId: "high", ext: "mp4", resolution: "1080p60", vcodec: "avc1", acodec: "aac"),
+            MediaFormat(formatId: "low", ext: "mp4", resolution: "240p", vcodec: "avc1", acodec: "aac")
+        ])
+        var options = DownloadOptions.default
+        options.videoResolution = .r720p
+        options.resolutionFallbackPolicy = .strictCeiling
+        XCTAssertEqual(info.resolveSelectedFormats(options: options).map(\.id), ["low"])
+    }
+
+    func testHTMLDecodingConsumesOnlyOriginalEntities() {
+        XCTAssertEqual("&amp;lt; &amp;#39; &#38;lt; &#38;#x27;".decodingHTMLEntities(), "&lt; &#39; &lt; &#x27;")
+        XCTAssertEqual("&#x26;lt; &#x26;#39;".decodingHTMLEntities(), "&lt; &#39;")
+    }
+
+    func testYouTubeFallbackRequiresSourceAndValidID() throws {
+        for source in [nil, "vimeo", "youtube:tab"] as [String?] {
+            let info = MediaInfo(id: "dQw4w9WgXcQ", title: "Fixture", extractor: source)
+            XCTAssertEqual(info.thumbnailURL != nil, source == "youtube:tab")
+            XCTAssertEqual(info.resolvedURL, source == "youtube:tab" ? "https://www.youtube.com/watch?v=dQw4w9WgXcQ" : info.id)
+        }
+        let fromKey = try JSONDecoder().decode(MediaInfo.self, from: Data(#"{"id":"dQw4w9WgXcQ","extractor_key":"Youtube"}"#.utf8))
+        XCTAssertNotNil(fromKey.thumbnailURL)
+        XCTAssertNotNil(fromKey.prunedForCompletion().thumbnailURL)
+        let fromURL = MediaInfo(id: "dQw4w9WgXcQ", title: "Fixture", webpageUrl: "https://www.youtube.com/watch?v=dQw4w9WgXcQ")
+        XCTAssertNotNil(fromURL.thumbnailURL)
+        XCTAssertNil(MediaInfo(id: "abcdefghij?", title: "Fixture", extractor: "youtube").thumbnailURL)
+        XCTAssertNil(MediaInfo(id: "dQw4w9WgXcQ", title: "Fixture", webpageUrl: "https://youtube.com.example.org/video").thumbnailURL)
+    }
+
     func testDRMMetadataDecodingAndRoundTrip() throws {
         for (field, knownDRM) in [
             ("", false), (",\"has_drm\":null", false),
@@ -139,7 +207,7 @@ final class MediaInfoTests: XCTestCase {
     }
 
     func testResolvedURL_WithYouTube11CharId_ReturnsYouTubeUrl() {
-        let info = MediaInfo(id: "dQw4w9WgXcQ", title: "YouTube Video")
+        let info = MediaInfo(id: "dQw4w9WgXcQ", title: "YouTube Video", extractor: "youtube")
         XCTAssertEqual(info.resolvedURL, "https://www.youtube.com/watch?v=dQw4w9WgXcQ")
     }
 

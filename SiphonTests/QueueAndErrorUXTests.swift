@@ -1305,7 +1305,8 @@ final class QueueAndErrorUXTests: XCTestCase {
         let download = Download(url: "https://example.com/video", options: options, title: "MyMovie")
         manager.resumeWithNewName(download)
 
-        XCTAssertEqual(download.options.customFilename, "MyMovie (2)", "Must skip conflicting basename even if existing file has a different media extension")
+        XCTAssertNil(download.options.customFilename)
+        XCTAssertEqual(download.resolvedOutputBaseName, "MyMovie (2)", "Must skip conflicting basename even if existing file has a different media extension")
     }
 
     func testWhatsNewOnlyShowsOnFirstRunOrUpdate() async {
@@ -2023,6 +2024,22 @@ final class QueueAndErrorUXTests: XCTestCase {
         }
     }
 
+    func testExternalSessionKeepsBoundaryAcrossURLEditsAndBatchItems() {
+        let state = AppState()
+        state.setExternalTarget("https://8.8.8.8/video?tracking=1")
+        for editedURL in ["https://8.8.8.8/video", "https://1.1.1.1/item", "https://1.1.1.1/item"] {
+            state.clearBrowserSessionIfOriginChanged(to: editedURL)
+            XCTAssertTrue(state.hasExternalTarget)
+        }
+        state.clearExternalTarget()
+        XCTAssertFalse(state.hasExternalTarget)
+    }
+
+    func testExternalTargetRejectsGlobalIPv6ZoneIdentifiers() {
+        XCTAssertFalse(ExternalDownloadTargetPolicy.isAllowedTarget(host: "2001:4860:4860::8888%lo0"))
+        XCTAssertFalse(ExternalDownloadTargetPolicy.isAllowedTarget(host: "2001:4860:4860::8888%25lo0"))
+    }
+
     func testExternalTargetSurvivesBrowserCredentialClears() throws {
         let state = AppState()
         let sheetURL = "https://public.example.com/video/a"
@@ -2044,12 +2061,12 @@ final class QueueAndErrorUXTests: XCTestCase {
         )
         state.clearBrowserSession()
 
-        XCTAssertTrue(state.consumeExternalTarget(for: sheetURL), "A deep-linked URL must keep the public network boundary after credential clears")
-        XCTAssertFalse(state.consumeExternalTarget(for: sheetURL), "The boundary marker is single-use")
+        XCTAssertTrue(state.hasExternalTarget, "A deep-linked URL must keep the public network boundary after credential clears")
+        XCTAssertTrue(state.hasExternalTarget, "The boundary persists until sheet dismissal")
 
         state.setExternalTarget(sheetURL)
         state.clearExternalTarget()
-        XCTAssertFalse(state.consumeExternalTarget(for: sheetURL))
+        XCTAssertFalse(state.hasExternalTarget)
     }
 
     func testRedownloadKeepsDeepLinkBoundary() {
@@ -2061,11 +2078,12 @@ final class QueueAndErrorUXTests: XCTestCase {
         state.reopenInAddSheet(deepLinked)
         XCTAssertEqual(state.urlToDownload, deepLinked.url)
         XCTAssertTrue(state.showAddDownloadSheet)
-        XCTAssertTrue(state.consumeExternalTarget(for: deepLinked.url), "Re-downloading a deep-linked job must stay behind the egress proxy")
+        XCTAssertTrue(state.hasExternalTarget, "Re-downloading a deep-linked job must stay behind the egress proxy")
 
+        state.clearExternalTarget()
         let local = Download(url: "https://public.example.com/video/b", options: .default)
         state.reopenInAddSheet(local)
-        XCTAssertFalse(state.consumeExternalTarget(for: local.url))
+        XCTAssertFalse(state.hasExternalTarget)
     }
 
     func testHeroDropReadsFileBeforeURL() throws {

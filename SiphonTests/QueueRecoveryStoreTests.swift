@@ -8,6 +8,36 @@ import XCTest
 
 @MainActor
 final class QueueRecoveryStoreTests: XCTestCase {
+    func testDecodedTitlesSurviveHistoryRecoveryAndPruning() throws {
+        let info = MediaInfo(id: "fixture", title: "&amp;lt; &amp;#39;")
+        XCTAssertEqual(info.title, "&lt; &#39;")
+        XCTAssertEqual(info.prunedForCompletion().title, info.title)
+        var job = Download(url: "https://example.com/video", options: .default, title: info.title, titleIsDecoded: true)
+        for _ in 0..<3 {
+            job = try JSONDecoder().decode(HistoricDownload.self, from: JSONEncoder().encode(HistoricDownload(download: job))).toDownload()
+            XCTAssertEqual(job.title, info.title)
+        }
+        let recovered = QueueRecoveryRecord(download: job).toDownload()
+        XCTAssertEqual(recovered.title, info.title)
+    }
+
+    func testPartialFailureRetainsPlaybackAndRetryAfterRestoration() {
+        let job = Download(url: "https://example.com/playlist", options: .default)
+        job.status = .failed
+        job.hasPartialFailure = true
+        job.errorMessage = "Some items failed"
+        job.filePaths = [URL(fileURLWithPath: "/tmp/finished.mp4")]
+        let restored = HistoricDownload(download: job).toDownload()
+        XCTAssertEqual(restored.status, .failed)
+        XCTAssertTrue(restored.hasPlayableOutput)
+        XCTAssertEqual(restored.errorUXInfo(lang: LanguageService())?.actionType, .retry)
+        restored.status = .downloading
+        XCTAssertFalse(restored.hasPlayableOutput)
+        restored.status = .failed
+        restored.filePaths = []
+        XCTAssertFalse(restored.hasPlayableOutput)
+    }
+
     private var tempDir: URL!
     private var recoveryFileURL: URL!
     private var originalHistory: Any?

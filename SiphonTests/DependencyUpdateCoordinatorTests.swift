@@ -54,25 +54,44 @@ final class DependencyUpdateCoordinatorTests: XCTestCase {
         XCTAssertEqual(coordinator.version, "2026.09.17")
     }
 
-    func testAdHocSignBinaryHandlesNonExecutableGracefully() throws {
-        let tempFile = FileManager.default.temporaryDirectory.appendingPathComponent("non_exec_\(UUID().uuidString)")
-        try "text".write(to: tempFile, atomically: true, encoding: .utf8)
-        defer { try? FileManager.default.removeItem(at: tempFile) }
-
-        // Should return cleanly without throwing because it's not executable
-        XCTAssertNoThrow(try DependencyInstaller.adHocSignBinary(at: tempFile))
+    func testPreparingPinnedExecutablePreservesSignedAndUnsignedBytes() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        for removeSignature in [false, true] {
+            let file = directory.appendingPathComponent(removeSignature ? "unsigned" : "signed")
+            try FileManager.default.copyItem(at: URL(fileURLWithPath: "/usr/bin/true"), to: file)
+            if removeSignature {
+                let process = Process()
+                process.executableURL = URL(fileURLWithPath: "/usr/bin/codesign")
+                process.arguments = ["--remove-signature", "--", file.path]
+                process.standardOutput = FileHandle.nullDevice
+                process.standardError = FileHandle.nullDevice
+                try process.run()
+                process.waitUntilExit()
+                XCTAssertEqual(process.terminationStatus, 0)
+            }
+            let before = try Data(contentsOf: file)
+            let checksum = try UpdateVerifier.computeSHA256(for: file)
+            try DependencyInstaller.prepareVerifiedExecutable(at: file, expectedSHA256: checksum, name: "Fixture")
+            XCTAssertEqual(try Data(contentsOf: file), before)
+            XCTAssertTrue(YtdlpService.verifySHA256(fileURL: file, expectedHash: checksum))
+            XCTAssertTrue(FileManager.default.isExecutableFile(atPath: file.path))
+        }
     }
 
-    func testIsBinarySignedDetection() throws {
-        let codesignURL = URL(fileURLWithPath: "/usr/bin/codesign")
-        XCTAssertTrue(DependencyInstaller.isBinarySigned(at: codesignURL), "System binary /usr/bin/codesign must be recognized as validly signed")
-
-        let unsignedScript = FileManager.default.temporaryDirectory.appendingPathComponent("script_\(UUID().uuidString).sh")
-        try "#!/bin/sh\necho hi\n".write(to: unsignedScript, atomically: true, encoding: .utf8)
-        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: unsignedScript.path)
-        defer { try? FileManager.default.removeItem(at: unsignedScript) }
-
-        XCTAssertFalse(DependencyInstaller.isBinarySigned(at: unsignedScript), "Unsigned script should not report as signed")
+    func testPreparingPinnedExecutableRejectsMismatchedBytes() throws {
+        let file = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try Data("tampered".utf8).write(to: file)
+        defer { try? FileManager.default.removeItem(at: file) }
+        XCTAssertThrowsError(try DependencyInstaller.prepareVerifiedExecutable(at: file, expectedSHA256: String(repeating: "0", count: 64), name: "FFmpeg executable")) { error in
+            guard case DependencyInstaller.InstallError.sha256Mismatch(let name, let expected) = error else {
+                return XCTFail("Unexpected error: \(error)")
+            }
+            XCTAssertEqual(name, "FFmpeg executable")
+            XCTAssertEqual(expected, String(repeating: "0", count: 64))
+        }
+        XCTAssertEqual(try Data(contentsOf: file), Data("tampered".utf8))
     }
 
     func testRebindCancelsPreviousSubscriptions() {

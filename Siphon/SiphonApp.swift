@@ -5,13 +5,26 @@ import CryptoKit
 final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
     weak var downloadManager: DownloadManager?
 
-    func applicationDidFinishLaunching(_ _: Notification) {
+    func applicationDidFinishLaunching(_ notification: Notification) {
         UNUserNotificationCenter.current().delegate = NotificationService.shared
         NotificationService.shared.setup()
+        guard !NotificationService.isRunningTests else { return }
+        NSWorkspace.shared.notificationCenter.addObserver(self, selector: #selector(cleanupRecoveryBackups(_:)),
+            name: NSWorkspace.didTerminateApplicationNotification, object: nil)
+        cleanupRecoveryBackups(notification)
+    }
+
+    @MainActor @objc private func cleanupRecoveryBackups(_ _: Notification) {
+        if UpdateInstaller.pruneRecoveryBackupsOnLaunch() {
+            NSWorkspace.shared.notificationCenter.removeObserver(self,
+                name: NSWorkspace.didTerminateApplicationNotification, object: nil)
+        }
     }
 
     @MainActor
     func handleApplicationWillTerminate(bypassTestGuard: Bool = false) {
+        NSWorkspace.shared.notificationCenter.removeObserver(self,
+            name: NSWorkspace.didTerminateApplicationNotification, object: nil)
         guard bypassTestGuard || !NotificationService.isRunningTests else { return }
         downloadManager?.handleAppTermination()
     }
@@ -62,12 +75,11 @@ struct SiphonApp: App {
 
     init() {
         GeistFontRegistrar.registerFonts()
-        NotificationService.shared.setup()
         CookieManager.purgeOrphanedTempCookieFiles()
     }
 
     var body: some Scene {
-        WindowGroup {
+        WindowGroup(id: "main") {
             ContentView()
                 .environmentObject(downloadManager)
                 .environmentObject(appState)
@@ -76,7 +88,6 @@ struct SiphonApp: App {
                 .onAppear {
                     appDelegate.downloadManager = downloadManager
                     SiphonTheme.applyTheme(theme)
-                    setupMenuBarIfNeeded()
                     applyBackgroundModeIfNeeded()
                 }
                 .onChange(of: theme) { _, newTheme in
@@ -132,11 +143,6 @@ struct SiphonApp: App {
                 }
             }
         }
-    }
-
-    private func setupMenuBarIfNeeded() {
-        appDelegate.downloadManager = downloadManager
-        MenuBarManager.shared.setup(languageService: languageService, downloadManager: downloadManager)
     }
 
     private func applyBackgroundModeIfNeeded() {

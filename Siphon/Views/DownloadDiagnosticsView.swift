@@ -218,7 +218,7 @@ struct DownloadDiagnosticsView: View {
                         .foregroundColor(SiphonTheme.accentText)
                     }
 
-                    Text(cmd)
+                    Text(LoggerService.sanitizedDiagnosticExport(cmd))
                         .font(.siphonMetadataMono)
                         .foregroundColor(.primary.opacity(0.85))
                         .padding(10)
@@ -386,7 +386,7 @@ struct DownloadDiagnosticsView: View {
 
             Spacer()
 
-            Text(value)
+            Text(LoggerService.sanitizedDiagnosticExport(value))
                 .font(isMonospace ? .siphonMetadataMono : .siphonSecondaryMedium)
                 .foregroundColor(.primary)
                 .multilineTextAlignment(.trailing)
@@ -401,10 +401,11 @@ struct DownloadDiagnosticsView: View {
     }
 
     private var filteredLogs: String {
+        let logs = LoggerService.sanitizedDiagnosticExport(download.log)
         if logSearchText.isEmpty {
-            return download.log.isEmpty ? languageService.s("no_log_output") : download.log
+            return logs.isEmpty ? languageService.s("no_log_output") : logs
         }
-        let matches = download.log.split(whereSeparator: \.isNewline)
+        let matches = logs.split(whereSeparator: \.isNewline)
             .filter { $0.localizedCaseInsensitiveContains(logSearchText) }
         return matches.isEmpty ? "No matches for '\(logSearchText)'" : matches.joined(separator: "\n")
     }
@@ -412,7 +413,7 @@ struct DownloadDiagnosticsView: View {
     private func copyToClipboard(_ text: String, label: String) {
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
-        pasteboard.setString(text, forType: .string)
+        pasteboard.setString(LoggerService.sanitizedDiagnosticExport(text), forType: .string)
         copyFeedback.show(label, isSuccess: true, duration: 2.0, animation: .default)
     }
 

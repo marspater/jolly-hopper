@@ -10,7 +10,7 @@ class MenuBarManager: NSObject {
     private var languageService: LanguageService?
     private var downloadManager: DownloadManager?
 
-    func setup(languageService: LanguageService, downloadManager: DownloadManager) {
+    func setup(languageService: LanguageService, downloadManager: DownloadManager, openMainWindow: @escaping () -> Void) {
         if statusItem != nil { return }
 
         self.languageService = languageService
@@ -21,7 +21,7 @@ class MenuBarManager: NSObject {
         popover.contentSize = NSSize(width: 360, height: 420)
         popover.behavior = .transient
 
-        let contentView = MenuBarView()
+        let contentView = MenuBarView(openMainWindow: openMainWindow)
             .environmentObject(languageService)
             .environmentObject(downloadManager)
 

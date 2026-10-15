@@ -56,9 +56,6 @@ public enum ImageUtilities {
         let sourceSize = image.size
         guard sourceSize.width > 0 && sourceSize.height > 0 else { return image }
 
-        let canvas = NSImage(size: NSSize(width: targetSize, height: targetSize))
-        canvas.lockFocus()
-
         let widthRatio = targetSize / sourceSize.width
         let heightRatio = targetSize / sourceSize.height
         let scale = min(widthRatio, heightRatio)
@@ -71,9 +68,9 @@ public enum ImageUtilities {
         let destRect = NSRect(x: originX, y: originY, width: scaledWidth, height: scaledHeight)
         let srcRect = NSRect(origin: .zero, size: sourceSize)
 
-        image.draw(in: destRect, from: srcRect, operation: .copy, fraction: 1.0)
-        canvas.unlockFocus()
-
-        return canvas
+        return NSImage(size: NSSize(width: targetSize, height: targetSize), flipped: false) { _ in
+            image.draw(in: destRect, from: srcRect, operation: .copy, fraction: 1.0)
+            return true
+        }
     }
 }
