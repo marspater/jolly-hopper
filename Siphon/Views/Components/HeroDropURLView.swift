@@ -245,7 +245,7 @@ struct HeroDropURLView: View {
         }
         .frame(maxWidth: .infinity)
         .frame(height: 168)
-        .scaleEffect(isTargeted ? 1.012 : 1.0)
+        .siphonMotionScale(isTargeted ? 1.012 : 1.0)
         .shadow(
             color: SiphonTheme.accent.opacity(isTargeted ? 0.24 : 0.04),
             radius: isTargeted ? 18 : 5,
