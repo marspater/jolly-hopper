@@ -123,7 +123,13 @@ truth only when the value is genuinely reused or has semantic meaning.
   native push buttons and pop-up menus set `.tint(nil)`; tinted, their label is
   accent text on tinted glass, which is hard to read in Dark Mode. Dark Mode
   uses regular rather than ultra-thin material, so a bright window behind does
-  not wash text out.
+  not wash text out. With Reduce Transparency it draws the opaque
+  `surfaceElevated` color instead.
+- Only the window root and floating bars (`siphonGlassSurface()`) carry a blur
+  material. Cards, pills, controls and fields inside a window use translucent
+  fills (`SiphonTheme.surfaceRaised`, control and field colors), never another
+  `Material`: blur on blur muddies Dark Mode mid-tones and makes the
+  compositor sample the backdrop once per layer while scrolling.
 - Content cards use `SiphonTheme.cardBackground` and matching border helpers.
   Gradient borders draw through `.drawingGroup()`: as plain layers they are
   rasterized on the CPU at the card's full size, which stalled fast scrolling
@@ -131,6 +137,11 @@ truth only when the value is genuinely reused or has semantic meaning.
 - Interactive status/navigation surfaces may use `siphonGlassSurface()`, which
   opts into native `Glass.regular.interactive()` on macOS 26+ and preserves the
   adaptive Siphon material fallback on macOS 15–25.
+- Small glass buttons use `siphonInteractiveGlass()`: native `Glass.regular`
+  on macOS 26+, tinted on hover and when selected, and the custom fill, border
+  and hover treatment on macOS 15–25. Do not add `.interactive()` there: on
+  macOS it swallows pointer tracking, so hover and the button style's press
+  scale stop.
 - Inset fields use `SiphonTheme.fieldBackground` and `fieldBorder`.
 - Controls use the shared Siphon button styles or the native macOS bordered
   styles when they better express platform behavior.
