@@ -98,6 +98,23 @@ truth only when the value is genuinely reused or has semantic meaning.
 - Keep hierarchy compact: one strong title, one supporting line, and metadata
   only where it helps a decision.
 - Custom fonts must remain Dynamic Type-aware through `relativeTo`.
+- No SF Pro in Siphon-drawn UI. `siphonWindowBackground()` sets
+  `.siphonStandard` as every window's default, so unstyled text, labels,
+  toggles and fields render Geist; views set their own role on top. A view that
+  draws its own root surface instead (the What's New sheet) sets the default
+  itself.
+- Some native controls ignore SwiftUI fonts because AppKit draws their text.
+  Do not use them:
+  - `.pickerStyle(.menu)` (and Form's default picker): use `SiphonMenuPicker`.
+  - `.buttonStyle(.bordered)` / `.borderedProminent` / `.link`: use
+    `.siphonSecondary` / `.siphonPrimary` (both honor `.controlSize(.small)`)
+    or `.plain`.
+  - `.menuStyle(.borderlessButton)` / `.borderedButton`: use
+    `siphonMenuStyle()`, with `SiphonMenuLabel` for pop-up chrome.
+  - `Section("title")`: use `Section(siphonHeader:)`.
+- System chrome stays in the system font: menu items, alerts, tooltips, window
+  titles and the menu bar. `SiphonFontCoverageTests` fails the build on any of
+  the patterns above.
 
 ### Layout and spacing
 
@@ -147,16 +164,14 @@ truth only when the value is genuinely reused or has semantic meaning.
   macOS it swallows pointer tracking, so hover and the button style's press
   scale stop.
 - Inset fields use `SiphonTheme.fieldBackground` and `fieldBorder`.
-- Controls use the shared Siphon button styles or the native macOS bordered
-  styles when they better express platform behavior.
+- Controls use the shared Siphon button styles; native bordered styles draw
+  SF Pro (see Typography).
 - Tinted inline notices (permission hints, errors, info banners) use
   `siphonCallout(tint:)` with a saturated status or accent tint.
 - Every segmented choice uses `SiphonSegmentedPicker`: compact capsules for
   inline choices (Single/Batch, Theme, Diagnostics tabs) and `isLarge` with
   icons for the full-width Settings tab bar. Do not use
   `.pickerStyle(.segmented)` or hand-roll gradient bubbles.
-- Text sets a Siphon font (`.font(.siphon…)`); `.fontWeight` alone falls back
-  to SF Pro.
 - All corners are `.continuous`; do not use the deprecated `.cornerRadius(_:)`.
 - Keep the hierarchy shallow: root surface → card → inset field/control. Avoid
   stacking multiple opaque fills, dark scrims, or unrelated blurs.

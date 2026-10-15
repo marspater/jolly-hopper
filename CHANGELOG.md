@@ -4,6 +4,7 @@
 
 ### Changes
 
+- No SF Pro left in Siphon's own UI. Every window defaults to Geist, and the controls macOS drew in its system font now render Geist too: pop-up menus, bordered buttons, menu buttons and Settings section headers. A unit test fails if any of those patterns return. Menu items, alerts and tooltips keep the system font.
 - Siphon again downloads a pinned, SHA-256-verified yt-dlp: the Siphon fork 2026.10.12.1, which keeps its DRM-format and byte-range download fixes. The user-provided yt-dlp path in Settings is no longer used.
 - Double-clicking a finished download's card, or its row in Recent downloads, plays the video.
 - Cards, fields, pills and buttons inside a window no longer add a second blur over the window's glass, so Dark Mode greys stay clean and scrolling composites less. With Reduce Transparency, windows draw an opaque background.
