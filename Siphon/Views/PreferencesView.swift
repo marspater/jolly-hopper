@@ -242,7 +242,7 @@ struct PreferencesView: View {
     }
 
     private var launchAtLoginSection: some View {
-        Section(languageService.s("other")) {
+        Section(siphonHeader: languageService.s("other")) {
             HStack {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(languageService.s("launch_at_login"))
@@ -312,7 +312,7 @@ struct PreferencesView: View {
     }
 
     private var themeSection: some View {
-        Section(languageService.s("appearance")) {
+        Section(siphonHeader: languageService.s("appearance")) {
             HStack {
                 Text(languageService.s("theme"))
                     .font(.siphonStandardMedium)
@@ -335,7 +335,7 @@ struct PreferencesView: View {
     }
 
     private var saveFolderSection: some View {
-        Section(languageService.s("save_folder")) {
+        Section(siphonHeader: languageService.s("save_folder")) {
             HStack(spacing: 12) {
                 HStack(spacing: 8) {
                     Image(systemName: "folder.fill")
@@ -393,7 +393,7 @@ struct PreferencesView: View {
     }
 
     private var appUpdatesSection: some View {
-        Section(languageService.s("updates")) {
+        Section(siphonHeader: languageService.s("updates")) {
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(spacing: 8) {
@@ -471,7 +471,7 @@ struct PreferencesView: View {
                         await updateChecker.downloadAndInstallUpdate()
                     }
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.siphonPrimary)
             }
         }
     }
@@ -491,7 +491,7 @@ struct PreferencesView: View {
     }
 
     private var downloadPresetsSection: some View {
-        Section(languageService.s("download_presets")) {
+        Section(siphonHeader: languageService.s("download_presets")) {
             Picker("", selection: $selectedPreset) {
                 ForEach(DownloadPreset.allCases) { preset in
                     HStack {
@@ -525,7 +525,7 @@ struct PreferencesView: View {
     }
 
     private var customPresetsSection: some View {
-        Section(languageService.s("custom_presets")) {
+        Section(siphonHeader: languageService.s("custom_presets")) {
             if customPresets.isEmpty {
                 Text(languageService.s("no_custom_presets"))
                     .foregroundColor(.secondary)
@@ -608,26 +608,20 @@ struct PreferencesView: View {
 
     private var formatSettingsSection: some View {
         Section {
-            Picker(languageService.s("file_type"), selection: $defaultFileType) {
-                ForEach(MediaFileType.allCases) { type in
-                    Text(type.rawValue).tag(type.rawValue.lowercased())
-                }
-            }
-            .tint(nil)
+            SiphonMenuPicker(
+                languageService.s("file_type"), selection: $defaultFileType,
+                options: MediaFileType.allCases.map { type in (value: type.rawValue.lowercased(), title: type.rawValue) }
+            )
 
-            Picker(languageService.s("video_quality"), selection: $defaultVideoResolution) {
-                ForEach(VideoResolution.allCases) { res in
-                    Text(res.title(lang: languageService)).tag(res.rawValue)
-                }
-            }
-            .tint(nil)
+            SiphonMenuPicker(
+                languageService.s("video_quality"), selection: $defaultVideoResolution,
+                options: VideoResolution.allCases.map { res in (value: res.rawValue, title: res.title(lang: languageService)) }
+            )
 
-            Picker(languageService.s("res_fallback_policy"), selection: $resolutionFallbackPolicy) {
-                ForEach(ResolutionFallbackPolicy.allCases) { policy in
-                    Text(policy.title(lang: languageService)).tag(policy.rawValue)
-                }
-            }
-            .tint(nil)
+            SiphonMenuPicker(
+                languageService.s("res_fallback_policy"), selection: $resolutionFallbackPolicy,
+                options: ResolutionFallbackPolicy.allCases.map { policy in (value: policy.rawValue, title: policy.title(lang: languageService)) }
+            )
 
             HStack {
                 Spacer()
@@ -642,24 +636,21 @@ struct PreferencesView: View {
             }
         } header: {
             Text(languageService.s("format_settings"))
+                .font(.siphonStandardSemibold)
         }
     }
 
     private var codecSettingsSection: some View {
-        Section(languageService.s("codec_settings")) {
-            Picker(languageService.s("preferred_video_codec"), selection: $defaultVideoCodec) {
-                ForEach(VideoCodec.allCases) { codec in
-                    Text(codec.title(lang: languageService)).tag(codec.rawValue)
-                }
-            }
-            .tint(nil)
+        Section(siphonHeader: languageService.s("codec_settings")) {
+            SiphonMenuPicker(
+                languageService.s("preferred_video_codec"), selection: $defaultVideoCodec,
+                options: VideoCodec.allCases.map { codec in (value: codec.rawValue, title: codec.title(lang: languageService)) }
+            )
 
-            Picker(languageService.s("preferred_audio_codec"), selection: $defaultAudioCodec) {
-                ForEach(AudioCodec.allCases) { codec in
-                    Text(codec.title(lang: languageService)).tag(codec.rawValue)
-                }
-            }
-            .tint(nil)
+            SiphonMenuPicker(
+                languageService.s("preferred_audio_codec"), selection: $defaultAudioCodec,
+                options: AudioCodec.allCases.map { codec in (value: codec.rawValue, title: codec.title(lang: languageService)) }
+            )
 
             Text(languageService.s("codec_fallback_note"))
                 .font(.siphonMetadata)
@@ -668,29 +659,31 @@ struct PreferencesView: View {
     }
 
     private var embedOptionsSection: some View {
-        Section(languageService.s("embed_options")) {
+        Section(siphonHeader: languageService.s("embed_options")) {
             Toggle(languageService.s("embed_thumbnail"), isOn: $embedThumbnail)
             Toggle(languageService.s("embed_metadata"), isOn: $embedMetadata)
         }
     }
 
     private var concurrentDownloadsSection: some View {
-        Section(languageService.s("concurrent_downloads")) {
+        Section(siphonHeader: languageService.s("concurrent_downloads")) {
             Stepper("\(languageService.s("max")): \(maxConcurrentDownloads)", value: $maxConcurrentDownloads, in: 1...10)
         }
     }
 
     private var speedLimiterSection: some View {
-        Section(languageService.s("speed_limiter")) {
-            Picker(languageService.s("max_download_speed"), selection: $downloadSpeedLimit) {
-                Text(languageService.s("unlimited")).tag(0)
-                Text("1 MB/s (1024 KB/s)").tag(1024)
-                Text("5 MB/s (5120 KB/s)").tag(5120)
-                Text("10 MB/s (10240 KB/s)").tag(10240)
-                Text("25 MB/s (25600 KB/s)").tag(25600)
-                Text("50 MB/s (51200 KB/s)").tag(51200)
-            }
-            .tint(nil)
+        Section(siphonHeader: languageService.s("speed_limiter")) {
+            SiphonMenuPicker(
+                languageService.s("max_download_speed"), selection: $downloadSpeedLimit,
+                options: [
+                    (value: 0, title: languageService.s("unlimited")),
+                    (value: 1024, title: "1 MB/s (1024 KB/s)"),
+                    (value: 5120, title: "5 MB/s (5120 KB/s)"),
+                    (value: 10240, title: "10 MB/s (10240 KB/s)"),
+                    (value: 25600, title: "25 MB/s (25600 KB/s)"),
+                    (value: 51200, title: "50 MB/s (51200 KB/s)")
+                ]
+            )
             Text(languageService.s("speed_limiter_desc"))
                 .font(.siphonMetadata)
                 .foregroundColor(.secondary)
@@ -728,7 +721,7 @@ struct PreferencesView: View {
                     showCreatePresetSheet = false
                     resetPresetForm()
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.siphonPrimary)
                 .disabled(newPresetName.isEmpty)
             }
         }
@@ -738,43 +731,35 @@ struct PreferencesView: View {
     }
 
     private var presetFormatSection: some View {
-        Section(languageService.s("format_settings")) {
-            Picker(languageService.s("file_type"), selection: $presetFileType) {
-                ForEach(MediaFileType.allCases) { type in
-                    Text(type.rawValue).tag(type)
-                }
-            }
-            .tint(nil)
+        Section(siphonHeader: languageService.s("format_settings")) {
+            SiphonMenuPicker(
+                languageService.s("file_type"), selection: $presetFileType,
+                options: MediaFileType.allCases.map { type in (value: type, title: type.rawValue) }
+            )
 
-            Picker(languageService.s("video_quality"), selection: $presetVideoResolution) {
-                ForEach(presetFilteredResolutions) { res in
-                    Text(res.title(lang: languageService)).tag(res)
-                }
-            }
-            .tint(nil)
+            SiphonMenuPicker(
+                languageService.s("video_quality"), selection: $presetVideoResolution,
+                options: presetFilteredResolutions.map { res in (value: res, title: res.title(lang: languageService)) }
+            )
         }
     }
 
     private var presetCodecSection: some View {
-        Section(languageService.s("codec_settings")) {
-            Picker(languageService.s("video_codec"), selection: $presetVideoCodec) {
-                ForEach(VideoCodec.allCases) { codec in
-                    Text(codec.title(lang: languageService)).tag(codec)
-                }
-            }
-            .tint(nil)
+        Section(siphonHeader: languageService.s("codec_settings")) {
+            SiphonMenuPicker(
+                languageService.s("video_codec"), selection: $presetVideoCodec,
+                options: VideoCodec.allCases.map { codec in (value: codec, title: codec.title(lang: languageService)) }
+            )
             .onChange(of: presetVideoCodec) { _, _ in
                 if !presetFilteredResolutions.contains(presetVideoResolution) {
                     presetVideoResolution = .r1080p
                 }
             }
 
-            Picker(languageService.s("audio_codec"), selection: $presetAudioCodec) {
-                ForEach(AudioCodec.allCases) { codec in
-                    Text(codec.title(lang: languageService)).tag(codec)
-                }
-            }
-            .tint(nil)
+            SiphonMenuPicker(
+                languageService.s("audio_codec"), selection: $presetAudioCodec,
+                options: AudioCodec.allCases.map { codec in (value: codec, title: codec.title(lang: languageService)) }
+            )
 
             if presetVideoCodec == .h264 {
                 HStack {
@@ -790,7 +775,7 @@ struct PreferencesView: View {
     }
 
     private var presetSubtitleSection: some View {
-        Section(languageService.s("subtitles")) {
+        Section(siphonHeader: languageService.s("subtitles")) {
             Toggle(languageService.s("download_subtitles"), isOn: $presetEmbedSubtitles)
 
             if presetEmbedSubtitles {
@@ -829,20 +814,17 @@ struct PreferencesView: View {
                     ))
                     .textFieldStyle(.roundedBorder)
 
-                    Picker(languageService.s("subtitle_format"), selection: $presetSubtitleFormat) {
-                        ForEach(SubtitleFormat.allCases) { format in
-                            Text(format.displayName).tag(format)
-                        }
-                    }
-                    .tint(nil)
-                    .pickerStyle(.menu)
+                    SiphonMenuPicker(
+                        languageService.s("subtitle_format"), selection: $presetSubtitleFormat,
+                        options: SubtitleFormat.allCases.map { format in (value: format, title: format.displayName) }
+                    )
                 }
             }
         }
     }
 
     private var presetAdvancedSection: some View {
-        Section(languageService.s("extra_settings")) {
+        Section(siphonHeader: languageService.s("extra_settings")) {
             Toggle(languageService.s("split_chapters"), isOn: $presetSplitChapters)
             Toggle(languageService.s("sponsorblock"), isOn: $presetSponsorBlock)
         }
@@ -950,7 +932,7 @@ struct PreferencesView: View {
 
     private var advancedTab: some View {
         Form {
-            Section("SponsorBlock") {
+            Section(siphonHeader: "SponsorBlock") {
                 Toggle(languageService.s("sponsorblock_desc"), isOn: $sponsorBlock)
             }
 
@@ -968,7 +950,7 @@ struct PreferencesView: View {
     }
 
     private var debugLogsSection: some View {
-        Section(languageService.s("debugging_and_logs")) {
+        Section(siphonHeader: languageService.s("debugging_and_logs")) {
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(languageService.s("app_and_download_logs"))
@@ -990,7 +972,7 @@ struct PreferencesView: View {
     }
 
     private var ytdlpSourceSection: some View {
-        Section(languageService.s("ytdlp_source")) {
+        Section(siphonHeader: languageService.s("ytdlp_source")) {
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
                     if let path = downloadManager.ytdlpService.ytdlpPath {
@@ -1032,7 +1014,7 @@ struct PreferencesView: View {
     }
 
     private var ytdlpUpdateSection: some View {
-        Section(languageService.s("ytdlp_update")) {
+        Section(siphonHeader: languageService.s("ytdlp_update")) {
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("yt-dlp")
@@ -1073,14 +1055,12 @@ struct PreferencesView: View {
     }
 
     private var browserCookiesSection: some View {
-        Section(languageService.s("browser_cookies")) {
-            Picker(languageService.s("browser"), selection: $browserForCookies) {
-                Text(languageService.s("none")).tag("none")
-                ForEach(installedBrowsers) { browser in
-                    Text(browser.displayName).tag(browser.id)
-                }
-            }
-            .tint(nil)
+        Section(siphonHeader: languageService.s("browser_cookies")) {
+            SiphonMenuPicker(
+                languageService.s("browser"), selection: $browserForCookies,
+                options: [(value: "none", title: languageService.s("none"))]
+                    + installedBrowsers.map { browser in (value: browser.id, title: browser.displayName) }
+            )
             .accessibilityLabel(languageService.s("browser_cookies"))
 
             VStack(alignment: .leading, spacing: 8) {
@@ -1143,7 +1123,7 @@ struct PreferencesView: View {
                             NSWorkspace.shared.open(url)
                         }
                     }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.siphonPrimary)
                     .controlSize(.small)
 
                     Button {
@@ -1157,7 +1137,7 @@ struct PreferencesView: View {
                             Text(languageService.s("check_permission"))
                         }
                     }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.siphonSecondary)
                     .controlSize(.small)
                     .tint(nil)
                     .disabled(isCheckingPermission)
@@ -1165,7 +1145,7 @@ struct PreferencesView: View {
                     Button(languageService.s("restart_siphon")) {
                         updateChecker.restartApp()
                     }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.siphonSecondary)
                     .controlSize(.small)
                     .tint(nil)
                 }
@@ -1261,7 +1241,7 @@ struct PreferencesView: View {
     }
 
     private var siteCookiesSection: some View {
-        Section(languageService.s("site_sessions")) {
+        Section(siphonHeader: languageService.s("site_sessions")) {
             siteCookieRow(
                 titleKey: "recu_cookies_title",
                 descKey: "recu_cookies_desc",
@@ -1413,7 +1393,7 @@ struct PreferencesView: View {
             .padding(.bottom, 4)
 
             Form {
-                Section(languageService.s("credits")) {
+                Section(siphonHeader: languageService.s("credits")) {
                     HStack {
                         Text(languageService.s("maintainer"))
                             .font(.siphonStandardMedium)
@@ -1433,7 +1413,7 @@ struct PreferencesView: View {
                     }
                 }
 
-                Section(languageService.s("legal_disclaimer_title")) {
+                Section(siphonHeader: languageService.s("legal_disclaimer_title")) {
                     HStack(alignment: .top, spacing: 8) {
                         Image(systemName: "exclamationmark.shield.fill")
                             .foregroundColor(SiphonTheme.statusQueuedText)
