@@ -1305,7 +1305,8 @@ final class QueueAndErrorUXTests: XCTestCase {
         let download = Download(url: "https://example.com/video", options: options, title: "MyMovie")
         manager.resumeWithNewName(download)
 
-        XCTAssertEqual(download.options.customFilename, "MyMovie (2)", "Must skip conflicting basename even if existing file has a different media extension")
+        XCTAssertNil(download.options.customFilename)
+        XCTAssertEqual(download.resolvedOutputBaseName, "MyMovie (2)", "Must skip conflicting basename even if existing file has a different media extension")
     }
 
     func testWhatsNewOnlyShowsOnFirstRunOrUpdate() async {

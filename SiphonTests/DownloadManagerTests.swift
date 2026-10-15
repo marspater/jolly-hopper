@@ -747,7 +747,8 @@ final class DownloadManagerTests: XCTestCase {
 
         manager.resumeWithNewName(dl)
 
-        XCTAssertEqual(dl.options.customFilename, "My Video (1)")
+        XCTAssertNil(dl.options.customFilename)
+        XCTAssertEqual(dl.resolvedOutputBaseName, "My Video (1)")
         XCTAssertFalse(dl.options.forceOverwrite == true)
         XCTAssertEqual(dl.status, .queued)
     }

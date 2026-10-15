@@ -137,7 +137,7 @@ final class DownloadQueue: ObservableObject {
         forceIncrement: Bool = false,
         fileManager: FileManager = .default
     ) -> (resolvedBaseName: String, candidatePath: String) {
-        let rawBaseName = download.options.customFilename ?? download.title
+        let rawBaseName = download.options.customFilename ?? download.displayTitle
         let sanitizedBase = YtdlpService.sanitizeFilename(rawBaseName)
         let folder = download.options.saveFolder
         let ext = YtdlpService.resolvedOutputFileExtension(for: download.options)
@@ -149,20 +149,26 @@ final class DownloadQueue: ObservableObject {
         let overwritesOriginal = download.options.forceOverwrite == true
 
         var counter = 1
-        var candidateName = sanitizedBase
+        let originalName = download.resolvedOutputBaseName ?? sanitizedBase
+        var candidateName = originalName
         if forceIncrement {
+            let prefix = sanitizedBase + " ("
+            if originalName.hasPrefix(prefix), originalName.hasSuffix(")"),
+               let suffix = Int(originalName.dropFirst(prefix.count).dropLast()), suffix > 0, suffix < Int.max {
+                counter = suffix + 1
+            }
             candidateName = "\(sanitizedBase) (\(counter))"
-            counter += 1
+            counter = counter == Int.max ? 1 : counter + 1
         }
         var candidatePath = folder.appendingPathComponent("\(candidateName).\(ext)").path
 
         while isOutputReserved(baseName: candidateName, in: folder, options: download.options) ||
-              (!(overwritesOriginal && candidateName == sanitizedBase) &&
+              (!(overwritesOriginal && candidateName == originalName) &&
                (Self.mediaFileCollides(baseName: candidateName, options: download.options, existingMediaFileKeys: existingFiles) ||
                 fileManager.fileExists(atPath: candidatePath))) {
             candidateName = "\(sanitizedBase) (\(counter))"
             candidatePath = folder.appendingPathComponent("\(candidateName).\(ext)").path
-            counter += 1
+            counter = counter == Int.max ? 1 : counter + 1
         }
 
         return (candidateName, candidatePath)
@@ -180,7 +186,9 @@ final class DownloadQueue: ObservableObject {
             fileManager: fileManager
         )
         reserveOutputPath(candidatePath)
-        download.options.customFilename = candidateName
+        if download.title != Download.fetchingPlaceholder || download.options.customFilename != nil {
+            download.resolvedOutputBaseName = candidateName
+        }
         return (candidateName, candidatePath)
     }
 

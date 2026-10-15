@@ -26,6 +26,9 @@ class Download: ObservableObject, Identifiable {
     let url: String
     let createdAt: Date
     var options: DownloadOptions
+    // Queue-selected name, separate from the user's explicit filename.
+    var resolvedOutputBaseName: String?
+    var outputBaseName: String { resolvedOutputBaseName ?? options.customFilename ?? displayTitle }
     // Owned by this job; retained across pause/resume, never shared by filename.
     var scratchDirectory: URL?
 
@@ -2181,14 +2184,16 @@ struct HistoricDownload: Codable, Identifiable {
     let browserCookieSource: String?
     let requiresAdvancedArgumentsReview: Bool?
     let hasPartialFailure: Bool?
+    let resolvedOutputBaseName: String?
     let options: DownloadOptions
 
     enum CodingKeys: String, CodingKey {
-        case id, url, title, filePath, filePaths, downloadDate, fileType, status, thumbnailURL, duration, errorMessage, log, progress, scratchDirectoryPath, browserCookieSource, requiresAdvancedArgumentsReview, hasPartialFailure, options
+        case resolvedOutputBaseName, id, url, title, filePath, filePaths, downloadDate, fileType, status, thumbnailURL, duration, errorMessage, log, progress, scratchDirectoryPath, browserCookieSource, requiresAdvancedArgumentsReview, hasPartialFailure, options
     }
 
     @MainActor
     init(download: Download) {
+        self.resolvedOutputBaseName = download.resolvedOutputBaseName
         self.id = download.id
         self.url = download.url
         self.title = download.displayTitle
@@ -2236,6 +2241,7 @@ struct HistoricDownload: Codable, Identifiable {
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.resolvedOutputBaseName = try container.decodeIfPresent(String.self, forKey: .resolvedOutputBaseName)
         self.id = try container.decode(UUID.self, forKey: .id)
         self.url = try container.decode(String.self, forKey: .url)
         self.title = try container.decode(String.self, forKey: .title)
@@ -2271,6 +2277,7 @@ struct HistoricDownload: Codable, Identifiable {
     }
 
     private func encodeMetadata(to container: inout KeyedEncodingContainer<CodingKeys>) throws {
+        try container.encodeIfPresent(resolvedOutputBaseName, forKey: .resolvedOutputBaseName)
         try container.encode(id, forKey: .id)
         try container.encode(url, forKey: .url)
         try container.encode(title, forKey: .title)
@@ -2305,6 +2312,7 @@ struct HistoricDownload: Codable, Identifiable {
             createdAt: self.downloadDate,
             titleIsDecoded: true
         )
+        download.resolvedOutputBaseName = self.resolvedOutputBaseName.map(YtdlpService.sanitizeFilename)
         download.requiresAdvancedArgumentsReview = self.requiresAdvancedArgumentsReview ?? false
         download.hasPartialFailure = self.hasPartialFailure ?? (self.status == .completed && self.errorMessage != nil)
         let restoredStatus = download.hasPartialFailure && self.status == .completed ? DownloadStatus.failed : self.status
