@@ -218,7 +218,7 @@ struct ContentView: View {
 
         ToolbarItemGroup(placement: .automatic) {
             if (appState.selectedNavItem == .downloading || appState.selectedNavItem == .queued || appState.selectedNavItem == .home) &&
-                (downloadManager.downloadingCount > 0 || downloadManager.queuedCount > 0) {
+                downloadManager.canStopDownloads {
                 Button {
                     downloadManager.stopAllDownloads()
                 } label: {
@@ -271,6 +271,7 @@ struct SidebarView: View {
                 }
 
                 Section(siphonHeader: languageService.s("history"), font: .siphonMetadataSemibold) {
+                    sidebarButton(item: .recent)
                     sidebarButton(item: .completed, badgeCount: downloadManager.completedCount, badgeColor: SiphonTheme.statusCompletedText)
                     sidebarButton(item: .failed, badgeCount: downloadManager.failedCount, badgeColor: SiphonTheme.statusFailedText)
                 }
@@ -394,6 +395,8 @@ struct DetailView: View {
                 switch appState.selectedNavItem {
                 case .home:
                     HomeView()
+                case .recent:
+                    DownloadListView(downloads: downloadManager.recentDownloads(limit: downloadManager.downloads.count), emptyMessage: languageService.s("no_recent_downloads"), emptyDetail: languageService.s("no_recent_downloads_sub"), emptyIcon: "clock.arrow.circlepath", showStop: true)
                 case .downloading:
                     DownloadListView(downloads: downloadManager.downloadingDownloads, emptyMessage: languageService.s("empty_downloading"), emptyDetail: languageService.s("empty_downloading_detail"), emptyIcon: "arrow.down.circle", showStop: true)
                 case .queued:
@@ -512,7 +515,7 @@ struct HomeView: View {
                 Spacer()
 
                 Button {
-                    appState.selectedNavItem = downloadManager.mostRelevantNavigationItem
+                    appState.selectedNavItem = .recent
                 } label: {
                     HStack(spacing: 4) {
                         Text(languageService.s("see_all"))

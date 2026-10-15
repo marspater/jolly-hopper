@@ -31,13 +31,25 @@ struct RecentDownloadRowView: View {
             }
             .accessibilityElement(children: .combine)
 
-            // Fixed 24 pt slots keep every row's icons on the same columns,
-            // whether or not a row has a primary action.
+            // History uses folder + remove; live work uses the same trailing
+            // column for Pause/Resume so actions stay aligned across states.
             HStack(spacing: SiphonTheme.spacing8) {
-                primaryActionView
-                    .frame(width: 24, height: 24)
-                removeActionView
-                    .frame(width: 24, height: 24)
+                Group {
+                    if canRemoveFromHistory {
+                        primaryActionView
+                    } else {
+                        Color.clear.accessibilityHidden(true)
+                    }
+                }
+                .frame(width: 24, height: 24)
+                Group {
+                    if canRemoveFromHistory {
+                        removeActionView
+                    } else {
+                        primaryActionView
+                    }
+                }
+                .frame(width: 24, height: 24)
             }
         }
         .padding(.horizontal, SiphonTheme.spacing14)
@@ -65,9 +77,8 @@ struct RecentDownloadRowView: View {
             }
         }
         .onTapGesture(count: 2) {
-            // Double-clicking a finished row plays it, like Play on its card.
-            if download.hasPlayableOutput, let path = download.primaryFilePath, primaryFileIsPresent != false {
-                downloadManager.openFile(path)
+            if download.status == .fileExists || primaryFileIsPresent != false {
+                downloadManager.openDownload(download)
             }
         }
     }
@@ -77,8 +88,8 @@ struct RecentDownloadRowView: View {
     private var activeTint: Color? {
         switch download.status {
         case .downloading, .fetching, .processing: return SiphonTheme.statusDownloading
-        case .queued, .paused, .fileExists: return SiphonTheme.statusQueued
-        case .completed, .failed, .stopped: return nil
+        case .queued, .paused: return SiphonTheme.statusQueued
+        case .completed, .failed, .stopped, .fileExists: return nil
         }
     }
 

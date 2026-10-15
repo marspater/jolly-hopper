@@ -50,6 +50,22 @@ final class MockYtdlpProcessRunner: YtdlpProcessRunning, @unchecked Sendable {
 }
 
 @MainActor
+private final class PopupNavigationAction: WKNavigationAction {
+    var requestedURL: URL!
+    override var request: URLRequest { URLRequest(url: requestedURL) }
+    override var targetFrame: WKFrameInfo? { nil }
+}
+
+@MainActor
+private final class NavigationRecordingWebView: WKWebView {
+    var loadedURLs: [URL] = []
+    override func load(_ request: URLRequest) -> WKNavigation? {
+        if let url = request.url { loadedURLs.append(url) }
+        return nil
+    }
+}
+
+@MainActor
 final class YtdlpServiceTests: XCTestCase {
 
     var service: YtdlpService!
@@ -239,7 +255,7 @@ final class YtdlpServiceTests: XCTestCase {
             throw YtdlpError.commandFailed("fixture conversion failed")
         })
         do {
-            _ = try await service.postprocessDecryptedMedia(at: source, options: options, ffmpegDir: "/fixture")
+            _ = try await service.postprocessDownloadedMedia(at: source, options: options, ffmpegDir: "/fixture")
             XCTFail("Expected failure")
         } catch {}
         XCTAssertEqual(try Data(contentsOf: source), original)
@@ -247,7 +263,7 @@ final class YtdlpServiceTests: XCTestCase {
             try Data("converted audio".utf8).write(to: URL(fileURLWithPath: try XCTUnwrap(args.last)))
             return ""
         })
-        let result = try await service.postprocessDecryptedMedia(at: source, options: options, ffmpegDir: "/fixture")
+        let result = try await service.postprocessDownloadedMedia(at: source, options: options, ffmpegDir: "/fixture")
         XCTAssertEqual(result.pathExtension, "mp3")
         XCTAssertEqual(try String(contentsOf: result, encoding: .utf8), "converted audio")
         XCTAssertFalse(FileManager.default.fileExists(atPath: source.path))
@@ -4065,6 +4081,63 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertNil(YtdlpService.recuSegmentCheck(for: "https://cdn.example.test/index.m3u8?uid=ab12;3,4&request_id=a&expires=1"))
     }
 
+    func testRecuPageRecognizesSessionPlayersWithoutLegacyTokens() async throws {
+        for (attributes, token, sessionPlayer, signIn) in [
+            ("data-play-session='session-fixture'", "session-fixture", true, false),
+            ("data-token='legacy-fixture'", "legacy-fixture", false, false),
+            ("", "", false, true)
+        ] {
+            let configuration = WKWebViewConfiguration()
+            configuration.websiteDataStore = .nonPersistent()
+            let webView = WKWebView(frame: .zero, configuration: configuration)
+            webView.loadHTMLString("<title>Fixture</title><button id='play_button' data-video-id='123' \(attributes)>Play</button>", baseURL: URL(string: "https://recu.me/fixture/video/123/play"))
+            let deadline = Date().addingTimeInterval(5)
+            var observed: YtdlpService.RecuPageState?
+            repeat {
+                observed = await service.recuPageState(webView, videoID: "123")
+                if observed?.html != nil { break }
+                try await Task.sleep(for: .milliseconds(20))
+            } while Date() < deadline
+            let state = try XCTUnwrap(observed)
+            XCTAssertNotNil(state.html)
+            XCTAssertEqual(state.token ?? "", token)
+            XCTAssertEqual(state.usesSessionPlayer, sessionPlayer)
+            XCTAssertEqual(state.needsSignIn, signIn)
+            let wrongVideo = await service.recuPageState(webView, videoID: "456")
+            XCTAssertNil(wrongVideo?.token)
+        }
+    }
+
+    func testRecuTokenCanBeRetriedAfterSignInNavigation() {
+        let delegate = YtdlpService.RecuNavigationDelegate()
+        let configuration = WKWebViewConfiguration()
+        configuration.websiteDataStore = .nonPersistent()
+        let webView = WKWebView(frame: .zero, configuration: configuration)
+        XCTAssertTrue(delegate.consumeToken("fixture-token"))
+        XCTAssertFalse(delegate.consumeToken("fixture-token"), "Polling must not repeat an API call in one document")
+        delegate.webView(webView, didCommit: nil)
+        XCTAssertTrue(delegate.consumeToken("fixture-token"), "Login can return to the same video token")
+        XCTAssertFalse(delegate.consumeToken("fixture-token"))
+        XCTAssertFalse(delegate.responds(to: NSSelectorFromString("webView:createWebViewWithConfiguration:forNavigationAction:windowFeatures:")), "New-window links are handled by the navigation policy, without a second popup delegate")
+    }
+
+    func testProtectedSessionPopupLinksUseTheNavigationPolicy() throws {
+        let delegate = YtdlpService.RecuNavigationDelegate()
+        let configuration = WKWebViewConfiguration()
+        configuration.websiteDataStore = .nonPersistent()
+        let webView = NavigationRecordingWebView(frame: .zero, configuration: configuration)
+        let action = PopupNavigationAction()
+        let allowedURL = try XCTUnwrap(URL(string: "https://recu.me/account/signin"))
+        for url in [allowedURL, try XCTUnwrap(URL(string: "https://example.com/rejected"))] {
+            action.requestedURL = url
+            var decisions: [WKNavigationActionPolicy] = []
+            delegate.webView(webView, decidePolicyFor: action) { decisions.append($0) }
+            XCTAssertEqual(decisions, [.cancel], "Popup navigation must be cancelled after routing or rejection")
+        }
+        XCTAssertEqual(webView.loadedURLs, [allowedURL], "Only an allowlisted popup may reuse the owned WebView")
+        XCTAssertNil(webView.uiDelegate, "The navigation delegate owns popup routing")
+    }
+
     func testRecuNavigationDelegateAllowsCloudflareAndRecuHosts() {
         XCTAssertTrue(YtdlpService.RecuNavigationDelegate.isAllowedHost("recu.me"))
         XCTAssertTrue(YtdlpService.RecuNavigationDelegate.isAllowedHost("sub.recu.me"))
@@ -4077,15 +4150,15 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertFalse(YtdlpService.RecuNavigationDelegate.isAllowedHost("cloudflare.com.evil.com"))
 
         // Scheme security: internal safe schemes allowed, javascript rejected
-        XCTAssertTrue(YtdlpService.RecuNavigationDelegate.allowsNavigation(to: URL(string: "about:blank"), targetFrame: nil))
-        XCTAssertTrue(YtdlpService.RecuNavigationDelegate.allowsNavigation(to: URL(string: "data:text/html,test"), targetFrame: nil))
-        XCTAssertFalse(YtdlpService.RecuNavigationDelegate.allowsNavigation(to: URL(string: "javascript:alert(1)"), targetFrame: nil))
+        XCTAssertTrue(YtdlpService.RecuNavigationDelegate.allowsNavigation(to: URL(string: "about:blank")))
+        XCTAssertTrue(YtdlpService.RecuNavigationDelegate.allowsNavigation(to: URL(string: "data:text/html,test")))
+        XCTAssertFalse(YtdlpService.RecuNavigationDelegate.allowsNavigation(to: URL(string: "javascript:alert(1)")))
 
         // Host security
-        XCTAssertTrue(YtdlpService.RecuNavigationDelegate.allowsNavigation(to: URL(string: "https://recu.me/test"), targetFrame: nil))
-        XCTAssertTrue(YtdlpService.RecuNavigationDelegate.allowsNavigation(to: URL(string: "https://challenges.cloudflare.com/cdn-cgi/challenge"), targetFrame: nil))
-        XCTAssertFalse(YtdlpService.RecuNavigationDelegate.allowsNavigation(to: URL(string: "https://evil.com/phish"), targetFrame: nil))
-        XCTAssertFalse(YtdlpService.RecuNavigationDelegate.allowsNavigation(to: nil, targetFrame: nil))
+        XCTAssertTrue(YtdlpService.RecuNavigationDelegate.allowsNavigation(to: URL(string: "https://recu.me/test")))
+        XCTAssertTrue(YtdlpService.RecuNavigationDelegate.allowsNavigation(to: URL(string: "https://challenges.cloudflare.com/cdn-cgi/challenge")))
+        XCTAssertFalse(YtdlpService.RecuNavigationDelegate.allowsNavigation(to: URL(string: "https://evil.com/phish")))
+        XCTAssertFalse(YtdlpService.RecuNavigationDelegate.allowsNavigation(to: nil))
     }
 
     func testRecuMetadataResolvesThroughBrowserSessionWithoutBrowserCookies() async throws {
@@ -5839,73 +5912,124 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertEqual(diag.exitStatus, "Success (0)")
     }
 
-    func testHDRToSDRToneMappingArguments() async throws {
-        let capturedArgsBox = TestBox<[String]>([])
-        service.processRunner = MockYtdlpProcessRunner(mockDownload: { args in
-            capturedArgsBox.value = args
-            return "[download] Destination: /tmp/test_hdr.mp4\n"
+    func testHDRToSDRToneMappingRunsOnSameContainer() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let source = root.appendingPathComponent("hdr.mp4")
+        try Data("source".utf8).write(to: source)
+        let commands = TestBox<[[String]]>([])
+        service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
+            commands.value.append(args)
+            try Data("tone mapped".utf8).write(to: URL(fileURLWithPath: try XCTUnwrap(args.last)))
+            return ""
+        }, mockDownload: { args in
+            XCTAssertFalse(args.contains("--recode-video"))
+            return source.path
         })
-
         var options = DownloadOptions.default
+        options.saveFolder = root
+        options.embedThumbnail = false
         options.hdrAction = .convertToSDR
-
-        _ = try await service.download(
-            url: "https://example.com/hdr-video",
-            options: options,
-            onProgress: { _, _, _ in /* Progress ignored in test */ },
-            onOutput: { _ in /* Output ignored in test */ }
-        )
-
-        // Must trigger video recoding
-        XCTAssertTrue(capturedArgsBox.value.contains("--recode-video"))
-        // Must target VideoConvertor, NEVER general ffmpeg (which breaks streamcopy steps)
-        XCTAssertFalse(capturedArgsBox.value.contains(where: { $0.hasPrefix("ffmpeg:") }))
-        XCTAssertTrue(capturedArgsBox.value.contains(where: { $0.contains("VideoConvertor:") && $0.contains("tonemap=hable") }))
-        if let idx = capturedArgsBox.value.firstIndex(of: "--postprocessor-args") {
-            XCTAssertTrue(capturedArgsBox.value[idx + 1].contains("tonemap=hable"))
-            XCTAssertTrue(capturedArgsBox.value[idx + 1].contains("zscale=t=bt709"))
-            XCTAssertFalse(capturedArgsBox.value[idx + 1].hasPrefix("ffmpeg:"))
-        }
+        let result = try await service.download(url: "https://example.com/hdr-video", options: options,
+                                              onProgress: { _, _, _ in }, onOutput: { _ in })
+        XCTAssertEqual(result.primaryFile, source)
+        XCTAssertEqual(try String(contentsOf: source, encoding: .utf8), "tone mapped")
+        let conversion = try XCTUnwrap(commands.value.first)
+        XCTAssertTrue(conversion.contains("tonemap=hable:desat=0,zscale=t=bt709:m=bt709:r=tv,format=yuv420p"))
+        XCTAssertTrue(conversion.contains("-c:v"), "Tone mapping must encode rather than stream-copy filtered video")
     }
 
-    func testCodecConversionRunsWithMediaInfo() async throws {
-        let capturedArgsBox = TestBox<[String]>([])
-        service.processRunner = MockYtdlpProcessRunner(mockDownload: { args in
-            capturedArgsBox.value = args
-            return "[download] Destination: /tmp/test_codec.mp4\n"
+    func testHEVCConversionRunsWhenMP4ContainerAlreadyMatches() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let source = root.appendingPathComponent("video.mp4")
+        try Data("H264 source".utf8).write(to: source)
+        let commands = TestBox<[[String]]>([])
+        service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
+            commands.value.append(args)
+            try Data("HEVC output".utf8).write(to: URL(fileURLWithPath: try XCTUnwrap(args.last)))
+            return ""
+        }, mockDownload: { args in
+            XCTAssertFalse(args.contains("--recode-video"))
+            return source.path
         })
-
         var options = DownloadOptions.default
-        options.conversionCodec = .h264
+        options.saveFolder = root
+        options.embedThumbnail = false
+        options.conversionCodec = .h265
+        let format = MediaFormat(formatId: "137", ext: "mp4", vcodec: "avc1", acodec: "mp4a")
+        let info = MediaInfo(id: "fixture", title: "Fixture", formats: [format])
+        let result = try await service.download(url: "https://example.com/video", options: options, mediaInfo: info,
+                                              onProgress: { _, _, _ in }, onOutput: { _ in })
+        XCTAssertEqual(result.primaryFile, source)
+        XCTAssertEqual(try String(contentsOf: source, encoding: .utf8), "HEVC output")
+        let conversion = try XCTUnwrap(commands.value.first)
+        #if arch(arm64)
+        XCTAssertTrue(conversion.contains("hevc_videotoolbox"))
+        #else
+        XCTAssertTrue(conversion.contains("libx265"))
+        #endif
+        XCTAssertTrue(conversion.contains("hvc1"))
+        XCTAssertTrue(conversion.contains("0:s?"), "Keep embedded subtitles during conversion")
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: root.path), ["video.mp4"])
+    }
 
-        let sampleFormat = MediaFormat(
-            formatId: "137",
-            ext: "mp4",
-            resolution: "1920x1080",
-            fps: 30,
-            vcodec: "avc1",
-            acodec: "mp4a",
-            abr: 128,
-            vbr: 3000,
-            filesize: 1024,
-            filesizeApprox: nil,
-            formatNote: nil,
-            formatProtocol: "https",
-            manifestUrl: nil
-        )
-        let mediaInfo = MediaInfo(id: "sample_vid", title: "Sample Video", formats: [sampleFormat])
+    func testSDRConversionKeepsWebMCodecsValid() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let source = root.appendingPathComponent("video.webm")
+        try Data("HDR source".utf8).write(to: source)
+        let commands = TestBox<[[String]]>([])
+        service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
+            commands.value.append(args)
+            try Data("SDR output".utf8).write(to: URL(fileURLWithPath: try XCTUnwrap(args.last)))
+            return ""
+        })
+        var options = DownloadOptions.default
+        options.fileType = .webm
+        options.hdrAction = .convertToSDR
+        _ = try await service.postprocessDownloadedMedia(at: source, options: options, ffmpegDir: root.path)
+        let conversion = try XCTUnwrap(commands.value.first)
+        XCTAssertTrue(conversion.contains("libvpx-vp9"), "WebM rejects H.264 video")
+        XCTAssertEqual(conversion.filter { $0 == "-c:s" }.count, 1)
+        XCTAssertTrue(conversion.contains("webvtt"), "WebM stores only WebVTT subtitles")
+        XCTAssertFalse(conversion.contains("0:t?"), "Only Matroska stores attachments")
+    }
 
-        _ = try await service.download(
-            url: "https://example.com/test-codec",
-            options: options,
-            mediaInfo: mediaInfo,
-            onProgress: { _, _, _ in },
-            onOutput: { _ in }
-        )
-
-        XCTAssertTrue(capturedArgsBox.value.contains("--recode-video"))
-        XCTAssertTrue(capturedArgsBox.value.contains("mp4"))
-        XCTAssertTrue(capturedArgsBox.value.contains(where: { $0.contains("VideoConvertor:") }))
+    func testHEVCConversionProducesHEVCWithRealFFmpeg() async throws {
+        guard let tools = ProcessInfo.processInfo.environment["SIPHON_CONVERSION_FFMPEG_DIR"] else {
+            throw XCTSkip("Requires explicit FFmpeg path for the local codec smoke test")
+        }
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let source = root.appendingPathComponent("fixture.mp4")
+        let ffmpeg = URL(fileURLWithPath: tools).appendingPathComponent("ffmpeg")
+        let ffprobe = URL(fileURLWithPath: tools).appendingPathComponent("ffprobe")
+        let runner = DefaultYtdlpProcessRunner()
+        _ = try await runner.runCommand([ffmpeg.path, "-v", "error", "-f", "lavfi", "-i", "testsrc2=size=320x180:rate=24",
+                                         "-t", "1", "-c:v", "libx264", "-pix_fmt", "yuv420p", source.path])
+        service.ffmpegPath = ffmpeg
+        service.ffprobePath = ffprobe
+        service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
+            try await runner.runCommand(args)
+        }, mockDownload: { _ in source.path })
+        var options = DownloadOptions.default
+        options.saveFolder = root
+        options.embedThumbnail = false
+        options.conversionCodec = .h265
+        let result = try await service.download(url: "https://example.com/fixture", options: options,
+                                              onProgress: { _, _, _ in }, onOutput: { _ in })
+        let output = try XCTUnwrap(result.primaryFile)
+        let probe = try await runner.runCommand([ffprobe.path, "-v", "error", "-select_streams", "v:0",
+                                                "-show_entries", "stream=codec_name,codec_tag_string", "-of", "json", output.path])
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(probe.utf8)) as? [String: Any])
+        let stream = try XCTUnwrap((json["streams"] as? [[String: Any]])?.first)
+        XCTAssertEqual(stream["codec_name"] as? String, "hevc")
+        XCTAssertEqual(stream["codec_tag_string"] as? String, "hvc1")
     }
 
     @MainActor
@@ -6580,6 +6704,8 @@ final class YtdlpServiceTests: XCTestCase {
     }
 
     func testClearRecuWebDataClearsInMemoryStores() async throws {
+        // Exercise the cache without clearing the user's persistent sign-in.
+        service.recuWebDataStores[""] = .nonPersistent()
         _ = service.recuWebDataStore
         XCTAssertFalse(service.recuWebDataStores.isEmpty)
         service.websiteDataStoreRemover = { _ in }
