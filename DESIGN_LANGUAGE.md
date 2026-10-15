@@ -147,8 +147,12 @@ truth only when the value is genuinely reused or has semantic meaning.
   styles when they better express platform behavior.
 - Tinted inline notices (permission hints, errors, info banners) use
   `siphonCallout(tint:)` with a saturated status or accent tint.
-- Two-option capsule switches (Single/Batch, Video/Audio) use
-  `SiphonSegmentedPicker`; do not hand-roll gradient bubbles.
+- Every segmented choice uses `SiphonSegmentedPicker`: compact capsules for
+  inline choices (Single/Batch, Theme, Diagnostics tabs) and `isLarge` with
+  icons for the full-width Settings tab bar. Do not use
+  `.pickerStyle(.segmented)` or hand-roll gradient bubbles.
+- Text sets a Siphon font (`.font(.siphon…)`); `.fontWeight` alone falls back
+  to SF Pro.
 - All corners are `.continuous`; do not use the deprecated `.cornerRadius(_:)`.
 - Keep the hierarchy shallow: root surface → card → inset field/control. Avoid
   stacking multiple opaque fills, dark scrims, or unrelated blurs.
