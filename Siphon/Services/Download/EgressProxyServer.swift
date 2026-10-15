@@ -12,12 +12,13 @@ import Network
 /// without threading a parameter through each one.
 enum EgressBoundary {
     @TaskLocal static var proxyURL: String?
+    @TaskLocal static var ytdlpExecutablePath: String?
 
     /// `args` with the bound proxy added when they launch yt-dlp without one.
-    static func applying(to args: [String]) -> [String] {
+    static func applying(to args: [String], downloaderPath: String? = nil) -> [String] {
         guard let proxyURL,
               let executable = args.first,
-              URL(fileURLWithPath: executable).lastPathComponent.hasPrefix("yt-dlp"),
+              (executable == (downloaderPath ?? ytdlpExecutablePath) || URL(fileURLWithPath: executable).lastPathComponent.hasPrefix("yt-dlp")),
               !args.contains(where: { $0 == "--proxy" || $0.hasPrefix("--proxy=") }) else {
             return args
         }
@@ -39,9 +40,18 @@ enum EgressBoundary {
                 kCFNetworkProxiesHTTPSPort as String: endpoint.port
             ]
             let session = URLSession(configuration: configuration)
+            // ponytail: cap cached routes at eight; retired sessions finish in-flight work.
+            if sessions.count >= 8, let retiredPort = sessions.keys.first {
+                sessions.removeValue(forKey: retiredPort)?.finishTasksAndInvalidate()
+            }
             sessions[endpoint.port] = session
             return session
         }
+    }
+
+    static func retireSession(for port: UInt16) {
+        let retired = sessionLock.withLock { sessions.removeValue(forKey: Int(port)) }
+        retired?.finishTasksAndInvalidate()
     }
 
     /// WebKit proxy settings for a website data store: the bound proxy, or none.
@@ -83,7 +93,7 @@ public final class EgressProxyServer: @unchecked Sendable {
 
     public init(targetValidator: TargetValidator? = nil, addressResolver: AddressResolver? = nil) {
         self.targetValidator = targetValidator ?? { host, port in
-            ExternalDownloadTargetPolicy.isAllowedTarget(host: host, port: port)
+            ExternalDownloadTargetPolicy.isAllowedTarget(host: host, port: port, resolveDNS: false)
         }
         self.addressResolver = addressResolver ?? Self.resolveNumericAddresses
     }
@@ -101,6 +111,7 @@ public final class EgressProxyServer: @unchecked Sendable {
                 case .failed?, .cancelled?:
                     listener?.cancel()
                     listener = nil
+                    EgressBoundary.retireSession(for: port)
                     port = 0
                     Task { @MainActor in
                         LoggerService.shared.log("Egress proxy listener stopped after startup; restarting it", level: .warning)
@@ -185,8 +196,10 @@ public final class EgressProxyServer: @unchecked Sendable {
         listener = nil
         startTask?.cancel()
         startTask = nil
+        let retiredPort = port
         port = 0
         lock.unlock()
+        EgressBoundary.retireSession(for: retiredPort)
     }
 
     private func handleClientConnection(_ client: NWConnection) {
@@ -235,8 +248,12 @@ public final class EgressProxyServer: @unchecked Sendable {
             return
         }
 
-        // Bolt Performance Optimization: Use Substring views directly from split(whereSeparator: \.isNewline) and split(separator: " ") without calling .map(String.init) to eliminate per-line heap allocations for header strings on every proxy request.
-        let lines = headerString.split(whereSeparator: \.isNewline)
+        let normalizedHeaders = headerString.replacingOccurrences(of: "\r\n", with: "\n")
+        guard normalizedHeaders.unicodeScalars.allSatisfy({ $0.value == 10 || !CharacterSet.newlines.contains($0) }) else {
+            sendResponse(client: client, status: "400 Bad Request", body: "Invalid header newline\n", close: true)
+            return
+        }
+        let lines = normalizedHeaders.split(separator: "\n", omittingEmptySubsequences: false)
         guard let rawFirstLine = lines.first else {
             sendResponse(client: client, status: "400 Bad Request", body: "Empty request\n", close: true)
             return
@@ -463,11 +480,11 @@ public final class EgressProxyServer: @unchecked Sendable {
     /// when the name and every address it resolves to pass the validator.
     /// Connecting to those exact addresses, instead of letting NWConnection resolve
     /// the name again, closes the DNS-rebinding window between check and connect.
-    private func approvedAddresses(host: String, port: Int) -> [String]? {
+    func approvedAddresses(host: String, port: Int) -> [String]? {
         guard targetValidator(host, port) else { return nil }
         let addresses = addressResolver(host)
         guard !addresses.isEmpty,
-              addresses.allSatisfy({ targetValidator($0, port) }) else {
+              addresses.allSatisfy({ (IPv4Address($0) != nil || IPv6Address($0) != nil) && targetValidator($0, port) }) else {
             return nil
         }
         return addresses

@@ -18,7 +18,17 @@ APP="$BUILD_DIR/Build/Products/Debug/Siphon.app"
 codesign --verify --deep --strict "$APP"
 if [[ "$MODE" != --build ]]; then
     # SIGTERM allows normal shutdown; no forced kill and no user data is removed.
-    if pgrep -x Siphon >/dev/null; then pkill -TERM -x Siphon; fi
+    if pgrep -x Siphon >/dev/null; then
+        pkill -TERM -x Siphon
+        for ((attempt = 0; attempt < 300; attempt++)); do
+            if ! pgrep -x Siphon >/dev/null; then break; fi
+            sleep 0.1
+        done
+        if pgrep -x Siphon >/dev/null; then
+            echo "Siphon has not finished shutting down; refusing to launch another instance." >&2
+            exit 1
+        fi
+    fi
     open -n "$APP"
     if [[ "$MODE" == --verify ]]; then
         pgrep -x Siphon >/dev/null

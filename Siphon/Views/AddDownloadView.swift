@@ -4,6 +4,7 @@ struct AddDownloadView: View {
     @EnvironmentObject var downloadManager: DownloadManager
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var languageService: LanguageService
+    @EnvironmentObject var updateChecker: UpdateChecker
     @Environment(\.dismiss) private var dismiss
     @Environment(\.appearsActive) private var appearsActive
     @Environment(\.colorScheme) private var colorScheme
@@ -45,6 +46,7 @@ struct AddDownloadView: View {
     @StateObject private var pasteFeedback = TransientFeedbackState()
     @State private var selectedSubtitleLangs: Set<String> = []
     @State private var availableSubtitles: [SubtitleOption] = []
+    @State private var batchSubtitleLanguages = "en"
     @State private var embedSubtitles: Bool = true
     @State private var subtitleFormat: SubtitleFormat = .srt
     @State private var embedThumbnail: Bool = true
@@ -170,6 +172,7 @@ struct AddDownloadView: View {
         .onAppear {
             focusedField = .url
             loadPreferencesDefaults()
+            batchSubtitleLanguages = presetSubtitleLanguage.isEmpty ? "en" : presetSubtitleLanguage
             let loadedPresets = CustomPreset.loadAll()
             self.customPresets = loadedPresets
 
@@ -179,6 +182,8 @@ struct AddDownloadView: View {
                let customPreset = loadedPresets.first(where: { $0.id == customPresetId }) {
                 applyCustomPreset(customPreset)
                 selectedPresetName = customPreset.name
+            } else {
+                selectedPresetName = DownloadPreset(rawValue: selectedPreset)?.title(lang: languageService)
             }
 
             // Handle External URLs passed via AppState
@@ -190,6 +195,12 @@ struct AddDownloadView: View {
             if additionalArguments.isEmpty && !defaultAdditionalArguments.isEmpty {
                 additionalArguments = defaultAdditionalArguments
             }
+        }
+        .onChange(of: downloadSubtitles) { _, enabled in
+            if enabled { selectDefaultSubtitleLanguages() }
+        }
+        .onChange(of: inputMode) { _, _ in
+            if downloadSubtitles { selectDefaultSubtitleLanguages() }
         }
         .onChange(of: urlInput) { _, newValue in
             fetchTask?.cancel()
@@ -976,10 +987,9 @@ struct AddDownloadView: View {
         sponsorBlock = preset.sponsorBlock ?? false
         splitChapters = preset.splitChapters ?? false
 
-        if !presetSubtitleLanguage.isEmpty && !availableSubtitles.isEmpty,
-           availableSubtitles.contains(where: { $0.id == presetSubtitleLanguage }) {
-            selectedSubtitleLangs = [presetSubtitleLanguage]
-        }
+        selectedSubtitleLangs.removeAll()
+        batchSubtitleLanguages = presetSubtitleLanguage.isEmpty ? "en" : presetSubtitleLanguage
+        if downloadSubtitles { selectDefaultSubtitleLanguages() }
     }
 
     private var saveSection: some View {
@@ -1134,13 +1144,24 @@ struct AddDownloadView: View {
                                 .foregroundColor(.secondary)
 
                             Toggle(languageService.s("download_subtitles"), isOn: $downloadSubtitles)
-                                .disabled(availableSubtitles.isEmpty)
+                                .disabled(inputMode == .single && availableSubtitles.isEmpty)
 
-                            if availableSubtitles.isEmpty && mediaInfo != nil {
+                            if inputMode == .batch && downloadSubtitles {
+                                TextField(languageService.s("subtitle_language_codes"), text: $batchSubtitleLanguages)
+                                    .textFieldStyle(.roundedBorder)
+                                    .accessibilityLabel(languageService.s("subtitle_language_codes"))
+                                Picker(languageService.s("subtitle_format"), selection: $subtitleFormat) {
+                                    ForEach(SubtitleFormat.allCases) { format in
+                                        Text(format.displayName).tag(format)
+                                    }
+                                }
+                                .tint(nil)
+                                Toggle(languageService.s("embed_video"), isOn: $embedSubtitles)
+                            } else if inputMode == .single && availableSubtitles.isEmpty && mediaInfo != nil {
                                 Text(languageService.s("no_subtitles"))
                                     .font(.siphonMetadata)
                                     .foregroundColor(.secondary)
-                            } else if downloadSubtitles {
+                            } else if inputMode == .single && downloadSubtitles {
                                 HStack(spacing: SiphonTheme.spacing12) {
                                     Menu {
                                         let (manualSubs, autoSubs): ([SubtitleOption], [SubtitleOption]) = availableSubtitles.reduce(into: ([], [])) { result, sub in
@@ -1409,7 +1430,7 @@ struct AddDownloadView: View {
                         Button {
                             PreferencesWindowManager.shared.showPreferencesWindow(
                                 languageService: languageService,
-                                updateChecker: UpdateChecker(),
+                                updateChecker: updateChecker,
                                 downloadManager: downloadManager,
                                 appState: appState,
                                 initialTab: .advanced
@@ -1425,7 +1446,7 @@ struct AddDownloadView: View {
                         Button {
                             PreferencesWindowManager.shared.showPreferencesWindow(
                                 languageService: languageService,
-                                updateChecker: UpdateChecker(),
+                                updateChecker: updateChecker,
                                 downloadManager: downloadManager,
                                 appState: appState,
                                 initialTab: .advanced
@@ -1521,7 +1542,7 @@ struct AddDownloadView: View {
                     rawCookies: session?.rawCookies,
                     rawUserAgent: session?.rawUserAgent,
                     browserCookieSource: session?.browserCookieSource,
-                    proxy: try await previewProxy(for: cleanURL)
+                    proxy: try await previewProxy()
                 )
                 guard !Task.isCancelled else { return }
                 mediaInfo = info
@@ -1576,15 +1597,7 @@ struct AddDownloadView: View {
                 // Don't reset selectedCodec here - preserve preset selection
                 availableSubtitles = subs
 
-                if !presetSubtitleLanguage.isEmpty {
-                    if foundLangs.contains(presetSubtitleLanguage) {
-                        selectedSubtitleLangs = [presetSubtitleLanguage]
-                    } else {
-                        selectedSubtitleLangs.removeAll()
-                    }
-                } else {
-                    selectedSubtitleLangs.removeAll()
-                }
+                if downloadSubtitles { selectDefaultSubtitleLanguages() }
 
             } catch {
                 if !Task.isCancelled {
@@ -1599,9 +1612,8 @@ struct AddDownloadView: View {
 
     /// Deep-link targets are probed through the egress proxy too: the preview
     /// runs before the user confirms, and its info JSON is reused for the download.
-    private func previewProxy(for url: String) async throws -> String? {
-        let clean = url.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard appState.externalTargetURL == clean else { return nil }
+    private func previewProxy() async throws -> String? {
+        guard appState.hasExternalTarget else { return nil }
         return try await downloadManager.ytdlpService.egressProxyURL()
     }
 
@@ -1617,7 +1629,7 @@ struct AddDownloadView: View {
                     rawCookies: session?.rawCookies,
                     rawUserAgent: session?.rawUserAgent,
                     browserCookieSource: session?.browserCookieSource,
-                    proxy: try await previewProxy(for: urlInput)
+                    proxy: try await previewProxy()
                 )
                 guard !Task.isCancelled else { return }
                 playlistItems = items
@@ -1688,7 +1700,7 @@ struct AddDownloadView: View {
         let videoCodecEnum = isVideoTab ? VideoCodec(rawValue: selectedCodec) : nil
         let conversionCodecEnum = isVideoTab ? ConversionCodec(rawValue: selectedConversionCodec) : nil
         let audioCodecEnum: AudioCodec? = {
-            if !isVideoTab || selectedAudioCodec == "auto" {
+            if selectedAudioCodec == "auto" {
                 return nil
             }
             return AudioCodec(rawValue: selectedAudioCodec)
@@ -1700,7 +1712,9 @@ struct AddDownloadView: View {
             videoResolution: isVideoTab ? videoResolution : nil,
             audioQuality: isVideoTab ? nil : audioQuality,
             downloadSubtitles: isVideoTab ? downloadSubtitles : false,
-            subtitleLanguages: Array(selectedSubtitleLangs),
+            subtitleLanguages: inputMode == .batch
+                ? Self.batchSubtitleCodes(batchSubtitleLanguages)
+                : Self.resolvedSubtitleLanguages(selected: selectedSubtitleLangs, preferred: presetSubtitleLanguage, available: availableSubtitles),
             subtitleFormat: subtitleFormat,
             embedSubtitles: isVideoTab ? embedSubtitles : false,
             downloadThumbnail: false,
@@ -1806,7 +1820,7 @@ struct AddDownloadView: View {
 
     private func proceedWithBatchDownload(urls: [String], options: DownloadOptions) {
         var finalOptions = options
-        if appState.consumeExternalTarget(for: urls) {
+        if appState.hasExternalTarget {
             finalOptions.enforcePublicNetworkBoundary = true
         }
         if let session = appState.consumeBrowserSession(for: urls) {
@@ -1826,7 +1840,7 @@ struct AddDownloadView: View {
         finalOptions.forceOverwrite = forceOverwrite
 
         let cleanURL = urlInput.trimmingCharacters(in: .whitespacesAndNewlines)
-        let isExternal = appState.consumeExternalTarget(for: cleanURL)
+        let isExternal = appState.hasExternalTarget
         if isExternal {
             finalOptions.enforcePublicNetworkBoundary = true
         }
@@ -1840,10 +1854,7 @@ struct AddDownloadView: View {
         } else {
             let selectedItems = playlistItems.filter { selectedPlaylistIds.contains($0.id) }
             let urls = selectedItems.map { $0.resolvedURL }
-            if isExternal || appState.consumeExternalTarget(for: urls) {
-                finalOptions.enforcePublicNetworkBoundary = true
-            }
-            if let session = appState.consumeBrowserSession(for: urls) {
+            if let session = appState.consumeBrowserSession(forPlaylistURL: cleanURL, itemURLs: urls) {
                 finalOptions.rawCookies = session.rawCookies
                 finalOptions.rawUserAgent = session.rawUserAgent
                 finalOptions.browserCookieSource = session.browserCookieSource
@@ -1885,6 +1896,24 @@ struct AddDownloadView: View {
         panel.canCreateDirectories = true
         panel.prompt = languageService.s("save")
         if panel.runModal() == .OK, let url = panel.url { saveFolder = url }
+    }
+
+    static func resolvedSubtitleLanguages(selected: Set<String>, preferred: String, available: [SubtitleOption]) -> [String] {
+        let validSelection = available.isEmpty ? selected : selected.intersection(available.map(\.id))
+        if !validSelection.isEmpty { return validSelection.sorted() }
+        if !preferred.isEmpty, available.isEmpty || available.contains(where: { $0.id == preferred }) { return [preferred] }
+        if available.contains(where: { $0.id == "en" }) { return ["en"] }
+        return [available.map(\.id).sorted().first ?? "en"]
+    }
+
+    static func batchSubtitleCodes(_ text: String) -> [String] {
+        let codes = text.split { $0 == "," || $0.isWhitespace }.map(String.init).filter(YtdlpService.isSafeSubtitleLanguage)
+        return codes.isEmpty ? ["en"] : Array(Set(codes)).sorted()
+    }
+
+    private func selectDefaultSubtitleLanguages() {
+        selectedSubtitleLangs = Set(Self.resolvedSubtitleLanguages(selected: selectedSubtitleLangs,
+            preferred: presetSubtitleLanguage, available: availableSubtitles))
     }
 
     private func toggleSubtitle(_ id: String) {
@@ -1964,4 +1993,5 @@ struct AddDownloadView: View {
         .environmentObject(DownloadManager())
         .environmentObject(AppState())
         .environmentObject(LanguageService())
+        .environmentObject(UpdateChecker())
 }

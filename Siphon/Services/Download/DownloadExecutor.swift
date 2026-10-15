@@ -297,7 +297,7 @@ final class DownloadExecutor: ObservableObject {
 
             Self.populateDiagnostics(for: download, info: info, ytdlpVersion: ytdlpVersion)
 
-            let rawBaseName = download.options.customFilename ?? download.title
+            let rawBaseName = download.outputBaseName
             let sanitizedBaseName = YtdlpService.sanitizeFilename(rawBaseName)
             let folderPath = download.options.saveFolder
 
@@ -328,9 +328,7 @@ final class DownloadExecutor: ObservableObject {
             }
 
             let (resolvedBaseName, candidateKey) = queue.planUniqueOutputPath(for: download)
-            if resolvedBaseName != sanitizedBaseName {
-                download.options.customFilename = resolvedBaseName
-            }
+            download.resolvedOutputBaseName = resolvedBaseName
             queue.reserveOutputPath(candidateKey)
             defer {
                 queue.unreserveOutputPath(candidateKey)
@@ -394,9 +392,11 @@ final class DownloadExecutor: ObservableObject {
             }
             eventCoalescer = coalescer
 
+            var executionOptions = download.options
+            executionOptions.customFilename = download.resolvedOutputBaseName ?? executionOptions.customFilename
             let downloadResult = try await ytdlpService.download(
                 url: download.url,
-                options: download.options,
+                options: executionOptions,
                 mediaInfo: download.mediaInfo,
                 processController: controller,
                 temporaryDirectory: download.scratchDirectory,
@@ -429,10 +429,6 @@ final class DownloadExecutor: ObservableObject {
             download.diagnostics.exitStatus = download.hasPartialFailure ? "Completed with failed items" : "Completed (0)"
             delegate?.executorDidUpdateStatus(for: download, to: download.hasPartialFailure ? .failed : .completed)
             if !download.hasPartialFailure { download.progress = 1.0 }
-
-            if download.options.embedThumbnail, let finalURL = download.primaryFilePath, let thumbURL = download.thumbnailURL {
-                Self.attachFinderIcon(from: thumbURL, to: finalURL)
-            }
 
             if download.diagnostics.resolution == nil, let maxH = download.mediaInfo?.downloadableFormats.compactMap({ $0.parsedHeight }).max() {
                 download.diagnostics.resolution = "\(maxH)p"
@@ -654,30 +650,28 @@ final class DownloadExecutor: ObservableObject {
         }
     }
 
-    static func attachFinderIcon(from thumbURL: URL, to fileURL: URL) {
-        Task.detached(priority: .utility) {
-            if let data = await fetchThumbnailData(from: thumbURL), let img = NSImage(data: data) {
-                let squareIcon = YtdlpService.createAspectFitIcon(from: img)
-                await MainActor.run {
-                    _ = NSWorkspace.shared.setIcon(squareIcon, forFile: fileURL.path, options: [])
-                }
-            }
-        }
-    }
-
     nonisolated static let maxThumbnailBytes = 5 * 1024 * 1024
     nonisolated static let maxThumbnailPixelDimension = 4096
 
     /// Thumbnail URLs come from untrusted site metadata. Only fetch public
     /// targets (re-checked on every redirect), bound the body size, and refuse
     /// images whose pixel dimensions would make decoding expensive.
-    nonisolated static func fetchThumbnailData(from url: URL, session: URLSession = .shared) async -> Data? {
+    nonisolated static func fetchThumbnailData(from url: URL, session: URLSession? = nil) async -> Data? {
         await fetchThumbnailData(for: URLRequest(url: url, timeoutInterval: 15), session: session)
     }
 
-    nonisolated static func fetchThumbnailData(for request: URLRequest, session: URLSession = .shared) async -> Data? {
-        guard let url = request.url, ExternalDownloadTargetPolicy.isAllowed(url),
-              let (data, response) = try? await session.boundedData(
+    nonisolated static func fetchThumbnailData(for request: URLRequest, session: URLSession? = nil) async -> Data? {
+        guard !Task.isCancelled, let url = request.url, ExternalDownloadTargetPolicy.isAllowed(url) else { return nil }
+        let routeSession: URLSession
+        if let session {
+            routeSession = session
+        } else if EgressBoundary.proxyURL != nil {
+            routeSession = EgressBoundary.session
+        } else {
+            guard let port = try? await EgressProxyServer.shared.start(), !Task.isCancelled else { return nil }
+            routeSession = EgressBoundary.$proxyURL.withValue("http://127.0.0.1:\(port)") { EgressBoundary.session }
+        }
+        guard let (data, response) = try? await routeSession.boundedData(
                   for: request,
                   delegate: PublicRedirectPolicy(),
                   limit: maxThumbnailBytes
