@@ -6,7 +6,9 @@
     "description": "__MSG_extension_description__",
     "permissions": [
         "contextMenus",
-        "tabs"
+        "tabs",
+        "storage",
+        "alarms"
     ],
     "icons": {
         "128": "icons/icon128.png"
@@ -25,5 +27,8 @@
                 ]
             }
         }
+    },
+    "action": {
+        "default_title": "__MSG_context_download__"
     }
 }
