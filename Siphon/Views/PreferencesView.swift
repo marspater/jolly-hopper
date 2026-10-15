@@ -93,6 +93,15 @@ struct PreferencesView: View {
 
     enum PreferenceTab: Int, Hashable {
         case general, download, advanced, about
+
+        var icon: String? {
+            switch self {
+            case .general: return "gearshape.fill"
+            case .download: return "arrow.down.circle.fill"
+            case .advanced: return "wrench.and.screwdriver.fill"
+            case .about: return "info.circle.fill"
+            }
+        }
     }
 
     @State private var selectedTab: PreferenceTab
@@ -103,40 +112,19 @@ struct PreferencesView: View {
 
     @Environment(\.dismiss) var dismiss
 
-    @Namespace private var tabNamespace
-    @Environment(\.siphonRenderingCapabilities) private var renderingCapabilities
-
-    private var showBorders: Bool {
-        renderingCapabilities.increaseContrast
-    }
-
     var body: some View {
         VStack(spacing: 0) {
-            // Fluid Glass segmented tab bar with restrained SDR accent emphasis
-            HStack(spacing: 3) {
-                tabSegment(.general, title: languageService.s("general"), icon: "gearshape.fill")
-                tabSegment(.download, title: languageService.s("download"), icon: "arrow.down.circle.fill")
-                tabSegment(.advanced, title: languageService.s("advanced"), icon: "wrench.and.screwdriver.fill")
-                tabSegment(.about, title: languageService.s("about"), icon: "info.circle.fill")
-            }
-            .padding(3)
-            .frame(height: 38)
-            .background(SiphonTheme.pillBackground(isSelected: false))
-            .clipShape(Capsule())
-            .overlay(
-                Capsule()
-                    .strokeBorder(
-                        LinearGradient(
-                            colors: [
-                                Color.primary.opacity(showBorders ? 0.34 : 0.16),
-                                Color.primary.opacity(showBorders ? 0.14 : 0.04),
-                                Color.clear
-                            ],
-                            startPoint: .top,
-                            endPoint: .bottom
-                        ),
-                        lineWidth: showBorders ? 1.5 : 1
-                    )
+            SiphonSegmentedPicker(
+                selection: $selectedTab,
+                options: [
+                    (.general, languageService.s("general")),
+                    (.download, languageService.s("download")),
+                    (.advanced, languageService.s("advanced")),
+                    (.about, languageService.s("about"))
+                ],
+                horizontalPadding: SiphonTheme.spacing8,
+                icon: \.icon,
+                isLarge: true
             )
             .padding(.top, SiphonTheme.spacing10)
             .padding(.bottom, SiphonTheme.spacing10)
@@ -241,51 +229,6 @@ struct PreferencesView: View {
             Text(languageService.s("clear_all_sites_confirm_message"))
         }
     }
-    @ViewBuilder
-    private func tabSegment(_ tab: PreferenceTab, title: String, icon: String) -> some View {
-        Button {
-            withAnimation(SiphonAnimation.fluidSpring) {
-                selectedTab = tab
-            }
-        } label: {
-            HStack(spacing: 5) {
-                Image(systemName: icon)
-                    .font(.system(size: 11, weight: .semibold))
-                    .accessibilityHidden(true)
-                Text(title)
-                    .font(.siphonSecondarySemibold)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.82)
-            }
-            .foregroundColor(selectedTab == tab ? .white : .secondary)
-            .padding(.horizontal, 8)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background {
-                if selectedTab == tab {
-                    ZStack {
-                        Capsule()
-                            .fill(SiphonTheme.accent.opacity(0.35))
-                            .blur(radius: 6)
-                            .padding(-1)
-
-                        Capsule()
-                            .fill(SiphonTheme.primaryGradient)
-                            .overlay(
-                                Capsule()
-                                    .strokeBorder(Color.white.opacity(0.25), lineWidth: 1)
-                            )
-                    }
-                    .matchedGeometryEffect(id: "activeTabBubble", in: tabNamespace)
-                }
-            }
-            .contentShape(Capsule())
-        }
-        .buttonStyle(.bouncy)
-        .help(title)
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel(title)
-        .accessibilityAddTraits(selectedTab == tab ? [.isButton, .isSelected] : [.isButton])
-    }
 
     private var generalTab: some View {
         Form {
@@ -377,14 +320,15 @@ struct PreferencesView: View {
 
                 Spacer()
 
-                Picker(languageService.s("theme"), selection: $theme) {
-                    Text(languageService.s("system")).tag("system")
-                    Text(languageService.s("light")).tag("light")
-                    Text(languageService.s("dark")).tag("dark")
-                }
-                .labelsHidden()
-                .pickerStyle(.segmented)
-                .frame(width: 220)
+                SiphonSegmentedPicker(
+                    selection: $theme,
+                    options: [
+                        ("system", languageService.s("system")),
+                        ("light", languageService.s("light")),
+                        ("dark", languageService.s("dark"))
+                    ]
+                )
+                .accessibilityElement(children: .contain)
                 .accessibilityLabel(languageService.s("theme"))
             }
         }
@@ -553,7 +497,7 @@ struct PreferencesView: View {
                     HStack {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(preset.title(lang: languageService))
-                                .fontWeight(.medium)
+                                .font(.siphonStandardMedium)
                                 .lineLimit(1)
                                 .truncationMode(.tail)
                             Text(preset.description(lang: languageService))
@@ -616,7 +560,7 @@ struct PreferencesView: View {
                         .accessibilityHidden(true)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(preset.name)
-                            .fontWeight(.medium)
+                            .font(.siphonStandardMedium)
                             .foregroundColor(.primary)
                             .lineLimit(1)
                             .truncationMode(.tail)
@@ -850,17 +794,26 @@ struct PreferencesView: View {
             Toggle(languageService.s("download_subtitles"), isOn: $presetEmbedSubtitles)
 
             if presetEmbedSubtitles {
-                Picker(languageService.s("subtitle_output"), selection: Binding(
-                    get: { presetSubtitleLang.hasPrefix("embed:") },
-                    set: { isEmbed in
-                        let lang = presetSubtitleLang.replacingOccurrences(of: "embed:", with: "")
-                        presetSubtitleLang = isEmbed ? "embed:\(lang)" : lang
-                    }
-                )) {
-                    Text(languageService.s("subtitle_external")).tag(false)
-                    Text(languageService.s("subtitle_embedded")).tag(true)
+                HStack {
+                    Text(languageService.s("subtitle_output"))
+                        .font(.siphonStandardMedium)
+                    Spacer()
+                    SiphonSegmentedPicker(
+                        selection: Binding(
+                            get: { presetSubtitleLang.hasPrefix("embed:") },
+                            set: { isEmbed in
+                                let lang = presetSubtitleLang.replacingOccurrences(of: "embed:", with: "")
+                                presetSubtitleLang = isEmbed ? "embed:\(lang)" : lang
+                            }
+                        ),
+                        options: [
+                            (false, languageService.s("subtitle_external")),
+                            (true, languageService.s("subtitle_embedded"))
+                        ]
+                    )
+                    .accessibilityElement(children: .contain)
+                    .accessibilityLabel(languageService.s("subtitle_output"))
                 }
-                .pickerStyle(.segmented)
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text(languageService.s("languages"))
@@ -1019,7 +972,7 @@ struct PreferencesView: View {
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(languageService.s("app_and_download_logs"))
-                        .fontWeight(.medium)
+                        .font(.siphonStandardMedium)
                     Text(languageService.s("debug_logs_desc"))
                         .font(.siphonMetadata)
                         .foregroundColor(.secondary)
@@ -1053,7 +1006,7 @@ struct PreferencesView: View {
                         }
                     } else {
                         Text(languageService.s("ytdlp_missing"))
-                            .fontWeight(.medium)
+                            .font(.siphonStandardMedium)
                     }
                     Text(languageService.s("ytdlp_source_hint"))
                         .font(.siphonMetadata)
@@ -1083,7 +1036,7 @@ struct PreferencesView: View {
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("yt-dlp")
-                        .fontWeight(.medium)
+                        .font(.siphonStandardMedium)
                     if let version = appState.ytdlpVersion {
                         Text("\(languageService.s("version")): \(version)")
                             .font(.siphonMetadataMonoMedium)
@@ -1280,7 +1233,7 @@ struct PreferencesView: View {
         HStack {
             VStack(alignment: .leading, spacing: 4) {
                 Text(languageService.s(titleKey))
-                    .fontWeight(.medium)
+                    .font(.siphonStandardMedium)
                 Text(languageService.s(descKey))
                     .font(.siphonMetadata)
                     .foregroundColor(.secondary)
@@ -1341,7 +1294,7 @@ struct PreferencesView: View {
         HStack {
             VStack(alignment: .leading, spacing: 4) {
                 Text(languageService.s("all_sites_cookies_title"))
-                    .fontWeight(.medium)
+                    .font(.siphonStandardMedium)
                 Text(languageService.s("all_sites_cookies_desc"))
                     .font(.siphonMetadata)
                     .foregroundColor(.secondary)
