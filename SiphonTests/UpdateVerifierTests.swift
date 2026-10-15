@@ -224,6 +224,61 @@ final class UpdateVerifierTests: XCTestCase {
         XCTAssertEqual(try fixtureVersion(XCTUnwrap(backup)), "old")
     }
 
+    func testBackupCleanupKeepsNewestAndExcludesUnrelatedFilesAndSymlinks() throws {
+        let fixture = try makeReplacementFixtures()
+        let fileManager = FileManager.default
+        let root = fixture.current.deletingLastPathComponent()
+        func configure(_ url: URL, identifier: String = "test.siphon", date: TimeInterval) throws {
+            let contents = url.appendingPathComponent("Contents")
+            try fileManager.createDirectory(at: contents, withIntermediateDirectories: true)
+            let info = try PropertyListSerialization.data(fromPropertyList: ["CFBundleIdentifier": identifier], format: .xml, options: 0)
+            try info.write(to: contents.appendingPathComponent("Info.plist"))
+            try fileManager.setAttributes([.modificationDate: Date(timeIntervalSince1970: date)], ofItemAtPath: url.path)
+        }
+        try configure(fixture.current, date: 0)
+        var backups: [URL] = []
+        for index in 1...3 {
+            let backup = root.appendingPathComponent(".Siphon_Backup_\(UUID().uuidString).app")
+            try configure(backup, date: TimeInterval(index))
+            backups.append(backup)
+        }
+        let unrelated = root.appendingPathComponent(".Siphon_Backup_\(UUID().uuidString).app")
+        try configure(unrelated, identifier: "test.other-app", date: 100)
+        let malformedName = root.appendingPathComponent(".Siphon_Backup_notes.app")
+        try configure(malformedName, date: 100)
+        let regularFile = root.appendingPathComponent(".Siphon_Backup_\(UUID().uuidString).app")
+        try Data("unrelated file".utf8).write(to: regularFile)
+        let link = root.appendingPathComponent(".Siphon_Backup_\(UUID().uuidString).app")
+        try fileManager.createSymbolicLink(at: link, withDestinationURL: fixture.current)
+
+        for _ in 0..<2 {
+            try UpdateInstaller.pruneRecoveryBackups(nextTo: fixture.current)
+            XCTAssertFalse(fileManager.fileExists(atPath: backups[0].path))
+            XCTAssertFalse(fileManager.fileExists(atPath: backups[1].path))
+            for preserved in [backups[2], fixture.current, fixture.staged, unrelated, malformedName, regularFile, link] {
+                XCTAssertTrue(fileManager.fileExists(atPath: preserved.path), preserved.lastPathComponent)
+            }
+        }
+    }
+
+    func testBackupCleanupNeverDeletesTheRunningRecoveryBundle() throws {
+        let fixture = try makeReplacementFixtures()
+        let root = fixture.current.deletingLastPathComponent()
+        let fileManager = FileManager.default
+        let running = root.appendingPathComponent(".Siphon_Backup_\(UUID().uuidString).app")
+        let newest = root.appendingPathComponent(".Siphon_Backup_\(UUID().uuidString).app")
+        for (url, timestamp) in [(running, 1.0), (newest, 2.0)] {
+            let contents = url.appendingPathComponent("Contents")
+            try fileManager.createDirectory(at: contents, withIntermediateDirectories: true)
+            let info = try PropertyListSerialization.data(fromPropertyList: ["CFBundleIdentifier": "test.siphon"], format: .xml, options: 0)
+            try info.write(to: contents.appendingPathComponent("Info.plist"))
+            try fileManager.setAttributes([.modificationDate: Date(timeIntervalSince1970: timestamp)], ofItemAtPath: url.path)
+        }
+        try UpdateInstaller.pruneRecoveryBackups(nextTo: running)
+        XCTAssertTrue(fileManager.fileExists(atPath: running.path))
+        XCTAssertTrue(fileManager.fileExists(atPath: newest.path))
+    }
+
     func testInstallerAssetAcceptsEitherVersionPrefixWithoutChoosingOtherReleases() {
         let plain: [[String: Any]] = [["name": "Siphon-5.5.0.dmg"]]
         let prefixed: [[String: Any]] = [["name": "Siphon-v5.5.0.dmg"]]

@@ -40,6 +40,9 @@ public enum UpdateInstallError: LocalizedError, Sendable {
 }
 
 public final class UpdateInstaller: Sendable {
+    // Serialize startup pruning with bundle swaps in this process.
+    private static let bundleMaintenanceLock = NSLock()
+
     public init() {
         // Intentionally empty initializer for class instantiation (swift:S1186)
     }
@@ -166,6 +169,49 @@ public final class UpdateInstaller: Sendable {
         )
     }
 
+    /// Returns true once pruning is scheduled; overlapping app instances must exit first.
+    @MainActor
+    static func pruneRecoveryBackupsOnLaunch() -> Bool {
+        guard !NotificationService.isRunningTests,
+              let identifier = Bundle.main.bundleIdentifier,
+              !NSRunningApplication.runningApplications(withBundleIdentifier: identifier).contains(where: {
+                  !$0.isTerminated && $0.processIdentifier != ProcessInfo.processInfo.processIdentifier
+              }) else { return false }
+        let appURL = Bundle.main.bundleURL
+        Task.detached(priority: .utility) {
+            do { try Self.pruneRecoveryBackups(nextTo: appURL) }
+            catch { Self.log("Updater backup cleanup failed: \(error.localizedDescription)", level: .warning) }
+        }
+        return true
+    }
+
+    static func pruneRecoveryBackups(nextTo appURL: URL, fileManager: FileManager = .default) throws {
+        bundleMaintenanceLock.lock()
+        defer { bundleMaintenanceLock.unlock() }
+        guard let identifier = Bundle(url: appURL)?.bundleIdentifier else { return }
+        let prefix = ".Siphon_Backup_"
+        let entries = try fileManager.contentsOfDirectory(at: appURL.deletingLastPathComponent(),
+            includingPropertiesForKeys: [.isDirectoryKey, .isSymbolicLinkKey, .contentModificationDateKey])
+        var backups: [(url: URL, date: Date)] = []
+        for entry in entries {
+            let name = entry.lastPathComponent
+            guard name.hasPrefix(prefix), name.hasSuffix(".app"),
+                  UUID(uuidString: String(name.dropFirst(prefix.count).dropLast(4))) != nil else { continue }
+            let values = try entry.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey, .contentModificationDateKey])
+            guard values.isDirectory == true, values.isSymbolicLink != true,
+                  entry.standardizedFileURL != appURL.standardizedFileURL,
+                  Bundle(url: entry)?.bundleIdentifier == identifier else { continue }
+            backups.append((entry, values.contentModificationDate ?? .distantPast))
+        }
+        backups.sort {
+            if $0.date != $1.date { return $0.date > $1.date }
+            return $0.url.lastPathComponent < $1.url.lastPathComponent
+        }
+        for backup in backups.dropFirst() {
+            try fileManager.removeItem(at: backup.url)
+        }
+    }
+
     /// Copies and verifies a complete sibling before atomically exchanging the
     /// two names. At interruption the installed path contains the old or new
     /// complete bundle; the other bundle remains at the sibling backup path.
@@ -196,6 +242,8 @@ public final class UpdateInstaller: Sendable {
         exchange: (URL, URL) throws -> Void = exchangeAppBundles,
         verify: (URL) throws -> Void
     ) throws {
+        bundleMaintenanceLock.lock()
+        defer { bundleMaintenanceLock.unlock() }
         let backupURL = currentAppURL.deletingLastPathComponent().appendingPathComponent(".Siphon_Backup_\(UUID().uuidString).app")
         var exchanged = false
         var preserveBackup = false
@@ -218,8 +266,10 @@ public final class UpdateInstaller: Sendable {
             exchanged = true
             try verify(currentAppURL)
             if retainBackup {
-                // ponytail: keep one recovery bundle per update; prune on a later launch if disk use warrants it.
                 preserveBackup = true
+                // Bundle dates otherwise describe the old installation, not retention order.
+                do { try fileManager.setAttributes([.modificationDate: Date()], ofItemAtPath: backupURL.path) }
+                catch { Self.log("Could not date the recovery bundle: \(error.localizedDescription)", level: .warning) }
                 Self.log("Previous app bundle retained for restart/recovery at \(backupURL.path).", level: .info)
             }
         } catch {
