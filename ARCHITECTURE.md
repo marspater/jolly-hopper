@@ -58,6 +58,8 @@ Recovered jobs whose advanced arguments were removed are held paused until the u
 
 Partially failed playlists retain their completed output paths but enter Failed with a retry action. Playlist retries skip existing files rather than overwriting completed entries, unless the user explicitly chose overwrite. Partial-failure markers survive history restoration, including migration of older completed-with-error records.
 
+Filename collisions remain visible in Queue, including its count, until the user chooses overwrite, a new name, or removal. Queue visibility does not admit these action-required jobs for execution.
+
 ### Dependency update exclusion
 
 yt-dlp replacement is serialized against download execution:
@@ -78,9 +80,11 @@ Executor task/controller ownership is still released by executor teardown rather
 
 Browser extensions enter through `SiphonApp.handleIncomingURL`. The custom URL is accepted only for supported Siphon schemes and download hosts, then the target URL is validated by `ExternalDownloadTargetPolicy` before it reaches download code. For external deep-link downloads, Siphon enforces `enforcePublicNetworkBoundary`: yt-dlp runs through a local loopback forward proxy (`EgressProxyServer` via `--proxy`) that intercepts connection attempts and HTTP redirects, resolving hostnames and blocking access to loopback, private, link-local, and multicast ranges with HTTP 403. Siphon's internal metadata fetches (e.g. Finder icon thumbnails) re-apply the public network policy on every redirect via `PublicRedirectPolicy`. Custom user arguments cannot override this proxy configuration for boundary-enforced downloads. Site-specific resolvers inherit the boundary through the `EgressBoundary.proxyURL` task-local that `YtdlpService.fetchInfo` and `download` bind: their yt-dlp runs, `URLSession` requests and WebKit sessions go through the same proxy. The proxy forwards one plain-HTTP request per upstream connection (`Connection: close`), because clients reuse a proxy connection across hosts.
 
+The proxy rejects bare carriage returns and Unicode header separators, resolves each target once, validates every returned numeric address, and connects to that validated snapshot. Custom yt-dlp executables inherit the boundary by their resolved path even when renamed. Thumbnail fetches also use the public-network proxy, including view tasks outside a download's task-local scope; Finder icons reuse the thumbnail already downloaded by the service. Proxy shutdown retires its cached URLSession, and the route cache has a fixed size limit.
+
 Fast-download deep links hand their sanitized browser identifier and user agent straight to the job; only the Add Download sheet path stores deep-link state in `AppState`, and its external-target marker is cleared when the sheet closes, not when credentials are consumed.
 
-Raw cookies are never accepted through the custom URL. Browser source identifiers and user agents are sanitized, and browser-session state is scoped to the validated target origin (scheme, hostname, and effective port). Chrome handoff cleanup stores per-tab deadlines in session storage and uses alarms, so service-worker suspension does not lose pending helper tabs; tabs navigated to another page are retained.
+Raw cookies are never accepted through the custom URL. Browser source identifiers and user agents are sanitized, and browser-session state is scoped to the validated target origin (scheme, hostname, and effective port). Playlist expansion across known HTTPS YouTube aliases preserves browser identity, while raw cookies remain restricted to the original exact origin; mixed or unrelated origins receive no session. Chrome, Firefox, and Safari handoff cleanup stores per-tab deadlines in session storage and uses alarms, so service-worker suspension does not lose pending helper tabs; tabs navigated to another page are retained.
 
 ### App update trust
 

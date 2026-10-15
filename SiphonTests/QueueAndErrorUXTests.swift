@@ -6,6 +6,45 @@ import UniformTypeIdentifiers
 
 @MainActor
 final class QueueAndErrorUXTests: XCTestCase {
+    @MainActor
+    func testPlaylistCanonicalizationPreservesBrowserIdentityWithoutRescopingCookies() throws {
+        let state = AppState()
+        let original = URL(string: "https://youtu.be/fixture?list=playlist")!
+        state.setBrowserSession(for: original, rawCookies: "session=private", rawUserAgent: "Chrome/140", browserCookieSource: "chrome")
+        let session = try XCTUnwrap(state.consumeBrowserSession(forPlaylistURL: original.absoluteString,
+            itemURLs: ["https://www.youtube.com/watch?v=fixture"]))
+        XCTAssertNil(session.rawCookies)
+        XCTAssertEqual(session.rawUserAgent, "Chrome/140")
+        XCTAssertEqual(session.browserCookieSource, "chrome")
+        XCTAssertNil(state.browserSession(for: original.absoluteString))
+        state.setBrowserSession(for: original, rawCookies: "session=private", rawUserAgent: "Chrome/140", browserCookieSource: "chrome")
+        XCTAssertNil(state.consumeBrowserSession(forPlaylistURL: original.absoluteString,
+            itemURLs: ["https://www.youtube.com.attacker.test/watch?v=fixture"]))
+        state.setBrowserSession(for: original, rawCookies: "session=private", rawUserAgent: nil)
+        XCTAssertEqual(state.consumeBrowserSession(forPlaylistURL: original.absoluteString,
+            itemURLs: ["https://youtu.be/other"])?.rawCookies, "session=private")
+    }
+
+    @MainActor
+    func testSubtitleSelectionUsesAvailableDefaultsAndBatchCodes() {
+        let french = AddDownloadView.SubtitleOption(id: "fr", name: "French", isAuto: false)
+        let english = AddDownloadView.SubtitleOption(id: "en", name: "English", isAuto: true)
+        XCTAssertEqual(AddDownloadView.resolvedSubtitleLanguages(selected: [], preferred: "", available: [french]), ["fr"])
+        XCTAssertEqual(AddDownloadView.resolvedSubtitleLanguages(selected: [], preferred: "", available: [french, english]), ["en"])
+        XCTAssertEqual(AddDownloadView.resolvedSubtitleLanguages(selected: [], preferred: "fr", available: [french, english]), ["fr"])
+        XCTAssertEqual(AddDownloadView.resolvedSubtitleLanguages(selected: ["de"], preferred: "fr", available: [french]), ["fr"])
+        XCTAssertEqual(AddDownloadView.resolvedSubtitleLanguages(selected: ["fr"], preferred: "en", available: [french, english]), ["fr"])
+        XCTAssertEqual(AddDownloadView.batchSubtitleCodes("fr, en fr"), ["en", "fr"])
+        XCTAssertEqual(AddDownloadView.batchSubtitleCodes(" --exec "), ["en"])
+    }
+
+    func testURLDropAcceptsTitleLinesNULTerminatorsAndBinaryWebloc() throws {
+        XCTAssertEqual(HeroDropURLView.droppedURL(from: Data("https://example.com/video\0\nA title".utf8)), "https://example.com/video")
+        let plist = try PropertyListSerialization.data(fromPropertyList: ["URL": "https://example.com/video"], format: .binary, options: 0)
+        XCTAssertEqual(HeroDropURLView.droppedURL(from: plist), "https://example.com/video")
+        XCTAssertNil(HeroDropURLView.droppedURL(from: Data("file:///private/fixture".utf8)))
+    }
+
     
     func testSourceDomainExtraction() {
         let options = DownloadOptions.default

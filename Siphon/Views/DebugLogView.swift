@@ -62,7 +62,7 @@ struct DebugLogView: View {
                 Button {
                     let pasteboard = NSPasteboard.general
                     pasteboard.clearContents()
-                    pasteboard.setString(logger.logs.joined(separator: "\n"), forType: .string)
+                    pasteboard.setString(LoggerService.sanitizeLogContentForExport(logger.logs.joined(separator: "\n")), forType: .string)
                     copyFeedback.show(languageService.s("copied"), isSuccess: true, duration: 1.5, animation: SiphonAnimation.snappySpring)
                 } label: {
                     HStack(spacing: 6) {
