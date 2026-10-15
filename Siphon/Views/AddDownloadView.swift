@@ -9,6 +9,8 @@ struct AddDownloadView: View {
     @Environment(\.appearsActive) private var appearsActive
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var scrollViewportHeight: CGFloat = 0
+    @State private var scrollContentHeight: CGFloat = 0
     @FocusState private var focusedField: InputField?
 
     private enum InputField: Hashable {
@@ -161,6 +163,17 @@ struct AddDownloadView: View {
                         }
                     }
                     .padding(SiphonTheme.spacing20)
+                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height in
+                        scrollContentHeight = height
+                        fitWindowToContent()
+                    }
+                }
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height in
+                    // Later viewport changes come from the window animating and
+                    // must not restart the resize; only the first one fits.
+                    let isFirstMeasure = scrollViewportHeight == 0
+                    scrollViewportHeight = height
+                    if isFirstMeasure { fitWindowToContent() }
                 }
                 .onChange(of: showOptionalSettings) { _, expanded in
                     if expanded {
@@ -175,11 +188,10 @@ struct AddDownloadView: View {
             SiphonTheme.subtleDivider
             footer
         }
-        // The pre-fetch state contains only the URL input. Starting at the same
-        // height as the fully-expanded inspector leaves a visually inert window;
-        // the scroll view keeps metadata and advanced options resilient once they
-        // are available.
-        .frame(minWidth: 500, idealWidth: 540, maxWidth: 680, minHeight: 420, idealHeight: 440, maxHeight: .infinity)
+        // The pre-fetch state contains only the URL input, so the window opens
+        // compact and grows as details appear; the scroll view takes over once
+        // the window reaches the screen's height.
+        .frame(minWidth: 500, idealWidth: 540, maxWidth: 680, minHeight: AddDownloadWindowManager.compactHeight, maxHeight: .infinity)
         .siphonAdaptiveRendering()
         .siphonWindowBackground()
         .onAppear {
@@ -1533,6 +1545,11 @@ struct AddDownloadView: View {
             }
         }
         .padding()
+    }
+
+    private func fitWindowToContent() {
+        guard scrollViewportHeight > 0 else { return }
+        AddDownloadWindowManager.shared.growToFit(overflow: scrollContentHeight - scrollViewportHeight)
     }
 
     private func fetchInfo(debounce: Bool = false) {
