@@ -172,6 +172,7 @@ struct AddDownloadView: View {
         .onAppear {
             focusedField = .url
             loadPreferencesDefaults()
+            batchSubtitleLanguages = presetSubtitleLanguage.isEmpty ? "en" : presetSubtitleLanguage
             let loadedPresets = CustomPreset.loadAll()
             self.customPresets = loadedPresets
 
@@ -987,6 +988,7 @@ struct AddDownloadView: View {
         splitChapters = preset.splitChapters ?? false
 
         selectedSubtitleLangs.removeAll()
+        batchSubtitleLanguages = presetSubtitleLanguage.isEmpty ? "en" : presetSubtitleLanguage
         if downloadSubtitles { selectDefaultSubtitleLanguages() }
     }
 
@@ -1912,7 +1914,6 @@ struct AddDownloadView: View {
     private func selectDefaultSubtitleLanguages() {
         selectedSubtitleLangs = Set(Self.resolvedSubtitleLanguages(selected: selectedSubtitleLangs,
             preferred: presetSubtitleLanguage, available: availableSubtitles))
-        if inputMode == .batch, !presetSubtitleLanguage.isEmpty { batchSubtitleLanguages = presetSubtitleLanguage }
     }
 
     private func toggleSubtitle(_ id: String) {

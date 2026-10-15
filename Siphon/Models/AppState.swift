@@ -26,14 +26,9 @@ public enum ExternalDownloadTargetPolicy {
         while host.hasSuffix(".") {
             host.removeLast()
         }
-        guard !host.isEmpty else { return false }
-
-        if host == "localhost" ||
-            host.hasSuffix(".localhost") ||
-            host.hasSuffix(".local") ||
-            host.hasSuffix(".localdomain") ||
-            host.hasSuffix(".internal") ||
-            host.hasSuffix(".lan") {
+        let localDomains = ["localhost", "local", "localdomain", "internal", "lan"]
+        guard !host.isEmpty,
+              !localDomains.contains(where: { host == $0 || host.hasSuffix("." + $0) }) else {
             return false
         }
 
