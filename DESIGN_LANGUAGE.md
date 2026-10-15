@@ -115,6 +115,10 @@ truth only when the value is genuinely reused or has semantic meaning.
 
 ### Surfaces and depth
 
+- Auxiliary windows hide the system title (`titleVisibility = .hidden`) but
+  keep it set, localized, for the Window menu, and draw one in-content header
+  below the title bar. They rely on the window's own close button and corners:
+  no second close button or hand-drawn border.
 - Root windows and utility surfaces use `siphonWindowBackground()`. It supplies
   the material, the faint brand wash and the Siphon accent tint for native
   controls, so feature views do not re-tint toggles or pickers or add their own
