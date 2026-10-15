@@ -7,6 +7,19 @@ import XCTest
 @testable import Siphon
 
 final class ProcessLifecycleTests: XCTestCase {
+    func testFixupParserUsesTheQuotedDestinationInsteadOfIntoInTheSourceTitle() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let output = root.appendingPathComponent("finished.mp4")
+        try Data("media".utf8).write(to: output)
+        let script = #"printf '[Fixup] Converting "into old.mp4" into "%s"\n' "$1""#
+        let result = try await DefaultYtdlpProcessRunner().runDownloadProcess(
+            args: ["/bin/sh", "-c", script, "--", output.path], saveFolder: root,
+            processController: DownloadProcessController(), onProgress: { _, _, _ in }, onOutput: { _ in })
+        XCTAssertEqual(result.primaryPath, output.path)
+    }
+
 
     func testFfmpegProgressHandlesDurationUnknownValuesAndCarriageReturns() {
         let parser = FfmpegDownloadProgress()
@@ -20,7 +33,11 @@ final class ProcessLifecycleTests: XCTestCase {
         XCTAssertEqual(parser.parse("size=1024kB time=00:01:30.00 speed=N/A")?.fraction, 1)
         XCTAssertNil(parser.parse("file time=00:00:15.00"))
         XCTAssertNil(parser.parse("Duration: N/A, start: 0.0"))
-        XCTAssertNil(parser.parse("frame=10 time=00:00:15.00 speed=2x"))
+        XCTAssertEqual(parser.parse("frame=10 time=00:00:15.00 speed=2x")?.fraction, 0.25)
+        XCTAssertNil(parser.parse("Duration: 00:00:00.04, start: 0.0"))
+        XCTAssertEqual(parser.parse("frame=10 time=00:00:15.00 speed=2x")?.fraction, 0.25)
+        XCTAssertNil(parser.parse("Duration: 00:02:00.00, start: 0.0"))
+        XCTAssertEqual(parser.parse("frame=10 time=00:00:15.00 speed=2x")?.fraction, 0.125)
 
         let buffer = StreamBuffer()
         XCTAssertEqual(buffer.appendAndExtractLines(Data("frame=1\rframe=2\r".utf8)), ["frame=1", "frame=2"])

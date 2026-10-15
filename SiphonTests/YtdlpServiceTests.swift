@@ -1,6 +1,7 @@
 import XCTest
 import SQLite3
 import WebKit
+import AppKit
 @testable import Siphon
 
 final class TestBox<T>: @unchecked Sendable {
@@ -52,6 +53,352 @@ final class MockYtdlpProcessRunner: YtdlpProcessRunning, @unchecked Sendable {
 final class YtdlpServiceTests: XCTestCase {
 
     var service: YtdlpService!
+
+    func testEnabledSubtitlesWithEmptyLanguagesUseEnglishRatherThanSilentlySkipping() async throws {
+        var options = DownloadOptions.default
+        options.downloadSubtitles = true
+        options.subtitleLanguages = []
+        options.embedThumbnail = false
+        service.processRunner = MockYtdlpProcessRunner(mockDownload: { args in
+            XCTAssertTrue(args.contains("--write-subs"))
+            XCTAssertTrue(args.contains("--write-auto-subs"))
+            let index = try XCTUnwrap(args.firstIndex(of: "--sub-langs"))
+            XCTAssertEqual(args[index + 1], "en")
+            throw CancellationError()
+        })
+        do {
+            _ = try await service.download(url: "https://example.com/video", options: options, onProgress: { _, _, _ in }, onOutput: { _ in })
+            XCTFail("Expected cancellation")
+        } catch is CancellationError {}
+    }
+
+
+    func testChromiumFailuresRetryMetadataAndDownloadsAnonymously() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let output = root.appendingPathComponent("fixture.mp4")
+        try Data("media".utf8).write(to: output)
+        for browser in ["helium", "chromium-based", "arc"] {
+            service.resetCookieDenial()
+            let calls = TestBox(0)
+            service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
+                calls.value += 1
+                if args.contains("--cookies-from-browser") {
+                    throw YtdlpError.downloadFailed("Chromium cookies: Could not read cookie key from Keychain.")
+                }
+                XCTAssertTrue(args.contains("http://127.0.0.1:4321"))
+                return #"{"id":"fixture","title":"Fixture"}"#
+            })
+            _ = try await service.fetchSingleVideoInfo(path: "/usr/local/bin/yt-dlp", url: "https://example.com/video", browserCookieSource: browser, proxy: "http://127.0.0.1:4321")
+            XCTAssertEqual(calls.value, 2)
+            // A fresh service has no prior denial, so the download must exercise the same fallback.
+            let downloader = YtdlpService()
+            downloader.ytdlpPath = service.ytdlpPath
+            downloader.ffmpegPath = service.ffmpegPath
+            let attempts = TestBox(0)
+            downloader.processRunner = MockYtdlpProcessRunner(mockDownload: { args in
+                attempts.value += 1
+                if args.contains("--cookies-from-browser") {
+                    throw YtdlpError.downloadFailed("Chromium cookies: No cookie database found.")
+                }
+                return output.path
+            })
+            var options = DownloadOptions.default
+            options.saveFolder = root
+            options.browserCookieSource = browser
+            options.embedThumbnail = false
+            _ = try await downloader.download(url: "https://example.com/video", options: options, onProgress: { _, _, _ in }, onOutput: { _ in })
+            XCTAssertEqual(attempts.value, 2)
+        }
+    }
+
+    func testChromiumSkipsMalformedRowsButPreservesKeychainFailuresAndMergesCookies() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let profile = root.appendingPathComponent("Default")
+        try FileManager.default.createDirectory(at: profile, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        var database: OpaquePointer?
+        XCTAssertEqual(sqlite3_open(profile.appendingPathComponent("Cookies").path, &database), SQLITE_OK)
+        defer { sqlite3_close(database) }
+        let encrypted = Data(base64Encoded: "djEwl0EKULQ4rr5F8E9Nz4uDN1OehYLX5wjFTdUkTSwHkt/wtYh0HJF26qMCeN9zWSql")!
+        let hex = encrypted.map { String(format: "%02x", $0) }.joined()
+        let sql = """
+        CREATE TABLE meta(key TEXT, value TEXT);
+        INSERT INTO meta VALUES('version','24');
+        CREATE TABLE cookies(host_key TEXT, name TEXT, value TEXT, encrypted_value BLOB, path TEXT, expires_utc INTEGER, is_secure INTEGER, is_httponly INTEGER, has_expires INTEGER);
+        INSERT INTO cookies VALUES('.example.com','bad','',X'763230','/',0,1,1,0);
+        INSERT INTO cookies VALUES('.example.com','verified','',X'\(hex)','/',0,1,1,0);
+        INSERT INTO cookies VALUES('.example.com','badControl',CAST(X'610062' AS TEXT),X'','/',0,1,1,0);
+        INSERT INTO cookies VALUES('.example.com','badUTF8',CAST(X'ff' AS TEXT),X'','/',0,1,1,0);
+        INSERT INTO cookies VALUES('.example.com','session','browser',X'','/',0,1,1,0);
+        """
+        XCTAssertEqual(sqlite3_exec(database, sql, nil, nil, nil), SQLITE_OK)
+        let target = URL(string: "https://example.com/video")!
+        XCTAssertThrowsError(try ChromiumCookieReader.export(for: target, root: root, password: { throw YtdlpError.downloadFailed("Keychain denied") }))
+        let file = try XCTUnwrap(ChromiumCookieReader.export(for: target, root: root, password: { Data("fixture".utf8) }))
+        defer { file.cleanup() }
+        let text = try String(contentsOf: file.fileURL, encoding: .utf8)
+        XCTAssertTrue(text.contains("verified\tsession-value"))
+        XCTAssertTrue(text.contains("session\tbrowser"))
+        XCTAssertFalse(text.contains("bad"))
+        // prepare must merge an existing clearance file without losing either source.
+        XCTAssertEqual(sqlite3_exec(database, "DELETE FROM cookies WHERE length(encrypted_value)>0", nil, nil, nil), SQLITE_OK)
+        let supplied = try SecureCookieFile.create(url: target.absoluteString, additionalCookies: [("clearance", "fixture")])
+        defer { supplied.cleanup() }
+        let prepared = try ChromiumCookieReader.prepare(["yt-dlp", "--cookies", supplied.path, "--cookies-from-browser", "arc", "--", target.absoluteString], rootOverride: root)
+        let merged = try XCTUnwrap(prepared.cookieFile)
+        defer { merged.cleanup() }
+        let mergedText = try String(contentsOf: merged.fileURL, encoding: .utf8)
+        XCTAssertTrue(mergedText.contains("session\tbrowser"))
+        XCTAssertTrue(mergedText.contains("clearance\tfixture"))
+        XCTAssertEqual(prepared.args.filter { $0 == "--cookies" }.count, 1)
+        XCTAssertFalse(prepared.args.contains("--cookies-from-browser"))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: supplied.path))
+    }
+
+    func testClearanceIdentityAndBrowserCookiesSurviveEveryCaller() async throws {
+        let original = UserDefaults.standard.object(forKey: UserDefaultsKeys.browserForCookies)
+        defer { UserDefaults.standard.set(original, forKey: UserDefaultsKeys.browserForCookies) }
+        UserDefaults.standard.set("safari", forKey: UserDefaultsKeys.browserForCookies)
+        service.sucuriCookieResolver = { _ in ("clearance", "fixture") }
+        let commands = TestBox(0)
+        let assertIdentity: @Sendable ([String]) throws -> Void = { args in
+            XCTAssertTrue(args.contains("--cookies"))
+            XCTAssertTrue(args.contains("--cookies-from-browser"))
+            let identities = args.indices.filter { args[$0] == "--user-agent" }.map { args[$0 + 1] }
+            XCTAssertEqual(identities, [YtdlpService.sucuriUserAgent])
+            XCTAssertTrue(args.contains("generic:impersonate=chrome:macos"))
+        }
+        service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
+            commands.value += 1
+            try assertIdentity(args)
+            return #"{"_type":"playlist","id":"fixture","title":"Fixture","entries":[]}"#
+        }, mockDownload: { args in
+            try assertIdentity(args)
+            throw CancellationError()
+        })
+        _ = try await service.fetchSingleVideoInfo(path: "yt-dlp", url: "https://example.com/video")
+        _ = try await service.fetchInfo(url: "https://example.com/playlist")
+        _ = try await service.fetchPlaylistInfo(url: "https://example.com/playlist")
+        var options = DownloadOptions.default
+        options.embedThumbnail = false
+        do {
+            _ = try await service.download(url: "https://example.com/video", options: options, onProgress: { _, _, _ in }, onOutput: { _ in })
+            XCTFail("Expected cancellation")
+        } catch is CancellationError {}
+        XCTAssertEqual(commands.value, 3)
+    }
+
+    func testAdditionalArgumentsHandleAdjacentFlagsEscapesAndEmptyValues() {
+        XCTAssertEqual(YtdlpService.removingOutputLocationArguments(["-o", "--output=/tmp/x", "--paths", "-P", "/tmp/y", "--no-mtime"]), ["--no-mtime"])
+        XCTAssertEqual(YtdlpService.removingOutputLocationArguments(["--config-location=/tmp/config", "--exe", "command", "--", "--no-mtime"]), ["--no-mtime"])
+        XCTAssertEqual(YtdlpService.removingProxyArguments(["--proxy", "--proxy=http://evil", "--downloader-args", "ffmpeg:-http_proxy http://evil", "--external-downloader=aria2c", "--ppa=ffmpeg:-i http://evil", "--ffmpeg-location", "/tmp/unsafe", "--plugin-dirs=/tmp/plugins", "--geo-verification-proxy", "http://evil", "--no-mtime"]), ["--no-mtime"])
+        XCTAssertEqual(YtdlpService.parseArgumentString(#"--header "" 'a\b' "say \"hi\"" path\ with\ spaces \\ "x\y""#), ["--header", "", #"a\b"#, #"say "hi""#, "path with spaces", #"\"#, #"x\y"#])
+    }
+
+    func testCookieHeaderPaddingAndUTF8ErrorBufferRemainIntact() throws {
+        let header = "token==abc; padding==; session=a=b=="
+        let secure = try SecureCookieFile.create(url: "https://example.com/v", rawCookies: header)
+        defer { secure.cleanup() }
+        let legacy = try XCTUnwrap(service.createTempCookiesFileFromHeader(url: "https://example.com/v", cookieHeader: header))
+        defer { try? FileManager.default.removeItem(at: legacy) }
+        for url in [secure.fileURL, legacy] {
+            let text = try String(contentsOf: url, encoding: .utf8)
+            for pair in ["token\t=abc", "padding\t=", "session\ta=b=="] { XCTAssertTrue(text.contains(pair)) }
+        }
+        let state = ThreadSafeOutputState()
+        state.appendError(String(repeating: "🫠", count: 30_000))
+        XCTAssertLessThanOrEqual(state.getErrorText().utf8.count, 50_003)
+        state.appendError("tail")
+        XCTAssertTrue(state.getErrorText().hasSuffix("tail"))
+        XCTAssertLessThan(state.getErrorText().utf8.count, 100_000)
+    }
+
+    func testDecryptedMediaConversionPreservesInputOnFailureAndPublishesSuccess() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let source = root.appendingPathComponent("fixture.mp4")
+        let corrupt = root.appendingPathComponent("corrupt.mp4")
+        let invalid = Data("not an encrypted MP4".utf8)
+        try invalid.write(to: corrupt)
+        XCTAssertThrowsError(try YtdlpService.decryptBestCamFile(at: corrupt, filename: "fixture"))
+        XCTAssertEqual(try Data(contentsOf: corrupt), invalid)
+        try FileManager.default.removeItem(at: corrupt)
+        let original = Data([0, 0, 0, 32] + Array("ftypisom".utf8))
+        try original.write(to: source)
+        try YtdlpService.decryptBestCamFile(at: source, filename: "fixture")
+        XCTAssertEqual(try Data(contentsOf: source), original)
+        var options = DownloadOptions.default
+        options.fileType = .mp3
+        options.audioQuality = .q192
+        service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
+            XCTAssertTrue(args.contains("-vn"))
+            XCTAssertTrue(args.contains("192K"))
+            throw YtdlpError.commandFailed("fixture conversion failed")
+        })
+        do {
+            _ = try await service.postprocessDecryptedMedia(at: source, options: options, ffmpegDir: "/fixture")
+            XCTFail("Expected failure")
+        } catch {}
+        XCTAssertEqual(try Data(contentsOf: source), original)
+        service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
+            try Data("converted audio".utf8).write(to: URL(fileURLWithPath: try XCTUnwrap(args.last)))
+            return ""
+        })
+        let result = try await service.postprocessDecryptedMedia(at: source, options: options, ffmpegDir: "/fixture")
+        XCTAssertEqual(result.pathExtension, "mp3")
+        XCTAssertEqual(try String(contentsOf: result, encoding: .utf8), "converted audio")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: source.path))
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: root.path), ["fixture.mp3"])
+    }
+
+
+    func testCookieRecoveryInsertsOptionsBeforeTheURLDelimiter() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let output = root.appendingPathComponent("video.mp4")
+        try Data("media".utf8).write(to: output)
+        var options = DownloadOptions.default
+        options.saveFolder = root
+        options.rawCookies = "fixture=1"
+        options.browserCookieSource = "safari"
+        options.embedThumbnail = false
+        let target = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+        let attempts = TestBox(0)
+        service.processRunner = MockYtdlpProcessRunner(mockDownload: { args in
+            attempts.value += 1
+            guard args.contains("--cookies-from-browser") else {
+                throw YtdlpError.downloadFailed("HTTP Error 403: Forbidden")
+            }
+            let option = try XCTUnwrap(args.firstIndex(of: "--cookies-from-browser"))
+            let delimiter = try XCTUnwrap(args.firstIndex(of: "--"))
+            XCTAssertLessThan(option + 1, delimiter)
+            XCTAssertEqual(args[option + 1], "safari")
+            XCTAssertEqual(Array(args[(delimiter + 1)...]), [target])
+            return output.path
+        })
+        _ = try await service.download(url: target, options: options, onProgress: { _, _, _ in }, onOutput: { _ in })
+        XCTAssertGreaterThan(attempts.value, 1)
+    }
+
+    func testMetadataCookieRetryPreservesTheExplicitProxy() async throws {
+        let proxy = "http://127.0.0.1:12345"
+        let calls = TestBox(0)
+        service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
+            calls.value += 1
+            let index = try XCTUnwrap(args.firstIndex(of: "--proxy"))
+            XCTAssertEqual(args[index + 1], proxy)
+            if calls.value == 1 { throw YtdlpError.commandFailed("HTTP Error 403: Forbidden") }
+            return #"{"id":"fixture","title":"Fixture"}"#
+        })
+        _ = try await service.fetchSingleVideoInfo(path: "/usr/local/bin/yt-dlp", url: "https://www.gayporntube.com/video/123/fixture", rawCookies: "fixture=1", browserCookieSource: "safari", proxy: proxy)
+        XCTAssertEqual(calls.value, 2)
+    }
+
+    func testEveryDownloadedFileGetsItsOwnGeneratedThumbnail() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let files = [root.appendingPathComponent("chapter1.mp4"), root.appendingPathComponent("chapter2.mp4")]
+        for file in files { try Data("media".utf8).write(to: file) }
+        try FileManager.default.createSymbolicLink(at: root.appendingPathComponent("ffmpeg"), withDestinationURL: URL(fileURLWithPath: "/usr/bin/true"))
+        service.ffmpegPath = root.appendingPathComponent("ffmpeg")
+        let generated = TestBox<[String]>([])
+        service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
+            let input = try XCTUnwrap(args.firstIndex(of: "-i"))
+            generated.value.append(args[input + 1])
+            try Data("cover".utf8).write(to: URL(fileURLWithPath: try XCTUnwrap(args.last)))
+            return ""
+        }, mockDownloadResult: { _ in DownloadProcessResult(primaryPath: files[0].path, allPaths: files.map(\.path)) })
+        var options = DownloadOptions.default
+        options.saveFolder = root
+        options.embedThumbnail = false
+        options.downloadThumbnail = true
+        options.browserCookieSource = "none"
+        let result = try await service.download(url: "https://example.com/video", options: options, onProgress: { _, _, _ in }, onOutput: { _ in })
+        XCTAssertEqual(result.files, files)
+        XCTAssertEqual(generated.value, files.map(\.path))
+        for file in files {
+            XCTAssertEqual(try Data(contentsOf: file.deletingPathExtension().appendingPathExtension("jpg")), Data("cover".utf8))
+        }
+    }
+
+    func testCoverEmbeddingTranscodesAudioCoversAndSkipsWebM() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createSymbolicLink(at: root.appendingPathComponent("ffmpeg"), withDestinationURL: URL(fileURLWithPath: "/usr/bin/true"))
+        let image = root.appendingPathComponent("cover.webp")
+        let bitmap = try XCTUnwrap(NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 2, pixelsHigh: 2,
+            bitsPerSample: 8, samplesPerPixel: 3, hasAlpha: false, isPlanar: false,
+            colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0))
+        try XCTUnwrap(bitmap.representation(using: .png, properties: [:])).write(to: image)
+        let calls = TestBox(0)
+        service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
+            if args.first?.hasSuffix("ffprobe") == true { return "2\n3\n" }
+            calls.value += 1
+            if args.last?.hasSuffix("mkv") == true {
+                let attachment = try XCTUnwrap(args.firstIndex(of: "-attach"))
+                let jpeg = try Data(contentsOf: URL(fileURLWithPath: args[attachment + 1]))
+                XCTAssertEqual(Array(jpeg.prefix(2)), [0xFF, 0xD8])
+                XCTAssertTrue(args.contains("-metadata:s:t:2"), "Existing attachments must keep their metadata")
+                XCTAssertTrue(args.contains("mimetype=image/jpeg"))
+                XCTAssertTrue(args.contains("filename=cover.jpg"))
+            } else {
+                let codec = try XCTUnwrap(args.firstIndex(of: "-c:v:0"))
+                XCTAssertEqual(args[codec + 1], "mjpeg")
+            }
+            let metadata = try XCTUnwrap(args.firstIndex(of: "-map_metadata"))
+            XCTAssertEqual(args[metadata + 1], "0")
+            try Data("embedded".utf8).write(to: URL(fileURLWithPath: try XCTUnwrap(args.last)))
+            return ""
+        })
+        for ext in ["mp3", "m4a", "flac", "mkv", "webm"] {
+            let media = root.appendingPathComponent("media." + ext)
+            try Data("original".utf8).write(to: media)
+            let embedded = try await service.embedThumbnailWithFfmpeg(imageFile: image, mediaFile: media, ffmpegDir: root.path)
+            XCTAssertEqual(embedded, ext != "webm")
+        }
+        XCTAssertEqual(calls.value, 4)
+    }
+
+    func testVerificationRequestsSerializeAndClosingSuppressesQueuedWindows() async throws {
+        let service = self.service!
+        service.processRunner = MockYtdlpProcessRunner(mockCommand: { _ in "{}" })
+        let gate = TestBox<CheckedContinuation<Void, Never>?>(nil)
+        let calls = TestBox(0)
+        defer { gate.value?.resume() }
+        service.recuBrowserSessionLoader = { _, _ in
+            calls.value += 1
+            if calls.value == 1 {
+                await withCheckedContinuation { gate.value = $0 }
+                service.recordSessionWindowClosed(for: "recu.me")
+                throw YtdlpError.downloadFailed("Verification window closed")
+            }
+            return YtdlpService.RecuBrowserSession(pageHTML: "<title>Fixture</title>", playlistURL: "https://cdn.example.com/video.m3u8", userAgent: nil)
+        }
+        let target = "https://recu.me/fixture/video/123456/play"
+        let first = Task { try await service.fetchInfo(url: target) }
+        while gate.value == nil { await Task.yield() }
+        let second = Task { try await service.fetchInfo(url: target) }
+        let deadline = Date().addingTimeInterval(2)
+        while service.waitingWebKitSessionCount == 0 && Date() < deadline { await Task.yield() }
+        XCTAssertEqual(service.waitingWebKitSessionCount, 1)
+        XCTAssertEqual(calls.value, 1)
+        gate.value?.resume()
+        gate.value = nil
+        for task in [first, second] {
+            do { _ = try await task.value; XCTFail("Already queued jobs must stop after closure") }
+            catch { XCTAssertTrue(error.localizedDescription.lowercased().contains("closed")) }
+        }
+        XCTAssertEqual(calls.value, 1)
+        _ = try await service.fetchInfo(url: target)
+        XCTAssertEqual(calls.value, 2, "A later retry may open a fresh session")
+    }
+
 
     func testBrowserNavigationPolicyIsRegisteredWithWebKit() {
         let delegate = YtdlpService.BoyfriendTVNavigationDelegate()
@@ -394,15 +741,20 @@ final class YtdlpServiceTests: XCTestCase {
         )
         service.processRunner = MockYtdlpProcessRunner(mockDownload: { args in
             // FFmpeg cannot read the file before Siphon decrypts it.
-            for flag in ["--embed-metadata", "--embed-thumbnail", "--embed-chapters"] {
+            for flag in ["--embed-metadata", "--embed-thumbnail", "--embed-chapters", "-x", "--recode-video"] {
                 XCTAssertFalse(args.contains(flag), "\(flag) would fail on the encrypted file")
             }
             throw CancellationError()
         })
-        do {
-            _ = try await service.download(url: "https://bestcam.tv/video/1", options: options, mediaInfo: info, temporaryDirectory: root.appendingPathComponent("scratch"), onProgress: { _, _, _ in }, onOutput: { _ in })
-            XCTFail("Expected cancellation")
-        } catch is CancellationError {}
+        for type in [MediaFileType.mp4, .mp3] {
+            options.fileType = type
+            options.conversionCodec = .h264
+            options.hdrAction = .convertToSDR
+            do {
+                _ = try await service.download(url: "https://bestcam.tv/video/1", options: options, mediaInfo: info, temporaryDirectory: root.appendingPathComponent("scratch"), onProgress: { _, _, _ in }, onOutput: { _ in })
+                XCTFail("Expected cancellation")
+            } catch is CancellationError {}
+        }
     }
 
     func testDownloadReusesFreshMetadataAndFallsBackToFreshExtraction() async throws {
@@ -1675,14 +2027,17 @@ final class YtdlpServiceTests: XCTestCase {
         let fileURL = directory.appendingPathComponent("stream.mp4")
         // Larger than the 1 MB chunk and not a multiple of it, so the cipher
         // state must carry across chunk boundaries.
-        let original = Data((0..<(2 * 1024 * 1024 + 4_321)).map { UInt8(truncatingIfNeeded: $0 &* 31) })
+        let prefix = Data([0xe6, 0x4a, 0xbd, 0xed, 0xbe, 0xe1, 0x91, 0x3c, 0x6f, 0xaf, 0x93, 0x9a, 0xd6, 0x93, 0x83, 0x66])
+        let original = prefix + Data((0..<(2 * 1024 * 1024 + 4_321)).map { UInt8(truncatingIfNeeded: $0 &* 31) })
         try original.write(to: fileURL)
 
-        // AES-CTR is its own inverse: two passes restore the input.
-        try YtdlpService.decryptBestCamFile(at: fileURL, filename: "chunk-test")
-        XCTAssertNotEqual(try Data(contentsOf: fileURL), original)
-        try YtdlpService.decryptBestCamFile(at: fileURL, filename: "chunk-test")
-        XCTAssertEqual(try Data(contentsOf: fileURL), original)
+        try YtdlpService.decryptBestCamFile(at: fileURL, filename: "7c9a1f00ba871cce7861afcf0dfe6.255724278.4")
+        let clear = try Data(contentsOf: fileURL)
+        XCTAssertEqual(clear.count, original.count)
+        XCTAssertEqual(clear.prefix(16).map { String(format: "%02x", $0) }.joined(), "000000206674797069736f6d00000200")
+        // Retrying the completed file must leave its entire payload unchanged.
+        try YtdlpService.decryptBestCamFile(at: fileURL, filename: "7c9a1f00ba871cce7861afcf0dfe6.255724278.4")
+        XCTAssertEqual(try Data(contentsOf: fileURL), clear)
         XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: directory.path), ["stream.mp4"])
     }
 
@@ -3128,11 +3483,12 @@ final class YtdlpServiceTests: XCTestCase {
         UserDefaults.standard.set("safari", forKey: UserDefaultsKeys.browserForCookies)
         defer { UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.browserForCookies) }
         service.installedBrowsersProvider = { [] }
-        func cookie(_ domain: String, _ name: String, _ value: String) -> HTTPCookie {
+        @Sendable func cookie(_ domain: String, _ name: String, _ value: String) -> HTTPCookie {
             HTTPCookie(properties: [.domain: domain, .name: name, .value: value, .path: "/"])!
         }
         service.safariCookiesProvider = {
-            [cookie(".boyfriendtv.com", "remember", "signed-in"),
+            XCTAssertFalse(Thread.isMainThread, "Safari cookie I/O must run off the main thread")
+            return [cookie(".boyfriendtv.com", "remember", "signed-in"),
              cookie(".boyfriendtv.com", "cf_clearance", "safari-bound"),
              cookie(".boyfriend.tv", "other_domain", "x")]
         }

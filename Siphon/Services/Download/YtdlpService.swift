@@ -78,49 +78,13 @@ actor DependencyInstaller {
         }
     }
 
-    static func isBinarySigned(at url: URL) -> Bool {
-        guard FileManager.default.isExecutableFile(atPath: url.path) else { return false }
-        let proc = Process()
-        proc.executableURL = URL(fileURLWithPath: "/usr/bin/codesign")
-        // Use '--' to delimit arguments from option flags to prevent CLI option injection if a file path starts with '-'
-        proc.arguments = ["--verify", "--deep", "--strict", "--", url.path]
-        proc.environment = YtdlpService.createSanitizedEnvironment()
-        let nullPipe = Pipe()
-        proc.standardOutput = nullPipe
-        proc.standardError = nullPipe
-        do {
-            try proc.run()
-            proc.waitUntilExit()
-            return proc.terminationStatus == 0
-        } catch {
-            return false
+    static func prepareVerifiedExecutable(at url: URL, expectedSHA256: String, name: String) throws {
+        guard YtdlpService.verifySHA256(fileURL: url, expectedHash: expectedSHA256) else {
+            throw InstallError.sha256Mismatch(file: name, expected: expectedSHA256)
         }
-    }
-
-    static func adHocSignBinary(at url: URL) throws {
-        guard !NotificationService.isRunningTests else { return }
-        guard FileManager.default.isExecutableFile(atPath: url.path) else { return }
-
-        // If the binary already has a valid code signature, skip re-signing to avoid mutating
-        // Mach-O binaries and invalidating upstream SHA-256 hashes.
-        if isBinarySigned(at: url) {
-            return
-        }
-
-        let binaryPath = url.path
-        let proc = Process()
-        proc.executableURL = URL(fileURLWithPath: "/usr/bin/codesign")
-        proc.arguments = ["--force", "--sign", "-", "--", binaryPath]
-        proc.environment = YtdlpService.createSanitizedEnvironment()
-        let errPipe = Pipe()
-        proc.standardError = errPipe
-        try proc.run()
-        proc.waitUntilExit()
-        guard proc.terminationStatus == 0 else {
-            let errData = errPipe.fileHandleForReading.readDataToEndOfFile()
-            let errMsg = String(data: errData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            throw InstallError.executionFailed(binary: url.lastPathComponent, message: "Ad-hoc codesign failed with exit code \(proc.terminationStatus): \(errMsg)")
-        }
+        // Preserve the pinned bytes, including the upstream signature. Permissions
+        // are metadata; ad-hoc signing would invalidate the pinned executable hash.
+        try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: url.path)
     }
 
     func installYtdlp(
@@ -143,15 +107,7 @@ actor DependencyInstaller {
         try await Self.download(downloadURL, named: "yt-dlp", to: tempStaging)
         onProgress?(0.65)
 
-        // 1. Verify SHA-256
-        guard YtdlpService.verifySHA256(fileURL: tempStaging, expectedHash: expectedSHA256) else {
-            try? FileManager.default.removeItem(at: tempStaging)
-            throw InstallError.sha256Mismatch(file: "yt-dlp", expected: expectedSHA256)
-        }
-
-        // 2. Set executable permissions and ad-hoc sign
-        try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: tempStaging.path)
-        try Self.adHocSignBinary(at: tempStaging)
+        try Self.prepareVerifiedExecutable(at: tempStaging, expectedSHA256: expectedSHA256, name: "yt-dlp")
 
         // 3. Dry-run execution test
         let process = Process()
@@ -182,7 +138,6 @@ actor DependencyInstaller {
 
         do {
             try FileManager.default.moveItem(at: tempStaging, to: destination)
-            try Self.adHocSignBinary(at: destination)
             installedSuccessfully = true
             if hadOld {
                 try? FileManager.default.removeItem(at: backupDest)
@@ -254,19 +209,8 @@ actor DependencyInstaller {
             try? FileManager.default.removeItem(at: extractedFfprobe)
         }
 
-        // 4. Verify extracted binary SHA-256
-        guard YtdlpService.verifySHA256(fileURL: extractedFfmpeg, expectedHash: ffmpegExecutableSHA256) else {
-            throw InstallError.sha256Mismatch(file: "FFmpeg executable", expected: ffmpegExecutableSHA256)
-        }
-        guard YtdlpService.verifySHA256(fileURL: extractedFfprobe, expectedHash: ffprobeExecutableSHA256) else {
-            throw InstallError.sha256Mismatch(file: "FFprobe executable", expected: ffprobeExecutableSHA256)
-        }
-
-        // 5. Set executable permissions and ad-hoc sign
-        try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: extractedFfmpeg.path)
-        try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: extractedFfprobe.path)
-        try Self.adHocSignBinary(at: extractedFfmpeg)
-        try Self.adHocSignBinary(at: extractedFfprobe)
+        try Self.prepareVerifiedExecutable(at: extractedFfmpeg, expectedSHA256: ffmpegExecutableSHA256, name: "FFmpeg executable")
+        try Self.prepareVerifiedExecutable(at: extractedFfprobe, expectedSHA256: ffprobeExecutableSHA256, name: "FFprobe executable")
 
         // 6. Test both binaries
         let testVersion: (URL) async throws -> Void = { binURL in
@@ -307,8 +251,6 @@ actor DependencyInstaller {
 
             try FileManager.default.moveItem(at: extractedFfmpeg, to: ffmpegFinal)
             try FileManager.default.moveItem(at: extractedFfprobe, to: ffprobeFinal)
-            try Self.adHocSignBinary(at: ffmpegFinal)
-            try Self.adHocSignBinary(at: ffprobeFinal)
 
             if ffmpegMovedToBackup { try? FileManager.default.removeItem(at: ffmpegBackup) }
             if ffprobeMovedToBackup { try? FileManager.default.removeItem(at: ffprobeBackup) }
@@ -480,7 +422,7 @@ class YtdlpService: ObservableObject {
         await clearGayteamWebData()
     }
     // Test seam for Safari's saved cookies. Production reads Safari's cookie store.
-    var safariCookiesProvider: () -> [HTTPCookie] = { SafariCookieReader.cookies() }
+    var safariCookiesProvider: @Sendable () -> [HTTPCookie] = { SafariCookieReader.cookies() }
     // Test seam for the player capture session. Production uses WKWebView.
     var browserCaptureLoader: ((URL) async throws -> BrowserCapture)?
     // One WebKit page session at a time. Parallel jobs would each open their own
@@ -490,6 +432,7 @@ class YtdlpService: ObservableObject {
     // When the user closes a site's window, jobs already queued for that site stop
     // without opening one each. A later retry opens it again.
     private var sessionWindowClosedAt: [String: Date] = [:]
+    var waitingWebKitSessionCount: Int { webKitSessionWaiters.count }
 
     init(processRunner: YtdlpProcessRunning = DefaultYtdlpProcessRunner()) {
         self.processRunner = processRunner
@@ -537,6 +480,10 @@ class YtdlpService: ObservableObject {
     private func cancelWebKitSessionWait(_ id: UUID) {
         guard let index = webKitSessionWaiters.firstIndex(where: { $0.id == id }) else { return }
         webKitSessionWaiters.remove(at: index).continuation.resume(throwing: CancellationError())
+    }
+
+    func recordSessionWindowClosed(for site: String) {
+        sessionWindowClosedAt[site] = Date()
     }
 
     private func mayOpenSessionWindow(for site: String, requestedAt: Date) -> Bool {
@@ -827,7 +774,6 @@ class YtdlpService: ObservableObject {
         if FileManager.default.fileExists(atPath: ytdlpInSupport.path) {
             if await Self.verifySHA256Detached(fileURL: ytdlpInSupport, expectedHash: DependencyChecksums.ytdlpExecutableSHA256) {
                 ytdlpPath = ytdlpInSupport
-                try? DependencyInstaller.adHocSignBinary(at: ytdlpInSupport)
                 isAvailable = true
                 try? FileManager.default.removeItem(at: invalidBackup)
                 return
@@ -915,8 +861,6 @@ class YtdlpService: ObservableObject {
     private func setFfmpegPaths(ffmpeg: URL, ffprobe: URL, source: String) {
         ffmpegPath = ffmpeg
         ffprobePath = ffprobe
-        try? DependencyInstaller.adHocSignBinary(at: ffmpeg)
-        try? DependencyInstaller.adHocSignBinary(at: ffprobe)
         LoggerService.shared.log("Selected \(source) FFmpeg path: \(ffmpeg.path)", level: .info)
         LoggerService.shared.log("Selected \(source) FFprobe path: \(ffprobe.path)", level: .info)
     }
@@ -1033,14 +977,16 @@ class YtdlpService: ObservableObject {
         proxy: String? = nil
     ) async throws -> MediaInfo {
         // Site resolvers make their own requests; the binding routes those too.
-        try await EgressBoundary.$proxyURL.withValue(proxy ?? EgressBoundary.proxyURL) {
-            try await fetchInfoWithinBoundary(
-                url: url,
-                rawCookies: rawCookies,
-                rawUserAgent: rawUserAgent,
-                browserCookieSource: browserCookieSource,
-                proxy: proxy
-            )
+        try await EgressBoundary.$ytdlpExecutablePath.withValue(resolvedYtdlpBinary?.path) {
+            try await EgressBoundary.$proxyURL.withValue(proxy ?? EgressBoundary.proxyURL) {
+                try await fetchInfoWithinBoundary(
+                    url: url,
+                    rawCookies: rawCookies,
+                    rawUserAgent: rawUserAgent,
+                    browserCookieSource: browserCookieSource,
+                    proxy: proxy
+                )
+            }
         }
     }
 
@@ -1112,7 +1058,7 @@ class YtdlpService: ObservableObject {
         return !mediaHosts.isEmpty && mediaHosts.allSatisfy { $0 == "assets.twinkaboo.com" }
     }
 
-    private func fetchSingleVideoInfo(
+    func fetchSingleVideoInfo(
         path: String,
         url: String,
         forceBrowserCookies: Bool = false,
@@ -1419,6 +1365,7 @@ class YtdlpService: ObservableObject {
         }
 
         let sucuriCookie = await resolveSucuriCookie(for: url)
+        let requestUserAgent = sucuriCookie == nil ? rawUserAgent : Self.sucuriUserAgent
         var additionalCookies: [(name: String, value: String)] = []
         if let sc = sucuriCookie {
             additionalCookies.append((name: sc.name, value: sc.value))
@@ -1430,13 +1377,13 @@ class YtdlpService: ObservableObject {
                 args.append(contentsOf: ["--cookies", cookieFile.path])
                 if sucuriCookie != nil {
                     LoggerService.shared.log("Using temporary Sucuri cookie in consolidated file for \(hostForLog(url)) (cookie values not logged)", level: .info)
-                    args.append(contentsOf: ["--user-agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"])
                 }
                 if let raw = rawCookies, !raw.isEmpty {
                     LoggerService.shared.log("Using session cookies passed from browser extension for \(hostForLog(url))", level: .info)
                 }
             }
-        } else {
+        }
+        if rawCookies?.isEmpty != false {
             let usingBrowserCookies = appendCookieArgs(
                 for: url,
                 to: &args,
@@ -1446,7 +1393,7 @@ class YtdlpService: ObservableObject {
             logCookieUsage(for: url, usingBrowserCookies: usingBrowserCookies)
         }
 
-        appendSiteSpecificArgs(for: url, rawUserAgent: rawUserAgent, to: &args)
+        appendSiteSpecificArgs(for: url, rawUserAgent: requestUserAgent, to: &args)
         args.append("--")
         args.append(url)
 
@@ -1478,7 +1425,8 @@ class YtdlpService: ObservableObject {
                     forceBrowserCookies: true,
                     rawCookies: rawCookies,
                     rawUserAgent: rawUserAgent,
-                    browserCookieSource: browserCookieSource
+                    browserCookieSource: browserCookieSource,
+                    proxy: proxy
                 )
             }
             throw mapSiteSpecificError(
@@ -1515,6 +1463,7 @@ class YtdlpService: ObservableObject {
         }
 
         let sucuriCookie = await resolveSucuriCookie(for: url)
+        let requestUserAgent = sucuriCookie == nil ? rawUserAgent : Self.sucuriUserAgent
         var additionalCookies: [(name: String, value: String)] = []
         if let sc = sucuriCookie {
             additionalCookies.append((name: sc.name, value: sc.value))
@@ -1526,18 +1475,18 @@ class YtdlpService: ObservableObject {
                 args.append(contentsOf: ["--cookies", cookieFile.path])
                 if sucuriCookie != nil {
                     LoggerService.shared.log("Using temporary Sucuri cookie in consolidated file for \(hostForLog(url)) (cookie values not logged)", level: .info)
-                    args.append(contentsOf: ["--user-agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"])
                 }
                 if let raw = rawCookies, !raw.isEmpty {
                     LoggerService.shared.log("Using session cookies passed from browser extension for \(hostForLog(url))", level: .info)
                 }
             }
-        } else {
+        }
+        if rawCookies?.isEmpty != false {
             let usingBrowserCookies = appendCookieArgs(for: url, to: &args, browserOverride: browserCookieSource)
             logCookieUsage(for: url, usingBrowserCookies: usingBrowserCookies)
         }
 
-        if let exactUA = rawUserAgent?.trimmingCharacters(in: .whitespacesAndNewlines), !exactUA.isEmpty {
+        if let exactUA = requestUserAgent?.trimmingCharacters(in: .whitespacesAndNewlines), !exactUA.isEmpty {
             args.append(contentsOf: ["--user-agent", exactUA])
             args.append(contentsOf: [
                 "--extractor-args",
@@ -1618,6 +1567,7 @@ class YtdlpService: ObservableObject {
         }
 
         let sucuriCookie = await resolveSucuriCookie(for: url)
+        let requestUserAgent = sucuriCookie == nil ? rawUserAgent : Self.sucuriUserAgent
         var additionalCookies: [(name: String, value: String)] = []
         if let sc = sucuriCookie {
             additionalCookies.append((name: sc.name, value: sc.value))
@@ -1629,20 +1579,20 @@ class YtdlpService: ObservableObject {
                 args.append(contentsOf: ["--cookies", cookieFile.path])
                 if sucuriCookie != nil {
                     LoggerService.shared.log("Using temporary Sucuri cookie in consolidated file for \(hostForLog(url)) (cookie values not logged)", level: .info)
-                    args.append(contentsOf: ["--user-agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"])
                 }
                 if let raw = rawCookies, !raw.isEmpty {
                     LoggerService.shared.log("Using session cookies passed from browser extension for \(hostForLog(url))", level: .info)
                 }
             }
-        } else {
+        }
+        if rawCookies?.isEmpty != false {
             let usingBrowserCookies = appendCookieArgs(for: url, to: &args, browserOverride: browserCookieSource)
             logCookieUsage(for: url, usingBrowserCookies: usingBrowserCookies)
         }
 
         let parsedHost = (URL(string: url)?.host ?? url).lowercased()
         let isYouTube = parsedHost == "youtube.com" || parsedHost.hasSuffix(".youtube.com") || parsedHost == "youtu.be" || parsedHost.hasSuffix(".youtu.be")
-        if let exactUA = rawUserAgent?.trimmingCharacters(in: .whitespacesAndNewlines), !exactUA.isEmpty {
+        if let exactUA = requestUserAgent?.trimmingCharacters(in: .whitespacesAndNewlines), !exactUA.isEmpty {
             args.append(contentsOf: ["--user-agent", exactUA])
             args.append(contentsOf: ["--add-header", "Accept-Language:en-US,en;q=0.9"])
             if !isYouTube {
@@ -1787,16 +1737,18 @@ public struct DownloadResult: Sendable {
             }
         }
         let boundaryProxy = options.enforcePublicNetworkBoundary ? try await egressProxyURL() : nil
-        return try await EgressBoundary.$proxyURL.withValue(boundaryProxy) {
-            try await downloadWithinBoundary(
-                url: url,
-                options: options,
-                mediaInfo: mediaInfo,
-                processController: processController,
-                temporaryDirectory: temporaryDirectory,
-                onProgress: onProgress,
-                onOutput: onOutput
-            )
+        return try await EgressBoundary.$ytdlpExecutablePath.withValue(resolvedYtdlpBinary?.path) {
+            try await EgressBoundary.$proxyURL.withValue(boundaryProxy) {
+                try await downloadWithinBoundary(
+                    url: url,
+                    options: options,
+                    mediaInfo: mediaInfo,
+                    processController: processController,
+                    temporaryDirectory: temporaryDirectory,
+                    onProgress: onProgress,
+                    onOutput: onOutput
+                )
+            }
         }
     }
 
@@ -2023,12 +1975,13 @@ public struct DownloadResult: Sendable {
         // Let yt-dlp inspect HLS encryption before choosing a downloader.
         // Forcing FFmpeg skips its FairPlay/DRM rejection and can copy encrypted samples.
 
-        args.append(contentsOf: buildFormatArgs(url: url, options: options, mediaInfo: mediaInfo))
+        args.append(contentsOf: buildFormatArgs(url: url, options: options, mediaInfo: mediaInfo, deferPostprocessing: bestCamDecryptionKey != nil))
         let codecFallbackWarnings = codecFallbackOutputWarnings(options: options)
-        if options.downloadSubtitles && !options.subtitleLanguages.isEmpty {
+        if options.downloadSubtitles {
             let subFormat = options.subtitleFormat?.ytdlpValue ?? "srt"
             args.append(contentsOf: ["--sub-format", "\(subFormat)/best"])
-            let safeLangs = options.subtitleLanguages.filter { Self.isSafeSubtitleLanguage($0) }
+            let requestedLanguages = options.subtitleLanguages.isEmpty ? ["en"] : options.subtitleLanguages
+            let safeLangs = requestedLanguages.filter { Self.isSafeSubtitleLanguage($0) }
             if !safeLangs.isEmpty {
                 let langList = safeLangs.joined(separator: ",")
                 args.append(contentsOf: ["--sub-langs", langList])
@@ -2037,7 +1990,7 @@ public struct DownloadResult: Sendable {
             args.append("--write-subs")
             args.append("--write-auto-subs")
 
-            if options.embedSubtitles && options.fileType.isVideo {
+            if options.embedSubtitles && options.fileType.isVideo && bestCamDecryptionKey == nil {
                 args.append("--embed-subs")
                 args.append(contentsOf: ["--convert-subs", subFormat])
             }
@@ -2161,13 +2114,13 @@ public struct DownloadResult: Sendable {
                 args.append(contentsOf: ["--cookies", cookieFile.path])
                 if sucuriCookie != nil {
                     LoggerService.shared.log("Using temporary Sucuri cookie in consolidated file for \(hostForLog(normalizedURL)) (cookie values not logged)", level: .info)
-                    args.append(contentsOf: ["--user-agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"])
                 }
                 if let raw = options.rawCookies, !raw.isEmpty {
                     LoggerService.shared.log("Using session cookies passed from browser extension for \(hostForLog(targetURL))", level: .info)
                 }
             }
-        } else {
+        }
+        if !isRecuURL(normalizedURL), options.rawCookies?.isEmpty != false {
             let usingBrowserCookies = appendCookieArgs(
                 for: normalizedURL,
                 to: &args,
@@ -2185,7 +2138,7 @@ public struct DownloadResult: Sendable {
                                                userAgent: recuUserAgent, referer: recuUserAgent == nil ? nil : customEmbedURL)
         }
 
-        appendSiteSpecificArgs(for: customEmbedURL ?? targetURL, options: options, mediaInfo: mediaInfo, rawUserAgent: recuUserAgent, to: &args)
+        appendSiteSpecificArgs(for: customEmbedURL ?? targetURL, options: options, mediaInfo: mediaInfo, rawUserAgent: sucuriCookie == nil ? recuUserAgent : Self.sucuriUserAgent, to: &args)
         // Recu recordings are signed VOD streams; a skipped segment would leave
         // a corrupt recording. Live streams elsewhere may legitimately rotate
         // unavailable fragments, so keep yt-dlp's default behavior there.
@@ -2450,10 +2403,24 @@ public struct DownloadResult: Sendable {
 
         if let key = bestCamDecryptionKey {
             onOutput("[Siphon Info] Decrypting downloaded stream...\n")
-            let encryptedFile = finalFileURL
-            try await Task.detached(priority: .utility) {
-                try Self.decryptBestCamFile(at: encryptedFile, filename: key)
-            }.value
+            for index in allFileURLs.indices {
+                let encryptedFile = allFileURLs[index]
+                let decryption = Task.detached(priority: .utility) {
+                    try Task.checkCancellation()
+                    try Self.decryptBestCamFile(at: encryptedFile, filename: key)
+                }
+                try await withTaskCancellationHandler {
+                    try await decryption.value
+                } onCancel: {
+                    decryption.cancel()
+                }
+                let processed = try await postprocessDecryptedMedia(
+                    at: encryptedFile, options: options, ffmpegDir: ffmpegDir,
+                    processController: processController
+                )
+                allFileURLs[index] = processed
+                if finalFileURL == encryptedFile { finalFileURL = processed }
+            }
         }
 
         // yt-dlp saves GIF links and GIF pages as .gif; a video download must end as video.
@@ -2482,59 +2449,61 @@ public struct DownloadResult: Sendable {
             }
         }
 
-        // Direct streams often have no poster. Use a decoded frame for their cover.
-        if (options.embedThumbnail || options.downloadThumbnail), options.fileType.isVideo,
-           !FileManager.default.fileExists(atPath: scratchThumbnailURL.path) {
-            try await generateVideoThumbnail(mediaFile: finalFileURL, destination: scratchThumbnailURL,
-                                             ffmpegDir: ffmpegDir, processController: processController)
-        }
+        let providedThumbnail = FileManager.default.fileExists(atPath: scratchThumbnailURL.path) ? scratchThumbnailURL : nil
+        let scratchFiles = options.embedThumbnail
+            ? ((try? FileManager.default.contentsOfDirectory(at: scratchDirectory, includingPropertiesForKeys: nil)) ?? [])
+            : []
+        let otherThumbnails = scratchFiles.filter { ["jpg", "jpeg", "png", "webp"].contains($0.pathExtension.lowercased()) }
 
-        // Post-download cover art fallback: embed a local cover if it is missing.
-        if options.embedThumbnail && FileManager.default.fileExists(atPath: scratchThumbnailURL.path) {
-            let hasThumb = try await hasAttachedThumbnail(mediaFile: finalFileURL, ffmpegDir: ffmpegDir, processController: processController)
-            if !hasThumb {
-                let embedded = try await embedThumbnailWithFfmpeg(imageFile: scratchThumbnailURL, mediaFile: finalFileURL, ffmpegDir: ffmpegDir, processController: processController)
-                if !embedded {
-                    onOutput("[WARNING] Thumbnail embedding was requested, but FFmpeg could not embed the cover art into \(finalFileURL.lastPathComponent).\n")
-                    LoggerService.shared.log("Thumbnail embedding failed for \(finalFileURL.lastPathComponent)", level: .warning)
-                }
+        for (index, file) in allFileURLs.enumerated() {
+            try Task.checkCancellation()
+            let coverURL = providedThumbnail ?? scratchDirectory.appendingPathComponent("cover_\(index).jpg")
+            // Without a supplied poster, each chapter/playlist entry gets its own frame.
+            if (options.embedThumbnail || options.downloadThumbnail), options.fileType.isVideo,
+               !FileManager.default.fileExists(atPath: coverURL.path) {
+                try await generateVideoThumbnail(mediaFile: file, destination: coverURL,
+                                                 ffmpegDir: ffmpegDir, processController: processController)
             }
-        }
 
-        // Attach Finder custom file icon for native macOS Finder / Downloads thumbnail display
-        if options.embedThumbnail {
-            var possibleThumbnailURLs: [URL] = []
-            if FileManager.default.fileExists(atPath: scratchThumbnailURL.path) {
-                possibleThumbnailURLs.append(scratchThumbnailURL)
-            }
-            let scratchFiles = (try? FileManager.default.contentsOfDirectory(at: scratchDirectory, includingPropertiesForKeys: nil)) ?? []
-            for file in scratchFiles {
-                let ext = file.pathExtension.lowercased()
-                if ["jpg", "jpeg", "png", "webp"].contains(ext) {
-                    possibleThumbnailURLs.append(file)
-                }
-            }
-            for thumbURL in possibleThumbnailURLs {
-                if let img = DownloadExecutor.loadThumbnailImage(at: thumbURL) {
-                    let squareIcon = Self.createAspectFitIcon(from: img)
-                    let setSuccess = NSWorkspace.shared.setIcon(squareIcon, forFile: finalFileURL.path, options: [])
-                    if setSuccess {
-                        LoggerService.shared.log("Attached custom Finder thumbnail icon to \(finalFileURL.lastPathComponent)", level: .info)
-                        break
+            // WebM has no cover-art video stream; it still receives a Finder icon.
+            if options.embedThumbnail, file.pathExtension.lowercased() != "webm",
+               FileManager.default.fileExists(atPath: coverURL.path) {
+                let hasThumb = try await hasAttachedThumbnail(mediaFile: file, ffmpegDir: ffmpegDir, processController: processController)
+                if !hasThumb {
+                    let embedded = try await embedThumbnailWithFfmpeg(imageFile: coverURL, mediaFile: file, ffmpegDir: ffmpegDir, processController: processController)
+                    if !embedded {
+                        onOutput("[WARNING] Thumbnail embedding was requested, but FFmpeg could not embed the cover art into \(file.lastPathComponent).\n")
+                        LoggerService.shared.log("Thumbnail embedding failed for \(file.lastPathComponent)", level: .warning)
                     }
                 }
             }
-        }
 
-        // If user requested downloading thumbnail as a standalone file, save to folder
-        if options.downloadThumbnail && FileManager.default.fileExists(atPath: scratchThumbnailURL.path) {
-            let standaloneThumbURL = finalFileURL.deletingPathExtension().appendingPathExtension("jpg")
-            if !FileManager.default.fileExists(atPath: standaloneThumbURL.path) {
-                try? FileManager.default.copyItem(at: scratchThumbnailURL, to: standaloneThumbURL)
+            if options.embedThumbnail {
+                for thumbURL in [coverURL] + otherThumbnails {
+                    if let img = DownloadExecutor.loadThumbnailImage(at: thumbURL) {
+                        let squareIcon = Self.createAspectFitIcon(from: img)
+                        if NSWorkspace.shared.setIcon(squareIcon, forFile: file.path, options: []) {
+                            LoggerService.shared.log("Attached custom Finder thumbnail icon to \(file.lastPathComponent)", level: .info)
+                            break
+                        }
+                    }
+                }
+            }
+
+            if options.downloadThumbnail && FileManager.default.fileExists(atPath: coverURL.path) {
+                let standaloneThumbURL = file.deletingPathExtension().appendingPathExtension("jpg")
+                if !FileManager.default.fileExists(atPath: standaloneThumbURL.path) {
+                    do { try FileManager.default.copyItem(at: coverURL, to: standaloneThumbURL) }
+                    catch { LoggerService.shared.log("Could not save thumbnail: \(error.localizedDescription)", level: .warning) }
+                }
             }
         }
 
         return DownloadResult(files: allFileURLs, primaryFile: finalFileURL, partialFailure: finalResult.partialFailure)
+    }
+
+    static func jpegThumbnailData(_ data: Data) -> Data? {
+        NSBitmapImageRep(data: data)?.representation(using: .jpeg, properties: [:])
     }
 
     private func downloadThumbnailLocally(from urlString: String, to destinationURL: URL,
@@ -2546,8 +2515,9 @@ public struct DownloadResult: Sendable {
             request.setValue(referer, forHTTPHeaderField: "Referer")
         }
 
-        guard let data = await DownloadExecutor.fetchThumbnailData(for: request) else { return false }
-        return (try? data.write(to: destinationURL, options: .atomic)) != nil
+        guard let data = await DownloadExecutor.fetchThumbnailData(for: request),
+              let jpeg = Self.jpegThumbnailData(data) else { return false }
+        return (try? jpeg.write(to: destinationURL, options: .atomic)) != nil
     }
 
     nonisolated static func isGIF(_ file: URL) -> Bool { file.pathExtension.lowercased() == "gif" }
@@ -2585,6 +2555,51 @@ public struct DownloadResult: Sendable {
             throw YtdlpError.downloadFailed(LanguageService.s("gif_conversion_failed"))
         }
         try? fileManager.removeItem(at: gif)
+        return destination
+    }
+
+    func postprocessDecryptedMedia(at source: URL, options: DownloadOptions, ffmpegDir: String,
+                                  processController: DownloadProcessController? = nil) async throws -> URL {
+        let targetExtension = Self.resolvedOutputFileExtension(for: options)
+        let needsRecode = options.fileType.isAudio || (options.conversionCodec ?? .none) != .none || options.hdrAction == .convertToSDR
+        guard needsRecode || source.pathExtension != targetExtension else { return source }
+        try Task.checkCancellation()
+        guard processController?.isCancelled != true else { throw CancellationError() }
+        let destination = source.deletingPathExtension().appendingPathExtension(targetExtension)
+        let partial = source.deletingLastPathComponent().appendingPathComponent(".converted-\(UUID().uuidString).\(targetExtension)")
+        defer { try? FileManager.default.removeItem(at: partial) }
+        var args = [URL(fileURLWithPath: ffmpegDir).appendingPathComponent("ffmpeg").path,
+                    "-nostdin", "-v", "error", "-y", "-i", source.path, "-map_metadata", "0"]
+        if options.fileType.isAudio {
+            args += ["-map", "0:a:0", "-vn"]
+            if ![MediaFileType.flac, .wav].contains(options.fileType), let quality = options.audioQuality, quality != .best {
+                args += ["-b:a", quality.ytdlpValue]
+            } else if options.fileType == .mp3 {
+                args += ["-q:a", "0"]
+            }
+        } else {
+            args += ["-map", "0:v:0", "-map", "0:a?"]
+            args += needsRecode ? Self.videoConversionArguments(options: options) : ["-c", "copy"]
+        }
+        args.append(partial.path)
+        _ = try await processRunner.runCommand(args, processController: processController)
+        try Task.checkCancellation()
+        guard processController?.isCancelled != true else { throw CancellationError() }
+        guard FileManager.default.fileExists(atPath: partial.path) else {
+            throw YtdlpError.downloadFailed(LanguageService.s("media_integrity_failed"))
+        }
+        if FileManager.default.fileExists(atPath: destination.path) {
+            guard destination == source || options.forceOverwrite == true else {
+                throw CocoaError(.fileWriteFileExists)
+            }
+            _ = try FileManager.default.replaceItemAt(destination, withItemAt: partial)
+        } else {
+            try FileManager.default.moveItem(at: partial, to: destination)
+        }
+        if destination != source {
+            do { try FileManager.default.removeItem(at: source) }
+            catch { LoggerService.shared.log("Could not remove the source after conversion: \(error.localizedDescription)", level: .warning) }
+        }
         return destination
     }
 
@@ -2639,6 +2654,7 @@ public struct DownloadResult: Sendable {
     func embedThumbnailWithFfmpeg(imageFile: URL, mediaFile: URL, ffmpegDir: String, processController: DownloadProcessController? = nil) async throws -> Bool {
         try Task.checkCancellation()
         let ext = mediaFile.pathExtension.lowercased()
+        guard ext != "webm" else { return false }
         let fileManager = FileManager.default
         guard fileManager.fileExists(atPath: mediaFile.path), fileManager.fileExists(atPath: imageFile.path) else { return false }
 
@@ -2647,11 +2663,13 @@ public struct DownloadResult: Sendable {
 
         let tempOutput = mediaFile.deletingLastPathComponent().appendingPathComponent("thumb_temp_\(UUID().uuidString).\(ext)")
 
+        let coverAttachment = ext == "mkv" ? tempOutput.deletingPathExtension().appendingPathExtension("jpg") : nil
         var procArgs = [
             "-nostdin",
             "-y",
             "-i", mediaFile.path,
-            "-i", imageFile.path
+            "-i", imageFile.path,
+            "-map_metadata", "0"
         ]
 
         if ext == "mp4" || ext == "m4v" || ext == "mov" {
@@ -2664,19 +2682,16 @@ public struct DownloadResult: Sendable {
                 "-movflags", "+faststart",
                 tempOutput.path
             ])
-        } else if ext == "mkv" || ext == "webm" {
-            procArgs.append(contentsOf: [
-                "-map", "0",
-                "-map", "1",
-                "-c", "copy",
-                "-disposition:v:1", "attached_pic",
-                tempOutput.path
-            ])
+        } else if let coverAttachment {
+            // Matroska cover art is an attachment, not a second video track.
+            procArgs = ["-nostdin", "-y", "-i", mediaFile.path, "-map_metadata", "0",
+                        "-map", "0", "-c", "copy", "-attach", coverAttachment.path, tempOutput.path]
         } else if ext == "mp3" || ext == "m4a" || ext == "flac" {
             procArgs.append(contentsOf: [
                 "-map", "0:a",
                 "-map", "1",
                 "-c", "copy",
+                "-c:v:0", "mjpeg",
                 "-disposition:v:0", "attached_pic",
                 tempOutput.path
             ])
@@ -2685,12 +2700,23 @@ public struct DownloadResult: Sendable {
         }
 
         defer {
-            if fileManager.fileExists(atPath: tempOutput.path) {
-                do { try fileManager.removeItem(at: tempOutput) }
+            for file in [tempOutput] + [coverAttachment].compactMap({ $0 }) where fileManager.fileExists(atPath: file.path) {
+                do { try fileManager.removeItem(at: file) }
                 catch { LoggerService.shared.log("Could not remove thumbnail staging file: \(error.localizedDescription)", level: .warning) }
             }
         }
         do {
+            if let coverAttachment {
+                guard let jpeg = Self.jpegThumbnailData(try Data(contentsOf: imageFile)) else { return false }
+                try jpeg.write(to: coverAttachment, options: .atomic)
+                let ffprobe = URL(fileURLWithPath: ffmpegDir).appendingPathComponent("ffprobe")
+                let attachments = try await processRunner.runCommand([
+                    ffprobe.path, "-v", "error", "-select_streams", "t", "-show_entries", "stream=index", "-of", "csv=p=0", mediaFile.path
+                ], processController: processController)
+                let index = attachments.split(whereSeparator: \.isNewline).count
+                procArgs.insert(contentsOf: ["-metadata:s:t:\(index)", "mimetype=image/jpeg",
+                                            "-metadata:s:t:\(index)", "filename=cover.jpg"], at: procArgs.count - 1)
+            }
             _ = try await processRunner.runCommand([ffmpegBin.path] + procArgs, processController: processController)
             try Task.checkCancellation()
             guard processController?.isCancelled != true else { throw CancellationError() }
@@ -2767,7 +2793,7 @@ public struct DownloadResult: Sendable {
         return formats[0].isDownloadable && (formats[0].resolution == nil || formats[0].resolution == "unknown")
     }
 
-    private func buildFormatArgs(url: String? = nil, options: DownloadOptions, mediaInfo: MediaInfo? = nil) -> [String] {
+    private func buildFormatArgs(url: String? = nil, options: DownloadOptions, mediaInfo: MediaInfo? = nil, deferPostprocessing: Bool = false) -> [String] {
         var args: [String] = []
 
         let isSynthesizedDirectStream = mediaInfo?.uploader == "Protected Site" ||
@@ -2786,6 +2812,8 @@ public struct DownloadResult: Sendable {
                                         (url.map(isStarwankURL) ?? false) ||
                                         (url.map(isPussyspaceURL) ?? false) ||
                                         Self.isSingleUnprobedFormat(mediaInfo)
+
+        if deferPostprocessing { return ["-f", "b/best"] }
 
         // 1. Audio downloads: return early with audio extraction and quality options
         if options.fileType.isAudio {
@@ -2877,31 +2905,7 @@ public struct DownloadResult: Sendable {
 
         let needsRecode = (conversionCodec != .none) || isConvertToSDR
         if needsRecode {
-            var videoConvertorArgs: [String] = ["-y"]
-            if isConvertToSDR {
-                videoConvertorArgs.append(contentsOf: ["-vf", "tonemap=hable:desat=0,zscale=t=bt709:m=bt709:r=tv,format=yuv420p"])
-            }
-
-            switch conversionCodec {
-            case .av1:
-                videoConvertorArgs.append(contentsOf: ["-c:v", "libsvtav1", "-preset", "8", "-crf", "28", "-strict", "experimental"])
-            case .h265:
-                #if arch(arm64)
-                videoConvertorArgs.append(contentsOf: ["-c:v", "hevc_videotoolbox", "-strict", "experimental"])
-                #else
-                videoConvertorArgs.append(contentsOf: ["-c:v", "libx265", "-strict", "experimental"])
-                #endif
-            case .vp9:
-                videoConvertorArgs.append(contentsOf: ["-c:v", "libvpx-vp9", "-strict", "experimental"])
-            case .h264:
-                #if arch(arm64)
-                videoConvertorArgs.append(contentsOf: ["-c:v", "h264_videotoolbox", "-strict", "experimental"])
-                #else
-                videoConvertorArgs.append(contentsOf: ["-c:v", "libx264", "-strict", "experimental"])
-                #endif
-            case .none:
-                break
-            }
+            let videoConvertorArgs = Self.videoConversionArguments(options: options)
 
             args.append(contentsOf: [
                 "--recode-video", targetExt,
@@ -2910,6 +2914,38 @@ public struct DownloadResult: Sendable {
         }
 
         return args
+    }
+
+    nonisolated static func videoConversionArguments(options: DownloadOptions) -> [String] {
+        let conversionCodec = options.conversionCodec ?? .none
+        let isConvertToSDR = options.hdrAction == .convertToSDR
+        var videoConvertorArgs: [String] = ["-y"]
+        if isConvertToSDR {
+            videoConvertorArgs.append(contentsOf: ["-vf", "tonemap=hable:desat=0,zscale=t=bt709:m=bt709:r=tv,format=yuv420p"])
+        }
+
+        switch conversionCodec {
+        case .av1:
+            videoConvertorArgs.append(contentsOf: ["-c:v", "libsvtav1", "-preset", "8", "-crf", "28", "-strict", "experimental"])
+        case .h265:
+            #if arch(arm64)
+            videoConvertorArgs.append(contentsOf: ["-c:v", "hevc_videotoolbox", "-strict", "experimental"])
+            #else
+            videoConvertorArgs.append(contentsOf: ["-c:v", "libx265", "-strict", "experimental"])
+            #endif
+        case .vp9:
+            videoConvertorArgs.append(contentsOf: ["-c:v", "libvpx-vp9", "-strict", "experimental"])
+        case .h264:
+            #if arch(arm64)
+            videoConvertorArgs.append(contentsOf: ["-c:v", "h264_videotoolbox", "-strict", "experimental"])
+            #else
+            videoConvertorArgs.append(contentsOf: ["-c:v", "libx264", "-strict", "experimental"])
+            #endif
+        case .none:
+            break
+        }
+
+        return videoConvertorArgs
     }
 
     nonisolated static func resolvedOutputFileExtension(for options: DownloadOptions) -> String {
@@ -3014,7 +3050,7 @@ public struct DownloadResult: Sendable {
         if isCookieDenied(browser: browser, url: url) { return false }
         if force || !args.contains("--cookies-from-browser") {
             let cookieArg = Self.cookiesFromBrowserArgument(for: browser)
-            args.append(contentsOf: ["--cookies-from-browser", cookieArg])
+            args.insert(contentsOf: ["--cookies-from-browser", cookieArg], at: args.firstIndex(of: "--") ?? args.endIndex)
         }
         return true
     }
@@ -3139,6 +3175,7 @@ public struct DownloadResult: Sendable {
         if ua.contains("safari/") && !ua.contains("chrome/") && !ua.contains("chromium/") {
             return "safari:macos"
         }
+        if ua.contains("chrome/") || ua.contains("chromium/") { return "chrome:macos" }
         switch Self.validatedBrowserCookieSource(browserCookieSource) ?? configuredBrowserCookieSource() {
         case "firefox": return "firefox:macos"
         case "safari": return "safari:macos"
@@ -3400,7 +3437,7 @@ public struct DownloadResult: Sendable {
     /// WebKit session: hidden while that session's clearance and sign-in are valid, and
     /// shown in a window only when the user must complete Cloudflare's check or sign in.
     /// Siphon never completes either step itself.
-    private func loadRecuBrowserSession(pageURL: URL, videoID: String) async throws -> RecuBrowserSession {
+    private func loadRecuBrowserSession(pageURL: URL, videoID: String, requestedAt: Date) async throws -> RecuBrowserSession {
         if let loader = recuBrowserSessionLoader {
             return try await loader(pageURL, videoID)
         }
@@ -3433,8 +3470,11 @@ public struct DownloadResult: Sendable {
         var reloadedStaleToken = false
         var redirectedToSignIn = false
 
-        func presentWindow(reason: String) {
+        func presentWindow(reason: String) throws {
             guard window == nil else { return }
+            guard mayOpenSessionWindow(for: "recu.me", requestedAt: requestedAt) else {
+                throw YtdlpError.downloadFailed(LanguageService.s("verification_window_closed"))
+            }
             LoggerService.shared.log("[ProtectedSite] stage=browser-session result=\(reason); waiting for the user", level: .info)
             window = presentBrowserSessionWindow(
                 webView,
@@ -3450,11 +3490,12 @@ public struct DownloadResult: Sendable {
             try Task.checkCancellation()
 
             if windowDelegate.didClose {
-                throw YtdlpError.downloadFailed("The recu.me window was closed before verification or sign-in finished.")
+                recordSessionWindowClosed(for: "recu.me")
+                throw YtdlpError.downloadFailed(LanguageService.s("verification_window_closed"))
             }
             if Date() > deadline {
                 guard window != nil else {
-                    presentWindow(reason: "page-timeout")
+                    try presentWindow(reason: "page-timeout")
                     continue
                 }
                 throw YtdlpError.downloadFailed("Recu.me verification or sign-in did not finish within 5 minutes.")
@@ -3462,7 +3503,7 @@ public struct DownloadResult: Sendable {
 
             guard let state = await recuPageState(webView, videoID: videoID) else { continue }
             if state.challenge {
-                presentWindow(reason: "challenge")
+                try presentWindow(reason: "challenge")
                 continue
             }
 
@@ -3473,7 +3514,7 @@ public struct DownloadResult: Sendable {
                         currentWindow.orderFrontRegardless()
                         NSApp.requestUserAttention(.criticalRequest)
                     } else {
-                        presentWindow(reason: "sign-in-required")
+                        try presentWindow(reason: "sign-in-required")
                     }
                     deadline = Date().addingTimeInterval(300)
                     if let currentURL = webView.url, !Self.isRecuSignInURL(currentURL),
@@ -3501,7 +3542,7 @@ public struct DownloadResult: Sendable {
                     currentWindow.orderFrontRegardless()
                     NSApp.requestUserAttention(.criticalRequest)
                 } else {
-                    presentWindow(reason: "sign-in-required")
+                    try presentWindow(reason: "sign-in-required")
                 }
                 deadline = Date().addingTimeInterval(300)
                 if let signInURL = Self.recuSignInURL(for: pageURL) {
@@ -3526,7 +3567,14 @@ public struct DownloadResult: Sendable {
               let pageURL = URL(string: "https://recu.me/\(identity.model)/video/\(identity.videoID)/play") else {
             throw YtdlpError.downloadFailed("Unsupported protected-site URL. Expected /<model>/video/<id>/play.")
         }
-        let session = try await loadRecuBrowserSession(pageURL: pageURL, videoID: identity.videoID)
+        let requestedAt = Date()
+        let session = try await withExclusiveWebKitSession {
+            try Task.checkCancellation()
+            guard mayOpenSessionWindow(for: "recu.me", requestedAt: requestedAt) else {
+                throw YtdlpError.downloadFailed(LanguageService.s("verification_window_closed"))
+            }
+            return try await loadRecuBrowserSession(pageURL: pageURL, videoID: identity.videoID, requestedAt: requestedAt)
+        }
         let lastPageHTML = session.pageHTML
 
         let title: String = {
@@ -3749,7 +3797,7 @@ public struct DownloadResult: Sendable {
             try Task.checkCancellation()
 
             if windowDelegate.didClose {
-                sessionWindowClosedAt[siteHost] = Date()
+                recordSessionWindowClosed(for: siteHost)
                 throw YtdlpError.downloadFailed("The \(siteHost) window was closed before a video started.")
             }
             // Players start within a moment of each other; keep the order they started in.
@@ -4064,6 +4112,7 @@ public struct DownloadResult: Sendable {
 
         let store = boyfriendTVWebDataStore.httpCookieStore
         for cookie in cookies {
+            guard !Task.isCancelled else { return }
             await withCheckedContinuation { continuation in
                 store.setCookie(cookie) {
                     continuation.resume()
@@ -4089,11 +4138,19 @@ public struct DownloadResult: Sendable {
         }
     }
 
+    private func savedSafariSessionCookies() async -> [HTTPCookie] {
+        let provider = safariCookiesProvider
+        return await Task.detached {
+            Self.boyfriendTVSessionCookies(from: provider())
+        }.value
+    }
+
     private func seedBoyfriendTVSafariSession() async {
-        let cookies = Self.boyfriendTVSessionCookies(from: safariCookiesProvider())
-        guard !cookies.isEmpty else { return }
+        let cookies = await savedSafariSessionCookies()
+        guard !Task.isCancelled, !cookies.isEmpty else { return }
         let store = boyfriendTVWebDataStore.httpCookieStore
         for cookie in cookies {
+            guard !Task.isCancelled else { return }
             await withCheckedContinuation { continuation in
                 store.setCookie(cookie) {
                     continuation.resume()
@@ -4367,7 +4424,7 @@ public struct DownloadResult: Sendable {
         let finalResult: String
         if windowDelegate.didClose {
             finalResult = "window-closed"
-            sessionWindowClosedAt["boyfriendtv"] = Date()
+            recordSessionWindowClosed(for: "boyfriendtv")
         } else if let lastHTML {
             finalResult = isBoyfriendTVChallengeHTML(lastHTML) ? "challenge-timeout" : "page-timeout"
         } else {
@@ -4535,8 +4592,9 @@ public struct DownloadResult: Sendable {
         var safariSessionSignedOut = false
         if html.isEmpty, rawCookies?.isEmpty != false, effectiveBrowserSource == "safari",
            let ytdlp = ytdlpBinary, let scope = Self.boyfriendTVCookieScope(for: targetUrl) {
-            let header = Self.boyfriendTVSessionCookies(from: safariCookiesProvider())
-                .filter { Self.boyfriendTVCookieScope(for: $0.domain.trimmingCharacters(in: CharacterSet(charactersIn: "."))) == scope }
+            let cookies = await savedSafariSessionCookies()
+            try Task.checkCancellation()
+            let header = cookies.filter { Self.boyfriendTVCookieScope(for: $0.domain.trimmingCharacters(in: CharacterSet(charactersIn: "."))) == scope }
                 .map { "\($0.name)=\($0.value)" }
                 .joined(separator: "; ")
             if !header.isEmpty, let tempFile = createTempCookiesFileFromHeader(url: targetUrl, cookieHeader: header) {
@@ -6047,6 +6105,10 @@ public struct DownloadResult: Sendable {
     /// Streams the file through the cipher off the main actor. Each chunk is
     /// released per iteration, so memory stays flat for multi-GB videos.
     nonisolated static func decryptBestCamFile(at fileURL: URL, filename: String) throws {
+        let headerHandle = try FileHandle(forReadingFrom: fileURL)
+        let header = try headerHandle.read(upToCount: 12) ?? Data()
+        try headerHandle.close()
+        if header.count >= 8, header[4..<8] == Data("ftyp".utf8) { return }
         let keyHex = BestCamStreamCipher.deriveKeyHex(from: filename)
         guard let keyData = keyHex.data(using: .ascii), keyData.count == 32 else {
             throw YtdlpError.downloadFailed("Invalid stream decryption key")
@@ -6097,6 +6159,7 @@ public struct DownloadResult: Sendable {
         do {
             var hasMoreData = true
             while hasMoreData {
+                try Task.checkCancellation()
                 hasMoreData = try autoreleasepool {
                     guard let chunk = try readHandle.read(upToCount: chunkSize), !chunk.isEmpty else { return false }
                     guard let decrypted = cryptorUpdate(ref, chunk, into: &buffer) else {
@@ -6106,6 +6169,8 @@ public struct DownloadResult: Sendable {
                     return true
                 }
             }
+        } catch is CancellationError {
+            throw CancellationError()
         } catch let error as YtdlpError {
             throw error
         } catch {
@@ -6114,6 +6179,13 @@ public struct DownloadResult: Sendable {
 
         try? readHandle.close()
         try? writeHandle.close()
+        let outputHandle = try FileHandle(forReadingFrom: tempOutputURL)
+        let outputHeader = try outputHandle.read(upToCount: 12) ?? Data()
+        try outputHandle.close()
+        guard outputHeader.count >= 8, outputHeader[4..<8] == Data("ftyp".utf8) else {
+            throw YtdlpError.downloadFailed(LanguageService.s("media_integrity_failed"))
+        }
+        try Task.checkCancellation()
         _ = try FileManager.default.replaceItemAt(fileURL, withItemAt: tempOutputURL)
         replaced = true
     }
@@ -7577,6 +7649,7 @@ public struct DownloadResult: Sendable {
 
     private func isCookieFailureError(_ errorOutput: String) -> Bool {
         let lower = errorOutput.lowercased()
+        if lower.hasPrefix("chromium cookies:") { return true }
         if lower.contains("extracted") && lower.contains("cookies") {
             return false
         }
@@ -7635,11 +7708,18 @@ public struct DownloadResult: Sendable {
     }
 
     private func runCommand(_ args: [String]) async throws -> String {
+        let args = EgressBoundary.applying(to: args, downloaderPath: resolvedYtdlpBinary?.path)
         try Task.checkCancellation()
         do {
             return try await runTransportCommand(args)
         } catch let error as YtdlpError {
-            if case .commandFailed(let output) = error, isCookieFailureError(output), let idx = args.firstIndex(of: "--cookies-from-browser"), idx + 1 < args.count {
+            try Task.checkCancellation()
+            let output: String
+            switch error {
+            case .commandFailed(let message), .downloadFailed(let message): output = message
+            default: throw error
+            }
+            if isCookieFailureError(output), let idx = args.firstIndex(of: "--cookies-from-browser"), idx + 1 < args.count {
                 let browser = args[idx + 1]
                 LoggerService.shared.log("Browser cookie access failed for '\(browser)' or database missing. Checking alternative browsers...", level: .info)
                 if let urlArg = args.last {
@@ -7694,14 +7774,19 @@ public struct DownloadResult: Sendable {
         return siphonDir
     }
 
+    nonisolated static let sucuriUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+
+    var sucuriCookieResolver: ((String) async -> (name: String, value: String)?)?
+
     private func resolveSucuriCookie(for url: String) async -> (name: String, value: String)? {
         guard let parsedURL = URL(string: url), let host = parsedURL.host?.lowercased() else { return nil }
+        if let sucuriCookieResolver { return await sucuriCookieResolver(url) }
         let sucuriDomains = ["thisvid.com"]
         guard sucuriDomains.contains(where: { host == $0 || host.hasSuffix("." + $0) }) else { return nil }
 
         var request = URLRequest(url: parsedURL)
         request.timeoutInterval = 3.0
-        request.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36", forHTTPHeaderField: "User-Agent")
+        request.setValue(Self.sucuriUserAgent, forHTTPHeaderField: "User-Agent")
 
         do {
             let (data, _) = try await EgressBoundary.session.boundedData(for: request)
@@ -7830,24 +7915,30 @@ public struct DownloadResult: Sendable {
     /// arguments. Siphon sets both and only accepts output inside the save
     /// folder, so an override downloads fine but the job reports failure.
     static func removingOutputLocationArguments(_ arguments: [String]) -> [String] {
-        let separateValue: Set<String> = ["-P", "--paths", "-o", "--output"]
+        removingRestrictedArguments(arguments, options: ["-P", "--paths", "-o", "--output", "--config-locations", "--exec", "--exec-before-download"])
+    }
+
+    private static func removingRestrictedArguments(_ arguments: [String], options: Set<String>) -> [String] {
         var kept: [String] = []
         var index = arguments.startIndex
         while index < arguments.endIndex {
             let argument = arguments[index]
-            if separateValue.contains(argument) {
-                LoggerService.shared.log("Ignoring additional argument \(argument): Siphon controls the output location.", level: .warning)
-                index += 2
-                continue
+            let name = String(argument.prefix { $0 != "=" })
+            let restricted = options.contains(name) || options.contains { option in
+                if option.hasPrefix("--") { return name.count > 2 && option.hasPrefix(name) }
+                return argument.hasPrefix(option)
             }
-            let attachedValue = argument.hasPrefix("--paths=") || argument.hasPrefix("--output=")
-                || (argument.count > 2 && (argument.hasPrefix("-P") || argument.hasPrefix("-o")) && !argument.hasPrefix("--"))
-            if attachedValue {
-                LoggerService.shared.log("Ignoring additional argument \(argument.prefix(2)): Siphon controls the output location.", level: .warning)
+            if argument == "--" {
+                // The job owns the sole end-of-options delimiter.
+                index += 1
+            } else if restricted {
+                LoggerService.shared.log("Ignoring a restricted additional argument.", level: .warning)
+                let hasAttachedValue = argument.contains("=") || (!argument.hasPrefix("--") && argument.count > 2)
+                index += !hasAttachedValue && index + 1 < arguments.endIndex && !arguments[index + 1].hasPrefix("-") ? 2 : 1
             } else {
                 kept.append(argument)
+                index += 1
             }
-            index += 1
         }
         return kept
     }
@@ -7864,56 +7955,46 @@ public struct DownloadResult: Sendable {
         }
     }
 
-    /// Drops `--proxy` (with its value) from user arguments when public-network
-    /// boundary enforcement is active, so deep-link jobs cannot bypass the egress proxy.
+    /// Drops proxy and executable overrides from user arguments when the public-network
+    /// boundary is active, including custom downloader/postprocessor command lines.
     static func removingProxyArguments(_ arguments: [String]) -> [String] {
-        var kept: [String] = []
-        var index = arguments.startIndex
-        while index < arguments.endIndex {
-            let argument = arguments[index]
-            if argument == "--proxy" {
-                LoggerService.shared.log("Ignoring additional argument --proxy: Siphon enforces egress boundary for this job.", level: .warning)
-                index += 2
-                continue
-            }
-            if argument.hasPrefix("--proxy=") {
-                LoggerService.shared.log("Ignoring additional argument --proxy: Siphon enforces egress boundary for this job.", level: .warning)
-            } else {
-                kept.append(argument)
-            }
-            index += 1
-        }
-        return kept
+        removingRestrictedArguments(arguments, options: [
+            "--proxy", "--geo-verification-proxy", "--downloader", "--downloader-args",
+            "--external-downloader", "--external-downloader-args", "--config-locations",
+            "--exec", "--exec-before-download", "--postprocessor-args", "--ppa",
+            "--use-postprocessor", "--plugin-dirs", "--js-runtimes", "--remote-components", "--ffmpeg-location"
+        ])
     }
 
     nonisolated static func parseArgumentString(_ argString: String) -> [String] {
         var args: [String] = []
         var current = ""
-        var inQuotes = false
-        var quoteChar: Character = "\""
-
+        var quote: Character?
+        var escaping = false
+        var started = false
         for char in argString {
-            if char == "\"" || char == "'" {
-                if inQuotes && char == quoteChar {
-                    inQuotes = false
-                } else if !inQuotes {
-                    inQuotes = true
-                    quoteChar = char
-                } else {
-                    current.append(char)
-                }
-            } else if char.isWhitespace && !inQuotes {
-                if !current.isEmpty {
-                    args.append(current)
-                    current = ""
-                }
+            if escaping {
+                // Inside double quotes, retain backslashes before ordinary characters.
+                if quote == "\"", char != "\"", char != "\\" { current.append("\\") }
+                current.append(char)
+                escaping = false
+            } else if char == "\\", quote != "'" {
+                escaping = true
+                started = true
+            } else if let activeQuote = quote {
+                if char == activeQuote { quote = nil } else { current.append(char) }
+            } else if char == "\"" || char == "'" {
+                quote = char
+                started = true
+            } else if char.isWhitespace {
+                if started { args.append(current); current = ""; started = false }
             } else {
                 current.append(char)
+                started = true
             }
         }
-        if !current.isEmpty {
-            args.append(current)
-        }
+        if escaping { current.append("\\") }
+        if started { args.append(current) }
         return args
     }
 
@@ -8226,7 +8307,7 @@ final class ThreadSafeOutputState: @unchecked Sendable {
         // Bound error buffer to prevent unbounded memory growth during long-running error outputs.
         // utf8.count is O(1); count walks every character on each appended line.
         if errorText.utf8.count > 100_000 {
-            errorText = String(errorText.suffix(50_000))
+            errorText = String(decoding: errorText.utf8.suffix(50_000), as: UTF8.self)
         }
         lock.unlock()
     }

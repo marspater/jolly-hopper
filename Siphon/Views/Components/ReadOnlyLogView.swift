@@ -64,6 +64,7 @@ struct ReadOnlyLogView: NSViewRepresentable {
         // repeated system font table lookups, and dictionary allocations during high-frequency log updates.
         let currentText = textView.string
         if currentText != text {
+            let shouldFollowTail = currentText.isEmpty || textView.visibleRect.maxY >= textView.bounds.maxY - 20
             if !currentText.isEmpty && text.hasPrefix(currentText) {
                 let appendText = String(text.dropFirst(currentText.count))
                 if let storage = textView.textStorage {
@@ -79,9 +80,10 @@ struct ReadOnlyLogView: NSViewRepresentable {
                 textView.textColor = NSColor.labelColor
             }
 
-            // Auto-scroll to bottom on update
-            let range = NSRange(location: text.utf16.count, length: 0)
-            textView.scrollRangeToVisible(range)
+            if shouldFollowTail {
+                let range = NSRange(location: text.utf16.count, length: 0)
+                textView.scrollRangeToVisible(range)
+            }
         }
     }
 }
