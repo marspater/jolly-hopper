@@ -149,7 +149,7 @@ struct DownloadDiagnosticsView: View {
     private var runtimeTab: some View {
         VStack(spacing: 12) {
             diagnosticSection(title: languageService.s("diag_process_execution")) {
-                diagnosticRow(label: languageService.s("diag_process_id"), value: download.diagnostics.pid.map { "\($0)" } ?? (download.status == .downloading || download.status == .processing ? languageService.s("diag_active_subprocess") : languageService.s("diag_terminated")))
+                diagnosticRow(label: languageService.s("diag_process_id"), value: download.diagnostics.pid.map { "\($0)" } ?? (download.status == .downloading || download.status == .fetching || download.status == .processing ? languageService.s("diag_active_subprocess") : languageService.s("diag_terminated")))
                 diagnosticRow(label: languageService.s("diag_exit_status"), value: diagnosticExitStatus)
                 diagnosticRow(label: languageService.s("diag_ytdlp_engine"), value: download.diagnostics.ytdlpVersion ?? languageService.s("diag_ytdlp_fallback"))
                 diagnosticRow(label: languageService.s("diag_ffmpeg_pipeline"), value: download.diagnostics.ffmpegVersion ?? languageService.s("diag_ffmpeg_fallback"))
@@ -178,7 +178,7 @@ struct DownloadDiagnosticsView: View {
             }
 
             diagnosticSection(title: languageService.s("diag_color_section")) {
-                diagnosticRow(label: languageService.s("diag_dynamic_range"), value: download.diagnostics.dynamicRange ?? (download.mediaInfo?.formats?.first(where: { $0.isHDR }) != nil ? "HDR" : languageService.s("not_detected")))
+                diagnosticRow(label: languageService.s("diag_dynamic_range"), value: download.diagnostics.dynamicRange ?? (download.mediaInfo?.formats?.first(where: { $0.isHDR }) != nil ? languageService.s("diag_hdr") : languageService.s("not_detected")))
                 diagnosticRow(label: languageService.s("diag_color_space"), value: download.diagnostics.colorSpace ?? languageService.s("not_detected"))
                 diagnosticRow(label: languageService.s("diag_bit_depth"), value: download.diagnostics.bitDepth.map { String(format: languageService.s("diag_bit_depth_value"), $0) } ?? languageService.s("not_detected"))
                 diagnosticRow(label: languageService.s("diag_hdr_policy"), value: download.options.hdrAction?.title(lang: languageService) ?? languageService.s("diag_preserve_hdr"))

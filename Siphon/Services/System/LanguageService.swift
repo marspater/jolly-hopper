@@ -459,6 +459,7 @@ class LanguageService: ObservableObject {
         "diag_resolution_fps": "Resolution & FPS",
         "diag_color_section": "Color Space & Dynamic Range (EDR)",
         "diag_dynamic_range": "Dynamic Range",
+        "diag_hdr": "HDR",
         "diag_color_space": "Color Primaries / Space",
         "diag_bit_depth": "Bit Depth",
         "diag_hdr_policy": "HDR Action Policy",
