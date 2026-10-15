@@ -297,7 +297,7 @@ final class DownloadExecutor: ObservableObject {
 
             Self.populateDiagnostics(for: download, info: info, ytdlpVersion: ytdlpVersion)
 
-            let rawBaseName = download.options.customFilename ?? download.title
+            let rawBaseName = download.outputBaseName
             let sanitizedBaseName = YtdlpService.sanitizeFilename(rawBaseName)
             let folderPath = download.options.saveFolder
 
@@ -328,9 +328,7 @@ final class DownloadExecutor: ObservableObject {
             }
 
             let (resolvedBaseName, candidateKey) = queue.planUniqueOutputPath(for: download)
-            if resolvedBaseName != sanitizedBaseName {
-                download.options.customFilename = resolvedBaseName
-            }
+            download.resolvedOutputBaseName = resolvedBaseName
             queue.reserveOutputPath(candidateKey)
             defer {
                 queue.unreserveOutputPath(candidateKey)
@@ -394,9 +392,11 @@ final class DownloadExecutor: ObservableObject {
             }
             eventCoalescer = coalescer
 
+            var executionOptions = download.options
+            executionOptions.customFilename = download.resolvedOutputBaseName ?? executionOptions.customFilename
             let downloadResult = try await ytdlpService.download(
                 url: download.url,
-                options: download.options,
+                options: executionOptions,
                 mediaInfo: download.mediaInfo,
                 processController: controller,
                 temporaryDirectory: download.scratchDirectory,

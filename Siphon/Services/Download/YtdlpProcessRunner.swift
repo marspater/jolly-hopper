@@ -722,8 +722,8 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
                     if !path.isEmpty {
                         outputState.addCandidatePath(path)
                     }
-                } else if line.contains("[Fixup") && line.contains("into") {
-                    if let intoRange = line.range(of: "into") {
+                } else if line.contains("[Fixup") {
+                    if let intoRange = line.range(of: " into \"", options: .backwards) {
                         let path = line[intoRange.upperBound...]
                             .trimmingCharacters(in: .whitespacesAndNewlines)
                             .trimmingCharacters(in: CharacterSet(charactersIn: "\""))
@@ -941,7 +941,9 @@ final class FfmpegDownloadProgress: @unchecked Sendable {
             return parts[0] * 3600 + parts[1] * 60 + parts[2]
         }
         if line.contains("Duration:") {
-            duration = seconds(token(after: "Duration:"))
+            if let parsed = seconds(token(after: "Duration:")), parsed > (duration ?? 0) {
+                duration = parsed
+            }
             return nil
         }
         guard line.trimmingCharacters(in: .whitespaces).hasPrefix("frame=") ||

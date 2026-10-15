@@ -13,6 +13,7 @@ struct QueueRecoveryRecord: Codable, Identifiable, Sendable {
     let title: String
     let createdAt: Date
     let requiresAdvancedArgumentsReview: Bool?
+    let resolvedOutputBaseName: String?
     let options: DownloadOptions
     let status: DownloadStatus
     let progress: Double
@@ -25,6 +26,7 @@ struct QueueRecoveryRecord: Codable, Identifiable, Sendable {
 
     @MainActor
     init(download: Download) {
+        self.resolvedOutputBaseName = download.resolvedOutputBaseName
         self.id = download.id
         self.url = download.url
         self.title = download.displayTitle
@@ -68,8 +70,10 @@ struct QueueRecoveryRecord: Codable, Identifiable, Sendable {
             options: restoredOptions,
             title: self.title,
             id: self.id,
-            createdAt: self.createdAt
+            createdAt: self.createdAt,
+            titleIsDecoded: true
         )
+        download.resolvedOutputBaseName = self.resolvedOutputBaseName.map(YtdlpService.sanitizeFilename)
         download.requiresAdvancedArgumentsReview = self.requiresAdvancedArgumentsReview ?? false
         download.status = self.status
         download.progress = self.progress

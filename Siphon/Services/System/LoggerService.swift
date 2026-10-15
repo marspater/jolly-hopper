@@ -8,6 +8,8 @@ class LoggerService: ObservableObject {
     @Published var logs: [String] = []
     let logFileURL: URL
     private let maxLogEntries = 1000
+    private var logGeneration = 0
+    private(set) var initialLogLoadTask: Task<Void, Never>?
     private let fileQueue = DispatchQueue(label: "com.siphon.loggerQueue", qos: .utility)
 
     private static let dateFormatter: DateFormatter = {
@@ -26,7 +28,7 @@ class LoggerService: ObservableObject {
         (#"(?i)set-cookie:\s*[^\r\n]+"#, "Set-Cookie: <REDACTED>"),
         (#"(?i)(x-[a-z0-9\-]*api-key|x-[a-z0-9\-]*token|x-[a-z0-9\-]*auth[a-z0-9\-]*):\s*[^\r\n]+"#, "$1: <REDACTED>"),
         (#"(?i)(token|api_key|password|pass|secret|auth|signature|sig|access_token|session|sessionid|sess|jwt|key|apikey|private_key|client_secret|pcode|oauth_token)=([^\s&"'<>]+)"#, "$1=<REDACTED>"),
-        (#"(?i)("|\')(token|api_key|password|pass|secret|auth|signature|sig|access_token|session|sessionid|sess|jwt|key|apikey|private_key|client_secret|pcode|oauth_token)("|\')\s*:\s*("|\')[^"']+\1"#, "$1$2$3: $4<REDACTED>$1")
+        (#"(?i)(["'])(token|api_key|password|pass|secret|auth|signature|sig|access_token|session|sessionid|sess|jwt|key|apikey|private_key|client_secret|pcode|oauth_token)\1\s*:\s*(["'])(?:\\.|(?!\3)[^\\])*\3"#, "$1$2$1: $3<REDACTED>$3")
     ].compactMap { pattern, replacement in
         guard let regex = try? NSRegularExpression(pattern: pattern, options: []) else { return nil }
         return (regex, replacement)
@@ -157,7 +159,7 @@ class LoggerService: ObservableObject {
         return sanitizedArgs.joined(separator: " ")
     }
 
-    private init() {
+    init(logFileURL: URL? = nil, initialLogReader: (@Sendable () async -> [String])? = nil) {
         // The unit tests run inside Siphon.app, so keep their fixture output
         // out of the user's real debug log.
         let logDirectory = NotificationService.isRunningTests
@@ -165,31 +167,38 @@ class LoggerService: ObservableObject {
             : URL.applicationSupportDirectory.appendingPathComponent("Siphon")
 
         try? FileManager.default.createDirectory(at: logDirectory, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
-        self.logFileURL = logDirectory.appendingPathComponent("siphon_debug.log")
-        if FileManager.default.fileExists(atPath: logFileURL.path) {
-            try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: logFileURL.path)
+        self.logFileURL = logFileURL ?? logDirectory.appendingPathComponent("siphon_debug.log")
+        if FileManager.default.fileExists(atPath: self.logFileURL.path) {
+            try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: self.logFileURL.path)
         }
 
-        loadInitialLogs()
+        loadInitialLogs(reader: initialLogReader)
     }
 
-    private func loadInitialLogs() {
+    private func loadInitialLogs(reader: (@Sendable () async -> [String])?) {
         let fileURL = logFileURL
         let maxEntries = maxLogEntries
-        Task.detached {
-            guard let handle = FileHandle(forReadingAtPath: fileURL.path) else { return }
-            defer { try? handle.close() }
+        let generation = logGeneration
+        initialLogLoadTask = Task.detached {
+            let initialLogs: [String]
+            if let reader {
+                initialLogs = await reader()
+            } else {
+                guard let handle = FileHandle(forReadingAtPath: fileURL.path) else { return }
+                defer { try? handle.close() }
 
-            let fileSize = (try? handle.seekToEnd()) ?? 0
-            guard fileSize > 0 else { return }
+                let fileSize = (try? handle.seekToEnd()) ?? 0
+                guard fileSize > 0 else { return }
 
-            let readSize = min(fileSize, 256 * 1024)
-            let seekPos = fileSize - readSize
-            try? handle.seek(toOffset: seekPos)
-            guard let data = try? handle.read(upToCount: Int(readSize)), !data.isEmpty else { return }
+                let readSize = min(fileSize, 256 * 1024)
+                let seekPos = fileSize - readSize
+                try? handle.seek(toOffset: seekPos)
+                guard let data = try? handle.read(upToCount: Int(readSize)), !data.isEmpty else { return }
 
-            let initialLogs = Self.extractTailLines(from: data, maxEntries: maxEntries)
+                initialLogs = Self.extractTailLines(from: data, maxEntries: maxEntries, discardFirstLine: seekPos > 0)
+            }
             await MainActor.run {
+                guard self.logGeneration == generation else { return }
                 // Entries logged during launch are already in the file tail;
                 // replacing them would only keep what was on disk at read time.
                 let persisted = Set(initialLogs)
@@ -199,13 +208,12 @@ class LoggerService: ObservableObject {
         }
     }
 
-    nonisolated static func extractTailLines(from data: Data, maxEntries: Int) -> [String] {
-        guard !data.isEmpty else { return [] }
-        let count = data.count
-        var lineStarts: [Int] = [0]
-        for i in 0..<count {
-            if data[i] == 0x0A && i + 1 < count {
-                lineStarts.append(i + 1)
+    nonisolated static func extractTailLines(from data: Data, maxEntries: Int, discardFirstLine: Bool = false) -> [String] {
+        guard !data.isEmpty, maxEntries > 0 else { return [] }
+        var lineStarts: [Int] = discardFirstLine ? [] : [data.startIndex]
+        for byteIndex in data.indices {
+            if data[byteIndex] == 0x0A && byteIndex + 1 < data.endIndex {
+                lineStarts.append(byteIndex + 1)
             }
         }
 
@@ -313,7 +321,7 @@ class LoggerService: ObservableObject {
             try? handle.seek(toOffset: seekPos)
             guard let data = try? handle.read(upToCount: Int(readSize)), !data.isEmpty else { return }
 
-            let lines = extractTailLines(from: data, maxEntries: maxEntries)
+            let lines = extractTailLines(from: data, maxEntries: maxEntries, discardFirstLine: seekPos > 0)
             guard !lines.isEmpty else { return }
             let trimmed = lines.joined(separator: "\n") + "\n"
             if let trimmedData = trimmed.data(using: .utf8),
@@ -325,6 +333,7 @@ class LoggerService: ObservableObject {
     }
 
     func clearLogs() {
+        logGeneration += 1
         logs.removeAll()
         let fileURL = logFileURL
         fileQueue.async {
@@ -334,6 +343,10 @@ class LoggerService: ObservableObject {
             }
         }
         log("Logs cleared", level: .info)
+    }
+
+    nonisolated static func sanitizedDiagnosticExport(_ text: String) -> String {
+        sanitizeLogContentForExport(sanitizeDiagnosticText(text))
     }
 
     nonisolated static func sanitizeLogContentForExport(_ content: String) -> String {

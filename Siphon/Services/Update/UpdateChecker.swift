@@ -34,7 +34,7 @@ public final class UpdateChecker: ObservableObject {
     public var requireSignedManifest: Bool
     private var updateOperationID: UUID?
 
-    private let downloader = UpdateDownloader()
+    private let downloader: UpdateDownloader
     private let installer = UpdateInstaller()
     private let manifestVerifier: UpdateManifestVerifier
     private let fetchManifestData: @Sendable (URL) async throws -> Data
@@ -58,10 +58,12 @@ public final class UpdateChecker: ObservableObject {
     }
 
     public init(
+        downloader: UpdateDownloader = UpdateDownloader(),
         manifestVerifier: UpdateManifestVerifier = UpdateManifestVerifier(),
         requireSignedManifest: Bool = false,
         fetchManifestData: @escaping @Sendable (URL) async throws -> Data = { try await UpdateDownloader.fetchData(from: $0) }
     ) {
+        self.downloader = downloader
         self.manifestVerifier = manifestVerifier
         self.requireSignedManifest = requireSignedManifest
         self.fetchManifestData = fetchManifestData
@@ -86,9 +88,12 @@ public final class UpdateChecker: ObservableObject {
         #else
         let archSuffixes = ["-x86_64", "-intel", "-universal", ""]
         #endif
-        let lowerTag = tag.lowercased()
+        let lowerTag = tag.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let cleanTag = lowerTag.hasPrefix("v") ? String(lowerTag.dropFirst()) : lowerTag
         let accepted = archSuffixes.flatMap { arch in
-            ["dmg", "zip"].map { "siphon-\(lowerTag)\(arch).\($0)" }
+            ["dmg", "zip"].flatMap { ext in
+                [cleanTag, "v" + cleanTag].map { "siphon-\($0)\(arch).\(ext)" }
+            }
         }
         let byName = Dictionary(
             assets.compactMap { asset in (asset["name"] as? String).map { ($0.lowercased(), asset) } },
@@ -280,7 +285,7 @@ public final class UpdateChecker: ObservableObject {
             guard let manifest = await verifySignedReleaseManifest(candidate: candidate, operationID: operationID, existingChecksum: verifiedChecksum) else {
                 return nil
             }
-            verifiedChecksum = manifest
+            return manifest
         }
 
         if let checksumURL = candidate.checksumURL {

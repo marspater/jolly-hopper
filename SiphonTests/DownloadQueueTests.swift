@@ -22,6 +22,51 @@ final class DownloadQueueTests: XCTestCase {
         try await super.tearDown()
     }
 
+    func testReservedNamesStaySeparateAcrossRetriesRecoveryAndHistory() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        var options = DownloadOptions.default
+        options.saveFolder = folder
+        let job = Download(url: "https://example.com/video", options: options, title: "Clip")
+        let queue = DownloadQueue(userDefaults: testDefaults)
+        let first = queue.reserveUniqueOutputPath(for: job)
+        XCTAssertNil(job.options.customFilename)
+        queue.unreserveOutputPath(first.candidatePath)
+        let second = queue.reserveUniqueOutputPath(for: job, forceIncrement: true)
+        XCTAssertEqual(second.resolvedBaseName, "Clip (1)")
+        queue.unreserveOutputPath(second.candidatePath)
+        let third = queue.reserveUniqueOutputPath(for: job, forceIncrement: true)
+        XCTAssertEqual(third.resolvedBaseName, "Clip (2)")
+        queue.unreserveOutputPath(third.candidatePath)
+        XCTAssertNil(job.options.customFilename)
+        job.status = .paused
+        let history = try JSONDecoder().decode(HistoricDownload.self, from: JSONEncoder().encode(HistoricDownload(download: job))).toDownload()
+        let recovery = try JSONDecoder().decode(QueueRecoveryRecord.self, from: JSONEncoder().encode(QueueRecoveryRecord(download: job))).toDownload()
+        for restored in [history, recovery] {
+            XCTAssertNil(restored.options.customFilename)
+            XCTAssertEqual(restored.resolvedOutputBaseName, "Clip (2)")
+            XCTAssertEqual(queue.planUniqueOutputPath(for: restored).resolvedBaseName, "Clip (2)")
+            XCTAssertEqual(queue.planUniqueOutputPath(for: restored, forceIncrement: true).resolvedBaseName, "Clip (3)")
+        }
+        job.resolvedOutputBaseName = "Clip (\(Int.max - 1))"
+        XCTAssertEqual(queue.planUniqueOutputPath(for: job, forceIncrement: true).resolvedBaseName, "Clip (\(Int.max))")
+        let fetching = Download(url: "https://example.com/video", options: options)
+        fetching.title = Download.fetchingPlaceholder
+        let reserved = queue.reserveUniqueOutputPath(for: fetching)
+        XCTAssertFalse(reserved.resolvedBaseName.contains(Download.fetchingPlaceholder))
+        XCTAssertNil(fetching.options.customFilename)
+        XCTAssertNil(fetching.resolvedOutputBaseName)
+        queue.unreserveOutputPath(reserved.candidatePath)
+        fetching.title = "Actual title"
+        XCTAssertEqual(queue.planUniqueOutputPath(for: fetching).resolvedBaseName, "Actual title")
+        // A literal custom name's suffix remains part of the user's base name.
+        options.customFilename = "Custom (1)"
+        let custom = Download(url: "https://example.com/v", options: options, title: "Title")
+        XCTAssertEqual(queue.reserveUniqueOutputPath(for: custom, forceIncrement: true).resolvedBaseName, "Custom (1) (1)")
+        XCTAssertEqual(custom.options.customFilename, "Custom (1)")
+    }
+
     func testSlotReservationAndRelease() {
         testDefaults.set(2, forKey: UserDefaultsKeys.maxConcurrentDownloads)
         let queue = DownloadQueue(userDefaults: testDefaults)

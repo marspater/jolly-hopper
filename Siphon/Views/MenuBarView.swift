@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct MenuBarView: View {
+    let openMainWindow: () -> Void
     @EnvironmentObject var downloadManager: DownloadManager
     @EnvironmentObject var languageService: LanguageService
     @Environment(\.appearsActive) private var appearsActive
@@ -324,12 +325,11 @@ struct MenuBarView: View {
                 MenuBarManager.shared.closePopover()
                 NSApp.setActivationPolicy(.regular)
                 NSApp.activate(ignoringOtherApps: true)
-                if let window = NSApp.windows.first(where: { $0.isVisible && $0.className != "NSStatusBarWindow" }) {
+                if let window = NSApp.windows.first(where: { $0.identifier == NSUserInterfaceItemIdentifier("SiphonMainWindow") }) {
+                    if window.isMiniaturized { window.deminiaturize(nil) }
                     window.makeKeyAndOrderFront(nil)
                 } else {
-                    if let openURL = URL(string: "siphon://show") {
-                        NSWorkspace.shared.open(openURL)
-                    }
+                    openMainWindow()
                 }
             } label: {
                 HStack(spacing: 5) {

@@ -139,12 +139,10 @@ public enum ExternalDownloadTargetPolicy {
     }
 
     private static func isGloballyRoutableIPv6(_ host: String) -> Bool {
-        var value = host
+        let value = host
             .trimmingCharacters(in: CharacterSet(charactersIn: "[]"))
             .lowercased()
-        if let zoneIndex = value.firstIndex(of: "%") {
-            value = String(value[..<zoneIndex])
-        }
+        guard !value.contains("%") else { return false }
 
         var sin6Addr = in6_addr()
         let parsed = value.withCString { cString in
@@ -503,23 +501,9 @@ public final class AppState: ObservableObject {
         externalTargetURL = urlString.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    public func consumeExternalTarget(for urlString: String) -> Bool {
-        let clean = urlString.trimmingCharacters(in: .whitespacesAndNewlines)
-        if let target = externalTargetURL, target == clean {
-            externalTargetURL = nil
-            return true
-        }
-        return false
-    }
-
-    public func consumeExternalTarget(for urls: [String]) -> Bool {
-        let cleanUrls = Set(urls.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) })
-        if let target = externalTargetURL, cleanUrls.contains(target) {
-            externalTargetURL = nil
-            return true
-        }
-        return false
-    }
+    /// Provenance belongs to the Add Download session, including edited URLs and batches.
+    /// Only dismissal clears it; consuming credentials must never remove the boundary.
+    public var hasExternalTarget: Bool { externalTargetURL != nil }
 
     /// Clears browser credentials only. The external-target marker is security
     /// provenance, not a credential: it must outlive credential clears, or a URL
