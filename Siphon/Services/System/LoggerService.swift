@@ -211,9 +211,9 @@ class LoggerService: ObservableObject {
     nonisolated static func extractTailLines(from data: Data, maxEntries: Int, discardFirstLine: Bool = false) -> [String] {
         guard !data.isEmpty, maxEntries > 0 else { return [] }
         var lineStarts: [Int] = discardFirstLine ? [] : [data.startIndex]
-        for i in data.indices {
-            if data[i] == 0x0A && i + 1 < data.endIndex {
-                lineStarts.append(i + 1)
+        for byteIndex in data.indices {
+            if data[byteIndex] == 0x0A && byteIndex + 1 < data.endIndex {
+                lineStarts.append(byteIndex + 1)
             }
         }
 

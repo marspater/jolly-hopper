@@ -148,30 +148,38 @@ final class DownloadQueue: ObservableObject {
         // --force-overwrites would clobber an unrelated file.
         let overwritesOriginal = download.options.forceOverwrite == true
 
-        var counter = 1
         let originalName = download.resolvedOutputBaseName ?? sanitizedBase
         var candidateName = originalName
+        var counter = 1
         if forceIncrement {
-            let prefix = sanitizedBase + " ("
-            if originalName.hasPrefix(prefix), originalName.hasSuffix(")"),
-               let suffix = Int(originalName.dropFirst(prefix.count).dropLast()), suffix > 0, suffix < Int.max {
-                counter = suffix + 1
-            }
+            counter = Self.nextOutputSuffix(after: originalName, baseName: sanitizedBase)
             candidateName = "\(sanitizedBase) (\(counter))"
             counter = counter == Int.max ? 1 : counter + 1
         }
+
+        func isUnavailable(_ baseName: String) -> Bool {
+            if isOutputReserved(baseName: baseName, in: folder, options: download.options) { return true }
+            if overwritesOriginal && baseName == originalName { return false }
+            let path = folder.appendingPathComponent("\(baseName).\(ext)").path
+            return Self.mediaFileCollides(baseName: baseName, options: download.options, existingMediaFileKeys: existingFiles) ||
+                fileManager.fileExists(atPath: path)
+        }
         var candidatePath = folder.appendingPathComponent("\(candidateName).\(ext)").path
 
-        while isOutputReserved(baseName: candidateName, in: folder, options: download.options) ||
-              (!(overwritesOriginal && candidateName == originalName) &&
-               (Self.mediaFileCollides(baseName: candidateName, options: download.options, existingMediaFileKeys: existingFiles) ||
-                fileManager.fileExists(atPath: candidatePath))) {
+        while isUnavailable(candidateName) {
             candidateName = "\(sanitizedBase) (\(counter))"
             candidatePath = folder.appendingPathComponent("\(candidateName).\(ext)").path
             counter = counter == Int.max ? 1 : counter + 1
         }
 
         return (candidateName, candidatePath)
+    }
+
+    private static func nextOutputSuffix(after name: String, baseName: String) -> Int {
+        let prefix = baseName + " ("
+        guard name.hasPrefix(prefix), name.hasSuffix(")"),
+              let suffix = Int(name.dropFirst(prefix.count).dropLast()), suffix > 0, suffix < Int.max else { return 1 }
+        return suffix + 1
     }
 
     @discardableResult
