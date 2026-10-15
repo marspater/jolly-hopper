@@ -56,7 +56,7 @@ struct ContentView: View {
                 }
                 .onChange(of: appState.showAddDownloadSheet) { _, newValue in
                     if newValue {
-                        AddDownloadWindowManager.shared.showAddDownloadWindow(downloadManager: downloadManager, appState: appState, languageService: languageService)
+                        AddDownloadWindowManager.shared.showAddDownloadWindow(downloadManager: downloadManager, appState: appState, languageService: languageService, updateChecker: updateChecker)
                         appState.showAddDownloadSheet = false
                     }
                 }

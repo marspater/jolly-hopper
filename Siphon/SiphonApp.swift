@@ -114,7 +114,7 @@ struct SiphonApp: App {
             }
             CommandGroup(replacing: .newItem) {
                 Button(languageService.s("new_download") + "…") {
-                    AddDownloadWindowManager.shared.showAddDownloadWindow(downloadManager: downloadManager, appState: appState, languageService: languageService)
+                    AddDownloadWindowManager.shared.showAddDownloadWindow(downloadManager: downloadManager, appState: appState, languageService: languageService, updateChecker: updateChecker)
                 }
                 .keyboardShortcut("n", modifiers: .command)
             }

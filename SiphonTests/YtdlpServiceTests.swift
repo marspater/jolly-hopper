@@ -54,6 +54,25 @@ final class YtdlpServiceTests: XCTestCase {
 
     var service: YtdlpService!
 
+    func testEnabledSubtitlesWithEmptyLanguagesUseEnglishRatherThanSilentlySkipping() async throws {
+        var options = DownloadOptions.default
+        options.downloadSubtitles = true
+        options.subtitleLanguages = []
+        options.embedThumbnail = false
+        service.processRunner = MockYtdlpProcessRunner(mockDownload: { args in
+            XCTAssertTrue(args.contains("--write-subs"))
+            XCTAssertTrue(args.contains("--write-auto-subs"))
+            let index = try XCTUnwrap(args.firstIndex(of: "--sub-langs"))
+            XCTAssertEqual(args[index + 1], "en")
+            throw CancellationError()
+        })
+        do {
+            _ = try await service.download(url: "https://example.com/video", options: options, onProgress: { _, _, _ in }, onOutput: { _ in })
+            XCTFail("Expected cancellation")
+        } catch is CancellationError {}
+    }
+
+
     func testChromiumFailuresRetryMetadataAndDownloadsAnonymously() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)

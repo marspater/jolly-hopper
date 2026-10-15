@@ -127,14 +127,12 @@ class DownloadManager: ObservableObject {
             switch download.status {
             case .downloading, .fetching, .processing:
                 downloading += 1
-            case .queued, .paused:
+            case .queued, .paused, .fileExists:
                 queued += 1
             case .completed:
                 completed += 1
             case .failed, .stopped:
                 failed += 1
-            default:
-                break
             }
         }
         return (downloading, queued, completed, failed)

@@ -3,6 +3,19 @@ import XCTest
 
 @MainActor
 final class DownloadManagerTests: XCTestCase {
+    @MainActor
+    func testFileCollisionsRemainVisibleAndCountedOnQueueTab() {
+        let manager = DownloadManager()
+        defer { manager.shutdown() }
+        let job = Download(url: "https://example.com/video", options: .default, title: "Collision")
+        job.status = .fileExists
+        manager.downloads = [job]
+        XCTAssertEqual(manager.queuedDownloads.map(\.id), [job.id])
+        XCTAssertEqual(manager.actionRequiredDownloads.map(\.id), [job.id])
+        XCTAssertEqual(manager.queuedCount, 1)
+        XCTAssertTrue(DownloadQueue.isQueueTabMember(job))
+    }
+
 
     func testRecentDownloadsListsNewestJobsFirst() {
         let manager = DownloadManager()
