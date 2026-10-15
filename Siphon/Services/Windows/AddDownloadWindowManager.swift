@@ -23,7 +23,9 @@ final class AddDownloadWindowManager: NSObject, NSWindowDelegate {
         let hostingController = NSHostingController(rootView: addDownloadView)
 
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 520, height: 440),
+            // Starts at the URL card's height; growToFit(overflow:) adds room
+            // as fetched details or batch input appear.
+            contentRect: NSRect(x: 0, y: 0, width: 520, height: Self.compactHeight),
             styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
             backing: .buffered,
             defer: false
@@ -36,7 +38,7 @@ final class AddDownloadWindowManager: NSObject, NSWindowDelegate {
         window.center()
         window.isReleasedWhenClosed = false
         window.title = languageService.s("new_download")
-        window.minSize = NSSize(width: 480, height: 420)
+        window.minSize = NSSize(width: 480, height: Self.compactHeight)
         window.contentViewController = hostingController
         window.delegate = self
 
@@ -46,6 +48,32 @@ final class AddDownloadWindowManager: NSObject, NSWindowDelegate {
         controller.showWindow(nil)
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+    }
+
+    /// Header, URL card and footer, below the title bar.
+    static let compactHeight: CGFloat = 230
+
+    /// Grows the window by `overflow` points with its top edge fixed, staying
+    /// inside the screen's visible frame. It never shrinks a window the user
+    /// made larger.
+    func growToFit(overflow: CGFloat) {
+        guard overflow > 0.5, let window = windowController?.window else { return }
+        var frame = window.frame
+        frame.size.height += overflow
+        frame.origin.y -= overflow
+        if let visible = window.screen?.visibleFrame {
+            frame.size.height = min(frame.size.height, visible.height)
+            frame.origin.y = max(frame.origin.y, visible.minY)
+        }
+        guard !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else {
+            window.setFrame(frame, display: true)
+            return
+        }
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.25
+            context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            window.animator().setFrame(frame, display: true)
+        }
     }
 
     func closeWindow() {

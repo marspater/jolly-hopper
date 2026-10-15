@@ -11,6 +11,7 @@
 - Motion is calmer and more consistent: each hover runs one spring, download cards fade their background and border with the lift, pages fade in with a slight rise, and Add Download's details and errors drop gently into place. With Reduce Motion, the logo stops spinning, hover and press no longer scale or lift, and new content only fades.
 - One segmented control style everywhere: the Settings tabs, the Theme and subtitle-output choices, and the Diagnostics tabs now match Add Download's capsule switch. Settings row titles that fell back to SF Pro now use Geist.
 - On Home, an active download's button pauses it instead of stopping it, so partial data is kept; a paused row offers Resume. Diagnostics labels now go through the app's string table.
+- Add Download opens compact and grows as video details, errors or batch input appear. Debug Logs shows one title and uses the window's own close button.
 
 ### Security
 
