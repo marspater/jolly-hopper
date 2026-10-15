@@ -9,7 +9,10 @@ struct AddDownloadView: View {
     @Environment(\.appearsActive) private var appearsActive
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var scrollViewportHeight: CGFloat = 0
+    @State private var advancedPanePresented = false
+    @State private var advancedPaneOpacity = 0.0
+    @State private var headerHeight: CGFloat = 0
+    @State private var footerHeight: CGFloat = 0
     @State private var scrollContentHeight: CGFloat = 0
     @FocusState private var focusedField: InputField?
 
@@ -111,10 +114,6 @@ struct AddDownloadView: View {
         return VideoResolution.allCases
     }
 
-    private var settingsAnimation: Animation {
-        SiphonAnimation.fluidSpring
-    }
-
     /// Fetched cards drop 8 pt into place. `.move(edge: .top)` would slide them
     /// their full height, across the URL card. Reduce Motion keeps only the fade.
     private var revealTransition: AnyTransition {
@@ -123,37 +122,42 @@ struct AddDownloadView: View {
             : .opacity.combined(with: .offset(y: -8)).combined(with: .scale(scale: 0.98, anchor: .top))
     }
 
+    private var showsAdvancedOptions: Bool {
+        showOptionalSettings && (inputMode == .batch || mediaInfo != nil)
+    }
+
+    private var windowLayout: AddDownloadWindowManager.Layout {
+        .init(contentHeight: scrollContentHeight, chromeHeight: headerHeight > 0 && footerHeight > 0 ? headerHeight + footerHeight : 0,
+              advancedVisible: showsAdvancedOptions, allowsShrink: inputMode == .single && mediaInfo == nil)
+    }
+
     var body: some View {
         VStack(spacing: 0) {
-            header
-            SiphonTheme.subtleDivider
+            VStack(spacing: 0) {
+                header
+                SiphonTheme.subtleDivider
+            }
+            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { headerHeight = $0 }
 
-            ScrollViewReader { scrollProxy in
+            HStack(spacing: 0) {
                 ScrollView {
-                    VStack(alignment: .leading, spacing: 20) {
+                    VStack(alignment: .leading, spacing: SiphonTheme.spacing20) {
                         if inputMode == .single {
                             urlSection
-
                             if let info = mediaInfo {
-                                VStack(alignment: .leading, spacing: 20) {
+                                VStack(alignment: .leading, spacing: SiphonTheme.spacing20) {
                                     if !showPlaylistSelector {
                                         mediaInfoSection(info)
-
-                                        if info.playlist != nil {
-                                            playlistDetectedBanner
-                                        }
+                                        if info.playlist != nil { playlistDetectedBanner }
                                     } else {
                                         playlistSelectorSection
                                     }
-
                                     formatSection
                                     saveSection
                                     optionalSettingsSection
-                                        .id("optionalSettings")
                                 }
                                 .transition(revealTransition)
                             }
-
                             if let error = errorMessage {
                                 errorSection(error)
                                     .transition(revealTransition)
@@ -165,33 +169,62 @@ struct AddDownloadView: View {
                     .padding(SiphonTheme.spacing20)
                     .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height in
                         scrollContentHeight = height
-                        fitWindowToContent()
                     }
                 }
-                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height in
-                    // Later viewport changes come from the window animating and
-                    // must not restart the resize; only the first one fits.
-                    let isFirstMeasure = scrollViewportHeight == 0
-                    scrollViewportHeight = height
-                    if isFirstMeasure { fitWindowToContent() }
-                }
-                .onChange(of: showOptionalSettings) { _, expanded in
-                    if expanded {
-                        withAnimation(settingsAnimation) {
-                            scrollProxy.scrollTo("optionalSettings", anchor: .top)
+                .frame(minWidth: 500, maxWidth: .infinity)
+
+                if advancedPanePresented {
+                    Divider()
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: SiphonTheme.spacing14) {
+                            Text(languageService.s("advanced_options"))
+                                .font(.siphonPrimarySemibold)
+                                .accessibilityAddTraits(.isHeader)
+                            optionalSettingsContent
+                        }
+                        .padding(SiphonTheme.spacing16)
+                        .opacity(advancedPaneOpacity)
+                        .offset(x: reduceMotion ? 0 : (1 - advancedPaneOpacity) * SiphonTheme.spacing16)
+                        .onAppear {
+                            withAnimation(reduceMotion ? nil : SiphonAnimation.panelReveal) {
+                                advancedPaneOpacity = 1
+                            }
                         }
                     }
+                    .frame(width: AddDownloadWindowManager.advancedPaneWidth)
                 }
-
+            }
+            // Window changes must run after SwiftUI's layout pass. Calling
+            // setFrame from a geometry callback reenters NSHostingView layout.
+            .task(id: windowLayout) {
+                if showsAdvancedOptions {
+                    if advancedPanePresented {
+                        withAnimation(reduceMotion ? nil : SiphonAnimation.panelReveal) {
+                            advancedPaneOpacity = 1
+                        }
+                    } else {
+                        advancedPanePresented = true
+                    }
+                } else {
+                    withAnimation(reduceMotion ? nil : SiphonAnimation.panelReveal) {
+                        advancedPaneOpacity = 0
+                    }
+                }
+                AddDownloadWindowManager.shared.updateLayout(windowLayout)
+                guard !Task.isCancelled else { return }
+                if !showsAdvancedOptions {
+                    advancedPanePresented = false
+                }
             }
 
-            SiphonTheme.subtleDivider
-            footer
+            VStack(spacing: 0) {
+                SiphonTheme.subtleDivider
+                footer
+            }
+            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { footerHeight = $0 }
         }
-        // The pre-fetch state contains only the URL input, so the window opens
-        // compact and grows as details appear; the scroll view takes over once
-        // the window reaches the screen's height.
-        .frame(minWidth: 500, idealWidth: 540, maxWidth: 680, minHeight: AddDownloadWindowManager.compactHeight, maxHeight: .infinity)
+        .frame(minWidth: 500, idealWidth: 540,
+               minHeight: AddDownloadWindowManager.compactHeight, maxHeight: .infinity)
         .siphonAdaptiveRendering()
         .siphonWindowBackground()
         .onAppear {
@@ -349,13 +382,11 @@ struct AddDownloadView: View {
                             .padding(.vertical, SiphonTheme.spacing10)
                             .allowsHitTesting(false)
                     }
-                    TextEditor(text: $batchUrlsText)
-                        .focused($focusedField, equals: .batch)
-                        .font(.siphonSecondaryMono)
-                        .scrollContentBackground(.hidden)
+                    BatchURLTextEditor(text: $batchUrlsText, label: languageService.s("paste_multiple_urls")) { focused in
+                        focusedField = focused ? .batch : nil
+                    }
                         .frame(minHeight: 120, idealHeight: 150, maxHeight: 220)
                         .padding(6)
-                        .accessibilityLabel(languageService.s("paste_multiple_urls"))
                 }
                 .background(SiphonTheme.fieldBackground(cornerRadius: SiphonTheme.radiusControl, isFocused: showsFocus(.batch)))
                 .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusControl, style: .continuous))
@@ -800,7 +831,10 @@ struct AddDownloadView: View {
                 }
 
                 Spacer()
+            }
 
+            LazyVGrid(columns: [GridItem(.flexible(minimum: 0)), GridItem(.flexible(minimum: 0))],
+                      alignment: .leading, spacing: SiphonTheme.spacing12) {
                 // Quick Presets dropdown menu button
                 Menu {
                     Section(siphonHeader: languageService.s("download_presets")) {
@@ -861,6 +895,7 @@ struct AddDownloadView: View {
                         } else {
                             Text(languageService.s("quick_presets"))
                         }
+                        Spacer(minLength: 0)
                         Image(systemName: "chevron.down")
                             .font(.siphonMicroSemibold)
                             .accessibilityHidden(true)
@@ -874,7 +909,7 @@ struct AddDownloadView: View {
                     .overlay(SiphonTheme.pillBorder(isSelected: false))
                 }
                 .siphonMenuStyle()
-                .fixedSize()
+                .frame(maxWidth: .infinity, alignment: .leading)
 
                 // Video / Audio Capsule Switcher
                 SiphonSegmentedPicker(
@@ -888,55 +923,52 @@ struct AddDownloadView: View {
                     options: [
                         (true, languageService.s("video")),
                         (false, languageService.s("audio"))
-                    ]
+                    ],
+                    fillsWidth: true
                 )
-            }
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(languageService.s("file_type"))
+                        .font(.siphonMetadataMedium)
+                        .foregroundColor(.secondary)
+                    SiphonMenuPicker(
+                        selection: $fileType,
+                        fillsWidth: true,
+                        options: (isVideoTab ? MediaFileType.videoTypes : MediaFileType.audioTypes)
+                            .map { type in (value: type, title: type.rawValue) }
+                    )
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .accessibilityLabel(languageService.s("file_type"))
+                }
 
-            // Grid Form inside Card
-            VStack(spacing: 12) {
-                Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 12) {
-                    GridRow {
-                        VStack(alignment: .leading, spacing: 5) {
-                            Text(languageService.s("file_type"))
-                                .font(.siphonMetadataMedium)
-                                .foregroundColor(.secondary)
-                            SiphonMenuPicker(
-                                selection: $fileType,
-                                options: (isVideoTab ? MediaFileType.videoTypes : MediaFileType.audioTypes)
-                                    .map { type in (value: type, title: type.rawValue) }
-                            )
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .accessibilityLabel(languageService.s("file_type"))
-                        }
-
-                        VStack(alignment: .leading, spacing: 5) {
-                            Text(isVideoTab ? languageService.s("quality") : languageService.s("audio_quality"))
-                                .font(.siphonMetadataMedium)
-                                .foregroundColor(.secondary)
-                            if isVideoTab {
-                                SiphonMenuPicker(
-                                    selection: $videoResolution,
-                                    options: filteredResolutions.map { res in (value: res, title: res.title(lang: languageService)) }
-                                )
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .accessibilityLabel(languageService.s("quality"))
-                                .onChange(of: selectedCodec) { _, newCodec in
-                                    if newCodec == "h264" && (videoResolution == .r1440p || videoResolution == .r2160p || videoResolution == .best) {
-                                        videoResolution = .r1080p
-                                    }
-                                }
-                            } else {
-                                SiphonMenuPicker(
-                                    selection: $audioQuality,
-                                    options: AudioQuality.allCases.map { quality in (value: quality, title: quality.title(lang: languageService)) }
-                                )
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .accessibilityLabel(languageService.s("audio_quality"))
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(isVideoTab ? languageService.s("quality") : languageService.s("audio_quality"))
+                        .font(.siphonMetadataMedium)
+                        .foregroundColor(.secondary)
+                    if isVideoTab {
+                        SiphonMenuPicker(
+                            selection: $videoResolution,
+                            fillsWidth: true,
+                            options: filteredResolutions.map { res in (value: res, title: res.title(lang: languageService)) }
+                        )
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .accessibilityLabel(languageService.s("quality"))
+                        .onChange(of: selectedCodec) { _, newCodec in
+                            if newCodec == "h264" && (videoResolution == .r1440p || videoResolution == .r2160p || videoResolution == .best) {
+                                videoResolution = .r1080p
                             }
                         }
+                    } else {
+                        SiphonMenuPicker(
+                            selection: $audioQuality,
+                            fillsWidth: true,
+                            options: AudioQuality.allCases.map { quality in (value: quality, title: quality.title(lang: languageService)) }
+                        )
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .accessibilityLabel(languageService.s("audio_quality"))
                     }
                 }
             }
+
 
             // Info notices
             if isVideoTab && selectedCodec == "h264" {
@@ -1070,211 +1102,195 @@ struct AddDownloadView: View {
     }
 
     private var optionalSettingsSection: some View {
-        VStack(alignment: .leading, spacing: SiphonTheme.spacing10) {
-            Button {
-                withAnimation(settingsAnimation) {
-                    showOptionalSettings.toggle()
-                }
-            } label: {
+        Button {
+            showOptionalSettings.toggle()
+        } label: {
+            HStack(spacing: SiphonTheme.spacing8) {
+                Image(systemName: "chevron.right")
+                    .rotationEffect(.degrees(showOptionalSettings ? 180 : 0))
+                    .font(.siphonMetadataSemibold)
+                    .foregroundColor(SiphonTheme.accentText)
+                    .frame(width: 12)
+                    .accessibilityHidden(true)
+
+                Text(languageService.s("advanced_options"))
+                    .font(.siphonStandardSemibold)
+                    .foregroundColor(.primary)
+
+                Spacer()
+            }
+            .padding(.horizontal, SiphonTheme.spacing14)
+            .padding(.vertical, SiphonTheme.spacing10)
+            .background(
+                SiphonTheme.cardBackground(cornerRadius: SiphonTheme.radiusControl)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusControl, style: .continuous))
+            .overlay(
+                SiphonTheme.cardBorder(cornerRadius: SiphonTheme.radiusControl)
+            )
+        }
+        .buttonStyle(.plain)
+        .accessibilityElement(children: .combine)
+        .accessibilityValue(showOptionalSettings ? "Expanded" : "Collapsed")
+    }
+
+    private var optionalSettingsContent: some View {
+        VStack(alignment: .leading, spacing: SiphonTheme.spacing14) {
+            // Custom filename
+            VStack(alignment: .leading, spacing: SiphonTheme.spacing6) {
+                Text(languageService.s("custom_filename"))
+                    .font(.siphonSecondarySemibold)
+                    .foregroundColor(.secondary)
+
                 HStack(spacing: SiphonTheme.spacing8) {
-                    Image(systemName: "chevron.right")
-                        .rotationEffect(.degrees(showOptionalSettings ? 90 : 0))
-                        .font(.siphonMetadataSemibold)
-                        .foregroundColor(SiphonTheme.accentText)
-                        .frame(width: 12)
+                    Image(systemName: "pencil")
+                        .font(.siphonSecondary)
+                        .foregroundColor(.secondary)
+                        .frame(width: 14)
                         .accessibilityHidden(true)
 
-                    Text(languageService.s("advanced_options"))
-                        .font(.siphonStandardSemibold)
-                        .foregroundColor(.primary)
-
-                    Spacer()
-
-                    Text(languageService.s("advanced_badge"))
-                        .font(.siphonMetadataSemibold)
-                        .foregroundColor(.secondary)
-                        .padding(.horizontal, SiphonTheme.spacing6)
-                        .padding(.vertical, SiphonTheme.spacing2)
-                        .background(SiphonTheme.pillBackground(isSelected: false))
-                        .clipShape(Capsule())
+                    TextField(languageService.s("custom_filename_hint"), text: $customFilename)
+                        .focused($focusedField, equals: .filename)
+                        .font(.siphonSecondary)
+                        .textFieldStyle(.plain)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .layoutPriority(1)
                 }
-                .padding(.horizontal, SiphonTheme.spacing14)
-                .padding(.vertical, SiphonTheme.spacing10)
+                .padding(.horizontal, SiphonTheme.spacing10)
+                .padding(.vertical, SiphonTheme.spacing6)
                 .background(
-                    SiphonTheme.cardBackground(cornerRadius: SiphonTheme.radiusControl)
+                    SiphonTheme.fieldBackground(
+                        cornerRadius: SiphonTheme.radiusControl,
+                        isFocused: showsFocus(.filename)
+                    )
                 )
                 .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusControl, style: .continuous))
                 .overlay(
-                    SiphonTheme.cardBorder(cornerRadius: SiphonTheme.radiusControl)
+                    SiphonTheme.fieldBorder(
+                        cornerRadius: SiphonTheme.radiusControl,
+                        isFocused: showsFocus(.filename)
+                    )
                 )
             }
-            .buttonStyle(.plain)
-            .accessibilityElement(children: .combine)
-            .accessibilityValue(showOptionalSettings ? "Expanded" : "Collapsed")
 
-            if showOptionalSettings {
-                VStack(alignment: .leading, spacing: SiphonTheme.spacing14) {
-                    // Custom filename
-                    VStack(alignment: .leading, spacing: SiphonTheme.spacing6) {
-                        Text(languageService.s("custom_filename"))
-                            .font(.siphonSecondarySemibold)
+            if isVideoTab {
+                SiphonTheme.subtleDivider
+
+                VStack(alignment: .leading, spacing: SiphonTheme.spacing8) {
+                    Toggle(languageService.s("download_subtitles"), isOn: $downloadSubtitles)
+                        .disabled(inputMode == .single && availableSubtitles.isEmpty)
+
+                    if inputMode == .batch && downloadSubtitles {
+                        TextField(languageService.s("subtitle_language_codes"), text: $batchSubtitleLanguages)
+                            .textFieldStyle(.roundedBorder)
+                            .accessibilityLabel(languageService.s("subtitle_language_codes"))
+                        SiphonMenuPicker(
+                            languageService.s("subtitle_format"), selection: $subtitleFormat,
+                            options: SubtitleFormat.allCases.map { format in (value: format, title: format.displayName) }
+                        )
+                        Toggle(languageService.s("embed_video"), isOn: $embedSubtitles)
+                    } else if inputMode == .single && availableSubtitles.isEmpty && mediaInfo != nil {
+                        Text(languageService.s("no_subtitles"))
+                            .font(.siphonMetadata)
                             .foregroundColor(.secondary)
+                    } else if inputMode == .single && downloadSubtitles {
+                        HStack(spacing: SiphonTheme.spacing12) {
+                            Menu {
+                                let (manualSubs, autoSubs): ([SubtitleOption], [SubtitleOption]) = availableSubtitles.reduce(into: ([], [])) { result, sub in
+                                    if sub.isAuto {
+                                        result.1.append(sub)
+                                    } else {
+                                        result.0.append(sub)
+                                    }
+                                }
+                                let sortedManualSubs = manualSubs.sorted(by: { $0.name < $1.name })
+                                let sortedAutoSubs = autoSubs.sorted(by: { $0.name < $1.name })
 
-                        HStack(spacing: SiphonTheme.spacing8) {
-                            Image(systemName: "pencil")
-                                .font(.siphonSecondary)
-                                .foregroundColor(.secondary)
-                                .frame(width: 14)
-                                .accessibilityHidden(true)
-
-                            TextField(languageService.s("custom_filename_hint"), text: $customFilename)
-                                .focused($focusedField, equals: .filename)
-                                .font(.siphonSecondary)
-                                .textFieldStyle(.plain)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .layoutPriority(1)
-                        }
-                        .padding(.horizontal, SiphonTheme.spacing10)
-                        .padding(.vertical, SiphonTheme.spacing6)
-                        .background(
-                            SiphonTheme.fieldBackground(
-                                cornerRadius: SiphonTheme.radiusControl,
-                                isFocused: showsFocus(.filename)
-                            )
-                        )
-                        .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusControl, style: .continuous))
-                        .overlay(
-                            SiphonTheme.fieldBorder(
-                                cornerRadius: SiphonTheme.radiusControl,
-                                isFocused: showsFocus(.filename)
-                            )
-                        )
-                    }
-
-                    if isVideoTab {
-                        SiphonTheme.subtleDivider
-
-                        VStack(alignment: .leading, spacing: SiphonTheme.spacing8) {
-                            Text(languageService.s("subtitles"))
-                                .font(.siphonSecondarySemibold)
-                                .foregroundColor(.secondary)
-
-                            Toggle(languageService.s("download_subtitles"), isOn: $downloadSubtitles)
-                                .disabled(inputMode == .single && availableSubtitles.isEmpty)
-
-                            if inputMode == .batch && downloadSubtitles {
-                                TextField(languageService.s("subtitle_language_codes"), text: $batchSubtitleLanguages)
-                                    .textFieldStyle(.roundedBorder)
-                                    .accessibilityLabel(languageService.s("subtitle_language_codes"))
-                                SiphonMenuPicker(
-                                    languageService.s("subtitle_format"), selection: $subtitleFormat,
-                                    options: SubtitleFormat.allCases.map { format in (value: format, title: format.displayName) }
-                                )
-                                Toggle(languageService.s("embed_video"), isOn: $embedSubtitles)
-                            } else if inputMode == .single && availableSubtitles.isEmpty && mediaInfo != nil {
-                                Text(languageService.s("no_subtitles"))
-                                    .font(.siphonMetadata)
-                                    .foregroundColor(.secondary)
-                            } else if inputMode == .single && downloadSubtitles {
-                                HStack(spacing: SiphonTheme.spacing12) {
-                                    Menu {
-                                        let (manualSubs, autoSubs): ([SubtitleOption], [SubtitleOption]) = availableSubtitles.reduce(into: ([], [])) { result, sub in
-                                            if sub.isAuto {
-                                                result.1.append(sub)
-                                            } else {
-                                                result.0.append(sub)
-                                            }
-                                        }
-                                        let sortedManualSubs = manualSubs.sorted(by: { $0.name < $1.name })
-                                        let sortedAutoSubs = autoSubs.sorted(by: { $0.name < $1.name })
-
-                                        if !sortedManualSubs.isEmpty {
-                                            Section(siphonHeader: languageService.s("internal")) {
-                                                ForEach(sortedManualSubs) { sub in
-                                                    Button {
-                                                        toggleSubtitle(sub.id)
-                                                    } label: {
-                                                        HStack {
-                                                            if selectedSubtitleLangs.contains(sub.id) {
-                                                                Image(systemName: "checkmark")
-                                                            }
-                                                            Text(sub.name)
-                                                        }
+                                if !sortedManualSubs.isEmpty {
+                                    Section(siphonHeader: languageService.s("internal")) {
+                                        ForEach(sortedManualSubs) { sub in
+                                            Button {
+                                                toggleSubtitle(sub.id)
+                                            } label: {
+                                                HStack {
+                                                    if selectedSubtitleLangs.contains(sub.id) {
+                                                        Image(systemName: "checkmark")
                                                     }
+                                                    Text(sub.name)
                                                 }
-                                            }
-                                        }
-
-                                        if !sortedAutoSubs.isEmpty {
-                                            Section(siphonHeader: languageService.s("auto_subs")) {
-                                                ForEach(sortedAutoSubs) { sub in
-                                                    Button {
-                                                        toggleSubtitle(sub.id)
-                                                    } label: {
-                                                        HStack {
-                                                            if selectedSubtitleLangs.contains(sub.id) {
-                                                                Image(systemName: "checkmark")
-                                                            }
-                                                            Text(String(format: languageService.s("subtitle_auto_format"), sub.name))
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    } label: {
-                                        SiphonMenuLabel {
-                                            Text(languageService.s("languages"))
-                                            Spacer()
-                                            if selectedSubtitleLangs.isEmpty {
-                                                Text(languageService.s("select"))
-                                            } else {
-                                                Text(String(
-                                                    format: languageService.s("subtitles_selected"),
-                                                    selectedSubtitleLangs.count
-                                                ))
                                             }
                                         }
                                     }
-                                    .siphonMenuStyle()
-
-                                    SiphonMenuPicker(
-                                        languageService.s("subtitle_format"), selection: $subtitleFormat,
-                                        options: SubtitleFormat.allCases.map { format in (value: format, title: format.displayName) }
-                                    )
                                 }
 
-                                Toggle(languageService.s("embed_video"), isOn: $embedSubtitles)
+                                if !sortedAutoSubs.isEmpty {
+                                    Section(siphonHeader: languageService.s("auto_subs")) {
+                                        ForEach(sortedAutoSubs) { sub in
+                                            Button {
+                                                toggleSubtitle(sub.id)
+                                            } label: {
+                                                HStack {
+                                                    if selectedSubtitleLangs.contains(sub.id) {
+                                                        Image(systemName: "checkmark")
+                                                    }
+                                                    Text(String(format: languageService.s("subtitle_auto_format"), sub.name))
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            } label: {
+                                SiphonMenuLabel {
+                                    Text(languageService.s("languages"))
+                                    Spacer()
+                                    if selectedSubtitleLangs.isEmpty {
+                                        Text(languageService.s("select"))
+                                    } else {
+                                        Text(String(
+                                            format: languageService.s("subtitles_selected"),
+                                            selectedSubtitleLangs.count
+                                        ))
+                                    }
+                                }
                             }
+                            .siphonMenuStyle()
+
+                            SiphonMenuPicker(
+                                languageService.s("subtitle_format"), selection: $subtitleFormat,
+                                options: SubtitleFormat.allCases.map { format in (value: format, title: format.displayName) }
+                            )
                         }
+
+                        Toggle(languageService.s("embed_video"), isOn: $embedSubtitles)
                     }
-
-                    SiphonTheme.subtleDivider
-
-                    VStack(alignment: .leading, spacing: SiphonTheme.spacing8) {
-                        Text(languageService.s("embedded_data"))
-                            .font(.siphonSecondarySemibold)
-                            .foregroundColor(.secondary)
-
-                        Toggle(languageService.s("embed_thumbnail"), isOn: $embedThumbnail)
-
-                        Toggle(languageService.s("metadata_desc"), isOn: $embedMetadata)
-                    }
-
-                    SiphonTheme.subtleDivider
-
-                    advancedOptionsContent(inputMode == .single ? mediaInfo : nil)
                 }
-                .padding(SiphonTheme.spacing14)
-                .background(
-                    SiphonTheme.cardBackground(cornerRadius: SiphonTheme.radiusCard)
-                )
-                .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusCard, style: .continuous))
-                .overlay(
-                    SiphonTheme.cardBorder(cornerRadius: SiphonTheme.radiusCard)
-                )
-                .transition(.opacity.combined(with: .move(edge: .top)))
             }
+
+            SiphonTheme.subtleDivider
+
+            LazyVGrid(columns: [GridItem(.flexible(minimum: 0)), GridItem(.flexible(minimum: 0))],
+                      alignment: .leading, spacing: SiphonTheme.spacing12) {
+                Toggle(languageService.s("embed_thumbnail"), isOn: $embedThumbnail)
+                Toggle(languageService.s("embed_metadata_short"), isOn: $embedMetadata)
+                    .help(languageService.s("metadata_desc"))
+                Toggle(languageService.s("split_chapters"), isOn: $splitChapters)
+                Toggle(languageService.s("sponsorblock"), isOn: $sponsorBlock)
+                    .help(languageService.s("sponsorblock_hint"))
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            SiphonTheme.subtleDivider
+
+            advancedOptionsContent(inputMode == .single ? mediaInfo : nil)
         }
+        .padding(SiphonTheme.spacing16)
+        .background(
+            SiphonTheme.cardBackground(cornerRadius: SiphonTheme.radiusCard)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusCard, style: .continuous))
+        .overlay(
+            SiphonTheme.cardBorder(cornerRadius: SiphonTheme.radiusCard)
+        )
     }
 
     @ViewBuilder
@@ -1291,35 +1307,34 @@ struct AddDownloadView: View {
                         .font(.siphonSecondarySemibold)
                         .foregroundColor(.secondary)
 
-                    Grid(alignment: .leading, horizontalSpacing: SiphonTheme.spacing16, verticalSpacing: SiphonTheme.spacing12) {
-                        GridRow {
-                            advancedPicker(
-                                title: languageService.s("video_codec"),
-                                selection: $selectedCodec,
-                                options: VideoCodec.allCases.map { codec in (value: codec.rawValue, title: videoCodecLabel(for: codec)) }
-                            )
+                    LazyVGrid(columns: [GridItem(.flexible(minimum: 0)), GridItem(.flexible(minimum: 0))],
+                              alignment: .leading, spacing: SiphonTheme.spacing14) {
+                        advancedPicker(
+                            title: languageService.s("video_codec"),
+                            selection: $selectedCodec,
+                            options: VideoCodec.allCases.map { codec in (value: codec.rawValue, title: videoCodecLabel(for: codec)) }
+                        )
 
-                            advancedPicker(
-                                title: languageService.s("audio_codec"),
-                                selection: $selectedAudioCodec,
-                                options: AudioCodec.allCases.map { codec in (value: codec.rawValue, title: codec.title(lang: languageService)) }
-                            )
-                        }
-
-                        GridRow {
-                            advancedPicker(
-                                title: languageService.s("post_processing"),
-                                selection: $selectedConversionCodec,
-                                options: ConversionCodec.allCases.map { codec in (value: codec.rawValue, title: codec.title(lang: languageService)) }
-                            )
-
-                            advancedPicker(
-                                title: languageService.s("hdr_dynamic_range"),
-                                selection: $selectedHDRAction,
-                                options: HDRAction.allCases.map { action in (value: action.rawValue, title: action.title(lang: languageService)) }
-                            )
-                        }
+                        advancedPicker(
+                            title: languageService.s("audio_codec"),
+                            selection: $selectedAudioCodec,
+                            options: AudioCodec.allCases.map { codec in (value: codec.rawValue, title: codec.title(lang: languageService)) }
+                        )
                     }
+
+                    advancedPicker(
+                        title: languageService.s("post_processing"),
+                        selection: $selectedConversionCodec,
+                        options: ConversionCodec.allCases.map { codec in (value: codec.rawValue, title: codec.title(lang: languageService)) },
+                        horizontal: true
+                    )
+
+                    advancedPicker(
+                        title: languageService.s("hdr_dynamic_range"),
+                        selection: $selectedHDRAction,
+                        options: HDRAction.allCases.map { action in (value: action.rawValue, title: action.title(lang: languageService)) },
+                        horizontal: true
+                    )
                 }
 
                 SiphonTheme.subtleDivider
@@ -1361,17 +1376,6 @@ struct AddDownloadView: View {
                 )
             }
 
-            SiphonTheme.subtleDivider
-
-            VStack(alignment: .leading, spacing: SiphonTheme.spacing8) {
-                Text(languageService.s("advanced"))
-                    .font(.siphonSecondarySemibold)
-                    .foregroundColor(.secondary)
-
-                Toggle(languageService.s("split_chapters"), isOn: $splitChapters)
-
-                Toggle(languageService.s("sponsorblock_hint"), isOn: $sponsorBlock)
-            }
         }
     }
 
@@ -1379,14 +1383,19 @@ struct AddDownloadView: View {
     private func advancedPicker<Selection: Hashable>(
         title: String,
         selection: Binding<Selection>,
-        options: [(value: Selection, title: String)]
+        options: [(value: Selection, title: String)],
+        horizontal: Bool = false
     ) -> some View {
-        VStack(alignment: .leading, spacing: 5) {
+        let layout = horizontal
+            ? AnyLayout(HStackLayout(alignment: .firstTextBaseline, spacing: SiphonTheme.spacing12))
+            : AnyLayout(VStackLayout(alignment: .leading, spacing: SiphonTheme.spacing6))
+        layout {
             Text(title)
                 .font(.siphonMetadataMedium)
                 .foregroundColor(.secondary)
+                .frame(width: horizontal ? 120 : nil, alignment: .leading)
 
-            SiphonMenuPicker(selection: selection, options: options)
+            SiphonMenuPicker(selection: selection, fillsWidth: true, options: options)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .accessibilityLabel(title)
         }
@@ -1515,11 +1524,6 @@ struct AddDownloadView: View {
             }
         }
         .padding()
-    }
-
-    private func fitWindowToContent() {
-        guard scrollViewportHeight > 0 else { return }
-        AddDownloadWindowManager.shared.growToFit(overflow: scrollContentHeight - scrollViewportHeight)
     }
 
     private func fetchInfo(debounce: Bool = false) {
@@ -1991,6 +1995,89 @@ struct AddDownloadView: View {
                 resolutionFallbackPolicyRaw = fallback
             }
         }
+    }
+}
+
+/// A plain native URL editor with an autohiding overlay scroller. SwiftUI's
+/// TextEditor leaves a disabled, full-height scroller after window resizing.
+struct BatchURLTextEditor: NSViewRepresentable {
+    @Binding var text: String
+    var label: String
+    var onFocusChange: (Bool) -> Void
+    @Environment(\.colorScheme) private var colorScheme
+
+    final class TextView: NSTextView {
+        var onFocusChange: ((Bool) -> Void)?
+
+        override func becomeFirstResponder() -> Bool {
+            let accepted = super.becomeFirstResponder()
+            if accepted { onFocusChange?(true) }
+            return accepted
+        }
+
+        override func resignFirstResponder() -> Bool {
+            let accepted = super.resignFirstResponder()
+            if accepted { onFocusChange?(false) }
+            return accepted
+        }
+    }
+
+    final class Coordinator: NSObject, NSTextViewDelegate {
+        var parent: BatchURLTextEditor
+        init(_ parent: BatchURLTextEditor) { self.parent = parent }
+
+        func textDidChange(_ notification: Notification) {
+            guard let view = notification.object as? NSTextView else { return }
+            parent.text = view.string
+        }
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
+
+    func makeNSView(context: Context) -> NSScrollView {
+        let scroll = NSScrollView()
+        scroll.hasVerticalScroller = true
+        scroll.hasHorizontalScroller = false
+        scroll.autohidesScrollers = true
+        scroll.scrollerStyle = .overlay
+        scroll.drawsBackground = false
+        scroll.borderType = .noBorder
+        let editor = TextView()
+        editor.isRichText = false
+        editor.importsGraphics = false
+        editor.allowsUndo = true
+        editor.isAutomaticQuoteSubstitutionEnabled = false
+        editor.isAutomaticDashSubstitutionEnabled = false
+        editor.isAutomaticTextReplacementEnabled = false
+        editor.isContinuousSpellCheckingEnabled = false
+        editor.drawsBackground = false
+        editor.font = NSFont(name: "GeistMono-Regular", size: 12) ?? .monospacedSystemFont(ofSize: 12, weight: .regular)
+        editor.textColor = .labelColor
+        editor.insertionPointColor = .labelColor
+        editor.isVerticallyResizable = true
+        editor.isHorizontallyResizable = false
+        editor.autoresizingMask = [.width]
+        editor.textContainer?.widthTracksTextView = true
+        editor.textContainer?.containerSize = NSSize(width: scroll.contentSize.width, height: .greatestFiniteMagnitude)
+        editor.textContainer?.lineFragmentPadding = 0
+        editor.textContainerInset = NSSize(width: 4, height: 4)
+        editor.delegate = context.coordinator
+        scroll.documentView = editor
+        return scroll
+    }
+
+    func updateNSView(_ scroll: NSScrollView, context: Context) {
+        context.coordinator.parent = self
+        scroll.scrollerKnobStyle = colorScheme == .dark ? .light : .dark
+        guard let editor = scroll.documentView as? TextView else { return }
+        editor.onFocusChange = onFocusChange
+        editor.setAccessibilityLabel(label)
+        if editor.string != text { editor.string = text }
+    }
+
+    static func dismantleNSView(_ scroll: NSScrollView, coordinator _: Coordinator) {
+        (scroll.documentView as? TextView)?.onFocusChange = nil
+        (scroll.documentView as? NSTextView)?.delegate = nil
     }
 }
 

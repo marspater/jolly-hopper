@@ -134,7 +134,7 @@ struct DownloadRowView: View {
                     // Line 2: Subtitle (Domain • Quality • Format • Duration)
                     Text(download.formatSubtitle(lang: languageService))
                         .font(.siphonSecondaryMedium)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(.primary)
                         .lineLimit(1)
                         .truncationMode(.tail)
                         .help(download.formatSubtitle(lang: languageService))
@@ -157,18 +157,18 @@ struct DownloadRowView: View {
 
                                     if let speed = download.speed, !speed.isEmpty {
                                         Text("•")
-                                            .foregroundColor(.secondary.opacity(0.4))
+                                            .foregroundColor(.primary)
                                         Text(speed)
                                             .font(.siphonMetadataMonoMedium)
-                                            .foregroundColor(.secondary)
+                                            .foregroundColor(.primary)
                                     }
 
                                     if let eta = download.eta, !eta.isEmpty {
                                         Text("•")
-                                            .foregroundColor(.secondary.opacity(0.4))
+                                            .foregroundColor(.primary)
                                         Text("~\(eta)")
                                             .font(.siphonMetadataMonoMedium)
-                                            .foregroundColor(.secondary)
+                                            .foregroundColor(.primary)
                                     }
                                 }
                             }
@@ -201,6 +201,7 @@ struct DownloadRowView: View {
                 Spacer(minLength: SiphonTheme.spacing8)
 
                 actionButtons
+                    .fixedSize()
                     .frame(minWidth: download.status == .fileExists ? 0 : 62, alignment: .trailing)
                     .padding(.top, 1)
                     .animation(SiphonAnimation.snappySpring, value: download.status)
@@ -233,9 +234,8 @@ struct DownloadRowView: View {
             }
         }
         .onTapGesture(count: 2) {
-            // Double-clicking a finished card does what its Play button does.
-            if download.hasPlayableOutput, let path = download.primaryFilePath, primaryFileIsPresent != false {
-                downloadManager.openFile(path)
+            if download.status == .fileExists || primaryFileIsPresent != false {
+                downloadManager.openDownload(download)
             }
         }
         .contextMenu {
@@ -543,6 +543,7 @@ struct DownloadRowView: View {
                 }
             }
         }
+        .frame(width: 120, height: 68)
     }
 
     private var thumbnailPlaceholder: some View {
@@ -622,8 +623,8 @@ struct FileThumbnailView: View {
         switch download.status {
         case .downloading, .fetching, .processing: return SiphonTheme.statusDownloading
         // Finished cards stay calm: no status-colored glow under them.
-        case .completed, .failed, .stopped: return .clear
-        case .queued, .paused, .fileExists: return SiphonTheme.statusQueued
+        case .completed, .failed, .stopped, .fileExists: return .clear
+        case .queued, .paused: return SiphonTheme.statusQueued
         }
     }
 
