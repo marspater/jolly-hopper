@@ -6603,17 +6603,21 @@ public struct DownloadResult: Sendable {
         return html
     }
 
+    // Bolt Performance Optimization: Use native Swift Range slicing (`String(text[swiftRange])`) and
+    // native UTF-16 character counting (`text.utf16.count`) instead of bridging to `NSString`
+    // (`(text as NSString).length` and `nsText.substring(with:)`).
+    // This eliminates temporary Objective-C object allocations on HTML media metadata extraction calls.
     nonisolated private static func firstRegexCapture(
         in text: String,
         regexes: [NSRegularExpression],
         transform: (String) -> String?
     ) -> String? {
-        let nsText = text as NSString
-        let range = NSRange(location: 0, length: nsText.length)
+        let range = NSRange(location: 0, length: text.utf16.count)
         for regex in regexes {
             if let match = regex.firstMatch(in: text, options: [], range: range),
                match.numberOfRanges > 1,
-               let value = transform(nsText.substring(with: match.range(at: 1))) {
+               let swiftRange = Range(match.range(at: 1), in: text),
+               let value = transform(String(text[swiftRange])) {
                 return value
             }
         }
