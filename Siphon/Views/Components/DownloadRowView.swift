@@ -228,7 +228,9 @@ struct DownloadRowView: View {
             // Rows sliding under a still cursor would each lift and settle
             // mid-scroll; only an exit is taken while the list scrolls.
             guard !hovering || scrollActivity?.isScrolling != true else { return }
-            isHovering = hovering
+            withAnimation(SiphonAnimation.hoverSpring) {
+                isHovering = hovering
+            }
         }
         .onTapGesture(count: 2) {
             // Double-clicking a finished card does what its Play button does.
