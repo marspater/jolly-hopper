@@ -439,6 +439,7 @@ public enum SiphonTheme {
         }
 
         NSApp.appearance = appearance
+        MenuBarManager.shared.applyTheme()
         for window in NSApp.windows {
             window.appearance = appearance
             window.contentView?.needsDisplay = true

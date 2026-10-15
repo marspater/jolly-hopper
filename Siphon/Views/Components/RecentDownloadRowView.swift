@@ -66,7 +66,7 @@ struct RecentDownloadRowView: View {
         }
         .onTapGesture(count: 2) {
             // Double-clicking a finished row plays it, like Play on its card.
-            if download.status == .completed, let path = download.primaryFilePath, primaryFileIsPresent != false {
+            if download.hasPlayableOutput, let path = download.primaryFilePath, primaryFileIsPresent != false {
                 downloadManager.openFile(path)
             }
         }
@@ -258,6 +258,7 @@ struct RecentDownloadRowView: View {
             } label: {
                 Image(systemName: "exclamationmark.triangle")
                     .foregroundStyle(SiphonTheme.statusQueuedText)
+                    .accessibilityHidden(true)
             }
             .buttonStyle(.siphonIcon(size: 24))
             .help(languageService.s("recovery_arguments_review"))
@@ -292,6 +293,8 @@ struct RecentDownloadRowView: View {
             .accessibilityLabel(languageService.s("resume"))
         case .completed where download.primaryFilePath != nil && primaryFileIsPresent != false:
             revealButton { downloadManager.showInFinder(download.filePaths) }
+        case .failed where download.hasPlayableOutput && primaryFileIsPresent != false:
+            revealButton { downloadManager.showInFinder(download.filePaths) }
         case .fileExists:
             revealButton { downloadManager.revealExistingFile(for: download) }
         default:
@@ -305,6 +308,7 @@ struct RecentDownloadRowView: View {
             Image(systemName: "folder")
                 .font(.system(size: 13))
                 .foregroundColor(.secondary)
+                .accessibilityHidden(true)
         }
         .buttonStyle(.siphonIcon(size: 24))
         .help(languageService.s("reveal_in_finder"))
@@ -320,6 +324,7 @@ struct RecentDownloadRowView: View {
                 Image(systemName: "xmark.circle")
                     .font(.system(size: 13))
                     .foregroundColor(.secondary)
+                    .accessibilityHidden(true)
             }
             .buttonStyle(.siphonIcon(size: 24))
             .help(languageService.s("remove_from_history"))

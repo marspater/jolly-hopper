@@ -54,6 +54,7 @@ struct PreferencesView: View {
     @ObservedObject private var logger = LoggerService.shared
     @State private var customPresets: [CustomPreset] = []
     @State private var showCreatePresetSheet = false
+    @State private var showUpdateRestartAlert = false
     @State private var newPresetName = ""
     @AppStorage(UserDefaultsKeys.selectedCustomPresetId) private var selectedCustomPresetIdString: String = ""
 
@@ -167,7 +168,14 @@ struct PreferencesView: View {
         .onChange(of: theme) { _, newTheme in
             SiphonTheme.applyTheme(newTheme)
         }
+        .onChange(of: showMenuBarIcon) { _, visible in
+            MenuBarManager.shared.setVisible(visible)
+        }
+        .onChange(of: updateChecker.needsRestart) { _, ready in
+            showUpdateRestartAlert = ready
+        }
         .onAppear {
+            showUpdateRestartAlert = updateChecker.needsRestart
             SiphonTheme.applyTheme(theme)
             previousLanguage = languageService.selectedLanguage
             customPresets = CustomPreset.loadAll()
@@ -193,12 +201,12 @@ struct PreferencesView: View {
                 downloadManager.ytdlpService.resetCookieDenial(for: "safari")
             }
         }
-        .sheet(isPresented: $showCreatePresetSheet) {
+        .sheet(isPresented: $showCreatePresetSheet, onDismiss: resetPresetForm) {
             createPresetSheet
         }
-        .alert(languageService.s("update_ready_title"), isPresented: $updateChecker.needsRestart) {
-            Button(languageService.s("ok")) {
-                updateChecker.needsRestart = false
+        .alert(languageService.s("update_ready_title"), isPresented: $showUpdateRestartAlert) {
+            Button(languageService.s("restart_siphon")) {
+                updateChecker.restartApp()
             }
         } message: {
             Text(languageService.s("update_ready_message"))
@@ -529,6 +537,7 @@ struct PreferencesView: View {
             }
 
             Button {
+                resetPresetForm()
                 showCreatePresetSheet = true
             } label: {
                 Label(languageService.s("create_preset"), systemImage: "plus.circle")
@@ -754,6 +763,11 @@ struct PreferencesView: View {
                 }
             }
             .tint(nil)
+            .onChange(of: presetVideoCodec) { _, _ in
+                if !presetFilteredResolutions.contains(presetVideoResolution) {
+                    presetVideoResolution = .r1080p
+                }
+            }
 
             Picker(languageService.s("audio_codec"), selection: $presetAudioCodec) {
                 ForEach(AudioCodec.allCases) { codec in
@@ -835,6 +849,8 @@ struct PreferencesView: View {
     }
 
     private func resetPresetForm() {
+        editingPreset = nil
+        presetEmbedSubtitles = false
         newPresetName = ""
         presetFileType = .mp4
         presetVideoResolution = .r1080p
@@ -850,8 +866,8 @@ struct PreferencesView: View {
         editingPreset = preset
         newPresetName = preset.name
         presetFileType = preset.fileType
-        presetVideoResolution = preset.videoResolution
         presetVideoCodec = preset.videoCodec
+        presetVideoResolution = presetFilteredResolutions.contains(preset.videoResolution) ? preset.videoResolution : .r1080p
         presetAudioCodec = preset.audioCodec
         presetEmbedSubtitles = preset.downloadSubtitles ?? false
         presetSubtitleLang = preset.subtitleLanguage ?? ""
@@ -888,6 +904,9 @@ struct PreferencesView: View {
                 customPresets[index].subtitleFormat = presetSubtitleFormat
                 customPresets[index].sponsorBlock = presetSponsorBlock
                 customPresets[index].splitChapters = presetSplitChapters
+                if selectedCustomPresetIdString == editing.id.uuidString {
+                    applyCustomPreset(customPresets[index])
+                }
             }
             editingPreset = nil
         } else {
