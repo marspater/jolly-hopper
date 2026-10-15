@@ -8,6 +8,7 @@ struct AddDownloadView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.appearsActive) private var appearsActive
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @FocusState private var focusedField: InputField?
 
     private enum InputField: Hashable {
@@ -112,6 +113,14 @@ struct AddDownloadView: View {
         SiphonAnimation.fluidSpring
     }
 
+    /// Fetched cards drop 8 pt into place. `.move(edge: .top)` would slide them
+    /// their full height, across the URL card. Reduce Motion keeps only the fade.
+    private var revealTransition: AnyTransition {
+        reduceMotion
+            ? .opacity
+            : .opacity.combined(with: .offset(y: -8)).combined(with: .scale(scale: 0.98, anchor: .top))
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             header
@@ -124,24 +133,28 @@ struct AddDownloadView: View {
                             urlSection
 
                             if let info = mediaInfo {
-                                if !showPlaylistSelector {
-                                    mediaInfoSection(info)
+                                VStack(alignment: .leading, spacing: 20) {
+                                    if !showPlaylistSelector {
+                                        mediaInfoSection(info)
 
-                                    if info.playlist != nil {
-                                        playlistDetectedBanner
+                                        if info.playlist != nil {
+                                            playlistDetectedBanner
+                                        }
+                                    } else {
+                                        playlistSelectorSection
                                     }
-                                } else {
-                                    playlistSelectorSection
-                                }
 
-                                formatSection
-                                saveSection
-                                optionalSettingsSection
-                                    .id("optionalSettings")
+                                    formatSection
+                                    saveSection
+                                    optionalSettingsSection
+                                        .id("optionalSettings")
+                                }
+                                .transition(revealTransition)
                             }
 
                             if let error = errorMessage {
                                 errorSection(error)
+                                    .transition(revealTransition)
                             }
                         } else {
                             batchSection
@@ -1545,7 +1558,9 @@ struct AddDownloadView: View {
                     proxy: try await previewProxy()
                 )
                 guard !Task.isCancelled else { return }
-                mediaInfo = info
+                withAnimation(SiphonAnimation.fluidSpring) {
+                    mediaInfo = info
+                }
                 customFilename = info.title
 
                 var subs: [SubtitleOption] = []
@@ -1601,7 +1616,9 @@ struct AddDownloadView: View {
 
             } catch {
                 if !Task.isCancelled {
-                    errorMessage = formatErrorMessage(error)
+                    withAnimation(SiphonAnimation.fluidSpring) {
+                        errorMessage = formatErrorMessage(error)
+                    }
                 }
             }
             if !Task.isCancelled {
@@ -1638,7 +1655,9 @@ struct AddDownloadView: View {
                 downloadMode = .playlist
             } catch {
                 if !Task.isCancelled {
-                    errorMessage = formatErrorMessage(error)
+                    withAnimation(SiphonAnimation.fluidSpring) {
+                        errorMessage = formatErrorMessage(error)
+                    }
                 }
             }
             if !Task.isCancelled {
