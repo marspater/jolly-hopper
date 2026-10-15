@@ -276,7 +276,7 @@ struct DownloadRowView: View {
                     recoveredArguments = ""
                 }
             }
-            .buttonStyle(.bordered)
+            .buttonStyle(.siphonSecondary)
             .controlSize(.small)
             .tint(nil)
         }
@@ -323,7 +323,7 @@ struct DownloadRowView: View {
                                 Text(languageService.s("fix_signin_error"))
                                     .font(.siphonMetadataSemibold)
                             }
-                            .buttonStyle(.borderedProminent)
+                            .buttonStyle(.siphonPrimary)
                             .controlSize(.small)
 
                         case .retry:
@@ -333,7 +333,7 @@ struct DownloadRowView: View {
                                 Text(languageService.s("retry"))
                                     .font(.siphonMetadataSemibold)
                             }
-                            .buttonStyle(.bordered)
+                            .buttonStyle(.siphonSecondary)
                             .controlSize(.small)
                             .tint(nil)
 
@@ -354,7 +354,7 @@ struct DownloadRowView: View {
                                 Text(languageService.s("change_folder"))
                                     .font(.siphonMetadataSemibold)
                             }
-                            .buttonStyle(.bordered)
+                            .buttonStyle(.siphonSecondary)
                             .controlSize(.small)
                             .tint(nil)
 

@@ -697,7 +697,7 @@ struct AddDownloadView: View {
             if isLoadingPlaylist {
                 ProgressView().controlSize(.small)
             } else {
-                Button(languageService.s("load_playlist")) { loadPlaylist() }.buttonStyle(.bordered).tint(nil)
+                Button(languageService.s("load_playlist")) { loadPlaylist() }.buttonStyle(.siphonSecondary).tint(nil)
             }
         }
         .padding()
@@ -713,7 +713,7 @@ struct AddDownloadView: View {
                     showPlaylistSelector = false
                     downloadMode = .single
                 }
-                .buttonStyle(.link)
+                .buttonStyle(.plain)
                 .foregroundColor(SiphonTheme.accentText)
             }
 
@@ -803,7 +803,7 @@ struct AddDownloadView: View {
 
                 // Quick Presets dropdown menu button
                 Menu {
-                    Section(languageService.s("download_presets")) {
+                    Section(siphonHeader: languageService.s("download_presets")) {
                         ForEach(DownloadPreset.allCases) { preset in
                             Button {
                                 selectedPreset = preset.rawValue
@@ -829,7 +829,7 @@ struct AddDownloadView: View {
 
                     if !customPresets.isEmpty {
                         Divider()
-                        Section(languageService.s("custom_presets")) {
+                        Section(siphonHeader: languageService.s("custom_presets")) {
                             ForEach(customPresets) { preset in
                                 Button {
                                     selectedPreset = ""
@@ -873,8 +873,8 @@ struct AddDownloadView: View {
                     .clipShape(Capsule())
                     .overlay(SiphonTheme.pillBorder(isSelected: false))
                 }
-                .menuStyle(.borderlessButton)
-                .menuIndicator(.hidden)
+                .siphonMenuStyle()
+                .fixedSize()
 
                 // Video / Audio Capsule Switcher
                 SiphonSegmentedPicker(
@@ -900,16 +900,11 @@ struct AddDownloadView: View {
                             Text(languageService.s("file_type"))
                                 .font(.siphonMetadataMedium)
                                 .foregroundColor(.secondary)
-                            Picker("", selection: $fileType) {
-                                if isVideoTab {
-                                    ForEach(MediaFileType.videoTypes) { type in Text(type.rawValue).tag(type) }
-                                } else {
-                                    ForEach(MediaFileType.audioTypes) { type in Text(type.rawValue).tag(type) }
-                                }
-                            }
-                            .tint(nil)
-                            .labelsHidden()
-                            .pickerStyle(.menu)
+                            SiphonMenuPicker(
+                                selection: $fileType,
+                                options: (isVideoTab ? MediaFileType.videoTypes : MediaFileType.audioTypes)
+                                    .map { type in (value: type, title: type.rawValue) }
+                            )
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .accessibilityLabel(languageService.s("file_type"))
                         }
@@ -919,12 +914,10 @@ struct AddDownloadView: View {
                                 .font(.siphonMetadataMedium)
                                 .foregroundColor(.secondary)
                             if isVideoTab {
-                                Picker("", selection: $videoResolution) {
-                                    ForEach(filteredResolutions) { res in Text(res.title(lang: languageService)).tag(res) }
-                                }
-                                .tint(nil)
-                                .labelsHidden()
-                                .pickerStyle(.menu)
+                                SiphonMenuPicker(
+                                    selection: $videoResolution,
+                                    options: filteredResolutions.map { res in (value: res, title: res.title(lang: languageService)) }
+                                )
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .accessibilityLabel(languageService.s("quality"))
                                 .onChange(of: selectedCodec) { _, newCodec in
@@ -933,12 +926,10 @@ struct AddDownloadView: View {
                                     }
                                 }
                             } else {
-                                Picker("", selection: $audioQuality) {
-                                    ForEach(AudioQuality.allCases) { quality in Text(quality.title(lang: languageService)).tag(quality) }
-                                }
-                                .tint(nil)
-                                .labelsHidden()
-                                .pickerStyle(.menu)
+                                SiphonMenuPicker(
+                                    selection: $audioQuality,
+                                    options: AudioQuality.allCases.map { quality in (value: quality, title: quality.title(lang: languageService)) }
+                                )
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .accessibilityLabel(languageService.s("audio_quality"))
                             }
@@ -1175,12 +1166,10 @@ struct AddDownloadView: View {
                                 TextField(languageService.s("subtitle_language_codes"), text: $batchSubtitleLanguages)
                                     .textFieldStyle(.roundedBorder)
                                     .accessibilityLabel(languageService.s("subtitle_language_codes"))
-                                Picker(languageService.s("subtitle_format"), selection: $subtitleFormat) {
-                                    ForEach(SubtitleFormat.allCases) { format in
-                                        Text(format.displayName).tag(format)
-                                    }
-                                }
-                                .tint(nil)
+                                SiphonMenuPicker(
+                                    languageService.s("subtitle_format"), selection: $subtitleFormat,
+                                    options: SubtitleFormat.allCases.map { format in (value: format, title: format.displayName) }
+                                )
                                 Toggle(languageService.s("embed_video"), isOn: $embedSubtitles)
                             } else if inputMode == .single && availableSubtitles.isEmpty && mediaInfo != nil {
                                 Text(languageService.s("no_subtitles"))
@@ -1200,7 +1189,7 @@ struct AddDownloadView: View {
                                         let sortedAutoSubs = autoSubs.sorted(by: { $0.name < $1.name })
 
                                         if !sortedManualSubs.isEmpty {
-                                            Section(header: Text(languageService.s("internal"))) {
+                                            Section(siphonHeader: languageService.s("internal")) {
                                                 ForEach(sortedManualSubs) { sub in
                                                     Button {
                                                         toggleSubtitle(sub.id)
@@ -1217,7 +1206,7 @@ struct AddDownloadView: View {
                                         }
 
                                         if !sortedAutoSubs.isEmpty {
-                                            Section(header: Text(languageService.s("auto_subs"))) {
+                                            Section(siphonHeader: languageService.s("auto_subs")) {
                                                 ForEach(sortedAutoSubs) { sub in
                                                     Button {
                                                         toggleSubtitle(sub.id)
@@ -1233,7 +1222,7 @@ struct AddDownloadView: View {
                                             }
                                         }
                                     } label: {
-                                        HStack {
+                                        SiphonMenuLabel {
                                             Text(languageService.s("languages"))
                                             Spacer()
                                             if selectedSubtitleLangs.isEmpty {
@@ -1246,16 +1235,12 @@ struct AddDownloadView: View {
                                             }
                                         }
                                     }
-                                    .tint(nil)
-                                    .menuStyle(.borderedButton)
+                                    .siphonMenuStyle()
 
-                                    Picker(languageService.s("subtitle_format"), selection: $subtitleFormat) {
-                                        ForEach(SubtitleFormat.allCases) { format in
-                                            Text(format.displayName).tag(format)
-                                        }
-                                    }
-                                    .tint(nil)
-                                    .pickerStyle(.menu)
+                                    SiphonMenuPicker(
+                                        languageService.s("subtitle_format"), selection: $subtitleFormat,
+                                        options: SubtitleFormat.allCases.map { format in (value: format, title: format.displayName) }
+                                    )
                                 }
 
                                 Toggle(languageService.s("embed_video"), isOn: $embedSubtitles)
@@ -1310,41 +1295,29 @@ struct AddDownloadView: View {
                         GridRow {
                             advancedPicker(
                                 title: languageService.s("video_codec"),
-                                selection: $selectedCodec
-                            ) {
-                                ForEach(VideoCodec.allCases) { codec in
-                                    Text(videoCodecLabel(for: codec)).tag(codec.rawValue)
-                                }
-                            }
+                                selection: $selectedCodec,
+                                options: VideoCodec.allCases.map { codec in (value: codec.rawValue, title: videoCodecLabel(for: codec)) }
+                            )
 
                             advancedPicker(
                                 title: languageService.s("audio_codec"),
-                                selection: $selectedAudioCodec
-                            ) {
-                                ForEach(AudioCodec.allCases) { codec in
-                                    Text(codec.title(lang: languageService)).tag(codec.rawValue)
-                                }
-                            }
+                                selection: $selectedAudioCodec,
+                                options: AudioCodec.allCases.map { codec in (value: codec.rawValue, title: codec.title(lang: languageService)) }
+                            )
                         }
 
                         GridRow {
                             advancedPicker(
                                 title: languageService.s("post_processing"),
-                                selection: $selectedConversionCodec
-                            ) {
-                                ForEach(ConversionCodec.allCases) { codec in
-                                    Text(codec.title(lang: languageService)).tag(codec.rawValue)
-                                }
-                            }
+                                selection: $selectedConversionCodec,
+                                options: ConversionCodec.allCases.map { codec in (value: codec.rawValue, title: codec.title(lang: languageService)) }
+                            )
 
                             advancedPicker(
                                 title: languageService.s("hdr_dynamic_range"),
-                                selection: $selectedHDRAction
-                            ) {
-                                ForEach(HDRAction.allCases) { action in
-                                    Text(action.title(lang: languageService)).tag(action.rawValue)
-                                }
-                            }
+                                selection: $selectedHDRAction,
+                                options: HDRAction.allCases.map { action in (value: action.rawValue, title: action.title(lang: languageService)) }
+                            )
                         }
                     }
                 }
@@ -1403,20 +1376,17 @@ struct AddDownloadView: View {
     }
 
     @ViewBuilder
-    private func advancedPicker<Selection: Hashable, Content: View>(
+    private func advancedPicker<Selection: Hashable>(
         title: String,
         selection: Binding<Selection>,
-        @ViewBuilder content: () -> Content
+        options: [(value: Selection, title: String)]
     ) -> some View {
         VStack(alignment: .leading, spacing: 5) {
             Text(title)
                 .font(.siphonMetadataMedium)
                 .foregroundColor(.secondary)
 
-            Picker("", selection: selection, content: content)
-                .tint(nil)
-                .labelsHidden()
-                .pickerStyle(.menu)
+            SiphonMenuPicker(selection: selection, options: options)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .accessibilityLabel(title)
         }
@@ -1449,7 +1419,7 @@ struct AddDownloadView: View {
                             Text(languageService.s("open_system_settings"))
                                 .font(.siphonMetadataSemibold)
                         }
-                        .buttonStyle(.borderedProminent)
+                        .buttonStyle(.siphonPrimary)
                         .controlSize(.small)
 
                         Button {
@@ -1464,7 +1434,7 @@ struct AddDownloadView: View {
                             Text(languageService.s("settings"))
                                 .font(.siphonMetadataSemibold)
                         }
-                        .buttonStyle(.bordered)
+                        .buttonStyle(.siphonSecondary)
                         .controlSize(.small)
                         .tint(nil)
                     } else {
@@ -1480,7 +1450,7 @@ struct AddDownloadView: View {
                             Text(languageService.s("settings"))
                                 .font(.siphonMetadataSemibold)
                         }
-                        .buttonStyle(.borderedProminent)
+                        .buttonStyle(.siphonPrimary)
                         .controlSize(.small)
                     }
                 }
