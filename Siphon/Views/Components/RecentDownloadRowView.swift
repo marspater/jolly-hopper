@@ -258,6 +258,7 @@ struct RecentDownloadRowView: View {
             } label: {
                 Image(systemName: "exclamationmark.triangle")
                     .foregroundStyle(SiphonTheme.statusQueuedText)
+                    .accessibilityHidden(true)
             }
             .buttonStyle(.siphonIcon(size: 24))
             .help(languageService.s("recovery_arguments_review"))
@@ -271,6 +272,7 @@ struct RecentDownloadRowView: View {
                 Image(systemName: "stop.circle.fill")
                     .font(.system(size: 14))
                     .foregroundColor(SiphonTheme.statusDownloadingText)
+                    .accessibilityHidden(true)
             }
             .buttonStyle(.siphonIcon(size: 24))
             .help(languageService.s("stop_download"))
@@ -292,6 +294,7 @@ struct RecentDownloadRowView: View {
             Image(systemName: "folder")
                 .font(.system(size: 13))
                 .foregroundColor(.secondary)
+                .accessibilityHidden(true)
         }
         .buttonStyle(.siphonIcon(size: 24))
         .help(languageService.s("reveal_in_finder"))
@@ -307,6 +310,7 @@ struct RecentDownloadRowView: View {
                 Image(systemName: "xmark.circle")
                     .font(.system(size: 13))
                     .foregroundColor(.secondary)
+                    .accessibilityHidden(true)
             }
             .buttonStyle(.siphonIcon(size: 24))
             .help(languageService.s("remove_from_history"))
