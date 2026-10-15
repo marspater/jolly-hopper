@@ -1294,7 +1294,6 @@ public struct SiphonCardHoverModifier: ViewModifier {
                 radius: isHovered ? 14 : 4,
                 y: isHovered ? 5 : 2
             )
-            .animation(SiphonAnimation.hoverSpring, value: isHovered)
     }
 }
 
@@ -1316,6 +1315,9 @@ extension View {
 }
 
 extension View {
+    /// Lift and shadow for a hovered card. The caller sets `isHovered` inside
+    /// `withAnimation(SiphonAnimation.hoverSpring)`, so the card's background,
+    /// border and lift share one transaction.
     public func siphonCardHover(isHovered: Bool, tint: Color = SiphonTheme.accent) -> some View {
         modifier(SiphonCardHoverModifier(isHovered: isHovered, tint: tint))
     }
