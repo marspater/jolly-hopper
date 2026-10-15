@@ -35,13 +35,19 @@ struct RecentDownloadRowView: View {
             // column for Pause/Resume so actions stay aligned across states.
             HStack(spacing: SiphonTheme.spacing8) {
                 Group {
-                    if canRemoveFromHistory { primaryActionView }
-                    else { Color.clear.accessibilityHidden(true) }
+                    if canRemoveFromHistory {
+                        primaryActionView
+                    } else {
+                        Color.clear.accessibilityHidden(true)
+                    }
                 }
                 .frame(width: 24, height: 24)
                 Group {
-                    if canRemoveFromHistory { removeActionView }
-                    else { primaryActionView }
+                    if canRemoveFromHistory {
+                        removeActionView
+                    } else {
+                        primaryActionView
+                    }
                 }
                 .frame(width: 24, height: 24)
             }

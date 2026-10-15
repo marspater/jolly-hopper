@@ -224,7 +224,6 @@ struct ContentView: View {
                 } label: {
                     Label(languageService.s("stop_all"), systemImage: "stop.circle")
                 }
-                .disabled(!downloadManager.canStopDownloads)
                 .help(languageService.s("stop_all"))
                 .accessibilityLabel(languageService.s("stop_all"))
             } else if !clearableHistory.isEmpty {

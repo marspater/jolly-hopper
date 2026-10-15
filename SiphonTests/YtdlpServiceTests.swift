@@ -50,6 +50,22 @@ final class MockYtdlpProcessRunner: YtdlpProcessRunning, @unchecked Sendable {
 }
 
 @MainActor
+private final class PopupNavigationAction: WKNavigationAction {
+    var requestedURL: URL!
+    override var request: URLRequest { URLRequest(url: requestedURL) }
+    override var targetFrame: WKFrameInfo? { nil }
+}
+
+@MainActor
+private final class NavigationRecordingWebView: WKWebView {
+    var loadedURLs: [URL] = []
+    override func load(_ request: URLRequest) -> WKNavigation? {
+        if let url = request.url { loadedURLs.append(url) }
+        return nil
+    }
+}
+
+@MainActor
 final class YtdlpServiceTests: XCTestCase {
 
     var service: YtdlpService!
@@ -4102,7 +4118,24 @@ final class YtdlpServiceTests: XCTestCase {
         delegate.webView(webView, didCommit: nil)
         XCTAssertTrue(delegate.consumeToken("fixture-token"), "Login can return to the same video token")
         XCTAssertFalse(delegate.consumeToken("fixture-token"))
-        XCTAssertTrue(delegate.responds(to: NSSelectorFromString("webView:createWebViewWithConfiguration:forNavigationAction:windowFeatures:")))
+        XCTAssertFalse(delegate.responds(to: NSSelectorFromString("webView:createWebViewWithConfiguration:forNavigationAction:windowFeatures:")), "New-window links are handled by the navigation policy, without a second popup delegate")
+    }
+
+    func testProtectedSessionPopupLinksUseTheNavigationPolicy() throws {
+        let delegate = YtdlpService.RecuNavigationDelegate()
+        let configuration = WKWebViewConfiguration()
+        configuration.websiteDataStore = .nonPersistent()
+        let webView = NavigationRecordingWebView(frame: .zero, configuration: configuration)
+        let action = PopupNavigationAction()
+        let allowedURL = try XCTUnwrap(URL(string: "https://recu.me/account/signin"))
+        for url in [allowedURL, try XCTUnwrap(URL(string: "https://example.com/rejected"))] {
+            action.requestedURL = url
+            var decisions: [WKNavigationActionPolicy] = []
+            delegate.webView(webView, decidePolicyFor: action) { decisions.append($0) }
+            XCTAssertEqual(decisions, [.cancel], "Popup navigation must be cancelled after routing or rejection")
+        }
+        XCTAssertEqual(webView.loadedURLs, [allowedURL], "Only an allowlisted popup may reuse the owned WebView")
+        XCTAssertNil(webView.uiDelegate, "The navigation delegate owns popup routing")
     }
 
     func testRecuNavigationDelegateAllowsCloudflareAndRecuHosts() {
@@ -4117,15 +4150,15 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertFalse(YtdlpService.RecuNavigationDelegate.isAllowedHost("cloudflare.com.evil.com"))
 
         // Scheme security: internal safe schemes allowed, javascript rejected
-        XCTAssertTrue(YtdlpService.RecuNavigationDelegate.allowsNavigation(to: URL(string: "about:blank"), targetFrame: nil))
-        XCTAssertTrue(YtdlpService.RecuNavigationDelegate.allowsNavigation(to: URL(string: "data:text/html,test"), targetFrame: nil))
-        XCTAssertFalse(YtdlpService.RecuNavigationDelegate.allowsNavigation(to: URL(string: "javascript:alert(1)"), targetFrame: nil))
+        XCTAssertTrue(YtdlpService.RecuNavigationDelegate.allowsNavigation(to: URL(string: "about:blank")))
+        XCTAssertTrue(YtdlpService.RecuNavigationDelegate.allowsNavigation(to: URL(string: "data:text/html,test")))
+        XCTAssertFalse(YtdlpService.RecuNavigationDelegate.allowsNavigation(to: URL(string: "javascript:alert(1)")))
 
         // Host security
-        XCTAssertTrue(YtdlpService.RecuNavigationDelegate.allowsNavigation(to: URL(string: "https://recu.me/test"), targetFrame: nil))
-        XCTAssertTrue(YtdlpService.RecuNavigationDelegate.allowsNavigation(to: URL(string: "https://challenges.cloudflare.com/cdn-cgi/challenge"), targetFrame: nil))
-        XCTAssertFalse(YtdlpService.RecuNavigationDelegate.allowsNavigation(to: URL(string: "https://evil.com/phish"), targetFrame: nil))
-        XCTAssertFalse(YtdlpService.RecuNavigationDelegate.allowsNavigation(to: nil, targetFrame: nil))
+        XCTAssertTrue(YtdlpService.RecuNavigationDelegate.allowsNavigation(to: URL(string: "https://recu.me/test")))
+        XCTAssertTrue(YtdlpService.RecuNavigationDelegate.allowsNavigation(to: URL(string: "https://challenges.cloudflare.com/cdn-cgi/challenge")))
+        XCTAssertFalse(YtdlpService.RecuNavigationDelegate.allowsNavigation(to: URL(string: "https://evil.com/phish")))
+        XCTAssertFalse(YtdlpService.RecuNavigationDelegate.allowsNavigation(to: nil))
     }
 
     func testRecuMetadataResolvesThroughBrowserSessionWithoutBrowserCookies() async throws {
@@ -5941,6 +5974,29 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertTrue(conversion.contains("hvc1"))
         XCTAssertTrue(conversion.contains("0:s?"), "Keep embedded subtitles during conversion")
         XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: root.path), ["video.mp4"])
+    }
+
+    func testSDRConversionKeepsWebMCodecsValid() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let source = root.appendingPathComponent("video.webm")
+        try Data("HDR source".utf8).write(to: source)
+        let commands = TestBox<[[String]]>([])
+        service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
+            commands.value.append(args)
+            try Data("SDR output".utf8).write(to: URL(fileURLWithPath: try XCTUnwrap(args.last)))
+            return ""
+        })
+        var options = DownloadOptions.default
+        options.fileType = .webm
+        options.hdrAction = .convertToSDR
+        _ = try await service.postprocessDownloadedMedia(at: source, options: options, ffmpegDir: root.path)
+        let conversion = try XCTUnwrap(commands.value.first)
+        XCTAssertTrue(conversion.contains("libvpx-vp9"), "WebM rejects H.264 video")
+        XCTAssertEqual(conversion.filter { $0 == "-c:s" }.count, 1)
+        XCTAssertTrue(conversion.contains("webvtt"), "WebM stores only WebVTT subtitles")
+        XCTAssertFalse(conversion.contains("0:t?"), "Only Matroska stores attachments")
     }
 
     func testHEVCConversionProducesHEVCWithRealFFmpeg() async throws {

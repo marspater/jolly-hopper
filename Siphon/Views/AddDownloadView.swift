@@ -127,207 +127,219 @@ struct AddDownloadView: View {
     }
 
     private var windowLayout: AddDownloadWindowManager.Layout {
-        .init(contentHeight: scrollContentHeight, chromeHeight: headerHeight > 0 && footerHeight > 0 ? headerHeight + footerHeight : 0,
-              advancedVisible: showsAdvancedOptions, allowsShrink: inputMode == .single && mediaInfo == nil)
+        AddDownloadWindowManager.Layout(
+            contentHeight: scrollContentHeight,
+            chromeHeight: headerHeight > 0 && footerHeight > 0 ? headerHeight + footerHeight : 0,
+            advancedVisible: showsAdvancedOptions,
+            allowsShrink: inputMode == .single && mediaInfo == nil
+        )
     }
 
     var body: some View {
+        windowContent
+            .frame(minWidth: 500, idealWidth: 540,
+                   minHeight: AddDownloadWindowManager.compactHeight, maxHeight: .infinity)
+            .siphonAdaptiveRendering()
+            .siphonWindowBackground()
+            .onAppear(perform: initializeForm)
+            .onChange(of: downloadSubtitles) { _, enabled in
+                if enabled { selectDefaultSubtitleLanguages() }
+            }
+            .onChange(of: inputMode) { _, _ in
+                if downloadSubtitles { selectDefaultSubtitleLanguages() }
+            }
+            .onChange(of: urlInput) { _, newValue in resetForURL(newValue) }
+            .onChange(of: appState.urlToDownload) { _, newURL in acceptExternalURL(newURL) }
+            .alert(languageService.s("file_exists_title"), isPresented: $showFileExistsAlert) {
+                Button(languageService.s("overwrite"), role: .destructive) {
+                    if let options = pendingDownloadOptions {
+                        proceedWithDownload(options: options, forceOverwrite: true)
+                    }
+                }
+                Button(languageService.s("add_number"), action: downloadWithUniqueFilename)
+                Button(languageService.s("cancel"), role: .cancel) { pendingDownloadOptions = nil }
+            } message: {
+                Text(languageService.s("file_exists_message"))
+            }
+            .onReceive(NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification)) { _ in
+                refreshCustomPresets()
+            }
+            .onDisappear(perform: tearDownForm)
+    }
+
+    private var windowContent: some View {
         VStack(spacing: 0) {
             VStack(spacing: 0) {
                 header
                 SiphonTheme.subtleDivider
             }
             .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { headerHeight = $0 }
-
-            HStack(spacing: 0) {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: SiphonTheme.spacing20) {
-                        if inputMode == .single {
-                            urlSection
-                            if let info = mediaInfo {
-                                VStack(alignment: .leading, spacing: SiphonTheme.spacing20) {
-                                    if !showPlaylistSelector {
-                                        mediaInfoSection(info)
-                                        if info.playlist != nil { playlistDetectedBanner }
-                                    } else {
-                                        playlistSelectorSection
-                                    }
-                                    formatSection
-                                    saveSection
-                                    optionalSettingsSection
-                                }
-                                .transition(revealTransition)
-                            }
-                            if let error = errorMessage {
-                                errorSection(error)
-                                    .transition(revealTransition)
-                            }
-                        } else {
-                            batchSection
-                        }
-                    }
-                    .padding(SiphonTheme.spacing20)
-                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height in
-                        scrollContentHeight = height
-                    }
-                }
-                .frame(minWidth: 500, maxWidth: .infinity)
-
-                if advancedPanePresented {
-                    Divider()
-                    ScrollView {
-                        VStack(alignment: .leading, spacing: SiphonTheme.spacing14) {
-                            Text(languageService.s("advanced_options"))
-                                .font(.siphonPrimarySemibold)
-                                .accessibilityAddTraits(.isHeader)
-                            optionalSettingsContent
-                        }
-                        .padding(SiphonTheme.spacing16)
-                        .opacity(advancedPaneOpacity)
-                        .offset(x: reduceMotion ? 0 : (1 - advancedPaneOpacity) * SiphonTheme.spacing16)
-                        .onAppear {
-                            withAnimation(reduceMotion ? nil : SiphonAnimation.panelReveal) {
-                                advancedPaneOpacity = 1
-                            }
-                        }
-                    }
-                    .frame(width: AddDownloadWindowManager.advancedPaneWidth)
-                }
-            }
-            // Window changes must run after SwiftUI's layout pass. Calling
-            // setFrame from a geometry callback reenters NSHostingView layout.
-            .task(id: windowLayout) {
-                if showsAdvancedOptions {
-                    if advancedPanePresented {
-                        withAnimation(reduceMotion ? nil : SiphonAnimation.panelReveal) {
-                            advancedPaneOpacity = 1
-                        }
-                    } else {
-                        advancedPanePresented = true
-                    }
-                } else {
-                    withAnimation(reduceMotion ? nil : SiphonAnimation.panelReveal) {
-                        advancedPaneOpacity = 0
-                    }
-                }
-                AddDownloadWindowManager.shared.updateLayout(windowLayout)
-                guard !Task.isCancelled else { return }
-                if !showsAdvancedOptions {
-                    advancedPanePresented = false
-                }
-            }
-
+            formColumns
+                // Resize after layout; a geometry callback would reenter NSHostingView.
+                .task(id: windowLayout) { updateWindowLayout() }
             VStack(spacing: 0) {
                 SiphonTheme.subtleDivider
                 footer
             }
             .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { footerHeight = $0 }
         }
-        .frame(minWidth: 500, idealWidth: 540,
-               minHeight: AddDownloadWindowManager.compactHeight, maxHeight: .infinity)
-        .siphonAdaptiveRendering()
-        .siphonWindowBackground()
-        .onAppear {
-            focusedField = .url
-            loadPreferencesDefaults()
-            batchSubtitleLanguages = presetSubtitleLanguage.isEmpty ? "en" : presetSubtitleLanguage
-            let loadedPresets = CustomPreset.loadAll()
-            self.customPresets = loadedPresets
+    }
 
-            // 1. Try to load from Custom Preset first
-            if !selectedCustomPresetIdString.isEmpty,
-               let customPresetId = UUID(uuidString: selectedCustomPresetIdString),
-               let customPreset = loadedPresets.first(where: { $0.id == customPresetId }) {
-                applyCustomPreset(customPreset)
-                selectedPresetName = customPreset.name
+    private var formColumns: some View {
+        HStack(spacing: 0) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: SiphonTheme.spacing20) {
+                    if inputMode == .single {
+                        singleInputContent
+                    } else {
+                        batchSection
+                    }
+                }
+                .padding(SiphonTheme.spacing20)
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { scrollContentHeight = $0 }
+            }
+            .frame(minWidth: 500, maxWidth: .infinity)
+            if advancedPanePresented {
+                Divider()
+                advancedPane
+            }
+        }
+    }
+
+    private var singleInputContent: some View {
+        Group {
+            urlSection
+            if let info = mediaInfo {
+                VStack(alignment: .leading, spacing: SiphonTheme.spacing20) {
+                    if !showPlaylistSelector {
+                        mediaInfoSection(info)
+                        if info.playlist != nil { playlistDetectedBanner }
+                    } else {
+                        playlistSelectorSection
+                    }
+                    formatSection
+                    saveSection
+                    optionalSettingsSection
+                }
+                .transition(revealTransition)
+            }
+            if let error = errorMessage {
+                errorSection(error)
+                    .transition(revealTransition)
+            }
+        }
+    }
+
+    private var advancedPane: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: SiphonTheme.spacing14) {
+                Text(languageService.s("advanced_options"))
+                    .font(.siphonPrimarySemibold)
+                    .accessibilityAddTraits(.isHeader)
+                optionalSettingsContent
+            }
+            .padding(SiphonTheme.spacing16)
+            .opacity(advancedPaneOpacity)
+            .offset(x: reduceMotion ? 0 : (1 - advancedPaneOpacity) * SiphonTheme.spacing16)
+            .onAppear {
+                withAnimation(reduceMotion ? nil : SiphonAnimation.panelReveal) {
+                    advancedPaneOpacity = 1
+                }
+            }
+        }
+        .frame(width: AddDownloadWindowManager.advancedPaneWidth)
+    }
+
+    private func updateWindowLayout() {
+        if showsAdvancedOptions {
+            if advancedPanePresented {
+                withAnimation(reduceMotion ? nil : SiphonAnimation.panelReveal) {
+                    advancedPaneOpacity = 1
+                }
             } else {
-                selectedPresetName = DownloadPreset(rawValue: selectedPreset)?.title(lang: languageService)
+                advancedPanePresented = true
             }
+        } else {
+            withAnimation(reduceMotion ? nil : SiphonAnimation.panelReveal) {
+                advancedPaneOpacity = 0
+            }
+        }
+        AddDownloadWindowManager.shared.updateLayout(windowLayout)
+        guard !Task.isCancelled else { return }
+        if !showsAdvancedOptions { advancedPanePresented = false }
+    }
 
-            // Handle External URLs passed via AppState
-            if !appState.urlToDownload.isEmpty {
-                urlInput = appState.urlToDownload
-                appState.urlToDownload = ""
-            }
+    private func initializeForm() {
+        focusedField = .url
+        loadPreferencesDefaults()
+        batchSubtitleLanguages = presetSubtitleLanguage.isEmpty ? "en" : presetSubtitleLanguage
+        let loadedPresets = CustomPreset.loadAll()
+        customPresets = loadedPresets
+        if !selectedCustomPresetIdString.isEmpty,
+           let customPresetID = UUID(uuidString: selectedCustomPresetIdString),
+           let customPreset = loadedPresets.first(where: { $0.id == customPresetID }) {
+            applyCustomPreset(customPreset)
+            selectedPresetName = customPreset.name
+        } else {
+            selectedPresetName = DownloadPreset(rawValue: selectedPreset)?.title(lang: languageService)
+        }
+        if !appState.urlToDownload.isEmpty {
+            urlInput = appState.urlToDownload
+            appState.urlToDownload = ""
+        }
+        if additionalArguments.isEmpty && !defaultAdditionalArguments.isEmpty {
+            additionalArguments = defaultAdditionalArguments
+        }
+    }
 
-            if additionalArguments.isEmpty && !defaultAdditionalArguments.isEmpty {
-                additionalArguments = defaultAdditionalArguments
-            }
-        }
-        .onChange(of: downloadSubtitles) { _, enabled in
-            if enabled { selectDefaultSubtitleLanguages() }
-        }
-        .onChange(of: inputMode) { _, _ in
-            if downloadSubtitles { selectDefaultSubtitleLanguages() }
-        }
-        .onChange(of: urlInput) { _, newValue in
-            fetchTask?.cancel()
-            // A playlist load for the previous URL must not land on the new one.
-            playlistTask?.cancel()
-            isLoadingPlaylist = false
-            showPlaylistSelector = false
-            downloadMode = .single
-            mediaInfo = nil
-            customFilename = ""
-            selectedFormatId = nil
-            availableSubtitles = []
-            selectedSubtitleLangs.removeAll()
-            availableCodecs = []
-            errorMessage = nil
-            playlistItems = []
-            selectedPlaylistIds.removeAll()
-            isLoading = false
+    private func resetForURL(_ newValue: String) {
+        fetchTask?.cancel()
+        // A playlist load for the previous URL must not land on the new one.
+        playlistTask?.cancel()
+        isLoadingPlaylist = false
+        showPlaylistSelector = false
+        downloadMode = .single
+        mediaInfo = nil
+        customFilename = ""
+        selectedFormatId = nil
+        availableSubtitles = []
+        selectedSubtitleLangs.removeAll()
+        availableCodecs = []
+        errorMessage = nil
+        playlistItems = []
+        selectedPlaylistIds.removeAll()
+        isLoading = false
+        let clean = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        appState.clearBrowserSessionIfOriginChanged(to: clean)
+        if clean.hasPrefix("http://") || clean.hasPrefix("https://") { fetchInfo(debounce: true) }
+    }
 
-            let clean = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
-            appState.clearBrowserSessionIfOriginChanged(to: clean)
-            if clean.hasPrefix("http://") || clean.hasPrefix("https://") {
-                fetchInfo(debounce: true)
-            }
-        }
-        .onChange(of: appState.urlToDownload) { _, newUrl in
-            if !newUrl.isEmpty {
-                urlInput = newUrl
-                appState.urlToDownload = ""
-                inputMode = .single
-                fetchInfo(debounce: false)
-            }
-        }
-        .alert(languageService.s("file_exists_title"), isPresented: $showFileExistsAlert) {
-            Button(languageService.s("overwrite"), role: .destructive) {
-                if let options = pendingDownloadOptions {
-                    proceedWithDownload(options: options, forceOverwrite: true)
-                }
-            }
-            Button(languageService.s("add_number")) {
-                downloadWithUniqueFilename()
-            }
-            Button(languageService.s("cancel"), role: .cancel) {
-                pendingDownloadOptions = nil
-            }
-        } message: {
-            Text(languageService.s("file_exists_message"))
-        }
-        .onReceive(NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification)) { _ in
-            let newPresets = CustomPreset.loadAll()
-            if newPresets != self.customPresets {
-                self.customPresets = newPresets
+    private func acceptExternalURL(_ newURL: String) {
+        guard !newURL.isEmpty else { return }
+        urlInput = newURL
+        appState.urlToDownload = ""
+        inputMode = .single
+        fetchInfo(debounce: false)
+    }
 
-                // If the currently selected custom preset was updated, re-apply its values
-                if let customPresetId = UUID(uuidString: selectedCustomPresetIdString),
-                   let customPreset = newPresets.first(where: { $0.id == customPresetId }) {
-                    applyCustomPreset(customPreset)
-                    selectedPresetName = customPreset.name
-                }
-            }
+    private func refreshCustomPresets() {
+        let newPresets = CustomPreset.loadAll()
+        guard newPresets != customPresets else { return }
+        customPresets = newPresets
+        if let customPresetID = UUID(uuidString: selectedCustomPresetIdString),
+           let customPreset = newPresets.first(where: { $0.id == customPresetID }) {
+            applyCustomPreset(customPreset)
+            selectedPresetName = customPreset.name
         }
-        .onDisappear {
-            fetchTask?.cancel()
-            fetchTask = nil
-            playlistTask?.cancel()
-            playlistTask = nil
-            appState.clearBrowserSession()
-            appState.clearExternalTarget()
-        }
+    }
+
+    private func tearDownForm() {
+        fetchTask?.cancel()
+        fetchTask = nil
+        playlistTask?.cancel()
+        playlistTask = nil
+        appState.clearBrowserSession()
+        appState.clearExternalTarget()
     }
 
     private var header: some View {
@@ -968,7 +980,6 @@ struct AddDownloadView: View {
                     }
                 }
             }
-
 
             // Info notices
             if isVideoTab && selectedCodec == "h264" {
