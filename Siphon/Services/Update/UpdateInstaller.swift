@@ -374,7 +374,7 @@ public final class UpdateInstaller: Sendable {
     private func extractZip(zipURL: URL, destinationDir: URL) throws {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/ditto")
-        process.arguments = ["-xk", zipURL.path, destinationDir.path]
+        process.arguments = ["-xk", "--", zipURL.path, destinationDir.path]
         process.environment = YtdlpService.createSanitizedEnvironment()
         process.standardOutput = FileHandle.nullDevice
         process.standardError = FileHandle.nullDevice
