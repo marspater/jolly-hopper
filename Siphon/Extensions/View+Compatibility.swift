@@ -175,6 +175,9 @@ public enum SiphonAnimation {
         .spring(response: 0.20, dampingFraction: 0.78, blendDuration: 0)
     }
 
+    public static let panelRevealDuration: TimeInterval = 0.34
+    public static let panelReveal = Animation.easeInOut(duration: panelRevealDuration)
+
     /// Shared tactile motion used by all custom button styles. These values are
     /// independent of refresh rate; 120 Hz displays simply sample them more often.
     public static let buttonPressSpring = Animation.spring(
@@ -1384,16 +1387,18 @@ struct SiphonMenuPicker<Value: Hashable>: View {
     typealias Option = (value: Value, title: String)
 
     private let label: String?
+    private let fillsWidth: Bool
     @Binding private var selection: Value
     private let sections: [(header: String?, options: [Option])]
 
     /// `label` adds a leading title, laid out like a Form row.
-    init(_ label: String? = nil, selection: Binding<Value>, options: [Option]) {
-        self.init(label, selection: selection, sections: [(nil, options)])
+    init(_ label: String? = nil, selection: Binding<Value>, fillsWidth: Bool = false, options: [Option]) {
+        self.init(label, selection: selection, fillsWidth: fillsWidth, sections: [(nil, options)])
     }
 
-    init(_ label: String? = nil, selection: Binding<Value>, sections: [(header: String?, options: [Option])]) {
+    init(_ label: String? = nil, selection: Binding<Value>, fillsWidth: Bool = false, sections: [(header: String?, options: [Option])]) {
         self.label = label
+        self.fillsWidth = fillsWidth
         _selection = selection
         self.sections = sections.filter { !$0.options.isEmpty }
     }
@@ -1425,10 +1430,15 @@ struct SiphonMenuPicker<Value: Hashable>: View {
             .pickerStyle(.inline)
             .labelsHidden()
         } label: {
-            SiphonMenuLabel { Text(currentTitle) }
+            SiphonMenuLabel {
+                Text(currentTitle).truncationMode(.tail)
+                if fillsWidth { Spacer(minLength: 0) }
+            }
         }
         .siphonMenuStyle()
-        .fixedSize()
+        .fixedSize(horizontal: !fillsWidth, vertical: true)
+        .frame(maxWidth: fillsWidth ? .infinity : nil, alignment: .leading)
+        .help(currentTitle)
         .accessibilityLabel(label ?? "")
         .accessibilityValue(currentTitle)
     }
@@ -1451,6 +1461,7 @@ struct SiphonSegmentedPicker<Value: Hashable>: View {
     var icon: (Value) -> String? = { _ in nil }
     /// Full-width bar of equal segments, 38 pt tall (Settings tabs).
     var isLarge = false
+    var fillsWidth = false
 
     @Namespace private var bubble
     @Environment(\.siphonRenderingCapabilities) private var renderingCapabilities
@@ -1479,7 +1490,7 @@ struct SiphonSegmentedPicker<Value: Hashable>: View {
                     .foregroundColor(isSelected ? .white : .secondary)
                     .padding(.horizontal, horizontalPadding)
                     .padding(.vertical, SiphonTheme.spacing4)
-                    .frame(maxWidth: isLarge ? .infinity : nil, maxHeight: isLarge ? .infinity : nil)
+                    .frame(maxWidth: isLarge || fillsWidth ? .infinity : nil, maxHeight: isLarge ? .infinity : nil)
                     .background {
                         if isSelected {
                             Capsule()
@@ -1495,6 +1506,7 @@ struct SiphonSegmentedPicker<Value: Hashable>: View {
             }
         }
         .padding(SiphonTheme.spacing2)
+        .frame(maxWidth: fillsWidth ? .infinity : nil)
         .frame(height: isLarge ? 38 : nil)
         .background(SiphonTheme.pillBackground(isSelected: false))
         .clipShape(Capsule())

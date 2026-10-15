@@ -93,6 +93,10 @@ class DownloadManager: ObservableObject {
         downloads.filter(DownloadQueue.isQueueTabMember)
     }
 
+    var canStopDownloads: Bool {
+        downloadingCount > 0 || queuedCount > 0
+    }
+
     var completedDownloads: [Download] {
         downloads.filter { $0.status == .completed }
     }
@@ -127,8 +131,10 @@ class DownloadManager: ObservableObject {
             switch download.status {
             case .downloading, .fetching, .processing:
                 downloading += 1
-            case .queued, .paused, .fileExists:
+            case .queued, .paused:
                 queued += 1
+            case .fileExists:
+                break
             case .completed:
                 completed += 1
             case .failed, .stopped:
@@ -643,17 +649,38 @@ class DownloadManager: ObservableObject {
         }
     }
 
-    /// Reveals the file that blocked a `.fileExists` download, or its folder.
-    func revealExistingFile(for download: Download) {
-        // Same base name the executor checked for the collision.
+    /// Resolves the collision using the same filename/container rules as admission.
+    func existingFile(for download: Download) async -> URL? {
         let baseName = YtdlpService.sanitizeFilename(download.outputBaseName)
         let options = download.options
-        let folder = options.saveFolder
+        return await Task.detached {
+            DownloadQueue.collidingMediaFile(baseName: baseName, options: options, in: options.saveFolder)
+        }.value
+    }
+
+    func openDownload(_ download: Download) {
+        if download.status == .fileExists {
+            Task {
+                if let path = await existingFile(for: download) {
+                    openFile(path)
+                } else {
+                    LoggerService.shared.log("The existing media file is no longer available.", level: .warning)
+                    NSSound.beep()
+                }
+            }
+        } else if download.hasPlayableOutput, let path = download.primaryFilePath {
+            openFile(path)
+        }
+    }
+
+    /// Reveals the file that blocked a `.fileExists` download, or its folder.
+    func revealExistingFile(for download: Download) {
         Task {
-            let existing = await Task.detached {
-                DownloadQueue.collidingMediaFile(baseName: baseName, options: options, in: folder)
-            }.value
-            showInFinder([existing ?? folder.appendingPathComponent(baseName)])
+            let existing = await existingFile(for: download)
+            let fallback = download.options.saveFolder.appendingPathComponent(
+                YtdlpService.sanitizeFilename(download.outputBaseName)
+            )
+            showInFinder([existing ?? fallback])
         }
     }
 

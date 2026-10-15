@@ -2414,12 +2414,22 @@ public struct DownloadResult: Sendable {
                 } onCancel: {
                     decryption.cancel()
                 }
-                let processed = try await postprocessDecryptedMedia(
-                    at: encryptedFile, options: options, ffmpegDir: ffmpegDir,
+            }
+        }
+
+        // yt-dlp skips --recode-video when the container already matches,
+        // even if a different codec or tone mapping was explicitly requested.
+        if bestCamDecryptionKey != nil ||
+           (options.fileType.isVideo && ((options.conversionCodec ?? .none) != .none || options.hdrAction == .convertToSDR)) {
+            onOutput("[VideoConvertor] Converting downloaded media...\n")
+            for index in allFileURLs.indices {
+                let source = allFileURLs[index]
+                let processed = try await postprocessDownloadedMedia(
+                    at: source, options: options, ffmpegDir: ffmpegDir,
                     processController: processController
                 )
                 allFileURLs[index] = processed
-                if finalFileURL == encryptedFile { finalFileURL = processed }
+                if finalFileURL == source { finalFileURL = processed }
             }
         }
 
@@ -2558,7 +2568,7 @@ public struct DownloadResult: Sendable {
         return destination
     }
 
-    func postprocessDecryptedMedia(at source: URL, options: DownloadOptions, ffmpegDir: String,
+    func postprocessDownloadedMedia(at source: URL, options: DownloadOptions, ffmpegDir: String,
                                   processController: DownloadProcessController? = nil) async throws -> URL {
         let targetExtension = Self.resolvedOutputFileExtension(for: options)
         let needsRecode = options.fileType.isAudio || (options.conversionCodec ?? .none) != .none || options.hdrAction == .convertToSDR
@@ -2578,8 +2588,10 @@ public struct DownloadResult: Sendable {
                 args += ["-q:a", "0"]
             }
         } else {
-            args += ["-map", "0:v:0", "-map", "0:a?"]
-            args += needsRecode ? Self.videoConversionArguments(options: options) : ["-c", "copy"]
+            // Preserve audio, subtitles, chapters and attachments. Cover art is
+            // restored below; it must not be sent through the video encoder.
+            args += ["-map", "0:V:0", "-map", "0:a?", "-map", "0:s?", "-map", "0:t?", "-c", "copy"]
+            if needsRecode { args += Self.videoConversionArguments(options: options) }
         }
         args.append(partial.path)
         _ = try await processRunner.runCommand(args, processController: processController)
@@ -2889,7 +2901,6 @@ public struct DownloadResult: Sendable {
         // 3. Common video postprocessing: container selection, codec conversion, and tone mapping
         var finalMergeFormat = Self.compatibleMergeOutputFormat(for: options)
         let conversionCodec = options.conversionCodec ?? .none
-        let isConvertToSDR = options.hdrAction == .convertToSDR
 
         var targetExt = options.fileType.fileExtension
         if conversionCodec == .av1 || conversionCodec == .vp9 {
@@ -2901,16 +2912,6 @@ public struct DownloadResult: Sendable {
 
         if let mergeOutputFormat = finalMergeFormat {
             args.append(contentsOf: ["--merge-output-format", mergeOutputFormat])
-        }
-
-        let needsRecode = (conversionCodec != .none) || isConvertToSDR
-        if needsRecode {
-            let videoConvertorArgs = Self.videoConversionArguments(options: options)
-
-            args.append(contentsOf: [
-                "--recode-video", targetExt,
-                "--postprocessor-args", "VideoConvertor:" + videoConvertorArgs.joined(separator: " ")
-            ])
         }
 
         return args
@@ -2933,6 +2934,9 @@ public struct DownloadResult: Sendable {
             #else
             videoConvertorArgs.append(contentsOf: ["-c:v", "libx265", "-strict", "experimental"])
             #endif
+            if options.fileType == .mp4 {
+                videoConvertorArgs += ["-tag:v", "hvc1"]
+            }
         case .vp9:
             videoConvertorArgs.append(contentsOf: ["-c:v", "libvpx-vp9", "-strict", "experimental"])
         case .h264:
@@ -2942,6 +2946,13 @@ public struct DownloadResult: Sendable {
             videoConvertorArgs.append(contentsOf: ["-c:v", "libx264", "-strict", "experimental"])
             #endif
         case .none:
+            if isConvertToSDR {
+                #if arch(arm64)
+                videoConvertorArgs += ["-c:v", "h264_videotoolbox"]
+                #else
+                videoConvertorArgs += ["-c:v", "libx264"]
+                #endif
+            }
             break
         }
 
@@ -3256,15 +3267,44 @@ public struct DownloadResult: Sendable {
         let userAgent: String?
     }
 
-    private struct RecuPageState: Decodable {
+    struct RecuPageState: Decodable {
         let challenge: Bool
         let token: String?
         let needsSignIn: Bool
+        let usesSessionPlayer: Bool
         let html: String?
         let userAgent: String?
     }
 
-    final class RecuNavigationDelegate: NSObject, WKNavigationDelegate {
+    final class RecuNavigationDelegate: NSObject, WKNavigationDelegate, WKUIDelegate {
+        private var lastToken: String?
+
+        /// A sign-in redirect may render the same token in a new document.
+        /// Suppress duplicate polling only until the next navigation commits.
+        func consumeToken(_ token: String) -> Bool {
+            guard token != lastToken else { return false }
+            lastToken = token
+            return true
+        }
+
+        func webView(_ _: WKWebView, didCommit _: WKNavigation!) {
+            lastToken = nil
+        }
+
+        func webView(
+            _ webView: WKWebView,
+            createWebViewWith _: WKWebViewConfiguration,
+            for navigationAction: WKNavigationAction,
+            windowFeatures _: WKWindowFeatures
+        ) -> WKWebView? {
+            // Keep allowed sign-in/player links in the owned session. Never
+            // create an untracked browser or admit a host outside the policy.
+            if navigationAction.targetFrame == nil, Self.allowsNavigation(to: navigationAction.request.url) {
+                webView.load(navigationAction.request)
+            }
+            return nil
+        }
+
         nonisolated static func isAllowedHost(_ host: String) -> Bool {
             let h = host.lowercased()
             return h == "recu.me" || h.hasSuffix(".recu.me") ||
@@ -3292,24 +3332,15 @@ public struct DownloadResult: Sendable {
             decidePolicyFor navigationAction: WKNavigationAction,
             decisionHandler: @escaping @MainActor (WKNavigationActionPolicy) -> Void
         ) {
-            guard let url = navigationAction.request.url else {
+            guard Self.allowsNavigation(to: navigationAction.request.url) else {
                 decisionHandler(.cancel)
                 return
             }
-
-            let scheme = url.scheme?.lowercased() ?? ""
-            if ["about", "data", "blob"].contains(scheme) {
-                decisionHandler(.allow)
-                return
-            }
-
-            guard (scheme == "https" || scheme == "http"),
-                  let host = url.host?.lowercased(),
-                  Self.isAllowedHost(host) else {
+            if navigationAction.targetFrame == nil {
+                webView.load(navigationAction.request)
                 decisionHandler(.cancel)
                 return
             }
-
             decisionHandler(.allow)
         }
     }
@@ -3359,24 +3390,22 @@ public struct DownloadResult: Sendable {
         return window
     }
 
-    private func recuPageState(_ webView: WKWebView, videoID: String) async -> RecuPageState? {
+    func recuPageState(_ webView: WKWebView, videoID: String) async -> RecuPageState? {
         let script = """
         const playBtn = document.querySelector('#play_button');
-        const hasPlayBtn = !!playBtn;
-        const playBtnToken = playBtn ? playBtn.getAttribute('data-token') : null;
-        const playBtnVideoId = playBtn ? playBtn.getAttribute('data-video-id') : null;
-        const matches = hasPlayBtn && !!playBtnToken && playBtnVideoId === videoID;
-
+        const playBtnToken = playBtn?.getAttribute('data-token');
+        const playSession = playBtn?.getAttribute('data-play-session');
+        const matchesVideo = playBtn?.getAttribute('data-video-id') === videoID;
+        const playbackToken = matchesVideo ? (playBtnToken || playSession || null) : null;
         const hasSignInButton = !!document.querySelector('#top-signin-signin-button, a[href*="/account/signin"]');
         const isSignInPage = window.location.pathname.startsWith('/account/signin');
-        // When signed out, #play_button exists with data-video-id but has NO data-token, or the page displays sign-in controls.
-        const needsSignIn = isSignInPage || hasSignInButton || (hasPlayBtn && !playBtnToken && playBtnVideoId === videoID);
 
         return JSON.stringify({
             challenge: !!document.getElementById('challenge-error-text') || /^just a moment/i.test(document.title),
-            token: matches ? playBtnToken : null,
-            needsSignIn: needsSignIn,
-            html: matches ? document.documentElement.outerHTML : null,
+            token: playbackToken,
+            needsSignIn: isSignInPage || hasSignInButton || (matchesVideo && !playbackToken),
+            usesSessionPlayer: matchesVideo && !!playSession && !playBtnToken,
+            html: matchesVideo ? document.documentElement.outerHTML : null,
             userAgent: navigator.userAgent
         });
         """
@@ -3450,10 +3479,18 @@ public struct DownloadResult: Sendable {
         configuration.mediaTypesRequiringUserActionForPlayback = .all
         configuration.defaultWebpagePreferences.allowsContentJavaScript = true
         configuration.preferences.javaScriptCanOpenWindowsAutomatically = true
+        let messageHandler = BrowserCaptureMessageHandler()
+        configuration.userContentController.add(messageHandler, name: "siphonCapture")
+        configuration.userContentController.addUserScript(WKUserScript(
+            source: Self.browserCaptureScript,
+            injectionTime: .atDocumentEnd,
+            forMainFrameOnly: true
+        ))
         let webView = WKWebView(frame: NSRect(x: 0, y: 0, width: 1000, height: 760), configuration: configuration)
         webView.customUserAgent = Self.safariUserAgent
         let navigationDelegate = RecuNavigationDelegate()
         webView.navigationDelegate = navigationDelegate
+        webView.uiDelegate = navigationDelegate
         webView.load(URLRequest(url: pageURL))
 
         var window: NSWindow?
@@ -3461,14 +3498,16 @@ public struct DownloadResult: Sendable {
         defer {
             _ = navigationDelegate
             _ = windowDelegate
+            configuration.userContentController.removeScriptMessageHandler(forName: "siphonCapture")
             webView.stopLoading()
             window?.close()
         }
 
         var deadline = Date().addingTimeInterval(15)
-        var lastToken: String?
         var reloadedStaleToken = false
         var redirectedToSignIn = false
+        var sessionPageHTML: String?
+        var sessionUserAgent: String?
 
         func presentWindow(reason: String) throws {
             guard window == nil else { return }
@@ -3507,6 +3546,22 @@ public struct DownloadResult: Sendable {
                 continue
             }
 
+            if let html = state.html {
+                sessionPageHTML = html
+                sessionUserAgent = state.userAgent
+            }
+            // Starting the player can remove #play_button. Completion must
+            // depend on the captured request, not on that button remaining.
+            if let html = sessionPageHTML {
+                if let stream = messageHandler.streams.first(where: {
+                    guard let url = URL(string: $0.url), let frame = URL(string: $0.frameURL) else { return false }
+                    return url.scheme == "https" && url.pathExtension.lowercased() == "m3u8"
+                        && frame.host == pageURL.host && frame.path == pageURL.path
+                }) {
+                    return RecuBrowserSession(pageHTML: html, playlistURL: stream.url, userAgent: sessionUserAgent)
+                }
+            }
+
             if state.needsSignIn && state.token == nil {
                 if !redirectedToSignIn {
                     redirectedToSignIn = true
@@ -3526,10 +3581,25 @@ public struct DownloadResult: Sendable {
                 continue
             }
 
-            // A token is single-use for this loop: navigation leaves the old page
-            // readable until the next one commits.
-            guard let token = state.token, let html = state.html, token != lastToken else { continue }
-            lastToken = token
+            if state.usesSessionPlayer, let token = state.token {
+                // Current players own the session API. Capture the HLS request
+                // they authorize instead of treating a play-session as a legacy token.
+                if navigationDelegate.consumeToken(token) {
+                    try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+                        webView.callAsyncJavaScript(
+                            "document.querySelector('#play_button')?.click()",
+                            arguments: [:], in: nil, in: .page
+                        ) { result in
+                            continuation.resume(with: result.map { _ in () })
+                        }
+                    }
+                }
+                continue
+            }
+
+            // Retry a repeated token after sign-in commits a new document.
+            guard let token = state.token, let html = state.html,
+                  navigationDelegate.consumeToken(token) else { continue }
 
             let response = try await recuAPIResponse(webView, url: Self.recuAPIURL(videoID: videoID, token: token))
             switch Self.recuAPIOutcome(from: response) {

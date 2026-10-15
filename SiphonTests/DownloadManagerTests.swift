@@ -4,18 +4,57 @@ import XCTest
 @MainActor
 final class DownloadManagerTests: XCTestCase {
     @MainActor
-    func testFileCollisionsRemainVisibleAndCountedOnQueueTab() {
+    func testFileCollisionsBelongOnlyToRecentDownloads() {
         let manager = DownloadManager()
         defer { manager.shutdown() }
         let job = Download(url: "https://example.com/video", options: .default, title: "Collision")
         job.status = .fileExists
         manager.downloads = [job]
-        XCTAssertEqual(manager.queuedDownloads.map(\.id), [job.id])
+        XCTAssertTrue(manager.queuedDownloads.isEmpty)
         XCTAssertEqual(manager.actionRequiredDownloads.map(\.id), [job.id])
-        XCTAssertEqual(manager.queuedCount, 1)
-        XCTAssertTrue(DownloadQueue.isQueueTabMember(job))
+        XCTAssertEqual(manager.queuedCount, 0)
+        XCTAssertFalse(DownloadQueue.isQueueTabMember(job))
+        XCTAssertEqual(manager.recentDownloads(limit: 3).map(\.id), [job.id])
+        XCTAssertFalse(manager.canStopDownloads)
+        XCTAssertTrue(manager.completedDownloads.isEmpty)
+        XCTAssertTrue(manager.failedDownloads.isEmpty)
     }
 
+
+    func testStopAllIsAvailableOnlyForLiveWork() {
+        let manager = DownloadManager()
+        defer { manager.shutdown() }
+        let job = Download(url: "https://example.com/video", options: .default)
+        manager.downloads = [job]
+        for status: DownloadStatus in [.failed, .stopped, .completed, .fileExists] {
+            job.status = status
+            XCTAssertFalse(manager.canStopDownloads, "Nothing to stop for \(status)")
+        }
+        for status: DownloadStatus in [.queued, .paused, .fetching, .downloading, .processing] {
+            job.status = status
+            XCTAssertTrue(manager.canStopDownloads)
+        }
+    }
+
+    func testExistingFileResolutionFindsTheActualContainerAndFilename() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let manager = DownloadManager(recoveryFileURL: root.appendingPathComponent("recovery.json"))
+        defer { manager.shutdown() }
+        var options = DownloadOptions.default
+        options.saveFolder = root
+        options.fileType = .mp4
+        let job = Download(url: "https://example.com/video", options: options, title: "Fixture")
+        job.status = .fileExists
+        let file = root.appendingPathComponent("FIXTURE.mkv")
+        try Data([0]).write(to: file)
+        let resolved = await manager.existingFile(for: job)
+        XCTAssertEqual(resolved?.resolvingSymlinksInPath(), file.resolvingSymlinksInPath())
+        try FileManager.default.removeItem(at: file)
+        let missing = await manager.existingFile(for: job)
+        XCTAssertNil(missing)
+    }
 
     func testRecentDownloadsListsNewestJobsFirst() {
         let manager = DownloadManager()
@@ -281,7 +320,7 @@ final class DownloadManagerTests: XCTestCase {
         XCTAssertEqual(lang.s("file_exists_status"), "File Exists")
         XCTAssertEqual(lang.s("playlist_detected"), "Playlist Detected")
         XCTAssertEqual(lang.s("site_sessions"), "Site Sessions & Cache")
-        XCTAssertEqual(lang.s("recu_cookies_title"), "Recu.me")
+        XCTAssertEqual(lang.s("all_sites_cookies_title"), "All Protected Sites")
         XCTAssertEqual(lang.s("cleared"), "Cleared")
     }
 

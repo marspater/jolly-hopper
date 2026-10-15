@@ -1055,6 +1055,22 @@ final class QueueAndErrorUXTests: XCTestCase {
 
     // MARK: - Design System & UI Architecture Tests
 
+    func testDownloadCardsKeepCompactHeightWithHDRThumbnails() {
+        let manager = DownloadManager()
+        defer { manager.shutdown() }
+        let job = Download(url: "https://example.com/video", options: .default, title: "Fixture")
+        job.status = .fileExists
+        job.diagnostics.dynamicRange = "HDR10"
+        let view = DownloadRowView(download: job, showStop: false)
+            .environmentObject(manager)
+            .environmentObject(AppState())
+            .environmentObject(LanguageService())
+            .environmentObject(UpdateChecker())
+            .frame(width: 900)
+        let hosting = NSHostingView(rootView: view)
+        XCTAssertLessThan(hosting.fittingSize.height, 180, "Thumbnail overlays must not stretch the row")
+    }
+
     func testDesignTokensSpacingScale() {
         XCTAssertEqual(SiphonTheme.spacing2, 2)
         XCTAssertEqual(SiphonTheme.spacing4, 4)
@@ -2174,6 +2190,168 @@ final class QueueAndErrorUXTests: XCTestCase {
 final class AddDownloadWindowSizingTests: XCTestCase {
     private let screen = NSRect(x: 0, y: 25, width: 1440, height: 875)
 
+    @MainActor
+    func testBatchEditorPreservesEditingAndScrollsLongInput() throws {
+        let value = TestBox("")
+        let editor = BatchURLTextEditor(text: Binding(get: { value.value }, set: { value.value = $0 }),
+                                        label: "URLs", onFocusChange: { _ in })
+        let host = NSHostingView(rootView: editor.frame(width: 320, height: 140))
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 320, height: 140),
+                              styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView = host
+        window.makeKeyAndOrderFront(nil)
+        defer { window.close() }
+        host.layoutSubtreeIfNeeded()
+        func findScroll(_ view: NSView) -> NSScrollView? {
+            if let scroll = view as? NSScrollView { return scroll }
+            return view.subviews.lazy.compactMap(findScroll).first
+        }
+        let scroll = try XCTUnwrap(findScroll(host))
+        let text = try XCTUnwrap(scroll.documentView as? NSTextView)
+        XCTAssertFalse(scroll.hasHorizontalScroller)
+        XCTAssertTrue(scroll.autohidesScrollers)
+        XCTAssertTrue(scroll.verticalScroller?.isHidden != false, "An empty editor must not draw a disabled full-height scroller")
+        let urls = (0..<60).map { "https://example.com/video/\($0)" }.joined(separator: "\n")
+        text.insertText(urls, replacementRange: NSRange(location: 0, length: 0))
+        XCTAssertEqual(value.value, urls, "Native editing must update the SwiftUI binding")
+        text.layoutManager?.ensureLayout(for: try XCTUnwrap(text.textContainer))
+        XCTAssertGreaterThan(text.bounds.height, scroll.contentView.bounds.height)
+        text.scrollRangeToVisible(NSRange(location: text.string.utf16.count, length: 0))
+        XCTAssertGreaterThan(scroll.contentView.bounds.minY, 0)
+    }
+
+    @MainActor
+    func testAdvancedPaneWindowRestoresItsOriginalWidth() async throws {
+        let manager = DownloadManager()
+        defer { manager.shutdown() }
+        let windows = AddDownloadWindowManager()
+        let previous = Set(NSApp.windows.map(ObjectIdentifier.init))
+        let language = LanguageService()
+        windows.showAddDownloadWindow(downloadManager: manager, appState: AppState(), languageService: language, updateChecker: UpdateChecker())
+        defer { windows.closeWindow() }
+        let window = try XCTUnwrap(NSApp.windows.first { !previous.contains(ObjectIdentifier($0)) })
+        var initial = window.frame
+        initial.size.height = 400
+        window.setFrame(initial, display: true)
+        window.contentView?.layoutSubtreeIfNeeded()
+        let chrome = 140 - (window.frame.height - window.contentLayoutRect.height)
+        let original = window.frame
+        windows.updateLayout(.init(contentHeight: 260, chromeHeight: chrome, advancedVisible: true, allowsShrink: false), animated: false)
+        XCTAssertEqual(window.frame.width, original.width + AddDownloadWindowManager.advancedPaneWidth + 1)
+        XCTAssertEqual(window.frame.height, original.height)
+        windows.updateLayout(.init(contentHeight: 260, chromeHeight: chrome, advancedVisible: false, allowsShrink: false), animated: false)
+        XCTAssertEqual(window.frame.width, original.width)
+        XCTAssertEqual(window.frame.height, original.height)
+    }
+
+    @MainActor
+    func testModeResizeSettlesBeforeTheNextResize() throws {
+        let manager = DownloadManager()
+        defer { manager.shutdown() }
+        let windows = AddDownloadWindowManager()
+        let previous = Set(NSApp.windows.map(ObjectIdentifier.init))
+        windows.showAddDownloadWindow(downloadManager: manager, appState: AppState(), languageService: LanguageService(), updateChecker: UpdateChecker())
+        defer { windows.closeWindow() }
+        let window = try XCTUnwrap(NSApp.windows.first { !previous.contains(ObjectIdentifier($0)) })
+        // Start above the form's intrinsic minimum so this exercises resize
+        // sequencing rather than AppKit's initial minimum-content adjustment.
+        var initial = window.frame
+        initial.size.height = 400
+        window.setFrame(initial, display: true)
+        window.contentView?.layoutSubtreeIfNeeded()
+        let chrome = 140 - (window.frame.height - window.contentLayoutRect.height)
+        let original = window.frame
+        windows.updateLayout(.init(contentHeight: 460, chromeHeight: chrome, advancedVisible: false, allowsShrink: false))
+        XCTAssertEqual(window.frame.height, original.height + 200, accuracy: 1)
+        windows.updateLayout(.init(contentHeight: 260, chromeHeight: chrome, advancedVisible: false, allowsShrink: true))
+        XCTAssertEqual(window.frame.height, original.height, accuracy: 1)
+        XCTAssertEqual(window.frame.maxY, original.maxY, accuracy: 1)
+    }
+
+    @MainActor
+    func testAdvancedPaneAnimatesThroughIntermediateWidths() async throws {
+        guard !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else {
+            throw XCTSkip("Window motion follows Reduce Motion")
+        }
+        let manager = DownloadManager()
+        defer { manager.shutdown() }
+        let windows = AddDownloadWindowManager()
+        let previous = Set(NSApp.windows.map(ObjectIdentifier.init))
+        windows.showAddDownloadWindow(downloadManager: manager, appState: AppState(), languageService: LanguageService(), updateChecker: UpdateChecker())
+        defer { windows.closeWindow() }
+        let window = try XCTUnwrap(NSApp.windows.first { !previous.contains(ObjectIdentifier($0)) })
+        var initial = window.frame
+        initial.size.height = 400
+        window.setFrame(initial, display: true)
+        window.contentView?.layoutSubtreeIfNeeded()
+        let chrome = 140 - (window.frame.height - window.contentLayoutRect.height)
+        let originalWidth = window.frame.width
+        let widths = TestBox<[CGFloat]>([])
+        let observer = NotificationCenter.default.addObserver(forName: NSWindow.didResizeNotification, object: window, queue: .main) { _ in
+            MainActor.assumeIsolated { widths.value.append(window.frame.width) }
+        }
+        defer { NotificationCenter.default.removeObserver(observer) }
+        windows.updateLayout(.init(contentHeight: 260, chromeHeight: chrome, advancedVisible: true, allowsShrink: false))
+        let expandedWidth = originalWidth + AddDownloadWindowManager.advancedPaneWidth + 1
+        XCTAssertEqual(window.frame.width, expandedWidth)
+        XCTAssertTrue(widths.value.contains { $0 > originalWidth && $0 < expandedWidth }, "Opening must visibly animate, not jump to its final frame")
+        widths.value = []
+        windows.updateLayout(.init(contentHeight: 260, chromeHeight: chrome, advancedVisible: false, allowsShrink: false))
+        XCTAssertEqual(window.frame.width, originalWidth)
+        XCTAssertTrue(widths.value.contains { $0 > originalWidth && $0 < expandedWidth }, "Closing must animate too")
+    }
+
+    @MainActor
+    func testBatchSingleBatchRestoresHeightWithAdvancedRemembered() throws {
+        let manager = DownloadManager()
+        defer { manager.shutdown() }
+        let windows = AddDownloadWindowManager()
+        let previous = Set(NSApp.windows.map(ObjectIdentifier.init))
+        windows.showAddDownloadWindow(downloadManager: manager, appState: AppState(), languageService: LanguageService(), updateChecker: UpdateChecker())
+        defer { windows.closeWindow() }
+        let window = try XCTUnwrap(NSApp.windows.first { !previous.contains(ObjectIdentifier($0)) })
+        var initial = window.frame
+        initial.size.height = 400
+        window.setFrame(initial, display: true)
+        window.contentView?.layoutSubtreeIfNeeded()
+        let chrome = 140 - (window.frame.height - window.contentLayoutRect.height)
+        windows.updateLayout(.init(contentHeight: 260, chromeHeight: chrome, advancedVisible: false, allowsShrink: true), animated: false)
+        let width = window.frame.width
+        for _ in 0..<3 {
+            windows.updateLayout(.init(contentHeight: 540, chromeHeight: chrome, advancedVisible: true, allowsShrink: false), animated: false)
+            XCTAssertEqual(window.frame.height, 680, accuracy: 1, "Batch must grow even when Advanced is restored")
+            XCTAssertEqual(window.frame.width, width + AddDownloadWindowManager.advancedPaneWidth + 1, accuracy: 1)
+            windows.updateLayout(.init(contentHeight: 540, chromeHeight: chrome, advancedVisible: true, allowsShrink: false), animated: false)
+            XCTAssertEqual(window.frame.height, 680, accuracy: 1, "The viewport's resize must not add overflow again")
+            var manual = window.frame
+            manual.size.height = 620
+            window.setFrame(manual, display: true)
+            windows.updateLayout(.init(contentHeight: 540, chromeHeight: chrome, advancedVisible: true, allowsShrink: false), animated: false)
+            XCTAssertEqual(window.frame.height, 620, accuracy: 1, "A manual resize must not trigger automatic fitting again")
+            windows.updateLayout(.init(contentHeight: 200, chromeHeight: chrome, advancedVisible: false, allowsShrink: true), animated: false)
+            XCTAssertEqual(window.frame.height, 340, accuracy: 1)
+            XCTAssertEqual(window.frame.width, width, accuracy: 1)
+        }
+    }
+
+    func testAdvancedPaneGrowsRightAndPreservesHeight() {
+        let frame = NSRect(x: 100, y: 200, width: 540, height: 600)
+        let expanded = AddDownloadWindowManager.sidePanelFrame(frame, width: 901, within: screen)
+        XCTAssertEqual(expanded.width, 901)
+        XCTAssertEqual(expanded.minX, frame.minX)
+        XCTAssertEqual(expanded.minY, frame.minY)
+        XCTAssertEqual(expanded.height, frame.height)
+        XCTAssertEqual(AddDownloadWindowManager.sidePanelFrame(expanded, width: 540, within: screen), frame)
+    }
+
+    func testAdvancedPaneStaysInsideTheVisibleScreen() {
+        let frame = NSRect(x: 1100, y: 200, width: 540, height: 600)
+        let expanded = AddDownloadWindowManager.sidePanelFrame(frame, width: 901, within: screen)
+        XCTAssertEqual(expanded.maxX, screen.maxX)
+        XCTAssertEqual(expanded.height, frame.height)
+    }
+
     func testGrowKeepsTopEdgeFixed() throws {
         let frame = NSRect(x: 100, y: 500, width: 520, height: 281)
         let grown = try XCTUnwrap(AddDownloadWindowManager.grownFrame(frame, by: 104, within: screen))
@@ -2187,6 +2365,16 @@ final class AddDownloadWindowSizingTests: XCTestCase {
         let grown = try XCTUnwrap(AddDownloadWindowManager.grownFrame(frame, by: 900, within: screen))
         XCTAssertEqual(grown.height, screen.height)
         XCTAssertEqual(grown.minY, screen.minY)
+    }
+
+    func testReturningToSingleCanShrinkAndKeepsTheTopEdgeFixed() throws {
+        let frame = NSRect(x: 100, y: 100, width: 520, height: 800)
+        let compact = try XCTUnwrap(AddDownloadWindowManager.grownFrame(frame, by: -500, within: screen, allowShrink: true))
+        XCTAssertEqual(compact.height, 300)
+        XCTAssertEqual(compact.maxY, frame.maxY)
+        XCTAssertEqual(compact.width, frame.width)
+        let minimum = try XCTUnwrap(AddDownloadWindowManager.grownFrame(frame, by: -900, within: screen, allowShrink: true))
+        XCTAssertEqual(minimum.height, AddDownloadWindowManager.compactHeight)
     }
 
     func testNoGrowthForNegativeOrSubpixelOverflow() {

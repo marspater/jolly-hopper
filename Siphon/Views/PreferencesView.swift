@@ -72,12 +72,6 @@ struct PreferencesView: View {
     @State private var hasFullDiskAccess: Bool = YtdlpService.hasFullDiskAccess
     @State private var isCheckingPermission: Bool = false
     @State private var permissionCheckMessage: String?
-    @State private var isClearingRecu: Bool = false
-    @State private var showRecuClearedFeedback: Bool = false
-    @State private var isClearingBoyfriendTV: Bool = false
-    @State private var showBoyfriendTVClearedFeedback: Bool = false
-    @State private var isClearingGayteam: Bool = false
-    @State private var showGayteamClearedFeedback: Bool = false
     @State private var isClearingAllSites: Bool = false
     @State private var showAllSitesClearedFeedback: Bool = false
     @State private var showClearAllSitesConfirmation: Bool = false
@@ -150,7 +144,7 @@ struct PreferencesView: View {
         }
         .padding(.horizontal, SiphonTheme.spacing16)
         .padding(.bottom, SiphonTheme.spacing16)
-        .frame(minWidth: 500, idealWidth: 520, maxWidth: 620, minHeight: 646, idealHeight: 662, maxHeight: 780)
+        .frame(minWidth: 500, idealWidth: 520, maxWidth: 620, minHeight: 670, idealHeight: 686, maxHeight: 780)
         .siphonAdaptiveRendering()
         .background(PreferencesWindowConfigurator())
         .siphonWindowBackground()
@@ -1203,69 +1197,8 @@ struct PreferencesView: View {
     }
 
     @ViewBuilder
-    private func siteCookieRow(
-        titleKey: String,
-        descKey: String,
-        isClearing: Bool,
-        showCleared: Bool,
-        clearAction: @escaping () -> Void
-    ) -> some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(languageService.s(titleKey))
-                    .font(.siphonStandardMedium)
-                Text(languageService.s(descKey))
-                    .font(.siphonMetadata)
-                    .foregroundColor(.secondary)
-            }
-            Spacer()
-            if isClearing {
-                ProgressView()
-                    .controlSize(.small)
-            } else if showCleared {
-                HStack(spacing: 4) {
-                    Image(systemName: "checkmark")
-                        .foregroundColor(SiphonTheme.statusCompletedText)
-                    Text(languageService.s("cleared"))
-                        .font(.siphonMetadataSemibold)
-                        .foregroundColor(SiphonTheme.statusCompletedText)
-                }
-            } else {
-                Button(languageService.s("clear")) {
-                    clearAction()
-                }
-                .tint(nil)
-                .accessibilityLabel("\(languageService.s("clear")) \(languageService.s(titleKey))")
-            }
-        }
-    }
-
     private var siteCookiesSection: some View {
         Section(siphonHeader: languageService.s("site_sessions")) {
-            siteCookieRow(
-                titleKey: "recu_cookies_title",
-                descKey: "recu_cookies_desc",
-                isClearing: isClearingRecu,
-                showCleared: showRecuClearedFeedback,
-                clearAction: clearRecuCookies
-            )
-
-            siteCookieRow(
-                titleKey: "boyfriendtv_cookies_title",
-                descKey: "boyfriendtv_cookies_desc",
-                isClearing: isClearingBoyfriendTV,
-                showCleared: showBoyfriendTVClearedFeedback,
-                clearAction: clearBoyfriendTVCookies
-            )
-
-            siteCookieRow(
-                titleKey: "gayteam_cookies_title",
-                descKey: "gayteam_cookies_desc",
-                isClearing: isClearingGayteam,
-                showCleared: showGayteamClearedFeedback,
-                clearAction: clearGayteamCookies
-            )
-
             allSitesCookieRow
         }
     }
@@ -1297,54 +1230,6 @@ struct PreferencesView: View {
                 }
                 .tint(nil)
                 .accessibilityLabel(languageService.s("clear_all"))
-            }
-        }
-    }
-
-    private func clearRecuCookies() {
-        guard !isClearingRecu else { return }
-        isClearingRecu = true
-        Task {
-            await downloadManager.ytdlpService.clearRecuWebData()
-            isClearingRecu = false
-            withAnimation(SiphonAnimation.snappySpring) {
-                showRecuClearedFeedback = true
-            }
-            try? await Task.sleep(nanoseconds: 2_500_000_000)
-            withAnimation(SiphonAnimation.snappySpring) {
-                showRecuClearedFeedback = false
-            }
-        }
-    }
-
-    private func clearBoyfriendTVCookies() {
-        guard !isClearingBoyfriendTV else { return }
-        isClearingBoyfriendTV = true
-        Task {
-            await downloadManager.ytdlpService.clearBoyfriendTVWebData()
-            isClearingBoyfriendTV = false
-            withAnimation(SiphonAnimation.snappySpring) {
-                showBoyfriendTVClearedFeedback = true
-            }
-            try? await Task.sleep(nanoseconds: 2_500_000_000)
-            withAnimation(SiphonAnimation.snappySpring) {
-                showBoyfriendTVClearedFeedback = false
-            }
-        }
-    }
-
-    private func clearGayteamCookies() {
-        guard !isClearingGayteam else { return }
-        isClearingGayteam = true
-        Task {
-            await downloadManager.ytdlpService.clearGayteamWebData()
-            isClearingGayteam = false
-            withAnimation(SiphonAnimation.snappySpring) {
-                showGayteamClearedFeedback = true
-            }
-            try? await Task.sleep(nanoseconds: 2_500_000_000)
-            withAnimation(SiphonAnimation.snappySpring) {
-                showGayteamClearedFeedback = false
             }
         }
     }
