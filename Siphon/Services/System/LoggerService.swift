@@ -41,7 +41,9 @@ class LoggerService: ObservableObject {
     nonisolated private static let exportHomeDirRegex = try? NSRegularExpression(pattern: "/Users/([a-zA-Z0-9._-]+)/", options: [])
 
     nonisolated static func sanitizeURLForLog(_ urlString: String) -> String {
-        guard let url = URL(string: urlString) else { return urlString }
+        // Unparseable (e.g. a URL sliced out of a longer argument): still drop
+        // the query and fragment, which carry tokens and signatures.
+        guard let url = URL(string: urlString) else { return String(urlString.prefix { $0 != "?" && $0 != "#" }) }
         var components = URLComponents(url: url, resolvingAgainstBaseURL: false)
         components?.query = nil
         components?.fragment = nil

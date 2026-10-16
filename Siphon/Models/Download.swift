@@ -657,7 +657,26 @@ struct DownloadOptions: Codable {
         defaultOptions
     }
 
-    static func defaultFromPreferences(userDefaults: UserDefaults = .standard) -> DownloadOptions {
+    /// The parts of a custom preset that Preferences does not mirror into its
+    /// format defaults: subtitles, chapter splitting and SponsorBlock.
+    mutating func applyCustomPresetExtras(_ preset: CustomPreset) {
+        // An "embed:" language prefix embeds; otherwise subtitles are a separate file.
+        let rawLanguage = preset.subtitleLanguage ?? ""
+        let language = rawLanguage.replacingOccurrences(of: "embed:", with: "")
+        downloadSubtitles = preset.downloadSubtitles ?? false
+        subtitleLanguages = [language.isEmpty ? "en" : language]
+        subtitleFormat = preset.subtitleFormat ?? .srt
+        embedSubtitles = downloadSubtitles && rawLanguage.hasPrefix("embed:")
+        splitChapters = preset.splitChapters ?? false
+        sponsorBlock = preset.sponsorBlock ?? false
+    }
+
+    /// Selecting a custom preset in Preferences writes only its format choices
+    /// into the defaults, so the rest of the selected preset is applied here.
+    static func defaultFromPreferences(
+        userDefaults: UserDefaults = .standard,
+        applyingSelectedCustomPreset: Bool = true
+    ) -> DownloadOptions {
         let saveFolderURL: URL
         let defaultPath = userDefaults.string(forKey: UserDefaultsKeys.defaultSaveFolder) ?? ""
         if !defaultPath.isEmpty && FileManager.default.fileExists(atPath: defaultPath) {
@@ -690,7 +709,7 @@ struct DownloadOptions: Codable {
         let fallbackPolicyStr = userDefaults.string(forKey: UserDefaultsKeys.resolutionFallbackPolicy) ?? ResolutionFallbackPolicy.strictCeiling.rawValue
         let fallbackPolicy = ResolutionFallbackPolicy(rawValue: fallbackPolicyStr) ?? .strictCeiling
 
-        return DownloadOptions(
+        var options = DownloadOptions(
             saveFolder: saveFolderURL,
             fileType: fileType,
             videoResolution: fileType.isVideo ? resolution : nil,
@@ -716,6 +735,12 @@ struct DownloadOptions: Codable {
             resolutionFallbackPolicy: fallbackPolicy,
             additionalArguments: (extraArgs?.isEmpty ?? true) ? nil : extraArgs
         )
+        if applyingSelectedCustomPreset,
+           let id = UUID(uuidString: userDefaults.string(forKey: UserDefaultsKeys.selectedCustomPresetId) ?? ""),
+           let preset = CustomPreset.loadAll(from: userDefaults).first(where: { $0.id == id }) {
+            options.applyCustomPresetExtras(preset)
+        }
+        return options
     }
 }
 
@@ -1139,8 +1164,8 @@ struct CustomPreset: Codable, Identifiable, Equatable {
         ))
     }
 
-    static func loadAll() -> [CustomPreset] {
-        guard let data = UserDefaults.standard.data(forKey: UserDefaultsKeys.customPresets) else {
+    static func loadAll(from userDefaults: UserDefaults = .standard) -> [CustomPreset] {
+        guard let data = userDefaults.data(forKey: UserDefaultsKeys.customPresets) else {
             return []
         }
 

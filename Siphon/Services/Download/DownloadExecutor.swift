@@ -141,6 +141,9 @@ private final class PublicRedirectPolicy: NSObject, URLSessionTaskDelegate, Send
 final class DownloadExecutor: ObservableObject {
     private(set) var activeControllers: [UUID: DownloadProcessController] = [:]
     private(set) var activeTasks: [UUID: Task<Void, Never>] = [:]
+    /// Attempts stopped while still unwinding. Retry can re-queue the job before
+    /// the attempt finishes, and its files must still be discarded.
+    private var stoppedAttemptIDs: Set<UUID> = []
 
     var activeExecutionCount: Int {
         activeTasks.count
@@ -257,8 +260,8 @@ final class DownloadExecutor: ObservableObject {
             activeTasks.removeValue(forKey: downloadId)
             activeControllers.removeValue(forKey: downloadId)
             lastRecoveryProgressBucket.removeValue(forKey: downloadId)
-            if download.status != .paused && download.status != .queued {
-                Self.cleanupTemporaryFiles(for: downloadCopy)
+            if stoppedAttemptIDs.remove(downloadId) != nil || (download.status != .paused && download.status != .queued) {
+                Self.cleanupTemporaryFiles(for: downloadCopy, force: true)
             }
             delegate?.executorDidFinishDownload()
         }
@@ -546,7 +549,9 @@ final class DownloadExecutor: ObservableObject {
         // Releasing the slot or removing the task here can allow a replacement
         // download to start while the cancelled metadata/process work is still unwinding.
         delegate?.executorDidUpdateStatus(for: download, to: .stopped)
-        if activeTasks[download.id] == nil {
+        if activeTasks[download.id] != nil {
+            stoppedAttemptIDs.insert(download.id)
+        } else {
             queue.releaseSlot(for: download.id)
             delegate?.executorDidFinishDownload()
         }
@@ -820,8 +825,9 @@ final class DownloadExecutor: ObservableObject {
         return status == .stopped || status == .failed
     }
 
-    static func cleanupTemporaryFiles(for download: Download) {
-        guard download.status != .paused && download.status != .queued,
+    /// `force` also cleans a re-queued job; only its finished attempt may pass it.
+    static func cleanupTemporaryFiles(for download: Download, force: Bool = false) {
+        guard force || (download.status != .paused && download.status != .queued),
               let directory = download.scratchDirectory else { return }
         guard ScratchDirectoryPolicy.isOwned(directory) else {
             LoggerService.shared.log(
