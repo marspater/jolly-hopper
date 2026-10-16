@@ -673,21 +673,8 @@ struct DownloadOptions: Codable {
 
     /// Selecting a custom preset in Preferences writes only its format choices
     /// into the defaults, so the rest of the selected preset is applied here.
-    static func defaultFromPreferences(
-        userDefaults: UserDefaults = .standard,
-        applyingSelectedCustomPreset: Bool = true
-    ) -> DownloadOptions {
-        let saveFolderURL: URL
-        let defaultPath = userDefaults.string(forKey: UserDefaultsKeys.defaultSaveFolder) ?? ""
-        if !defaultPath.isEmpty && FileManager.default.fileExists(atPath: defaultPath) {
-            saveFolderURL = URL(fileURLWithPath: defaultPath)
-        } else if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil || NSClassFromString("XCTestCase") != nil {
-            let testDir = FileManager.default.temporaryDirectory.appendingPathComponent("SiphonTestDownloads", isDirectory: true)
-            try? FileManager.default.createDirectory(at: testDir, withIntermediateDirectories: true)
-            saveFolderURL = testDir
-        } else {
-            saveFolderURL = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Downloads", isDirectory: true)
-        }
+    static func defaultFromPreferences(userDefaults: UserDefaults = .standard, applyingSelectedCustomPreset: Bool = true) -> DownloadOptions {
+        let saveFolderURL = preferredSaveFolder(userDefaults: userDefaults)
 
         let fileTypeStr = userDefaults.string(forKey: UserDefaultsKeys.defaultFileType) ?? "mp4"
         let fileType = MediaFileType.allCases.first(where: { $0.rawValue.lowercased() == fileTypeStr.lowercased() }) ?? .mp4
@@ -735,12 +722,23 @@ struct DownloadOptions: Codable {
             resolutionFallbackPolicy: fallbackPolicy,
             additionalArguments: (extraArgs?.isEmpty ?? true) ? nil : extraArgs
         )
-        if applyingSelectedCustomPreset,
-           let id = UUID(uuidString: userDefaults.string(forKey: UserDefaultsKeys.selectedCustomPresetId) ?? ""),
-           let preset = CustomPreset.loadAll(from: userDefaults).first(where: { $0.id == id }) {
+        if applyingSelectedCustomPreset, let preset = CustomPreset.selected(in: userDefaults) {
             options.applyCustomPresetExtras(preset)
         }
         return options
+    }
+
+    private static func preferredSaveFolder(userDefaults: UserDefaults) -> URL {
+        let defaultPath = userDefaults.string(forKey: UserDefaultsKeys.defaultSaveFolder) ?? ""
+        if !defaultPath.isEmpty && FileManager.default.fileExists(atPath: defaultPath) {
+            return URL(fileURLWithPath: defaultPath)
+        }
+        if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil || NSClassFromString("XCTestCase") != nil {
+            let testDir = FileManager.default.temporaryDirectory.appendingPathComponent("SiphonTestDownloads", isDirectory: true)
+            try? FileManager.default.createDirectory(at: testDir, withIntermediateDirectories: true)
+            return testDir
+        }
+        return FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Downloads", isDirectory: true)
     }
 }
 
@@ -1175,6 +1173,12 @@ struct CustomPreset: Codable, Identifiable, Equatable {
         }
 
         return presets
+    }
+
+    /// The preset selected in Preferences, if it still exists.
+    static func selected(in userDefaults: UserDefaults = .standard) -> CustomPreset? {
+        guard let id = UUID(uuidString: userDefaults.string(forKey: UserDefaultsKeys.selectedCustomPresetId) ?? "") else { return nil }
+        return loadAll(from: userDefaults).first { $0.id == id }
     }
 
     static func saveAll(_ presets: [CustomPreset]) {
