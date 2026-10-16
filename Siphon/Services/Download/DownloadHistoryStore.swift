@@ -76,11 +76,12 @@ final class DownloadHistoryStore {
         history.append(historic)
 
         if history.count > Self.maxHistoryCount {
-            // Paused jobs are live, resumable work with scratch data on disk, not
+            // Paused jobs are live, resumable work with scratch data on disk, and
+            // filename collisions still await the user's choice. Neither is
             // history: evict the oldest finished entries instead.
             var excess = history.count - Self.maxHistoryCount
             history.removeAll { entry in
-                guard excess > 0, entry.status != .paused else { return false }
+                guard excess > 0, entry.status != .paused, entry.status != .fileExists else { return false }
                 excess -= 1
                 return true
             }
