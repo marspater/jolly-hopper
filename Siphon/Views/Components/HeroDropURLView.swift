@@ -171,6 +171,7 @@ struct HeroDropURLView: View {
                         .buttonStyle(.plain)
                         .help(languageService.s("clear"))
                         .accessibilityLabel(languageService.s("clear"))
+                        .transition(.opacity)
                     }
 
                     // Paste from clipboard button
@@ -180,6 +181,7 @@ struct HeroDropURLView: View {
                         HStack(spacing: 5) {
                             Image(systemName: pasteFeedback.isShowing ? "checkmark" : "doc.on.clipboard")
                                 .font(.system(size: 12, weight: .semibold))
+                                .contentTransition(.symbolEffect(.replace))
                                 .accessibilityHidden(true)
                             Text(languageService.s("paste"))
                                 .font(.siphonSecondaryMedium)
@@ -208,6 +210,7 @@ struct HeroDropURLView: View {
                     .disabled(inputURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     .accessibilityLabel(languageService.s("download_btn"))
                 }
+                .animation(SiphonAnimation.snappySpring, value: inputURL.isEmpty)
                 .padding(.horizontal, SiphonTheme.spacing12)
                 .frame(minHeight: 44)
                 .background(

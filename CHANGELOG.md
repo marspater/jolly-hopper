@@ -13,6 +13,12 @@
 - One segmented control style everywhere: the Settings tabs, the Theme and subtitle-output choices, and the Diagnostics tabs now match Add Download's capsule switch. Settings row titles that fell back to SF Pro now use Geist.
 - On Home, an active download's button pauses it instead of stopping it, so partial data is kept; a paused row offers Resume. Diagnostics labels now go through the app's string table.
 - Add Download opens compact and grows as video details, errors or batch input appear. Debug Logs shows one title and uses the window's own close button.
+- Settings buttons (View Debug Logs, yt-dlp, Update Now, Clear All) render Geist instead of SF Pro, and every text field uses Siphon's field style with the accent focus edge. Pop-up menus brighten on hover.
+- Paste and copy confirmations fade in and out, and their icons morph into a checkmark. Clear buttons, the subtitle options, the playlist picker, the Advanced Options chevron and Home's recent rows animate instead of popping.
+- The Home progress ring glides with the liquid fill, and the fill's wave freezes in place while Siphon is in the background instead of jumping. Recent rows use Siphon's progress bar and spinner.
+- In an inactive window the sidebar selection turns grey, as native sidebars do. With Increase Contrast, card, control and field borders get a solid edge.
+- The Diagnostics and download log sheets close with Done or Esc; Return in the log search no longer closes Diagnostics. The What's New sheet uses the window surface instead of a drawn border.
+- The Firefox and Safari extensions ship 16 and 48 pt toolbar icons.
 
 ### Security
 
@@ -27,6 +33,7 @@
 - No AppleScript notification fallback after notifications were denied.
 - The egress proxy restarts a listener that died after startup, and process-tree cleanup never signals an already-reaped process.
 - Faster download history loading, and clearer VoiceOver state for disclosure buttons in Add Download.
+- The main and Settings windows keep their titles in the Window menu and Mission Control.
 
 ## 5.5.0 - 2026-09-28
 

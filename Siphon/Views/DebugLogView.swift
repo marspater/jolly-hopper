@@ -51,11 +51,12 @@ struct DebugLogView: View {
                     let pasteboard = NSPasteboard.general
                     pasteboard.clearContents()
                     pasteboard.setString(LoggerService.sanitizeLogContentForExport(logger.logs.joined(separator: "\n")), forType: .string)
-                    copyFeedback.show(languageService.s("copied"), isSuccess: true, duration: 1.5, animation: SiphonAnimation.snappySpring)
+                    copyFeedback.show(languageService.s("copied"), isSuccess: true, duration: 1.5)
                 } label: {
                     HStack(spacing: 6) {
                         Image(systemName: copyFeedback.isShowing ? "checkmark" : "doc.on.doc")
                             .font(.system(size: 11, weight: .semibold))
+                            .contentTransition(.symbolEffect(.replace))
                             .accessibilityHidden(true)
                         Text(copyFeedback.isShowing ? languageService.s("copied") : languageService.s("copy_log"))
                             .font(.siphonSecondaryMedium)

@@ -327,17 +327,16 @@ public final class TransientFeedbackState: ObservableObject {
         _ message: String,
         isSuccess: Bool,
         icon: String? = nil,
-        duration: TimeInterval = 3.5,
-        animation: Animation? = nil
+        duration: TimeInterval = 3.5
     ) {
         dismissTask?.cancel()
-        withAnimation(animation) {
+        withAnimation(SiphonAnimation.snappySpring) {
             current = Item(message: message, isSuccess: isSuccess, icon: icon)
         }
         dismissTask = Task { @MainActor [weak self] in
             try? await Task.sleep(nanoseconds: UInt64(duration * 1_000_000_000))
             guard !Task.isCancelled else { return }
-            withAnimation(animation) {
+            withAnimation(SiphonAnimation.snappySpring) {
                 self?.current = nil
             }
         }
@@ -579,6 +578,7 @@ public enum SiphonTheme {
             }
         }
         .drawingGroup()
+        .overlay(IncreasedContrastEdge(cornerRadius: cornerRadius))
     }
 
     @ViewBuilder
@@ -617,6 +617,7 @@ public enum SiphonTheme {
             }
         }
         .drawingGroup()
+        .overlay(IncreasedContrastEdge(cornerRadius: cornerRadius))
     }
 
     // Pill / Badge Backgrounds (Capsule)
@@ -710,6 +711,8 @@ public enum SiphonTheme {
                 ),
                 lineWidth: 1
             )
+            .drawingGroup()
+            .overlay(IncreasedContrastEdge(cornerRadius: cornerRadius))
     }
 
     // Inset Field & Search/Path Box Background (Distinct contrast inside glass cards)
@@ -756,6 +759,7 @@ public enum SiphonTheme {
                 lineWidth: isFocused ? 2.0 : 1
             )
             .shadow(color: isFocused ? accent.opacity(0.18) : .clear, radius: isFocused ? 4 : 0)
+            .overlay(IncreasedContrastEdge(cornerRadius: cornerRadius).opacity(isFocused ? 0 : 1))
     }
 
     // Settings & Diagnostics Subtle Divider
@@ -763,6 +767,21 @@ public enum SiphonTheme {
     public static var subtleDivider: some View {
         Divider()
             .overlay(separator)
+    }
+}
+
+/// Increase Contrast / Show Borders: a solid hairline over a shared border,
+/// whose faint gradient alone fades out. Drawn inside the border, so layout
+/// does not change.
+private struct IncreasedContrastEdge: View {
+    let cornerRadius: CGFloat
+    @Environment(\.colorSchemeContrast) private var contrast
+
+    var body: some View {
+        if contrast == .increased {
+            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                .strokeBorder(Color.primary.opacity(SiphonTheme.Opacity.borderIncreaseContrast), lineWidth: 1)
+        }
     }
 }
 
@@ -819,8 +838,6 @@ public struct SiphonWindowBackgroundModifier: ViewModifier {
 public struct SiphonGlassSurfaceModifier: ViewModifier {
     public var cornerRadius: CGFloat
 
-    @ObservedObject private var renderingEnvironment = AdaptiveRenderingEnvironment.shared
-
     public init(cornerRadius: CGFloat = SiphonTheme.radiusCard) {
         self.cornerRadius = cornerRadius
     }
@@ -830,7 +847,9 @@ public struct SiphonGlassSurfaceModifier: ViewModifier {
         let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
 
         if #available(macOS 26.0, *) {
-            content.glassEffect(.regular.interactive(), in: shape)
+            // Not .interactive(): this surface holds buttons, and interactive
+            // glass swallows their hover tracking and press scale on macOS.
+            content.glassEffect(.regular, in: shape)
         } else {
             content
                 .background(shape.fill(.ultraThinMaterial))
@@ -847,7 +866,6 @@ public struct SiphonSpinner: View {
     public var lineWidth: CGFloat
 
     @State private var isSpinning = false
-    @ObservedObject private var renderingEnvironment = AdaptiveRenderingEnvironment.shared
 
     public init(size: CGFloat = 14, color: Color = .white, lineWidth: CGFloat = 2) {
         self.size = size
@@ -986,7 +1004,6 @@ public struct SiphonInteractiveGlassModifier: ViewModifier {
     public var tintColor: Color?
 
     @State private var isHovered = false
-    @ObservedObject private var renderingEnvironment = AdaptiveRenderingEnvironment.shared
 
     public init(
         cornerRadius: CGFloat = SiphonTheme.radiusControl,
@@ -1346,8 +1363,10 @@ struct SiphonMenuLabel<Content: View>: View {
 
     @Environment(\.controlSize) private var controlSize
     @Environment(\.isEnabled) private var isEnabled
+    @State private var isHovered = false
 
     private var isCompact: Bool { controlSize == .small || controlSize == .mini }
+    private var cornerRadius: CGFloat { isCompact ? SiphonTheme.radiusSmall : SiphonTheme.radiusControl }
 
     var body: some View {
         HStack(spacing: SiphonTheme.spacing6) {
@@ -1362,14 +1381,42 @@ struct SiphonMenuLabel<Content: View>: View {
         .foregroundColor(.primary)
         .padding(.horizontal, isCompact ? SiphonTheme.spacing8 : SiphonTheme.spacing10)
         .padding(.vertical, isCompact ? 2 : 4)
-        .background(SiphonTheme.controlBackground(cornerRadius: SiphonTheme.radiusSmall))
-        .overlay(SiphonTheme.controlBorder(cornerRadius: SiphonTheme.radiusSmall))
-        .contentShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusSmall, style: .continuous))
+        .background(SiphonTheme.controlBackground(cornerRadius: cornerRadius, isHovered: isHovered && isEnabled))
+        .overlay(SiphonTheme.controlBorder(cornerRadius: cornerRadius, isHovered: isHovered && isEnabled))
+        .contentShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
         .opacity(isEnabled ? 1.0 : 0.45)
+        .animation(SiphonAnimation.hoverSpring, value: isHovered)
+        .onHover { isHovered = $0 }
+    }
+}
+
+/// Inset text field chrome: field fill and border, plus the 2 pt accent focus
+/// edge while the field is focused in the key window.
+private struct SiphonFieldModifier: ViewModifier {
+    let isFocused: Bool
+    @Environment(\.appearsActive) private var appearsActive
+
+    func body(content: Content) -> some View {
+        let shape = RoundedRectangle(cornerRadius: SiphonTheme.radiusControl, style: .continuous)
+        let showsFocus = isFocused && appearsActive
+        content
+            .textFieldStyle(.plain)
+            .padding(.horizontal, SiphonTheme.spacing10)
+            .padding(.vertical, SiphonTheme.spacing6)
+            .background(SiphonTheme.fieldBackground(isFocused: showsFocus))
+            .clipShape(shape)
+            .overlay(SiphonTheme.fieldBorder(isFocused: showsFocus))
+            .animation(SiphonAnimation.snappySpring, value: showsFocus)
     }
 }
 
 extension View {
+    /// Siphon's inset field. Use instead of `.textFieldStyle(.roundedBorder)`,
+    /// whose AppKit bezel does not match the field tokens.
+    func siphonField(isFocused: Bool = false) -> some View {
+        modifier(SiphonFieldModifier(isFocused: isFocused))
+    }
+
     /// Menu presentation whose label SwiftUI draws as authored. The default,
     /// `.borderlessButton` and `.borderedButton` menu styles hand the label to an
     /// AppKit button that ignores SwiftUI fonts and renders SF Pro.
