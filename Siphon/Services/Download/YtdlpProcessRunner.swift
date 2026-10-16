@@ -494,11 +494,15 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
                 let data = handle.availableData
                 guard !data.isEmpty else {
                     handle.readabilityHandler = nil
+                    // Closed here, after the last read: closing from another thread
+                    // while a read is in flight raises an uncatchable ObjC exception.
+                    try? handle.close()
                     outputDrained.streamFinished()
                     return
                 }
                 if !outputBuffer.append(data) {
-                    process?.terminate()
+                    // The whole tree: its children would otherwise keep the pipe open.
+                    DownloadProcessController.terminateProcessTree(process)
                 }
             }
 
@@ -512,7 +516,6 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
                     Self.stopOutputHolders(processGroup: processGroup)
                     pipe.fileHandleForReading.readabilityHandler = nil
                 }, {
-                    try? pipe.fileHandleForReading.close()
                     // Before any early return: a controller left in .running would
                     // signal the stale PID on a later cancel, after the OS may reuse it.
                     controller.transitionToTerminated(exitCode: exitCode, reason: reason)
@@ -792,6 +795,7 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
                 let data = handle.availableData
                 guard !data.isEmpty else {
                     handle.readabilityHandler = nil
+                    try? handle.close()
                     for line in outputBuffer.flush() {
                         processOutputLine(line)
                     }
@@ -807,6 +811,7 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
                 let data = handle.availableData
                 guard !data.isEmpty else {
                     handle.readabilityHandler = nil
+                    try? handle.close()
                     for line in errorBuffer.flush() {
                         postErrorLine(line)
                     }
@@ -830,8 +835,8 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
                     outputPipe.fileHandleForReading.readabilityHandler = nil
                     errorPipe.fileHandleForReading.readabilityHandler = nil
                 }) {
-                    try? outputPipe.fileHandleForReading.close()
-                    try? errorPipe.fileHandleForReading.close()
+                    // Each reader closes its handle at EOF. After a timeout the
+                    // handles close on release, never under an in-flight read.
 
                     // If user requested cancellation or process was terminated via signal, resume with appropriate error
                     if Task.isCancelled || controller.isCancelled {

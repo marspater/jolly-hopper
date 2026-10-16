@@ -218,6 +218,7 @@ private final class SiphonScreenObserverView: NSView {
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         NotificationCenter.default.removeObserver(self, name: NSWindow.didChangeScreenNotification, object: nil)
+        NotificationCenter.default.removeObserver(self, name: NSWindow.didChangeScreenProfileNotification, object: nil)
 
         if let window {
             NotificationCenter.default.addObserver(

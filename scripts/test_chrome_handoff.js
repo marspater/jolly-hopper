@@ -106,6 +106,17 @@ for (const extension of ["Chrome", "Firefox", "Safari"]) {
         assert.equal(Object.keys(browser.records).length, 0);
     });
 
+    test(`${extension}: focus lost before the helper is recorded still closes it`, async () => {
+        const browser = mockBrowser(extension);
+        const opening = browser.startWorker().openDeepLink(handoff);
+        // macOS hands focus to Siphon as soon as the tab opens the link.
+        await browser.loseFocus();
+        await opening;
+        await flush();
+        assert.equal(browser.tabs.size, 0);
+        assert.equal(Object.keys(browser.records).length, 0);
+    });
+
     test(`${extension}: cleanup never closes a helper that navigated to another page`, async () => {
         const browser = mockBrowser(extension);
         await browser.startWorker().openDeepLink(handoff);
