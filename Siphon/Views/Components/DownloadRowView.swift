@@ -108,6 +108,7 @@ struct DownloadRowView: View {
     @State private var isHovering = false
     @State private var showLog = false
     @State private var recoveredArguments = ""
+    @FocusState private var isRecoveredArgumentsFocused: Bool
     @State private var showDiagnostics = false
     @StateObject private var logCopyFeedback = TransientFeedbackState()
     @StateObject private var errorCopyFeedback = TransientFeedbackState()
@@ -263,8 +264,9 @@ struct DownloadRowView: View {
                 .font(.siphonSecondaryMedium)
                 .fixedSize(horizontal: false, vertical: true)
             TextField(languageService.s("recovery_arguments_placeholder"), text: $recoveredArguments)
-                .textFieldStyle(.roundedBorder)
+                .focused($isRecoveredArgumentsFocused)
                 .font(.siphonSecondaryMonoMedium)
+                .siphonField(isFocused: isRecoveredArgumentsFocused)
             HStack(spacing: SiphonTheme.spacing8) {
                 Button(languageService.s("recovery_arguments_resume")) {
                     downloadManager.reviewRecoveredArguments(for: download, arguments: recoveredArguments)
@@ -382,7 +384,7 @@ struct DownloadRowView: View {
                     if showRawError {
                         VStack(alignment: .leading, spacing: 4) {
                             Text(info.rawError)
-                                .font(.siphonMicroMono)
+                                .font(.siphonMetadataMono)
                                 .foregroundColor(.secondary)
                                 .lineLimit(6)
                                 .padding(8)
@@ -404,6 +406,7 @@ struct DownloadRowView: View {
                                     HStack(spacing: 3) {
                                         Image(systemName: errorCopyFeedback.isShowing ? "checkmark" : "doc.on.doc")
                                             .font(.siphonMicro)
+                                            .contentTransition(.symbolEffect(.replace))
                                             .accessibilityHidden(true)
                                         Text(errorCopyFeedback.isShowing ? languageService.s("copied") : languageService.s("copy_error"))
                                             .font(.siphonMicroMedium)
@@ -1197,18 +1200,6 @@ struct FileThumbnailView: View {
                 }
 
                 Spacer()
-
-                Button {
-                    showLog = false
-                } label: {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 11, weight: .bold))
-                        .foregroundColor(.secondary)
-                }
-                .buttonStyle(.siphonIcon(size: 24))
-                .help(languageService.s("close"))
-                .accessibilityLabel(languageService.s("close"))
-                .keyboardShortcut(.cancelAction)
             }
             .padding(.horizontal, SiphonTheme.spacing16)
             .padding(.top, SiphonTheme.spacing16)
@@ -1234,11 +1225,12 @@ struct FileThumbnailView: View {
                     let pasteboard = NSPasteboard.general
                     pasteboard.clearContents()
                     pasteboard.setString(LoggerService.sanitizedDiagnosticExport(download.log), forType: .string)
-                    logCopyFeedback.show(languageService.s("copied"), isSuccess: true, duration: 1.5, animation: SiphonAnimation.snappySpring)
+                    logCopyFeedback.show(languageService.s("copied"), isSuccess: true, duration: 1.5)
                 } label: {
                     HStack(spacing: 6) {
                         Image(systemName: logCopyFeedback.isShowing ? "checkmark" : "doc.on.doc")
                             .font(.system(size: 11, weight: .semibold))
+                            .contentTransition(.symbolEffect(.replace))
                             .accessibilityHidden(true)
                         Text(logCopyFeedback.isShowing ? languageService.s("copied") : languageService.s("copy_log"))
                             .font(.siphonSecondaryMedium)
@@ -1256,7 +1248,7 @@ struct FileThumbnailView: View {
                     showLog = false
                 }
                 .buttonStyle(.siphonPrimary)
-                .keyboardShortcut(.defaultAction)
+                .keyboardShortcut(.cancelAction)
             }
             .padding(.horizontal, SiphonTheme.spacing16)
             .padding(.bottom, SiphonTheme.spacing16)
@@ -1268,7 +1260,6 @@ struct FileThumbnailView: View {
 
 struct LinearProgressBar: View {
     let value: Double
-    @ObservedObject private var renderingEnvironment = AdaptiveRenderingEnvironment.shared
 
     // Bug #3 fix: Guard against NaN to prevent SwiftUI layout crash
     var safeValue: Double {

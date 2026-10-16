@@ -48,6 +48,9 @@ final class PreferencesWindowManager: NSObject, NSWindowDelegate {
         window.isOpaque = false
         window.backgroundColor = .clear
         window.titlebarAppearsTransparent = true
+        // The tab bar is the in-content header; the hidden title still names
+        // the window in the Window menu and Mission Control.
+        window.titleVisibility = .hidden
         window.center()
         window.isReleasedWhenClosed = false
         window.title = languageService.s("settings")

@@ -2302,6 +2302,27 @@ final class AddDownloadWindowSizingTests: XCTestCase {
         XCTAssertTrue(widths.value.contains { $0 > originalWidth && $0 < expandedWidth }, "Closing must animate too")
     }
 
+    /// The tab bar is Settings' header, so the system title is hidden; it must
+    /// stay set for the Window menu and Mission Control.
+    @MainActor
+    func testSettingsWindowKeepsItsHiddenTitle() throws {
+        let manager = DownloadManager()
+        defer { manager.shutdown() }
+        let languageService = LanguageService()
+        let windows = PreferencesWindowManager()
+        let previous = Set(NSApp.windows.map(ObjectIdentifier.init))
+        windows.showPreferencesWindow(languageService: languageService, updateChecker: UpdateChecker(), downloadManager: manager, appState: AppState())
+        defer { windows.closeWindow() }
+        let window = try XCTUnwrap(NSApp.windows.first { !previous.contains(ObjectIdentifier($0)) })
+        // Render the view, then let work it queued on the main queue run.
+        window.contentView?.layoutSubtreeIfNeeded()
+        let drained = expectation(description: "main queue drained")
+        DispatchQueue.main.async { drained.fulfill() }
+        wait(for: [drained], timeout: 2)
+        XCTAssertEqual(window.title, languageService.s("settings"))
+        XCTAssertEqual(window.titleVisibility, .hidden)
+    }
+
     @MainActor
     func testBatchSingleBatchRestoresHeightWithAdvancedRemembered() throws {
         let manager = DownloadManager()
@@ -2456,6 +2477,27 @@ final class SiphonFontCoverageTests: XCTestCase {
             }
         }
         XCTAssertTrue(findings.isEmpty, "Controls that render SF Pro:\n" + findings.map(\.description).joined(separator: "\n"))
+    }
+
+    func testTextFieldsUseSiphonFieldChrome() throws {
+        var findings: [Finding] = []
+        for (name, lines) in try sourceFiles() {
+            for (index, line) in lines.enumerated()
+            where (line.components(separatedBy: "//").first ?? line).contains(".textFieldStyle(.roundedBorder)") {
+                findings.append(Finding(file: name, line: index + 1, rule: "use siphonField(isFocused:): the AppKit bezel ignores the field tokens"))
+            }
+        }
+        XCTAssertTrue(findings.isEmpty, findings.map(\.description).joined(separator: "\n"))
+    }
+
+    func testWindowsKeepTheirTitles() throws {
+        var findings: [Finding] = []
+        for (name, lines) in try sourceFiles() {
+            for (index, line) in lines.enumerated() where line.contains(".title = \"\"") {
+                findings.append(Finding(file: name, line: index + 1, rule: "hide the title with titleVisibility; keep it for the Window menu"))
+            }
+        }
+        XCTAssertTrue(findings.isEmpty, findings.map(\.description).joined(separator: "\n"))
     }
 
     func testThumbnailPlaceholdersHideDecorativeIconsFromVoiceOver() throws {
