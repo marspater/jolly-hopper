@@ -234,7 +234,7 @@ function createServer({
       let url;
       try {
         const host = req.headers.host;
-        if (host && /[\/@?#\s]/.test(host)) {
+        if (host && /[/@?#\s]/.test(host)) {
           sendStaticResponse(res, STATIC_RESPONSES.BAD_REQUEST);
           return;
         }
