@@ -78,12 +78,12 @@ const TRUSTED_RELEASE_HOSTS = new Set([
   'objects.githubusercontent.com'
 ]);
 
-function isTrustedReleaseUrl(urlStr) {
-  if (typeof urlStr !== 'string' || !urlStr.startsWith('https://')) {
+function isTrustedReleaseUrl(htmlUrl) {
+  if (typeof htmlUrl !== 'string' || !htmlUrl.startsWith('https://')) {
     return false;
   }
   try {
-    const parsed = new URL(urlStr);
+    const parsed = new URL(htmlUrl);
     return parsed.protocol === 'https:' && TRUSTED_RELEASE_HOSTS.has(parsed.hostname.toLowerCase());
   } catch {
     return false;
@@ -93,8 +93,8 @@ function isTrustedReleaseUrl(urlStr) {
 function extractDownloadUrl(payload) {
   const assets = Array.isArray(payload.assets) ? payload.assets : [];
   const dmgAsset = assets.find((a) => typeof a?.name === 'string' && a.name.endsWith('.dmg'));
-  const candidate = dmgAsset ? dmgAsset.browser_download_url : payload.html_url;
-  return isTrustedReleaseUrl(candidate) ? candidate : DEFAULT_RELEASE_URL;
+  const releaseHtmlUrl = dmgAsset ? dmgAsset.browser_download_url : payload['html_url'];
+  return isTrustedReleaseUrl(releaseHtmlUrl) ? releaseHtmlUrl : DEFAULT_RELEASE_URL;
 }
 
 // Returns a release lookup with its own in-memory cache. `fetchImpl` is
@@ -238,9 +238,11 @@ async function handleReleaseApi(req, res, pathname, getLatestRelease) {
   return true;
 }
 
+const INVALID_HOST_PATTERN = new RegExp('[/@?#\\s]');
+
 function parseRequestUrl(req) {
   const host = req.headers.host;
-  if (host && /[/@?#\s]/.test(host)) {
+  if (host && INVALID_HOST_PATTERN.test(host)) {
     return null;
   }
   try {
