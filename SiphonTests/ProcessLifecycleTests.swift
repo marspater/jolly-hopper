@@ -395,6 +395,25 @@ final class ProcessLifecycleTests: XCTestCase {
         XCTAssertLessThan(Date().timeIntervalSince(commandStarted), 10)
     }
 
+    func testOutputOverflowStopsTheWholeProcessTree() async throws {
+        let perl = "/usr/bin/perl"
+        guard FileManager.default.isExecutableFile(atPath: perl) else { throw XCTSkip("Needs perl to leave the process group") }
+        // A child in its own process group keeps the pipe open. Signalling only the
+        // root (and its group) misses it, so the command would wait out the 30 s
+        // drain timeout; the tree kill finds it by parentage.
+        let runner = DefaultYtdlpProcessRunner(streamDrainTimeout: 30)
+        let started = Date()
+        do {
+            _ = try await runner.runCommand(["/bin/sh", "-c", "\(perl) -e 'setpgrp(0,0); exec(\"sleep\", \"30\")' & sleep 0.3; yes"])
+            XCTFail("Unbounded output must fail")
+        } catch YtdlpError.downloadFailed(let message) {
+            XCTAssertTrue(message.contains("32 MB"), message)
+        } catch {
+            XCTFail("Expected downloadFailed, got \(error)")
+        }
+        XCTAssertLessThan(Date().timeIntervalSince(started), 10)
+    }
+
     func testCancelDoesNotWaitOutTheTerminationGracePeriods() throws {
         let controller = DownloadProcessController()
         let proc = Process()
