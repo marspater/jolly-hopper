@@ -1,27 +1,6 @@
 import SwiftUI
 import AppKit
 
-struct PreferencesWindowConfigurator: NSViewRepresentable {
-    func makeNSView(context _: Context) -> NSView {
-        let view = NSView()
-        DispatchQueue.main.async {
-            guard let window = view.window else { return }
-            window.title = ""
-            window.titleVisibility = .hidden
-            window.isOpaque = false
-            window.backgroundColor = .clear
-            window.titlebarAppearsTransparent = true
-            if !window.styleMask.contains(.fullSizeContentView) {
-                window.styleMask.insert(.fullSizeContentView)
-            }
-        }
-        return view
-    }
-    func updateNSView(_: NSView, context _: Context) {
-        // No-op: Window configuration does not require dynamic view updates
-    }
-}
-
 struct PreferencesView: View {
     @AppStorage(UserDefaultsKeys.theme) private var theme: String = "system"
     @AppStorage(UserDefaultsKeys.defaultSaveFolder) private var defaultSaveFolder: String = ""
@@ -69,6 +48,11 @@ struct PreferencesView: View {
     @State private var presetSponsorBlock: Bool = false
     @State private var presetSplitChapters: Bool = false
     @State private var editingPreset: CustomPreset?
+    @FocusState private var focusedPresetField: PresetField?
+
+    private enum PresetField: Hashable {
+        case name, subtitleLanguages
+    }
     @State private var hasFullDiskAccess: Bool = YtdlpService.hasFullDiskAccess
     @State private var isCheckingPermission: Bool = false
     @State private var permissionCheckMessage: String?
@@ -146,7 +130,6 @@ struct PreferencesView: View {
         .padding(.bottom, SiphonTheme.spacing16)
         .frame(minWidth: 500, idealWidth: 520, maxWidth: 620, minHeight: 670, idealHeight: 686, maxHeight: 780)
         .siphonAdaptiveRendering()
-        .background(PreferencesWindowConfigurator())
         .siphonWindowBackground()
         .onReceive(NotificationCenter.default.publisher(for: .siphonShowPreferencesTab)) { notification in
             if let tab = notification.object as? PreferenceTab {
@@ -691,7 +674,8 @@ struct PreferencesView: View {
                 .font(.siphonHeadline)
 
             TextField(languageService.s("preset_name"), text: $newPresetName)
-                .textFieldStyle(.roundedBorder)
+                .focused($focusedPresetField, equals: .name)
+                .siphonField(isFocused: focusedPresetField == .name)
                 .frame(width: 350)
 
             SiphonTheme.subtleDivider
@@ -704,12 +688,14 @@ struct PreferencesView: View {
             }
             .siphonFormStyle()
 
-            HStack(spacing: 16) {
+            HStack(spacing: SiphonTheme.spacing10) {
+                Spacer()
                 Button(languageService.s("cancel")) {
                     showCreatePresetSheet = false
                     resetPresetForm()
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.siphonSecondary)
+                .keyboardShortcut(.cancelAction)
 
                 Button(languageService.s("save")) {
                     createCustomPreset()
@@ -717,6 +703,7 @@ struct PreferencesView: View {
                     resetPresetForm()
                 }
                 .buttonStyle(.siphonPrimary)
+                .keyboardShortcut(.defaultAction)
                 .disabled(newPresetName.isEmpty)
             }
         }
@@ -771,7 +758,7 @@ struct PreferencesView: View {
 
     private var presetSubtitleSection: some View {
         Section(siphonHeader: languageService.s("subtitles")) {
-            Toggle(languageService.s("download_subtitles"), isOn: $presetEmbedSubtitles)
+            Toggle(languageService.s("download_subtitles"), isOn: $presetEmbedSubtitles.animation(SiphonAnimation.fluidSpring))
 
             if presetEmbedSubtitles {
                 HStack {
@@ -807,7 +794,8 @@ struct PreferencesView: View {
                             presetSubtitleLang = isEmbed ? "embed:\(newLang)" : newLang
                         }
                     ))
-                    .textFieldStyle(.roundedBorder)
+                    .focused($focusedPresetField, equals: .subtitleLanguages)
+                    .siphonField(isFocused: focusedPresetField == .subtitleLanguages)
 
                     SiphonMenuPicker(
                         languageService.s("subtitle_format"), selection: $presetSubtitleFormat,
@@ -958,10 +946,9 @@ struct PreferencesView: View {
                 Button(languageService.s("view_debug_logs")) {
                     DebugLogWindowManager.shared.showDebugLogWindow()
                 }
-                // Secondary push buttons and menus drop the window's accent tint:
-                // tinted, their label is accent text on tinted glass, which is
-                // hard to read in Dark Mode. Untinted they use the system label.
-                .tint(nil)
+                // A native push button would draw its title in SF Pro.
+                .buttonStyle(.siphonSecondary)
+                .controlSize(.small)
             }
         }
     }
@@ -996,13 +983,15 @@ struct PreferencesView: View {
                         customYtdlpPath = ""
                         reloadYtdlp()
                     }
-                    .tint(nil)
+                    .buttonStyle(.siphonSecondary)
+                    .controlSize(.small)
                     .disabled(downloadManager.activeExecutionCount > 0)
                 }
                 Button(languageService.s("ytdlp_choose")) {
                     selectYtdlp()
                 }
-                .tint(nil)
+                .buttonStyle(.siphonSecondary)
+                .controlSize(.small)
                 .disabled(downloadManager.activeExecutionCount > 0)
             }
         }
@@ -1043,7 +1032,8 @@ struct PreferencesView: View {
                     Button(languageService.s("update_now")) {
                         updateYtdlp()
                     }
-                    .tint(nil)
+                    .buttonStyle(.siphonSecondary)
+                    .controlSize(.small)
                 }
             }
         }
@@ -1229,7 +1219,8 @@ struct PreferencesView: View {
                 Button(languageService.s("clear_all")) {
                     showClearAllSitesConfirmation = true
                 }
-                .tint(nil)
+                .buttonStyle(.siphonSecondary)
+                .controlSize(.small)
                 .accessibilityLabel(languageService.s("clear_all"))
             }
         }
@@ -1263,7 +1254,7 @@ struct PreferencesView: View {
 
                     SiphonTagBadge(
                         text: "v\(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "5.5.0")",
-                        tintColor: SiphonTheme.accent,
+                        tintColor: SiphonTheme.accentText,
                         isMonospaced: true
                     )
                 }

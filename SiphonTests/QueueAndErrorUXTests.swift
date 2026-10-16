@@ -2458,6 +2458,17 @@ final class SiphonFontCoverageTests: XCTestCase {
         XCTAssertTrue(findings.isEmpty, "Controls that render SF Pro:\n" + findings.map(\.description).joined(separator: "\n"))
     }
 
+    func testTextFieldsUseSiphonFieldChrome() throws {
+        var findings: [Finding] = []
+        for (name, lines) in try sourceFiles() {
+            for (index, line) in lines.enumerated()
+            where (line.components(separatedBy: "//").first ?? line).contains(".textFieldStyle(.roundedBorder)") {
+                findings.append(Finding(file: name, line: index + 1, rule: "use siphonField(isFocused:): the AppKit bezel ignores the field tokens"))
+            }
+        }
+        XCTAssertTrue(findings.isEmpty, findings.map(\.description).joined(separator: "\n"))
+    }
+
     func testThumbnailPlaceholdersHideDecorativeIconsFromVoiceOver() throws {
         for (name, lines) in try sourceFiles() {
             for (index, line) in lines.enumerated() {

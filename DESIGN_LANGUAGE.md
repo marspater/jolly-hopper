@@ -100,9 +100,7 @@ truth only when the value is genuinely reused or has semantic meaning.
 - Custom fonts must remain Dynamic Type-aware through `relativeTo`.
 - No SF Pro in Siphon-drawn UI. `siphonWindowBackground()` sets
   `.siphonStandard` as every window's default, so unstyled text, labels,
-  toggles and fields render Geist; views set their own role on top. A view that
-  draws its own root surface instead (the What's New sheet) sets the default
-  itself.
+  toggles and fields render Geist; views set their own role on top.
 - Some native controls ignore SwiftUI fonts because AppKit draws their text.
   Do not use them:
   - `.pickerStyle(.menu)` (and Form's default picker): use `SiphonMenuPicker`.
@@ -135,7 +133,10 @@ truth only when the value is genuinely reused or has semantic meaning.
 - Auxiliary windows hide the system title (`titleVisibility = .hidden`) but
   keep it set, localized, for the Window menu, and draw one in-content header
   below the title bar. They rely on the window's own close button and corners:
-  no second close button or hand-drawn border.
+  no second close button or hand-drawn border. Sheets use the same root surface.
+  A read-only sheet closes with one Done button bound to Esc (`.cancelAction`),
+  so Return in its search field does not dismiss it; a form sheet pairs Cancel
+  (Esc) with its primary action (Return).
 - Root windows and utility surfaces use `siphonWindowBackground()`. It supplies
   the material, the faint brand wash and the Siphon accent tint for native
   controls, so feature views do not re-tint toggles or pickers or add their own
@@ -155,15 +156,17 @@ truth only when the value is genuinely reused or has semantic meaning.
   Gradient borders draw through `.drawingGroup()`: as plain layers they are
   rasterized on the CPU at the card's full size, which stalled fast scrolling
   of long lists.
-- Interactive status/navigation surfaces may use `siphonGlassSurface()`, which
-  opts into native `Glass.regular.interactive()` on macOS 26+ and preserves the
-  adaptive Siphon material fallback on macOS 15–25.
+- Status/navigation surfaces may use `siphonGlassSurface()`: native
+  `Glass.regular` on macOS 26+ and the adaptive Siphon material on macOS 15–25.
+  It is not `.interactive()`, because it holds buttons (see below).
 - Small glass buttons use `siphonInteractiveGlass()`: native `Glass.regular`
   on macOS 26+, tinted on hover and when selected, and the custom fill, border
   and hover treatment on macOS 15–25. Do not add `.interactive()` there: on
   macOS it swallows pointer tracking, so hover and the button style's press
   scale stop.
-- Inset fields use `SiphonTheme.fieldBackground` and `fieldBorder`.
+- Inset fields use `SiphonTheme.fieldBackground` and `fieldBorder`;
+  `siphonField(isFocused:)` applies both to a text field, with the focus edge
+  only in the key window. Never `.textFieldStyle(.roundedBorder)`.
 - Controls use the shared Siphon button styles; native bordered styles draw
   SF Pro (see Typography).
 - Tinted inline notices (permission hints, errors, info banners) use
@@ -219,7 +222,10 @@ truth only when the value is genuinely reused or has semantic meaning.
 - Custom chrome follows the key window's active/inactive appearance through
   `appearsActive`; inactive emphasis should become quieter, not disappear.
 - Honor Increase Contrast / Show Borders by strengthening custom interactive
-  outlines while preserving the translucent material treatment.
+  outlines while preserving the translucent material treatment. The shared
+  card, control and field borders add a solid hairline on their own.
+- Inactive windows quiet accent emphasis: the sidebar selection turns grey and
+  field focus edges hide.
 - Do not show an affordance for an action that cannot currently succeed.
 
 ## Liquid Glass policy

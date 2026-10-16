@@ -217,11 +217,9 @@ struct RecentDownloadRowView: View {
                         .foregroundColor(.primary)
                 }
 
-                ProgressView(value: safeProgress)
-                    .progressViewStyle(.linear)
+                LinearProgressBar(value: safeProgress)
                     .frame(width: 80)
-                    .tint(SiphonTheme.statusDownloading)
-                    .animation(SiphonAnimation.snappySpring, value: safeProgress)
+                    .accessibilityHidden(true)
             }
         case .fetching, .processing:
             HStack(spacing: 6) {
@@ -229,9 +227,9 @@ struct RecentDownloadRowView: View {
                     .font(.siphonMetadataMedium)
                     .foregroundColor(SiphonTheme.statusForeground(for: download.status, colorScheme: colorScheme))
                     .lineLimit(1)
-                ProgressView()
-                    .controlSize(.mini)
+                SiphonSpinner(size: 12, color: SiphonTheme.statusForeground(for: download.status, colorScheme: colorScheme), lineWidth: 1.8)
                     .frame(width: 14, height: 14)
+                    .accessibilityHidden(true)
             }
         case .queued:
             statusLabel(languageService.s("queued"), icon: "clock.fill", status: .queued)

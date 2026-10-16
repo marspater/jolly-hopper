@@ -108,6 +108,7 @@ struct MenuBarView: View {
                 .buttonStyle(.plain)
                 .help(languageService.s("clear"))
                 .accessibilityLabel(languageService.s("clear"))
+                .transition(.opacity)
             }
 
             Button {
@@ -118,6 +119,7 @@ struct MenuBarView: View {
             } label: {
                 Image(systemName: pasteFeedback.isShowing ? "checkmark" : "doc.on.clipboard")
                     .font(.system(size: 12))
+                    .contentTransition(.symbolEffect(.replace))
                     .foregroundColor(pasteFeedback.isShowing ? SiphonTheme.statusCompletedText : .secondary)
                     .accessibilityHidden(true)
             }
@@ -125,14 +127,15 @@ struct MenuBarView: View {
             .help(languageService.s("paste_from_clipboard"))
             .accessibilityLabel(pasteFeedback.isShowing ? languageService.s("paste") : languageService.s("paste_from_clipboard"))
         }
+        .animation(SiphonAnimation.snappySpring, value: url.isEmpty)
         .padding(.horizontal, SiphonTheme.spacing10)
         .padding(.vertical, 7)
         .background(
-            SiphonTheme.fieldBackground(cornerRadius: SiphonTheme.radiusControl, isFocused: isFieldFocused)
+            SiphonTheme.fieldBackground(cornerRadius: SiphonTheme.radiusControl, isFocused: isFieldFocused && appearsActive)
         )
         .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusControl, style: .continuous))
         .overlay(
-            SiphonTheme.fieldBorder(cornerRadius: SiphonTheme.radiusControl, isFocused: isFieldFocused)
+            SiphonTheme.fieldBorder(cornerRadius: SiphonTheme.radiusControl, isFocused: isFieldFocused && appearsActive)
         )
     }
 

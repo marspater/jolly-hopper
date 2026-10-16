@@ -17,7 +17,7 @@ struct AddDownloadView: View {
     @FocusState private var focusedField: InputField?
 
     private enum InputField: Hashable {
-        case url, batch, filename, arguments
+        case url, batch, filename, arguments, subtitleLanguages
     }
 
     private func showsFocus(_ field: InputField) -> Bool {
@@ -422,28 +422,17 @@ struct AddDownloadView: View {
                             Text(languageService.s("import_file"))
                                 .font(.siphonSecondaryMedium)
                         }
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 5)
-                        .background(SiphonTheme.controlBackground(cornerRadius: SiphonTheme.radiusControl))
-                        .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusControl, style: .continuous))
-                        .overlay(
-                            SiphonTheme.controlBorder(cornerRadius: SiphonTheme.radiusControl)
-                        )
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.siphonSecondary)
 
                     Button {
                         batchUrlsText = ""
                     } label: {
                         Text(languageService.s("clear"))
                             .font(.siphonSecondaryMedium)
-                            .foregroundColor(batchUrlsText.isEmpty ? .secondary.opacity(0.5) : SiphonTheme.statusFailedText)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 5)
-                            .background(batchUrlsText.isEmpty ? Color.clear : SiphonTheme.destructiveSurface)
-                            .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusControl, style: .continuous))
+                            .foregroundColor(batchUrlsText.isEmpty ? .secondary : SiphonTheme.statusFailedText)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.siphonSecondary)
                     .disabled(batchUrlsText.isEmpty)
 
                     Spacer()
@@ -504,7 +493,7 @@ struct AddDownloadView: View {
                     }
                     .buttonStyle(.plain)
                     .accessibilityElement(children: .combine)
-                    .accessibilityValue(showStreamInspector ? "Expanded" : "Collapsed")
+                    .accessibilityValue(languageService.s(showStreamInspector ? "a11y_expanded" : "a11y_collapsed"))
 
                     if showStreamInspector {
                         VStack(alignment: .leading, spacing: 8) {
@@ -615,8 +604,10 @@ struct AddDownloadView: View {
                         .buttonStyle(.plain)
                         .help(languageService.s("clear"))
                         .accessibilityLabel(languageService.s("clear"))
+                        .transition(.opacity)
                     }
                 }
+                .animation(SiphonAnimation.snappySpring, value: urlInput.isEmpty)
                 .padding(.horizontal, SiphonTheme.spacing10)
                 .padding(.vertical, 7)
                 .background(SiphonTheme.fieldBackground(cornerRadius: SiphonTheme.radiusControl, isFocused: showsFocus(.url)))
@@ -634,19 +625,13 @@ struct AddDownloadView: View {
                     HStack(spacing: SiphonTheme.spacing4) {
                         Image(systemName: pasteFeedback.isShowing ? "checkmark" : "doc.on.clipboard")
                             .font(.system(size: 12, weight: .medium))
+                            .contentTransition(.symbolEffect(.replace))
                         Text(languageService.s("paste"))
                             .font(.siphonSecondaryMedium)
                     }
                     .foregroundColor(pasteFeedback.isShowing ? SiphonTheme.statusForeground(for: .completed, colorScheme: colorScheme) : .primary)
-                    .padding(.horizontal, SiphonTheme.spacing10)
-                    .padding(.vertical, 7)
-                    .background(SiphonTheme.controlBackground(cornerRadius: SiphonTheme.radiusControl))
-                    .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusControl, style: .continuous))
-                    .overlay(
-                        SiphonTheme.controlBorder(cornerRadius: SiphonTheme.radiusControl)
-                    )
                 }
-                .buttonStyle(.bouncy(scale: 0.97, hover: 1.015))
+                .buttonStyle(.siphonSecondary)
                 .help(languageService.s("paste_from_clipboard"))
                 .accessibilityLabel(pasteFeedback.isShowing ? languageService.s("paste") : languageService.s("paste_from_clipboard"))
 
@@ -758,8 +743,10 @@ struct AddDownloadView: View {
                 Text(languageService.s("entire_playlist")).font(.siphonPrimarySemibold)
                 Spacer()
                 Button(languageService.s("single_video")) {
-                    showPlaylistSelector = false
-                    downloadMode = .single
+                    withAnimation(SiphonAnimation.fluidSpring) {
+                        showPlaylistSelector = false
+                        downloadMode = .single
+                    }
                 }
                 .buttonStyle(.plain)
                 .foregroundColor(SiphonTheme.accentText)
@@ -1087,6 +1074,8 @@ struct AddDownloadView: View {
                 .layoutPriority(1)
                 .padding(.horizontal, SiphonTheme.spacing10)
                 .padding(.vertical, 6)
+                // As tall as the Choose Folder button beside it.
+                .frame(maxHeight: .infinity)
                 .background(SiphonTheme.fieldBackground(cornerRadius: SiphonTheme.radiusControl))
                 .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusControl, style: .continuous))
                 .overlay(
@@ -1098,17 +1087,11 @@ struct AddDownloadView: View {
                 } label: {
                     Text(languageService.s("choose_folder"))
                         .font(.siphonSecondaryMedium)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 5)
-                        .background(SiphonTheme.controlBackground(cornerRadius: SiphonTheme.radiusControl))
-                        .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusControl, style: .continuous))
-                        .overlay(
-                            SiphonTheme.controlBorder(cornerRadius: SiphonTheme.radiusControl)
-                        )
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.siphonSecondary)
                 .fixedSize(horizontal: true, vertical: false)
             }
+            .fixedSize(horizontal: false, vertical: true)
         }
         .padding(SiphonTheme.spacing14)
         .background(
@@ -1127,6 +1110,7 @@ struct AddDownloadView: View {
             HStack(spacing: SiphonTheme.spacing8) {
                 Image(systemName: "chevron.right")
                     .rotationEffect(.degrees(showOptionalSettings ? 180 : 0))
+                    .animation(SiphonAnimation.snappySpring, value: showOptionalSettings)
                     .font(.siphonMetadataSemibold)
                     .foregroundColor(SiphonTheme.accentText)
                     .frame(width: 12)
@@ -1150,7 +1134,7 @@ struct AddDownloadView: View {
         }
         .buttonStyle(.plain)
         .accessibilityElement(children: .combine)
-        .accessibilityValue(showOptionalSettings ? "Expanded" : "Collapsed")
+        .accessibilityValue(languageService.s(showOptionalSettings ? "a11y_expanded" : "a11y_collapsed"))
     }
 
     private var optionalSettingsContent: some View {
@@ -1196,12 +1180,13 @@ struct AddDownloadView: View {
                 SiphonTheme.subtleDivider
 
                 VStack(alignment: .leading, spacing: SiphonTheme.spacing8) {
-                    Toggle(languageService.s("download_subtitles"), isOn: $downloadSubtitles)
+                    Toggle(languageService.s("download_subtitles"), isOn: $downloadSubtitles.animation(SiphonAnimation.fluidSpring))
                         .disabled(inputMode == .single && availableSubtitles.isEmpty)
 
                     if inputMode == .batch && downloadSubtitles {
                         TextField(languageService.s("subtitle_language_codes"), text: $batchSubtitleLanguages)
-                            .textFieldStyle(.roundedBorder)
+                            .focused($focusedField, equals: .subtitleLanguages)
+                            .siphonField(isFocused: focusedField == .subtitleLanguages)
                             .accessibilityLabel(languageService.s("subtitle_language_codes"))
                         SiphonMenuPicker(
                             languageService.s("subtitle_format"), selection: $subtitleFormat,
@@ -1661,8 +1646,10 @@ struct AddDownloadView: View {
                 guard !Task.isCancelled else { return }
                 playlistItems = items
                 selectedPlaylistIds = Set(items.lazy.map(\.id))
-                showPlaylistSelector = true
-                downloadMode = .playlist
+                withAnimation(SiphonAnimation.fluidSpring) {
+                    showPlaylistSelector = true
+                    downloadMode = .playlist
+                }
             } catch {
                 if !Task.isCancelled {
                     withAnimation(SiphonAnimation.fluidSpring) {

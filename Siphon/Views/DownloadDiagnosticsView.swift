@@ -10,6 +10,7 @@ struct DownloadDiagnosticsView: View {
     @State private var selectedTab = 0
     @StateObject private var copyFeedback = TransientFeedbackState()
     @State private var logSearchText: String = ""
+    @FocusState private var isSearchFocused: Bool
 
     var body: some View {
         VStack(spacing: 0) {
@@ -114,18 +115,6 @@ struct DownloadDiagnosticsView: View {
             }
 
             Spacer()
-
-            Button {
-                dismiss()
-            } label: {
-                Image(systemName: "xmark.circle.fill")
-                    .font(.system(size: 16))
-                    .foregroundColor(.secondary)
-                    .accessibilityHidden(true)
-            }
-            .buttonStyle(.siphonIcon(size: 24))
-            .help(languageService.s("close"))
-            .accessibilityLabel(languageService.s("close"))
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 14)
@@ -225,6 +214,7 @@ struct DownloadDiagnosticsView: View {
                     Text(LoggerService.sanitizedDiagnosticExport(cmd))
                         .font(.siphonMetadataMono)
                         .foregroundColor(.primary.opacity(0.85))
+                        .textSelection(.enabled)
                         .padding(10)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .background(Color.primary.opacity(SiphonTheme.Opacity.fillPill))
@@ -264,7 +254,7 @@ struct DownloadDiagnosticsView: View {
                         .accessibilityHidden(true)
 
                     TextField(languageService.s("search_logs"), text: $logSearchText)
-                        .textFieldStyle(.plain)
+                        .focused($isSearchFocused)
                         .font(.siphonMetadata)
                         .accessibilityLabel(languageService.s("search_logs"))
 
@@ -282,15 +272,13 @@ struct DownloadDiagnosticsView: View {
                         .accessibilityLabel(languageService.s("clear"))
                     }
                 }
-                .padding(.horizontal, SiphonTheme.spacing8)
-                .padding(.vertical, 6)
-                .background(SiphonTheme.cardBackground(cornerRadius: SiphonTheme.radiusControl))
-                .overlay(SiphonTheme.cardBorder(cornerRadius: SiphonTheme.radiusControl))
+                .siphonField(isFocused: isSearchFocused)
 
                 ScrollView {
                     Text(filteredLogs)
-                        .font(.siphonMicroMono)
+                        .font(.siphonMetadataMono)
                         .foregroundColor(.primary.opacity(0.85))
+                        .textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(10)
                 }
@@ -356,7 +344,7 @@ struct DownloadDiagnosticsView: View {
                     .font(.siphonSecondarySemibold)
             }
             .buttonStyle(.siphonPrimary)
-            .keyboardShortcut(.defaultAction)
+            .keyboardShortcut(.cancelAction)
         }
         .padding(.horizontal, SiphonTheme.spacing20)
         .padding(.vertical, SiphonTheme.spacing12)
@@ -419,7 +407,7 @@ struct DownloadDiagnosticsView: View {
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
         pasteboard.setString(LoggerService.sanitizedDiagnosticExport(text), forType: .string)
-        copyFeedback.show(label, isSuccess: true, duration: 2.0, animation: .default)
+        copyFeedback.show(label, isSuccess: true, duration: 2.0)
     }
 
     private func exportDiagnosticsMarkdown() {
