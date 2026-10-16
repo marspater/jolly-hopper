@@ -121,7 +121,10 @@ function createReleaseFetcher(fetchImpl, cacheTtlMs, failureRetryMs) {
 
       const payload = await res.json();
       const dmgAsset = (payload.assets || []).find((a) => a.name?.endsWith('.dmg'));
-      const downloadUrl = dmgAsset ? dmgAsset.browser_download_url : (payload.html_url || 'https://github.com/marspater/jolly-hopper/releases/latest');
+      const rawDownloadUrl = dmgAsset ? dmgAsset.browser_download_url : payload.html_url;
+      const downloadUrl = typeof rawDownloadUrl === 'string' && rawDownloadUrl.startsWith('https://')
+        ? rawDownloadUrl
+        : 'https://github.com/marspater/jolly-hopper/releases/latest';
 
       if (!payload.tag_name) {
         throw new Error('GitHub API response missing tag_name');
@@ -230,7 +233,12 @@ function createServer({
 
       let url;
       try {
-        url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+        const host = req.headers.host;
+        if (host && /[\/@?#\s]/.test(host)) {
+          sendStaticResponse(res, STATIC_RESPONSES.BAD_REQUEST);
+          return;
+        }
+        url = new URL(req.url, `http://${host || 'localhost'}`);
       } catch {
         sendStaticResponse(res, STATIC_RESPONSES.BAD_REQUEST);
         return;
