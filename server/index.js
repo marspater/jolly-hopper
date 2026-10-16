@@ -71,6 +71,31 @@ function sendStaticResponse(res, staticResponse) {
 
 const RELEASE_CACHE_TTL_MS = 15 * 60 * 1000;
 const RELEASE_FAILURE_RETRY_MS = 30 * 1000;
+const DEFAULT_RELEASE_URL = 'https://github.com/marspater/jolly-hopper/releases/latest';
+const TRUSTED_RELEASE_HOSTS = new Set([
+  'github.com',
+  'api.github.com',
+  'objects.githubusercontent.com'
+]);
+
+function isTrustedReleaseUrl(urlStr) {
+  if (typeof urlStr !== 'string' || !urlStr.startsWith('https://')) {
+    return false;
+  }
+  try {
+    const parsed = new URL(urlStr);
+    return parsed.protocol === 'https:' && TRUSTED_RELEASE_HOSTS.has(parsed.hostname.toLowerCase());
+  } catch {
+    return false;
+  }
+}
+
+function extractDownloadUrl(payload) {
+  const assets = Array.isArray(payload.assets) ? payload.assets : [];
+  const dmgAsset = assets.find((a) => typeof a?.name === 'string' && a.name.endsWith('.dmg'));
+  const candidate = dmgAsset ? dmgAsset.browser_download_url : payload.html_url;
+  return isTrustedReleaseUrl(candidate) ? candidate : DEFAULT_RELEASE_URL;
+}
 
 // Returns a release lookup with its own in-memory cache. `fetchImpl` is
 // injectable so tests never depend on the live GitHub API.
@@ -120,20 +145,15 @@ function createReleaseFetcher(fetchImpl, cacheTtlMs, failureRetryMs) {
       }
 
       const payload = await res.json();
-      const dmgAsset = (payload.assets || []).find((a) => a.name?.endsWith('.dmg'));
-      const rawDownloadUrl = dmgAsset ? dmgAsset.browser_download_url : payload.html_url;
-      const downloadUrl = typeof rawDownloadUrl === 'string' && rawDownloadUrl.startsWith('https://')
-        ? rawDownloadUrl
-        : 'https://github.com/marspater/jolly-hopper/releases/latest';
-
       if (!payload.tag_name) {
         throw new Error('GitHub API response missing tag_name');
       }
+
       const cleanData = {
         version: payload.tag_name,
         name: payload.name || 'Siphon',
         publishedAt: payload.published_at || new Date().toISOString(),
-        downloadUrl,
+        downloadUrl: extractDownloadUrl(payload),
         notes: payload.body || ''
       };
 
@@ -218,6 +238,18 @@ async function handleReleaseApi(req, res, pathname, getLatestRelease) {
   return true;
 }
 
+function parseRequestUrl(req) {
+  const host = req.headers.host;
+  if (host && /[/@?#\s]/.test(host)) {
+    return null;
+  }
+  try {
+    return new URL(req.url, `http://${host || 'localhost'}`);
+  } catch {
+    return null;
+  }
+}
+
 function createServer({
   fetchImpl = globalThis.fetch,
   cacheTtlMs = RELEASE_CACHE_TTL_MS,
@@ -231,15 +263,8 @@ function createServer({
         return;
       }
 
-      let url;
-      try {
-        const host = req.headers.host;
-        if (host && /[/@?#\s]/.test(host)) {
-          sendStaticResponse(res, STATIC_RESPONSES.BAD_REQUEST);
-          return;
-        }
-        url = new URL(req.url, `http://${host || 'localhost'}`);
-      } catch {
+      const url = parseRequestUrl(req);
+      if (!url) {
         sendStaticResponse(res, STATIC_RESPONSES.BAD_REQUEST);
         return;
       }
