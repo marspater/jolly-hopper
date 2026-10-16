@@ -314,6 +314,7 @@ enum ChromiumCookieReader {
             return String(data: Data(bytes: text, count: Int(sqlite3_column_bytes(statement, column))), encoding: .utf8)
         }
         var key: Data?
+        var undecryptableRows = 0
         var lines = ["# Netscape HTTP Cookie File"]
         while true {
             try Task.checkCancellation()
@@ -337,6 +338,7 @@ enum ChromiumCookieReader {
                     Task { @MainActor in
                         LoggerService.shared.log("Skipping an unverifiable Chromium cookie row.", level: .warning)
                     }
+                    undecryptableRows += 1
                     continue
                 }
             } else if string(2) == nil {
@@ -352,6 +354,11 @@ enum ChromiumCookieReader {
             let subdomains = domain.hasPrefix(".") ? "TRUE" : "FALSE"
             let secure = sqlite3_column_int(statement, 6) != 0 ? "TRUE" : "FALSE"
             lines.append("\(httpOnly)\(domain)\t\(subdomains)\t\(path)\t\(secure)\t\(expiry)\t\(name)\t\(value)")
+        }
+        // Every matching row failing points at a stale or wrong Keychain key, not a
+        // signed-out browser; continuing anonymously would hide that.
+        if lines.count == 1 && undecryptableRows > 0 {
+            throw failure("Could not decrypt any cookie for this site with the browser's Keychain key.")
         }
         // No cookies for this host is not an error: yt-dlp's own browser readers
         // also continue anonymously, and CDN hosts never carry site cookies.

@@ -113,9 +113,9 @@ actor DependencyInstaller {
         let process = Process()
         process.executableURL = tempStaging
         process.arguments = ["--ignore-config", "--version"]
-        let pipe = Pipe()
-        process.standardOutput = pipe
-        process.standardError = pipe
+        // Output is never read; an unread pipe can fill and block the child.
+        process.standardOutput = FileHandle.nullDevice
+        process.standardError = FileHandle.nullDevice
         process.environment = YtdlpService.createSanitizedEnvironment()
         do {
             try process.run()
@@ -218,9 +218,8 @@ actor DependencyInstaller {
             proc.executableURL = binURL
             proc.arguments = ["-version"]
             proc.environment = YtdlpService.createSanitizedEnvironment()
-            let p = Pipe()
-            proc.standardOutput = p
-            proc.standardError = p
+            proc.standardOutput = FileHandle.nullDevice
+            proc.standardError = FileHandle.nullDevice
             try proc.run()
             proc.waitUntilExit()
             guard proc.terminationStatus == 0 else {
@@ -2572,10 +2571,13 @@ public struct DownloadResult: Sendable {
                                   processController: DownloadProcessController? = nil) async throws -> URL {
         let targetExtension = Self.resolvedOutputFileExtension(for: options)
         let needsRecode = options.fileType.isAudio || (options.conversionCodec ?? .none) != .none || options.hdrAction == .convertToSDR
-        guard needsRecode || source.pathExtension != targetExtension else { return source }
+        // APFS is case-insensitive by default: `video.MP4` and `video.mp4` are one
+        // file, so a case-only difference must not be treated as a new destination.
+        let sameExtension = source.pathExtension.lowercased() == targetExtension.lowercased()
+        guard needsRecode || !sameExtension else { return source }
         try Task.checkCancellation()
         guard processController?.isCancelled != true else { throw CancellationError() }
-        let destination = source.deletingPathExtension().appendingPathExtension(targetExtension)
+        let destination = sameExtension ? source : source.deletingPathExtension().appendingPathExtension(targetExtension)
         let partial = source.deletingLastPathComponent().appendingPathComponent(".converted-\(UUID().uuidString).\(targetExtension)")
         defer { try? FileManager.default.removeItem(at: partial) }
         var args = [URL(fileURLWithPath: ffmpegDir).appendingPathComponent("ffmpeg").path,
@@ -7981,25 +7983,46 @@ public struct DownloadResult: Sendable {
     /// arguments. Siphon sets both and only accepts output inside the save
     /// folder, so an override downloads fine but the job reports failure.
     static func removingOutputLocationArguments(_ arguments: [String]) -> [String] {
-        removingRestrictedArguments(arguments, options: ["-P", "--paths", "-o", "--output", "--config-locations", "--exec", "--exec-before-download"])
+        // `--netrc-cmd` runs a command like `--exec`; `--alias` can re-create any
+        // dropped option under a new name.
+        removingRestrictedArguments(arguments, options: [
+            "-P", "--paths", "-o", "--output", "--config-locations", "--exec", "--exec-before-download",
+            "--netrc-cmd", "--alias"
+        ])
     }
 
+    /// yt-dlp short options that take a value. In a cluster such as `-fbest`,
+    /// the rest of the token after one of these is its value, not more flags.
+    private static let valueTakingShortOptions: Set<Character> = ["a", "f", "o", "O", "P", "S", "r", "R", "N", "I", "u", "p", "2", "t"]
+
     private static func removingRestrictedArguments(_ arguments: [String], options: Set<String>) -> [String] {
+        let restrictedShortOptions = Set(options.filter { !$0.hasPrefix("--") }.compactMap(\.last))
         var kept: [String] = []
         var index = arguments.startIndex
         while index < arguments.endIndex {
             let argument = arguments[index]
             let name = String(argument.prefix { $0 != "=" })
-            let restricted = options.contains(name) || options.contains { option in
-                if option.hasPrefix("--") { return name.count > 2 && option.hasPrefix(name) }
-                return argument.hasPrefix(option)
+            var restricted = options.contains(name) || options.contains { option in
+                option.hasPrefix("--") && name.count > 2 && option.hasPrefix(name)
+            }
+            var hasAttachedValue = argument.contains("=")
+            if !argument.hasPrefix("--"), argument.hasPrefix("-") {
+                // optparse accepts clustered short flags, so `-qo FILE` is `-q -o FILE`.
+                var letters = argument.dropFirst()
+                while let letter = letters.popFirst() {
+                    if restrictedShortOptions.contains(letter) {
+                        restricted = true
+                        hasAttachedValue = !letters.isEmpty
+                        break
+                    }
+                    if valueTakingShortOptions.contains(letter) { break }
+                }
             }
             if argument == "--" {
                 // The job owns the sole end-of-options delimiter.
                 index += 1
             } else if restricted {
                 LoggerService.shared.log("Ignoring a restricted additional argument.", level: .warning)
-                let hasAttachedValue = argument.contains("=") || (!argument.hasPrefix("--") && argument.count > 2)
                 index += !hasAttachedValue && index + 1 < arguments.endIndex && !arguments[index + 1].hasPrefix("-") ? 2 : 1
             } else {
                 kept.append(argument)
@@ -8246,7 +8269,8 @@ final class ThreadSafeDataBuffer: @unchecked Sendable {
     func getString() -> String {
         lock.lock()
         defer { lock.unlock() }
-        return String(data: data, encoding: .utf8) ?? ""
+        // Lossy: one invalid byte in a description must not discard the whole JSON.
+        return String(decoding: data, as: UTF8.self)
     }
 }
 
@@ -8272,8 +8296,8 @@ final class StreamBuffer: @unchecked Sendable {
             while lineSlice.last == 0x0D { lineSlice = lineSlice.dropLast() }
             while lineSlice.first == 0x0D { lineSlice = lineSlice.dropFirst() }
 
-            if !lineSlice.isEmpty, let line = String(data: lineSlice, encoding: .utf8) {
-                lines.append(line)
+            if !lineSlice.isEmpty {
+                lines.append(String(decoding: lineSlice, as: UTF8.self))
             }
         }
 
@@ -8288,8 +8312,8 @@ final class StreamBuffer: @unchecked Sendable {
             var lineSlice = buffer[...]
             while lineSlice.last == 0x0D || lineSlice.last == 0x0A { lineSlice = lineSlice.dropLast() }
             while lineSlice.first == 0x0D || lineSlice.first == 0x0A { lineSlice = lineSlice.dropFirst() }
-            if !lineSlice.isEmpty, let line = String(data: lineSlice, encoding: .utf8) {
-                lines.append(line)
+            if !lineSlice.isEmpty {
+                lines.append(String(decoding: lineSlice, as: UTF8.self))
             }
             buffer.removeAll(keepingCapacity: true)
         }
@@ -8305,8 +8329,8 @@ final class StreamBuffer: @unchecked Sendable {
             var lineSlice = buffer[...]
             while lineSlice.last == 0x0D || lineSlice.last == 0x0A { lineSlice = lineSlice.dropLast() }
             while lineSlice.first == 0x0D || lineSlice.first == 0x0A { lineSlice = lineSlice.dropFirst() }
-            if !lineSlice.isEmpty, let line = String(data: lineSlice, encoding: .utf8) {
-                lines.append(line)
+            if !lineSlice.isEmpty {
+                lines.append(String(decoding: lineSlice, as: UTF8.self))
             }
             buffer.removeAll(keepingCapacity: true)
         }
