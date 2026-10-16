@@ -84,7 +84,7 @@ final class DownloadQueue: ObservableObject {
         let files = (try? fileManager.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)) ?? []
         // Bolt Performance Optimization: Stream elements directly using lazy.compactMap to eliminate intermediate Array allocation before Set construction
         return Set(files.lazy.compactMap { file in
-            YtdlpService.isMediaFilePath(file.path) ? filenameCollisionKey(file.lastPathComponent) : nil
+            YtdlpService.isMediaFilePath(file.path) ? Self.filenameCollisionKey(file.lastPathComponent) : nil
         })
     }
 
@@ -113,10 +113,10 @@ final class DownloadQueue: ObservableObject {
         fileManager: FileManager = .default
     ) -> URL? {
         // Bolt Performance Optimization: Stream elements directly using lazy.map to eliminate intermediate Array allocation before Set construction
-        let keys = Set(collisionExtensions(for: options).lazy.map { filenameCollisionKey("\(baseName).\($0)") })
+        let keys = Set(collisionExtensions(for: options).lazy.map { Self.filenameCollisionKey("\(baseName).\($0)") })
         let files = (try? fileManager.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)) ?? []
         return files.first {
-            YtdlpService.isMediaFilePath($0.path) && keys.contains(filenameCollisionKey($0.lastPathComponent))
+            YtdlpService.isMediaFilePath($0.path) && keys.contains(Self.filenameCollisionKey($0.lastPathComponent))
         }
     }
 
