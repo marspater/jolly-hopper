@@ -43,6 +43,9 @@ final class DownloadHistoryStoreTests: XCTestCase {
         let paused = Download(url: "https://example.com/paused", options: .default, title: "Paused")
         paused.status = .paused
         store.addToHistory(paused, history: &history, skipSave: true)
+        let collision = Download(url: "https://example.com/collision", options: .default, title: "Collision")
+        collision.status = .fileExists
+        store.addToHistory(collision, history: &history, skipSave: true)
         for index in 0..<DownloadHistoryStore.maxHistoryCount {
             let done = Download(url: "https://example.com/\(index)", options: .default, title: "Done \(index)")
             done.status = .completed
@@ -51,7 +54,8 @@ final class DownloadHistoryStoreTests: XCTestCase {
 
         XCTAssertEqual(history.count, DownloadHistoryStore.maxHistoryCount)
         XCTAssertTrue(history.contains { $0.id == paused.id }, "The oldest entry was paused, so a finished one must go instead")
-        XCTAssertFalse(history.contains { $0.url == "https://example.com/0" })
+        XCTAssertTrue(history.contains { $0.id == collision.id }, "A filename collision still awaits the user's choice")
+        XCTAssertFalse(history.contains { $0.url == "https://example.com/1" })
     }
 
     func testHistoryStripsSecretsFromLogsAndAdvancedArguments() {

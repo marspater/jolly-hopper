@@ -77,9 +77,14 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
     }
 });
 
+// Opening siphon:// can move focus to Siphon before a new helper tab's record
+// is stored; openDeepLink checks this once the record exists.
+let browserFocused = true;
+
 if (chrome.windows?.onFocusChanged) {
     chrome.windows.onFocusChanged.addListener((windowId) => {
-        if (windowId === chrome.windows.WINDOW_ID_NONE) {
+        browserFocused = windowId !== chrome.windows.WINDOW_ID_NONE;
+        if (!browserFocused) {
             reconcileDeepLinkTabs(true).catch(reportCleanupFailure);
         }
     });
@@ -96,6 +101,7 @@ async function openDeepLink(deepLink) {
         const record = { url: deepLink, deadline: Date.now() + DEEP_LINK_TAB_TIMEOUT_MS };
         await chrome.storage.session.set({ [tabKey(tab.id)]: record });
         await chrome.alarms.create(tabKey(tab.id), { when: record.deadline });
+        if (!browserFocused) await reconcileDeepLinkTabs(true);
     } catch (error) {
         console.warn("Failed to open Siphon deep link:", error);
     }

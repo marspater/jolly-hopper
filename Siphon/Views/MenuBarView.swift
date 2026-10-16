@@ -278,20 +278,13 @@ struct MenuBarView: View {
         customPresets: [CustomPreset],
         userDefaults: UserDefaults = .standard
     ) -> DownloadOptions {
-        var options = DownloadOptions.defaultFromPreferences(userDefaults: userDefaults)
+        // The menu bar picks its own preset; Preferences' selection must not leak in.
+        var options = DownloadOptions.defaultFromPreferences(userDefaults: userDefaults, applyingSelectedCustomPreset: false)
         // A deleted custom preset falls back to the standard preset instead of dropping the URL.
         if selectedPreset.hasPrefix("custom_"),
            let preset = customPresets.first(where: { $0.id.uuidString == String(selectedPreset.dropFirst(7)) }) {
             applyFormat(fileType: preset.fileType, resolution: preset.videoResolution, videoCodec: preset.videoCodec, audioCodec: preset.audioCodec, to: &options)
-            // Same subtitle rule as the Add sheet: an "embed:" prefix embeds, otherwise a separate file.
-            let rawLanguage = preset.subtitleLanguage ?? ""
-            let language = rawLanguage.replacingOccurrences(of: "embed:", with: "")
-            options.downloadSubtitles = preset.downloadSubtitles ?? false
-            options.subtitleLanguages = [language.isEmpty ? "en" : language]
-            options.subtitleFormat = preset.subtitleFormat ?? .srt
-            options.embedSubtitles = options.downloadSubtitles && rawLanguage.hasPrefix("embed:")
-            options.splitChapters = preset.splitChapters ?? false
-            options.sponsorBlock = preset.sponsorBlock ?? false
+            options.applyCustomPresetExtras(preset)
         } else {
             let preset = DownloadPreset(rawValue: selectedPreset) ?? (selectedType == "audio" ? .audioOnly : .bestQuality)
             applyFormat(fileType: preset.fileType, resolution: preset.videoResolution, videoCodec: preset.videoCodec, audioCodec: preset.audioCodec, to: &options)
