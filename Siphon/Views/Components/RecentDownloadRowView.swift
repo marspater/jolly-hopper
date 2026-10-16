@@ -112,6 +112,7 @@ struct RecentDownloadRowView: View {
             Image(systemName: "play.rectangle.fill")
                 .font(.system(size: 16))
                 .foregroundColor(.secondary.opacity(0.6))
+                .accessibilityHidden(true)
         }
     }
 
