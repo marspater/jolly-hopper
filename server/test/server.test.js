@@ -13,7 +13,7 @@ const RELEASE_PAYLOAD = {
   name: 'Siphon 9.9.9',
   published_at: '2026-01-01T00:00:00Z',
   html_url: 'https://github.com/marspater/jolly-hopper/releases/tag/v9.9.9',
-  assets: [{ name: 'Siphon.dmg', browser_download_url: 'https://example.com/Siphon.dmg' }],
+  assets: [{ name: 'Siphon.dmg', browser_download_url: 'https://github.com/marspater/jolly-hopper/releases/download/v9.9.9/Siphon.dmg' }],
   body: 'notes'
 };
 
@@ -157,27 +157,31 @@ describe('Siphon Companion Server', () => {
     assert.equal(res.status, 503);
   });
 
-  test('malformed Host header returns 400 without crashing the server', async () => {
+  test('malformed or injected Host header returns 400 without crashing the server', async () => {
     const addr = server.address();
-    const result = await new Promise((resolve, reject) => {
-      const req = http.request({
-        hostname: '127.0.0.1',
-        port: addr.port,
-        path: '/',
-        method: 'GET',
-        headers: { Host: '%' }
-      }, (res) => {
-        let body = '';
-        res.setEncoding('utf8');
-        res.on('data', (chunk) => { body += chunk; });
-        res.on('end', () => resolve({ statusCode: res.statusCode, body }));
-      });
-      req.on('error', reject);
-      req.end();
-    });
+    const invalidHosts = ['%', 'evil.com@localhost', 'localhost/path', 'localhost?query', 'localhost#fragment', 'localhost bad'];
 
-    assert.equal(result.statusCode, 400);
-    assert.deepEqual(JSON.parse(result.body), { error: 'Bad Request' });
+    for (const hostHeader of invalidHosts) {
+      const result = await new Promise((resolve, reject) => {
+        const req = http.request({
+          hostname: '127.0.0.1',
+          port: addr.port,
+          path: '/',
+          method: 'GET',
+          headers: { Host: hostHeader }
+        }, (res) => {
+          let body = '';
+          res.setEncoding('utf8');
+          res.on('data', (chunk) => { body += chunk; });
+          res.on('end', () => resolve({ statusCode: res.statusCode, body }));
+        });
+        req.on('error', reject);
+        req.end();
+      });
+
+      assert.equal(result.statusCode, 400, `Host header '${hostHeader}' should return 400`);
+      assert.deepEqual(JSON.parse(result.body), { error: 'Bad Request' });
+    }
 
     const health = await fetch(`${baseUrl}/health`);
     assert.equal(health.status, 200, 'server must remain healthy after malformed input');
@@ -213,7 +217,7 @@ describe('GET /api/latest', () => {
     assert.equal(first.headers.get('content-type'), 'application/json');
     const data = await first.json();
     assert.equal(data.version, 'v9.9.9');
-    assert.equal(data.downloadUrl, 'https://example.com/Siphon.dmg');
+    assert.equal(data.downloadUrl, RELEASE_PAYLOAD.assets[0].browser_download_url);
     assert.equal(data.cached, false);
 
     const second = await (await fetch(`${baseUrl}/api/latest`)).json();
@@ -247,6 +251,63 @@ describe('GET /api/latest', () => {
     assert.ok(responses.every((res) => res.status === 200));
     assert.equal(calls, 1);
   });
+
+  test('falls back to default release page when download URL is non-HTTPS', async () => {
+    const payloadWithInsecureUrl = {
+      ...RELEASE_PAYLOAD,
+      assets: [{ name: 'Siphon.dmg', browser_download_url: 'http://insecure.example.com/Siphon.dmg' }]
+    };
+    const { baseUrl } = await start([{ status: 200, body: payloadWithInsecureUrl }]);
+
+    const res = await fetch(`${baseUrl}/api/latest`);
+    assert.equal(res.status, 200);
+    const data = await res.json();
+    assert.equal(data.downloadUrl, 'https://github.com/marspater/jolly-hopper/releases/latest');
+  });
+
+  test('falls back to default release page when download URL is an attacker-controlled HTTPS URL', async () => {
+    const untrustedUrls = [
+      'https://attacker.example.com/malicious.dmg',
+      'https://evil.github.com.attacker.com/Siphon.dmg',
+      'https://github.com.evil.org/download.dmg',
+      'https://evil-github.com/download.dmg'
+    ];
+
+    for (const url of untrustedUrls) {
+      const payloadWithUntrustedUrl = {
+        ...RELEASE_PAYLOAD,
+        assets: [{ name: 'Siphon.dmg', browser_download_url: url }]
+      };
+      const { baseUrl } = await start([{ status: 200, body: payloadWithUntrustedUrl }]);
+
+      const res = await fetch(`${baseUrl}/api/latest`);
+      assert.equal(res.status, 200);
+      const data = await res.json();
+      assert.equal(data.downloadUrl, 'https://github.com/marspater/jolly-hopper/releases/latest', `Untrusted URL ${url} must fall back`);
+    }
+  });
+
+  test('accepts trusted GitHub release asset URLs and objects.githubusercontent.com URLs', async () => {
+    const trustedUrls = [
+      'https://github.com/marspater/jolly-hopper/releases/download/v1.0.0/Siphon.dmg',
+      'https://objects.githubusercontent.com/github-production-release-asset/Siphon.dmg',
+      'https://api.github.com/repos/marspater/jolly-hopper/releases/assets/12345'
+    ];
+
+    for (const url of trustedUrls) {
+      const payloadWithTrustedUrl = {
+        ...RELEASE_PAYLOAD,
+        assets: [{ name: 'Siphon.dmg', browser_download_url: url }]
+      };
+      const { baseUrl } = await start([{ status: 200, body: payloadWithTrustedUrl }]);
+
+      const res = await fetch(`${baseUrl}/api/latest`);
+      assert.equal(res.status, 200);
+      const data = await res.json();
+      assert.equal(data.downloadUrl, url, `Trusted URL ${url} should be accepted`);
+    }
+  });
+
 
   [
     ['rate limiting', { status: 403, body: { message: 'API rate limit exceeded' } }],
