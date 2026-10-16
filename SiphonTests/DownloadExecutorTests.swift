@@ -676,26 +676,32 @@ final class DownloadExecutorTests: XCTestCase {
         let executor = DownloadExecutor(ytdlpService: YtdlpService(), delegate: delegate)
         let queue = DownloadQueue()
         let download = Download(url: "https://example.com/retried", options: .default)
-        let scratch = ScratchDirectoryPolicy.makeURL()
-        try FileManager.default.createDirectory(at: scratch, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: scratch) }
-        try Data("partial".utf8).write(to: scratch.appendingPathComponent("video.mp4.part"))
-        download.scratchDirectory = scratch
-        download.status = .queued
-        XCTAssertTrue(queue.reserveSlot(for: download.id))
-        executor.startDownloadTask(download, queue: queue, ytdlpVersion: nil, languageService: nil)
+        // Two overlapping stop/retry cycles: each attempt discards only its own files.
+        for cycle in 0..<2 {
+            let scratch = ScratchDirectoryPolicy.makeURL()
+            try FileManager.default.createDirectory(at: scratch, withIntermediateDirectories: true)
+            defer { try? FileManager.default.removeItem(at: scratch) }
+            try Data("partial".utf8).write(to: scratch.appendingPathComponent("video.mp4.part"))
+            download.scratchDirectory = scratch
+            download.status = .queued
+            XCTAssertTrue(queue.reserveSlot(for: download.id))
+            executor.startDownloadTask(download, queue: queue, ytdlpVersion: nil, languageService: nil)
 
-        executor.stopDownload(download, queue: queue, suppressNotification: true, skipSaveAndBroadcast: true)
-        // Retry re-queues the job before the stopped attempt has unwound.
-        download.status = .queued
+            executor.stopDownload(download, queue: queue, suppressNotification: true, skipSaveAndBroadcast: true)
+            // Retry re-queues the job before the stopped attempt has unwound, and
+            // cannot start a newer attempt while the old one still owns the ID.
+            download.status = .queued
+            executor.startDownloadTask(download, queue: queue, ytdlpVersion: nil, languageService: nil)
+            XCTAssertEqual(executor.executionState(for: download.id), .cancelling, "Cycle \(cycle)")
 
-        for _ in 0..<50 where executor.executionState(for: download.id) != .idle {
-            try await Task.sleep(nanoseconds: 10_000_000)
+            for _ in 0..<50 where executor.executionState(for: download.id) != .idle {
+                try await Task.sleep(nanoseconds: 10_000_000)
+            }
+            XCTAssertEqual(executor.executionState(for: download.id), .idle)
+            XCTAssertFalse(FileManager.default.fileExists(atPath: scratch.path), "The stopped attempt's files must not leak into the retry")
+            XCTAssertNil(download.scratchDirectory)
+            XCTAssertEqual(download.status, .queued)
         }
-        XCTAssertEqual(executor.executionState(for: download.id), .idle)
-        XCTAssertFalse(FileManager.default.fileExists(atPath: scratch.path), "The stopped attempt's files must not leak into the retry")
-        XCTAssertNil(download.scratchDirectory)
-        XCTAssertEqual(download.status, .queued)
     }
 
     func testStopDownloadWithFetchingPlaceholderUsesSanitizedURL() {

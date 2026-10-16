@@ -142,7 +142,9 @@ final class DownloadExecutor: ObservableObject {
     private(set) var activeControllers: [UUID: DownloadProcessController] = [:]
     private(set) var activeTasks: [UUID: Task<Void, Never>] = [:]
     /// Attempts stopped while still unwinding. Retry can re-queue the job before
-    /// the attempt finishes, and its files must still be discarded.
+    /// the attempt finishes, and its files must still be discarded. One ID is one
+    /// attempt: a new attempt cannot start while `activeTasks` holds the old one,
+    /// and the old one clears both in the same MainActor teardown.
     private var stoppedAttemptIDs: Set<UUID> = []
 
     var activeExecutionCount: Int {
