@@ -503,7 +503,8 @@ class YtdlpService: ObservableObject {
             hasher.update(data: data)
         }
         let digest = hasher.finalize()
-        let hashString = digest.map { String(format: "%02x", $0) }.joined()
+        // Bolt Performance Optimization: Stream formatted hex strings directly via lazy.map to eliminate intermediate Array allocation before joining
+        let hashString = digest.lazy.map { String(format: "%02x", $0) }.joined()
         return hashString.caseInsensitiveCompare(expectedHash) == .orderedSame
     }
 
@@ -4062,7 +4063,8 @@ public struct DownloadResult: Sendable {
         // that as a new client on every request. Automatic discovery is only used
         // when no usable browser was selected.
         if result.isEmpty {
-            let installedSet = Set(installed.map { $0.lowercased() })
+            // Bolt Performance Optimization: Stream elements directly using lazy.map to eliminate intermediate Array allocation before Set construction
+            let installedSet = Set(installed.lazy.map { $0.lowercased() })
             for browser in ["chrome", "brave", "edge", "vivaldi", "chromium", "firefox", "opera", "safari", "helium", "chromium-based"]
                 where installedSet.contains(browser) {
                 appendBrowser(browser)
@@ -6103,7 +6105,8 @@ public struct DownloadResult: Sendable {
             withUnsafeBytes(of: b.littleEndian) { res.append(contentsOf: $0) }
             withUnsafeBytes(of: c.littleEndian) { res.append(contentsOf: $0) }
             withUnsafeBytes(of: d.littleEndian) { res.append(contentsOf: $0) }
-            return res.map { String(format: "%02x", $0) }.joined()
+            // Bolt Performance Optimization: Stream formatted hex strings directly via lazy.map to eliminate intermediate Array allocation before joining
+            return res.lazy.map { String(format: "%02x", $0) }.joined()
         }
     }
 
@@ -7668,7 +7671,8 @@ public struct DownloadResult: Sendable {
         guard let components = URLComponents(string: url),
               let host = components.host?.lowercased(),
               host.hasSuffix(".onlyfans.com"), components.path.lowercased().hasSuffix(".m3u8") else { return false }
-        let names = Set(components.queryItems?.map(\.name) ?? [])
+        // Bolt Performance Optimization: Stream elements directly using lazy.map to eliminate intermediate Array allocation before Set construction
+        let names = Set((components.queryItems ?? []).lazy.map(\.name))
         return names.contains("Policy") && names.contains("Signature") && names.contains("Key-Pair-Id")
     }
 
