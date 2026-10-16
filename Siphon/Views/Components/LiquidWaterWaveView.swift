@@ -63,6 +63,18 @@ struct StatusSegmentFill: View {
     @ObservedObject private var renderingEnvironment = AdaptiveRenderingEnvironment.shared
     @Environment(\.siphonRenderingCapabilities) private var renderingCapabilities
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// The wave clock stops while paused, so the edge freezes where it was and
+    /// resumes from there instead of snapping to another phase.
+    @State private var pausedAt: Date?
+    @State private var pausedDuration: TimeInterval = 0
+
+    private var animatesWave: Bool {
+        renderingEnvironment.shouldAnimateAmbient && !reduceMotion
+    }
+
+    private func wavePhase(at date: Date) -> Double {
+        (date.timeIntervalSinceReferenceDate - pausedDuration) * 2.2
+    }
 
     var body: some View {
         ZStack {
@@ -80,17 +92,28 @@ struct StatusSegmentFill: View {
             }
 
             if isActive, let progress {
-                if renderingEnvironment.shouldAnimateAmbient && !reduceMotion {
+                if animatesWave {
                     TimelineView(.animation(minimumInterval: renderingCapabilities.animationMinimumInterval)) { timeline in
-                        liquid(progress: progress, phase: timeline.date.timeIntervalSinceReferenceDate * 2.2)
+                        liquid(progress: progress, phase: wavePhase(at: timeline.date))
                     }
                 } else {
-                    liquid(progress: progress, phase: 0)
+                    liquid(progress: progress, phase: pausedAt.map(wavePhase) ?? 0)
                 }
             }
         }
         .animation(SiphonAnimation.hoverSpring, value: isHovered)
         .animation(SiphonAnimation.fluidSpring, value: isActive)
+        .onAppear {
+            if !animatesWave { pausedAt = Date() }
+        }
+        .onChange(of: animatesWave) { _, animates in
+            if animates {
+                pausedDuration += pausedAt.map { Date().timeIntervalSince($0) } ?? 0
+                pausedAt = nil
+            } else {
+                pausedAt = Date()
+            }
+        }
     }
 
     private func liquid(progress: Double, phase: Double) -> some View {

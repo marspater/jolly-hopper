@@ -10,7 +10,6 @@ struct MainWindowConfigurator: NSViewRepresentable {
         DispatchQueue.main.async {
             guard let window = view.window else { return }
             window.identifier = NSUserInterfaceItemIdentifier("SiphonMainWindow")
-            window.title = ""
             window.titleVisibility = .hidden
             window.isOpaque = false
             window.backgroundColor = .clear
@@ -363,9 +362,20 @@ struct SidebarView: View {
         .listRowInsets(EdgeInsets(top: 2, leading: 6, bottom: 2, trailing: 6))
         .listRowBackground(
             RoundedRectangle(cornerRadius: SiphonTheme.radiusControl, style: .continuous)
-                .fill(isSelected ? SiphonTheme.accent.opacity(SiphonTheme.Opacity.tintSidebarSelected) : Color.clear)
+                .fill(sidebarSelectionFill(isSelected: isSelected))
                 .padding(.horizontal, 2)
         )
+    }
+}
+
+extension SidebarView {
+    /// An inactive window keeps the selection visible but drops the accent,
+    /// as native sidebars do.
+    private func sidebarSelectionFill(isSelected: Bool) -> Color {
+        guard isSelected else { return .clear }
+        return appearsActive
+            ? SiphonTheme.accent.opacity(SiphonTheme.Opacity.tintSidebarSelected)
+            : Color.primary.opacity(SiphonTheme.Opacity.fillPillHover)
     }
 }
 
@@ -530,34 +540,39 @@ struct HomeView: View {
                 .help(languageService.s("see_all"))
             }
 
-            if downloadManager.downloads.isEmpty {
-                VStack(spacing: 8) {
-                    Image(systemName: "arrow.down.circle")
-                        .font(.system(size: 24, weight: .light))
-                        .foregroundColor(.secondary.opacity(0.7))
-                        .accessibilityHidden(true)
-                    Text(languageService.s("no_recent_downloads"))
-                        .font(.siphonStandardMedium)
-                        .foregroundColor(.primary)
-                    Text(languageService.s("no_recent_downloads_sub"))
-                        .font(.siphonMetadata)
-                        .foregroundColor(.secondary)
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 26)
-                .background(
-                    SiphonTheme.cardBackground(cornerRadius: SiphonTheme.radiusCard)
-                )
-                .overlay(
-                    SiphonTheme.cardBorder(cornerRadius: SiphonTheme.radiusCard)
-                )
-            } else {
-                VStack(spacing: 6) {
-                    ForEach(downloadManager.recentDownloads(limit: 3)) { download in
-                        RecentDownloadRowView(download: download)
+            let recent = downloadManager.recentDownloads(limit: 3)
+            Group {
+                if recent.isEmpty {
+                    VStack(spacing: 8) {
+                        Image(systemName: "arrow.down.circle")
+                            .font(.system(size: 24, weight: .light))
+                            .foregroundColor(.secondary.opacity(0.7))
+                            .accessibilityHidden(true)
+                        Text(languageService.s("no_recent_downloads"))
+                            .font(.siphonStandardMedium)
+                            .foregroundColor(.primary)
+                        Text(languageService.s("no_recent_downloads_sub"))
+                            .font(.siphonMetadata)
+                            .foregroundColor(.secondary)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 26)
+                    .background(
+                        SiphonTheme.cardBackground(cornerRadius: SiphonTheme.radiusCard)
+                    )
+                    .overlay(
+                        SiphonTheme.cardBorder(cornerRadius: SiphonTheme.radiusCard)
+                    )
+                } else {
+                    VStack(spacing: 6) {
+                        ForEach(recent) { download in
+                            RecentDownloadRowView(download: download)
+                                .transition(.opacity)
+                        }
                     }
                 }
             }
+            .animation(SiphonAnimation.fluidSpring, value: recent.map(\.id))
         }
     }
 }
@@ -644,7 +659,6 @@ struct StatusSegmentButton: View {
     let isActive: Bool
 
     @State private var isHovered = false
-    @ObservedObject private var renderingEnvironment = AdaptiveRenderingEnvironment.shared
 
     @ViewBuilder
     private var statusIndicator: some View {
@@ -657,6 +671,7 @@ struct StatusSegmentButton: View {
                     .trim(from: 0, to: CGFloat(ringProgress))
                     .stroke(readableColor, style: StrokeStyle(lineWidth: 2, lineCap: .round))
                     .rotationEffect(.degrees(-90))
+                    .animation(SiphonAnimation.fluidSpring, value: ringProgress)
                 Circle()
                     .fill(readableColor)
                     .frame(width: 4.5, height: 4.5)
@@ -829,7 +844,7 @@ struct WhatsNewSheetView: View {
 
                     SiphonTagBadge(
                         text: "v\(appState.appVersion)",
-                        tintColor: SiphonTheme.accent,
+                        tintColor: SiphonTheme.accentText,
                         isMonospaced: true
                     )
                 }
@@ -898,16 +913,8 @@ struct WhatsNewSheetView: View {
             .padding(.vertical, SiphonTheme.spacing16)
         }
         .frame(width: 540, height: 520)
-        // This sheet draws its own card surface instead of siphonWindowBackground().
-        .font(.siphonStandard)
-        .background(
-            SiphonTheme.cardBackground(cornerRadius: SiphonTheme.radiusCard)
-                .ignoresSafeArea()
-        )
-        .overlay(
-            SiphonTheme.cardBorder(cornerRadius: SiphonTheme.radiusCard)
-                .ignoresSafeArea()
-        )
+        .siphonAdaptiveRendering()
+        .siphonWindowBackground()
     }
 }
 

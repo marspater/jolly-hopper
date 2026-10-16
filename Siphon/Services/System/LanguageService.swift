@@ -61,6 +61,8 @@ class LanguageService: ObservableObject {
         "unsupported_url_desc": "Unsupported URL or unrecognized host",
         "generic_error_desc": "An unexpected error occurred",
         "details": "Details",
+        "a11y_expanded": "Expanded",
+        "a11y_collapsed": "Collapsed",
         "hide_details": "Hide Details",
         "copy_error": "Copy Error",
         "more_actions": "More Actions",
