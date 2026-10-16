@@ -3776,7 +3776,8 @@ final class YtdlpServiceTests: XCTestCase {
             baseURL: URL(string: "https://gayteam.club/41596-x.html")
         )
 
-        for _ in 0..<50 where collector.urls.isEmpty {
+        // A cold WebContent process on a loaded CI runner can take several seconds.
+        for _ in 0..<200 where collector.urls.isEmpty {
             try await Task.sleep(nanoseconds: 100_000_000)
         }
         XCTAssertEqual(collector.urls, ["https://127.0.0.1:9/stream/qb0x~0mv?token=t"])
