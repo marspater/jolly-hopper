@@ -316,10 +316,15 @@ struct AddDownloadView: View {
 
     private func acceptExternalURL(_ newURL: String) {
         guard !newURL.isEmpty else { return }
-        urlInput = newURL
         appState.urlToDownload = ""
         inputMode = .single
-        fetchInfo(debounce: false)
+        // A changed URL fetches through onChange(of: urlInput); fetching here too
+        // would start a request that the reset immediately cancels.
+        if urlInput == newURL {
+            fetchInfo(debounce: false)
+        } else {
+            urlInput = newURL
+        }
     }
 
     private func refreshCustomPresets() {
@@ -1023,6 +1028,9 @@ struct AddDownloadView: View {
         embedSubtitles = false
         selectedSubtitleLangs.removeAll()
         presetSubtitleLanguage = ""
+        // A custom preset applied earlier may have changed these.
+        splitChapters = false
+        sponsorBlock = UserDefaults.standard.bool(forKey: UserDefaultsKeys.sponsorBlock)
     }
 
     private func applyCustomPreset(_ preset: CustomPreset) {

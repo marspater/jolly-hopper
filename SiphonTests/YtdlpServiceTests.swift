@@ -171,6 +171,9 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertEqual(prepared.args.filter { $0 == "--cookies" }.count, 1)
         XCTAssertFalse(prepared.args.contains("--cookies-from-browser"))
         XCTAssertTrue(FileManager.default.fileExists(atPath: supplied.path))
+        // With only encrypted rows, a wrong key is an error, not a signed-out browser.
+        XCTAssertEqual(sqlite3_exec(database, "DELETE FROM cookies; INSERT INTO cookies VALUES('.example.com','verified','',X'\(hex)','/',0,1,1,0);", nil, nil, nil), SQLITE_OK)
+        XCTAssertThrowsError(try ChromiumCookieReader.export(for: target, root: root, password: { Data("wrong".utf8) }))
     }
 
     func testClearanceIdentityAndBrowserCookiesSurviveEveryCaller() async throws {
@@ -209,6 +212,10 @@ final class YtdlpServiceTests: XCTestCase {
     func testAdditionalArgumentsHandleAdjacentFlagsEscapesAndEmptyValues() {
         XCTAssertEqual(YtdlpService.removingOutputLocationArguments(["-o", "--output=/tmp/x", "--paths", "-P", "/tmp/y", "--no-mtime"]), ["--no-mtime"])
         XCTAssertEqual(YtdlpService.removingOutputLocationArguments(["--config-location=/tmp/config", "--exe", "command", "--", "--no-mtime"]), ["--no-mtime"])
+        // Clustered short flags, command runners and aliases cannot slip past the filter.
+        XCTAssertEqual(YtdlpService.removingOutputLocationArguments([
+            "-qo", "/tmp/x", "-vP/tmp/y", "--netrc-cmd", "cmd", "--alias=get", "-fbestvideo", "-q", "--no-mtime"
+        ]), ["-fbestvideo", "-q", "--no-mtime"])
         XCTAssertEqual(YtdlpService.removingProxyArguments(["--proxy", "--proxy=http://evil", "--downloader-args", "ffmpeg:-http_proxy http://evil", "--external-downloader=aria2c", "--ppa=ffmpeg:-i http://evil", "--ffmpeg-location", "/tmp/unsafe", "--plugin-dirs=/tmp/plugins", "--geo-verification-proxy", "http://evil", "--no-mtime"]), ["--no-mtime"])
         XCTAssertEqual(YtdlpService.parseArgumentString(#"--header "" 'a\b' "say \"hi\"" path\ with\ spaces \\ "x\y""#), ["--header", "", #"a\b"#, #"say "hi""#, "path with spaces", #"\"#, #"x\y"#])
     }
@@ -2438,6 +2445,10 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertFalse(sanitized.contains("sig"))
     }
 
+    func testLoggerServiceSanitizeURLForLogDropsQueryWhenUnparseable() {
+        XCTAssertEqual(LoggerService.sanitizeURLForLog("https://exa mple.com/a.m3u8?token=SECRET#x"), "https://exa mple.com/a.m3u8")
+    }
+
     func testLoggerServiceSanitizeURLForLogWithCredentialsAndPort() {
         // User/password basic auth credentials in URL
         let urlWithAuth = "https://user:pass123@example.com/video/stream.m3u8?key=val"
@@ -2568,6 +2579,15 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertEqual(urlA.path, fileA.path)
         XCTAssertEqual(urlB.path, fileB.path)
         XCTAssertNotEqual(urlA.path, urlB.path)
+    }
+
+    func testOutputDecodingSurvivesInvalidUTF8() {
+        let json = ThreadSafeDataBuffer()
+        json.append(Data(#"{"title":"a"#.utf8) + Data([0xFF]) + Data(#""}"#.utf8))
+        XCTAssertTrue(json.getString().hasPrefix(#"{"title":"a"#), "One bad byte must not discard the whole payload")
+        let lines = StreamBuffer().appendAndExtractLines(Data([0xC3]) + Data("SIPHON_FINAL_PATH:/tmp/a.mp4\n".utf8))
+        XCTAssertEqual(lines.count, 1)
+        XCTAssertTrue(lines.first?.hasSuffix("SIPHON_FINAL_PATH:/tmp/a.mp4") == true)
     }
 
     func testByteSafeStreamBufferSplitUTF8() {
@@ -5974,6 +5994,27 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertTrue(conversion.contains("hvc1"))
         XCTAssertTrue(conversion.contains("0:s?"), "Keep embedded subtitles during conversion")
         XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: root.path), ["video.mp4"])
+    }
+
+    func testConversionKeepsOutputWhenExtensionDiffersOnlyInCase() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let source = root.appendingPathComponent("video.MP4")
+        service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
+            try Data("converted".utf8).write(to: URL(fileURLWithPath: try XCTUnwrap(args.last)))
+            return ""
+        })
+        var options = DownloadOptions.default
+        options.fileType = .mp4
+        options.conversionCodec = .h265
+        for forceOverwrite in [false, true] {
+            try Data("source".utf8).write(to: source)
+            options.forceOverwrite = forceOverwrite
+            let result = try await service.postprocessDownloadedMedia(at: source, options: options, ffmpegDir: root.path)
+            XCTAssertEqual(try String(contentsOf: result, encoding: .utf8), "converted")
+            XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: root.path), ["video.MP4"])
+        }
     }
 
     func testSDRConversionKeepsWebMCodecsValid() async throws {

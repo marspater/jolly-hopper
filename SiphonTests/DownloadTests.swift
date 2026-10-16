@@ -460,6 +460,30 @@ final class DownloadTests: XCTestCase {
         XCTAssertEqual(historic.title, "Summer Fun")
     }
 
+    func testDefaultFromPreferencesAppliesSelectedCustomPreset() throws {
+        let suiteName = "testDefaults_\(UUID().uuidString)"
+        let testDefaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { testDefaults.removePersistentDomain(forName: suiteName) }
+        let preset = CustomPreset(name: "Lectures", videoCodec: .h264, audioCodec: .aac, videoResolution: .r720p, fileType: .mp4,
+                                  downloadSubtitles: true, subtitleLanguage: "embed:de", subtitleFormat: .vtt,
+                                  sponsorBlock: true, splitChapters: true)
+        testDefaults.set(try JSONEncoder().encode([preset]), forKey: UserDefaultsKeys.customPresets)
+        testDefaults.set(preset.id.uuidString, forKey: UserDefaultsKeys.selectedCustomPresetId)
+
+        let options = DownloadOptions.defaultFromPreferences(userDefaults: testDefaults)
+        XCTAssertTrue(options.downloadSubtitles)
+        XCTAssertTrue(options.embedSubtitles)
+        XCTAssertEqual(options.subtitleLanguages, ["de"])
+        XCTAssertEqual(options.subtitleFormat, .vtt)
+        XCTAssertTrue(options.splitChapters)
+        XCTAssertTrue(options.sponsorBlock)
+
+        let plain = DownloadOptions.defaultFromPreferences(userDefaults: testDefaults, applyingSelectedCustomPreset: false)
+        XCTAssertFalse(plain.downloadSubtitles)
+        XCTAssertFalse(plain.splitChapters)
+        XCTAssertFalse(plain.sponsorBlock)
+    }
+
     func testDownloadOptionsDefaultFromPreferences() {
         let suiteName = "testDefaults_\(UUID().uuidString)"
         guard let testDefaults = UserDefaults(suiteName: suiteName) else {

@@ -58,7 +58,7 @@ Recovered jobs whose advanced arguments were removed are held paused until the u
 
 Partially failed playlists retain their completed output paths but enter Failed with a retry action. Playlist retries skip existing files rather than overwriting completed entries, unless the user explicitly chose overwrite. Partial-failure markers survive history restoration, including migration of older completed-with-error records.
 
-Filename collisions remain visible in Queue, including its count, until the user chooses overwrite, a new name, or removal. Queue visibility does not admit these action-required jobs for execution.
+Filename collisions are action-required jobs: they appear in Recent (not Queue or its count) until the user chooses overwrite, a new name, or removal, and history trimming never evicts them. They are never admitted for execution until the user chooses.
 
 ### Dependency update exclusion
 

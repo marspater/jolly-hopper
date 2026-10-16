@@ -560,7 +560,7 @@ struct PreferencesView: View {
                             .lineLimit(1)
                             .truncationMode(.tail)
                             .help(preset.name)
-                        Text("\(preset.videoCodec.title(lang: languageService)) + \(preset.audioCodec.title(lang: languageService)) • \(preset.videoResolution.title(lang: languageService))\(preset.downloadSubtitles == true ? " • CC: \(preset.subtitleLanguage ?? "")" : "")\(preset.splitChapters == true ? " • \(languageService.s("split_chapters"))" : "")\(preset.sponsorBlock == true ? " • \(languageService.s("sponsorblock"))" : "")")
+                        Text("\(preset.videoCodec.title(lang: languageService)) + \(preset.audioCodec.title(lang: languageService)) • \(preset.videoResolution.title(lang: languageService))\(preset.downloadSubtitles == true ? " • CC: \((preset.subtitleLanguage ?? "").replacingOccurrences(of: "embed:", with: ""))" : "")\(preset.splitChapters == true ? " • \(languageService.s("split_chapters"))" : "")\(preset.sponsorBlock == true ? " • \(languageService.s("sponsorblock"))" : "")")
                             .font(.siphonMetadata)
                             .foregroundColor(.secondary)
                             .lineLimit(1)
