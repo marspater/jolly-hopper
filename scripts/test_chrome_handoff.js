@@ -164,6 +164,10 @@ for (const extension of ["Firefox", "Safari"]) {
         assert.equal(Object.keys(browser.records).length, 0);
         const manifest = JSON.parse(fs.readFileSync(path.join(__dirname, `../SiphonExtension_${extension}/manifest.json`)));
         assert.ok(manifest.action);
+        for (const size of ["16", "48", "128"]) {
+            assert.ok(fs.existsSync(path.join(__dirname, `../SiphonExtension_${extension}`, manifest.icons[size])), `${size} px icon`);
+            assert.equal(manifest.action.default_icon[size], manifest.icons[size]);
+        }
         assert.ok(manifest.permissions.includes("storage"));
         assert.ok(manifest.permissions.includes("alarms"));
     });
