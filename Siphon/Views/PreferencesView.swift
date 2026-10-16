@@ -353,6 +353,7 @@ struct PreferencesView: View {
                             Image(systemName: "xmark.circle.fill")
                                 .font(.siphonPrimary)
                                 .foregroundColor(.secondary)
+                                .accessibilityHidden(true)
                         }
                         .buttonStyle(.plain)
                         .help(languageService.s("reset_save_folder"))

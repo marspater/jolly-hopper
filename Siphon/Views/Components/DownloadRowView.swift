@@ -579,6 +579,7 @@ struct FileThumbnailView: View {
                         Image(systemName: "play.rectangle.fill")
                             .font(.system(size: 24))
                             .foregroundColor(.secondary.opacity(0.6))
+                            .accessibilityHidden(true)
                     }
             }
         }

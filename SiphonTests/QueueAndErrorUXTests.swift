@@ -2457,4 +2457,40 @@ final class SiphonFontCoverageTests: XCTestCase {
         }
         XCTAssertTrue(findings.isEmpty, "Controls that render SF Pro:\n" + findings.map(\.description).joined(separator: "\n"))
     }
+
+    func testThumbnailPlaceholdersHideDecorativeIconsFromVoiceOver() throws {
+        for (name, lines) in try sourceFiles() {
+            for (index, line) in lines.enumerated() {
+                if line.contains("Image(systemName: \"play.rectangle.fill\")") {
+                    let nextFewLines = lines[index..<min(lines.count, index + 6)].joined(separator: "\n")
+                    XCTAssertTrue(
+                        nextFewLines.contains(".accessibilityHidden(true)"),
+                        "\(name):\(index + 1) thumbnail placeholder play-rectangle icon must be accessibilityHidden(true)"
+                    )
+                }
+            }
+        }
+    }
+
+    func testClearButtonIconsAreAccessibilityHiddenFromVoiceOver() throws {
+        let lang = LanguageService()
+        XCTAssertEqual(lang.s("clear"), "Clear")
+
+        for (name, lines) in try sourceFiles() {
+            for (index, line) in lines.enumerated() {
+                if line.contains("Image(systemName: \"xmark.circle.fill\")") {
+                    let start = max(0, index - 6)
+                    let end = min(lines.count, index + 8)
+                    let window = lines[start..<end].joined(separator: "\n")
+                    if window.contains("Button") {
+                        let nextFewLines = lines[index..<min(lines.count, index + 6)].joined(separator: "\n")
+                        XCTAssertTrue(
+                            nextFewLines.contains(".accessibilityHidden(true)"),
+                            "\(name):\(index + 1) clear button xmark icon must be accessibilityHidden(true) so VoiceOver uses explicit label"
+                        )
+                    }
+                }
+            }
+        }
+    }
 }
