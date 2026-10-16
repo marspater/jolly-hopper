@@ -166,6 +166,7 @@ struct HeroDropURLView: View {
                             Image(systemName: "xmark.circle.fill")
                                 .font(.system(size: 12))
                                 .foregroundColor(.secondary)
+                                .accessibilityHidden(true)
                         }
                         .buttonStyle(.plain)
                         .help(languageService.s("clear"))
