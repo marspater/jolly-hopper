@@ -78,12 +78,12 @@ const TRUSTED_RELEASE_HOSTS = new Set([
   'objects.githubusercontent.com'
 ]);
 
-function isTrustedReleaseUrl(htmlUrl) {
-  if (typeof htmlUrl !== 'string' || !htmlUrl.startsWith('https://')) {
+function isTrustedReleaseUrl(targetUrl) {
+  if (typeof targetUrl !== 'string' || !targetUrl.startsWith('https://')) {
     return false;
   }
   try {
-    const parsed = new URL(htmlUrl);
+    const parsed = new URL(targetUrl);
     return parsed.protocol === 'https:' && TRUSTED_RELEASE_HOSTS.has(parsed.hostname.toLowerCase());
   } catch {
     return false;
@@ -93,8 +93,11 @@ function isTrustedReleaseUrl(htmlUrl) {
 function extractDownloadUrl(payload) {
   const assets = Array.isArray(payload.assets) ? payload.assets : [];
   const dmgAsset = assets.find((a) => typeof a?.name === 'string' && a.name.endsWith('.dmg'));
-  const releaseHtmlUrl = dmgAsset ? dmgAsset.browser_download_url : payload['html_url'];
-  return isTrustedReleaseUrl(releaseHtmlUrl) ? releaseHtmlUrl : DEFAULT_RELEASE_URL;
+  const fallbackUrl = payload.tag_name
+    ? `https://github.com/marspater/jolly-hopper/releases/tag/${payload.tag_name}`
+    : DEFAULT_RELEASE_URL;
+  const candidateUrl = dmgAsset ? dmgAsset.browser_download_url : fallbackUrl;
+  return isTrustedReleaseUrl(candidateUrl) ? candidateUrl : DEFAULT_RELEASE_URL;
 }
 
 // Returns a release lookup with its own in-memory cache. `fetchImpl` is
