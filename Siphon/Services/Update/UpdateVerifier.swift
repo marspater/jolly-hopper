@@ -72,8 +72,7 @@ public struct UpdateVerifier: Sendable {
         }
 
         let digest = hasher.finalize()
-        // Bolt Performance Optimization: Stream formatted hex strings directly via lazy.map to eliminate intermediate Array allocation before joining
-        return digest.lazy.map { String(format: "%02x", $0) }.joined()
+        return digest.map { String(format: "%02x", $0) }.joined()
     }
 
     /// Verifies that a downloaded file matches the expected SHA-256 checksum.
