@@ -12,7 +12,7 @@ public enum ExternalDownloadTargetPolicy {
         isAllowed(url, resolveDNS: true)
     }
 
-    private static func isAllowed(_ url: URL, resolveDNS: Bool) -> Bool {
+    static func isAllowed(_ url: URL, resolveDNS: Bool) -> Bool {
         guard let scheme = url.scheme?.lowercased(),
               ["http", "https"].contains(scheme),
               url.user == nil,
