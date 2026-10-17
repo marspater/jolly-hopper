@@ -29,3 +29,8 @@
 **Vulnerability:** Binary cookie record offsets and string field offsets (`domainAt`, `nameAt`, `pathAt`, `valueAt`) read from `Cookies.binarycookies` were not checked against record and page size bounds, allowing malformed files to trigger integer overflow traps.
 **Learning:** Unsafe binary data parsing where offsets are added to a base address can trigger runtime arithmetic overflow panics if offsets exceed `pageSize` or `size`.
 **Prevention:** Always validate that record offsets (`offset < pageSize`) and string field offsets (`domainAt < size`, etc.) are within bounds before performing pointer or index arithmetic.
+
+## 2026-04-03 - Rejected `--` Delimiter in hdiutil Invocations
+**Vulnerability:** Attempted to add `--` end-of-options delimiters to `hdiutil attach` and `hdiutil detach` invocations in `UpdateInstaller.swift` to prevent hypothetical option flag injection.
+**Learning:** macOS `hdiutil` does NOT accept `--` as an end-of-options marker. Passing `--` to `hdiutil attach` or `hdiutil detach` causes `hdiutil` to exit with status 1 (usage error) and breaks self-update installations. Furthermore, update DMG and mount point paths are internally generated temporary paths, not untrusted user inputs.
+**Prevention:** Never pass `--` option delimiters to `hdiutil` invocations; verify tool-specific CLI flag support on macOS target binaries before attempting option delimiter refactoring.
