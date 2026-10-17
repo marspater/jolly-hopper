@@ -40,8 +40,8 @@ class LoggerService: ObservableObject {
     nonisolated private static let exportSecretQueryRegex = try? NSRegularExpression(pattern: "(?i)([?&](?:token|auth|key|api_key|password|pass|secret|sig|signature|access_token|session|sessionid|sess|jwt|apikey|private_key|client_secret|pcode|oauth_token)=)[^&\\s\\r\\n]+", options: [])
     nonisolated private static let exportHomeDirRegex = try? NSRegularExpression(pattern: "/Users/([a-zA-Z0-9._-]+)/", options: [])
 
-    // Bolt Performance Optimization: Pre-compile sensitive option flag dictionaries as static constants
-    // to eliminate dynamic heap allocations and dictionary initialization overhead whenever command execution lines are sanitized for logging.
+    // Bolt Performance Optimization: Move sensitive option flag dictionaries to static, lazy storage
+    // to avoid per-call dictionary initialization overhead whenever command execution lines are sanitized for logging.
     nonisolated private static let sensitiveValueFlags: [String: String] = [
         "--cookies": "\"<COOKIE_FILE>\"",
         "--cookies-from-browser": "\"<BROWSER>\"",
