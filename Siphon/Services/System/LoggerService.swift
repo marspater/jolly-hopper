@@ -40,6 +40,56 @@ class LoggerService: ObservableObject {
     nonisolated private static let exportSecretQueryRegex = try? NSRegularExpression(pattern: "(?i)([?&](?:token|auth|key|api_key|password|pass|secret|sig|signature|access_token|session|sessionid|sess|jwt|apikey|private_key|client_secret|pcode|oauth_token)=)[^&\\s\\r\\n]+", options: [])
     nonisolated private static let exportHomeDirRegex = try? NSRegularExpression(pattern: "/Users/([a-zA-Z0-9._-]+)/", options: [])
 
+    // Bolt Performance Optimization: Pre-compile sensitive option flag dictionaries as static constants
+    // to eliminate dynamic heap allocations and dictionary initialization overhead whenever command execution lines are sanitized for logging.
+    nonisolated private static let sensitiveValueFlags: [String: String] = [
+        "--cookies": "\"<COOKIE_FILE>\"",
+        "--cookies-from-browser": "\"<BROWSER>\"",
+        "-b": "\"<BROWSER>\"",
+        "--add-header": "\"<REDACTED_HEADER>\"",
+        "--add-headers": "\"<REDACTED_HEADER>\"",
+        "--header": "\"<REDACTED_HEADER>\"",
+        "--http-header": "\"<REDACTED_HEADER>\"",
+        "-H": "\"<REDACTED_HEADER>\"",
+        "--username": "\"<USERNAME>\"",
+        "-u": "\"<USERNAME>\"",
+        "--password": "\"<PASSWORD>\"",
+        "-p": "\"<PASSWORD>\"",
+        "--video-password": "\"<PASSWORD>\"",
+        "--ap-username": "\"<USERNAME>\"",
+        "--ap-password": "\"<PASSWORD>\"",
+        "--2factor": "\"<2FACTOR>\"",
+        "-2": "\"<2FACTOR>\"",
+        "--token": "\"<TOKEN>\"",
+        "--login-with-token": "\"<TOKEN>\"",
+        "--api-key": "\"<API_KEY>\"",
+        "--client-certificate-password": "\"<PASSWORD>\"",
+        "--client-certificate": "\"<CLIENT_CERT_REDACTED>\"",
+        "--client-certificate-key": "\"<CLIENT_KEY_REDACTED>\"",
+        "--client-certificate-key-password": "\"<PASSWORD>\"",
+        "--proxy": "\"<PROXY_REDACTED>\"",
+        "--proxy-user": "\"<USERNAME>\"",
+        "--proxy-password": "\"<PASSWORD>\"",
+        "--user": "\"<USERNAME>\"",
+        "--ffmpeg-location": "\"<LOCATION_REDACTED>\"",
+        "--netrc-cmd": "\"<COMMAND_REDACTED>\"",
+        "--netrc-location": "\"<LOCATION_REDACTED>\"",
+        "--config-location": "\"<LOCATION_REDACTED>\"",
+        "--exec": "\"<EXEC_REDACTED>\"",
+        "--extractor-args": "\"<ARGS_REDACTED>\"",
+        "--postprocessor-args": "\"<ARGS_REDACTED>\"",
+        "--downloader-args": "\"<ARGS_REDACTED>\"",
+        "--external-downloader-args": "\"<ARGS_REDACTED>\""
+    ]
+
+    nonisolated private static let shortSensitiveFlags: [String: String] = [
+        "-p": "\"<PASSWORD>\"",
+        "-u": "\"<USERNAME>\"",
+        "-2": "\"<2FACTOR>\"",
+        "-b": "\"<BROWSER>\"",
+        "-H": "\"<REDACTED_HEADER>\""
+    ]
+
     nonisolated static func sanitizeURLForLog(_ urlString: String) -> String {
         // Unparseable (e.g. a URL sliced out of a longer argument): still drop
         // the query and fragment, which carry tokens and signatures.
@@ -56,54 +106,6 @@ class LoggerService: ObservableObject {
         var sanitizedArgs: [String] = []
         var skipNextForRedaction: String?
 
-        let sensitiveValueFlags: [String: String] = [
-            "--cookies": "\"<COOKIE_FILE>\"",
-            "--cookies-from-browser": "\"<BROWSER>\"",
-            "-b": "\"<BROWSER>\"",
-            "--add-header": "\"<REDACTED_HEADER>\"",
-            "--add-headers": "\"<REDACTED_HEADER>\"",
-            "--header": "\"<REDACTED_HEADER>\"",
-            "--http-header": "\"<REDACTED_HEADER>\"",
-            "-H": "\"<REDACTED_HEADER>\"",
-            "--username": "\"<USERNAME>\"",
-            "-u": "\"<USERNAME>\"",
-            "--password": "\"<PASSWORD>\"",
-            "-p": "\"<PASSWORD>\"",
-            "--video-password": "\"<PASSWORD>\"",
-            "--ap-username": "\"<USERNAME>\"",
-            "--ap-password": "\"<PASSWORD>\"",
-            "--2factor": "\"<2FACTOR>\"",
-            "-2": "\"<2FACTOR>\"",
-            "--token": "\"<TOKEN>\"",
-            "--login-with-token": "\"<TOKEN>\"",
-            "--api-key": "\"<API_KEY>\"",
-            "--client-certificate-password": "\"<PASSWORD>\"",
-            "--client-certificate": "\"<CLIENT_CERT_REDACTED>\"",
-            "--client-certificate-key": "\"<CLIENT_KEY_REDACTED>\"",
-            "--client-certificate-key-password": "\"<PASSWORD>\"",
-            "--proxy": "\"<PROXY_REDACTED>\"",
-            "--proxy-user": "\"<USERNAME>\"",
-            "--proxy-password": "\"<PASSWORD>\"",
-            "--user": "\"<USERNAME>\"",
-            "--ffmpeg-location": "\"<LOCATION_REDACTED>\"",
-            "--netrc-cmd": "\"<COMMAND_REDACTED>\"",
-            "--netrc-location": "\"<LOCATION_REDACTED>\"",
-            "--config-location": "\"<LOCATION_REDACTED>\"",
-            "--exec": "\"<EXEC_REDACTED>\"",
-            "--extractor-args": "\"<ARGS_REDACTED>\"",
-            "--postprocessor-args": "\"<ARGS_REDACTED>\"",
-            "--downloader-args": "\"<ARGS_REDACTED>\"",
-            "--external-downloader-args": "\"<ARGS_REDACTED>\""
-        ]
-
-        let shortSensitiveFlags: [String: String] = [
-            "-p": "\"<PASSWORD>\"",
-            "-u": "\"<USERNAME>\"",
-            "-2": "\"<2FACTOR>\"",
-            "-b": "\"<BROWSER>\"",
-            "-H": "\"<REDACTED_HEADER>\""
-        ]
-
         for arg in args {
             if let redactionPlaceholder = skipNextForRedaction {
                 sanitizedArgs.append(redactionPlaceholder)
@@ -111,7 +113,7 @@ class LoggerService: ObservableObject {
                 continue
             }
 
-            if let placeholder = sensitiveValueFlags[arg] {
+            if let placeholder = Self.sensitiveValueFlags[arg] {
                 sanitizedArgs.append(arg)
                 skipNextForRedaction = placeholder
                 continue
@@ -119,7 +121,7 @@ class LoggerService: ObservableObject {
 
             // Check attached short option syntax (e.g., -pPassword, -uUser, -2Code)
             var handledShort = false
-            for (shortFlag, placeholder) in shortSensitiveFlags {
+            for (shortFlag, placeholder) in Self.shortSensitiveFlags {
                 if arg.hasPrefix(shortFlag) && arg.count > 2 && !arg.hasPrefix(shortFlag + "=") {
                     sanitizedArgs.append("\(shortFlag)\(placeholder)")
                     handledShort = true
@@ -130,7 +132,7 @@ class LoggerService: ObservableObject {
 
             // Check --flag=value syntax
             var handledInline = false
-            for (flag, placeholder) in sensitiveValueFlags where arg.hasPrefix(flag + "=") {
+            for (flag, placeholder) in Self.sensitiveValueFlags where arg.hasPrefix(flag + "=") {
                 sanitizedArgs.append("\(flag)=\(placeholder)")
                 handledInline = true
                 break
