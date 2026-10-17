@@ -6,11 +6,16 @@ import AppKit
 extension View {
     @ViewBuilder
     func siphonFormStyle() -> some View {
-        self.formStyle(.grouped)
-            .scrollContentBackground(.hidden)
-            .background(OverlayScrollerStyle())
+        let form = self.formStyle(.grouped).scrollContentBackground(.hidden)
+        #if os(macOS)
+        form.background(OverlayScrollerStyle())
+        #else
+        form
+        #endif
     }
 }
+
+#if os(macOS)
 
 /// Forms sit on Siphon's translucent window background, where legacy
 /// (always-visible) scrollers draw a wide black track. Keep the window's scroll
@@ -18,7 +23,9 @@ extension View {
 /// a mouse connects (NSScrollView resets its own style on that notification).
 private struct OverlayScrollerStyle: NSViewRepresentable {
     func makeNSView(context _: Context) -> Probe { Probe() }
-    func updateNSView(_: Probe, context _: Context) {}
+    func updateNSView(_: Probe, context _: Context) {
+        // Nothing to update: the probe acts only when it joins a window.
+    }
 
     final class Probe: NSView {
         private var isObserving = false
@@ -56,6 +63,7 @@ private struct OverlayScrollerStyle: NSViewRepresentable {
         }
     }
 }
+#endif
 
 // MARK: - Adaptive Rendering Environment & Display Capabilities
 public struct RenderingCapabilities: Sendable, Equatable {
