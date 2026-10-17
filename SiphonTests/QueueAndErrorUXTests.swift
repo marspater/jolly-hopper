@@ -1978,8 +1978,8 @@ final class QueueAndErrorUXTests: XCTestCase {
     }
 
     func testExternalDownloadTargetsRejectPrivateAndLocalNetworks() throws {
-        let allowed = try XCTUnwrap(URL(string: "https://example.com/video"))
-        XCTAssertTrue(ExternalDownloadTargetPolicy.isAllowed(allowed))
+        // Allowing a public host depends on live DNS, so check the static rules only.
+        XCTAssertTrue(ExternalDownloadTargetPolicy.isAllowedTarget(host: "example.com", port: nil, resolveDNS: false))
 
         let blocked = [
             "http://127.0.0.1:8080/video",
