@@ -59,7 +59,8 @@ public final class UpdateInstaller: Sendable {
         packageURL: URL,
         expectedChecksum: String? = nil,
         expectedTeamID: String? = nil,
-        allowAdHoc: Bool = true
+        allowAdHoc: Bool = true,
+        expectedVersion: String? = nil
     ) async throws {
         let fileManager = FileManager.default
         guard fileManager.fileExists(atPath: packageURL.path) else {
@@ -152,7 +153,8 @@ public final class UpdateInstaller: Sendable {
             try UpdateVerifier.verifyAppBundle(
                 bundleURL: stagedAppURL,
                 expectedTeamID: expectedTeamID,
-                allowAdHoc: allowAdHoc
+                allowAdHoc: allowAdHoc,
+                expectedVersion: expectedVersion
             )
         } catch {
             throw UpdateInstallError.verificationFailed(error.localizedDescription)
@@ -449,19 +451,32 @@ public final class UpdateInstaller: Sendable {
 
     // MARK: - Relaunch
 
-    @MainActor
-    public static func restartApp() {
-        let appURL = Bundle.main.bundleURL
-        let configuration = NSWorkspace.OpenConfiguration()
-        configuration.createsNewApplicationInstance = true
-        NSWorkspace.shared.openApplication(at: appURL, configuration: configuration) { _, error in
-            DispatchQueue.main.async {
-                if let error = error {
-                    LoggerService.shared.log("Failed to restart application: \(error.localizedDescription)", level: .error)
-                } else {
-                    NSApp.terminate(nil)
-                }
-            }
+    /// Opens the app again only after this process has exited, so the new
+    /// instance never reads history or queue recovery state that this
+    /// instance's termination is still writing. `prepare` runs only once the
+    /// relaunch is armed, right before termination.
+    @preconcurrency @MainActor
+    public static func restartApp(prepare: @MainActor () -> Void) {
+        do {
+            try relaunchProcess(appURL: Bundle.main.bundleURL,
+                                waitingFor: ProcessInfo.processInfo.processIdentifier).run()
+        } catch {
+            LoggerService.shared.log("Failed to restart application: \(error.localizedDescription)", level: .error)
+            return
         }
+        prepare()
+        NSApp.terminate(nil)
+    }
+
+    /// The system Bourne shell from `<paths.h>`.
+    static let relaunchShellURL = URL(fileURLWithPath: _PATH_BSHELL)
+
+    static func relaunchProcess(appURL: URL, waitingFor pid: Int32, shell: URL = relaunchShellURL) -> Process {
+        let process = Process()
+        process.executableURL = shell
+        // Paths and the PID are passed as arguments, never interpolated into the script.
+        process.arguments = ["-c", "while /bin/kill -0 \"$1\" 2>/dev/null; do /bin/sleep 0.2; done; exec /usr/bin/open -n \"$0\"",
+                             appURL.path, String(pid)]
+        return process
     }
 }

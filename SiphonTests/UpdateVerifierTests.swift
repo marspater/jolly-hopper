@@ -4,6 +4,7 @@
 //
 
 import XCTest
+import Security
 import CryptoKit
 import os
 import Darwin
@@ -135,6 +136,89 @@ final class UpdateVerifierTests: XCTestCase {
                 )
             )
         }
+    }
+
+    /// A minimal unsigned bundle; `executable` nil leaves Contents/MacOS empty.
+    private func makeFixtureApp(version: String = "1.0", executable: Data? = nil) throws -> URL {
+        let fileManager = FileManager.default
+        let app = fileManager.temporaryDirectory.appendingPathComponent("fixture_\(UUID().uuidString).app")
+        let macOS = app.appendingPathComponent("Contents/MacOS")
+        try fileManager.createDirectory(at: macOS, withIntermediateDirectories: true)
+        addTeardownBlock { try? FileManager.default.removeItem(at: app) }
+        let info: [String: Any] = ["CFBundleIdentifier": UpdateVerifier.siphonBundleID, "CFBundleExecutable": "Siphon",
+                                   "CFBundleShortVersionString": version, "CFBundlePackageType": "APPL"]
+        try PropertyListSerialization.data(fromPropertyList: info, format: .xml, options: 0)
+            .write(to: app.appendingPathComponent("Contents/Info.plist"))
+        if let executable {
+            let binary = macOS.appendingPathComponent("Siphon")
+            try executable.write(to: binary)
+            try fileManager.setAttributes([.posixPermissions: 0o755], ofItemAtPath: binary.path)
+        }
+        return app
+    }
+
+    private func assertRejected(_ app: URL, expectedVersion: String? = nil, _ message: String,
+                                file: StaticString = #filePath, line: UInt = #line) {
+        XCTAssertThrowsError(try UpdateVerifier.verifyAppBundle(bundleURL: app, allowAdHoc: true,
+                                                                expectedVersion: expectedVersion),
+                             message, file: file, line: line)
+    }
+
+    func testVerifyAppBundleRejectsBundlesThatCannotLaunch() throws {
+        assertRejected(try makeFixtureApp(), "Missing executable")
+        assertRejected(try makeFixtureApp(executable: Data("#!/bin/sh\n".utf8)), "Not a Mach-O executable")
+
+        let symlinked = try makeFixtureApp()
+        try FileManager.default.createSymbolicLink(at: symlinked.appendingPathComponent("Contents/MacOS/Siphon"),
+                                                   withDestinationURL: try XCTUnwrap(Bundle.main.executableURL))
+        assertRejected(symlinked, "Symlinked executable")
+
+        let notExecutable = try makeFixtureApp(executable: try Data(contentsOf: try XCTUnwrap(Bundle.main.executableURL)))
+        try FileManager.default.setAttributes([.posixPermissions: 0o644],
+                                              ofItemAtPath: notExecutable.appendingPathComponent("Contents/MacOS/Siphon").path)
+        assertRejected(notExecutable, "Executable without execute permission")
+    }
+
+    func testVerifyAppBundleRejectsVersionThatDiffersFromRelease() throws {
+        XCTAssertThrowsError(try UpdateVerifier.verifyAppBundle(bundleURL: try makeFixtureApp(version: "5.4.5"),
+                                                                expectedVersion: "v5.5.0")) { error in
+            XCTAssertTrue(error.localizedDescription.contains("does not match release version"), "\(error)")
+        }
+        let current = Bundle.main.bundleURL
+        let currentVersion = try XCTUnwrap(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String)
+        XCTAssertNoThrow(try UpdateVerifier.verifyAppBundle(bundleURL: current, expectedVersion: "v" + currentVersion))
+    }
+
+    func testVerifyAppBundleRejectsDamagedSignature() throws {
+        let original = Bundle.main.bundleURL
+        var code: SecStaticCode?
+        guard SecStaticCodeCreateWithPath(original as CFURL, [], &code) == errSecSuccess, let code,
+              SecStaticCodeCheckValidity(code, SecCSFlags(), nil) == errSecSuccess else {
+            throw XCTSkip("Test host is unsigned; there is no signature to damage")
+        }
+        let copy = FileManager.default.temporaryDirectory.appendingPathComponent("damaged_\(UUID().uuidString).app")
+        try FileManager.default.copyItem(at: original, to: copy) // APFS clone: cheap
+        addTeardownBlock { try? FileManager.default.removeItem(at: copy) }
+        let plist = copy.appendingPathComponent("Contents/Info.plist")
+        var info = try XCTUnwrap(NSDictionary(contentsOf: plist) as? [String: Any])
+        info["SiphonTamperMarker"] = true
+        try PropertyListSerialization.data(fromPropertyList: info, format: .xml, options: 0).write(to: plist)
+        assertRejected(copy, "A damaged signature must never pass as ad-hoc")
+    }
+
+    func testRelaunchWaitsForTheOldProcessToExit() throws {
+        let oldInstance = Process()
+        oldInstance.executableURL = URL(fileURLWithPath: "/bin/sleep")
+        oldInstance.arguments = ["0.6"]
+        try oldInstance.run()
+        let started = Date()
+        let missingApp = FileManager.default.temporaryDirectory.appendingPathComponent("missing_\(UUID().uuidString).app")
+        let relaunch = UpdateInstaller.relaunchProcess(appURL: missingApp, waitingFor: oldInstance.processIdentifier)
+        relaunch.standardError = FileHandle.nullDevice
+        try relaunch.run()
+        relaunch.waitUntilExit()
+        XCTAssertFalse(oldInstance.isRunning)
+        XCTAssertGreaterThanOrEqual(Date().timeIntervalSince(started), 0.5, "open must not run before the old instance exits")
     }
 
     func testAtomicSwapRollsBackWhenStagedAppCorrupt() throws {

@@ -275,7 +275,8 @@ public final class UpdateChecker: ObservableObject {
 
         guard updateOperationID == operationID else { return }
 
-        await performUpdateDownloadAndInstall(url: url, verifiedChecksum: verifiedChecksum, operationID: operationID)
+        await performUpdateDownloadAndInstall(url: url, verifiedChecksum: verifiedChecksum,
+                                              expectedVersion: candidate.version, operationID: operationID)
     }
 
     private func verifyUpdateChecksum(candidate: ReleaseCandidate, operationID: UUID) async -> String? {
@@ -375,7 +376,12 @@ public final class UpdateChecker: ObservableObject {
         }
     }
 
-    private func performUpdateDownloadAndInstall(url: URL, verifiedChecksum: String, operationID: UUID) async {
+    private func performUpdateDownloadAndInstall(
+        url: URL,
+        verifiedChecksum: String,
+        expectedVersion: String,
+        operationID: UUID
+    ) async {
         isDownloading = true
         updateProgress = 0
         updateError = nil
@@ -400,7 +406,8 @@ public final class UpdateChecker: ObservableObject {
                 packageURL: downloadedPkgURL,
                 expectedChecksum: verifiedChecksum,
                 expectedTeamID: nil,
-                allowAdHoc: true
+                allowAdHoc: true,
+                expectedVersion: expectedVersion
             )
 
             isInstalling = false
@@ -438,8 +445,9 @@ public final class UpdateChecker: ObservableObject {
         }
     }
 
-    public func restartApp() {
-        UpdateInstaller.restartApp()
+    @preconcurrency
+    public func restartApp(prepare: @MainActor () -> Void) {
+        UpdateInstaller.restartApp(prepare: prepare)
     }
 
     /// Test seam: seeds what `checkForUpdates` would discover. Internal (not
