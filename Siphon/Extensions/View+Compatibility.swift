@@ -21,14 +21,18 @@ private struct OverlayScrollerStyle: NSViewRepresentable {
     func updateNSView(_: Probe, context _: Context) {}
 
     final class Probe: NSView {
+        private var isObserving = false
+
         override func viewDidMoveToWindow() {
             super.viewDidMoveToWindow()
-            NotificationCenter.default.removeObserver(self)
             guard window != nil else { return }
-            NotificationCenter.default.addObserver(
-                self, selector: #selector(preferredStyleChanged),
-                name: NSScroller.preferredScrollerStyleDidChangeNotification, object: nil
-            )
+            if !isObserving {
+                isObserving = true
+                NotificationCenter.default.addObserver(
+                    self, selector: #selector(preferredStyleChanged),
+                    name: NSScroller.preferredScrollerStyleDidChangeNotification, object: nil
+                )
+            }
             apply()
         }
 
