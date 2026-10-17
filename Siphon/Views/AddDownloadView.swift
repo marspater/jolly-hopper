@@ -638,25 +638,30 @@ struct AddDownloadView: View {
                 Button {
                     fetchInfo()
                 } label: {
+                    // The spinner takes the arrow's slot, so the button keeps
+                    // Paste's height and its own width while fetching.
                     HStack(spacing: SiphonTheme.spacing6) {
-                        if isLoading {
-                            SiphonSpinner(size: 12, color: .secondary, lineWidth: 2)
-                            Text(languageService.s("fetching"))
-                                .font(.siphonSecondarySemibold)
-                        } else {
-                            Text(languageService.s("fetch"))
-                                .font(.siphonSecondarySemibold)
-                            Image(systemName: "arrow.right")
-                                .font(.system(size: 11, weight: .bold))
-                                .accessibilityHidden(true)
+                        Text(languageService.s("fetch"))
+                            .font(.siphonSecondarySemibold)
+                        ZStack {
+                            if isLoading {
+                                SiphonSpinner(size: 11, color: .secondary, lineWidth: 2)
+                            } else {
+                                Image(systemName: "arrow.right")
+                                    .font(.system(size: 11, weight: .bold))
+                            }
                         }
+                        .frame(width: 12, height: 12)
+                        .accessibilityHidden(true)
                     }
                     .frame(minWidth: 74, alignment: .center)
+                    .fixedSize()
                 }
                 .buttonStyle(.siphonPrimary)
                 .disabled(urlInput.isEmpty || isLoading)
-                .help(languageService.s("fetch_info"))
+                .help(languageService.s(isLoading ? "fetching" : "fetch_info"))
                 .accessibilityLabel(languageService.s("fetch_info"))
+                .accessibilityValue(isLoading ? languageService.s("fetching") : "")
             }
         }
         .padding(SiphonTheme.spacing14)
