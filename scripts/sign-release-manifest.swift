@@ -25,6 +25,10 @@ func fail(_ message: String) -> Never {
     exit(1)
 }
 
+func logInfo(_ message: String) {
+    FileHandle.standardOutput.write(Data((message + "\n").utf8))
+}
+
 func sha256Hex(of file: URL) -> String {
     guard let handle = try? FileHandle(forReadingFrom: file) else { fail("Cannot read \(file.path)") }
     defer { try? handle.close() }
@@ -55,7 +59,7 @@ case "keygen":
         contents: Data(key.rawRepresentation.base64EncodedString().utf8),
         attributes: [.posixPermissions: 0o600]
     ) else { fail("Cannot write \(path)") }
-    print("Public key: \(key.publicKey.rawRepresentation.base64EncodedString())")
+    logInfo("Public key: \(key.publicKey.rawRepresentation.base64EncodedString())")
 
 case "sign":
     let values = Array(arguments.dropFirst())
@@ -74,7 +78,7 @@ case "sign":
     let signature = try key.signature(for: data)
     try data.write(to: URL(fileURLWithPath: "release-manifest.json"))
     try Data(signature.base64EncodedString().utf8).write(to: URL(fileURLWithPath: "release-manifest.json.sig"))
-    print("Signed \(assets.count) asset(s) for \(version): release-manifest.json, release-manifest.json.sig")
+    logInfo("Signed \(assets.count) asset(s) for \(version): release-manifest.json, release-manifest.json.sig")
 
 default:
     fail("usage: sign-release-manifest.swift keygen <private-key-file> | sign <private-key-file> <version> <asset>...")
