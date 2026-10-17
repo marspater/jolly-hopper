@@ -295,6 +295,14 @@ public struct BrowserSessionCredentials: Equatable, Sendable {
 @MainActor
 public final class AppState: ObservableObject {
     @Published public var showAddDownloadSheet: Bool = false
+    /// Interactive deep links pass a DNS check that can finish in any order;
+    /// only the newest one may fill the Add Download sheet.
+    private(set) var interactiveLinkGeneration = 0
+
+    func beginInteractiveLink() -> Int {
+        interactiveLinkGeneration &+= 1
+        return interactiveLinkGeneration
+    }
     @Published public var selectedNavItem: NavigationItem = .home
     @Published public var urlToDownload: String = ""
     @Published public private(set) var rawCookiesToDownload: String?

@@ -70,9 +70,17 @@ jobs:
         env:
           VERSION: ${{ steps.version.outputs.version }}
           SHA256: ${{ steps.asset.outputs.sha256 }}
+          EVENT_NAME: ${{ github.event_name }}
         run: |
           set -euo pipefail
           test -f Casks/siphon.rb
+          CURRENT=$(sed -n 's/^  version "\([^"]*\)"$/\1/p' Casks/siphon.rb)
+          # Release events can arrive out of order; only a manual dispatch may roll the cask back.
+          if [[ "$EVENT_NAME" == "release" && -n "$CURRENT" && "$CURRENT" != "$VERSION" ]] &&
+             [[ "$(printf '%s\n%s\n' "$CURRENT" "$VERSION" | sort -V | tail -n1)" == "$CURRENT" ]]; then
+            echo "Cask already at $CURRENT; not downgrading to $VERSION."
+            exit 0
+          fi
           sed -i "s/version \"[^\"]*\"/version \"$VERSION\"/" Casks/siphon.rb
           sed -i "s/sha256 \"[^\"]*\"/sha256 \"$SHA256\"/" Casks/siphon.rb
           git diff --check

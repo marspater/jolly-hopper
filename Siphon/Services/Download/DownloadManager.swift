@@ -405,6 +405,15 @@ class DownloadManager: ObservableObject {
         saveHistory()
     }
 
+    func pauseActiveAndQueuedDownloads() {
+        // Queued jobs first: pausing a running job frees a slot the queue could
+        // otherwise hand to one of them.
+        let queued = downloads.filter { $0.status == .queued }
+        for download in queued + downloadingDownloads {
+            pauseDownload(download)
+        }
+    }
+
     func resumeDownload(_ download: Download) {
         guard download.status == .paused, !download.requiresAdvancedArgumentsReview else { return }
         updateStatus(for: download, to: .queued)
