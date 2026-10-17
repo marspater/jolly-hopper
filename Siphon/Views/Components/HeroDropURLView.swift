@@ -191,7 +191,7 @@ struct HeroDropURLView: View {
                     .buttonStyle(.siphonSecondary)
                     .fixedSize(horizontal: true, vertical: false)
                     .help(languageService.s("paste_from_clipboard"))
-                    .accessibilityLabel(pasteFeedback.isShowing ? languageService.s("copied") : languageService.s("paste"))
+                    .accessibilityLabel(languageService.s("paste"))
 
                     // Download / Return Button
                     Button {
