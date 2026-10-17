@@ -82,3 +82,7 @@
 ## 2026-10-16 - Zero-Allocation Buffer Pointer Inspection for IP Address Validation
 **Learning:** Passing raw binary buffers (such as socket addresses or `in6_addr` IPv6 structures) into validation helpers via `Array($0)`, `[UInt8](repeating: 0, count: 16)`, or array slicing (`Array(bytes[12..<16])`) causes repetitive heap array allocations on every resolved socket address check in network loops. Accepting `UnsafeRawBufferPointer` directly and unpacking scalar bytes into registers eliminates all heap allocations during address validation.
 **Action:** Use `UnsafeRawBufferPointer` and scalar parameter overloads for raw binary address buffer checks instead of copying buffer bytes into Swift `[UInt8]` arrays.
+
+## 2026-10-17 - Direct URLSession `data(for:)` Buffering Over Per-Byte `AsyncSequence` Streaming
+**Learning:** Iterating over `URLSession.AsyncBytes` byte-by-byte via `for try await byte in bytes` with `data.append(byte)` introduces extreme CPU and task-switching overhead due to millions of `AsyncSequence` iterations and repeated `Data` buffer resizes. Using `URLSession.shared.data(for: request)` delegates response buffering directly to Foundation/libcurl native C buffers, eliminating $O(N)$ async task context switches while enforcing `expectedContentLength` and `data.count` size bounds.
+**Action:** Use `URLSession.data(for:)` directly with `expectedContentLength` and `data.count` limit assertions instead of iterating `URLSession.AsyncBytes` byte-by-byte for bounded HTTP payloads.
