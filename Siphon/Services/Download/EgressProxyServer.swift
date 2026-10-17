@@ -401,7 +401,12 @@ public final class EgressProxyServer: @unchecked Sendable {
         let path = components?.percentEncodedPath ?? ""
         let query = components?.percentEncodedQuery.map { "?\($0)" } ?? ""
         return ForwardTarget(host: host, port: port, relativePath: (path.isEmpty ? "/" : path) + query,
-                             authority: host + (url.port.map { ":\($0)" } ?? ""))
+                             authority: forwardAuthority(host: host, port: url.port))
+    }
+
+    /// `URL.host` drops IPv6 brackets; a Host header needs them back.
+    static func forwardAuthority(host: String, port: Int?) -> String {
+        (host.contains(":") ? "[\(host)]" : host) + (port.map { ":\($0)" } ?? "")
     }
 
     private static func originForwardTarget(_ target: String, lines: [Substring]) throws(ForwardRequestRejection) -> ForwardTarget {

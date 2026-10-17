@@ -8,6 +8,13 @@ import Network
 @testable import Siphon
 
 final class EgressProxyTests: XCTestCase {
+    func testForwardAuthorityBracketsIPv6Literals() {
+        XCTAssertEqual(EgressProxyServer.forwardAuthority(host: "2606:4700::1111", port: 8080), "[2606:4700::1111]:8080")
+        XCTAssertEqual(EgressProxyServer.forwardAuthority(host: "2606:4700::1111", port: nil), "[2606:4700::1111]")
+        XCTAssertEqual(EgressProxyServer.forwardAuthority(host: "example.com", port: 8080), "example.com:8080")
+        XCTAssertEqual(EgressProxyServer.forwardAuthority(host: "93.184.215.14", port: nil), "93.184.215.14")
+    }
+
     func testProxyRejectsBareAndUnicodeHeaderNewlinesBeforeResolving() async throws {
         let lookups = LockedValue(0)
         let proxy = EgressProxyServer(targetValidator: { _, _ in true }, addressResolver: { _ in

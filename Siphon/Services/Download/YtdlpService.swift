@@ -7964,12 +7964,18 @@ public struct DownloadResult: Sendable {
             trimmed = "download_\(trimmed)"
         }
 
+        // File systems cap a name at 255 bytes (APFS) or UTF-16 units (HFS+);
+        // UTF-8 bytes bound both. The rest is left for a collision suffix, the
+        // extension and yt-dlp's `.fNNN`/`.part` intermediates. Whole
+        // characters only, so truncation never splits an emoji or accent.
+        var byteCount = 0
+        trimmed = String(trimmed.prefix { character in
+            byteCount += character.utf8.count
+            return byteCount <= 200
+        }).trimmingCharacters(in: .whitespacesAndNewlines)
+
         while trimmed.hasSuffix(".") {
             trimmed = String(trimmed.dropLast()).trimmingCharacters(in: .whitespacesAndNewlines)
-        }
-
-        if trimmed.count > 200 {
-            trimmed = String(trimmed.prefix(200))
         }
 
         return trimmed.isEmpty ? "download" : trimmed

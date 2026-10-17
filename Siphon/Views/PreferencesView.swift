@@ -184,7 +184,7 @@ struct PreferencesView: View {
         }
         .alert(languageService.s("update_ready_title"), isPresented: $showUpdateRestartAlert) {
             Button(languageService.s("restart_siphon")) {
-                updateChecker.restartApp()
+                restartSiphon()
             }
         } message: {
             Text(languageService.s("update_ready_message"))
@@ -1129,7 +1129,7 @@ struct PreferencesView: View {
                     .disabled(isCheckingPermission)
 
                     Button(languageService.s("restart_siphon")) {
-                        updateChecker.restartApp()
+                        restartSiphon()
                     }
                     .buttonStyle(.siphonSecondary)
                     .controlSize(.small)
@@ -1404,6 +1404,12 @@ struct PreferencesView: View {
             customYtdlpPath = url.path
             reloadYtdlp()
         }
+    }
+
+    /// A restart keeps running and queued work as paused jobs, which survive
+    /// the relaunch with their partial data, instead of stopping it like Quit.
+    private func restartSiphon() {
+        updateChecker.restartApp(prepare: downloadManager.pauseActiveAndQueuedDownloads)
     }
 
     private func reloadYtdlp() {

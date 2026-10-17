@@ -1977,6 +1977,22 @@ final class QueueAndErrorUXTests: XCTestCase {
         XCTAssertTrue(delegate.applicationShouldHandleReopen(NSApplication.shared, hasVisibleWindows: true))
     }
 
+    func testOnlyTheNewestInteractiveDeepLinkIsCurrent() {
+        let state = AppState()
+        let slow = state.beginInteractiveLink()
+        let fast = state.beginInteractiveLink()
+        // The fast link's DNS check finishes first; the slow one finishes later.
+        XCTAssertTrue(state.isCurrentInteractiveLink(fast))
+        XCTAssertFalse(state.isCurrentInteractiveLink(slow), "A superseded link must not overwrite the sheet")
+    }
+
+    func testExternalDownloadTargetSyntax() {
+        XCTAssertEqual(SiphonApp.externalDownloadTarget(from: "  https://example.com/v  ")?.raw, "https://example.com/v")
+        for invalid in [nil, "", "ftp://example.com/v", "https://", "https://example.com/v\nx", "not a url"] {
+            XCTAssertNil(SiphonApp.externalDownloadTarget(from: invalid), "\(String(describing: invalid))")
+        }
+    }
+
     func testExternalDownloadTargetsRejectPrivateAndLocalNetworks() throws {
         // Allowing a public host depends on live DNS, so check the static rules only.
         let allowed = try XCTUnwrap(URL(string: "https://example.com/video"))

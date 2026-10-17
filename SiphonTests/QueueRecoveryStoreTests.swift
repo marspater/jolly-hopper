@@ -217,6 +217,30 @@ final class QueueRecoveryStoreTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: pausedScratch.path), "Paused jobs resume from their scratch")
     }
 
+    func testRestartPausesWorkSoTerminationKeepsScratch() throws {
+        let manager = DownloadManager(recoveryFileURL: recoveryFileURL)
+        let active = Download(url: "https://example.com/active", options: .default, title: "Active")
+        active.status = .downloading
+        let queued = Download(url: "https://example.com/queued", options: .default, title: "Queued")
+        queued.status = .queued
+        for job in [active, queued] {
+            job.scratchDirectory = ScratchDirectoryPolicy.makeURL()
+            try FileManager.default.createDirectory(at: job.scratchDirectory!, withIntermediateDirectories: true)
+        }
+        let scratches = [active, queued].compactMap(\.scratchDirectory)
+        defer { scratches.forEach { try? FileManager.default.removeItem(at: $0) } }
+        manager.downloads = [active, queued]
+
+        // Restart arms the relaunch, pauses, then terminates like Quit.
+        manager.pauseActiveAndQueuedDownloads()
+        manager.handleAppTermination()
+
+        XCTAssertEqual([active.status, queued.status], [.paused, .paused])
+        for scratch in scratches {
+            XCTAssertTrue(FileManager.default.fileExists(atPath: scratch.path), "Restart must keep resumable partial data")
+        }
+    }
+
     func testDownloadManagerDiscardRecovery() async throws {
         let store = QueueRecoveryStore(fileURL: recoveryFileURL)
         let dl = Download(url: "https://example.com/discard", options: .default, title: "Discard Download")
