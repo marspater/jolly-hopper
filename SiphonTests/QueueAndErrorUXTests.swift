@@ -1979,7 +1979,8 @@ final class QueueAndErrorUXTests: XCTestCase {
 
     func testExternalDownloadTargetsRejectPrivateAndLocalNetworks() throws {
         // Allowing a public host depends on live DNS, so check the static rules only.
-        XCTAssertTrue(ExternalDownloadTargetPolicy.isAllowedTarget(host: "example.com", port: nil, resolveDNS: false))
+        let allowed = try XCTUnwrap(URL(string: "https://example.com/video"))
+        XCTAssertTrue(ExternalDownloadTargetPolicy.isAllowed(allowed, resolveDNS: false))
 
         let blocked = [
             "http://127.0.0.1:8080/video",
@@ -2329,6 +2330,14 @@ final class AddDownloadWindowSizingTests: XCTestCase {
             stack.append(contentsOf: view.subviews)
         }
         XCTAssertFalse(scrollViews.isEmpty)
+        XCTAssertTrue(scrollViews.allSatisfy { $0.scrollerStyle == .overlay })
+
+        // A mouse connecting flips the preference; the forms must return to overlay.
+        scrollViews.forEach { $0.scrollerStyle = .legacy }
+        NotificationCenter.default.post(name: NSScroller.preferredScrollerStyleDidChangeNotification, object: nil)
+        let reapplied = expectation(description: "preference change handled")
+        DispatchQueue.main.async { reapplied.fulfill() }
+        wait(for: [reapplied], timeout: 2)
         XCTAssertTrue(scrollViews.allSatisfy { $0.scrollerStyle == .overlay })
     }
 
