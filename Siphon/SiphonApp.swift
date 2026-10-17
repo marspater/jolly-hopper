@@ -201,6 +201,9 @@ struct SiphonApp: App {
 
         // The target policy resolves DNS, which can block for seconds on a slow
         // or unreachable resolver. Keep that off the main actor.
+        let isFastDownload = url.host == "fast-download"
+        // Fast downloads each start their own job; interactive links share one sheet.
+        let generation = isFastDownload ? nil : appState.beginInteractiveLink()
         Task { @MainActor in
             let isAllowed = await Task.detached(priority: .userInitiated) {
                 ExternalDownloadTargetPolicy.isAllowed(targetURL)
@@ -209,10 +212,14 @@ struct SiphonApp: App {
                 rejectTarget()
                 return
             }
+            if let generation, generation != appState.interactiveLinkGeneration {
+                LoggerService.shared.log("Ignored an external download link superseded by a newer one.", level: .info)
+                return
+            }
             acceptExternalDownload(
                 rawVideoUrl: rawVideoUrl,
                 targetURL: targetURL,
-                isFastDownload: url.host == "fast-download",
+                isFastDownload: isFastDownload,
                 rawUserAgent: rawUserAgent,
                 rawBrowserSource: rawBrowserSource
             )

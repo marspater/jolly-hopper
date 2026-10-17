@@ -29,7 +29,15 @@ func sha256Hex(of file: URL) -> String {
     guard let handle = try? FileHandle(forReadingFrom: file) else { fail("Cannot read \(file.path)") }
     defer { try? handle.close() }
     var hasher = SHA256()
-    while let chunk = try? handle.read(upToCount: 1 << 20), !chunk.isEmpty {
+    // An I/O error must fail signing; `try?` would hash a truncated file.
+    while true {
+        let chunk: Data?
+        do {
+            chunk = try handle.read(upToCount: 1 << 20)
+        } catch {
+            fail("Cannot read \(file.path): \(error.localizedDescription)")
+        }
+        guard let chunk, !chunk.isEmpty else { break }
         hasher.update(data: chunk)
     }
     return hasher.finalize().map { String(format: "%02x", $0) }.joined()

@@ -48,6 +48,11 @@ public struct UpdateVerifier: Sendable {
         actual?.caseInsensitiveCompare(expected) == .orderedSame
     }
 
+    static func strippedVersionPrefix(_ version: String) -> String {
+        let trimmed = version.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.hasPrefix("v") || trimmed.hasPrefix("V") ? String(trimmed.dropFirst()) : trimmed
+    }
+
     public init() {
         // Intentionally empty initializer for struct instantiation (swift:S1186)
     }
@@ -98,11 +103,15 @@ public struct UpdateVerifier: Sendable {
     ///    - Bundle ID match
     ///    - Architecture compatibility
     ///    - Code signature checked if present, but ad-hoc or unsigned builds are permitted if `allowAdHoc` is true.
+    ///      A present but broken signature is always rejected.
+    /// Both modes require a launchable main executable and, when `expectedVersion`
+    /// is given, a matching `CFBundleShortVersionString`.
     public static func verifyAppBundle(
         bundleURL: URL,
         expectedBundleID: String = siphonBundleID,
         expectedTeamID: String? = nil,
-        allowAdHoc: Bool = true
+        allowAdHoc: Bool = true,
+        expectedVersion: String? = nil
     ) throws {
         guard FileManager.default.fileExists(atPath: bundleURL.path) else {
             throw UpdateVerificationError.bundleNotFound(bundleURL)
@@ -117,32 +126,44 @@ public struct UpdateVerifier: Sendable {
             throw UpdateVerificationError.invalidBundleIdentifier(expected: expectedBundleID, actual: actualBundleID)
         }
 
-        // 2. Verify architecture compatibility
-        if let archs = bundle.executableArchitectures {
-            let arm64Arch = NSNumber(value: NSBundleExecutableArchitectureARM64)
-            let x8664Arch = NSNumber(value: NSBundleExecutableArchitectureX86_64)
-            #if arch(arm64)
-            guard archs.contains(arm64Arch) else {
-                throw UpdateVerificationError.architectureMismatch(expected: "arm64")
+        if let expectedVersion, !expectedVersion.isEmpty {
+            let actualVersion = bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
+            guard let actualVersion, strippedVersionPrefix(actualVersion) == strippedVersionPrefix(expectedVersion) else {
+                throw UpdateVerificationError.verificationFailed(
+                    "App version \(actualVersion ?? "nil") does not match release version \(expectedVersion)"
+                )
             }
-            #else
-            guard archs.contains(x8664Arch) else {
-                throw UpdateVerificationError.architectureMismatch(expected: "x86_64")
-            }
-            #endif
         }
+
+        // 2. Verify the main executable exists and runs on this architecture.
+        // A bundle without one would replace a working install with an app that cannot launch.
+        guard let executableURL = bundle.executableURL,
+              executableURL.standardizedFileURL.path.hasPrefix(bundleURL.standardizedFileURL.path + "/"),
+              let values = try? executableURL.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey]),
+              values.isRegularFile == true, values.isSymbolicLink != true,
+              FileManager.default.isExecutableFile(atPath: executableURL.path) else {
+            throw UpdateVerificationError.verificationFailed("App bundle has no executable main binary")
+        }
+        guard let archs = bundle.executableArchitectures else {
+            throw UpdateVerificationError.verificationFailed("App executable is not a Mach-O binary")
+        }
+        let arm64Arch = NSNumber(value: NSBundleExecutableArchitectureARM64)
+        let x8664Arch = NSNumber(value: NSBundleExecutableArchitectureX86_64)
+        #if arch(arm64)
+        guard archs.contains(arm64Arch) else {
+            throw UpdateVerificationError.architectureMismatch(expected: "arm64")
+        }
+        #else
+        guard archs.contains(x8664Arch) else {
+            throw UpdateVerificationError.architectureMismatch(expected: "x86_64")
+        }
+        #endif
 
         // 3. Security.framework code signing verification
         let appCFURL = bundleURL as CFURL
         var staticCode: SecStaticCode?
         let createStatus = SecStaticCodeCreateWithPath(appCFURL, [], &staticCode)
         guard createStatus == errSecSuccess, let code = staticCode else {
-            if allowAdHoc && expectedTeamID == nil {
-                Task { @MainActor in
-                    LoggerService.shared.log("SecStaticCodeCreateWithPath status \(createStatus); proceeding under ad-hoc open-source mode", level: .warning)
-                }
-                return
-            }
             throw UpdateVerificationError.codeSignatureInvalid(createStatus, "Failed to create SecStaticCode")
         }
 
@@ -165,11 +186,14 @@ public struct UpdateVerifier: Sendable {
                 throw UpdateVerificationError.teamIDMismatch(expected: expectedTeamID, actual: actualTeamID)
             }
         } else {
-            // Open-source / ad-hoc mode
+            // Open-source / ad-hoc mode. An ad-hoc signature validates as
+            // errSecSuccess. Only a missing bundle signature may pass: none at
+            // all, or just the linker's executable signature. A modified or
+            // damaged signature never replaces the app.
             if validityStatus != errSecSuccess {
-                if allowAdHoc {
+                if allowAdHoc && [errSecCSUnsigned, errSecCSResourcesNotFound].contains(validityStatus) {
                     Task { @MainActor in
-                        LoggerService.shared.log("App code signature validation returned \(validityStatus); accepted under ad-hoc open-source mode.", level: .info)
+                        LoggerService.shared.log("App bundle has no bundle signature (\(validityStatus)); accepted under ad-hoc open-source mode.", level: .info)
                     }
                 } else {
                     throw UpdateVerificationError.codeSignatureInvalid(validityStatus, "Code signature invalid and ad-hoc builds not allowed")
@@ -336,12 +360,8 @@ public struct UpdateManifestVerifier: Sendable {
 
         let manifest = try Self.decodeManifest(manifestData)
 
-        let cleanExpected = (expectedVersion.hasPrefix("v") || expectedVersion.hasPrefix("V"))
-            ? String(expectedVersion.dropFirst())
-            : expectedVersion
-        let cleanManifest = (manifest.version.hasPrefix("v") || manifest.version.hasPrefix("V"))
-            ? String(manifest.version.dropFirst())
-            : manifest.version
+        let cleanExpected = UpdateVerifier.strippedVersionPrefix(expectedVersion)
+        let cleanManifest = UpdateVerifier.strippedVersionPrefix(manifest.version)
 
         guard cleanExpected == cleanManifest else {
             throw ManifestVerificationError.versionMismatch(expected: cleanExpected, actual: cleanManifest)

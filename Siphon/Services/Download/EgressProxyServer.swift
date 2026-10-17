@@ -401,7 +401,7 @@ public final class EgressProxyServer: @unchecked Sendable {
         let path = components?.percentEncodedPath ?? ""
         let query = components?.percentEncodedQuery.map { "?\($0)" } ?? ""
         return ForwardTarget(host: host, port: port, relativePath: (path.isEmpty ? "/" : path) + query,
-                             authority: host + (url.port.map { ":\($0)" } ?? ""))
+                             authority: (host.contains(":") ? "[\(host)]" : host) + (url.port.map { ":\($0)" } ?? ""))
     }
 
     private static func originForwardTarget(_ target: String, lines: [Substring]) throws(ForwardRequestRejection) -> ForwardTarget {

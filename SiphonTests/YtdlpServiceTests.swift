@@ -6577,6 +6577,19 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertEqual(YtdlpService.sanitizeFilename("...."), "download")
     }
 
+    func testSanitizeFilenameBoundsUTF8BytesAtCharacterBoundaries() {
+        let emoji = YtdlpService.sanitizeFilename(String(repeating: "😀", count: 150))
+        XCTAssertEqual(emoji, String(repeating: "😀", count: 50), "4-byte emoji: 200 bytes, not 200 characters")
+
+        // A flag is one Character of two 4-byte scalars; byte 200 falls inside the 25th.
+        let flag = "🇯🇵"
+        let flags = YtdlpService.sanitizeFilename("a" + String(repeating: flag, count: 30))
+        XCTAssertEqual(flags, "a" + String(repeating: flag, count: 24), "No grapheme may be split")
+
+        XCTAssertEqual(YtdlpService.sanitizeFilename(String(repeating: "a", count: 199) + " bcd"),
+                       String(repeating: "a", count: 199), "Truncation must not leave trailing whitespace")
+    }
+
     func testFilenameSanitizationPreservesUnicodeAndReplacesEachInvalidScalar() {
         XCTAssertEqual(
             YtdlpService.sanitizeFilename("café_日本語/video??clip.mp4"),
