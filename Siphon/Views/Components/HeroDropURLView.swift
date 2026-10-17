@@ -135,7 +135,7 @@ struct HeroDropURLView: View {
                     // size; only Download, the primary action, is filled.
                     .buttonStyle(.siphonSecondary)
                     .help(languageService.s("hero_options_help"))
-                    .accessibilityLabel(languageService.s("hero_options_help"))
+                    .accessibilityLabel(languageService.s("hero_options"))
                 }
 
                 // Interactive URL Input Bar
@@ -191,7 +191,7 @@ struct HeroDropURLView: View {
                     .buttonStyle(.siphonSecondary)
                     .fixedSize(horizontal: true, vertical: false)
                     .help(languageService.s("paste_from_clipboard"))
-                    .accessibilityLabel(languageService.s("paste_from_clipboard"))
+                    .accessibilityLabel(pasteFeedback.isShowing ? languageService.s("copied") : languageService.s("paste"))
 
                     // Download / Return Button
                     Button {
