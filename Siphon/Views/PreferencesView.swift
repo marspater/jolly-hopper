@@ -30,7 +30,6 @@ struct PreferencesView: View {
     @State private var showLanguageChangeAlert = false
     @State private var previousLanguage: Language?
     @State private var installedBrowsers: [SupportedBrowser] = []
-    @ObservedObject private var logger = LoggerService.shared
     @State private var customPresets: [CustomPreset] = []
     @State private var showCreatePresetSheet = false
     @State private var showUpdateRestartAlert = false
@@ -53,7 +52,9 @@ struct PreferencesView: View {
     private enum PresetField: Hashable {
         case name, subtitleLanguages
     }
-    @State private var hasFullDiskAccess: Bool = YtdlpService.hasFullDiskAccess
+    // Probed in onAppear: the probe logs, and publishing from a @State
+    // initializer runs inside a view update.
+    @State private var hasFullDiskAccess = false
     @State private var isCheckingPermission: Bool = false
     @State private var permissionCheckMessage: String?
     @State private var isClearingAllSites: Bool = false
