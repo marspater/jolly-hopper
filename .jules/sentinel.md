@@ -29,3 +29,8 @@
 **Vulnerability:** Binary cookie record offsets and string field offsets (`domainAt`, `nameAt`, `pathAt`, `valueAt`) read from `Cookies.binarycookies` were not checked against record and page size bounds, allowing malformed files to trigger integer overflow traps.
 **Learning:** Unsafe binary data parsing where offsets are added to a base address can trigger runtime arithmetic overflow panics if offsets exceed `pageSize` or `size`.
 **Prevention:** Always validate that record offsets (`offset < pageSize`) and string field offsets (`domainAt < size`, etc.) are within bounds before performing pointer or index arithmetic.
+
+## 2026-04-03 - Option Flag Injection via Positional Path Arguments in Subprocess Invocations
+**Vulnerability:** `hdiutil attach` and `hdiutil detach` invocations in `UpdateInstaller.swift` passed dynamic file/mount paths without positioning options before the `--` option delimiter, allowing paths starting with `-` to be misparsed as CLI flags.
+**Learning:** POSIX utilities parse options until `--` is encountered; passing positional paths before option flags or omitting `--` enables option flag injection when paths begin with hyphen characters.
+**Prevention:** Always place option flags before `--` and position dynamic path arguments after `--` when invoking system CLI utilities (`hdiutil`, `ditto`, `gzip`, `osascript`, etc.) via Swift `Process`.
