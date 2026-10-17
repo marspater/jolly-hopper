@@ -36,19 +36,22 @@ private struct OverlayScrollerStyle: NSViewRepresentable {
             if !isObserving {
                 isObserving = true
                 NotificationCenter.default.addObserver(
-                    self, selector: #selector(preferredStyleChanged),
+                    self, selector: #selector(applyAfterCurrentPass),
                     name: NSScroller.preferredScrollerStyleDidChangeNotification, object: nil
                 )
             }
             apply()
+            // The Form's scroll view may join the window after this probe and
+            // pick up the legacy style then, so apply again once it is in place.
+            applyAfterCurrentPass()
         }
 
         deinit {
             NotificationCenter.default.removeObserver(self)
         }
 
-        @objc private func preferredStyleChanged() {
-            // Run after the scroll views' own handlers have reset their style.
+        @objc private func applyAfterCurrentPass() {
+            // Also runs after the scroll views' own preference handlers reset their style.
             DispatchQueue.main.async { [weak self] in self?.apply() }
         }
 
