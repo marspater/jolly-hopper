@@ -468,7 +468,8 @@ public final class UpdateInstaller: Sendable {
         NSApp.terminate(nil)
     }
 
-    static let relaunchShellURL = URL(fileURLWithPath: "/bin/sh")
+    /// The system Bourne shell from `<paths.h>`.
+    static let relaunchShellURL = URL(fileURLWithPath: _PATH_BSHELL)
 
     static func relaunchProcess(appURL: URL, waitingFor pid: Int32, shell: URL = relaunchShellURL) -> Process {
         let process = Process()
