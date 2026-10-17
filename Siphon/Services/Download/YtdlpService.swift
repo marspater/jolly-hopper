@@ -7691,24 +7691,18 @@ public struct DownloadResult: Sendable {
         if let override = hasFullDiskAccessOverride {
             return override
         }
-        // This is an advisory cookie-read probe, not a query of macOS's FDA toggle.
-        // Missing files and a different running app identity can both make it inconclusive.
-        // This is an advisory cookie-read probe: only the actual Safari cookie
-        // database file is tested with a read operation. We do not treat parent
-        // directories or unrelated Safari files as evidence that cookies are readable.
-        let homeDir = FileManager.default.homeDirectoryForCurrentUser.path
-        let candidatePaths = [
-            "\(homeDir)/Library/Containers/com.apple.Safari/Data/Library/Cookies/Cookies.binarycookies",
-            "\(homeDir)/Library/Cookies/Cookies.binarycookies"
-        ]
+        // Advisory probe, not a query of macOS's FDA toggle: it opens the Safari cookie
+        // store itself. A missing file or a different running app identity can make it
+        // inconclusive.
         var lastErrno: Int32 = 0
-        for path in candidatePaths {
-            let fd = Darwin.open(path, O_RDONLY)
+        for file in SafariCookieReader.cookieFiles {
+            let fd = Darwin.open(file.path, O_RDONLY)
             if fd >= 0 {
                 Darwin.close(fd)
                 return true
             }
-            lastErrno = errno
+            // Keep a denial over a later "no such file" from the fallback path.
+            if lastErrno == 0 || errno != ENOENT { lastErrno = errno }
         }
 
         LoggerService.shared.log("[Permissions] Full Disk Access check inconclusive or denied (lastErrno=\(lastErrno))", level: .debug)
