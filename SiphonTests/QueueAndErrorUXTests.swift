@@ -2321,6 +2321,15 @@ final class AddDownloadWindowSizingTests: XCTestCase {
         wait(for: [drained], timeout: 2)
         XCTAssertEqual(window.title, languageService.s("settings"))
         XCTAssertEqual(window.titleVisibility, .hidden)
+        // Legacy scrollers draw a black track over the translucent background.
+        var stack = [try XCTUnwrap(window.contentView)]
+        var scrollViews: [NSScrollView] = []
+        while let view = stack.popLast() {
+            if let scroll = view as? NSScrollView { scrollViews.append(scroll) }
+            stack.append(contentsOf: view.subviews)
+        }
+        XCTAssertFalse(scrollViews.isEmpty)
+        XCTAssertTrue(scrollViews.allSatisfy { $0.scrollerStyle == .overlay })
     }
 
     @MainActor

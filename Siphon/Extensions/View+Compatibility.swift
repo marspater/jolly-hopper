@@ -8,6 +8,44 @@ extension View {
     func siphonFormStyle() -> some View {
         self.formStyle(.grouped)
             .scrollContentBackground(.hidden)
+            .background(OverlayScrollerStyle())
+    }
+}
+
+/// Forms sit on Siphon's translucent window background, where legacy
+/// (always-visible) scrollers draw a wide black track. Keep the window's scroll
+/// views on the thin overlay style, also after the system preference flips when
+/// a mouse connects (NSScrollView resets its own style on that notification).
+private struct OverlayScrollerStyle: NSViewRepresentable {
+    func makeNSView(context: Context) -> Probe { Probe() }
+    func updateNSView(_ nsView: Probe, context: Context) {}
+
+    final class Probe: NSView {
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            NotificationCenter.default.removeObserver(self)
+            guard window != nil else { return }
+            NotificationCenter.default.addObserver(
+                self, selector: #selector(preferredStyleChanged),
+                name: NSScroller.preferredScrollerStyleDidChangeNotification, object: nil
+            )
+            apply()
+        }
+
+        @objc private func preferredStyleChanged() {
+            // Run after the scroll views' own handlers have reset their style.
+            DispatchQueue.main.async { [weak self] in self?.apply() }
+        }
+
+        // The Form's scroll view is a sibling of this probe, not an ancestor.
+        private func apply() {
+            guard let root = window?.contentView else { return }
+            var stack = [root]
+            while let view = stack.popLast() {
+                (view as? NSScrollView)?.scrollerStyle = .overlay
+                stack.append(contentsOf: view.subviews)
+            }
+        }
     }
 }
 
