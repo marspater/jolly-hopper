@@ -17,8 +17,8 @@ extension View {
 /// views on the thin overlay style, also after the system preference flips when
 /// a mouse connects (NSScrollView resets its own style on that notification).
 private struct OverlayScrollerStyle: NSViewRepresentable {
-    func makeNSView(context: Context) -> Probe { Probe() }
-    func updateNSView(_ nsView: Probe, context: Context) {}
+    func makeNSView(context _: Context) -> Probe { Probe() }
+    func updateNSView(_: Probe, context _: Context) {}
 
     final class Probe: NSView {
         override func viewDidMoveToWindow() {
@@ -30,6 +30,10 @@ private struct OverlayScrollerStyle: NSViewRepresentable {
                 name: NSScroller.preferredScrollerStyleDidChangeNotification, object: nil
             )
             apply()
+        }
+
+        deinit {
+            NotificationCenter.default.removeObserver(self)
         }
 
         @objc private func preferredStyleChanged() {
