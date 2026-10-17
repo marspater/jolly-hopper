@@ -6879,7 +6879,8 @@ public struct DownloadResult: Sendable {
         )
     }
 
-    func resolveStarwankMediaInfo(url: String, rawCookies: String? = nil, requestedFormat: String? = nil) async -> StarwankExtractedMedia? {
+    func resolveStarwankMediaInfo(url: String, rawCookies: String? = nil, requestedFormat: String? = nil, depth: Int = 0) async -> StarwankExtractedMedia? {
+        guard depth < 3 else { return nil }
         guard let (targetUrl, pageURL, html) = await protectedPageContext(
             url: url,
             rawCookies: rawCookies,
@@ -6890,12 +6891,13 @@ public struct DownloadResult: Sendable {
 
         // If this was an embed page and it points to empty_referrer_redirect, follow it to get multi-quality options
         if pageURL.pathComponents.contains("embed"),
-           let redirectMatch = Self.starwankEmptyReferrerRegex?.firstMatch(in: html, options: [], range: NSRange(location: 0, length: (html as NSString).length)),
-           redirectMatch.numberOfRanges > 1 {
-            let redirectURL = (html as NSString).substring(with: redirectMatch.range(at: 1))
+           let redirectMatch = Self.starwankEmptyReferrerRegex?.firstMatch(in: html, options: [], range: NSRange(location: 0, length: html.utf16.count)),
+           redirectMatch.numberOfRanges > 1,
+           let swiftRange = Range(redirectMatch.range(at: 1), in: html) {
+            let redirectURL = String(html[swiftRange])
             if Self.isStarwankURL(redirectURL),
                !redirectURL.contains("embed/"),
-               let fullMedia = await resolveStarwankMediaInfo(url: redirectURL, rawCookies: rawCookies, requestedFormat: requestedFormat) {
+               let fullMedia = await resolveStarwankMediaInfo(url: redirectURL, rawCookies: rawCookies, requestedFormat: requestedFormat, depth: depth + 1) {
                 return fullMedia
             }
         }
