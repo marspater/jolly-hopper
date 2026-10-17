@@ -6,10 +6,64 @@ import AppKit
 extension View {
     @ViewBuilder
     func siphonFormStyle() -> some View {
-        self.formStyle(.grouped)
-            .scrollContentBackground(.hidden)
+        let form = self.formStyle(.grouped).scrollContentBackground(.hidden)
+        #if os(macOS)
+        form.background(OverlayScrollerStyle())
+        #else
+        form
+        #endif
     }
 }
+
+#if os(macOS)
+
+/// Forms sit on Siphon's translucent window background, where legacy
+/// (always-visible) scrollers draw a wide black track. Keep the window's scroll
+/// views on the thin overlay style, also after the system preference flips when
+/// a mouse connects (NSScrollView resets its own style on that notification).
+private struct OverlayScrollerStyle: NSViewRepresentable {
+    func makeNSView(context _: Context) -> Probe { Probe() }
+    func updateNSView(_: Probe, context _: Context) {
+        // Nothing to update: the probe acts only when it joins a window.
+    }
+
+    final class Probe: NSView {
+        private var isObserving = false
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            guard window != nil else { return }
+            if !isObserving {
+                isObserving = true
+                NotificationCenter.default.addObserver(
+                    self, selector: #selector(preferredStyleChanged),
+                    name: NSScroller.preferredScrollerStyleDidChangeNotification, object: nil
+                )
+            }
+            apply()
+        }
+
+        deinit {
+            NotificationCenter.default.removeObserver(self)
+        }
+
+        @objc private func preferredStyleChanged() {
+            // Run after the scroll views' own handlers have reset their style.
+            DispatchQueue.main.async { [weak self] in self?.apply() }
+        }
+
+        // The Form's scroll view is a sibling of this probe, not an ancestor.
+        private func apply() {
+            guard let root = window?.contentView else { return }
+            var stack = [root]
+            while let view = stack.popLast() {
+                (view as? NSScrollView)?.scrollerStyle = .overlay
+                stack.append(contentsOf: view.subviews)
+            }
+        }
+    }
+}
+#endif
 
 // MARK: - Adaptive Rendering Environment & Display Capabilities
 public struct RenderingCapabilities: Sendable, Equatable {

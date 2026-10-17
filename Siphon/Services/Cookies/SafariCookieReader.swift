@@ -5,6 +5,10 @@ import Foundation
 /// Reading it needs Full Disk Access.
 enum SafariCookieReader {
     static let cookieFiles: [URL] = {
+        // Tests run inside Siphon.app under the real bundle ID but with a different
+        // signature. Touching the real store from that build makes TCC rewrite the
+        // app's Full Disk Access record as denied, so tests never read it.
+        guard !NotificationService.isRunningTests else { return [] }
         let home = FileManager.default.homeDirectoryForCurrentUser
         return [
             "Library/Containers/com.apple.Safari/Data/Library/Cookies/Cookies.binarycookies",

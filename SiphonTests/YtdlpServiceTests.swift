@@ -2382,9 +2382,11 @@ final class YtdlpServiceTests: XCTestCase {
         }
     }
 
-    func testHasFullDiskAccessCheckDoesNotCrash() {
-        let hasAccess = YtdlpService.hasFullDiskAccess
-        XCTAssertTrue(hasAccess == true || hasAccess == false)
+    /// The hosted test build shares Siphon's bundle ID; reading the real Safari store
+    /// from it overwrites the installed app's Full Disk Access grant with a denial.
+    func testTestsNeverTouchTheRealSafariCookieStore() {
+        XCTAssertTrue(SafariCookieReader.cookieFiles.isEmpty)
+        XCTAssertFalse(YtdlpService.hasFullDiskAccess)
     }
 
     func testHttp500ServerRangeErrorRetryFallback() async throws {
