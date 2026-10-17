@@ -376,8 +376,12 @@ public final class UpdateChecker: ObservableObject {
         }
     }
 
-    private func performUpdateDownloadAndInstall(url: URL, verifiedChecksum: String, expectedVersion: String,
-                                                  operationID: UUID) async {
+    private func performUpdateDownloadAndInstall(
+        url: URL,
+        verifiedChecksum: String,
+        expectedVersion: String,
+        operationID: UUID
+    ) async {
         isDownloading = true
         updateProgress = 0
         updateError = nil
@@ -441,7 +445,8 @@ public final class UpdateChecker: ObservableObject {
         }
     }
 
-    public func restartApp(prepare: @MainActor () -> Void = {}) {
+    @preconcurrency
+    public func restartApp(prepare: @MainActor () -> Void) {
         UpdateInstaller.restartApp(prepare: prepare)
     }
 

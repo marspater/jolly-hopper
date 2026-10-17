@@ -167,58 +167,77 @@ struct SiphonApp: App {
         NSApp.activate(ignoringOtherApps: true)
 
         guard url.host == "download" || url.host == "fast-download" else {
-            for window in NSApp.windows where window.canBecomeMain {
-                if window.isMiniaturized {
-                    window.deminiaturize(nil)
-                }
-                window.makeKeyAndOrderFront(nil)
-            }
+            bringMainWindowsForward()
             return
         }
 
-        let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
-        let queryItems = components?.queryItems
+        let queryItems = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems
         let videoUrl = queryItems?.first(where: { $0.name == "url" })?.value
-        let rawUserAgent = queryItems?.first(where: { $0.name == "ua" })?.value
-        let rawBrowserSource = queryItems?.first(where: { $0.name == "browser" })?.value
-
-        let rejectTarget = {
-            LoggerService.shared.log(
-                "Rejected external download target outside the public network boundary: \(LoggerService.sanitizeURLForLog(videoUrl ?? "<missing>"))",
-                level: .warning
-            )
-        }
-
-        guard let rawVideoUrl = videoUrl?.trimmingCharacters(in: .whitespacesAndNewlines),
-              !rawVideoUrl.isEmpty,
-              !rawVideoUrl.contains("\r") && !rawVideoUrl.contains("\n") && !rawVideoUrl.contains("\0"),
-              let targetURL = URL(string: rawVideoUrl),
-              let host = targetURL.host, !host.isEmpty,
-              targetURL.scheme == "http" || targetURL.scheme == "https" else {
-            rejectTarget()
+        guard let target = Self.externalDownloadTarget(from: videoUrl) else {
+            Self.logRejectedExternalTarget(videoUrl)
             return
         }
+        admitExternalDownload(
+            target,
+            isFastDownload: url.host == "fast-download",
+            rawUserAgent: queryItems?.first(where: { $0.name == "ua" })?.value,
+            rawBrowserSource: queryItems?.first(where: { $0.name == "browser" })?.value
+        )
+    }
 
-        // The target policy resolves DNS, which can block for seconds on a slow
-        // or unreachable resolver. Keep that off the main actor.
-        let isFastDownload = url.host == "fast-download"
+    private func bringMainWindowsForward() {
+        for window in NSApp.windows where window.canBecomeMain {
+            if window.isMiniaturized {
+                window.deminiaturize(nil)
+            }
+            window.makeKeyAndOrderFront(nil)
+        }
+    }
+
+    /// Syntax check only; the public-network boundary is checked by `admitExternalDownload`.
+    static func externalDownloadTarget(from rawValue: String?) -> (raw: String, url: URL)? {
+        guard let raw = rawValue?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !raw.isEmpty,
+              !raw.contains("\r") && !raw.contains("\n") && !raw.contains("\0"),
+              let url = URL(string: raw),
+              let host = url.host, !host.isEmpty,
+              url.scheme == "http" || url.scheme == "https" else { return nil }
+        return (raw, url)
+    }
+
+    private static func logRejectedExternalTarget(_ rawValue: String?) {
+        LoggerService.shared.log(
+            "Rejected external download target outside the public network boundary: \(LoggerService.sanitizeURLForLog(rawValue ?? "<missing>"))",
+            level: .warning
+        )
+    }
+
+    private func admitExternalDownload(
+        _ target: (raw: String, url: URL),
+        isFastDownload: Bool,
+        rawUserAgent: String?,
+        rawBrowserSource: String?
+    ) {
         // Fast downloads each start their own job; interactive links share one sheet.
         let generation = isFastDownload ? nil : appState.beginInteractiveLink()
+        // The target policy resolves DNS, which can block for seconds on a slow
+        // or unreachable resolver. Keep that off the main actor.
         Task { @MainActor in
+            let targetURL = target.url
             let isAllowed = await Task.detached(priority: .userInitiated) {
                 ExternalDownloadTargetPolicy.isAllowed(targetURL)
             }.value
             guard isAllowed else {
-                rejectTarget()
+                Self.logRejectedExternalTarget(target.raw)
                 return
             }
-            if let generation, generation != appState.interactiveLinkGeneration {
+            if let generation, !appState.isCurrentInteractiveLink(generation) {
                 LoggerService.shared.log("Ignored an external download link superseded by a newer one.", level: .info)
                 return
             }
             acceptExternalDownload(
-                rawVideoUrl: rawVideoUrl,
-                targetURL: targetURL,
+                rawVideoUrl: target.raw,
+                targetURL: target.url,
                 isFastDownload: isFastDownload,
                 rawUserAgent: rawUserAgent,
                 rawBrowserSource: rawBrowserSource

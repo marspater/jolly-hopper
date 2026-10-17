@@ -303,6 +303,10 @@ public final class AppState: ObservableObject {
         interactiveLinkGeneration &+= 1
         return interactiveLinkGeneration
     }
+
+    func isCurrentInteractiveLink(_ generation: Int) -> Bool {
+        generation == interactiveLinkGeneration
+    }
     @Published public var selectedNavItem: NavigationItem = .home
     @Published public var urlToDownload: String = ""
     @Published public private(set) var rawCookiesToDownload: String?
