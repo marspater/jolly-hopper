@@ -70,11 +70,15 @@ case "sign":
     let encoder = JSONEncoder()
     encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
     // The signature covers these exact bytes; the app verifies before parsing.
-    let data = try encoder.encode(Manifest(version: version, assets: assets))
-    let signature = try key.signature(for: data)
-    try data.write(to: URL(fileURLWithPath: "release-manifest.json"))
-    try Data(signature.base64EncodedString().utf8).write(to: URL(fileURLWithPath: "release-manifest.json.sig"))
-    print("Signed \(assets.count) asset(s) for \(version): release-manifest.json, release-manifest.json.sig")
+    do {
+        let data = try encoder.encode(Manifest(version: version, assets: assets))
+        let signature = try key.signature(for: data)
+        try data.write(to: URL(fileURLWithPath: "release-manifest.json"))
+        try Data(signature.base64EncodedString().utf8).write(to: URL(fileURLWithPath: "release-manifest.json.sig"))
+        print("Signed \(assets.count) asset(s) for \(version): release-manifest.json, release-manifest.json.sig")
+    } catch {
+        fail("Error signing release manifest: \(error)")
+    }
 
 default:
     fail("usage: sign-release-manifest.swift keygen <private-key-file> | sign <private-key-file> <version> <asset>...")
