@@ -339,8 +339,6 @@ class YtdlpService: ObservableObject {
     var boyfriendTVRenderedPageLoader: ((URL) async throws -> String?)?
     // Test seam for media URLs that only exist in the live browser runtime.
     var boyfriendTVRenderedStreamLoader: ((URL) async throws -> String?)?
-    // Test seam for installed browser candidate discovery.
-    var installedBrowsersProvider: (() async -> [String])?
     // Persistent, so the user's recu.me clearance and sign-in survive relaunches.
     // Boundary-enforced jobs keep theirs in a second store, signed in separately.
     var recuWebDataStores: [String: WKWebsiteDataStore] = [:]
@@ -1250,7 +1248,7 @@ class YtdlpService: ObservableObject {
 
         if isGFFURL(url) {
             LoggerService.shared.log("Initiating protected-site media info resolution for: \(LoggerService.sanitizeURLForLog(url))", level: .info)
-            if let gffMedia = await resolveGFFMediaInfo(url: url, rawCookies: rawCookies) {
+            if let gffMedia = await resolveGFFMediaInfo(url: url) {
                 LoggerService.shared.log("Protected-site media successfully extracted: '\(gffMedia.title)' with stream: \(LoggerService.sanitizeURLForLog(gffMedia.streamURL))", level: .info)
                 let quality = gffMedia.quality ?? "720p"
                 let height = Int(quality.replacingOccurrences(of: "p", with: "")) ?? 720
@@ -1866,7 +1864,7 @@ public struct DownloadResult: Sendable {
             ) {
                 (targetURL, customResolvedTitle, customEmbedURL, customThumbnailURL) =
                     (reused.streamURL, reused.title, reused.embedURL, reused.thumbnailURL)
-            } else if let gffMedia = await resolveGFFMediaInfo(url: url, rawCookies: options.rawCookies) {
+            } else if let gffMedia = await resolveGFFMediaInfo(url: url) {
                 targetURL = gffMedia.streamURL
                 customResolvedTitle = gffMedia.title
                 customEmbedURL = gffMedia.embedURL
@@ -2119,9 +2117,12 @@ public struct DownloadResult: Sendable {
             additionalCookies.append((name: sc.name, value: sc.value))
         }
 
-        if isRecuURL(normalizedURL) {
-            // Recu session cookies are only for resolving the signed playlist URL.
-            // The CDN playlist/segments are intentionally fetched without account cookies.
+        // Recu session cookies are only for resolving the signed playlist URL.
+        // GayForFans is public. Their CDN playlist/segments are intentionally
+        // fetched without account cookies, so no browser Keychain prompt runs.
+        let skipsAccountCookies = isRecuURL(normalizedURL) || isGFFURL(normalizedURL)
+            || Self.isGFFMediaURL(normalizedURL) || Self.isGFFMediaURL(targetURL)
+        if skipsAccountCookies {
             LoggerService.shared.log("Protected-site stream download uses the resolved CDN URL without forwarding account cookies", level: .debug)
         } else if (options.rawCookies?.isEmpty == false) || !additionalCookies.isEmpty {
             if let cookieFile = try? SecureCookieFile.create(
@@ -2139,7 +2140,7 @@ public struct DownloadResult: Sendable {
                 }
             }
         }
-        if !isRecuURL(normalizedURL), options.rawCookies?.isEmpty != false {
+        if !skipsAccountCookies, options.rawCookies?.isEmpty != false {
             let usingBrowserCookies = appendCookieArgs(
                 for: normalizedURL,
                 to: &args,
@@ -4102,46 +4103,6 @@ public struct DownloadResult: Sendable {
         return components.url?.absoluteString
     }
 
-    nonisolated static func boyfriendTVBrowserCandidates(
-        configured: String?,
-        installed: [String],
-        hasFullDiskAccess: Bool
-    ) -> [String?] {
-        var result: [String?] = []
-        var seen = Set<String>()
-
-        func appendBrowser(_ browser: String) {
-            let normalized = browser.lowercased()
-            guard normalized != "none",
-                  !normalized.isEmpty,
-                  normalized != "safari" || hasFullDiskAccess || configured?.lowercased() == "safari",
-                  seen.insert(normalized).inserted else {
-                return
-            }
-            result.append(normalized)
-        }
-
-        if let configured {
-            appendBrowser(configured)
-        }
-
-        // A selected browser is an explicit session choice. Do not spray a protected
-        // endpoint with unrelated browser profiles after a 403; Cloudflare can treat
-        // that as a new client on every request. Automatic discovery is only used
-        // when no usable browser was selected.
-        if result.isEmpty {
-            let installedSet = Set(installed.map { $0.lowercased() })
-            for browser in ["chrome", "brave", "edge", "vivaldi", "chromium", "firefox", "opera", "safari", "helium", "chromium-based"]
-                where installedSet.contains(browser) {
-                appendBrowser(browser)
-            }
-        }
-
-        // Keep one anonymous attempt as the final transport fallback.
-        result.append(nil)
-        return result
-    }
-
     nonisolated static func boyfriendTVCookieScope(for urlString: String) -> String? {
         let host = (URL(string: urlString)?.host ?? urlString).lowercased()
         if host == "boyfriend.tv" || host.hasSuffix(".boyfriend.tv") {
@@ -4742,22 +4703,9 @@ public struct DownloadResult: Sendable {
             }
         }
 
-        let installedBrowsers: [String]
-        if let provider = installedBrowsersProvider {
-            installedBrowsers = await provider()
-        } else {
-            installedBrowsers = await BrowserUtils.shared.getInstalledBrowsers().map(\.id)
-        }
-        let browsersToTry = Self.boyfriendTVBrowserCandidates(
-            configured: effectiveBrowserSource,
-            installed: installedBrowsers,
-            hasFullDiskAccess: Self.hasFullDiskAccess
-        )
-        let browserLabels = browsersToTry.compactMap { $0 }
-        LoggerService.shared.log(
-            "[BoyfriendTV] stage=session-recovery browser-candidates=\(browserLabels.count)",
-            level: .debug
-        )
+        // Only the selected browser: every other installed Chromium browser costs a
+        // Keychain prompt, and Cloudflare treats each profile as a new client.
+        let browsersToTry: [String?] = (effectiveBrowserSource.map { [$0] } ?? []) + [nil]
 
         if html.isEmpty, !safariSessionSignedOut, let ytdlp = ytdlpBinary {
             for candidatePage in pageCandidates {
@@ -5057,7 +5005,7 @@ public struct DownloadResult: Sendable {
             return BoyfriendTVExtractedMedia(streamURL: validStreamUrl, embedURL: embedUrl ?? targetUrl, title: title, thumbnailURL: thumbnailUrl)
         }
 
-        if safariCookieAccessDenied && (effectiveBrowserSource == "safari" || browserLabels.allSatisfy { $0 == "safari" }) {
+        if safariCookieAccessDenied && effectiveBrowserSource == "safari" {
             throw YtdlpError.safariCookiesFullDiskAccessRequired
         }
         try Task.checkCancellation()
@@ -5065,7 +5013,7 @@ public struct DownloadResult: Sendable {
             throw YtdlpError.cloudflareBlocked
         }
         if sawLoginPage || sawUnauthorized {
-            if browserLabels.isEmpty && rawCookies?.isEmpty != false {
+            if effectiveBrowserSource == nil && rawCookies?.isEmpty != false {
                 throw YtdlpError.protectedSiteNeedsBrowserCookies
             }
             throw YtdlpError.protectedSiteLoginRequired
@@ -5119,24 +5067,12 @@ public struct DownloadResult: Sendable {
         "<h1[^>]*>([^<]+)</h1>"
     ].compactMap { try? NSRegularExpression(pattern: $0, options: .caseInsensitive) }
 
-    nonisolated private static let gffStreamRegexes: [NSRegularExpression] = [
-        "video_url\\s*:\\s*['\"]([^'\"]+)['\"]",
-        "video_alt_url\\s*:\\s*['\"]([^'\"]+)['\"]",
-        "video_alt_url[1-4]?\\s*:\\s*['\"]([^'\"]+)['\"]",
-        "\"file\"\\s*:\\s*\"([^\"]+)\"",
-        "\"src\"\\s*:\\s*\"([^\"]+)\"",
-        "\"videoUrl\"\\s*:\\s*\"([^\"]+)\"",
-        "\"mediaUrl\"\\s*:\\s*\"([^\"]+)\"",
-        "\"contentUrl\"\\s*:\\s*\"([^\"]+)\"",
-        "\"(?:hlsAuto|hls|videoUrl|media|src|file|video_url)\"\\s*:\\s*\"([^\"]+)\"",
-        "<source[^>]+src=[\"']([^\"']+)[\"']",
-        "data-video-url=[\"']([^\"']+)[\"']",
-        "data-src=[\"']([^\"']+\\.(?:mp4|m3u8)[^\"']*)[\"']",
-        "['\"](https?://[^'\"]+\\.gayforfans\\.com[^'\"]+\\.(?:mp4|m3u8)(?:\\?[^'\"]*)?)['\"]",
-        "['\"](//[^'\"]+\\.gayforfans\\.com[^'\"]+\\.(?:mp4|m3u8)(?:\\?[^'\"]*)?)['\"]",
-        "['\"](/get_file/[^'\"]+)['\"]",
-        "['\"](https?://[^'\"]+/get_file/[^'\"]+)['\"]"
-    ].compactMap { try? NSRegularExpression(pattern: $0, options: .caseInsensitive) }
+    // The player reads `data-manifest` (a /play/<id>/manifest route that
+    // redirects to the CDN's index.m3u8) and `data-duration` in seconds.
+    nonisolated private static let gffManifestRegex = try? NSRegularExpression(
+        pattern: #"data-manifest=["'](https://gayforfans\.com/play/[A-Za-z0-9_-]+/manifest)["']"#
+    )
+    nonisolated private static let gffDurationRegex = try? NSRegularExpression(pattern: #"data-duration=["'](\d+)["']"#)
 
     nonisolated private static let gffThumbRegexes: [NSRegularExpression] = [
         "preview_url\\s*:\\s*['\"](https?://[^'\"]+)['\"]",
@@ -5144,18 +5080,6 @@ public struct DownloadResult: Sendable {
         "property=[\"']og:image[\"']\\s+content=[\"'](https?://[^\"']+)[\"']",
         "poster=[\"'](https?://[^\"']+)[\"']",
         "\"thumbnailUrl\"\\s*:\\s*\"(https?://[^\"]+)\""
-    ].compactMap { try? NSRegularExpression(pattern: $0, options: .caseInsensitive) }
-
-    nonisolated private static let gffEmbedRegexes: [NSRegularExpression] = [
-        "\"embedUrl\"\\s*:\\s*\"([^\"]+)\"",
-        "<iframe[^>]+src=[\"'](https?://(?:www\\.)?gayforfans\\.com/embed/[^\"']+)[\"']",
-        "<iframe[^>]+src=[\"'](/embed/[^\"']+)[\"']"
-    ].compactMap { try? NSRegularExpression(pattern: $0, options: .caseInsensitive) }
-
-    nonisolated private static let gffVideoIdRegexes: [NSRegularExpression] = [
-        "/videos?/(\\d+)",
-        "video_id\\s*:\\s*['\"](\\d+)['\"]",
-        "/embed/(\\d+)"
     ].compactMap { try? NSRegularExpression(pattern: $0, options: .caseInsensitive) }
 
     nonisolated private static let guywhTitleRegexes: [NSRegularExpression] = [
@@ -5652,6 +5576,20 @@ public struct DownloadResult: Sendable {
         return host == "gayforfans.com" || host.hasSuffix(".gayforfans.com")
     }
 
+    /// The site's CDN (playlists and segments), reached directly or after the
+    /// manifest redirect.
+    nonisolated static func isGFFMediaURL(_ url: String) -> Bool {
+        guard let host = URL(string: url)?.host?.lowercased() else { return false }
+        return host == "gff.network" || host.hasSuffix(".gff.network")
+    }
+
+    /// The manifest route's redirect target, when it is a public HLS playlist.
+    nonisolated static func acceptedGFFPlaylistURL(_ finalURL: URL?) -> String? {
+        guard let finalURL, finalURL.path.lowercased().hasSuffix(".m3u8"),
+              ExternalDownloadTargetPolicy.isAllowed(finalURL, resolveDNS: false) else { return nil }
+        return finalURL.absoluteString
+    }
+
     struct GFFExtractedMedia {
         let streamURL: String
         let embedURL: String
@@ -5661,409 +5599,96 @@ public struct DownloadResult: Sendable {
         let quality: String?
     }
 
-    private func sanitizeGFFStreamURL(_ raw: String) -> String? {
-        var candidate = raw.replacingOccurrences(of: "\\/", with: "/").trimmingCharacters(in: .whitespacesAndNewlines)
-        if candidate.isEmpty { return nil }
-
-        // Base64 decoded check (e.g. kt_player base64 encoded strings)
-        if !candidate.contains("://") && !candidate.hasPrefix("//") && !candidate.hasPrefix("/"),
-           let decodedData = Data(base64Encoded: candidate, options: .ignoreUnknownCharacters),
-           let decodedStr = String(data: decodedData, encoding: .utf8),
-           decodedStr.hasPrefix("http") || decodedStr.hasPrefix("//") || decodedStr.hasPrefix("/") {
-            candidate = decodedStr
+    /// Reads title, poster, duration and the player manifest from a video page.
+    nonisolated static func parseGFFPage(_ html: String, pageURL: String) -> GFFExtractedMedia? {
+        let range = NSRange(html.startIndex..., in: html)
+        func firstCapture(_ regex: NSRegularExpression?) -> String? {
+            guard let match = regex?.firstMatch(in: html, range: range),
+                  match.numberOfRanges > 1,
+                  let captured = Range(match.range(at: 1), in: html) else { return nil }
+            return String(html[captured])
         }
+        guard let manifest = firstCapture(gffManifestRegex) else { return nil }
 
-        if candidate.hasPrefix("//") {
-            candidate = "https:" + candidate
-        } else if candidate.hasPrefix("/") {
-            candidate = "https://gayforfans.com" + candidate
-        }
-
-        guard candidate.hasPrefix("http://") || candidate.hasPrefix("https://") else {
-            return nil
-        }
-
-        // Exclude image / preview thumbnails / short trailers if full stream exists
-        let lower = candidate.lowercased()
-        if lower.contains(".jpg") || lower.contains(".png") || lower.contains(".webp") || lower.contains(".gif") {
-            return nil
-        }
-        return candidate
-    }
-
-    private func resolveGFFMediaInfo(url: String, rawCookies: String? = nil) async -> GFFExtractedMedia? {
-        let targetUrl = normalizeURLForYtdlp(url)
-        guard let pageURL = URL(string: targetUrl) else { return nil }
-
-        LoggerService.shared.log("[GFF] Extracting media for: \(LoggerService.sanitizeURLForLog(targetUrl))", level: .info)
-        var html = ""
-
-        let ytdlpBinary = resolvedYtdlpBinary
-
-        // 1. Try raw session cookies if provided (e.g. from browser extension)
-        if let raw = rawCookies, !raw.isEmpty, let ytdlp = ytdlpBinary,
-           let tempFile = createTempCookiesFileFromHeader(url: targetUrl, cookieHeader: raw) {
-            defer { try? FileManager.default.removeItem(at: tempFile) }
-            var rawArgs = [ytdlp.path, "--ignore-config", "--dump-pages", "--cookies", tempFile.path]
-            appendSiteSpecificArgs(for: targetUrl, to: &rawArgs)
-            rawArgs.append("--")
-            rawArgs.append(targetUrl)
-
-            var dumpOutput: String? = nil
-            do {
-                dumpOutput = try await processRunner.runCommand(rawArgs)
-            } catch let error as YtdlpError {
-                if case .commandFailed(let output) = error {
-                    dumpOutput = output
-                }
-            } catch {
-                LoggerService.shared.log("[GFF] Non-YtdlpError during raw cookie dump-pages: \(error.localizedDescription)", level: .debug)
-            }
-
-            if let output = dumpOutput, !output.isEmpty {
-                var rawChunks: [String] = []
-                for line in output.split(whereSeparator: \.isNewline) {
-                    let trimmed = String(line).trimmingCharacters(in: .whitespaces)
-                    if !trimmed.starts(with: "#") && !trimmed.starts(with: "[") && !trimmed.starts(with: "WARNING") && !trimmed.starts(with: "ERROR"),
-                       let decodedData = Data(base64Encoded: trimmed, options: .ignoreUnknownCharacters) {
-                        let decodedString = String(decoding: decodedData, as: UTF8.self)
-                        if !decodedString.isEmpty {
-                            rawChunks.append(decodedString)
-                        }
-                    }
-                }
-                if !rawChunks.isEmpty {
-                    let rawHtml = rawChunks.joined()
-                    let hasMediaData = rawHtml.contains("video_url") ||
-                                       rawHtml.contains("videoPlayerData") ||
-                                       rawHtml.contains("sources") ||
-                                       rawHtml.contains("gayforfans") ||
-                                       rawHtml.contains("contentUrl") ||
-                                       rawHtml.contains("embedUrl") ||
-                                       rawHtml.contains("/embed/") ||
-                                       rawHtml.contains("<title>") ||
-                                       rawHtml.contains("flashvars") ||
-                                       rawHtml.contains("playerConfig")
-                    if hasMediaData {
-                        html = rawHtml
-                        LoggerService.shared.log("[ProtectedSite] Successfully extracted page data using session cookies (length: \(rawHtml.count) bytes)", level: .info)
-                    }
-                }
-            }
-        }
-
-        var browsersToTry: [String?] = []
-        if let configured = configuredBrowserCookieSource() {
-            browsersToTry.append(configured)
-        }
-        for candidate in ["safari", "chrome", "brave", "firefox", "edge", "helium", "chromium-based"] {
-            if candidate == "safari" && !Self.hasFullDiskAccess {
-                continue
-            }
-            if !browsersToTry.contains(candidate) {
-                browsersToTry.append(candidate)
-            }
-        }
-        browsersToTry.append(nil)
-
-        // 2. Try browser cookies and impersonated HTTP page dump
-        if html.isEmpty, let ytdlp = ytdlpBinary {
-            for browser in browsersToTry {
-                if let browserName = browser, deniedCookieSources.contains(browserName) { continue }
-                var args = [ytdlp.path, "--ignore-config", "--dump-pages"]
-                if let browserName = browser {
-                    args.append(contentsOf: ["--cookies-from-browser", Self.cookiesFromBrowserArgument(for: browserName)])
-                }
-                appendSiteSpecificArgs(for: targetUrl, to: &args)
-                args.append("--")
-                args.append(targetUrl)
-
-                var dumpOutput: String? = nil
-                do {
-                    dumpOutput = try await processRunner.runCommand(args)
-                } catch let error as YtdlpError {
-                    if case .commandFailed(let output) = error {
-                        dumpOutput = output
-                    }
-                } catch {
-                    // Ignore general process errors
-                }
-
-                if let output = dumpOutput, !output.isEmpty {
-                    var browserChunks: [String] = []
-                    for line in output.split(whereSeparator: \.isNewline) {
-                        let trimmed = String(line).trimmingCharacters(in: .whitespaces)
-                        if !trimmed.starts(with: "#") && !trimmed.starts(with: "[") && !trimmed.starts(with: "WARNING") && !trimmed.starts(with: "ERROR"),
-                           let decodedData = Data(base64Encoded: trimmed, options: .ignoreUnknownCharacters) {
-                            let decodedString = String(decoding: decodedData, as: UTF8.self)
-                            if !decodedString.isEmpty {
-                                browserChunks.append(decodedString)
-                            }
-                        }
-                    }
-                    if !browserChunks.isEmpty {
-                        let browserHtml = browserChunks.joined()
-                        let hasMediaData = browserHtml.contains("video_url") ||
-                                           browserHtml.contains("videoPlayerData") ||
-                                           browserHtml.contains("sources") ||
-                                           browserHtml.contains("gayforfans") ||
-                                           browserHtml.contains("contentUrl") ||
-                                           browserHtml.contains("embedUrl") ||
-                                           browserHtml.contains("/embed/") ||
-                                           browserHtml.contains("<title>") ||
-                                           browserHtml.contains("flashvars") ||
-                                           browserHtml.contains("playerConfig")
-                        if hasMediaData {
-                            html = browserHtml
-                            let sourceLog = browser.map { "browser cookies from '\($0)'" } ?? "impersonated HTTP request"
-                            LoggerService.shared.log("[ProtectedSite] Successfully extracted page data using \(sourceLog) (length: \(browserHtml.count) bytes)", level: .info)
-                            break
-                        }
-                    }
-                }
-            }
-        }
-
-        // 3. Fallback to URLSession if browser dump output was empty or didn't contain stream
-        if html.isEmpty && (processRunner is DefaultYtdlpProcessRunner) {
-            var request = URLRequest(url: pageURL)
-            request.timeoutInterval = 5.0
-            request.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36", forHTTPHeaderField: "User-Agent")
-            request.setValue("https://gayforfans.com/", forHTTPHeaderField: "Referer")
-            request.setValue("https://gayforfans.com", forHTTPHeaderField: "Origin")
-            if let raw = rawCookies, !raw.isEmpty {
-                request.setValue(raw, forHTTPHeaderField: "Cookie")
-            }
-
-            if let (data, response) = try? await EgressBoundary.session.boundedData(for: request),
-               let httpResponse = response as? HTTPURLResponse,
-               (200...299).contains(httpResponse.statusCode),
-               let fetched = String(data: data, encoding: .utf8) {
-                html = fetched
-                LoggerService.shared.log("[GFF] Fetched page HTML via URLSession direct request (length: \(fetched.count) bytes)", level: .info)
-            }
-        }
-
-        guard !html.isEmpty else {
-            LoggerService.shared.log("[GFF] Unable to retrieve HTML page dump for: \(LoggerService.sanitizeURLForLog(targetUrl))", level: .warning)
-            return nil
-        }
-
-        // Extract Title
         var title = "GayForFans Video"
-        for regex in Self.gffTitleRegexes {
-            if let match = regex.firstMatch(in: html, options: [], range: NSRange(location: 0, length: (html as NSString).length)),
-               match.numberOfRanges > 1 {
-                let rawTitle = (html as NSString).substring(with: match.range(at: 1))
-                    .replacingOccurrences(of: "(?i)<title>", with: "", options: .regularExpression)
-                    .replacingOccurrences(of: "(?i)</title>", with: "", options: .regularExpression)
-                    .replacingOccurrences(of: "(?i) - gayforfans\\.com", with: "", options: .regularExpression)
-                    .replacingOccurrences(of: "(?i)gayforfans\\.com - ", with: "", options: .regularExpression)
-                    .replacingOccurrences(of: "(?i)gayforfans - ", with: "", options: .regularExpression)
-                    .replacingOccurrences(of: "(?i) - gayforfans", with: "", options: .regularExpression)
-                    .replacingOccurrences(of: "(?i) \\| GayForFans", with: "", options: .regularExpression)
+        for regex in gffTitleRegexes {
+            if let raw = firstCapture(regex) {
+                let cleaned = raw
+                    .replacingOccurrences(of: "(?i) \\| GayForFans$", with: "", options: .regularExpression)
                     .trimmingCharacters(in: .whitespacesAndNewlines)
                     .decodingHTMLEntities()
-                if !rawTitle.isEmpty {
-                    title = rawTitle
+                if !cleaned.isEmpty {
+                    title = cleaned
                     break
                 }
             }
         }
+        let thumbnail = gffThumbRegexes.lazy.compactMap { firstCapture($0) }.first
+        return GFFExtractedMedia(
+            streamURL: manifest,
+            embedURL: pageURL,
+            title: title,
+            thumbnailURL: thumbnail,
+            duration: firstCapture(gffDurationRegex).flatMap(Double.init),
+            quality: nil
+        )
+    }
 
-        // Extract Thumbnail
-        var thumbnailURL: String? = nil
-        for regex in Self.gffThumbRegexes {
-            if let match = regex.firstMatch(in: html, options: [], range: NSRange(location: 0, length: (html as NSString).length)),
-               match.numberOfRanges > 1 {
-                let candidate = (html as NSString).substring(with: match.range(at: 1))
-                    .replacingOccurrences(of: "\\/", with: "/")
-                if candidate.hasPrefix("http") {
-                    thumbnailURL = candidate
-                    break
-                }
+    /// The site is public: one page request finds the player manifest, so no
+    /// browser cookie store (and its Keychain prompt) is ever read.
+    private func resolveGFFMediaInfo(url: String) async -> GFFExtractedMedia? {
+        let targetUrl = normalizeURLForYtdlp(url)
+        // Mocked runners mean a test host: keep it off the network.
+        guard processRunner is DefaultYtdlpProcessRunner, let pageURL = URL(string: targetUrl) else { return nil }
+        LoggerService.shared.log("[GFF] Extracting media for: \(LoggerService.sanitizeURLForLog(targetUrl))", level: .info)
+
+        // Cloudflare answers 403 to a non-browser user agent.
+        let userAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+        var request = URLRequest(url: pageURL)
+        request.timeoutInterval = 15
+        request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
+        let html: String
+        do {
+            let (data, response) = try await EgressBoundary.session.boundedData(for: request)
+            let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+            guard status == 200 else {
+                LoggerService.shared.log("[GFF] Page request returned HTTP \(status)", level: .warning)
+                return nil
             }
-        }
-
-        // Extract Stream URL & Quality
-        var streamURL: String? = nil
-        var quality: String? = nil
-
-        for regex in Self.gffStreamRegexes {
-            if let match = regex.firstMatch(in: html, options: [], range: NSRange(location: 0, length: (html as NSString).length)),
-               match.numberOfRanges > 1 {
-                let rawCandidate = (html as NSString).substring(with: match.range(at: 1))
-                if let candidate = sanitizeGFFStreamURL(rawCandidate) {
-                    streamURL = candidate
-                    break
-                }
-            }
-        }
-
-        // Extract Quality Text if present
-        if html.contains("video_url_fhd: '1'") || html.contains("video_url_fhd: 1") || html.contains("video_url_fhd:\"1\"") {
-            quality = "1080p"
-        } else if html.contains("video_url_hd: '1'") || html.contains("video_url_hd: 1") || html.contains("video_url_hd:\"1\"") {
-            quality = "720p"
-        } else if let qMatch = html.range(of: "video_url_text\\s*:\\s*['\"]([^'\"]+)['\"]", options: .regularExpression) {
-            let qStr = String(html[qMatch])
-            if qStr.contains("1080") { quality = "1080p" }
-            else if qStr.contains("720") { quality = "720p" }
-            else if qStr.contains("480") { quality = "480p" }
-            else if qStr.contains("360") { quality = "360p" }
-        }
-
-        // Extract Candidate Embed URLs
-        var candidateEmbeds: [String] = []
-        for regex in Self.gffEmbedRegexes {
-            if let match = regex.firstMatch(in: html, options: [], range: NSRange(location: 0, length: (html as NSString).length)),
-               match.numberOfRanges > 1 {
-                let val = (html as NSString).substring(with: match.range(at: 1))
-                    .replacingOccurrences(of: "\\/", with: "/")
-                if val.hasPrefix("http") {
-                    if !candidateEmbeds.contains(val) { candidateEmbeds.append(val) }
-                } else if val.hasPrefix("/embed/") {
-                    let full = "https://gayforfans.com" + val
-                    if !candidateEmbeds.contains(full) { candidateEmbeds.append(full) }
-                }
-            }
-        }
-
-        for regex in Self.gffVideoIdRegexes {
-            if let match = regex.firstMatch(in: targetUrl + "\n" + html, options: [], range: NSRange(location: 0, length: ((targetUrl + "\n" + html) as NSString).length)),
-               match.numberOfRanges > 1 {
-                let vidId = ((targetUrl + "\n" + html) as NSString).substring(with: match.range(at: 1))
-                let defaultEmbed = "https://gayforfans.com/embed/\(vidId)/"
-                if !candidateEmbeds.contains(defaultEmbed) && !candidateEmbeds.contains("https://gayforfans.com/embed/\(vidId)") {
-                    candidateEmbeds.append(defaultEmbed)
-                }
-            }
-        }
-
-        var embedURL = candidateEmbeds.first ?? targetUrl
-
-        // If stream URL was not in main page, attempt embed page fetch across candidate embeds
-        if streamURL == nil && !candidateEmbeds.isEmpty {
-            LoggerService.shared.log("[GFF] Stream URL not in main page; testing \(candidateEmbeds.count) candidate embed targets", level: .info)
-            for embed in candidateEmbeds {
-                if streamURL != nil { break }
-                if let ytdlp = ytdlpBinary {
-                    for browser in browsersToTry {
-                        if let browserName = browser, deniedCookieSources.contains(browserName) { continue }
-                        var embedArgs = [ytdlp.path, "--ignore-config", "--dump-pages"]
-                        if let browserName = browser {
-                            embedArgs.append(contentsOf: ["--cookies-from-browser", Self.cookiesFromBrowserArgument(for: browserName)])
-                        }
-                        appendSiteSpecificArgs(for: embed, to: &embedArgs)
-                        embedArgs.append("--")
-                        embedArgs.append(embed)
-
-                        var embedDump: String? = nil
-                        do {
-                            embedDump = try await processRunner.runCommand(embedArgs)
-                        } catch let error as YtdlpError {
-                            if case .commandFailed(let output) = error {
-                                embedDump = output
-                            }
-                        } catch {
-                            LoggerService.shared.log("[GFF] Non-YtdlpError during embed dump-pages: \(error.localizedDescription)", level: .debug)
-                        }
-
-                        if let output = embedDump, !output.isEmpty {
-                            var embedChunks: [String] = []
-                            for line in output.split(whereSeparator: \.isNewline) {
-                                let trimmed = String(line).trimmingCharacters(in: .whitespaces)
-                                if !trimmed.starts(with: "#") && !trimmed.starts(with: "[") && !trimmed.starts(with: "WARNING") && !trimmed.starts(with: "ERROR"),
-                                   let decodedData = Data(base64Encoded: trimmed, options: .ignoreUnknownCharacters) {
-                                    let decodedString = String(decoding: decodedData, as: UTF8.self)
-                                    if !decodedString.isEmpty {
-                                        embedChunks.append(decodedString)
-                                    }
-                                }
-                            }
-                            if !embedChunks.isEmpty {
-                                let embedHtml = embedChunks.joined()
-                                for regex in Self.gffStreamRegexes {
-                                    if let match = regex.firstMatch(in: embedHtml, options: [], range: NSRange(location: 0, length: (embedHtml as NSString).length)),
-                                       match.numberOfRanges > 1 {
-                                        let rawCandidate = (embedHtml as NSString).substring(with: match.range(at: 1))
-                                        if let candidate = sanitizeGFFStreamURL(rawCandidate) {
-                                            streamURL = candidate
-                                            embedURL = embed
-                                            break
-                                        }
-                                    }
-                                }
-                                if thumbnailURL == nil {
-                                    for regex in Self.gffThumbRegexes {
-                                        if let match = regex.firstMatch(in: embedHtml, options: [], range: NSRange(location: 0, length: (embedHtml as NSString).length)),
-                                           match.numberOfRanges > 1 {
-                                            let candidate = (embedHtml as NSString).substring(with: match.range(at: 1))
-                                                .replacingOccurrences(of: "\\/", with: "/")
-                                            if candidate.hasPrefix("http") {
-                                                thumbnailURL = candidate
-                                                break
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // HTTP direct fallback for embed URL if yt-dlp did not extract stream
-                if streamURL == nil, let embedPageURL = URL(string: embed), (processRunner is DefaultYtdlpProcessRunner) {
-                    var embedReq = URLRequest(url: embedPageURL)
-                    embedReq.timeoutInterval = 5.0
-                    embedReq.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36", forHTTPHeaderField: "User-Agent")
-                    embedReq.setValue("https://gayforfans.com/", forHTTPHeaderField: "Referer")
-                    if let (data, response) = try? await EgressBoundary.session.boundedData(for: embedReq),
-                       let httpResponse = response as? HTTPURLResponse,
-                       (200...299).contains(httpResponse.statusCode),
-                       let text = String(data: data, encoding: .utf8) {
-                        for regex in Self.gffStreamRegexes {
-                            if let match = regex.firstMatch(in: text, options: [], range: NSRange(location: 0, length: (text as NSString).length)),
-                               match.numberOfRanges > 1 {
-                                let rawCandidate = (text as NSString).substring(with: match.range(at: 1))
-                                if let candidate = sanitizeGFFStreamURL(rawCandidate) {
-                                    streamURL = candidate
-                                    embedURL = embed
-                                    break
-                                }
-                            }
-                        }
-                        if thumbnailURL == nil {
-                            for regex in Self.gffThumbRegexes {
-                                if let match = regex.firstMatch(in: text, options: [], range: NSRange(location: 0, length: (text as NSString).length)),
-                                   match.numberOfRanges > 1 {
-                                    let candidate = (text as NSString).substring(with: match.range(at: 1))
-                                        .replacingOccurrences(of: "\\/", with: "/")
-                                    if candidate.hasPrefix("http") {
-                                        thumbnailURL = candidate
-                                        break
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        guard let validStreamURL = streamURL else {
-            LoggerService.shared.log("[GFF] Failed to extract valid stream URL from page or embed targets (HTML length: \(html.count))", level: .warning)
+            html = String(decoding: data, as: UTF8.self)
+        } catch {
+            LoggerService.shared.log("[GFF] Page request failed: \(error.localizedDescription)", level: .warning)
             return nil
         }
 
-        LoggerService.shared.log("[GFF] Successfully extracted stream: \(LoggerService.sanitizeURLForLog(validStreamURL)) (Quality: \(quality ?? "auto"))", level: .info)
+        guard let media = Self.parseGFFPage(html, pageURL: targetUrl) else {
+            LoggerService.shared.log("[GFF] No player manifest on the page", level: .warning)
+            return nil
+        }
+
+        // Hand yt-dlp the CDN playlist the route redirects to: it ends in
+        // .m3u8 and is unsigned, so it stays valid until the download starts.
+        var streamURL = media.streamURL
+        if let manifestURL = URL(string: media.streamURL) {
+            var manifestRequest = URLRequest(url: manifestURL)
+            manifestRequest.timeoutInterval = 15
+            manifestRequest.setValue(userAgent, forHTTPHeaderField: "User-Agent")
+            manifestRequest.setValue(targetUrl, forHTTPHeaderField: "Referer")
+            if let (_, response) = try? await EgressBoundary.session.boundedData(for: manifestRequest),
+               (response as? HTTPURLResponse)?.statusCode == 200,
+               let playlist = Self.acceptedGFFPlaylistURL(response.url) {
+                streamURL = playlist
+            }
+        }
+
+        LoggerService.shared.log("[GFF] Successfully extracted stream: \(LoggerService.sanitizeURLForLog(streamURL))", level: .info)
         return GFFExtractedMedia(
-            streamURL: validStreamURL,
-            embedURL: embedURL,
-            title: title,
-            thumbnailURL: thumbnailURL,
-            duration: nil,
-            quality: quality
+            streamURL: streamURL,
+            embedURL: media.embedURL,
+            title: media.title,
+            thumbnailURL: media.thumbnailURL,
+            duration: media.duration,
+            quality: nil
         )
     }
 
@@ -7243,9 +6868,6 @@ public struct DownloadResult: Sendable {
                 return !Self.trackingNamesGroupA.contains(name) && !Self.trackingPrefixes.contains { name.hasPrefix($0) }
             }
             if components.queryItems?.isEmpty == true { components.queryItems = nil }
-            if components.path.hasPrefix("/video/") {
-                components.path = components.path.replacingOccurrences(of: "^/video/", with: "/videos/", options: .regularExpression)
-            }
             return components.url?.absoluteString ?? components.string ?? urlString
         }
 
@@ -7321,7 +6943,7 @@ public struct DownloadResult: Sendable {
     ) -> Bool {
         let selectedBrowser = Self.validatedBrowserCookieSource(browserCookieSource) ?? configuredBrowserCookieSource()
         guard !(error is CancellationError), !Task.isCancelled,
-              usesBrowserTransport(url) || isGFFURL(url),
+              usesBrowserTransport(url),
               !usingBrowserCookies, !forceBrowserCookies, selectedBrowser != nil else { return false }
         let message = String(describing: error)
             .replacingOccurrences(of: #"https?://[^\s\"]+"#, with: "[URL]", options: .regularExpression).lowercased()
@@ -7659,6 +7281,15 @@ public struct DownloadResult: Sendable {
             args.append(contentsOf: ["--add-header", "Referer: https://gayforfans.com/"])
             args.append(contentsOf: ["--add-header", "Origin: https://gayforfans.com"])
             args.append(contentsOf: ["--add-header", "Accept: */*"])
+            // The CDN answers segment bursts with 503. Eight workers without
+            // backoff exhaust retries and skip segments; four with backoff finish
+            // a 28-minute video in about 30 s. A skipped segment is a broken file.
+            if let index = args.firstIndex(of: "--concurrent-fragments"), index + 1 < args.count {
+                args[index + 1] = "4"
+            }
+            args.append(contentsOf: ["--retry-sleep", "http:exp=1:8",
+                                     "--retry-sleep", "fragment:exp=1:8",
+                                     "--abort-on-unavailable-fragments"])
         } else if isBestCamURL(parsedHost) || isBestCamURL(url) || parsedHost.contains("sssrr.org") || parsedHost.contains("abyssplayer") || parsedHost.contains("abyss.to") {
             if !isSafari {
                 if let uaIdx = args.firstIndex(of: "--user-agent") {
