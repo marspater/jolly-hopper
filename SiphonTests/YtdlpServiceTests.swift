@@ -1474,6 +1474,27 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertTrue(YtdlpService.isPlaylistURL("https://www.youtube.com/playlist?list=PL123"))
     }
 
+    func testYouTubeBotCheckDoesNotRerunWhenNoCookiesCanBeAdded() async throws {
+        let runs = TestBox<Int>(0)
+        service.processRunner = MockYtdlpProcessRunner(mockDownloadResult: { _ in
+            runs.value += 1
+            // First the browser cookies fail, then YouTube asks for a bot check.
+            if runs.value == 1 { throw YtdlpError.downloadFailed("ERROR: could not find chrome cookies database") }
+            throw YtdlpError.cloudflareBlocked
+        })
+        var options = DownloadOptions.default
+        options.browserCookieSource = "chrome"
+        options.embedThumbnail = false
+        do {
+            _ = try await service.download(url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ", options: options,
+                                           onProgress: { _, _, _ in }, onOutput: { _ in })
+            XCTFail("The bot check must fail the download")
+        } catch {
+            XCTAssertEqual(runs.value, 2, "Cookies denied for this host add nothing, so the same command must not run again")
+        }
+        service.resetCookieDenial()
+    }
+
     func testAddSheetAndRowShareFailureWording() {
         let lang = LanguageService()
         let safari = YtdlpError.downloadFailed("ERROR: Safari cookies: Operation not permitted")

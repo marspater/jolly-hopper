@@ -471,7 +471,9 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
 
     public func runCommand(_ args: [String], processController: DownloadProcessController?) async throws -> String {
         try Task.checkCancellation()
-        let prepared = try ChromiumCookieReader.prepare(EgressBoundary.applying(to: args))
+        let routed = try EgressBoundary.movingProxyCredentialToConfig(EgressBoundary.applying(to: args))
+        defer { routed.configFile.map { try? FileManager.default.removeItem(at: $0) } }
+        let prepared = try ChromiumCookieReader.prepare(routed.args)
         defer { prepared.cookieFile?.cleanup() }
         let args = prepared.args
         let process = Process()
@@ -581,7 +583,9 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
         onOutput: @escaping @Sendable (String) -> Void
     ) async throws -> DownloadProcessResult {
         try Task.checkCancellation()
-        let prepared = try ChromiumCookieReader.prepare(EgressBoundary.applying(to: args))
+        let routed = try EgressBoundary.movingProxyCredentialToConfig(EgressBoundary.applying(to: args))
+        defer { routed.configFile.map { try? FileManager.default.removeItem(at: $0) } }
+        let prepared = try ChromiumCookieReader.prepare(routed.args)
         defer { prepared.cookieFile?.cleanup() }
         let args = prepared.args
         let controller = processController ?? DownloadProcessController()
