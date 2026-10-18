@@ -3,6 +3,7 @@ import SQLite3
 import CryptoKit
 import WebKit
 import AppKit
+import Security
 @testable import Siphon
 
 final class TestBox<T>: @unchecked Sendable {
@@ -2564,6 +2565,21 @@ final class YtdlpServiceTests: XCTestCase {
     func testTestsNeverTouchTheRealSafariCookieStore() {
         XCTAssertTrue(SafariCookieReader.cookieFiles.isEmpty)
         XCTAssertFalse(YtdlpService.hasFullDiskAccess)
+    }
+
+    /// TCC replaces the com.marspater.siphon Full Disk Access record with a denial bound to
+    /// the requirement of any build that fails to match it. A build that keeps the linker's
+    /// cdhash requirement therefore revokes the installed app's grant.
+    func testUnsignedBuildsCarryTheStableDesignatedRequirement() throws {
+        var code: SecCode?
+        XCTAssertEqual(SecCodeCopySelf([], &code), errSecSuccess)
+        var staticCode: SecStaticCode?
+        XCTAssertEqual(SecCodeCopyStaticCode(try XCTUnwrap(code), [], &staticCode), errSecSuccess)
+        var requirement: SecRequirement?
+        XCTAssertEqual(SecCodeCopyDesignatedRequirement(try XCTUnwrap(staticCode), [], &requirement), errSecSuccess)
+        var text: CFString?
+        XCTAssertEqual(SecRequirementCopyString(try XCTUnwrap(requirement), [], &text), errSecSuccess)
+        XCTAssertEqual(text as String?, #"identifier "com.marspater.siphon""#)
     }
 
     func testHttp500ServerRangeErrorRetryFallback() async throws {
