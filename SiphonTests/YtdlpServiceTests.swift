@@ -3319,31 +3319,6 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertTrue(capturedArgsBox.value.contains(where: { $0.contains("Referer:https://www.boyfriend") }))
     }
 
-    func testBoyfriendTVBrowserCandidatesAutomaticallyUseInstalledSessions() {
-        let candidates = YtdlpService.boyfriendTVBrowserCandidates(
-            configured: nil,
-            installed: ["safari", "firefox", "chrome"],
-            hasFullDiskAccess: false
-        )
-
-        XCTAssertEqual(candidates.count, 3)
-        XCTAssertEqual(candidates[0], "chrome")
-        XCTAssertEqual(candidates[1], "firefox")
-        XCTAssertNil(candidates[2], "Anonymous transport should remain the final fallback")
-    }
-
-    func testBoyfriendTVBrowserCandidatesRespectConfiguredSessionWithoutProfileSpray() {
-        let candidates = YtdlpService.boyfriendTVBrowserCandidates(
-            configured: "firefox",
-            installed: ["chrome", "firefox", "brave"],
-            hasFullDiskAccess: true
-        )
-
-        XCTAssertEqual(candidates.count, 2)
-        XCTAssertEqual(candidates[0], "firefox")
-        XCTAssertNil(candidates[1], "Anonymous transport should remain the only fallback after the selected session")
-    }
-
     func testBoyfriendTVRawCookieBridgePreservesValuesAndScopesHost() throws {
         let url = try XCTUnwrap(URL(string: "https://www.boyfriendtv.com/videos/1710869/test/"))
         let cookies = YtdlpService.boyfriendTVCookies(
@@ -3545,7 +3520,6 @@ final class YtdlpServiceTests: XCTestCase {
         service.ytdlpPath = URL(fileURLWithPath: "/usr/local/bin/yt-dlp")
         UserDefaults.standard.set("none", forKey: UserDefaultsKeys.browserForCookies)
         defer { UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.browserForCookies) }
-        service.installedBrowsersProvider = { [] }
 
         let captured = TestBox<[String]>([])
         let stream = "https://cdn.boyfriendtv.com/key=test/media=hls4A/multi=854x480:v480/2026-09/_TPL_.mp4"
@@ -3571,6 +3545,48 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertTrue(captured.value.contains("generic:impersonate=chrome:macos"))
         XCTAssertFalse(captured.value.contains("--user-agent"))
         XCTAssertFalse(captured.value.contains(where: { $0.hasPrefix("Sec-Ch-Ua:") }))
+    }
+
+    func testBoyfriendTVResolverReadsCookiesOnlyFromConfiguredBrowser() async throws {
+        // Each extra Chromium browser read raises its own Keychain prompt, and the
+        // embed pages repeat the loop, so no other browser may be tried.
+        service.ytdlpPath = URL(fileURLWithPath: "/usr/local/bin/yt-dlp")
+        defer { UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.browserForCookies) }
+        service.boyfriendTVRenderedPageLoader = { _ in nil }
+        service.boyfriendTVRenderedStreamLoader = { _ in nil }
+
+        let cookieSources = TestBox<[String]>([])
+        let embedDumps = TestBox<Int>(0)
+        service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
+            if let idx = args.firstIndex(of: "--cookies-from-browser"), idx + 1 < args.count {
+                cookieSources.value.append(args[idx + 1])
+            }
+            if args.contains("--dump-pages") {
+                if args.last?.contains("/embed/") == true {
+                    embedDumps.value += 1
+                    return ""
+                }
+                // Player data without a stream sends the resolver to the embed pages.
+                return Data("<script>var videoPlayerData = {};</script>".utf8).base64EncodedString()
+            }
+            return "{}"
+        })
+
+        for (configured, expected) in [("edge", YtdlpService.cookiesFromBrowserArgument(for: "edge")), ("none", nil)] {
+            UserDefaults.standard.set(configured, forKey: UserDefaultsKeys.browserForCookies)
+            cookieSources.value = []
+            embedDumps.value = 0
+
+            _ = try? await service.fetchInfo(url: "https://www.boyfriendtv.com/videos/1710869/test/")
+
+            XCTAssertGreaterThan(embedDumps.value, 0, "embed pages must be exercised for \(configured)")
+            if let expected {
+                XCTAssertFalse(cookieSources.value.isEmpty)
+                XCTAssertEqual(Set(cookieSources.value), [expected])
+            } else {
+                XCTAssertEqual(cookieSources.value, [], "no browser is selected, so no browser may be read")
+            }
+        }
     }
 
     func testBoyfriendTVWebKitFallbackResolvesMainPageChallenge() async throws {
@@ -3620,7 +3636,6 @@ final class YtdlpServiceTests: XCTestCase {
         let login = "<html><body><p>To watch this video please <a href='/login'>login</a></p></body></html>"
         let renderedLoads = TestBox<[URL]>([])
         let dumpedPages = TestBox<[String]>([])
-        service.installedBrowsersProvider = { [] }
 
         service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
             if args.contains("--dump-pages") {
@@ -3651,7 +3666,6 @@ final class YtdlpServiceTests: XCTestCase {
     func testBoyfriendTVSignedOutWebKitPageStopsBeforeEmbeds() async throws {
         UserDefaults.standard.set("none", forKey: UserDefaultsKeys.browserForCookies)
         defer { UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.browserForCookies) }
-        service.installedBrowsersProvider = { [] }
 
         let login = "<html><body><p>To watch this video please <a href='/login'>login</a></p><iframe src='/embed/1684628/'></iframe></body></html>"
         let renderedLoads = TestBox<[URL]>([])
@@ -3679,7 +3693,6 @@ final class YtdlpServiceTests: XCTestCase {
     func testBoyfriendTVUsesTheSafariSignInWithoutSafarisCloudflareCookies() async throws {
         UserDefaults.standard.set("safari", forKey: UserDefaultsKeys.browserForCookies)
         defer { UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.browserForCookies) }
-        service.installedBrowsersProvider = { [] }
         @Sendable func cookie(_ domain: String, _ name: String, _ value: String) -> HTTPCookie {
             HTTPCookie(properties: [.domain: domain, .name: name, .value: value, .path: "/"])!
         }
@@ -3721,7 +3734,6 @@ final class YtdlpServiceTests: XCTestCase {
     func testBoyfriendTVSignedOutSafariFailsFastWithTheSafariSignInError() async throws {
         UserDefaults.standard.set("safari", forKey: UserDefaultsKeys.browserForCookies)
         defer { UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.browserForCookies) }
-        service.installedBrowsersProvider = { [] }
         service.safariCookiesProvider = {
             [HTTPCookie(properties: [.domain: ".boyfriendtv.com", .name: "configLang", .value: "es", .path: "/"])!]
         }
@@ -4107,7 +4119,6 @@ final class YtdlpServiceTests: XCTestCase {
     func testBoyfriendTVWebKitRuntimeRejectsPreviewMedia() async throws {
         UserDefaults.standard.set("none", forKey: UserDefaultsKeys.browserForCookies)
         defer { UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.browserForCookies) }
-        service.installedBrowsersProvider = { [] }
 
         let challenge = "<html><head><title>Just a moment...</title></head><body><script src='/cdn-cgi/challenge-platform/test'></script></body></html>"
         let challengeOutput = Data(challenge.utf8).base64EncodedString() + "\nERROR: HTTP Error 403: Forbidden"
@@ -4138,7 +4149,6 @@ final class YtdlpServiceTests: XCTestCase {
     func testBoyfriendTVWebKitChallengeTimeoutIsNotRepeatedAcrossMirrorsAndEmbeds() async throws {
         UserDefaults.standard.set("none", forKey: UserDefaultsKeys.browserForCookies)
         defer { UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.browserForCookies) }
-        service.installedBrowsersProvider = { [] }
 
         let challenge = "<html><head><title>Just a moment...</title></head><body><script src='/cdn-cgi/challenge-platform/test'></script></body></html>"
         let challengeOutput = Data(challenge.utf8).base64EncodedString() + "\nERROR: HTTP Error 403: Forbidden"
@@ -4173,7 +4183,6 @@ final class YtdlpServiceTests: XCTestCase {
     func testBoyfriendTVWebKitClearanceThenLoginReportsLoginNotCloudflare() async throws {
         UserDefaults.standard.set("none", forKey: UserDefaultsKeys.browserForCookies)
         defer { UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.browserForCookies) }
-        service.installedBrowsersProvider = { [] }
 
         let challenge = "<html><head><title>Just a moment...</title></head><body><script src='/cdn-cgi/challenge-platform/test'></script></body></html>"
         let challengeOutput = Data(challenge.utf8).base64EncodedString() + "\nERROR: HTTP Error 403: Forbidden"
