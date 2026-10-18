@@ -9,19 +9,21 @@ class MenuBarManager: NSObject {
     private var popover: NSPopover?
     private var languageService: LanguageService?
     private var downloadManager: DownloadManager?
+    private var openMainWindow: (() -> Void)?
 
     func setup(languageService: LanguageService, downloadManager: DownloadManager, openMainWindow: @escaping () -> Void) {
         if statusItem != nil { return }
 
         self.languageService = languageService
         self.downloadManager = downloadManager
+        self.openMainWindow = openMainWindow
 
         // Setup Popover
         let popover = NSPopover()
         popover.contentSize = NSSize(width: 360, height: 420)
         popover.behavior = .transient
 
-        let contentView = MenuBarView(openMainWindow: openMainWindow)
+        let contentView = MenuBarView()
             .environmentObject(languageService)
             .environmentObject(downloadManager)
 
@@ -81,6 +83,19 @@ class MenuBarManager: NSObject {
                 // Focus the app
                 NSApp.activate(ignoringOtherApps: true)
             }
+        }
+    }
+
+    /// Brings the main window forward, or opens one when it was closed (for
+    /// example after starting in the background).
+    func showMainWindow() {
+        NSApp.setActivationPolicy(.regular)
+        NSApp.activate(ignoringOtherApps: true)
+        if let window = NSApp.windows.first(where: { $0.identifier == NSUserInterfaceItemIdentifier("SiphonMainWindow") }) {
+            if window.isMiniaturized { window.deminiaturize(nil) }
+            window.makeKeyAndOrderFront(nil)
+        } else {
+            openMainWindow?()
         }
     }
 
