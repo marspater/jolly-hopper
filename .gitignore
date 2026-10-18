@@ -26,9 +26,17 @@ dmg_stage/
 *.app
 *.dmg
 
-# Release artifacts
+# Release artifacts and signing material
 RELEASE_NOTES.md
 SOCIAL_MEDIA.md
+*.zip
+release-manifest.json
+release-manifest.json.sig
+*.key
+
+# Local agent state
+.claude/worktrees/
+.claude/settings.local.json
 
 # Local case studies & scratch docs
 local_case_studies/

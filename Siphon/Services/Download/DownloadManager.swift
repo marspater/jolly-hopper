@@ -460,13 +460,6 @@ class DownloadManager: ObservableObject {
         processQueue()
     }
 
-    func moveDownload(from source: IndexSet, to destination: Int) {
-        queue.move(from: source, to: destination, in: &downloads)
-        objectWillChange.send()
-        persistQueueRecoveryState()
-        processQueue()
-    }
-
     func resumeWithOverwrite(_ download: Download) {
         guard !download.requiresAdvancedArgumentsReview else { return }
         download.options.forceOverwrite = true
@@ -518,10 +511,6 @@ class DownloadManager: ObservableObject {
         queue.reserveUniqueOutputPath(for: download, forceIncrement: forceIncrement)
     }
 
-    func resolveUniqueOutputPath(for download: Download) -> (resolvedBaseName: String, candidatePath: String) {
-        queue.planUniqueOutputPath(for: download)
-    }
-
     func reserveOutputPath(_ path: String) {
         queue.reserveOutputPath(path)
     }
@@ -547,18 +536,6 @@ class DownloadManager: ObservableObject {
         // stopDownload(..., skipSaveAndBroadcast: true) deliberately defers
         // recovery removal until this batched history write is durable.
         persistQueueRecoveryState()
-    }
-
-    func retryFailedDownloads() {
-        for download in failedDownloads {
-            retryDownload(download)
-        }
-    }
-
-    func clearQueuedDownloads() {
-        let queued = queuedDownloads
-        guard !queued.isEmpty else { return }
-        clearDownloads(queued)
     }
 
     func clearCompletedDownloads() {

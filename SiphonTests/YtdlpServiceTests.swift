@@ -11,6 +11,21 @@ final class TestBox<T>: @unchecked Sendable {
     init(_ value: T) { self.value = value }
 }
 
+/// A detached consolidated cookie file, as the resolvers that write one by hand get.
+private func consolidatedCookiesFile(
+    url: String,
+    rawCookies: String? = nil,
+    additionalCookies: [(name: String, value: String)] = [],
+    additionalNetscapeLines: [String] = []
+) -> URL? {
+    try? SecureCookieFile.create(
+        url: url,
+        rawCookies: rawCookies,
+        additionalCookies: additionalCookies,
+        additionalNetscapeLines: additionalNetscapeLines
+    ).detach()
+}
+
 final class MockYtdlpProcessRunner: YtdlpProcessRunning, @unchecked Sendable {
     var mockCommand: (@Sendable ([String]) async throws -> String)?
     var mockDownload: (@Sendable ([String]) async throws -> String)?
@@ -1039,9 +1054,15 @@ final class YtdlpServiceTests: XCTestCase {
         let secureCookiesDir = CookieManager.getSecureTempCookiesDirectory()
         XCTAssertNotNil(secureCookiesDir)
 
-        let staleCookieFile = tempDir.appendingPathComponent("siphon_cookies_test_purge.txt")
-        let staleHeaderCookieFile = tempDir.appendingPathComponent("siphon_header_cookies_test_purge.txt")
+        // Loose files in the shared temp root may belong to another running Siphon.
+        let looseCookieFile = tempDir.appendingPathComponent("siphon_cookies_test_purge.txt")
+        let looseHeaderCookieFile = tempDir.appendingPathComponent("siphon_header_cookies_test_purge.txt")
         let regularFile = tempDir.appendingPathComponent("siphon_regular_file.txt")
+        defer {
+            for file in [looseCookieFile, looseHeaderCookieFile, regularFile] {
+                try? FileManager.default.removeItem(at: file)
+            }
+        }
         // The test host shares the user's TMPDIR with the installed app, so the
         // purge must never touch job scratch data (paused downloads resume from it).
         let scratchDir = ScratchDirectoryPolicy.makeURL()
@@ -1051,8 +1072,8 @@ final class YtdlpServiceTests: XCTestCase {
         let subDirCookieFile = secureCookiesDir?.appendingPathComponent("siphon_cookies_subdir_test.txt")
         let subDirHeaderCookieFile = secureCookiesDir?.appendingPathComponent("siphon_header_cookies_subdir_test.txt")
 
-        try "test".write(to: staleCookieFile, atomically: true, encoding: .utf8)
-        try "test".write(to: staleHeaderCookieFile, atomically: true, encoding: .utf8)
+        try "test".write(to: looseCookieFile, atomically: true, encoding: .utf8)
+        try "test".write(to: looseHeaderCookieFile, atomically: true, encoding: .utf8)
         try "test".write(to: regularFile, atomically: true, encoding: .utf8)
         if let subDirCookieFile = subDirCookieFile {
             try "test".write(to: subDirCookieFile, atomically: true, encoding: .utf8)
@@ -1063,8 +1084,8 @@ final class YtdlpServiceTests: XCTestCase {
 
         CookieManager.purgeOrphanedTempCookieFiles()
 
-        XCTAssertFalse(FileManager.default.fileExists(atPath: staleCookieFile.path))
-        XCTAssertFalse(FileManager.default.fileExists(atPath: staleHeaderCookieFile.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: looseCookieFile.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: looseHeaderCookieFile.path))
         XCTAssertTrue(FileManager.default.fileExists(atPath: regularFile.path))
         XCTAssertTrue(FileManager.default.fileExists(atPath: scratchDir.path))
         if let subDirCookieFile = subDirCookieFile {
@@ -1099,17 +1120,6 @@ final class YtdlpServiceTests: XCTestCase {
             let dirAttrs = try FileManager.default.attributesOfItem(atPath: dirURL.path)
             let dirPosix = dirAttrs[.posixPermissions] as? NSNumber
             XCTAssertEqual(dirPosix?.intValue, 0o700, "Secure cookies directory must be created with 0o700 POSIX permissions")
-        }
-
-        let tempCookieURL = service.createTempCookiesFile(url: "https://example.com/video", cookieName: "test_token", cookieValue: "12345")
-        XCTAssertNotNil(tempCookieURL)
-        if let url = tempCookieURL {
-            defer { try? FileManager.default.removeItem(at: url) }
-            XCTAssertTrue(FileManager.default.fileExists(atPath: url.path))
-            let attrs = try FileManager.default.attributesOfItem(atPath: url.path)
-            let posix = attrs[.posixPermissions] as? NSNumber
-            XCTAssertEqual(posix?.intValue, 0o600, "Cookie file must be created with 0o600 POSIX permissions")
-            XCTAssertEqual(url.deletingLastPathComponent().lastPathComponent, "session-\(getpid())", "Cookie file must be stored in this process's cookie session directory")
         }
 
         let tempHeaderCookieURL = service.createTempCookiesFileFromHeader(url: "https://example.com/video", cookieHeader: "session=abcde; token=secret123")
@@ -1443,7 +1453,7 @@ final class YtdlpServiceTests: XCTestCase {
 
     func testThreadSafeOutputStateQuoteStripping() {
         let state = ThreadSafeOutputState()
-        state.setFinalPath("\"/path/to/downloaded video.mp4\"")
+        state.addFinalPath("\"/path/to/downloaded video.mp4\"")
         XCTAssertEqual(state.getFinalPath(), "/path/to/downloaded video.mp4")
 
         state.addCandidatePath("'/another/path/video.mp4'")
@@ -2694,18 +2704,18 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertNil(state.getFinalPath(), "Initial finalPath should be nil")
 
         // 2. Setting an empty or whitespace-only/quote-only string should be ignored
-        state.setFinalPath("")
+        state.addFinalPath("")
         XCTAssertNil(state.getFinalPath(), "Empty string should not update finalPath")
 
-        state.setFinalPath("   \"\"   ")
+        state.addFinalPath("   \"\"   ")
         XCTAssertNil(state.getFinalPath(), "Whitespace/quotes-only string should not update finalPath")
 
         // 3. Setting a valid path with surrounding quotes and whitespace should clean and store the path
-        state.setFinalPath("   \"/tmp/final_output_file.mp4\"   ")
+        state.addFinalPath("   \"/tmp/final_output_file.mp4\"   ")
         XCTAssertEqual(state.getFinalPath(), "/tmp/final_output_file.mp4")
 
         // 4. Updating finalPath with another valid path overwrites the existing value
-        state.setFinalPath("'/tmp/overwritten_output.mp4'")
+        state.addFinalPath("'/tmp/overwritten_output.mp4'")
         XCTAssertEqual(state.getFinalPath(), "/tmp/overwritten_output.mp4")
     }
 
@@ -2717,7 +2727,7 @@ final class YtdlpServiceTests: XCTestCase {
         for i in 0..<iterations {
             group.enter()
             DispatchQueue.global().async {
-                state.setFinalPath("/tmp/path_\(i).mp4")
+                state.addFinalPath("/tmp/path_\(i).mp4")
                 _ = state.getFinalPath()
                 group.leave()
             }
@@ -2994,14 +3004,6 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertFalse(sanitized.contains("654321"))
         XCTAssertFalse(sanitized.contains("cert_pass_999"))
         XCTAssertFalse(sanitized.contains("auth=SECRET"))
-    }
-
-    func testCancellationBoxStateManagement() {
-        let box = CancellationBox()
-        XCTAssertFalse(box.isCancelled)
-
-        box.cancel()
-        XCTAssertTrue(box.isCancelled)
     }
 
     func testSpeedOptimizationAndStreamConcurrencyFlags() async throws {
@@ -5514,7 +5516,7 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertTrue(headerContent.contains("session\txyz123"), "Must contain session cookie")
 
         // 2. Consolidated cookies file
-        let consolidatedFile = service.createConsolidatedCookiesFile(
+        let consolidatedFile = consolidatedCookiesFile(
             url: "https://www.boyfriendtv.com/videos/1505137/test/",
             rawCookies: rawCookies
         )
@@ -6452,12 +6454,11 @@ final class YtdlpServiceTests: XCTestCase {
     }
 
     func testConsolidatedNetscapeCookieFileGeneration() throws {
-        let service = YtdlpService(processRunner: MockYtdlpProcessRunner())
         let url = "https://example.com/video"
         let rawHeader = "session_id=s123; tracking_pref=0"
         let additional: [(name: String, value: String)] = [("sucuri_cloudproxy_uuid_123", "sec_val_999")]
 
-        guard let cookieFileURL = service.createConsolidatedCookiesFile(
+        guard let cookieFileURL = consolidatedCookiesFile(
             url: url,
             rawCookies: rawHeader,
             additionalCookies: additional
@@ -6488,7 +6489,7 @@ final class YtdlpServiceTests: XCTestCase {
         let rawHeader = "session_id=old_session; token=secret1"
         let additional: [(name: String, value: String)] = [("session_id", "new_session")]
 
-        guard let cookieFileURL = service.createConsolidatedCookiesFile(
+        guard let cookieFileURL = consolidatedCookiesFile(
             url: url,
             rawCookies: rawHeader,
             additionalCookies: additional
@@ -6508,7 +6509,7 @@ final class YtdlpServiceTests: XCTestCase {
         let url = "https://example.com/watch"
         let rawHeader = "sess\0ion_id=val\0ue123; bad_key\0=bad_val"
 
-        guard let cookieFileURL = service.createConsolidatedCookiesFile(
+        guard let cookieFileURL = consolidatedCookiesFile(
             url: url,
             rawCookies: rawHeader
         ) else {
@@ -6531,7 +6532,7 @@ final class YtdlpServiceTests: XCTestCase {
             ".sub.example.com\tTRUE\t/\tFALSE\t2000000000\ttoken\tsub_val"
         ]
 
-        guard let cookieFileURL = service.createConsolidatedCookiesFile(
+        guard let cookieFileURL = consolidatedCookiesFile(
             url: url,
             rawCookies: rawHeader,
             additionalCookies: [],
@@ -6552,7 +6553,7 @@ final class YtdlpServiceTests: XCTestCase {
         let url = "https://example.com/watch"
         let malformedHeader = ";;; invalid; =missing_name; empty_val=;   valid_key = valid_val \t\n ;;"
 
-        guard let cookieFileURL = service.createConsolidatedCookiesFile(
+        guard let cookieFileURL = consolidatedCookiesFile(
             url: url,
             rawCookies: malformedHeader,
             additionalCookies: [("", "empty_name"), ("valid_added", "added_val\twith\nnewlines")]

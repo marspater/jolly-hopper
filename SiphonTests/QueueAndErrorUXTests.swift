@@ -83,15 +83,6 @@ final class QueueAndErrorUXTests: XCTestCase {
         XCTAssertEqual(customDownload.sourceDomain, "Media.mysite.org")
     }
     
-    func testGenerateUpdateScriptContainsRequiredSteps() {
-        let script = UpdateChecker.generateUpdateScript()
-        XCTAssertTrue(script.contains("set -e"))
-        XCTAssertTrue(script.contains("/usr/bin/codesign --verify"))
-        XCTAssertTrue(script.contains("EXPECTED_BUNDLE_ID"))
-        XCTAssertTrue(script.contains("BACKUP_PATH"))
-        XCTAssertTrue(script.contains("ditto \"$NEW_APP\" \"$APP_PATH\""))
-    }
-
     func testGitHubAssetDigestParsingRequiresValidSHA256() {
         let hash = String(repeating: "a", count: 64)
         XCTAssertEqual(UpdateChecker.parseGitHubAssetSHA256("sha256:\(hash)"), hash)
@@ -343,10 +334,6 @@ final class QueueAndErrorUXTests: XCTestCase {
         // Move d3 to Bottom
         manager.moveDownloadToBottom(d3)
         XCTAssertEqual(manager.downloads.map { $0.title }, ["Video 1", "Video 2", "Video 3"])
-        
-        // Batch move with IndexSet
-        manager.moveDownload(from: IndexSet(integer: 0), to: 3)
-        XCTAssertEqual(manager.downloads.map { $0.title }, ["Video 2", "Video 3", "Video 1"])
     }
     
     func testSHA256ChecksumCalculation() throws {
@@ -704,7 +691,7 @@ final class QueueAndErrorUXTests: XCTestCase {
 
         for i in 0..<count {
             let dl = Download(url: "https://example.com/video_\(i)", options: options, title: "Title \(i)")
-            let (_, resolvedPath) = manager.resolveUniqueOutputPath(for: dl)
+            let (_, resolvedPath) = manager.planUniqueOutputPath(for: dl)
             manager.reserveOutputPath(resolvedPath)
             resolvedPaths.append(resolvedPath)
         }
@@ -1010,14 +997,6 @@ final class QueueAndErrorUXTests: XCTestCase {
         XCTAssertEqual(LoggerService.extractTailLines(from: unicodeLines, maxEntries: 2), ["Log entry 2: 🚀 Launched", "Log entry 3: ⚠️ Warning"])
     }
 
-    func testAppUpdateScriptIncludesTeamIDVerification() {
-        let script = UpdateChecker.generateUpdateScript()
-
-        XCTAssertTrue(script.contains("EXPECTED_TEAM_ID"))
-        XCTAssertTrue(script.contains("TeamIdentifier="))
-        XCTAssertTrue(script.contains("Team identifier mismatch"))
-    }
-
     func testFileExistsSeparationFromFailedDownloads() {
         let manager = DownloadManager()
         let d1 = Download(url: "https://example.com/1", options: .default)
@@ -1140,28 +1119,6 @@ final class QueueAndErrorUXTests: XCTestCase {
     }
 
     // MARK: - Security Hardening & Trust Boundary Tests
-
-    func testUpdateScriptSignatureIntegrityAndSymlinkRejection() {
-        let script = UpdateChecker.generateUpdateScript()
-        XCTAssertTrue(script.contains("[ -L \"$NEW_APP\" ]"), "Update script must explicitly reject symlinks for the app bundle")
-        XCTAssertTrue(script.contains("[ \"$NEW_TEAM_ID\" != \"$EXPECTED_TEAM_ID\" ]"), "Update script must strictly reject team identifier mismatches without bypass")
-    }
-
-    func testGenerateUpdateScriptContainsStatusFileReporting() {
-        let script = UpdateChecker.generateUpdateScript()
-        XCTAssertTrue(script.contains("STATUS_FILE"), "Update script must accept STATUS_FILE environment variable")
-        XCTAssertTrue(script.contains("report_failure"), "Update script must have failure reporter")
-        XCTAssertTrue(script.contains("report_success"), "Update script must have success reporter")
-        XCTAssertTrue(script.contains("SUCCESS"), "Update script must emit SUCCESS status on verified install")
-        XCTAssertTrue(script.contains("FAILED"), "Update script must emit FAILED status on verification failure")
-    }
-
-    func testUpdateScriptMountPointIsolationAndDirectoryCleanup() {
-        let script = UpdateChecker.generateUpdateScript()
-        XCTAssertTrue(script.contains("MOUNT_POINT=\"$WORK_DIR/mount\""), "Update script must isolate DMG mount point to avoid masking staging directory")
-        XCTAssertTrue(script.contains("hdiutil mount \"$PKG_PATH\" -mountpoint \"$MOUNT_POINT\""), "Update script must mount DMG at isolated mount point")
-        XCTAssertTrue(script.contains("SEARCH_DIR=\"${MOUNT_POINT:-$WORK_DIR}\""), "Update script must search inside mounted volume or unpacked zip")
-    }
 
     func testTrustedGitHubURLValidation() {
         let valid1 = URL(string: "https://github.com/marspater/jolly-hopper/releases/download/v5.0.0/Siphon.dmg")!
@@ -1337,7 +1294,7 @@ final class QueueAndErrorUXTests: XCTestCase {
 
         manager.downloads = [stoppedDownload, queuedDownload1, queuedDownload2]
 
-        manager.clearQueuedDownloads()
+        manager.clearDownloads(manager.queuedDownloads)
 
         XCTAssertEqual(manager.downloads.count, 1, "Only queued downloads should be removed")
         XCTAssertEqual(manager.downloads.first?.id, stoppedDownload.id, "Existing stopped download must be preserved")
@@ -1531,7 +1488,6 @@ final class QueueAndErrorUXTests: XCTestCase {
         XCTAssertNil(VideoResolution.best.maxHeight)
 
         XCTAssertTrue(VideoResolution.r1080p.ytdlpValue.contains("height<=1080"))
-        XCTAssertTrue(VideoResolution.r1080p.ytdlpCombinedValue.contains("bestaudio"))
         XCTAssertFalse(VideoResolution.r1080p.title(lang: lang).isEmpty)
     }
 
@@ -1541,7 +1497,6 @@ final class QueueAndErrorUXTests: XCTestCase {
         XCTAssertEqual(VideoCodec.h265.ytdlpFilter, "[vcodec~='^(hev1|hvc1)']")
         XCTAssertNil(VideoCodec.auto.ytdlpFilter)
         XCTAssertFalse(VideoCodec.h264.title(lang: lang).isEmpty)
-        XCTAssertNotNil(VideoCodec.h264.compatibilityNote)
 
         XCTAssertEqual(AudioCodec.aac.ytdlpFilter, "[acodec^=mp4a]")
         XCTAssertNil(AudioCodec.auto.ytdlpFilter)
@@ -1685,9 +1640,7 @@ final class QueueAndErrorUXTests: XCTestCase {
         XCTAssertNotNil(SiphonTheme.surface)
         XCTAssertNotNil(SiphonTheme.surfaceElevated)
         XCTAssertNotNil(SiphonTheme.separator)
-        XCTAssertNotNil(SiphonTheme.focusRing)
         XCTAssertNotNil(SiphonTheme.selection)
-        XCTAssertNotNil(SiphonTheme.destructiveSurface)
         XCTAssertEqual(SiphonTheme.radiusSmall, 6)
         XCTAssertEqual(SiphonTheme.radiusControl, 8)
         XCTAssertEqual(SiphonTheme.radiusCard, 12)

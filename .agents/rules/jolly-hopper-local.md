@@ -46,8 +46,9 @@ Run focused validation first, then the canonical tests in [AGENTS.md](../../AGEN
 ```bash
 npm test --prefix server
 node --test scripts/test_chrome_handoff.js
+node --test scripts/test_build_and_run.js
 node scripts/test_capture_original_mp4.js
-bash -n scripts/verify_bundle.sh scripts/build_and_run.sh
+for script in scripts/*.sh; do bash -n "$script"; done
 ```
 
 Run the relevant checks for the changed area; documentation-only edits need link and diff checks, not an app build. For version changes, also run `bash scripts/verify_bundle.sh`.
