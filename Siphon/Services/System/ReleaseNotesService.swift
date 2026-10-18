@@ -36,19 +36,19 @@ final class ReleaseNotesService {
             description: "App updates must carry an Ed25519-signed release manifest; a release without one is refused instead of trusting its checksum alone."
         ),
         ReleaseFeature(
+            icon: "checkmark.shield",
+            title: "Pinned yt-dlp",
+            description: "Siphon downloads a pinned, SHA-256-verified build of its yt-dlp fork, with DRM-format and byte-range download fixes."
+        ),
+        ReleaseFeature(
             icon: "macwindow",
             title: "Calmer Main Window",
-            description: "The status strip only animates while downloading, colors share one Display P3 palette, and finished downloads no longer glow."
+            description: "The status strip only animates while downloading, downloads stay in arrival order, finished downloads no longer glow, and motion respects Reduce Motion."
         ),
         ReleaseFeature(
-            icon: "list.bullet.rectangle",
-            title: "Predictable Lists",
-            description: "Downloads stay in arrival order, Recent shows the newest first, and Queue Move Up/Down follows the rows you see."
-        ),
-        ReleaseFeature(
-            icon: "sparkles",
-            title: "New App Icon",
-            description: "A layered Liquid Glass icon with light, dark, and mono variants."
+            icon: "textformat",
+            title: "Geist Everywhere",
+            description: "Every window, pop-up menu and button in Siphon uses Geist, with a new layered app icon in light, dark, and mono."
         )
     ]
 

@@ -25,7 +25,7 @@ A high-performance, native macOS media extractor & downloader powered by `yt-dlp
 - 🛡️ **Hardened update trust chain**: App updates are checked against an Ed25519-signed release manifest, dependencies are pinned by SHA-256, and installs keep rollback protection, stale-operation guards, and explicit exclusion between yt-dlp replacement and active downloads.
 - 🧱 **Public-network boundary for browser links**: Downloads that arrive from a browser extension run through a local egress proxy that refuses private, loopback, and reserved addresses at connection time, including after redirects.
 - 🌐 **Protected-site recovery**: Hardened site-specific extraction keeps browser cookies, user agents, origins, signed streams, and CDN boundaries coherent.
-- 💧 **Native macOS presentation**: Liquid Glass surfaces on one Display P3 palette, a status strip that only animates while downloading, downloads kept in arrival order with Recent newest first, a layered app icon, and accessible light/dark contrast.
+- 💧 **Native macOS presentation**: Liquid Glass surfaces on one Display P3 palette, Geist type throughout, a status strip that only animates while downloading, downloads kept in arrival order with Recent newest first, a layered app icon, and accessible light/dark contrast.
 - 🧭 **Explicit runtime ownership**: Download queueing, execution, app-level update state, shutdown, and browser ingress now have documented ownership boundaries and regression coverage.
 - 🎯 **Broad extraction & media control**: yt-dlp-backed support for 1,000+ sites, quality/codec presets, playlists, subtitles, SponsorBlock, FFmpeg processing, and fast browser-triggered downloads.
 
@@ -69,7 +69,7 @@ xattr -cr /Applications/"Siphon.app"
 
 Integrate Siphon directly into your favorite web browser for 1-click video downloads:
 - **Chrome / Brave / Edge / Helium**: Navigate to `chrome://extensions`, enable **Developer Mode**, and click **Load Unpacked** pointing to `SiphonExtension_Chrome`.
-- **Safari**: Enable the extension in Safari > Settings > Extensions.
+- **Safari**: Turn on **Show features for web developers** in Safari > Settings > Advanced, then use Develop > Developer Settings > **Add Temporary Extension** and choose `SiphonExtension_Safari`. Safari keeps a temporary extension until it quits.
 - **Firefox**: Load `SiphonExtension_Firefox` in `about:debugging#/runtime/this-firefox`.
 
 Extensions hand Siphon only the page URL and which browser to read cookies from, never the cookies themselves. To use **Safari** cookies (for sites that need a signed-in session), grant Siphon **Full Disk Access** in System Settings > Privacy & Security, then relaunch Siphon. Without it, Siphon skips Safari cookies for the rest of the session and downloads without them.
@@ -86,14 +86,15 @@ Extensions hand Siphon only the page URL and which browser to read cookies from,
 
 ## 🔧 Building from Source
 
-Requires Xcode 16 or later on macOS 15 or later. Open `Siphon.xcodeproj` and run the **Siphon** scheme, or run the test suite from the command line:
+Requires Xcode 26 or later (the macOS 26 SDK for Liquid Glass and the Icon Composer app icon); the app still runs on macOS 15. Open `Siphon.xcodeproj` and run the **Siphon** scheme, or run the test suite from the command line:
 
 ```bash
 xcodebuild test -project Siphon.xcodeproj -scheme Siphon -destination 'platform=macOS' \
+  -configuration Debug MACOSX_DEPLOYMENT_TARGET=15.0 \
   CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO
 ```
 
-Siphon downloads its pinned builds of `yt-dlp` (the Siphon fork, [marspater/yt-dlp](https://github.com/marspater/yt-dlp)), `FFmpeg` and `FFprobe` on first launch and verifies each against its SHA-256 before use. Contributor and agent rules live in [AGENTS.md](AGENTS.md).
+Siphon downloads its pinned builds of `yt-dlp`, `FFmpeg` and `FFprobe` on first launch and verifies each against its SHA-256 before use. The `yt-dlp` build is the Siphon fork, published as a `ytdlp-<version>` pre-release on this repository's [Releases](https://github.com/marspater/jolly-hopper/releases) page. Contributor and agent rules live in [AGENTS.md](AGENTS.md).
 
 ## 🧭 Architecture
 

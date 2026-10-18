@@ -43,11 +43,11 @@ Where things live:
 Repository-specific guardrails:
 
 - User-facing strings go through `LanguageService.s("key")`; add keys to its translation table.
-- Managed dependency binaries are pinned in `DependencyChecksums` (`YtdlpService.swift`). Bumping yt-dlp means updating version, URL, and SHA-256 together; FFmpeg/FFprobe updates require both archive and executable digests for each supported architecture. Never bypass managed-binary verification. Preserve the explicit user-provided yt-dlp mode, which validates executability/version rather than a pinned checksum; use `resolvedYtdlpBinary` instead of reconstructing binary paths in individual callers.
+- Managed dependency binaries are pinned in `DependencyChecksums` (`YtdlpService.swift`). The pinned yt-dlp is the Siphon fork, mirrored to a `ytdlp-<version>` pre-release on this repository; bumping it means publishing that pre-release and updating version, URL, and SHA-256 together. FFmpeg/FFprobe updates require both archive and executable digests for each supported architecture. Never bypass managed-binary verification. The user-provided yt-dlp mode is switched off (`DependencyChecksums.managedYtdlpEnabled`); use `resolvedYtdlpBinary` instead of reconstructing binary paths in individual callers.
 - Browser extensions must never put cookies or other credentials in deep links, and the Chrome manifest must not request `cookies`/`host_permissions`. External targets must pass `ExternalDownloadTargetPolicy`. CI enforces both.
 - External-target validation is only admission control. Preserve the connection-time public-network boundary through subprocesses, site-specific resolvers, WebKit, and redirects; user arguments must not override it. For updater changes, preserve signed-manifest verification and atomic replacement/rollback as described in `ARCHITECTURE.md`.
 - Do not add `allow-unsigned-executable-memory` or `disable-library-validation` to `Siphon/Siphon.entitlements` (CI-enforced).
-- Release version bumps touch `Siphon/Info.plist`, every `MARKETING_VERSION`/`CURRENT_PROJECT_VERSION` in `project.pbxproj` (checked by `scripts/verify_bundle.sh`), the `AppState.appVersion` fallback, the `whats_new_message` string, `README.md` badge, and `CHANGELOG.md`. `Casks/siphon.rb` is updated by the release workflow.
+- Release version bumps touch `Siphon/Info.plist`, every `MARKETING_VERSION`/`CURRENT_PROJECT_VERSION` in `project.pbxproj` (checked by `scripts/verify_bundle.sh`), the `AppState.appVersion` fallback, `ReleaseNotesService.defaultFeatures` (the What's New fallback when GitHub release notes cannot be fetched), `README.md` badge, and `CHANGELOG.md`. Releases after 5.4.5 also need a signed manifest (see `ARCHITECTURE.md`). `Casks/siphon.rb` is updated by the Homebrew workflow when the release is published.
 
 For non-destructive freshness checks:
 
@@ -86,7 +86,7 @@ xcodebuild test \
   CODE_SIGNING_ALLOWED=NO
 ```
 
-CI (`.github/workflows/swift.yml`) also runs the same suite with `-configuration Release ENABLE_TESTABILITY=YES`; run it for changes that may behave differently under optimization. For extension, server, or script changes, mirror the relevant checks in `.github/workflows/scripts.yml`: `node --check` on the affected JS, `npm test --prefix server`, `node --test scripts/test_chrome_handoff.js`, `node scripts/test_capture_original_mp4.js`, and `bash -n` on the shell scripts. For version changes, run `bash scripts/verify_bundle.sh`.
+CI (`.github/workflows/swift.yml`) also runs the same suite with `-configuration Release ENABLE_TESTABILITY=YES`; run it for changes that may behave differently under optimization. For extension, server, or script changes, mirror the relevant checks in `.github/workflows/scripts.yml`: `node --check` on the affected JS, `npm test --prefix server`, `node --test scripts/test_chrome_handoff.js`, `node --test scripts/test_build_and_run.js`, `node scripts/test_capture_original_mp4.js`, and `bash -n` on each shell script. For version changes, run `bash scripts/verify_bundle.sh`.
 
 Xcode/macOS SDKs are required for native validation. On Linux/headless runners without them, run available scripting checks and report native builds/tests as not run. `swiftc -parse` proves syntax only. Documentation-only changes need link and diff checks, not an app build.
 
