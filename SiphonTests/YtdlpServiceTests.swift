@@ -2571,10 +2571,12 @@ final class YtdlpServiceTests: XCTestCase {
     /// the requirement of any build that fails to match it. A build that keeps the linker's
     /// cdhash requirement therefore revokes the installed app's grant.
     func testUnsignedBuildsCarryTheStableDesignatedRequirement() throws {
-        var code: SecCode?
-        XCTAssertEqual(SecCodeCopySelf([], &code), errSecSuccess)
+        // The hosted test bundle runs inside the built Siphon.app; the canonical test command
+        // and CI build it with CODE_SIGNING_ALLOWED=NO, so this checks the unsigned-build phase.
+        let appURL = Bundle.main.bundleURL
+        XCTAssertEqual(appURL.pathExtension, "app")
         var staticCode: SecStaticCode?
-        XCTAssertEqual(SecCodeCopyStaticCode(try XCTUnwrap(code), [], &staticCode), errSecSuccess)
+        XCTAssertEqual(SecStaticCodeCreateWithPath(appURL as CFURL, [], &staticCode), errSecSuccess)
         var requirement: SecRequirement?
         XCTAssertEqual(SecCodeCopyDesignatedRequirement(try XCTUnwrap(staticCode), [], &requirement), errSecSuccess)
         var text: CFString?
