@@ -28,7 +28,7 @@ extension ChromiumCookieReader {
             root = defaultHeliumRoot
         }
         var prepared = args
-        guard let file = try export(for: target, root: root) else {
+        guard let file = try export(for: target, root: root, searchOtherBrowsers: browserArg == "chromium-based") else {
             let host = target.host ?? "target"
             Task { @MainActor in
                 LoggerService.shared.log("No \(browserArg) cookies for \(host); continuing without browser cookies.", level: .info)

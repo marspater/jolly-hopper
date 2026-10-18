@@ -1257,6 +1257,18 @@ final class YtdlpServiceTests: XCTestCase {
         ), "No matching cookies anywhere still proceeds anonymously")
     }
 
+    @MainActor
+    func testHeliumHandoffReadsOnlyHeliumCookies() {
+        // A Helium handoff must not fall through to a signed-in Chrome account.
+        XCTAssertEqual(AppState.normalizedBrowserCookieSource("Helium"), "helium")
+        XCTAssertEqual(YtdlpService.validatedBrowserCookieSource("helium"), "helium")
+        let helium = ChromiumCookieReader.cookieSearchRoots(root: ChromiumCookieReader.defaultHeliumRoot, searchOtherBrowsers: false)
+        XCTAssertEqual(helium.map(\.root), [ChromiumCookieReader.defaultHeliumRoot])
+        XCTAssertEqual(helium.first?.target?.name, "Helium")
+        let any = ChromiumCookieReader.cookieSearchRoots(root: ChromiumCookieReader.defaultHeliumRoot, searchOtherBrowsers: true)
+        XCTAssertEqual(any.first?.root, ChromiumCookieReader.defaultHeliumRoot, "Chromium-based still starts with Helium")
+    }
+
     func testAdditionalArgumentsCannotMoveOutputOutOfSaveFolder() {
         XCTAssertEqual(
             YtdlpService.removingOutputLocationArguments(
@@ -6118,6 +6130,7 @@ final class YtdlpServiceTests: XCTestCase {
         let commands = TestBox<[[String]]>([])
         service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
             commands.value.append(args)
+            if args.first?.hasSuffix("ffprobe") == true { return "hevc,smpte2084\n" }
             try Data("tone mapped".utf8).write(to: URL(fileURLWithPath: try XCTUnwrap(args.last)))
             return ""
         }, mockDownload: { args in
@@ -6132,8 +6145,8 @@ final class YtdlpServiceTests: XCTestCase {
                                               onProgress: { _, _, _ in }, onOutput: { _ in })
         XCTAssertEqual(result.primaryFile, source)
         XCTAssertEqual(try String(contentsOf: source, encoding: .utf8), "tone mapped")
-        let conversion = try XCTUnwrap(commands.value.first)
-        XCTAssertTrue(conversion.contains("tonemap=hable:desat=0,zscale=t=bt709:m=bt709:r=tv,format=yuv420p"))
+        let conversion = try XCTUnwrap(commands.value.first { $0.first?.hasSuffix("ffmpeg") == true })
+        XCTAssertTrue(conversion.contains(YtdlpService.hdrToSDRFilter))
         XCTAssertTrue(conversion.contains("-c:v"), "Tone mapping must encode rather than stream-copy filtered video")
     }
 
@@ -6211,12 +6224,22 @@ final class YtdlpServiceTests: XCTestCase {
         let encode = try XCTUnwrap(commands.value.first { $0.first?.hasSuffix("ffmpeg") == true })
         XCTAssertNotEqual(encode[try XCTUnwrap(encode.lastIndex(of: "-c:v")) + 1], "copy")
 
-        // Tone mapping needs a real encode even when the codec already matches.
-        commands.value = []
+        // Tone mapping needs a real encode even when the codec already matches,
+        // but only for a PQ/HLG source: an SDR source is stream-copied untouched.
         options.hdrAction = .convertToSDR
-        _ = try await service.postprocessDownloadedMedia(at: source, options: options, ffmpegDir: root.path)
-        XCTAssertFalse(commands.value.contains { $0.first?.hasSuffix("ffprobe") == true })
-        XCTAssertTrue(try XCTUnwrap(commands.value.first).contains("-c:v"))
+        for (transfer, toneMapped) in [("smpte2084", true), ("arib-std-b67", true), ("bt709", false), ("unknown", false)] {
+            commands.value = []
+            service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
+                commands.value.append(args)
+                if args.first?.hasSuffix("ffprobe") == true { return "hevc,\(transfer)\n" }
+                try Data("encoded".utf8).write(to: URL(fileURLWithPath: try XCTUnwrap(args.last)))
+                return ""
+            })
+            _ = try await service.postprocessDownloadedMedia(at: source, options: options, ffmpegDir: root.path)
+            let ffmpeg = try XCTUnwrap(commands.value.first { $0.first?.hasSuffix("ffmpeg") == true })
+            XCTAssertEqual(ffmpeg.contains(YtdlpService.hdrToSDRFilter), toneMapped, transfer)
+            XCTAssertEqual(ffmpeg[try XCTUnwrap(ffmpeg.lastIndex(of: "-c:v")) + 1] == "copy", !toneMapped, transfer)
+        }
     }
 
     func testVideoConversionSetsExplicitRateControl() {
@@ -6232,13 +6255,20 @@ final class YtdlpServiceTests: XCTestCase {
         cases.append(("H.264", options, h264))
         options.conversionCodec = .h265
         cases.append(("HEVC", options, h265))
+        options.conversionCodec = .vp9
+        cases.append(("VP9", options, ("-crf", "24")))
         options.conversionCodec = ConversionCodec.none
         options.hdrAction = .convertToSDR
         cases.append(("SDR", options, h264))
+        options.fileType = .webm
+        cases.append(("WebM SDR", options, ("-crf", "24")))
         for (label, options, (flag, value)) in cases {
-            let args = YtdlpService.videoConversionArguments(options: options)
+            let args = YtdlpService.videoConversionArguments(options: options, toneMap: options.hdrAction == .convertToSDR)
             XCTAssertEqual(args.firstIndex(of: flag).map { args[$0 + 1] }, value, "\(label): explicit rate control")
             XCTAssertFalse(args.contains("-strict"), "\(label): stable encoders need no experimental flag")
+            if args.contains("libvpx-vp9") {
+                XCTAssertEqual(args.firstIndex(of: "-b:v").map { args[$0 + 1] }, "0", "\(label): -crf is constant quality only with -b:v 0")
+            }
         }
     }
 
@@ -6272,6 +6302,7 @@ final class YtdlpServiceTests: XCTestCase {
         let commands = TestBox<[[String]]>([])
         service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
             commands.value.append(args)
+            if args.first?.hasSuffix("ffprobe") == true { return "vp9,smpte2084\n" }
             try Data("SDR output".utf8).write(to: URL(fileURLWithPath: try XCTUnwrap(args.last)))
             return ""
         })
@@ -6279,7 +6310,7 @@ final class YtdlpServiceTests: XCTestCase {
         options.fileType = .webm
         options.hdrAction = .convertToSDR
         _ = try await service.postprocessDownloadedMedia(at: source, options: options, ffmpegDir: root.path)
-        let conversion = try XCTUnwrap(commands.value.first)
+        let conversion = try XCTUnwrap(commands.value.first { $0.first?.hasSuffix("ffmpeg") == true })
         XCTAssertTrue(conversion.contains("libvpx-vp9"), "WebM rejects H.264 video")
         XCTAssertEqual(conversion.filter { $0 == "-c:s" }.count, 1)
         XCTAssertTrue(conversion.contains("webvtt"), "WebM stores only WebVTT subtitles")
@@ -6317,6 +6348,36 @@ final class YtdlpServiceTests: XCTestCase {
         let stream = try XCTUnwrap((json["streams"] as? [[String: Any]])?.first)
         XCTAssertEqual(stream["codec_name"] as? String, "hevc")
         XCTAssertEqual(stream["codec_tag_string"] as? String, "hvc1")
+    }
+
+    func testHDRToSDRToneMappingKeepsBrightnessWithRealFFmpeg() async throws {
+        guard let tools = ProcessInfo.processInfo.environment["SIPHON_CONVERSION_FFMPEG_DIR"] else {
+            throw XCTSkip("Requires explicit FFmpeg path for the local codec smoke test")
+        }
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let ffmpeg = URL(fileURLWithPath: tools).appendingPathComponent("ffmpeg").path
+        let runner = DefaultYtdlpProcessRunner()
+        service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in try await runner.runCommand(args) })
+        var options = DownloadOptions.default
+        options.fileType = .mkv
+        options.hdrAction = .convertToSDR
+        let toLinear = "format=yuv420p,setparams=color_primaries=bt709:color_trc=bt709:colorspace=bt709:range=tv,"
+            + "zscale=t=linear:npl=100,format=gbrpf32le"
+        for transfer in ["smpte2084", "arib-std-b67"] {
+            let source = root.appendingPathComponent("\(transfer).mkv")
+            _ = try await runner.runCommand([ffmpeg, "-v", "error", "-f", "lavfi", "-i", "testsrc2=size=320x180:rate=24", "-t", "0.5",
+                                             "-vf", toLinear + ",zscale=p=bt2020:t=\(transfer):m=bt2020nc:r=tv:npl=100,format=yuv420p10le",
+                                             "-color_primaries", "bt2020", "-color_trc", transfer, "-colorspace", "bt2020nc",
+                                             "-c:v", "libx265", "-x265-params", "log-level=error", source.path])
+            let output = try await service.postprocessDownloadedMedia(at: source, options: options, ffmpegDir: tools)
+            let stats = try await runner.runCommand([ffmpeg, "-v", "error", "-i", output.path, "-vf",
+                                                    "signalstats,metadata=print:key=lavfi.signalstats.YMAX:file=-", "-f", "null", "-"])
+            let peak = stats.split(separator: "\n").compactMap { $0.split(separator: "=").last.flatMap { Double($0) } }.max() ?? 0
+            // Tone mapping the coded PQ signal instead of linear light peaked near 45.
+            XCTAssertGreaterThan(peak, 120, "\(transfer): highlights must survive tone mapping")
+        }
     }
 
     @MainActor

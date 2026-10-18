@@ -740,8 +740,7 @@ final class DownloadExecutorTests: XCTestCase {
             onOutput("SIPHON_FINAL_PATH:\(output.path)")
             let hook = hook
             if let pause = await MainActor.run(body: { hook.pause }) {
-                try await Task.sleep(nanoseconds: 50_000_000) // the recorded path lands first
-                await pause()
+                await pause() // no delay: the recorded path must not depend on timing
                 throw YtdlpError.downloadFailed("Download was stopped.")
             }
             return DownloadProcessResult(primaryPath: output.path)

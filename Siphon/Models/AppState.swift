@@ -407,7 +407,8 @@ public final class AppState: ObservableObject {
     public static func normalizedBrowserCookieSource(_ raw: String?) -> String? {
         guard let raw else { return nil }
         let browser = raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        if browser == "helium" { return "chromium-based" }
+        // A Helium handoff reads Helium only; "chromium-based" searches every Chromium browser.
+        if browser == "helium" { return browser }
         return SupportedBrowser.allowedRawValues.contains(browser) ? browser : nil
     }
 
