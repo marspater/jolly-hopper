@@ -428,6 +428,7 @@
 				E0002001 /* Frameworks */,
 				E0004003 /* Resources */,
 				E0004030 /* Compile Native Helper */,
+				E0004031 /* Stable Designated Requirement */,
 			);
 			buildRules = (
 			);
@@ -477,6 +478,26 @@
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
 			shellScript = "clang -O2 -arch arm64 -arch x86_64 -isysroot \"${SDKROOT}\" -mmacosx-version-min=15.0 \"${SRCROOT}/Siphon/Helpers/siphon-pgrp.c\" -o \"${TEMP_DIR}/siphon-pgrp\"\ncp -f \"${TEMP_DIR}/siphon-pgrp\" \"${BUILT_PRODUCTS_DIR}/siphon-pgrp\"\nmkdir -p \"${TARGET_BUILD_DIR}/${CONTENTS_FOLDER_PATH}/Helpers\"\ncp -f \"${TEMP_DIR}/siphon-pgrp\" \"${TARGET_BUILD_DIR}/${CONTENTS_FOLDER_PATH}/Helpers/siphon-pgrp\"\nchmod +x \"${BUILT_PRODUCTS_DIR}/siphon-pgrp\" \"${TARGET_BUILD_DIR}/${CONTENTS_FOLDER_PATH}/Helpers/siphon-pgrp\"\ncodesign --force --sign \"${EXPANDED_CODE_SIGN_IDENTITY:--}\" -i \"com.marspater.siphon.pgrp\" -r=\"designated => identifier \\\"com.marspater.siphon.pgrp\\\"\" \"${TARGET_BUILD_DIR}/${CONTENTS_FOLDER_PATH}/Helpers/siphon-pgrp\" 2>/dev/null || codesign --force --sign - -i \"com.marspater.siphon.pgrp\" -r=\"designated => identifier \\\"com.marspater.siphon.pgrp\\\"\" \"${TARGET_BUILD_DIR}/${CONTENTS_FOLDER_PATH}/Helpers/siphon-pgrp\" 2>/dev/null || true\n";
+		};
+		E0004031 /* Stable Designated Requirement */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"$(TARGET_BUILD_DIR)/$(EXECUTABLE_PATH)",
+			);
+			name = "Stable Designated Requirement For Unsigned Builds";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "# Unsigned builds (CODE_SIGNING_ALLOWED=NO, as in the test command) keep the linker's\n# cdhash requirement. TCC then replaces the installed app's Full Disk Access record with a\n# denial bound to that cdhash, so give them the same requirement as signed builds.\n# Sign a detached copy: inside the bundle codesign would seal resources that the test\n# bundle copied in later breaks.\nif [ \"${CODE_SIGNING_ALLOWED}\" != \"YES\" ]; then\n  set -e\n  mkdir -p \"${DERIVED_FILE_DIR}\"\n  cp -f \"${TARGET_BUILD_DIR}/${EXECUTABLE_PATH}\" \"${DERIVED_FILE_DIR}/stable-dr-executable\"\n  codesign --force --sign - -i \"${PRODUCT_BUNDLE_IDENTIFIER}\" -r=\"designated => identifier \\\"${PRODUCT_BUNDLE_IDENTIFIER}\\\"\" \"${DERIVED_FILE_DIR}/stable-dr-executable\"\n  mv -f \"${DERIVED_FILE_DIR}/stable-dr-executable\" \"${TARGET_BUILD_DIR}/${EXECUTABLE_PATH}\"\nfi\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 
