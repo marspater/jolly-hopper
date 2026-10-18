@@ -6061,7 +6061,7 @@ final class YtdlpServiceTests: XCTestCase {
                                               onProgress: { _, _, _ in }, onOutput: { _ in })
         XCTAssertEqual(result.primaryFile, source)
         XCTAssertEqual(try String(contentsOf: source, encoding: .utf8), "HEVC output")
-        let conversion = try XCTUnwrap(commands.value.first)
+        let conversion = try XCTUnwrap(commands.value.first { $0.first?.hasSuffix("ffmpeg") == true })
         #if arch(arm64)
         XCTAssertTrue(conversion.contains("hevc_videotoolbox"))
         #else
@@ -6070,6 +6070,38 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertTrue(conversion.contains("hvc1"))
         XCTAssertTrue(conversion.contains("0:s?"), "Keep embedded subtitles during conversion")
         XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: root.path), ["video.mp4"])
+    }
+
+    func testHEVCConversionStreamCopiesWhenSourceIsAlreadyHEVC() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let source = root.appendingPathComponent("video.mp4")
+        try Data("HEVC source".utf8).write(to: source)
+        let commands = TestBox<[[String]]>([])
+        service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
+            commands.value.append(args)
+            if args.first?.hasSuffix("ffprobe") == true { return "hevc\n" }
+            try Data("remuxed".utf8).write(to: URL(fileURLWithPath: try XCTUnwrap(args.last)))
+            return ""
+        })
+        var options = DownloadOptions.default
+        options.fileType = .mp4
+        options.conversionCodec = .h265
+        _ = try await service.postprocessDownloadedMedia(at: source, options: options, ffmpegDir: root.path)
+        let probe = try XCTUnwrap(commands.value.first { $0.first?.hasSuffix("ffprobe") == true })
+        XCTAssertEqual(probe.last, source.path)
+        let remux = try XCTUnwrap(commands.value.first { $0.first?.hasSuffix("ffmpeg") == true })
+        XCTAssertFalse(remux.contains("-c:v"), "Matching codec must be stream-copied, not re-encoded")
+        XCTAssertTrue(remux.contains("hvc1"), "MP4 HEVC keeps the hvc1 tag for Apple players")
+        XCTAssertEqual(try String(contentsOf: source, encoding: .utf8), "remuxed")
+
+        // Tone mapping needs a real encode even when the codec already matches.
+        commands.value = []
+        options.hdrAction = .convertToSDR
+        _ = try await service.postprocessDownloadedMedia(at: source, options: options, ffmpegDir: root.path)
+        XCTAssertFalse(commands.value.contains { $0.first?.hasSuffix("ffprobe") == true })
+        XCTAssertTrue(try XCTUnwrap(commands.value.first).contains("-c:v"))
     }
 
     func testConversionKeepsOutputWhenExtensionDiffersOnlyInCase() async throws {
