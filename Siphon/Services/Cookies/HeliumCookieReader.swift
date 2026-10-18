@@ -198,35 +198,34 @@ enum ChromiumCookieReader {
     }
 
     /// Returns nil when no readable profile has cookies for the target host.
-    /// A browser with no matching cookies falls through to the next one, so an
-    /// installed but signed-out Chrome does not hide a signed-in Arc. Keychain
-    /// access failures remain errors; malformed individual rows are skipped.
+    /// With `searchOtherBrowsers` (the "Chromium-based" choice), a browser with no
+    /// matching cookies falls through to the next one, so an installed but
+    /// signed-out Chrome does not hide a signed-in Arc. A named browser reads only
+    /// its own profiles, so a Helium handoff never uses another browser's account.
+    /// Keychain access failures remain errors; malformed individual rows are skipped.
     static func export(
         for target: URL,
         root: URL = defaultHeliumRoot,
+        searchOtherBrowsers: Bool = false,
         password: (() throws -> Data)? = nil
     ) throws -> SecureCookieFile? {
         guard let host = target.host else { throw failure("Missing target host.") }
+        return try export(host: host, from: cookieSearchRoots(root: root, searchOtherBrowsers: searchOtherBrowsers), password: password)
+    }
 
-        // If default root does not exist, look across known Chromium browser installations
-        var candidateRoots: [(root: URL, target: ChromiumBrowserTarget?)] = []
-        if root == defaultHeliumRoot {
-            candidateRoots.append((defaultHeliumRoot, knownChromiumBrowsers.first))
-            let home = FileManager.default.homeDirectoryForCurrentUser
-            for browser in knownChromiumBrowsers {
-                let candidateURL = home.appendingPathComponent(browser.relativePath)
-                if candidateURL != root && FileManager.default.fileExists(atPath: candidateURL.path) {
-                    candidateRoots.append((candidateURL, browser))
-                }
-            }
-        } else {
-            let matched = knownChromiumBrowsers.first {
-                root.path.hasSuffix($0.relativePath)
-            }
-            candidateRoots.append((root, matched))
+    static func cookieSearchRoots(root: URL, searchOtherBrowsers: Bool) -> [(root: URL, target: ChromiumBrowserTarget?)] {
+        guard searchOtherBrowsers && root == defaultHeliumRoot else {
+            return [(root, knownChromiumBrowsers.first { root.path.hasSuffix($0.relativePath) })]
         }
-
-        return try export(host: host, from: candidateRoots, password: password)
+        var candidateRoots: [(root: URL, target: ChromiumBrowserTarget?)] = [(defaultHeliumRoot, knownChromiumBrowsers.first)]
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        for browser in knownChromiumBrowsers {
+            let candidateURL = home.appendingPathComponent(browser.relativePath)
+            if candidateURL != root && FileManager.default.fileExists(atPath: candidateURL.path) {
+                candidateRoots.append((candidateURL, browser))
+            }
+        }
+        return candidateRoots
     }
 
     static func export(

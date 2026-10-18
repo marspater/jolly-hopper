@@ -50,11 +50,14 @@ enum EgressBoundary {
         }
     }
 
-    /// `Proxy-Authorization` for a plain-HTTP request through the bound proxy.
+    /// `Proxy-Authorization` for a plain-HTTP request through `session`'s proxy.
     /// URLSession answers the proxy's 407 only for CONNECT (HTTPS), and a
     /// session-wide header would also travel inside every HTTPS tunnel to the site.
-    static var proxyAuthorization: String? {
-        guard let credential = proxyEndpoint?.credential, let user = credential.user, let password = credential.password else { return nil }
+    /// Read from the session itself: a request may run after the binding that
+    /// created the session has ended.
+    static func proxyAuthorization(for session: URLSession) -> String? {
+        guard let credential = (session.delegate as? ProxyCredentialDelegate)?.credential,
+              let user = credential.user, let password = credential.password else { return nil }
         return "Basic " + Data("\(user):\(password)".utf8).base64EncodedString()
     }
 

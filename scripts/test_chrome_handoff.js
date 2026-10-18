@@ -142,6 +142,14 @@ for (const extension of ["Chrome", "Firefox", "Safari"]) {
         assert.equal(browser.alarms.size, 0);
     });
 
+    test(`${extension}: an uppercase scheme accepted by selection also hands off`, async () => {
+        const browser = mockBrowser(extension);
+        const worker = browser.startWorker();
+        await worker.menuEvent.fire({ menuItemId: "download-siphon", linkUrl: "HTTPS://example.com/video" }, {});
+        await flush();
+        assert.equal(new URL(browser.tabs.get(1).url).searchParams.get("url"), "HTTPS://example.com/video");
+    });
+
 }
 
 for (const extension of ["Firefox", "Safari"]) {

@@ -147,8 +147,7 @@ async function detectBrowserSource() {
 }
 
 async function triggerDownload(url, host = "download") {
-    if (!url || typeof url !== "string") return;
-    if (!url.startsWith("http://") && !url.startsWith("https://")) return;
+    if (!firstWebURL(url)) return;
 
     const browserSource = await detectBrowserSource();
     let deepLink = `siphon://${host}?url=${encodeURIComponent(url)}&browser=${encodeURIComponent(browserSource)}`;

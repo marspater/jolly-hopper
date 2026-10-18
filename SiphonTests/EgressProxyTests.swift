@@ -151,10 +151,10 @@ final class EgressProxyTests: XCTestCase {
 
         let route = proxy.proxyURL(port: proxyPort)
         defer { EgressBoundary.retireSession(for: proxyPort) }
-        // Resolvers run inside the job's binding, which supplies the credential.
-        let (data, response) = try await EgressBoundary.$proxyURL.withValue(route) {
-            try await EgressBoundary.session.boundedData(for: URLRequest(url: URL(string: "http://127.0.0.1:\(serverPort)/")!))
-        }
+        // The thumbnail path takes the session inside a short binding and sends
+        // the request after it ends, so the credential must travel with the session.
+        let session = EgressBoundary.$proxyURL.withValue(route) { EgressBoundary.session }
+        let (data, response) = try await session.boundedData(for: URLRequest(url: URL(string: "http://127.0.0.1:\(serverPort)/")!))
         XCTAssertEqual((response as? HTTPURLResponse)?.statusCode, 200)
         XCTAssertEqual(String(decoding: data, as: UTF8.self), "REACHED")
         XCTAssertEqual(server.hitCount, 1)
