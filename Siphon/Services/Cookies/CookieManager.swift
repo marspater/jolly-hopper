@@ -63,16 +63,15 @@ public enum CookieManager {
         }
     }
 
-    /// Sweeps and removes any orphaned temporary cookie files left behind from crashes or SIGKILL.
+    /// Sweeps cookie files left behind by crashed or killed Siphon processes. Runs at launch.
+    /// Only Siphon's own session directories are touched: loose files in the shared temporary
+    /// directory may belong to another running instance, and macOS clears those itself.
     public static func purgeOrphanedTempCookieFiles() {
-        let root = secureDirectory(rootDirectory)
-        let tempDirsToClean: [URL] = [
-            FileManager.default.temporaryDirectory,
-            root,
-            getSecureTempCookiesDirectory()
-        ].compactMap { $0 }
-        tempDirsToClean.forEach(purgeCookieFiles(in:))
-        if let root {
+        // At launch, this process's directory can only hold files of a dead process with the same PID.
+        if let own = getSecureTempCookiesDirectory() {
+            purgeCookieFiles(in: own)
+        }
+        if let root = secureDirectory(rootDirectory) {
             purgeDeadSessions(in: root)
         }
     }
@@ -93,7 +92,7 @@ public enum CookieManager {
 
     /// Sessions of Siphon processes that are gone (crash, SIGKILL). A live one belongs
     /// to another running instance and is left alone.
-    private static func purgeDeadSessions(in root: URL) {
+    static func purgeDeadSessions(in root: URL) {
         let fileManager = FileManager.default
         guard let sessions = try? fileManager.contentsOfDirectory(at: root, includingPropertiesForKeys: nil) else { return }
         for session in sessions {

@@ -228,6 +228,44 @@ final class SecureCookieFileTests: XCTestCase {
         XCTAssertFalse(fileManager.fileExists(atPath: ownFile.path))
     }
 
+    func testPurgeDeadSessionsSkipsMalformedEntriesAndMissingRoot() throws {
+        let fileManager = FileManager.default
+        let root = fileManager.temporaryDirectory.appendingPathComponent("siphon_purge_test_\(UUID().uuidString)")
+        defer { try? fileManager.removeItem(at: root) }
+
+        CookieManager.purgeDeadSessions(in: root)
+        XCTAssertFalse(fileManager.fileExists(atPath: root.path), "A missing root is left alone")
+
+        let kept = ["session-abc", "session-0", "session--5", "session-", "other-999999", "session-\(getpid())"]
+        for name in kept + ["session-999999"] {
+            try fileManager.createDirectory(at: root.appendingPathComponent(name), withIntermediateDirectories: true)
+        }
+
+        CookieManager.purgeDeadSessions(in: root)
+
+        for name in kept {
+            XCTAssertTrue(fileManager.fileExists(atPath: root.appendingPathComponent(name).path), "\(name) must be kept")
+        }
+        XCTAssertFalse(fileManager.fileExists(atPath: root.appendingPathComponent("session-999999").path))
+    }
+
+    func testPurgeDeadSessionsSurvivesDeletionFailure() throws {
+        let fileManager = FileManager.default
+        let root = fileManager.temporaryDirectory.appendingPathComponent("siphon_purge_test_\(UUID().uuidString)")
+        let dead = root.appendingPathComponent("session-999999")
+        try fileManager.createDirectory(at: dead, withIntermediateDirectories: true)
+        // Without write permission on the root, removing the session fails.
+        try fileManager.setAttributes([.posixPermissions: 0o500], ofItemAtPath: root.path)
+        defer {
+            try? fileManager.setAttributes([.posixPermissions: 0o700], ofItemAtPath: root.path)
+            try? fileManager.removeItem(at: root)
+        }
+
+        CookieManager.purgeDeadSessions(in: root)
+
+        XCTAssertTrue(fileManager.fileExists(atPath: dead.path))
+    }
+
     func testChromiumExportKeepsKeychainFailureOverBrowserWithoutMatches() throws {
         struct KeychainDenied: Error {}
         func makeRoot(_ row: String) throws -> URL {

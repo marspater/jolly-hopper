@@ -1054,9 +1054,15 @@ final class YtdlpServiceTests: XCTestCase {
         let secureCookiesDir = CookieManager.getSecureTempCookiesDirectory()
         XCTAssertNotNil(secureCookiesDir)
 
-        let staleCookieFile = tempDir.appendingPathComponent("siphon_cookies_test_purge.txt")
-        let staleHeaderCookieFile = tempDir.appendingPathComponent("siphon_header_cookies_test_purge.txt")
+        // Loose files in the shared temp root may belong to another running Siphon.
+        let looseCookieFile = tempDir.appendingPathComponent("siphon_cookies_test_purge.txt")
+        let looseHeaderCookieFile = tempDir.appendingPathComponent("siphon_header_cookies_test_purge.txt")
         let regularFile = tempDir.appendingPathComponent("siphon_regular_file.txt")
+        defer {
+            for file in [looseCookieFile, looseHeaderCookieFile, regularFile] {
+                try? FileManager.default.removeItem(at: file)
+            }
+        }
         // The test host shares the user's TMPDIR with the installed app, so the
         // purge must never touch job scratch data (paused downloads resume from it).
         let scratchDir = ScratchDirectoryPolicy.makeURL()
@@ -1066,8 +1072,8 @@ final class YtdlpServiceTests: XCTestCase {
         let subDirCookieFile = secureCookiesDir?.appendingPathComponent("siphon_cookies_subdir_test.txt")
         let subDirHeaderCookieFile = secureCookiesDir?.appendingPathComponent("siphon_header_cookies_subdir_test.txt")
 
-        try "test".write(to: staleCookieFile, atomically: true, encoding: .utf8)
-        try "test".write(to: staleHeaderCookieFile, atomically: true, encoding: .utf8)
+        try "test".write(to: looseCookieFile, atomically: true, encoding: .utf8)
+        try "test".write(to: looseHeaderCookieFile, atomically: true, encoding: .utf8)
         try "test".write(to: regularFile, atomically: true, encoding: .utf8)
         if let subDirCookieFile = subDirCookieFile {
             try "test".write(to: subDirCookieFile, atomically: true, encoding: .utf8)
@@ -1078,8 +1084,8 @@ final class YtdlpServiceTests: XCTestCase {
 
         CookieManager.purgeOrphanedTempCookieFiles()
 
-        XCTAssertFalse(FileManager.default.fileExists(atPath: staleCookieFile.path))
-        XCTAssertFalse(FileManager.default.fileExists(atPath: staleHeaderCookieFile.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: looseCookieFile.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: looseHeaderCookieFile.path))
         XCTAssertTrue(FileManager.default.fileExists(atPath: regularFile.path))
         XCTAssertTrue(FileManager.default.fileExists(atPath: scratchDir.path))
         if let subDirCookieFile = subDirCookieFile {
