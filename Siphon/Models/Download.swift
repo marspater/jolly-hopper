@@ -988,6 +988,17 @@ enum ConversionCodec: String, Codable, CaseIterable, Identifiable {
         case .av1: return "Convert to AV1"
         }
     }
+
+    /// ffprobe's `codec_name` for the target codec.
+    var ffprobeCodecName: String? {
+        switch self {
+        case .none: return nil
+        case .h264: return "h264"
+        case .h265: return "hevc"
+        case .vp9: return "vp9"
+        case .av1: return "av1"
+        }
+    }
 }
 
 enum AudioCodec: String, Codable, CaseIterable, Identifiable {
