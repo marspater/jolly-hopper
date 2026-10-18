@@ -711,6 +711,39 @@ final class DownloadExecutorTests: XCTestCase {
         XCTAssertTrue(download.ownedOutputFiles.isEmpty)
     }
 
+    /// Stop then Retry clears ownership while the stopped attempt still unwinds;
+    /// that attempt must not claim its possibly broken file afterwards.
+    func testStoppedAttemptDoesNotClaimItsFinishedOutput() async throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let output = folder.appendingPathComponent("Post Fixture.mp4")
+
+        let hook = PauseHook()
+        let delegate = TestExecutorDelegate()
+        let service = YtdlpService(processRunner: PausingRunner(hook: hook, output: output))
+        service.ytdlpPath = URL(fileURLWithPath: "/usr/local/bin/yt-dlp")
+        let executor = DownloadExecutor(ytdlpService: service, delegate: delegate)
+        let queue = DownloadQueue()
+        var options = DownloadOptions.default
+        options.saveFolder = folder
+        options.embedThumbnail = false
+        let download = Download(url: "https://example.com/post", options: options)
+        hook.pause = { executor.stopDownload(download, queue: queue, suppressNotification: true, skipSaveAndBroadcast: true) }
+
+        download.status = .queued
+        XCTAssertTrue(queue.reserveSlot(for: download.id))
+        executor.startDownloadTask(download, queue: queue, ytdlpVersion: "test", languageService: LanguageService())
+        for _ in 0..<300 where hook.runs == 0 || executor.executionState(for: download.id) != .idle {
+            try await Task.sleep(nanoseconds: 10_000_000)
+        }
+        XCTAssertEqual(hook.runs, 1)
+        XCTAssertEqual(executor.executionState(for: download.id), .idle)
+        XCTAssertEqual(download.status, .stopped)
+        XCTAssertTrue(download.ownedOutputFiles.isEmpty, "A stopped attempt must not claim its output")
+        withExtendedLifetime(delegate) {}
+    }
+
     private final class PauseHook: @unchecked Sendable {
         var pause: (@MainActor @Sendable () -> Void)?
         var runs = 0
