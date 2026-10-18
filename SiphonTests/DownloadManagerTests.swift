@@ -783,11 +783,15 @@ final class DownloadManagerTests: XCTestCase {
         let dlQueued = Download(url: "https://example.com/4", options: .default)
         dlQueued.status = .queued
 
-        manager.downloads = [dlCompleted, dlFailed, dlStopped, dlQueued]
+        // A name collision still needs the user's choice; retention keeps it too.
+        let dlExists = Download(url: "https://example.com/5", options: .default)
+        dlExists.status = .fileExists
+
+        manager.downloads = [dlCompleted, dlFailed, dlStopped, dlQueued, dlExists]
         manager.clearHistory()
 
-        XCTAssertEqual(manager.downloads.count, 1)
-        XCTAssertEqual(manager.downloads.first?.id, dlQueued.id)
+        XCTAssertEqual(manager.downloads.map(\.id), [dlQueued.id, dlExists.id])
+        XCTAssertEqual(manager.history.map(\.id), [dlExists.id])
         XCTAssertEqual(manager.completedDownloads.count, 0)
         XCTAssertEqual(manager.failedDownloads.count, 0)
     }

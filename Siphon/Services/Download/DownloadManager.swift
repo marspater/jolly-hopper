@@ -632,16 +632,17 @@ class DownloadManager: ObservableObject {
     }
 
     func clearHistory() {
-        // Paused downloads are live resumable jobs, not disposable history.
-        // Keep a sanitized persistence record for them while clearing terminal entries.
+        // Paused jobs are resumable and .fileExists jobs await the user's choice,
+        // matching history retention. Keep a sanitized record for them.
+        let kept: Set<DownloadStatus> = [.paused, .fileExists]
         history = downloads
-            .filter { $0.status == .paused }
+            .filter { kept.contains($0.status) }
             .map { HistoricDownload(download: $0) }
         historyStore.saveHistory(history)
 
         downloads.removeAll {
             switch $0.status {
-            case .completed, .failed, .stopped, .fileExists:
+            case .completed, .failed, .stopped:
                 return true
             default:
                 return false

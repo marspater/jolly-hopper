@@ -92,4 +92,5 @@ jobs:
         run: node scripts/test_capture_original_mp4.js
 
       - name: Check shell script syntax
-        run: bash -n scripts/verify_bundle.sh scripts/build_and_run.sh
+        # bash -n checks only its first file; the rest become arguments.
+        run: for script in scripts/verify_bundle.sh scripts/build_and_run.sh scripts/fetch_pinned_ffmpeg.sh; do bash -n "$script"; done
