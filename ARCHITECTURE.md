@@ -88,7 +88,7 @@ Raw cookies are never accepted through the custom URL. Browser source identifier
 
 ### App update trust
 
-Releases newer than `UpdateChecker.lastUnsignedRelease` must carry `release-manifest.json` and `release-manifest.json.sig`, signed offline with the Ed25519 key whose public half is pinned in `UpdateManifestVerifier`. Create both with `swift scripts/sign-release-manifest.swift sign <key> <version> <assets>` and upload them with the release assets; a release without them is refused rather than verified by checksum alone.
+Releases newer than `UpdateChecker.lastUnsignedRelease` must carry `release-manifest.json` and `release-manifest.json.sig`, signed offline with the Ed25519 key whose public half is pinned in `UpdateManifestVerifier`. Create both with `swift scripts/sign-release-manifest.swift sign <key> <version> <assets>` and upload them with the release assets; a release without them is refused rather than verified by checksum alone. Installer assets are named `Siphon-v<version>.dmg` and `Siphon-v<version>.zip` (optionally with an architecture suffix; see `UpdateChecker.installerAsset`), and the Homebrew cask is built from the DMG. Each `Title: description` line of the GitHub release body becomes a What's New card, so keep other lines free of colons or link to `CHANGELOG.md` instead.
 
 ### App update installation
 

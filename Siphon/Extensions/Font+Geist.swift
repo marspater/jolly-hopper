@@ -4,9 +4,9 @@ import CoreText
 
 extension Font {
     private static let geistSansFontNames: [Font.Weight: String] = [
-        .black: "Geist-Black",
         .bold: "Geist-Bold",
         .heavy: "Geist-Bold",
+        .black: "Geist-Bold",
         .semibold: "Geist-SemiBold",
         .medium: "Geist-Medium"
     ]
@@ -40,7 +40,6 @@ extension Font {
     public static var siphonMicro: Font { .geist(10, weight: .regular, relativeTo: .caption2) }
     public static var siphonMicroMedium: Font { .geist(10, weight: .medium, relativeTo: .caption2) }
     public static var siphonMicroSemibold: Font { .geist(10, weight: .semibold, relativeTo: .caption2) }
-    public static var siphonMicroMono: Font { .geistMono(10, weight: .regular, relativeTo: .caption2) }
     public static var siphonMicroMonoMedium: Font { .geistMono(10, weight: .medium, relativeTo: .caption2) }
     public static var siphonMicroMonoSemibold: Font { .geistMono(10, weight: .semibold, relativeTo: .caption2) }
 
@@ -87,7 +86,6 @@ public struct GeistFontRegistrar {
         "Geist-Medium.otf",
         "Geist-SemiBold.otf",
         "Geist-Bold.otf",
-        "Geist-Black.otf",
         "GeistMono-Regular.otf",
         "GeistMono-Medium.otf",
         "GeistMono-SemiBold.otf",

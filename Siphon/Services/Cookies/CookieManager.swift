@@ -5,22 +5,15 @@
 
 import Foundation
 
-/// Actor coordinator for cookie file storage and orphaned file sweeps.
-/// Does not strongly retain cookie file instances to prevent accidental lifetime extension.
-public actor CookieManager {
-    public static let shared = CookieManager()
-
-    public init() {
-        // Intentionally empty initializer for actor instantiation (swift:S1186)
-    }
-
-    private nonisolated static func log(_ message: String, level: LoggerService.LogLevel) {
+/// Cookie temp-directory storage and orphaned file sweeps.
+public enum CookieManager {
+    private static func log(_ message: String, level: LoggerService.LogLevel) {
         Task { @MainActor in
             LoggerService.shared.log(message, level: level)
         }
     }
 
-    private nonisolated static var rootDirectory: URL {
+    private static var rootDirectory: URL {
         FileManager.default.temporaryDirectory.appendingPathComponent("siphon_cookies")
     }
 
@@ -28,12 +21,12 @@ public actor CookieManager {
     /// The app is unsandboxed, so every Siphon process of this user (installed and dev
     /// builds, other bundle IDs, the test host) shares $TMPDIR. Each process writes only
     /// into its own session directory, so another instance's purge cannot delete its files.
-    public nonisolated static func getSecureTempCookiesDirectory() -> URL? {
+    public static func getSecureTempCookiesDirectory() -> URL? {
         guard let root = secureDirectory(rootDirectory) else { return nil }
         return secureDirectory(root.appendingPathComponent("session-\(getpid())"))
     }
 
-    private nonisolated static func secureDirectory(_ cookiesDir: URL) -> URL? {
+    private static func secureDirectory(_ cookiesDir: URL) -> URL? {
         let path = cookiesDir.path
         let fileManager = FileManager.default
 
@@ -70,48 +63,38 @@ public actor CookieManager {
         }
     }
 
-    /// Creates and returns an isolated SecureCookieFile.
-    public func createSecureCookieFile(
-        url: String,
-        rawCookies: String? = nil,
-        additionalCookies: [(name: String, value: String)] = [],
-        additionalNetscapeLines: [String] = []
-    ) throws -> SecureCookieFile {
-        return try SecureCookieFile.create(
-            url: url,
-            rawCookies: rawCookies,
-            additionalCookies: additionalCookies,
-            additionalNetscapeLines: additionalNetscapeLines
-        )
+    /// Sweeps cookie files left behind by crashed or killed Siphon processes. Runs at launch.
+    /// Only Siphon's own session directories are touched: loose files in the shared temporary
+    /// directory may belong to another running instance, and macOS clears those itself.
+    public static func purgeOrphanedTempCookieFiles() {
+        // At launch, this process's directory can only hold files of a dead process with the same PID.
+        if let own = getSecureTempCookiesDirectory() {
+            purgeCookieFiles(in: own)
+        }
+        if let root = secureDirectory(rootDirectory) {
+            purgeDeadSessions(in: root)
+        }
     }
 
-    /// Sweeps and removes any orphaned temporary cookie files left behind from crashes or SIGKILL.
-    public nonisolated static func purgeOrphanedTempCookieFiles() {
-        let fileManager = FileManager.default
-        let root = secureDirectory(rootDirectory)
-        let tempDirsToClean: [URL] = [
-            FileManager.default.temporaryDirectory,
-            root,
-            getSecureTempCookiesDirectory()
-        ].compactMap { $0 }
+    private static let orphanedCookieFilePrefixes = ["siphon_consolidated_cookies_", "siphon_cookies_", "siphon_header_cookies_"]
 
-        for dir in tempDirsToClean {
-            guard let files = try? fileManager.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil) else { continue }
-            for file in files {
-                let name = file.lastPathComponent
-                if name.hasPrefix("siphon_consolidated_cookies_") || name.hasPrefix("siphon_cookies_") || name.hasPrefix("siphon_header_cookies_") {
-                    do {
-                        try fileManager.removeItem(at: file)
-                    } catch {
-                        log("Failed to remove orphaned temporary cookie file: \(error.localizedDescription)", level: .warning)
-                    }
-                }
+    private static func purgeCookieFiles(in dir: URL) {
+        let fileManager = FileManager.default
+        guard let files = try? fileManager.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil) else { return }
+        for file in files where orphanedCookieFilePrefixes.contains(where: { file.lastPathComponent.hasPrefix($0) }) {
+            do {
+                try fileManager.removeItem(at: file)
+            } catch {
+                log("Failed to remove orphaned temporary cookie file: \(error.localizedDescription)", level: .warning)
             }
         }
+    }
 
-        // Sessions of Siphon processes that are gone (crash, SIGKILL). A live one belongs
-        // to another running instance and is left alone.
-        guard let root, let sessions = try? fileManager.contentsOfDirectory(at: root, includingPropertiesForKeys: nil) else { return }
+    /// Sessions of Siphon processes that are gone (crash, SIGKILL). A live one belongs
+    /// to another running instance and is left alone.
+    static func purgeDeadSessions(in root: URL) {
+        let fileManager = FileManager.default
+        guard let sessions = try? fileManager.contentsOfDirectory(at: root, includingPropertiesForKeys: nil) else { return }
         for session in sessions {
             let name = session.lastPathComponent
             guard name.hasPrefix("session-"), let pid = pid_t(name.dropFirst("session-".count)),
@@ -125,10 +108,5 @@ public actor CookieManager {
                 log("Failed to remove orphaned cookie session directory: \(error.localizedDescription)", level: .warning)
             }
         }
-    }
-
-    /// Convenience instance method for purging orphaned files.
-    public func purgeOrphanedFiles() {
-        Self.purgeOrphanedTempCookieFiles()
     }
 }

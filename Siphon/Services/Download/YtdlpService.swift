@@ -7819,26 +7819,6 @@ public struct DownloadResult: Sendable {
                     .replacingOccurrences(of: "\0", with: "")
     }
 
-    func createTempCookiesFile(url: String, cookieName: String, cookieValue: String) -> URL? {
-        guard let cookiesDir = CookieManager.getSecureTempCookiesDirectory() else { return nil }
-        let tempCookiesURL = cookiesDir.appendingPathComponent("siphon_cookies_\(UUID().uuidString).txt")
-        let host = sanitizeCookieToken(URL(string: url)?.host ?? "")
-        guard !host.isEmpty else { return nil }
-        let cleanName = sanitizeCookieToken(cookieName)
-        let cleanValue = sanitizeCookieToken(cookieValue)
-        guard !cleanName.isEmpty, !cleanValue.isEmpty else { return nil }
-        let cookieContent = "# Netscape HTTP Cookie File\n\(host)\tFALSE\t/\tFALSE\t2783382923\t\(cleanName)\t\(cleanValue)\n"
-        guard let data = cookieContent.data(using: .utf8) else { return nil }
-
-        // Create file with 0o600 permissions upfront to prevent TOCTOU permission window
-        if FileManager.default.createFile(atPath: tempCookiesURL.path, contents: data, attributes: [.posixPermissions: 0o600]) {
-            return tempCookiesURL
-        } else {
-            LoggerService.shared.log("Error creating temporary cookies file with restricted permissions", level: .error)
-            return nil
-        }
-    }
-
     func createTempCookiesFileFromHeader(url: String, cookieHeader: String) -> URL? {
         guard let urlObj = URL(string: url), let rawHost = urlObj.host, !rawHost.isEmpty else { return nil }
         let host = sanitizeCookieToken(rawHost)
@@ -7883,21 +7863,6 @@ public struct DownloadResult: Sendable {
         } else {
             return nil
         }
-    }
-
-    func createConsolidatedCookiesFile(
-        url: String,
-        rawCookies: String? = nil,
-        additionalCookies: [(name: String, value: String)] = [],
-        additionalNetscapeLines: [String] = []
-    ) -> URL? {
-        guard let secureFile = try? SecureCookieFile.create(
-            url: url,
-            rawCookies: rawCookies,
-            additionalCookies: additionalCookies,
-            additionalNetscapeLines: additionalNetscapeLines
-        ) else { return nil }
-        return secureFile.detach()
     }
 }
 
@@ -7947,23 +7912,6 @@ enum YtdlpError: LocalizedError {
         case .securityViolation(let message):
             return "Security violation: \(message)"
         }
-    }
-}
-
-final class CancellationBox: @unchecked Sendable {
-    private var cancelled = false
-    private let lock = NSLock()
-
-    var isCancelled: Bool {
-        lock.lock()
-        defer { lock.unlock() }
-        return cancelled
-    }
-
-    func cancel() {
-        lock.lock()
-        cancelled = true
-        lock.unlock()
     }
 }
 
@@ -8072,10 +8020,6 @@ final class ThreadSafeOutputState: @unchecked Sendable {
     private var candidatePaths: [String] = []
     private var errorText: String = ""
     private let lock = NSLock()
-
-    func setFinalPath(_ path: String) {
-        addFinalPath(path)
-    }
 
     func addFinalPath(_ path: String) {
         let cleaned = path.trimmingCharacters(in: .whitespacesAndNewlines)

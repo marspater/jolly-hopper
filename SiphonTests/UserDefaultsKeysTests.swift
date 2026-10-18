@@ -48,9 +48,16 @@ final class UserDefaultsKeysTests: XCTestCase {
 
 final class GeistFontRegistrarTests: XCTestCase {
     func testFontFilesList() {
-        XCTAssertEqual(GeistFontRegistrar.fontFiles.count, 9)
+        XCTAssertEqual(GeistFontRegistrar.fontFiles.count, 8)
         XCTAssertTrue(GeistFontRegistrar.fontFiles.contains("Geist-Regular.otf"))
         XCTAssertTrue(GeistFontRegistrar.fontFiles.contains("GeistMono-Regular.otf"))
+        XCTAssertFalse(GeistFontRegistrar.fontFiles.contains("Geist-Black.otf"), "The black weight maps to Geist Bold")
+    }
+
+    func testEveryRegisteredFontIsBundled() {
+        for file in GeistFontRegistrar.fontFiles {
+            XCTAssertNotNil(GeistFontRegistrar.locateResource(for: file, in: .main), "\(file) must ship in the app bundle")
+        }
     }
 
     func testLocateResourceNonExistent() {
