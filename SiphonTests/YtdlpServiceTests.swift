@@ -6092,9 +6092,23 @@ final class YtdlpServiceTests: XCTestCase {
         let probe = try XCTUnwrap(commands.value.first { $0.first?.hasSuffix("ffprobe") == true })
         XCTAssertEqual(probe.last, source.path)
         let remux = try XCTUnwrap(commands.value.first { $0.first?.hasSuffix("ffmpeg") == true })
-        XCTAssertFalse(remux.contains("-c:v"), "Matching codec must be stream-copied, not re-encoded")
+        XCTAssertEqual(remux.filter { $0 == "-c:v" }.count, 1)
+        XCTAssertEqual(remux[try XCTUnwrap(remux.firstIndex(of: "-c:v")) + 1], "copy",
+                       "Matching codec must be stream-copied, not re-encoded")
         XCTAssertTrue(remux.contains("hvc1"), "MP4 HEVC keeps the hvc1 tag for Apple players")
         XCTAssertEqual(try String(contentsOf: source, encoding: .utf8), "remuxed")
+
+        // A failed probe falls back to the normal encode.
+        commands.value = []
+        service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
+            commands.value.append(args)
+            if args.first?.hasSuffix("ffprobe") == true { throw CocoaError(.fileReadCorruptFile) }
+            try Data("encoded".utf8).write(to: URL(fileURLWithPath: try XCTUnwrap(args.last)))
+            return ""
+        })
+        _ = try await service.postprocessDownloadedMedia(at: source, options: options, ffmpegDir: root.path)
+        let encode = try XCTUnwrap(commands.value.first { $0.first?.hasSuffix("ffmpeg") == true })
+        XCTAssertNotEqual(encode[try XCTUnwrap(encode.lastIndex(of: "-c:v")) + 1], "copy")
 
         // Tone mapping needs a real encode even when the codec already matches.
         commands.value = []

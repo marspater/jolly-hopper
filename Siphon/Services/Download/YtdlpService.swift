@@ -2605,6 +2605,7 @@ public struct DownloadResult: Sendable {
                 if try await sourceVideoAlreadyMatchesConversion(source, options: options, ffmpegDir: ffmpegDir,
                                                                  processController: processController) {
                     // Re-encoding a stream already in the target codec only costs a lossy generation.
+                    args += ["-c:v", "copy"]
                     if options.conversionCodec == .h265 && targetExtension == "mp4" { args += ["-tag:v", "hvc1"] }
                 } else {
                     args += Self.videoConversionArguments(options: options)
