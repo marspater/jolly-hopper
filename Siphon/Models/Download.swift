@@ -883,20 +883,6 @@ enum VideoResolution: String, Codable, CaseIterable, Identifiable {
         }
     }
 
-    var ytdlpCombinedValue: String {
-        switch self {
-        case .best: return "bestvideo*+bestaudio/best"
-        case .r2160p: return "bestvideo*[height<=2160]+bestaudio/best[height<=2160]/best"
-        case .r1440p: return "bestvideo*[height<=1440]+bestaudio/best[height<=1440]/best"
-        case .r1080p: return "bestvideo*[height<=1080]+bestaudio/best[height<=1080]/best"
-        case .r720p: return "bestvideo*[height<=720]+bestaudio/best[height<=720]/best"
-        case .r480p: return "bestvideo*[height<=480]+bestaudio/best[height<=480]/best"
-        case .r360p: return "bestvideo*[height<=360]+bestaudio/best[height<=360]/best"
-        case .r240p: return "bestvideo*[height<=240]+bestaudio/best[height<=240]/best"
-        case .worst: return "worstvideo*+worstaudio/worst"
-        }
-    }
-
     var maxHeight: Int? {
         switch self {
         case .r2160p: return 2160
@@ -957,16 +943,6 @@ enum VideoCodec: String, Codable, CaseIterable, Identifiable {
         case .h265: return "[vcodec~='^(hev1|hvc1)']"
         case .vp9: return "[vcodec^=vp9]"
         case .av1: return "[vcodec^=av01]"
-        }
-    }
-
-    var compatibilityNote: String? {
-        switch self {
-        case .h264: return "Best compatibility with all devices"
-        case .h265: return "Good compression, limited browser support"
-        case .vp9: return "Good for 1440p+, wide support"
-        case .av1: return "Best compression, requires modern hardware"
-        case .auto: return nil
         }
     }
 }

@@ -5,22 +5,15 @@
 
 import Foundation
 
-/// Actor coordinator for cookie file storage and orphaned file sweeps.
-/// Does not strongly retain cookie file instances to prevent accidental lifetime extension.
-public actor CookieManager {
-    public static let shared = CookieManager()
-
-    public init() {
-        // Intentionally empty initializer for actor instantiation (swift:S1186)
-    }
-
-    private nonisolated static func log(_ message: String, level: LoggerService.LogLevel) {
+/// Cookie temp-directory storage and orphaned file sweeps.
+public enum CookieManager {
+    private static func log(_ message: String, level: LoggerService.LogLevel) {
         Task { @MainActor in
             LoggerService.shared.log(message, level: level)
         }
     }
 
-    private nonisolated static var rootDirectory: URL {
+    private static var rootDirectory: URL {
         FileManager.default.temporaryDirectory.appendingPathComponent("siphon_cookies")
     }
 
@@ -28,12 +21,12 @@ public actor CookieManager {
     /// The app is unsandboxed, so every Siphon process of this user (installed and dev
     /// builds, other bundle IDs, the test host) shares $TMPDIR. Each process writes only
     /// into its own session directory, so another instance's purge cannot delete its files.
-    public nonisolated static func getSecureTempCookiesDirectory() -> URL? {
+    public static func getSecureTempCookiesDirectory() -> URL? {
         guard let root = secureDirectory(rootDirectory) else { return nil }
         return secureDirectory(root.appendingPathComponent("session-\(getpid())"))
     }
 
-    private nonisolated static func secureDirectory(_ cookiesDir: URL) -> URL? {
+    private static func secureDirectory(_ cookiesDir: URL) -> URL? {
         let path = cookiesDir.path
         let fileManager = FileManager.default
 
@@ -70,23 +63,8 @@ public actor CookieManager {
         }
     }
 
-    /// Creates and returns an isolated SecureCookieFile.
-    public func createSecureCookieFile(
-        url: String,
-        rawCookies: String? = nil,
-        additionalCookies: [(name: String, value: String)] = [],
-        additionalNetscapeLines: [String] = []
-    ) throws -> SecureCookieFile {
-        return try SecureCookieFile.create(
-            url: url,
-            rawCookies: rawCookies,
-            additionalCookies: additionalCookies,
-            additionalNetscapeLines: additionalNetscapeLines
-        )
-    }
-
     /// Sweeps and removes any orphaned temporary cookie files left behind from crashes or SIGKILL.
-    public nonisolated static func purgeOrphanedTempCookieFiles() {
+    public static func purgeOrphanedTempCookieFiles() {
         let fileManager = FileManager.default
         let root = secureDirectory(rootDirectory)
         let tempDirsToClean: [URL] = [
@@ -125,10 +103,5 @@ public actor CookieManager {
                 log("Failed to remove orphaned cookie session directory: \(error.localizedDescription)", level: .warning)
             }
         }
-    }
-
-    /// Convenience instance method for purging orphaned files.
-    public func purgeOrphanedFiles() {
-        Self.purgeOrphanedTempCookieFiles()
     }
 }
