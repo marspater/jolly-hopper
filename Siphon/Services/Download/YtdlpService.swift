@@ -2601,7 +2601,15 @@ public struct DownloadResult: Sendable {
             case "webm": args += ["-c:s", "webvtt"]
             default: args += ["-c:s", "mov_text"]
             }
-            if needsRecode { args += Self.videoConversionArguments(options: options) }
+            if needsRecode {
+                if try await sourceVideoAlreadyMatchesConversion(source, options: options, ffmpegDir: ffmpegDir,
+                                                                 processController: processController) {
+                    // Re-encoding a stream already in the target codec only costs a lossy generation.
+                    if options.conversionCodec == .h265 && targetExtension == "mp4" { args += ["-tag:v", "hvc1"] }
+                } else {
+                    args += Self.videoConversionArguments(options: options)
+                }
+            }
         }
         args.append(partial.path)
         _ = try await processRunner.runCommand(args, processController: processController)
@@ -2623,6 +2631,35 @@ public struct DownloadResult: Sendable {
             catch { LoggerService.shared.log("Could not remove the source after conversion: \(error.localizedDescription)", level: .warning) }
         }
         return destination
+    }
+
+    /// True when the first video stream already uses the requested conversion codec and
+    /// no tone mapping is needed, so the video can be stream-copied instead of re-encoded.
+    private func sourceVideoAlreadyMatchesConversion(_ source: URL, options: DownloadOptions, ffmpegDir: String,
+                                                     processController: DownloadProcessController?) async throws -> Bool {
+        guard options.hdrAction != .convertToSDR else { return false }
+        let expected: String
+        switch options.conversionCodec ?? .none {
+        case .none: return false
+        case .h264: expected = "h264"
+        case .h265: expected = "hevc"
+        case .vp9: expected = "vp9"
+        case .av1: expected = "av1"
+        }
+        let ffprobe = URL(fileURLWithPath: ffmpegDir).appendingPathComponent("ffprobe")
+        do {
+            let output = try await processRunner.runCommand([
+                ffprobe.path, "-v", "error", "-select_streams", "V:0", "-show_entries", "stream=codec_name",
+                "-of", "csv=p=0", source.path
+            ], processController: processController)
+            return output.trimmingCharacters(in: .whitespacesAndNewlines) == expected
+        } catch {
+            if error is CancellationError { throw error }
+            try Task.checkCancellation()
+            guard processController?.isCancelled != true else { throw CancellationError() }
+            LoggerService.shared.log("Codec probe failed, converting anyway: \(error.localizedDescription)", level: .warning)
+            return false
+        }
     }
 
     func validateDownloadedMedia(mediaFile: URL, ffmpegDir: String,
