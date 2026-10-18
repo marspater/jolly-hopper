@@ -241,6 +241,35 @@ final class QueueRecoveryStoreTests: XCTestCase {
         }
     }
 
+    /// Escape answers an alert with its cancel button. Here that must be "Later",
+    /// which keeps the interrupted jobs and their partial data for next launch.
+    func testEscapeOnRecoveryAlertPostponesInsteadOfDiscarding() throws {
+        let scratch = ScratchDirectoryPolicy.makeURL()
+        try FileManager.default.createDirectory(at: scratch, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: scratch) }
+        let dl = Download(url: "https://example.com/later", options: .default, title: "Later Download")
+        dl.status = .downloading
+        dl.scratchDirectory = scratch
+        QueueRecoveryStore(fileURL: recoveryFileURL).persist(activeJobs: [dl])
+
+        let manager = DownloadManager(recoveryFileURL: recoveryFileURL)
+        manager.initialize(languageService: LanguageService())
+        XCTAssertTrue(manager.showQueueRecoveryAlert)
+        manager.showQueueRecoveryAlert = false // what the alert's cancel button does
+        manager.shutdown()
+
+        XCTAssertEqual(QueueRecoveryStore(fileURL: recoveryFileURL).loadInterruptedJobs().map(\.id), [dl.id])
+        XCTAssertTrue(FileManager.default.fileExists(atPath: scratch.path))
+
+        let contentView = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("Siphon/Views/ContentView.swift")
+        guard let source = try? String(contentsOf: contentView, encoding: .utf8) else {
+            throw XCTSkip("Siphon sources are not available next to the test bundle")
+        }
+        let discardLine = try XCTUnwrap(source.components(separatedBy: "\n").first { $0.contains("\"queue_recovery_discard\"") })
+        XCTAssertFalse(discardLine.contains("role: .cancel"), "Escape must never discard interrupted jobs")
+    }
+
     func testDownloadManagerDiscardRecovery() async throws {
         let store = QueueRecoveryStore(fileURL: recoveryFileURL)
         let dl = Download(url: "https://example.com/discard", options: .default, title: "Discard Download")

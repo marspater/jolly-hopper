@@ -129,25 +129,17 @@ actor DependencyInstaller {
             throw InstallError.executionFailed(binary: "yt-dlp", message: error.localizedDescription)
         }
 
-        // 4. Atomic Replace
-        let backupDest = destination.deletingLastPathComponent().appendingPathComponent("yt-dlp.backup_\(UUID().uuidString)")
-        let hadOld = FileManager.default.fileExists(atPath: destination.path)
-        if hadOld {
-            try FileManager.default.moveItem(at: destination, to: backupDest)
-        }
-
+        // 4. Atomic replace: a crash leaves the old or the new binary, never neither.
         do {
-            try FileManager.default.moveItem(at: tempStaging, to: destination)
-            installedSuccessfully = true
-            if hadOld {
-                try? FileManager.default.removeItem(at: backupDest)
+            if FileManager.default.fileExists(atPath: destination.path) {
+                _ = try FileManager.default.replaceItemAt(destination, withItemAt: tempStaging, options: .usingNewMetadataOnly)
+            } else {
+                try FileManager.default.moveItem(at: tempStaging, to: destination)
             }
+            installedSuccessfully = true
             onProgress?(0.9)
             return destination
         } catch {
-            if hadOld && !FileManager.default.fileExists(atPath: destination.path) {
-                try? FileManager.default.moveItem(at: backupDest, to: destination)
-            }
             throw InstallError.installationFailed(destination: destination.path, underlyingError: error)
         }
     }
@@ -952,11 +944,18 @@ class YtdlpService: ObservableObject {
         }
     }
 
-    private func isPlaylistURL(_ urlString: String) -> Bool {
+    nonisolated static func isPlaylistURL(_ urlString: String) -> Bool {
         guard let components = URLComponents(string: urlString) else {
             return (urlString.contains("list=") || urlString.contains("/playlist/")) && !urlString.contains("/videos/")
         }
         let path = components.path.lowercased()
+        // A video opened from a playlist (`youtu.be/ID?list=…`, `/shorts/ID?list=…`)
+        // downloads only that video (`--no-playlist`), so preview it as one.
+        let host = components.host?.lowercased() ?? ""
+        let firstSegment = path.split(separator: "/").first.map(String.init) ?? ""
+        if host == "youtu.be" || ["shorts", "embed", "live"].contains(firstSegment) {
+            return false
+        }
         if path.contains("/playlist") || path.contains("/sets/") || path.contains("/album/") {
             return !path.contains("/videos/")
         }
@@ -1003,7 +1002,7 @@ class YtdlpService: ObservableObject {
         let normalizedURL = normalizeURLForYtdlp(url)
         // Try the flat summary first: --dump-json on a playlist URL fully extracts
         // every entry (about 1.4 s per YouTube video) before failing to decode.
-        if isPlaylistURL(normalizedURL) {
+        if Self.isPlaylistURL(normalizedURL) {
             do {
                 return try await fetchPlaylistSummaryInfo(
                     path: path.path,
@@ -2334,23 +2333,25 @@ public struct DownloadResult: Sendable {
                 }
 
                 // Strategy 4: YouTube 403 / bot challenge -> Inject browser cookies
-                if !errText.isEmpty, (normalizedURL.contains("youtube.com") || normalizedURL.contains("youtu.be")),
-                   (errText.contains("403") || errText.contains("Sign in") || errText.contains("bot") || errText.contains("login_required")),
+                // The bot check itself arrives as .cloudflareBlocked, which has no text.
+                let isYouTubeChallenge: Bool = {
+                    if case .cloudflareBlocked = error { return true }
+                    return errText.contains("403") || errText.contains("Sign in") ||
+                        DefaultYtdlpProcessRunner.mentionsBot(errText) || errText.contains("login_required")
+                }()
+                if isYouTubeChallenge, (normalizedURL.contains("youtube.com") || normalizedURL.contains("youtu.be")),
                    !currentArgs.contains("--cookies-from-browser"),
                    let browser = Self.validatedBrowserCookieSource(options.browserCookieSource) ?? configuredBrowserCookieSource(),
                    !triedStrategies.contains(.injectBrowserCookies(browser: browser)) {
                     triedStrategies.insert(.injectBrowserCookies(browser: browser))
-                    LoggerService.shared.log("YouTube 403 / bot challenge encountered. Retrying download with browser cookies from \(browser)...", level: .warning)
-                    onOutput("[Siphon Info] YouTube authentication required. Retrying download with browser cookies from \(browser)...\n")
                     var cookieArgs = currentArgs
-                    _ = appendCookieArgs(
-                        for: normalizedURL,
-                        to: &cookieArgs,
-                        force: true,
-                        browserOverride: options.browserCookieSource
-                    )
-                    currentArgs = cookieArgs
-                    continue
+                    // A browser denied earlier adds nothing; rerunning the same command would only fail again.
+                    if appendCookieArgs(for: normalizedURL, to: &cookieArgs, force: true, browserOverride: options.browserCookieSource) {
+                        LoggerService.shared.log("YouTube 403 / bot challenge encountered. Retrying download with browser cookies from \(browser)...", level: .warning)
+                        onOutput("[Siphon Info] YouTube authentication required. Retrying download with browser cookies from \(browser)...\n")
+                        currentArgs = cookieArgs
+                        continue
+                    }
                 }
 
                 // Strategy 5: Transient CDN connection refusal / server error -> Retry with fresh connection
@@ -2888,6 +2889,8 @@ public struct DownloadResult: Sendable {
             let selector: String
             if isSynthesizedDirectStream {
                 selector = "b/best"
+            } else if options.videoResolution == .worst {
+                selector = "worstvideo*+bestaudio/worst"
             } else if let h = maxH {
                 if options.resolutionFallbackPolicy == .allowHigher {
                     selector = "bestvideo[height<=\(h)]+bestaudio/best[height<=\(h)]/bestvideo[height>\(h)]+bestaudio/best[height>\(h)]/best"
@@ -8039,7 +8042,7 @@ public struct DownloadResult: Sendable {
     func egressProxyURL() async throws -> String {
         do {
             let port = try await EgressProxyServer.shared.start()
-            return "http://127.0.0.1:\(port)"
+            return EgressProxyServer.shared.proxyURL(port: port)
         } catch {
             LoggerService.shared.log("Egress proxy failed to start; refusing to contact external target directly: \(error.localizedDescription)", level: .error)
             throw error

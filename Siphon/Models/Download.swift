@@ -40,6 +40,10 @@ class Download: ObservableObject, Identifiable {
     @Published var speed: String?
     @Published var eta: String?
     @Published var filePaths: [URL] = []
+    /// Files this job's own attempt finished in its save folder, with their
+    /// file system numbers. Memory only: after a relaunch, or once the file is
+    /// replaced, a file with the same name is a collision again.
+    var ownedOutputFiles: [URL: Int] = [:]
     var hasPlayableOutput: Bool {
         !filePaths.isEmpty && (status == .completed || (status == .failed && hasPartialFailure))
     }
@@ -1540,6 +1544,18 @@ struct MediaInfo: Codable {
     }
 
     private func rankCandidateVideos(_ candidateVideos: [MediaFormat], options: DownloadOptions) -> [MediaFormat] {
+        if options.videoResolution == .worst {
+            // Lowest known height first (unknown heights last), then lowest bitrate;
+            // a requested codec still wins.
+            return candidateVideos.sorted { first, second in
+                let firstRank = first.videoRank(options: options)
+                let secondRank = second.videoRank(options: options)
+                if firstRank.matchesCodec != secondRank.matchesCodec { return firstRank.matchesCodec }
+                if (first.parsedHeight == nil) != (second.parsedHeight == nil) { return first.parsedHeight != nil }
+                if firstRank.height != secondRank.height { return firstRank.height < secondRank.height }
+                return firstRank.bitrate < secondRank.bitrate
+            }
+        }
         let eligibleVideos = candidateVideos.filter { video in
             guard let maxH = options.videoResolution?.maxHeight else { return true }
             if let h = video.parsedHeight {

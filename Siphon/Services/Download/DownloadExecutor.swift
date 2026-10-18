@@ -113,6 +113,12 @@ extension URLSession {
         delegate: (any URLSessionTaskDelegate)? = nil,
         limit: Int = 8 * 1024 * 1024
     ) async throws -> (Data, URLResponse) {
+        var request = request
+        if request.url?.scheme?.lowercased() == "http", configuration.connectionProxyDictionary != nil,
+           let authorization = EgressBoundary.proxyAuthorization {
+            // The proxy strips it before forwarding (hop-by-hop).
+            request.setValue(authorization, forHTTPHeaderField: "Proxy-Authorization")
+        }
         let (bytes, response) = try await self.bytes(for: request, delegate: delegate)
         guard response.expectedContentLength <= limit else { throw URLError(.dataLengthExceedsMaximum) }
         var data = Data()
@@ -311,11 +317,12 @@ final class DownloadExecutor: ObservableObject {
             // per entry by yt-dlp, so the job title says nothing about a collision.
             let options = download.options
             let isPlaylist = info.playlist != nil
+            let ownedFiles = DownloadQueue.ownedOutputKeys(download.ownedOutputFiles, in: folderPath)
             let fileExists = await Task.detached {
                 !isPlaylist && DownloadQueue.mediaFileCollides(
                     baseName: sanitizedBaseName,
                     options: options,
-                    existingMediaFileKeys: DownloadQueue.existingMediaFileKeys(in: folderPath)
+                    existingMediaFileKeys: DownloadQueue.existingMediaFileKeys(in: folderPath).subtracting(ownedFiles)
                 )
             }.value
 
@@ -409,7 +416,14 @@ final class DownloadExecutor: ObservableObject {
                     let safeProgress = progress.isNaN ? 0 : max(0, min(1, progress))
                     coalescer.recordProgress(progress: safeProgress, speed: speed, eta: eta)
                 },
-                onOutput: { line in
+                onOutput: { [weak self, weak download] line in
+                    // Recorded outside the coalescer, whose delivery stops at a pause.
+                    if let file = Self.finishedOutputFile(in: line, saveFolder: folderPath) {
+                        Task { @MainActor in
+                            guard let self, let download else { return }
+                            self.recordFinishedOutput(file, for: download)
+                        }
+                    }
                     coalescer.recordLogLine(line)
                 }
             )
@@ -533,6 +547,26 @@ final class DownloadExecutor: ObservableObject {
         ["[Merger]", "[Fixup", "[ExtractAudio]", "[VideoRemuxer]", "[VideoConvertor]", "[EmbedSubtitle]",
          "[ModifyChapters]", "[Metadata]", "[EmbedThumbnail]", "[SplitChapters]"]
             .contains { line.hasPrefix($0) }
+    }
+
+    /// The file yt-dlp's `after_move` print reports in the save folder. Siphon's
+    /// own post-processing runs after this point. A prefix match: the logged
+    /// `[COMMAND]` line contains the print template too.
+    nonisolated static func finishedOutputFile(in line: String, saveFolder: URL) -> URL? {
+        let marker = "SIPHON_FINAL_PATH:"
+        guard line.hasPrefix(marker) else { return nil }
+        let path = line.dropFirst(marker.count).trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !path.isEmpty else { return nil }
+        return path.hasPrefix("/") ? URL(fileURLWithPath: path) : saveFolder.appendingPathComponent(path)
+    }
+
+    /// Remembers a finished file, and which file it is, so a resume after a
+    /// pause in post-processing treats it as this job's own output (see
+    /// `DownloadQueue.ownedOutputKeys`). This hop is queued on the main actor
+    /// before the attempt's teardown, so no new attempt can start ahead of it.
+    private func recordFinishedOutput(_ file: URL, for download: Download) {
+        guard let number = DownloadQueue.fileNumber(of: file) else { return }
+        download.ownedOutputFiles[file] = number
     }
 
     func stopDownload(
@@ -676,7 +710,7 @@ final class DownloadExecutor: ObservableObject {
             routeSession = EgressBoundary.session
         } else {
             guard let port = try? await EgressProxyServer.shared.start(), !Task.isCancelled else { return nil }
-            routeSession = EgressBoundary.$proxyURL.withValue("http://127.0.0.1:\(port)") { EgressBoundary.session }
+            routeSession = EgressBoundary.$proxyURL.withValue(EgressProxyServer.shared.proxyURL(port: port)) { EgressBoundary.session }
         }
         guard let (data, response) = try? await routeSession.boundedData(
                   for: request,
@@ -741,7 +775,9 @@ final class DownloadExecutor: ObservableObject {
                 return String(format: lang.s("subtitle_download_failed"), details)
             case .downloadFailed(let reason), .commandFailed(let reason):
                 let lower = reason.lowercased()
-                if lower.contains("cloudflare") || lower.contains("cf-chl-") || lower.contains("anti-bot") || lower.contains("captcha") || lower.contains("turnstile") || lower.contains("just a moment...") {
+                if lower.contains("safari") && (lower.contains("full disk access") || lower.contains("operation not permitted") || lower.contains("cookies.binarycookies")) {
+                    return lang.s("safari_fda_required")
+                } else if lower.contains("cloudflare") || lower.contains("cf-chl-") || lower.contains("anti-bot") || lower.contains("captcha") || lower.contains("turnstile") || lower.contains("just a moment...") {
                     return lang.s("cloudflare_blocked")
                 } else if lower.contains("sign in") || lower.contains("private video") || lower.contains("login") || lower.contains("members-only") || lower.contains("403 forbidden") || lower.contains("http error 403") {
                     return lang.s("login_required")
