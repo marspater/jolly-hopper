@@ -1,43 +1,8 @@
 # Changelog
 
-## Unreleased
+## 5.5.0 - 2026-10-18
 
-### Changes
-
-- No SF Pro left in Siphon's own UI. Every window defaults to Geist, and the controls macOS drew in its system font now render Geist too: pop-up menus, bordered buttons, menu buttons and Settings section headers. A unit test fails if any of those patterns return. Menu items, alerts and tooltips keep the system font.
-- Siphon again downloads a pinned, SHA-256-verified yt-dlp: the Siphon fork 2026.10.12.1, which keeps its DRM-format and byte-range download fixes. The user-provided yt-dlp path in Settings is no longer used.
-- Double-clicking a finished download's card, or its row in Recent downloads, plays the video.
-- Cards, fields, pills and buttons inside a window no longer add a second blur over the window's glass, so Dark Mode greys stay clean and scrolling composites less. With Reduce Transparency, windows draw an opaque background.
-- On macOS 26 and later, small glass buttons (Check for Updates, About links, sidebar Settings) use native Liquid Glass with an accent tint on hover. The URL hero card's corners are now concentric with its URL field.
-- Motion is calmer and more consistent: each hover runs one spring, download cards fade their background and border with the lift, pages fade in with a slight rise, and Add Download's details and errors drop gently into place. With Reduce Motion, the logo stops spinning, hover and press no longer scale or lift, and new content only fades.
-- One segmented control style everywhere: the Settings tabs, the Theme and subtitle-output choices, and the Diagnostics tabs now match Add Download's capsule switch. Settings row titles that fell back to SF Pro now use Geist.
-- On Home, an active download's button pauses it instead of stopping it, so partial data is kept; a paused row offers Resume. Diagnostics labels now go through the app's string table.
-- Add Download opens compact and grows as video details, errors or batch input appear. Debug Logs shows one title and uses the window's own close button.
-- Settings buttons (View Debug Logs, yt-dlp, Update Now, Clear All) render Geist instead of SF Pro, and every text field uses Siphon's field style with the accent focus edge. Pop-up menus brighten on hover.
-- Paste and copy confirmations fade in and out, and their icons morph into a checkmark. Clear buttons, the subtitle options, the playlist picker, the Advanced Options chevron and Home's recent rows animate instead of popping.
-- The Home progress ring glides with the liquid fill, and the fill's wave freezes in place while Siphon is in the background instead of jumping. Recent rows use Siphon's progress bar and spinner.
-- In an inactive window the sidebar selection turns grey, as native sidebars do. With Increase Contrast, card, control and field borders get a solid edge.
-- The Diagnostics and download log sheets close with Done or Esc; Return in the log search no longer closes Diagnostics. The What's New sheet uses the window surface instead of a drawn border.
-- The Firefox and Safari extensions ship 16 and 48 pt toolbar icons.
-
-### Security
-
-- Browser-link downloads accept only global unicast IPv6 destinations and reject IPv4-compatible addresses.
-- `codesign` checks pass the binary path after `--`, so a path starting with `-` cannot be read as an option.
-- Temporary cookie files live in a per-process session folder, and a Keychain or decryption failure in one Chromium browser is no longer hidden by another browser with no match.
-
-### Fixes
-
-- Recent on Home stays newest-first when the queue is reordered.
-- Output reservations cover every video container for a file name, and overwrite only exempts the original name.
-- No AppleScript notification fallback after notifications were denied.
-- The egress proxy restarts a listener that died after startup, and process-tree cleanup never signals an already-reaped process.
-- Faster download history loading, and clearer VoiceOver state for disclosure buttons in Add Download.
-- The main and Settings windows keep their titles in the Window menu and Mission Control.
-
-## 5.5.0 - 2026-09-28
-
-Siphon 5.5.0 adds a public-network boundary for browser links, requires signed release manifests, and makes the main window calmer and more predictable.
+Siphon 5.5.0 adds a public-network boundary for browser links, requires signed release manifests, pins a verified yt-dlp build, and makes the app calmer and more consistent.
 
 ### Highlights
 
@@ -46,6 +11,10 @@ Siphon 5.5.0 adds a public-network boundary for browser links, requires signed r
 - **Predictable download lists:** The list keeps downloads in arrival order, Recent shows the newest first, and each list has a title and count header.
 - **Queue reordering:** Move Up and Move Down follow the rows visible in the Queue tab instead of hidden positions in the full list.
 - **New app icon:** A layered Icon Composer icon with default, dark, and mono variants replaces the legacy PNG set.
+- **Pinned yt-dlp:** Siphon again downloads a pinned, SHA-256-verified yt-dlp: the Siphon fork 2026.10.12.1, which keeps its DRM-format and byte-range download fixes. The user-provided yt-dlp path in Settings is no longer used.
+- **Geist everywhere:** Every window defaults to Geist, and the controls macOS drew in its system font now render Geist too: pop-up menus, bordered buttons, menu buttons and Settings section headers. Menu items, alerts and tooltips keep the system font.
+- **Play from the list:** Double-clicking a finished download's card, or its row in Recent downloads, plays the video.
+- **Pause from Home:** An active download's button on Home pauses it instead of stopping it, so partial data is kept; a paused row offers Resume.
 - **More sites:** PussySpace and StarWank support.
 
 ### UI polish
@@ -55,6 +24,18 @@ Siphon 5.5.0 adds a public-network boundary for browser links, requires signed r
 - The Home card says "Press ⏎ to download" instead of repeating the page subtitle, and row More menus use a neutral tint so Play is the only accent.
 - The sidebar toggle no longer flashes into the toolbar overflow menu at narrow widths.
 - Download preset rows read as one element in VoiceOver, and recent-download rows use the shared radius, badge, and button styles.
+- Cards, fields, pills and buttons inside a window no longer add a second blur over the window's glass, so Dark Mode greys stay clean and scrolling composites less. With Reduce Transparency, windows draw an opaque background.
+- On macOS 26 and later, small glass buttons (Check for Updates, About links, sidebar Settings) use native Liquid Glass with an accent tint on hover. The URL hero card's corners are now concentric with its URL field.
+- Motion is calmer and more consistent: each hover runs one spring, download cards fade their background and border with the lift, pages fade in with a slight rise, and Add Download's details and errors drop gently into place. With Reduce Motion, the logo stops spinning, hover and press no longer scale or lift, and new content only fades.
+- One segmented control style everywhere: the Settings tabs, the Theme and subtitle-output choices, and the Diagnostics tabs now match Add Download's capsule switch. Settings row titles that fell back to SF Pro now use Geist.
+- Add Download opens compact and grows as video details, errors or batch input appear. Debug Logs shows one title and uses the window's own close button.
+- Settings buttons (View Debug Logs, yt-dlp, Update Now, Clear All) render Geist instead of SF Pro, and every text field uses Siphon's field style with the accent focus edge. Pop-up menus brighten on hover.
+- Paste and copy confirmations fade in and out, and their icons morph into a checkmark. Clear buttons, the subtitle options, the playlist picker, the Advanced Options chevron and Home's recent rows animate instead of popping.
+- The Home progress ring glides with the liquid fill, and the fill's wave freezes in place while Siphon is in the background instead of jumping. Recent rows use Siphon's progress bar and spinner.
+- In an inactive window the sidebar selection turns grey, as native sidebars do. With Increase Contrast, card, control and field borders get a solid edge.
+- The Diagnostics and download log sheets close with Done or Esc; Return in the log search no longer closes Diagnostics. The What's New sheet uses the window surface instead of a drawn border.
+- The Firefox and Safari extensions ship 16 and 48 pt toolbar icons.
+- Diagnostics labels go through the app's string table.
 
 ### Security
 
@@ -62,6 +43,9 @@ Siphon 5.5.0 adds a public-network boundary for browser links, requires signed r
 - **Signed release manifests:** Releases after 5.4.5 must ship an Ed25519-signed `release-manifest.json`; the updater refuses a release without one instead of trusting the checksum alone.
 - Exported debug logs redact API key and token headers.
 - Tighter file-collision checks, protected output arguments (`-o`/`-P` and, for browser links, `--proxy` are ignored in extra arguments), hardened updater redirects, and bounded thumbnail and page fetches.
+- Browser-link downloads accept only global unicast IPv6 destinations and reject IPv4-compatible addresses.
+- `codesign` checks pass the binary path after `--`, so a path starting with `-` cannot be read as an option.
+- Temporary cookie files live in a per-process session folder, and a Keychain or decryption failure in one Chromium browser is no longer hidden by another browser with no match.
 
 ### Fixes
 
@@ -72,11 +56,18 @@ Siphon 5.5.0 adds a public-network boundary for browser links, requires signed r
 - Protected-site recovery for BoyfriendTV (visible WebKit challenge), Recu, and Eporner.
 - Missing completed files show "File moved or deleted", HTTP errors from dependency and update downloads are reported as such, and a full disk no longer crashes the logger.
 - Many smaller fixes to format ranking, window reopening, menu bar presets, error messages, and missing translations.
+- Recent on Home stays newest-first when the queue is reordered.
+- Output reservations cover every video container for a file name, and overwrite only exempts the original name.
+- No AppleScript notification fallback after notifications were denied.
+- The egress proxy restarts a listener that died after startup, and process-tree cleanup never signals an already-reaped process.
+- Faster download history loading, and clearer VoiceOver state for disclosure buttons in Add Download.
+- The main and Settings windows keep their titles in the Window menu and Mission Control.
 
 ### Maintenance
 
 - CI runs the Swift tests once per push (Debug and Release), scans every `main` commit with CodeQL and Codacy, and validates release tags in the Homebrew workflow.
 - The companion service binds to all interfaces on Render and to loopback elsewhere.
+- Unused strings, the unused Geist Black font, the legacy installer script and other dead code are removed, and the repository docs are refreshed.
 
 ## 5.4.5 - 2026-09-20
 
