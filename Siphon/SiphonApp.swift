@@ -161,8 +161,7 @@ struct SiphonApp: App {
     }
 
     private func handleIncomingURL(_ url: URL) {
-        // Schemes are case-insensitive (RFC 3986), and macOS opens `SIPHON://` here too.
-        guard let scheme = url.scheme?.lowercased(), scheme == "siphon" || scheme == "luma" else { return }
+        guard Self.isAppDeepLink(url) else { return }
 
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
@@ -195,17 +194,20 @@ struct SiphonApp: App {
         }
     }
 
+    /// Schemes are case-insensitive (RFC 3986), and macOS opens `SIPHON://` here too.
+    static func isAppDeepLink(_ url: URL) -> Bool {
+        ["siphon", "luma"].contains(url.scheme?.lowercased())
+    }
+
     /// Syntax check only; the public-network boundary is checked by `admitExternalDownload`.
     static func externalDownloadTarget(from rawValue: String?) -> (raw: String, url: URL)? {
         guard let raw = rawValue?.trimmingCharacters(in: .whitespacesAndNewlines),
               !raw.isEmpty,
               !raw.contains("\r") && !raw.contains("\n") && !raw.contains("\0"),
-              let url = URL(string: raw),
-              let host = url.host, !host.isEmpty,
-              let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https" else { return nil }
-        // yt-dlp extractor patterns match a lowercase scheme only.
-        let normalized = scheme + raw.dropFirst(scheme.count)
-        return (normalized, URL(string: normalized) ?? url)
+              let normalized = DownloadURLValidator.normalizedWebURL(raw),
+              let url = URL(string: normalized),
+              let host = url.host, !host.isEmpty else { return nil }
+        return (normalized, url)
     }
 
     private static func logRejectedExternalTarget(_ rawValue: String?) {
