@@ -48,3 +48,40 @@ jobs:
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO
+
+  conversion:
+    # Real-FFmpeg conversion tests (HDR10/HLG tone mapping, HEVC, VP9, AV1)
+    # against the build pinned in DependencyChecksums.
+    runs-on: macos-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Fetch pinned FFmpeg
+        run: scripts/fetch_pinned_ffmpeg.sh "$RUNNER_TEMP/ffmpeg"
+
+      - name: Test conversions (Debug)
+        env:
+          # xcodebuild passes TEST_RUNNER_-prefixed variables to the tests without the prefix.
+          TEST_RUNNER_SIPHON_CONVERSION_FFMPEG_DIR: ${{ runner.temp }}/ffmpeg
+        run: |
+          set -o pipefail
+          xcodebuild test \
+            -project Siphon.xcodeproj \
+            -scheme Siphon \
+            -destination 'platform=macOS' \
+            -configuration Debug \
+            -only-testing:SiphonTests/YtdlpServiceTests/testCodecConversionsProduceRequestedCodecWithRealFFmpeg \
+            -only-testing:SiphonTests/YtdlpServiceTests/testHDRToSDRToneMappingKeepsBrightnessWithRealFFmpeg \
+            -only-testing:SiphonTests/YtdlpServiceTests/testManagedFFmpegVerifiesHTTPSWithSanitizedEnvironment \
+            MACOSX_DEPLOYMENT_TARGET=15.0 \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO | tee "$RUNNER_TEMP/conversion.log"
+          # A skip means the FFmpeg path never reached the tests.
+          if grep -q "' skipped (" "$RUNNER_TEMP/conversion.log"; then
+            echo "::error::Real-FFmpeg conversion tests were skipped"
+            exit 1
+          fi
