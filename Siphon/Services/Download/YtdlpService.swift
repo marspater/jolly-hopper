@@ -2123,6 +2123,7 @@ public struct DownloadResult: Sendable {
         // GayForFans is public. Their CDN playlist/segments are intentionally
         // fetched without account cookies, so no browser Keychain prompt runs.
         let skipsAccountCookies = isRecuURL(normalizedURL) || isGFFURL(normalizedURL)
+            || Self.isGFFMediaURL(normalizedURL) || Self.isGFFMediaURL(targetURL)
         if skipsAccountCookies {
             LoggerService.shared.log("Protected-site stream download uses the resolved CDN URL without forwarding account cookies", level: .debug)
         } else if (options.rawCookies?.isEmpty == false) || !additionalCookies.isEmpty {
@@ -5630,6 +5631,20 @@ public struct DownloadResult: Sendable {
         return host == "gayforfans.com" || host.hasSuffix(".gayforfans.com")
     }
 
+    /// The site's CDN (playlists and segments), reached directly or after the
+    /// manifest redirect.
+    nonisolated static func isGFFMediaURL(_ url: String) -> Bool {
+        guard let host = URL(string: url)?.host?.lowercased() else { return false }
+        return host == "gff.network" || host.hasSuffix(".gff.network")
+    }
+
+    /// The manifest route's redirect target, when it is a public HLS playlist.
+    nonisolated static func acceptedGFFPlaylistURL(_ finalURL: URL?) -> String? {
+        guard let finalURL, finalURL.path.lowercased().hasSuffix(".m3u8"),
+              ExternalDownloadTargetPolicy.isAllowed(finalURL, resolveDNS: false) else { return nil }
+        return finalURL.absoluteString
+    }
+
     struct GFFExtractedMedia {
         let streamURL: String
         let embedURL: String
@@ -5716,9 +5731,8 @@ public struct DownloadResult: Sendable {
             manifestRequest.setValue(targetUrl, forHTTPHeaderField: "Referer")
             if let (_, response) = try? await EgressBoundary.session.boundedData(for: manifestRequest),
                (response as? HTTPURLResponse)?.statusCode == 200,
-               let finalURL = response.url, finalURL.path.lowercased().hasSuffix(".m3u8"),
-               ExternalDownloadTargetPolicy.isAllowed(finalURL, resolveDNS: false) {
-                streamURL = finalURL.absoluteString
+               let playlist = Self.acceptedGFFPlaylistURL(response.url) {
+                streamURL = playlist
             }
         }
 

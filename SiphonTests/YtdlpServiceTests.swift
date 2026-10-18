@@ -2399,6 +2399,39 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertNil(YtdlpService.parseGFFPage("<title>Not Found | GayForFans</title>", pageURL: page))
     }
 
+    func testGFFManifestRedirectAcceptsOnlyPublicPlaylists() {
+        let playlist = "https://cdn.gff.network/019e/videos/2026/07/02/clip/index.m3u8"
+        XCTAssertEqual(YtdlpService.acceptedGFFPlaylistURL(URL(string: playlist)), playlist)
+        // Not a playlist: keep the manifest route.
+        XCTAssertNil(YtdlpService.acceptedGFFPlaylistURL(URL(string: "https://gayforfans.com/play/abc/manifest")))
+        // Outside the public network boundary.
+        XCTAssertNil(YtdlpService.acceptedGFFPlaylistURL(URL(string: "http://127.0.0.1/index.m3u8")))
+        XCTAssertNil(YtdlpService.acceptedGFFPlaylistURL(URL(string: "file:///tmp/index.m3u8")))
+        XCTAssertNil(YtdlpService.acceptedGFFPlaylistURL(nil))
+    }
+
+    func testGFFCDNPlaylistDownloadSkipsBrowserCookies() async throws {
+        let previousBrowser = UserDefaults.standard.object(forKey: UserDefaultsKeys.browserForCookies)
+        UserDefaults.standard.set("chrome", forKey: UserDefaultsKeys.browserForCookies)
+        defer { UserDefaults.standard.set(previousBrowser, forKey: UserDefaultsKeys.browserForCookies) }
+        let capturedArgsBox = TestBox<[String]>([])
+        service.processRunner = MockYtdlpProcessRunner(mockDownload: { args in
+            capturedArgsBox.value = args
+            return "[download] Destination: /tmp/test.mp4\n"
+        })
+
+        // A playlist captured straight from the CDN, with no gayforfans.com page.
+        _ = try await service.download(
+            url: "https://cdn.gff.network/019e/videos/2026/07/02/clip/index.m3u8",
+            options: .default,
+            onProgress: { _, _, _ in /* Progress ignored in test */ },
+            onOutput: { _ in /* Output ignored in test */ }
+        )
+
+        XCTAssertFalse(capturedArgsBox.value.isEmpty)
+        XCTAssertFalse(capturedArgsBox.value.contains("--cookies-from-browser"))
+    }
+
     func testGFFErrorMappingAndCloudflare() async throws {
         service.ytdlpPath = URL(fileURLWithPath: "/usr/local/bin/yt-dlp")
         UserDefaults.standard.set("none", forKey: UserDefaultsKeys.browserForCookies)
