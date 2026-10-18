@@ -93,8 +93,9 @@ function isTrustedReleaseUrl(targetUrl) {
 function extractDownloadUrl(payload) {
   const assets = Array.isArray(payload.assets) ? payload.assets : [];
   const dmgAsset = assets.find((a) => typeof a?.name === 'string' && a.name.endsWith('.dmg'));
+  // Sanitize tag_name with encodeURIComponent to prevent path traversal or query string injection in release URLs
   const fallbackUrl = payload.tag_name
-    ? `https://github.com/marspater/jolly-hopper/releases/tag/${payload.tag_name}`
+    ? `https://github.com/marspater/jolly-hopper/releases/tag/${encodeURIComponent(payload.tag_name)}`
     : DEFAULT_RELEASE_URL;
   const candidateUrl = dmgAsset ? dmgAsset.browser_download_url : fallbackUrl;
   return isTrustedReleaseUrl(candidateUrl) ? candidateUrl : DEFAULT_RELEASE_URL;
