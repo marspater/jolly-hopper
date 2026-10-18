@@ -1465,6 +1465,21 @@ final class YtdlpServiceTests: XCTestCase {
         }
     }
 
+    func testWorstResolutionWithoutFormatsSelectsWorstVideo() async throws {
+        let captured = TestBox<[String]>([])
+        service.processRunner = MockYtdlpProcessRunner(mockDownload: { args in
+            captured.value = args
+            return "/tmp/worst.mp4"
+        })
+        var options = DownloadOptions.default
+        options.videoResolution = .worst
+        options.embedThumbnail = false
+        _ = try await service.download(url: "https://example.com/video", options: options,
+                                       onProgress: { _, _, _ in }, onOutput: { _ in })
+        let index = try XCTUnwrap(captured.value.firstIndex(of: "-f"))
+        XCTAssertEqual(captured.value[index + 1], "worstvideo*+bestaudio/worst")
+    }
+
     func testKnownDRMSelectionIsRejectedBeforeLaunchingProcesses() async throws {
         service.processRunner = MockYtdlpProcessRunner(
             mockCommand: { _ in XCTFail("DRM selection must not launch a command"); return "" },

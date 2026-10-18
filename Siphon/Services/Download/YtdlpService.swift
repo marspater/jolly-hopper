@@ -2888,6 +2888,8 @@ public struct DownloadResult: Sendable {
             let selector: String
             if isSynthesizedDirectStream {
                 selector = "b/best"
+            } else if options.videoResolution == .worst {
+                selector = "worstvideo*+bestaudio/worst"
             } else if let h = maxH {
                 if options.resolutionFallbackPolicy == .allowHigher {
                     selector = "bestvideo[height<=\(h)]+bestaudio/best[height<=\(h)]/bestvideo[height>\(h)]+bestaudio/best[height>\(h)]/best"
