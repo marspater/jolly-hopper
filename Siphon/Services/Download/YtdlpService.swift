@@ -668,7 +668,7 @@ class YtdlpService: ObservableObject {
         env["LC_ALL"] = "en_US.UTF-8"
         // The managed FFmpeg uses OpenSSL, which ignores the macOS keychain and
         // ships no trust store; without this every HTTPS input fails verification.
-        env["SSL_CERT_FILE"] = "/etc/ssl/cert.pem"
+        env["SSL_CERT_FILE"] = NSString.path(withComponents: ["/", "etc", "ssl", "cert.pem"])
         return env
     }
 

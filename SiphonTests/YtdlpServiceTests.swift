@@ -5812,14 +5812,16 @@ final class YtdlpServiceTests: XCTestCase {
         }
         let process = Process()
         process.executableURL = URL(fileURLWithPath: tools).appendingPathComponent("ffmpeg")
-        process.arguments = ["-nostdin", "-v", "error", "-i", "https://www.apple.com/", "-f", "null", "-"]
+        // The data demuxer reads any HTTPS body, so exit 0 proves TLS and input succeeded.
+        process.arguments = ["-nostdin", "-v", "error", "-f", "data", "-i", "https://www.apple.com/",
+                             "-map", "0", "-c", "copy", "-f", "null", "-"]
         process.environment = YtdlpService.createSanitizedEnvironment()
         let stderr = Pipe()
         process.standardError = stderr
         try process.run()
         process.waitUntilExit()
         let output = String(decoding: stderr.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
-        XCTAssertFalse(output.contains("certificate verify failed"), output)
+        XCTAssertEqual(process.terminationStatus, 0, output)
     }
 
     func testSanitizedEnvironmentRestrictsSandboxHomePermissions() {
