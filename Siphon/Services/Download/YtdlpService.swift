@@ -2955,36 +2955,36 @@ public struct DownloadResult: Sendable {
             videoConvertorArgs.append(contentsOf: ["-vf", "tonemap=hable:desat=0,zscale=t=bt709:m=bt709:r=tv,format=yuv420p"])
         }
 
+        // Every encoder needs explicit rate control: without it VideoToolbox
+        // falls back to a low default bitrate (~2 Mb/s HEVC, ~1.3 Mb/s H.264
+        // at 1080p) and x265 to CRF 28, visibly degrading the source.
+        // VideoToolbox constant quality (-q:v) is supported on Apple Silicon only.
+        #if arch(arm64)
+        let h264Encoder = ["-c:v", "h264_videotoolbox", "-q:v", "80"]
+        let h265Encoder = ["-c:v", "hevc_videotoolbox", "-q:v", "80"]
+        #else
+        let h264Encoder = ["-c:v", "libx264", "-crf", "18"]
+        let h265Encoder = ["-c:v", "libx265", "-crf", "20"]
+        #endif
+
         switch conversionCodec {
         case .av1:
             videoConvertorArgs.append(contentsOf: ["-c:v", "libsvtav1", "-preset", "8", "-crf", "28", "-strict", "experimental"])
         case .h265:
-            #if arch(arm64)
-            videoConvertorArgs.append(contentsOf: ["-c:v", "hevc_videotoolbox", "-strict", "experimental"])
-            #else
-            videoConvertorArgs.append(contentsOf: ["-c:v", "libx265", "-strict", "experimental"])
-            #endif
+            videoConvertorArgs += h265Encoder
             if options.fileType == .mp4 {
                 videoConvertorArgs += ["-tag:v", "hvc1"]
             }
         case .vp9:
             videoConvertorArgs.append(contentsOf: ["-c:v", "libvpx-vp9", "-strict", "experimental"])
         case .h264:
-            #if arch(arm64)
-            videoConvertorArgs.append(contentsOf: ["-c:v", "h264_videotoolbox", "-strict", "experimental"])
-            #else
-            videoConvertorArgs.append(contentsOf: ["-c:v", "libx264", "-strict", "experimental"])
-            #endif
+            videoConvertorArgs += h264Encoder
         case .none:
             if isConvertToSDR && resolvedOutputFileExtension(for: options) == "webm" {
                 // WebM accepts only VP8/VP9/AV1 video.
                 videoConvertorArgs += ["-c:v", "libvpx-vp9"]
             } else if isConvertToSDR {
-                #if arch(arm64)
-                videoConvertorArgs += ["-c:v", "h264_videotoolbox"]
-                #else
-                videoConvertorArgs += ["-c:v", "libx264"]
-                #endif
+                videoConvertorArgs += h264Encoder
             }
         }
 
