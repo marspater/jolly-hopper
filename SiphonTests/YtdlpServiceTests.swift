@@ -1443,6 +1443,87 @@ final class YtdlpServiceTests: XCTestCase {
         }
     }
 
+    /// FFmpeg ships as a ZIP per tool; both archives and both executables are
+    /// pinned, and the pair replaces the old binaries with nothing left behind.
+    func testFfmpegBundleInstallsFromPinnedZipArchives() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let support = root.appendingPathComponent("Support")
+        try FileManager.default.createDirectory(at: support, withIntermediateDirectories: true)
+        for old in ["ffmpeg", "ffprobe"] { try Data("old".utf8).write(to: support.appendingPathComponent(old)) }
+
+        func digest(_ url: URL) throws -> String {
+            SHA256.hash(data: try Data(contentsOf: url)).map { String(format: "%02x", $0) }.joined()
+        }
+        var archives: [String: (zip: URL, archiveSHA: String, executableSHA: String)] = [:]
+        for tool in ["ffmpeg", "ffprobe"] {
+            let source = root.appendingPathComponent("src-\(tool)")
+            try FileManager.default.createDirectory(at: source, withIntermediateDirectories: true)
+            let executable = source.appendingPathComponent(tool)
+            try Data("#!/bin/sh\necho \(tool)\n".utf8).write(to: executable)
+            try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: executable.path)
+            let zip = root.appendingPathComponent("\(tool).zip")
+            let ditto = Process()
+            ditto.executableURL = URL(fileURLWithPath: "/usr/bin/ditto")
+            ditto.arguments = ["-ck", executable.path, zip.path]
+            try ditto.run()
+            ditto.waitUntilExit()
+            archives[tool] = (zip, try digest(zip), try digest(executable))
+        }
+        let ffmpeg = try XCTUnwrap(archives["ffmpeg"])
+        let ffprobe = try XCTUnwrap(archives["ffprobe"])
+
+        let installed = try await DependencyInstaller.shared.installFfmpegBundle(
+            ffmpegURL: ffmpeg.zip, ffmpegArchiveSHA256: ffmpeg.archiveSHA, ffmpegExecutableSHA256: ffmpeg.executableSHA,
+            ffprobeURL: ffprobe.zip, ffprobeArchiveSHA256: ffprobe.archiveSHA, ffprobeExecutableSHA256: ffprobe.executableSHA,
+            appSupportDir: support)
+
+        XCTAssertEqual(try digest(installed.ffmpeg), ffmpeg.executableSHA)
+        XCTAssertEqual(try digest(installed.ffprobe), ffprobe.executableSHA)
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: support.path).sorted(), ["ffmpeg", "ffprobe"],
+                       "Archives and extraction directories must be removed")
+
+        // A tampered archive (one byte changed, pinned digest unchanged) is
+        // rejected before anything is extracted or replaced.
+        var bytes = try Data(contentsOf: ffmpeg.zip)
+        bytes[bytes.count / 2] ^= 0xFF
+        let tampered = root.appendingPathComponent("tampered-ffmpeg.zip")
+        try bytes.write(to: tampered)
+        let installedBefore = try digest(installed.ffmpeg)
+        do {
+            _ = try await DependencyInstaller.shared.installFfmpegBundle(
+                ffmpegURL: tampered, ffmpegArchiveSHA256: ffmpeg.archiveSHA, ffmpegExecutableSHA256: ffmpeg.executableSHA,
+                ffprobeURL: ffprobe.zip, ffprobeArchiveSHA256: ffprobe.archiveSHA, ffprobeExecutableSHA256: ffprobe.executableSHA,
+                appSupportDir: support)
+            XCTFail("A tampered archive must fail")
+        } catch {
+            XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: support.path).sorted(), ["ffmpeg", "ffprobe"])
+            XCTAssertEqual(try digest(installed.ffmpeg), installedBefore)
+        }
+
+        // An archive without the expected top-level executable is rejected.
+        do {
+            _ = try await DependencyInstaller.shared.installFfmpegBundle(
+                ffmpegURL: ffprobe.zip, ffmpegArchiveSHA256: ffprobe.archiveSHA, ffmpegExecutableSHA256: ffmpeg.executableSHA,
+                ffprobeURL: ffprobe.zip, ffprobeArchiveSHA256: ffprobe.archiveSHA, ffprobeExecutableSHA256: ffprobe.executableSHA,
+                appSupportDir: support)
+            XCTFail("An archive without ffmpeg must fail")
+        } catch {
+            XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: support.path).sorted(), ["ffmpeg", "ffprobe"])
+        }
+
+        XCTAssertEqual(DependencyChecksums.ffmpegBuildURL(architecture: "arm64", build: "1_9.0.2", tool: "ffprobe").absoluteString,
+                       "https://ffmpeg.martin-riedl.de/download/macos/arm64/1_9.0.2/ffprobe.zip")
+        #if arch(arm64)
+        XCTAssertEqual(DependencyChecksums.ffmpegURL.absoluteString,
+                       "https://ffmpeg.martin-riedl.de/download/macos/arm64/1789931890_9.0.2/ffmpeg.zip")
+        #else
+        XCTAssertEqual(DependencyChecksums.ffmpegURL.absoluteString,
+                       "https://ffmpeg.martin-riedl.de/download/macos/amd64/1789931006_9.0.2/ffmpeg.zip")
+        #endif
+    }
+
     func testCustomFormatIdSelectionFlagAppended() async throws {
         let capturedArgsBox = TestBox<[String]>([])
         service.processRunner = MockYtdlpProcessRunner(mockDownload: { args in
