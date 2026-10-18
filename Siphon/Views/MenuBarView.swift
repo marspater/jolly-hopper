@@ -1,7 +1,6 @@
 import SwiftUI
 
 struct MenuBarView: View {
-    let openMainWindow: () -> Void
     @EnvironmentObject var downloadManager: DownloadManager
     @EnvironmentObject var languageService: LanguageService
     @Environment(\.appearsActive) private var appearsActive
@@ -315,14 +314,7 @@ struct MenuBarView: View {
         HStack(alignment: .center, spacing: SiphonTheme.spacing8) {
             Button {
                 MenuBarManager.shared.closePopover()
-                NSApp.setActivationPolicy(.regular)
-                NSApp.activate(ignoringOtherApps: true)
-                if let window = NSApp.windows.first(where: { $0.identifier == NSUserInterfaceItemIdentifier("SiphonMainWindow") }) {
-                    if window.isMiniaturized { window.deminiaturize(nil) }
-                    window.makeKeyAndOrderFront(nil)
-                } else {
-                    openMainWindow()
-                }
+                MenuBarManager.shared.showMainWindow()
             } label: {
                 HStack(spacing: 5) {
                     Image(systemName: "macwindow")

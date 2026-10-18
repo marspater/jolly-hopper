@@ -1519,6 +1519,78 @@ final class YtdlpServiceTests: XCTestCase {
         }
     }
 
+    func testVideoOpenedFromAPlaylistIsNotPreviewedAsThePlaylist() {
+        for single in ["https://youtu.be/dQw4w9WgXcQ?list=PL123", "https://www.youtube.com/shorts/abc?list=PL1",
+                       "https://www.youtube.com/embed/abc?list=PL1", "https://www.youtube.com/watch?v=abc&list=PL1"] {
+            XCTAssertFalse(YtdlpService.isPlaylistURL(single), single)
+        }
+        XCTAssertTrue(YtdlpService.isPlaylistURL("https://www.youtube.com/playlist?list=PL123"))
+    }
+
+    func testYouTubeBotCheckDoesNotRerunWhenNoCookiesCanBeAdded() async throws {
+        let runs = TestBox<Int>(0)
+        service.processRunner = MockYtdlpProcessRunner(mockDownloadResult: { _ in
+            runs.value += 1
+            // First the browser cookies fail, then YouTube asks for a bot check.
+            if runs.value == 1 { throw YtdlpError.downloadFailed("ERROR: could not find chrome cookies database") }
+            throw YtdlpError.cloudflareBlocked
+        })
+        var options = DownloadOptions.default
+        options.browserCookieSource = "chrome"
+        options.embedThumbnail = false
+        do {
+            _ = try await service.download(url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ", options: options,
+                                           onProgress: { _, _, _ in }, onOutput: { _ in })
+            XCTFail("The bot check must fail the download")
+        } catch {
+            XCTAssertEqual(runs.value, 2, "Cookies denied for this host add nothing, so the same command must not run again")
+        }
+        service.resetCookieDenial()
+    }
+
+    func testAddSheetAndRowShareFailureWording() {
+        let lang = LanguageService()
+        let safari = YtdlpError.downloadFailed("ERROR: Safari cookies: Operation not permitted")
+        XCTAssertEqual(DownloadExecutor.errorMessage(for: safari, languageService: lang), lang.s("safari_fda_required"))
+        let forbidden = YtdlpError.downloadFailed("HTTP Error 403: Forbidden")
+        XCTAssertEqual(DownloadExecutor.errorMessage(for: forbidden, languageService: lang), lang.s("login_required"))
+    }
+
+    func testYtdlpInstallSwapsTheBinaryInPlace() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let source = root.appendingPathComponent("source-yt-dlp")
+        let script = Data("#!/bin/sh\nexit 0\n".utf8)
+        try script.write(to: source)
+        let appSupport = root.appendingPathComponent("Support")
+        try FileManager.default.createDirectory(at: appSupport, withIntermediateDirectories: true)
+        try Data("old".utf8).write(to: appSupport.appendingPathComponent("yt-dlp"))
+
+        let digest = SHA256.hash(data: script).map { String(format: "%02x", $0) }.joined()
+        let installed = try await DependencyInstaller.shared.installYtdlp(
+            downloadURL: source, expectedSHA256: digest, appSupportDir: appSupport)
+
+        XCTAssertEqual(try Data(contentsOf: installed), script)
+        let leftovers = try FileManager.default.contentsOfDirectory(atPath: appSupport.path).filter { $0 != "yt-dlp" }
+        XCTAssertTrue(leftovers.isEmpty, "No backup or staging file may remain: \(leftovers)")
+    }
+
+    func testWorstResolutionWithoutFormatsSelectsWorstVideo() async throws {
+        let captured = TestBox<[String]>([])
+        service.processRunner = MockYtdlpProcessRunner(mockDownload: { args in
+            captured.value = args
+            return "/tmp/worst.mp4"
+        })
+        var options = DownloadOptions.default
+        options.videoResolution = .worst
+        options.embedThumbnail = false
+        _ = try await service.download(url: "https://example.com/video", options: options,
+                                       onProgress: { _, _, _ in }, onOutput: { _ in })
+        let index = try XCTUnwrap(captured.value.firstIndex(of: "-f"))
+        XCTAssertEqual(captured.value[index + 1], "worstvideo*+bestaudio/worst")
+    }
+
     func testKnownDRMSelectionIsRejectedBeforeLaunchingProcesses() async throws {
         service.processRunner = MockYtdlpProcessRunner(
             mockCommand: { _ in XCTFail("DRM selection must not launch a command"); return "" },

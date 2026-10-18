@@ -21,6 +21,41 @@ final class ProcessLifecycleTests: XCTestCase {
     }
 
 
+    func testBotMatchingNeedsTheWord() {
+        XCTAssertTrue(DefaultYtdlpProcessRunner.mentionsBot("Sign in to confirm you're not a bot"))
+        XCTAssertTrue(DefaultYtdlpProcessRunner.mentionsBot("blocked by anti-bot protection"))
+        XCTAssertFalse(DefaultYtdlpProcessRunner.mentionsBot("both formats; robot; abbott"))
+        let forbidden = "WARNING: merging both formats\nERROR: unable to download video data: HTTP Error 403: Forbidden"
+        guard case .downloadFailed = DefaultYtdlpProcessRunner.classifyFailure(errorOutput: forbidden, exitCode: 1) else {
+            return XCTFail("A plain 403 is not an anti-bot block")
+        }
+    }
+
+    /// A descendant can keep the output pipes open after yt-dlp exits; Stop
+    /// in that window must end it instead of waiting for the drain timeout.
+    func testCancelDuringOutputDrainStopsThePipeHolders() throws {
+        let holder = Process()
+        holder.executableURL = URL(fileURLWithPath: "/usr/bin/perl")
+        holder.arguments = ["-e", "setpgrp(0, 0); sleep 30"]
+        try holder.run()
+        defer { if holder.isRunning { holder.terminate() } }
+        for _ in 0..<100 where getpgid(holder.processIdentifier) != holder.processIdentifier {
+            usleep(10_000)
+        }
+        XCTAssertEqual(getpgid(holder.processIdentifier), holder.processIdentifier)
+
+        let controller = DownloadProcessController()
+        controller.transitionToTerminated(exitCode: 0, reason: .exit)
+        controller.beginDrain(processGroup: holder.processIdentifier)
+        controller.cancel()
+        holder.waitUntilExit()
+        XCTAssertEqual(holder.terminationReason, .uncaughtSignal)
+
+        // After the drain the group is forgotten and never signalled.
+        controller.endDrain()
+        controller.cancel()
+    }
+
     func testFfmpegProgressHandlesDurationUnknownValuesAndCarriageReturns() {
         let parser = FfmpegDownloadProgress()
         XCTAssertNil(parser.parse("frame=10 time=00:00:10.00 speed=2x"))
@@ -38,6 +73,19 @@ final class ProcessLifecycleTests: XCTestCase {
         XCTAssertEqual(parser.parse("frame=10 time=00:00:15.00 speed=2x")?.fraction, 0.25)
         XCTAssertNil(parser.parse("Duration: 00:02:00.00, start: 0.0"))
         XCTAssertEqual(parser.parse("frame=10 time=00:00:15.00 speed=2x")?.fraction, 0.125)
+
+        // A trimmed download writes only its section, whatever the source length.
+        XCTAssertEqual(FfmpegDownloadProgress.sectionDuration(in: ["--download-sections", "*1:00-1:30", "--"]), 30)
+        XCTAssertEqual(FfmpegDownloadProgress.sectionDuration(in: ["--download-sections", "*1:00:00-1:00:45.5"]), 45.5)
+        XCTAssertNil(FfmpegDownloadProgress.sectionDuration(in: ["--download-sections", "*bad-1"]))
+        let section = FfmpegDownloadProgress(sectionDuration: 30)
+        XCTAssertNil(section.parse("  Duration: 01:00:00.00, start: 0.0"))
+        XCTAssertEqual(section.parse("frame=10 time=00:00:15.00 speed=1x")?.fraction, 0.5)
+
+        // Each playlist entry's FFmpeg run starts from its own Duration.
+        XCTAssertNil(parser.parse("Input #0, hls, from 'https://example.com/b.m3u8':"))
+        XCTAssertNil(parser.parse("  Duration: 00:00:30.00, start: 0.0"))
+        XCTAssertEqual(parser.parse("frame=10 time=00:00:15.00 speed=2x")?.fraction, 0.5)
 
         let buffer = StreamBuffer()
         XCTAssertEqual(buffer.appendAndExtractLines(Data("frame=1\rframe=2\r".utf8)), ["frame=1", "frame=2"])

@@ -99,6 +99,69 @@ final class EgressProxyTests: XCTestCase {
         XCTAssertTrue(response.hasPrefix("HTTP/1.1 403"), "Expected the new listener to answer, got: \(response)")
     }
 
+    func testSharedProxyRequiresItsLaunchCredential() async throws {
+        let shared = EgressProxyServer.shared.proxyURL(port: 1)
+        let url = try XCTUnwrap(URL(string: shared))
+        XCTAssertEqual(url.user, EgressProxyServer.credentialUser)
+        XCTAssertGreaterThanOrEqual(url.password?.count ?? 0, 32, "The secret must not be guessable")
+
+        let proxy = EgressProxyServer(credential: "secret-token")
+        let port = try await proxy.start()
+        defer { proxy.stop() }
+        XCTAssertEqual(proxy.proxyURL(port: port), "http://siphon:secret-token@127.0.0.1:\(port)")
+
+        let connect = "CONNECT 127.0.0.1:1 HTTP/1.1\r\nHost: 127.0.0.1:1\r\n"
+        for header in ["", "Proxy-Authorization: Basic \(Data("siphon:wrong".utf8).base64EncodedString())\r\n"] {
+            let refused = try await sendThroughProxy(port: port, connect + header + "\r\n")
+            XCTAssertTrue(refused.hasPrefix("HTTP/1.1 407"), "Expected 407, got: \(refused)")
+            XCTAssertTrue(refused.contains("Proxy-Authenticate: Basic realm=\"Siphon\""), "FFmpeg retries only after a Basic challenge")
+        }
+        let token = Data("siphon:secret-token".utf8).base64EncodedString()
+        let accepted = try await sendThroughProxy(port: port, connect + "Proxy-Authorization: Basic \(token)\r\n\r\n")
+        XCTAssertTrue(accepted.hasPrefix("HTTP/1.1 403"), "An authorized client reaches the boundary check, got: \(accepted)")
+    }
+
+    /// yt-dlp's argv is visible to other local processes; the credential
+    /// reaches it through a private config file instead.
+    func testProxyCredentialNeverReachesYtdlpArguments() throws {
+        let args = ["/x/yt-dlp", "--proxy", "http://siphon:secret-token@127.0.0.1:4321", "--", "https://example.com/v"]
+        let routed = try EgressBoundary.movingProxyCredentialToConfig(args)
+        let file = try XCTUnwrap(routed.configFile)
+        defer { try? FileManager.default.removeItem(at: file) }
+        XCTAssertEqual(routed.args, ["/x/yt-dlp", "--config-locations", file.path, "--", "https://example.com/v"])
+        XCTAssertFalse(routed.args.joined(separator: " ").contains("secret-token"))
+        XCTAssertEqual(try String(contentsOf: file, encoding: .utf8), "--proxy http://siphon:secret-token@127.0.0.1:4321\n")
+        let permissions = try FileManager.default.attributesOfItem(atPath: file.path)[.posixPermissions] as? NSNumber
+        XCTAssertEqual(permissions?.intValue, 0o600)
+
+        let plain = ["/x/yt-dlp", "--proxy", "http://127.0.0.1:4321", "--", "https://example.com/v"]
+        let unchanged = try EgressBoundary.movingProxyCredentialToConfig(plain)
+        XCTAssertEqual(unchanged.args, plain)
+        XCTAssertNil(unchanged.configFile)
+    }
+
+    func testResolverSessionAnswersTheProxyCredentialChallenge() async throws {
+        let server = MockHTTPServer()
+        let serverPort = try server.start { _ in (200, [:], Data("REACHED".utf8)) }
+        defer { server.stop() }
+        let proxy = EgressProxyServer(targetValidator: { _, port in port == Int(serverPort) },
+                                      addressResolver: { _ in ["127.0.0.1"] }, credential: "secret-token")
+        let proxyPort = try await proxy.start()
+        defer { proxy.stop() }
+
+        let route = proxy.proxyURL(port: proxyPort)
+        defer { EgressBoundary.retireSession(for: proxyPort) }
+        // Resolvers run inside the job's binding, which supplies the credential.
+        let (data, response) = try await EgressBoundary.$proxyURL.withValue(route) {
+            try await EgressBoundary.session.boundedData(for: URLRequest(url: URL(string: "http://127.0.0.1:\(serverPort)/")!))
+        }
+        XCTAssertEqual((response as? HTTPURLResponse)?.statusCode, 200)
+        XCTAssertEqual(String(decoding: data, as: UTF8.self), "REACHED")
+        XCTAssertEqual(server.hitCount, 1)
+        XCTAssertTrue(server.lastRequestText.contains("Connection: close"), "The request must go through the proxy")
+        XCTAssertEqual(EgressBoundary.$proxyURL.withValue(route) { EgressBoundary.webKitProxyConfigurations.count }, 1)
+    }
+
     func testProxyBlocksDirectLoopbackConnection() async throws {
         let proxy = EgressProxyServer()
         let proxyPort = try await proxy.start()
