@@ -65,31 +65,37 @@ public enum CookieManager {
 
     /// Sweeps and removes any orphaned temporary cookie files left behind from crashes or SIGKILL.
     public static func purgeOrphanedTempCookieFiles() {
-        let fileManager = FileManager.default
         let root = secureDirectory(rootDirectory)
         let tempDirsToClean: [URL] = [
             FileManager.default.temporaryDirectory,
             root,
             getSecureTempCookiesDirectory()
         ].compactMap { $0 }
+        tempDirsToClean.forEach(purgeCookieFiles(in:))
+        if let root {
+            purgeDeadSessions(in: root)
+        }
+    }
 
-        for dir in tempDirsToClean {
-            guard let files = try? fileManager.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil) else { continue }
-            for file in files {
-                let name = file.lastPathComponent
-                if name.hasPrefix("siphon_consolidated_cookies_") || name.hasPrefix("siphon_cookies_") || name.hasPrefix("siphon_header_cookies_") {
-                    do {
-                        try fileManager.removeItem(at: file)
-                    } catch {
-                        log("Failed to remove orphaned temporary cookie file: \(error.localizedDescription)", level: .warning)
-                    }
-                }
+    private static let orphanedCookieFilePrefixes = ["siphon_consolidated_cookies_", "siphon_cookies_", "siphon_header_cookies_"]
+
+    private static func purgeCookieFiles(in dir: URL) {
+        let fileManager = FileManager.default
+        guard let files = try? fileManager.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil) else { return }
+        for file in files where orphanedCookieFilePrefixes.contains(where: { file.lastPathComponent.hasPrefix($0) }) {
+            do {
+                try fileManager.removeItem(at: file)
+            } catch {
+                log("Failed to remove orphaned temporary cookie file: \(error.localizedDescription)", level: .warning)
             }
         }
+    }
 
-        // Sessions of Siphon processes that are gone (crash, SIGKILL). A live one belongs
-        // to another running instance and is left alone.
-        guard let root, let sessions = try? fileManager.contentsOfDirectory(at: root, includingPropertiesForKeys: nil) else { return }
+    /// Sessions of Siphon processes that are gone (crash, SIGKILL). A live one belongs
+    /// to another running instance and is left alone.
+    private static func purgeDeadSessions(in root: URL) {
+        let fileManager = FileManager.default
+        guard let sessions = try? fileManager.contentsOfDirectory(at: root, includingPropertiesForKeys: nil) else { return }
         for session in sessions {
             let name = session.lastPathComponent
             guard name.hasPrefix("session-"), let pid = pid_t(name.dropFirst("session-".count)),
