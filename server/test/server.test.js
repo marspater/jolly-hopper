@@ -294,6 +294,20 @@ describe('GET /api/latest', () => {
     assert.equal(data.downloadUrl, 'https://github.com/marspater/jolly-hopper/releases/latest');
   });
 
+  test('safely encodes tag_name into fallback URL when asset is missing or non-HTTPS', async () => {
+    const payloadWithSpecialTagName = {
+      ...RELEASE_PAYLOAD,
+      tag_name: 'v1.0.0?param=value#fragment',
+      assets: []
+    };
+    const { baseUrl } = await start([{ status: 200, body: payloadWithSpecialTagName }]);
+
+    const res = await fetch(`${baseUrl}/api/latest`);
+    assert.equal(res.status, 200);
+    const data = await res.json();
+    assert.equal(data.downloadUrl, 'https://github.com/marspater/jolly-hopper/releases/tag/v1.0.0%3Fparam%3Dvalue%23fragment');
+  });
+
   test('falls back to default release page when download URL is an attacker-controlled HTTPS URL', async () => {
     const untrustedUrls = [
       'https://attacker.example.com/malicious.dmg',
