@@ -565,7 +565,8 @@ private func sendThroughProxy(port: UInt16, fragments: [String], halfClose: Bool
                 // After a half-close, Network.framework can report the finished exchange
                 // as .failed(ENETDOWN) before the final receive callbacks; once bytes have
                 // arrived, let the pending receive drain and the assertions judge the result.
-                if response.get().isEmpty { finish(error) }
+                if case .posix(.ENETDOWN) = error, !response.get().isEmpty { return }
+                finish(error)
             default:
                 break
             }
