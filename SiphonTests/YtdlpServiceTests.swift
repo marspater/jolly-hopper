@@ -5802,6 +5802,26 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertEqual(env["HOME"], NSHomeDirectory(), "HOME must point to user home directory so browser cookie databases can be found")
         XCTAssertTrue(env["XDG_CONFIG_HOME"]?.contains("SandboxHome") == true, "XDG_CONFIG_HOME must be isolated to SandboxHome")
         XCTAssertTrue(env["XDG_CACHE_HOME"]?.contains("SandboxHome") == true, "XDG_CACHE_HOME must be isolated to SandboxHome")
+        let caBundle = try? String(contentsOfFile: env["SSL_CERT_FILE"] ?? "", encoding: .utf8)
+        XCTAssertTrue(caBundle?.contains("BEGIN CERTIFICATE") == true, "OpenSSL-based FFmpeg needs a CA bundle for HTTPS inputs")
+    }
+
+    func testManagedFFmpegVerifiesHTTPSWithSanitizedEnvironment() async throws {
+        guard let tools = ProcessInfo.processInfo.environment["SIPHON_CONVERSION_FFMPEG_DIR"] else {
+            throw XCTSkip("Requires explicit FFmpeg path and network for the TLS smoke test")
+        }
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: tools).appendingPathComponent("ffmpeg")
+        // The data demuxer reads any HTTPS body, so exit 0 proves TLS and input succeeded.
+        process.arguments = ["-nostdin", "-v", "error", "-f", "data", "-i", "https://www.apple.com/",
+                             "-map", "0", "-c", "copy", "-f", "null", "-"]
+        process.environment = YtdlpService.createSanitizedEnvironment()
+        let stderr = Pipe()
+        process.standardError = stderr
+        try process.run()
+        process.waitUntilExit()
+        let output = String(decoding: stderr.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+        XCTAssertEqual(process.terminationStatus, 0, output)
     }
 
     func testSanitizedEnvironmentRestrictsSandboxHomePermissions() {
