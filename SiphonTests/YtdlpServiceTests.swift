@@ -6075,21 +6075,23 @@ final class YtdlpServiceTests: XCTestCase {
     func testVideoConversionSetsExplicitRateControl() {
         var options = DownloadOptions.default
         options.fileType = .mp4
-        var cases: [(String, DownloadOptions)] = []
-        for codec in [ConversionCodec.h264, .h265] {
-            options.conversionCodec = codec
-            cases.append(("\(codec)", options))
-        }
+        #if arch(arm64)
+        let h264 = ("-q:v", "70"), h265 = ("-q:v", "70")
+        #else
+        let h264 = ("-crf", "18"), h265 = ("-crf", "20")
+        #endif
+        var cases: [(String, DownloadOptions, (String, String))] = []
+        options.conversionCodec = .h264
+        cases.append(("H.264", options, h264))
+        options.conversionCodec = .h265
+        cases.append(("HEVC", options, h265))
         options.conversionCodec = ConversionCodec.none
         options.hdrAction = .convertToSDR
-        cases.append(("SDR", options))
-        for (label, options) in cases {
+        cases.append(("SDR", options, h264))
+        for (label, options, (flag, value)) in cases {
             let args = YtdlpService.videoConversionArguments(options: options)
-            #if arch(arm64)
-            XCTAssertEqual(args.firstIndex(of: "-q:v").map { args[$0 + 1] }, "70", "\(label): VideoToolbox needs constant quality")
-            #else
-            XCTAssertNotNil(args.firstIndex(of: "-crf"), "\(label): x264/x265 need an explicit CRF")
-            #endif
+            XCTAssertEqual(args.firstIndex(of: flag).map { args[$0 + 1] }, value, "\(label): explicit rate control")
+            XCTAssertFalse(args.contains("-strict"), "\(label): stable encoders need no experimental flag")
         }
     }
 
