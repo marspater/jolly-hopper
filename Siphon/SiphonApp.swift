@@ -161,7 +161,7 @@ struct SiphonApp: App {
     }
 
     private func handleIncomingURL(_ url: URL) {
-        guard url.scheme == "siphon" || url.scheme == "luma" else { return }
+        guard Self.isAppDeepLink(url) else { return }
 
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
@@ -194,15 +194,20 @@ struct SiphonApp: App {
         }
     }
 
+    /// Schemes are case-insensitive (RFC 3986), and macOS opens `SIPHON://` here too.
+    static func isAppDeepLink(_ url: URL) -> Bool {
+        ["siphon", "luma"].contains(url.scheme?.lowercased())
+    }
+
     /// Syntax check only; the public-network boundary is checked by `admitExternalDownload`.
     static func externalDownloadTarget(from rawValue: String?) -> (raw: String, url: URL)? {
         guard let raw = rawValue?.trimmingCharacters(in: .whitespacesAndNewlines),
               !raw.isEmpty,
               !raw.contains("\r") && !raw.contains("\n") && !raw.contains("\0"),
-              let url = URL(string: raw),
-              let host = url.host, !host.isEmpty,
-              url.scheme == "http" || url.scheme == "https" else { return nil }
-        return (raw, url)
+              let normalized = DownloadURLValidator.normalizedWebURL(raw),
+              let url = URL(string: normalized),
+              let host = url.host, !host.isEmpty else { return nil }
+        return (normalized, url)
     }
 
     private static func logRejectedExternalTarget(_ rawValue: String?) {

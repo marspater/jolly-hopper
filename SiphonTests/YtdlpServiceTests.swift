@@ -210,6 +210,24 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertEqual(commands.value, 3)
     }
 
+    func testPlaylistFetchRoutesSucuriProbeThroughPreviewProxy() async throws {
+        let proxy = "http://127.0.0.1:4321"
+        defer { EgressBoundary.retireSession(for: 4321) }
+        let probeRoute = TestBox<(proxy: String?, direct: Bool)?>(nil)
+        service.sucuriCookieResolver = { _ in
+            probeRoute.value = (EgressBoundary.proxyURL, EgressBoundary.session === URLSession.shared)
+            return nil
+        }
+        service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
+            XCTAssertEqual(args.firstIndex(of: "--proxy").map { args[$0 + 1] }, proxy)
+            return ""
+        })
+        _ = try await service.fetchPlaylistInfo(url: "https://thisvid.com/playlist/1", proxy: proxy)
+        let route = try XCTUnwrap(probeRoute.value)
+        XCTAssertEqual(route.proxy, proxy)
+        XCTAssertFalse(route.direct, "The Sucuri request must not leave through URLSession.shared")
+    }
+
     func testAdditionalArgumentsHandleAdjacentFlagsEscapesAndEmptyValues() {
         XCTAssertEqual(YtdlpService.removingOutputLocationArguments(["-o", "--output=/tmp/x", "--paths", "-P", "/tmp/y", "--no-mtime"]), ["--no-mtime"])
         XCTAssertEqual(YtdlpService.removingOutputLocationArguments(["--config-location=/tmp/config", "--exe", "command", "--", "--no-mtime"]), ["--no-mtime"])
@@ -6226,6 +6244,21 @@ final class YtdlpServiceTests: XCTestCase {
         let encode = try XCTUnwrap(commands.value.first { $0.first?.hasSuffix("ffmpeg") == true })
         XCTAssertNotEqual(encode[try XCTUnwrap(encode.lastIndex(of: "-c:v")) + 1], "copy")
 
+        // A failed probe must not pass an SDR conversion off as done with a stream copy.
+        commands.value = []
+        try Data("HDR source".utf8).write(to: source)
+        options.conversionCodec = ConversionCodec.none
+        options.hdrAction = .convertToSDR
+        do {
+            _ = try await service.postprocessDownloadedMedia(at: source, options: options, ffmpegDir: root.path)
+            XCTFail("An unprobed source must not be reported as converted to SDR")
+        } catch YtdlpError.downloadFailed(let message) {
+            XCTAssertEqual(message, LanguageService.s("hdr_probe_failed"))
+        }
+        XCTAssertFalse(commands.value.contains { $0.first?.hasSuffix("ffmpeg") == true }, "No -c:v copy remux may run")
+        XCTAssertEqual(try String(contentsOf: source, encoding: .utf8), "HDR source", "The original file is kept")
+        options.conversionCodec = .h265
+
         // Tone mapping needs a real encode even when the codec already matches,
         // but only for a PQ/HLG source: an SDR source is stream-copied untouched.
         options.hdrAction = .convertToSDR
@@ -6319,37 +6352,42 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertFalse(conversion.contains("0:t?"), "Only Matroska stores attachments")
     }
 
-    func testHEVCConversionProducesHEVCWithRealFFmpeg() async throws {
+    func testCodecConversionsProduceRequestedCodecWithRealFFmpeg() async throws {
         guard let tools = ProcessInfo.processInfo.environment["SIPHON_CONVERSION_FFMPEG_DIR"] else {
             throw XCTSkip("Requires explicit FFmpeg path for the local codec smoke test")
         }
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: root) }
-        let source = root.appendingPathComponent("fixture.mp4")
         let ffmpeg = URL(fileURLWithPath: tools).appendingPathComponent("ffmpeg")
         let ffprobe = URL(fileURLWithPath: tools).appendingPathComponent("ffprobe")
         let runner = DefaultYtdlpProcessRunner()
-        _ = try await runner.runCommand([ffmpeg.path, "-v", "error", "-f", "lavfi", "-i", "testsrc2=size=320x180:rate=24",
-                                         "-t", "1", "-c:v", "libx264", "-pix_fmt", "yuv420p", source.path])
         service.ffmpegPath = ffmpeg
         service.ffprobePath = ffprobe
-        service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
-            try await runner.runCommand(args)
-        }, mockDownload: { _ in source.path })
-        var options = DownloadOptions.default
-        options.saveFolder = root
-        options.embedThumbnail = false
-        options.conversionCodec = .h265
-        let result = try await service.download(url: "https://example.com/fixture", options: options,
-                                              onProgress: { _, _, _ in }, onOutput: { _ in })
-        let output = try XCTUnwrap(result.primaryFile)
-        let probe = try await runner.runCommand([ffprobe.path, "-v", "error", "-select_streams", "v:0",
-                                                "-show_entries", "stream=codec_name,codec_tag_string", "-of", "json", output.path])
-        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(probe.utf8)) as? [String: Any])
-        let stream = try XCTUnwrap((json["streams"] as? [[String: Any]])?.first)
-        XCTAssertEqual(stream["codec_name"] as? String, "hevc")
-        XCTAssertEqual(stream["codec_tag_string"] as? String, "hvc1")
+        // VP9 and AV1 are written to Matroska; MP4 HEVC keeps the hvc1 tag for Apple players.
+        for (codec, name, tag) in [(ConversionCodec.h265, "hevc", "hvc1"), (.vp9, "vp9", nil), (.av1, "av1", nil)] {
+            let folder = root.appendingPathComponent(name)
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            let source = folder.appendingPathComponent("fixture.mp4")
+            _ = try await runner.runCommand([ffmpeg.path, "-v", "error", "-f", "lavfi", "-i", "testsrc2=size=320x180:rate=24",
+                                             "-t", "1", "-c:v", "libx264", "-pix_fmt", "yuv420p", source.path])
+            service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
+                try await runner.runCommand(args)
+            }, mockDownload: { _ in source.path })
+            var options = DownloadOptions.default
+            options.saveFolder = folder
+            options.embedThumbnail = false
+            options.conversionCodec = codec
+            let result = try await service.download(url: "https://example.com/fixture", options: options,
+                                                  onProgress: { _, _, _ in }, onOutput: { _ in })
+            let output = try XCTUnwrap(result.primaryFile)
+            let probe = try await runner.runCommand([ffprobe.path, "-v", "error", "-select_streams", "v:0",
+                                                    "-show_entries", "stream=codec_name,codec_tag_string", "-of", "json", output.path])
+            let json = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(probe.utf8)) as? [String: Any])
+            let stream = try XCTUnwrap((json["streams"] as? [[String: Any]])?.first)
+            XCTAssertEqual(stream["codec_name"] as? String, name)
+            if let tag { XCTAssertEqual(stream["codec_tag_string"] as? String, tag) }
+        }
     }
 
     func testHDRToSDRToneMappingKeepsBrightnessWithRealFFmpeg() async throws {

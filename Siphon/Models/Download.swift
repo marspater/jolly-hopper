@@ -2429,6 +2429,14 @@ public struct DownloadURLValidator: Sendable {
         return .valid(url: url, original: normalized)
     }
 
+    /// `raw` with its HTTP(S) scheme lowercased, or nil for any other scheme.
+    /// Schemes are case-insensitive, but yt-dlp extractor patterns match lowercase only.
+    public static func normalizedWebURL(_ raw: String) -> String? {
+        let lowered = raw.lowercased()
+        guard let scheme = ["https", "http"].first(where: { lowered.hasPrefix($0 + "://") }) else { return nil }
+        return scheme + raw.dropFirst(scheme.count)
+    }
+
     public static func extractURLs(from text: String) -> [String] {
         // Bolt Performance Optimization: Use `split(whereSeparator: \.isNewline)` lazy Substring iteration
         // to avoid allocating intermediate String arrays for line splitting, trimming, and filtering.

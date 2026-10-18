@@ -311,7 +311,13 @@ struct AddDownloadView: View {
         isLoading = false
         let clean = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
         appState.clearBrowserSessionIfOriginChanged(to: clean)
-        if clean.hasPrefix("http://") || clean.hasPrefix("https://") { fetchInfo(debounce: true) }
+        guard let normalized = DownloadURLValidator.normalizedWebURL(clean) else { return }
+        // Every later step reads urlInput; the change handler runs again with the fixed value.
+        if normalized != clean {
+            urlInput = normalized
+            return
+        }
+        fetchInfo(debounce: true)
     }
 
     private func acceptExternalURL(_ newURL: String) {
@@ -1767,9 +1773,8 @@ struct AddDownloadView: View {
         for token in tokens {
             let line = String(token)
             let trimmed = line.trimmingCharacters(in: Self.batchUrlStripSet)
-            if (trimmed.hasPrefix("http://") || trimmed.hasPrefix("https://")) && !seen.contains(trimmed) {
-                seen.insert(trimmed)
-                valid.append(trimmed)
+            if let url = DownloadURLValidator.normalizedWebURL(trimmed), seen.insert(url).inserted {
+                valid.append(url)
             }
         }
         return valid

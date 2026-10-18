@@ -1562,6 +1562,27 @@ class YtdlpService: ObservableObject {
         browserCookieSource: String? = nil,
         proxy: String? = nil
     ) async throws -> [MediaInfo] {
+        // The Sucuri probe makes its own request; the binding routes it too.
+        try await EgressBoundary.$ytdlpExecutablePath.withValue(resolvedYtdlpBinary?.path) {
+            try await EgressBoundary.$proxyURL.withValue(proxy ?? EgressBoundary.proxyURL) {
+                try await fetchPlaylistInfoWithinBoundary(
+                    url: url,
+                    rawCookies: rawCookies,
+                    rawUserAgent: rawUserAgent,
+                    browserCookieSource: browserCookieSource,
+                    proxy: proxy
+                )
+            }
+        }
+    }
+
+    private func fetchPlaylistInfoWithinBoundary(
+        url: String,
+        rawCookies: String?,
+        rawUserAgent: String?,
+        browserCookieSource: String?,
+        proxy: String?
+    ) async throws -> [MediaInfo] {
         guard let path = ytdlpPath else {
             throw YtdlpError.notFound
         }
@@ -2625,6 +2646,11 @@ public struct DownloadResult: Sendable {
             }
             if needsRecode {
                 let stream = try await probeVideoStream(source, ffmpegDir: ffmpegDir, processController: processController)
+                // An unprobed source may be HDR: copying it would report an SDR
+                // conversion that never happened.
+                if stream == nil && options.hdrAction == .convertToSDR {
+                    throw YtdlpError.downloadFailed(LanguageService.s("hdr_probe_failed"))
+                }
                 // Tone mapping needs a PQ or HLG source: on SDR video it only darkens
                 // the picture, and zscale cannot linearize an untagged transfer.
                 let toneMap = options.hdrAction == .convertToSDR && ["smpte2084", "arib-std-b67"].contains(stream?.transfer)
@@ -2675,7 +2701,7 @@ public struct DownloadResult: Sendable {
             if error is CancellationError { throw error }
             try Task.checkCancellation()
             guard processController?.isCancelled != true else { throw CancellationError() }
-            LoggerService.shared.log("Video stream probe failed, converting without tone mapping: \(error.localizedDescription)", level: .warning)
+            LoggerService.shared.log("Video stream probe failed: \(error.localizedDescription)", level: .warning)
             return nil
         }
     }

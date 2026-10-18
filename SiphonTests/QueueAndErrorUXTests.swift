@@ -1986,8 +1986,24 @@ final class QueueAndErrorUXTests: XCTestCase {
         XCTAssertFalse(state.isCurrentInteractiveLink(slow), "A superseded link must not overwrite the sheet")
     }
 
-    func testExternalDownloadTargetSyntax() {
+    func testExternalDownloadTargetSyntax() throws {
         XCTAssertEqual(SiphonApp.externalDownloadTarget(from: "  https://example.com/v  ")?.raw, "https://example.com/v")
+        // Browsers may hand over an uppercase or mixed-case scheme; yt-dlp needs it lowercase.
+        for (raw, expected) in [("HTTPS://example.com/V?a=B", "https://example.com/V?a=B"),
+                                ("Http://example.com/V?a=B", "http://example.com/V?a=B")] {
+            let target = SiphonApp.externalDownloadTarget(from: raw)
+            XCTAssertEqual(target?.raw, expected, raw)
+            XCTAssertEqual(target?.url.absoluteString, expected, raw)
+        }
+        // Add Download auto-fetch and batch extraction share the same normalization.
+        XCTAssertEqual(DownloadURLValidator.normalizedWebURL("HtTpS://Example.com/V"), "https://Example.com/V")
+        XCTAssertEqual(DownloadURLValidator.normalizedWebURL("http://example.com"), "http://example.com")
+        XCTAssertNil(DownloadURLValidator.normalizedWebURL("FTP://example.com/v"))
+        XCTAssertNil(DownloadURLValidator.normalizedWebURL("example.com/https://x"))
+        for link in ["siphon://download", "SIPHON://download", "Luma://download"] {
+            XCTAssertTrue(SiphonApp.isAppDeepLink(try XCTUnwrap(URL(string: link))), link)
+        }
+        XCTAssertFalse(SiphonApp.isAppDeepLink(try XCTUnwrap(URL(string: "https://download"))))
         for invalid in [nil, "", "ftp://example.com/v", "https://", "https://example.com/v\nx", "not a url"] {
             XCTAssertNil(SiphonApp.externalDownloadTarget(from: invalid), "\(String(describing: invalid))")
         }
