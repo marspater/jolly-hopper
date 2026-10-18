@@ -80,7 +80,7 @@ Extensions hand Siphon only the page URL and which browser to read cookies from,
 
 - **Language**: Swift 6.0 (Strict Concurrency & Sendable thread safety), SwiftUI, AppKit
 - **Extraction Engine**: Custom `yt-dlp` process coordinator
-- **Media Transcoder**: Native `FFmpeg` & `FFprobe` 6.1.1 (`arm64` / `x86_64`)
+- **Media Transcoder**: Native `FFmpeg` & `FFprobe` 9.0.2 (`arm64` / `x86_64`, static builds by [Martin Riedl](https://ffmpeg.martin-riedl.de))
 - **Logging & Diagnostics**: Centralized structured `LoggerService` & os_log tracing
 - **Target OS**: macOS 15.0 (Sequoia) through macOS 27+
 

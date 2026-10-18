@@ -17,22 +17,35 @@ struct DependencyChecksums {
     static let ytdlpURL = URL(string: "https://github.com/marspater/jolly-hopper/releases/download/ytdlp-2026.10.12.1/yt-dlp_macos") ?? URL(fileURLWithPath: "/")
     static let ytdlpExecutableSHA256 = "770375c36f63c72da6d9ec04959886e99c3d316f22728dc9be1ae57515339efb"
 
+    /// FFmpeg/FFprobe 9.0.2 release builds by Martin Riedl (ffmpeg.martin-riedl.de),
+    /// static, GPL, signed with Developer ID KU3N25YGLU. Versioned URLs never
+    /// change. To bump, take the new release's per-architecture ZIP URLs, check
+    /// the archive SHA-256 against the published `.sha256` files, and pin the
+    /// SHA-256 of each extracted executable. Intel release builds end January 2027.
+    static func ffmpegBuildURL(architecture: String, build: String, tool: String) -> URL {
+        var components = URLComponents()
+        components.scheme = "https"
+        components.host = "ffmpeg.martin-riedl.de"
+        let site = components.url ?? URL(fileURLWithPath: NSOpenStepRootDirectory())
+        return site.appending(components: "download", "macos", architecture, build, "\(tool).zip")
+    }
+
     #if arch(arm64)
-    static let ffmpegURL = URL(string: "https://github.com/eugeneware/ffmpeg-static/releases/download/b6.1.1/ffmpeg-darwin-arm64.gz") ?? URL(fileURLWithPath: "/")
-    static let ffmpegArchiveSHA256 = "8923876afa8db5585022d7860ec7e589af192f441c56793971276d450ed3bbfa"
-    static let ffmpegExecutableSHA256 = "a90e3db6a3fd35f6074b013f948b1aa45b31c6375489d39e572bea3f18336584"
+    static let ffmpegURL = ffmpegBuildURL(architecture: "arm64", build: "1789931890_9.0.2", tool: "ffmpeg")
+    static let ffmpegArchiveSHA256 = "c8ed4c4e6978a03c485edbfe4e0a5dc2380f8a30bba5150531b31b094492d924"
+    static let ffmpegExecutableSHA256 = "2e11c6f90993cdb79fff84d3f90044d28316b310e75b3e030cfc9a54f2c9d384"
 
-    static let ffprobeURL = URL(string: "https://github.com/eugeneware/ffmpeg-static/releases/download/b6.1.1/ffprobe-darwin-arm64.gz") ?? URL(fileURLWithPath: "/")
-    static let ffprobeArchiveSHA256 = "d986a8ec7b030899fe66a8a288ed809a3543338705a3ce178cfb85869c5d80be"
-    static let ffprobeExecutableSHA256 = "bb2db6f5d8cef919da12fbf592119a987202a8c060a886f3cab091f9cab90b64"
+    static let ffprobeURL = ffmpegBuildURL(architecture: "arm64", build: "1789931890_9.0.2", tool: "ffprobe")
+    static let ffprobeArchiveSHA256 = "fcbe839537485eaee7a7a8bc5cbc0f90d53617e80943e8a5b2e31cb851197ea6"
+    static let ffprobeExecutableSHA256 = "2738aa46a7f9acbc8ab09a6715554c90f7de603171ac403726765685df6a0059"
     #else
-    static let ffmpegURL = URL(string: "https://github.com/eugeneware/ffmpeg-static/releases/download/b6.1.1/ffmpeg-darwin-x64.gz") ?? URL(fileURLWithPath: "/")
-    static let ffmpegArchiveSHA256 = "929b375c1182d956c51f7ac25e0b2b0411fb01f6f407aa15c9758efeb4242106"
-    static let ffmpegExecutableSHA256 = "ebdddc936f61e14049a2d4b549a412b8a40deeff6540e58a9f2a2da9e6b18894"
+    static let ffmpegURL = ffmpegBuildURL(architecture: "amd64", build: "1789931006_9.0.2", tool: "ffmpeg")
+    static let ffmpegArchiveSHA256 = "7c6b4125b191cbf773832dc51f424cf2b6bb7da43007d1e066f95909e47cacd4"
+    static let ffmpegExecutableSHA256 = "b25689cf2211c0582d317e849912769a1f1c93904fe102c485b5364a425633d1"
 
-    static let ffprobeURL = URL(string: "https://github.com/eugeneware/ffmpeg-static/releases/download/b6.1.1/ffprobe-darwin-x64.gz") ?? URL(fileURLWithPath: "/")
-    static let ffprobeArchiveSHA256 = "d4da574d6e2e197bd259b47d69cf262df9e312af24ad960444f6d806d3d4c186"
-    static let ffprobeExecutableSHA256 = "fa3add0ce901f7241abe0dfc0155d958fc834aca3f8ce61f87cc712ae669c1e0"
+    static let ffprobeURL = ffmpegBuildURL(architecture: "amd64", build: "1789931006_9.0.2", tool: "ffprobe")
+    static let ffprobeArchiveSHA256 = "2322438ed2f6319a691291b247d09c69dcaa3a982460d1f269a7e1af335cfdfd"
+    static let ffprobeExecutableSHA256 = "b5df9964b0c2048318fafedcd4e3bbafbc561033cee77de8da1840685d8a9d0d"
     #endif
 }
 
@@ -76,6 +89,29 @@ actor DependencyInstaller {
             try? FileManager.default.removeItem(at: temporaryURL)
             throw error
         }
+    }
+
+    /// Unzips a verified archive with `ditto` and returns the regular file
+    /// `name` at its top level. The executable digest is checked by the caller.
+    static func extractExecutable(named name: String, from archive: URL, into directory: URL) throws -> URL {
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false, attributes: [.posixPermissions: 0o700])
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: NSOpenStepRootDirectory()).appending(components: "usr", "bin", "ditto")
+        process.arguments = ["-xk", "--", archive.path, directory.path]
+        process.environment = YtdlpService.createSanitizedEnvironment()
+        process.standardOutput = FileHandle.nullDevice
+        process.standardError = FileHandle.nullDevice
+        try process.run()
+        process.waitUntilExit()
+        guard process.terminationStatus == 0 else {
+            throw InstallError.executionFailed(binary: "ditto", message: "Failed to extract \(archive.lastPathComponent)")
+        }
+        let executable = directory.appendingPathComponent(name)
+        let values = try? executable.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey])
+        guard values?.isRegularFile == true, values?.isSymbolicLink != true else {
+            throw InstallError.executionFailed(binary: name, message: "\(archive.lastPathComponent) has no \(name) executable")
+        }
+        return executable
     }
 
     static func prepareVerifiedExecutable(at url: URL, expectedSHA256: String, name: String) throws {
@@ -158,48 +194,30 @@ actor DependencyInstaller {
         let ffmpegFinal = appSupportDir.appendingPathComponent("ffmpeg")
         let ffprobeFinal = appSupportDir.appendingPathComponent("ffprobe")
 
-        let ffmpegGz = appSupportDir.appendingPathComponent("ffmpeg_\(UUID().uuidString).gz")
-        let ffprobeGz = appSupportDir.appendingPathComponent("ffprobe_\(UUID().uuidString).gz")
+        let staging = appSupportDir.appendingPathComponent("ffmpeg_install_\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: staging, withIntermediateDirectories: false, attributes: [.posixPermissions: 0o700])
+        // Removes both archives, both extractions and anything left unmoved.
+        defer { try? FileManager.default.removeItem(at: staging) }
+        let ffmpegZip = staging.appendingPathComponent("ffmpeg.zip")
+        let ffprobeZip = staging.appendingPathComponent("ffprobe.zip")
 
-        // 1. Download both archives. The cleanup is registered first, so a
-        // failed second download does not leave the first archive behind.
-        defer {
-            try? FileManager.default.removeItem(at: ffmpegGz)
-            try? FileManager.default.removeItem(at: ffprobeGz)
-        }
-        try await Self.download(ffmpegURL, named: "FFmpeg", to: ffmpegGz)
-        try await Self.download(ffprobeURL, named: "FFprobe", to: ffprobeGz)
+        // 1. Download both archives.
+        try await Self.download(ffmpegURL, named: "FFmpeg", to: ffmpegZip)
+        try await Self.download(ffprobeURL, named: "FFprobe", to: ffprobeZip)
 
-        // 2. Verify both .gz archive SHA-256
-        guard YtdlpService.verifySHA256(fileURL: ffmpegGz, expectedHash: ffmpegArchiveSHA256) else {
+        // 2. Verify both archive SHA-256 values before extracting anything.
+        guard YtdlpService.verifySHA256(fileURL: ffmpegZip, expectedHash: ffmpegArchiveSHA256) else {
             throw InstallError.sha256Mismatch(file: "FFmpeg archive", expected: ffmpegArchiveSHA256)
         }
-        guard YtdlpService.verifySHA256(fileURL: ffprobeGz, expectedHash: ffprobeArchiveSHA256) else {
+        guard YtdlpService.verifySHA256(fileURL: ffprobeZip, expectedHash: ffprobeArchiveSHA256) else {
             throw InstallError.sha256Mismatch(file: "FFprobe archive", expected: ffprobeArchiveSHA256)
         }
 
-        // 3. Decompress both
-        let runGzip: (String) async throws -> Void = { path in
-            let proc = Process()
-            proc.executableURL = URL(fileURLWithPath: "/usr/bin/gzip")
-            proc.arguments = ["-d", "-f", "--", path]
-            proc.environment = YtdlpService.createSanitizedEnvironment()
-            try proc.run()
-            proc.waitUntilExit()
-            guard proc.terminationStatus == 0 else {
-                throw InstallError.executionFailed(binary: "gzip", message: "Failed to decompress \(path)")
-            }
-        }
-        try await runGzip(ffmpegGz.path)
-        try await runGzip(ffprobeGz.path)
-
-        let extractedFfmpeg = ffmpegGz.deletingPathExtension()
-        let extractedFfprobe = ffprobeGz.deletingPathExtension()
-
-        defer {
-            try? FileManager.default.removeItem(at: extractedFfmpeg)
-            try? FileManager.default.removeItem(at: extractedFfprobe)
-        }
+        // 3. Extract each into its own directory.
+        let extractedFfmpeg = try Self.extractExecutable(named: "ffmpeg", from: ffmpegZip,
+                                                         into: staging.appendingPathComponent("ffmpeg-x", isDirectory: true))
+        let extractedFfprobe = try Self.extractExecutable(named: "ffprobe", from: ffprobeZip,
+                                                          into: staging.appendingPathComponent("ffprobe-x", isDirectory: true))
 
         try Self.prepareVerifiedExecutable(at: extractedFfmpeg, expectedSHA256: ffmpegExecutableSHA256, name: "FFmpeg executable")
         try Self.prepareVerifiedExecutable(at: extractedFfprobe, expectedSHA256: ffprobeExecutableSHA256, name: "FFprobe executable")
@@ -2975,36 +2993,36 @@ public struct DownloadResult: Sendable {
             videoConvertorArgs.append(contentsOf: ["-vf", "tonemap=hable:desat=0,zscale=t=bt709:m=bt709:r=tv,format=yuv420p"])
         }
 
+        // Every encoder needs explicit rate control: without it VideoToolbox
+        // falls back to a low default bitrate (~2 Mb/s HEVC, ~1.3 Mb/s H.264
+        // at 1080p) and x265 to CRF 28, visibly degrading the source.
+        // VideoToolbox constant quality (-q:v) is supported on Apple Silicon only.
+        #if arch(arm64)
+        let h264Encoder = ["-c:v", "h264_videotoolbox", "-q:v", "80"]
+        let h265Encoder = ["-c:v", "hevc_videotoolbox", "-q:v", "80"]
+        #else
+        let h264Encoder = ["-c:v", "libx264", "-crf", "18"]
+        let h265Encoder = ["-c:v", "libx265", "-crf", "20"]
+        #endif
+
         switch conversionCodec {
         case .av1:
             videoConvertorArgs.append(contentsOf: ["-c:v", "libsvtav1", "-preset", "8", "-crf", "28", "-strict", "experimental"])
         case .h265:
-            #if arch(arm64)
-            videoConvertorArgs.append(contentsOf: ["-c:v", "hevc_videotoolbox", "-strict", "experimental"])
-            #else
-            videoConvertorArgs.append(contentsOf: ["-c:v", "libx265", "-strict", "experimental"])
-            #endif
+            videoConvertorArgs += h265Encoder
             if options.fileType == .mp4 {
                 videoConvertorArgs += ["-tag:v", "hvc1"]
             }
         case .vp9:
             videoConvertorArgs.append(contentsOf: ["-c:v", "libvpx-vp9", "-strict", "experimental"])
         case .h264:
-            #if arch(arm64)
-            videoConvertorArgs.append(contentsOf: ["-c:v", "h264_videotoolbox", "-strict", "experimental"])
-            #else
-            videoConvertorArgs.append(contentsOf: ["-c:v", "libx264", "-strict", "experimental"])
-            #endif
+            videoConvertorArgs += h264Encoder
         case .none:
             if isConvertToSDR && resolvedOutputFileExtension(for: options) == "webm" {
                 // WebM accepts only VP8/VP9/AV1 video.
                 videoConvertorArgs += ["-c:v", "libvpx-vp9"]
             } else if isConvertToSDR {
-                #if arch(arm64)
-                videoConvertorArgs += ["-c:v", "h264_videotoolbox"]
-                #else
-                videoConvertorArgs += ["-c:v", "libx264"]
-                #endif
+                videoConvertorArgs += h264Encoder
             }
         }
 
