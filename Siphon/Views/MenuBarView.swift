@@ -216,10 +216,13 @@ struct MenuBarView: View {
                     .foregroundColor(SiphonTheme.statusDownloadingText)
             }
             .padding(.horizontal, 2)
+            .accessibilityElement(children: .combine)
+            .accessibilityAddTraits(.isHeader)
 
             ForEach(downloadManager.downloadingDownloads.prefix(3)) { download in
                 HStack(spacing: 7) {
                     SiphonSpinner(size: 9, color: SiphonTheme.statusDownloadingText, lineWidth: 1.6)
+                        .accessibilityHidden(true)
 
                     Text(download.displayTitle)
                         .font(.siphonMetadataMedium)
@@ -241,6 +244,7 @@ struct MenuBarView: View {
                         .fill(Color.primary.opacity(SiphonTheme.Opacity.fillPill))
                 )
                 .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusSmall, style: .continuous))
+                .accessibilityElement(children: .combine)
             }
         }
     }
