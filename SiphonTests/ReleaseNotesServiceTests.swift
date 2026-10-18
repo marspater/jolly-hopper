@@ -26,6 +26,14 @@ final class ReleaseNotesServiceTests: XCTestCase {
         XCTAssertEqual(ReleaseNotesService.defaultFeatures.count, 5)
     }
 
+    func testDefaultFeaturesMatchCurrentRelease() {
+        XCTAssertEqual(
+            ReleaseNotesService.defaultFeatures.map(\.title),
+            ["Public-Network Boundary", "Signed Releases", "Pinned yt-dlp", "Calmer Main Window", "Geist Everywhere"]
+        )
+        XCTAssertTrue(ReleaseNotesService.defaultFeatures.allSatisfy { !$0.description.isEmpty })
+    }
+
     func testSanitizeReleaseNotes() {
         let service = ReleaseNotesService(userDefaults: testDefaults)
         let input = "  Line 1\r\nLine 2\r\n\r\n  "
