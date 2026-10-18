@@ -952,7 +952,8 @@ class YtdlpService: ObservableObject {
         // A video opened from a playlist (`youtu.be/ID?list=…`, `/shorts/ID?list=…`)
         // downloads only that video (`--no-playlist`), so preview it as one.
         let host = components.host?.lowercased() ?? ""
-        if host == "youtu.be" || ["/shorts/", "/embed/", "/live/"].contains(where: path.hasPrefix) {
+        let firstSegment = path.split(separator: "/").first.map(String.init) ?? ""
+        if host == "youtu.be" || ["shorts", "embed", "live"].contains(firstSegment) {
             return false
         }
         if path.contains("/playlist") || path.contains("/sets/") || path.contains("/album/") {

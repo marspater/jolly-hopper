@@ -121,6 +121,25 @@ final class EgressProxyTests: XCTestCase {
         XCTAssertTrue(accepted.hasPrefix("HTTP/1.1 403"), "An authorized client reaches the boundary check, got: \(accepted)")
     }
 
+    /// yt-dlp's argv is visible to other local processes; the credential
+    /// reaches it through a private config file instead.
+    func testProxyCredentialNeverReachesYtdlpArguments() throws {
+        let args = ["/x/yt-dlp", "--proxy", "http://siphon:secret-token@127.0.0.1:4321", "--", "https://example.com/v"]
+        let routed = try EgressBoundary.movingProxyCredentialToConfig(args)
+        let file = try XCTUnwrap(routed.configFile)
+        defer { try? FileManager.default.removeItem(at: file) }
+        XCTAssertEqual(routed.args, ["/x/yt-dlp", "--config-locations", file.path, "--", "https://example.com/v"])
+        XCTAssertFalse(routed.args.joined(separator: " ").contains("secret-token"))
+        XCTAssertEqual(try String(contentsOf: file, encoding: .utf8), "--proxy http://siphon:secret-token@127.0.0.1:4321\n")
+        let permissions = try FileManager.default.attributesOfItem(atPath: file.path)[.posixPermissions] as? NSNumber
+        XCTAssertEqual(permissions?.intValue, 0o600)
+
+        let plain = ["/x/yt-dlp", "--proxy", "http://127.0.0.1:4321", "--", "https://example.com/v"]
+        let unchanged = try EgressBoundary.movingProxyCredentialToConfig(plain)
+        XCTAssertEqual(unchanged.args, plain)
+        XCTAssertNil(unchanged.configFile)
+    }
+
     func testResolverSessionAnswersTheProxyCredentialChallenge() async throws {
         let server = MockHTTPServer()
         let serverPort = try server.start { _ in (200, [:], Data("REACHED".utf8)) }

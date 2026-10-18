@@ -74,13 +74,38 @@ enum EgressBoundary {
         return [configuration]
     }
 
-    private static var proxyEndpoint: (host: String, port: Int, credential: URLCredential?)? {
+    private struct ProxyEndpoint {
+        let host: String
+        let port: Int
+        let credential: URLCredential?
+    }
+
+    private static var proxyEndpoint: ProxyEndpoint? {
         guard let proxyURL, let url = URL(string: proxyURL), let host = url.host, let port = url.port else { return nil }
         let credential = url.user.flatMap { user in
             url.password.map { URLCredential(user: user.removingPercentEncoding ?? user,
                                               password: $0.removingPercentEncoding ?? $0, persistence: .none) }
         }
-        return (host, port, credential)
+        return ProxyEndpoint(host: host, port: port, credential: credential)
+    }
+
+    /// Moves a credentialed `--proxy` into a 0600 yt-dlp config file in the
+    /// private session directory, so the secret is not in yt-dlp's argv, which
+    /// other local processes can read. The caller removes the file afterwards.
+    static func movingProxyCredentialToConfig(_ args: [String]) throws -> (args: [String], configFile: URL?) {
+        guard let index = args.firstIndex(of: "--proxy"), index + 1 < args.count,
+              URL(string: args[index + 1])?.password != nil else { return (args, nil) }
+        guard let directory = CookieManager.getSecureTempCookiesDirectory() else {
+            throw YtdlpError.downloadFailed("Could not prepare the egress proxy configuration.")
+        }
+        let file = directory.appendingPathComponent("siphon_proxy_\(UUID().uuidString).conf")
+        guard FileManager.default.createFile(atPath: file.path, contents: Data("--proxy \(args[index + 1])\n".utf8),
+                                             attributes: [.posixPermissions: 0o600]) else {
+            throw YtdlpError.downloadFailed("Could not prepare the egress proxy configuration.")
+        }
+        var routed = args
+        routed.replaceSubrange(index...index + 1, with: ["--config-locations", file.path])
+        return (routed, file)
     }
 
     private static let sessionLock = NSLock()
@@ -319,30 +344,39 @@ public final class EgressProxyServer: @unchecked Sendable {
             return
         }
 
-        let parts = firstLine.split(separator: " ")
-        guard parts.count == 3, ["HTTP/1.0", "HTTP/1.1"].contains(String(parts[2])),
-              parts[0].allSatisfy({ Self.httpTokenCharacters.contains($0) }),
-              parts[1].utf8.allSatisfy({ $0 > 32 && $0 != 127 }) else {
+        guard let request = Self.requestLine(firstLine) else {
             sendResponse(client: client, status: "400 Bad Request", body: "Invalid request line\n", close: true)
             return
         }
 
-        let method = parts[0].uppercased()
-        let target = String(parts[1])
-
-        if let expectedAuthorization, !lines.dropFirst().contains(where: { line in
-            guard let header = RequestHeader(line), header.name == "proxy-authorization" else { return false }
-            return header.value == expectedAuthorization
-        }) {
+        guard isAuthorized(lines) else {
             sendResponse(client: client, status: "407 Proxy Authentication Required", body: "Proxy credential required\n",
                          close: true, extraHeaders: "Proxy-Authenticate: Basic realm=\"Siphon\"\r\n")
             return
         }
 
-        if method == "CONNECT" {
-            handleConnect(client: client, target: target, remainingData: remainingData)
+        if request.method == "CONNECT" {
+            handleConnect(client: client, target: request.target, remainingData: remainingData)
         } else {
-            handleForwardRequest(client: client, method: method, target: target, lines: lines, remainingData: remainingData)
+            handleForwardRequest(client: client, method: request.method, target: request.target, lines: lines, remainingData: remainingData)
+        }
+    }
+
+    /// Method and target of a valid `METHOD target HTTP/1.x` request line.
+    private static func requestLine(_ line: Substring) -> (method: String, target: String)? {
+        let parts = line.split(separator: " ")
+        guard parts.count == 3, ["HTTP/1.0", "HTTP/1.1"].contains(String(parts[2])),
+              parts[0].allSatisfy({ httpTokenCharacters.contains($0) }),
+              parts[1].utf8.allSatisfy({ $0 > 32 && $0 != 127 }) else { return nil }
+        return (parts[0].uppercased(), String(parts[1]))
+    }
+
+    /// True when no credential is required or a header carries the expected one.
+    private func isAuthorized(_ lines: [Substring]) -> Bool {
+        guard let expectedAuthorization else { return true }
+        return lines.dropFirst().contains { line in
+            guard let header = RequestHeader(line), header.name == "proxy-authorization" else { return false }
+            return header.value == expectedAuthorization
         }
     }
 
