@@ -664,6 +664,90 @@ final class DownloadExecutorTests: XCTestCase {
         XCTAssertNotEqual(download.options.customFilename, "SampleVideo (1)")
     }
 
+    /// yt-dlp moves the file into the save folder before Siphon's own
+    /// post-processing (conversion, integrity check). A pause there must resume
+    /// on that file, not stop at "file exists" or rename to "Title (1)".
+    func testResumeAfterPauseInPostProcessingReusesOwnOutput() async throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let output = folder.appendingPathComponent("Post Fixture.mp4")
+
+        let hook = PauseHook()
+        let delegate = TestExecutorDelegate()
+        let service = YtdlpService(processRunner: PausingRunner(hook: hook, output: output))
+        service.ytdlpPath = URL(fileURLWithPath: "/usr/local/bin/yt-dlp")
+        let executor = DownloadExecutor(ytdlpService: service, delegate: delegate)
+        let queue = DownloadQueue()
+        var options = DownloadOptions.default
+        options.saveFolder = folder
+        options.embedThumbnail = false
+        let download = Download(url: "https://example.com/post", options: options)
+        hook.pause = { executor.pauseDownload(download, queue: queue) }
+
+        await executor.executeDownload(download, queue: queue, ytdlpVersion: "test", languageService: LanguageService())
+        XCTAssertEqual(download.status, .paused)
+        XCTAssertEqual(Array(download.ownedOutputFiles.keys), [output], "The finished file is recorded as the job's own")
+
+        download.status = .queued // as resumeDownload does
+        hook.pause = nil
+        await executor.executeDownload(download, queue: queue, ytdlpVersion: "test", languageService: LanguageService())
+        XCTAssertEqual(download.status, .completed)
+        XCTAssertEqual(hook.runs, 2)
+        XCTAssertEqual(download.resolvedOutputBaseName, "Post Fixture")
+
+        // Replaced under the same name (say, another job's output), it is a collision again.
+        try FileManager.default.removeItem(at: output)
+        try Data("other".utf8).write(to: output)
+        XCTAssertEqual(queue.planUniqueOutputPath(for: download).resolvedBaseName, "Post Fixture (1)")
+
+        // A retry must not reuse a file a failed attempt left behind.
+        let manager = DownloadManager()
+        manager.ytdlpService.isUpdating = true
+        defer { manager.shutdown() }
+        manager.downloads = [download]
+        download.status = .failed
+        manager.retryDownload(download)
+        XCTAssertTrue(download.ownedOutputFiles.isEmpty)
+    }
+
+    private final class PauseHook: @unchecked Sendable {
+        var pause: (@MainActor @Sendable () -> Void)?
+        var runs = 0
+    }
+
+    /// Writes the output and prints yt-dlp's after_move line, then pauses the
+    /// job while `hook.pause` is set, as a user would during post-processing.
+    private struct PausingRunner: YtdlpProcessRunning {
+        let hook: PauseHook
+        let output: URL
+
+        func runCommand(_ args: [String]) async throws -> String {
+            #"{"id":"post","title":"Post Fixture"}"#
+        }
+
+        func runDownloadProcess(
+            args: [String],
+            saveFolder: URL,
+            processController: DownloadProcessController?,
+            onProgress: @escaping @Sendable (Double, String?, String?) -> Void,
+            onOutput: @escaping @Sendable (String) -> Void
+        ) async throws -> DownloadProcessResult {
+            hook.runs += 1
+            let template = args.firstIndex(of: "-o").map { args[$0 + 1] }
+            XCTAssertEqual(template, "Post Fixture.%(ext)s", "Run \(hook.runs) must keep the job's own name")
+            try Data("media".utf8).write(to: output)
+            onOutput("SIPHON_FINAL_PATH:\(output.path)")
+            let hook = hook
+            if let pause = await MainActor.run(body: { hook.pause }) {
+                try await Task.sleep(nanoseconds: 50_000_000) // the recorded path lands first
+                await pause()
+                throw YtdlpError.downloadFailed("Download was stopped.")
+            }
+            return DownloadProcessResult(primaryPath: output.path)
+        }
+    }
+
     func testRetryDuringStopUnwindStillDiscardsStoppedAttemptFiles() async throws {
         final class MockDelegate: DownloadExecutorDelegate {
             func executorDidUpdateStatus(for download: Download, to status: DownloadStatus) { download.status = status }

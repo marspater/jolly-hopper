@@ -1668,53 +1668,9 @@ struct AddDownloadView: View {
         }
     }
 
+    /// Same wording as the download row, so one failure reads the same in both places.
     private func formatErrorMessage(_ error: Error) -> String {
-        if let ytdlpError = error as? YtdlpError {
-            switch ytdlpError {
-            case .safariCookiesFullDiskAccessRequired:
-                return languageService.s("safari_fda_required")
-            case .tooManyRequests:
-                return languageService.s("too_many_requests")
-            case .cloudflareBlocked:
-                return languageService.s("cloudflare_blocked")
-            case .notFound:
-                return languageService.s("ytdlp_not_found")
-            case .parseError:
-                return languageService.s("parse_error")
-            case .noDownloadableFormats:
-                return languageService.s("no_downloadable_formats")
-            case .protectedSiteNeedsBrowserCookies:
-                return "This site requires signed-in browser cookies. Open Settings > Advanced > Browser Cookies, choose your browser, then try again."
-            case .protectedSiteLoginRequired:
-                return languageService.s("site_sign_in_required")
-            case .subtitleError(let details):
-                return String(format: languageService.s("subtitle_download_failed"), details)
-            case .ffmpegInstallationFailed:
-                return languageService.s("ffmpeg_error")
-            case .securityViolation(let message):
-                return "Security violation: \(message)"
-            case .downloadFailed(let reason), .commandFailed(let reason):
-                let lower = reason.lowercased()
-                if lower.contains("safari") && (lower.contains("full disk access") || lower.contains("operation not permitted") || lower.contains("cookies.binarycookies")) {
-                    return languageService.s("safari_fda_required")
-                } else if lower.contains("cloudflare") || lower.contains("403") || lower.contains("anti-bot") || lower.contains("captcha") {
-                    return languageService.s("cloudflare_blocked")
-                } else if lower.contains("sign in") || lower.contains("private video") || lower.contains("login") {
-                    return languageService.s("login_required")
-                } else if lower.contains("drm") || lower.contains("encrypted") {
-                    return languageService.s("drm_protected")
-                } else if lower.contains("unavailable") || lower.contains("removed") || lower.contains("404") {
-                    return languageService.s("video_unavailable")
-                } else if lower.contains("unsupported url") {
-                    return languageService.s("unsupported_url")
-                } else if lower.contains("timed out") || lower.contains("timeout") {
-                    return languageService.s("network_timeout")
-                } else {
-                    return reason.isEmpty ? languageService.s("parse_error") : reason
-                }
-            }
-        }
-        return error.localizedDescription
+        DownloadExecutor.errorMessage(for: error, languageService: languageService)
     }
 
     private func startDownload() {

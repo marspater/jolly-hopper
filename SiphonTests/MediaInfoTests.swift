@@ -50,6 +50,24 @@ final class MediaInfoTests: XCTestCase {
         XCTAssertEqual(info.resolveSelectedFormats(options: options).map(\.id), ["low"])
     }
 
+    @MainActor
+    func testWorstResolutionPicksLowestKnownHeight() {
+        let info = MediaInfo(id: "test", title: "Worst", formats: [
+            MediaFormat(formatId: "unknown", ext: "mp4", vcodec: "avc1", acodec: "none"),
+            MediaFormat(formatId: "1080", ext: "mp4", resolution: "1080p", vcodec: "avc1", acodec: "none", tbr: 4000),
+            MediaFormat(formatId: "144vp9", ext: "webm", resolution: "144p", vcodec: "vp9", acodec: "none", tbr: 80),
+            MediaFormat(formatId: "144", ext: "mp4", resolution: "144p", vcodec: "avc1", acodec: "none", tbr: 100),
+            MediaFormat(formatId: "360", ext: "mp4", resolution: "360p", vcodec: "avc1", acodec: "none", tbr: 500),
+            MediaFormat(formatId: "a-low", ext: "m4a", vcodec: "none", acodec: "aac", abr: 48),
+            MediaFormat(formatId: "a-high", ext: "m4a", vcodec: "none", acodec: "aac", abr: 128)
+        ])
+        var options = DownloadOptions.default
+        options.videoResolution = .worst
+        XCTAssertEqual(info.resolveSelectedFormats(options: options).map(\.id), ["144vp9", "a-high"])
+        options.videoCodec = .h264
+        XCTAssertEqual(info.resolveSelectedFormats(options: options).first?.id, "144", "A requested codec still wins")
+    }
+
     func testHTMLDecodingConsumesOnlyOriginalEntities() {
         XCTAssertEqual("&amp;lt; &amp;#39; &#38;lt; &#38;#x27;".decodingHTMLEntities(), "&lt; &#39; &lt; &#x27;")
         XCTAssertEqual("&#x26;lt; &#x26;#39;".decodingHTMLEntities(), "&lt; &#39;")
