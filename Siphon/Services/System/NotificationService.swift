@@ -60,10 +60,7 @@ final class NotificationService: NSObject, @unchecked Sendable, UNUserNotificati
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
         DispatchQueue.main.async {
-            NSApp.activate(ignoringOtherApps: true)
-            if let window = NSApp.windows.first(where: { $0.canBecomeMain }) {
-                window.makeKeyAndOrderFront(nil)
-            }
+            MainActor.assumeIsolated { MenuBarManager.shared.showMainWindow() }
         }
         completionHandler()
     }
