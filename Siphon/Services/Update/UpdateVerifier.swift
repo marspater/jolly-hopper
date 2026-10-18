@@ -281,7 +281,7 @@ public struct ReleaseManifest: Codable, Equatable, Sendable {
 public struct UpdateManifestVerifier: Sendable {
     /// Pinned Ed25519 public key for Siphon release manifest verification.
     /// The corresponding private key is held offline outside GitHub Actions.
-    public static let defaultPublicKeyBase64 = "Lmu0+3Kurb7TKWcwNNgDDKmXP/7F4rPRXqR10Q3k8/w="
+    public static let defaultPublicKeyBase64 = "Sl4wa+tCiG0Vwt9a4UMzubzrEvt1cedRakeaYMnDHX8="
 
     public static let defaultPublicKey: Curve25519.Signing.PublicKey = {
         guard let data = Data(base64Encoded: defaultPublicKeyBase64),
