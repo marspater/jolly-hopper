@@ -2960,8 +2960,8 @@ public struct DownloadResult: Sendable {
         // at 1080p) and x265 to CRF 28, visibly degrading the source.
         // VideoToolbox constant quality (-q:v) is supported on Apple Silicon only.
         #if arch(arm64)
-        let h264Encoder = ["-c:v", "h264_videotoolbox", "-q:v", "70"]
-        let h265Encoder = ["-c:v", "hevc_videotoolbox", "-q:v", "70"]
+        let h264Encoder = ["-c:v", "h264_videotoolbox", "-q:v", "80"]
+        let h265Encoder = ["-c:v", "hevc_videotoolbox", "-q:v", "80"]
         #else
         let h264Encoder = ["-c:v", "libx264", "-crf", "18"]
         let h265Encoder = ["-c:v", "libx265", "-crf", "20"]
