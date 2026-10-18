@@ -1,6 +1,6 @@
 cask "siphon" do
-  version "5.4.5"
-  sha256 "9bd6b023bce98eb2ecf72a52f2b78be127dd41bee1dca0eb7883ed9f2b6ef083"
+  version "5.5.0"
+  sha256 "a979d8b008ab57b7fb306f164946bc43593cd79806e3e3ee505d2d44c84beae1"
 
   url "https://github.com/marspater/jolly-hopper/releases/download/v#{version}/Siphon-v#{version}.dmg"
   name "Siphon"
