@@ -1,5 +1,6 @@
 import XCTest
 import SQLite3
+import CryptoKit
 import WebKit
 import AppKit
 @testable import Siphon
@@ -1439,6 +1440,59 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertTrue(capturedArgsBox.value.contains("--limit-rate"))
         if let idx = capturedArgsBox.value.firstIndex(of: "--limit-rate") {
             XCTAssertEqual(capturedArgsBox.value[idx + 1], "5120K")
+        }
+    }
+
+    /// FFmpeg ships as a ZIP per tool; both archives and both executables are
+    /// pinned, and the pair replaces the old binaries with nothing left behind.
+    func testFfmpegBundleInstallsFromPinnedZipArchives() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let support = root.appendingPathComponent("Support")
+        try FileManager.default.createDirectory(at: support, withIntermediateDirectories: true)
+        for old in ["ffmpeg", "ffprobe"] { try Data("old".utf8).write(to: support.appendingPathComponent(old)) }
+
+        func digest(_ url: URL) throws -> String {
+            SHA256.hash(data: try Data(contentsOf: url)).map { String(format: "%02x", $0) }.joined()
+        }
+        var archives: [String: (zip: URL, archiveSHA: String, executableSHA: String)] = [:]
+        for tool in ["ffmpeg", "ffprobe"] {
+            let source = root.appendingPathComponent("src-\(tool)")
+            try FileManager.default.createDirectory(at: source, withIntermediateDirectories: true)
+            let executable = source.appendingPathComponent(tool)
+            try Data("#!/bin/sh\necho \(tool)\n".utf8).write(to: executable)
+            try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: executable.path)
+            let zip = root.appendingPathComponent("\(tool).zip")
+            let ditto = Process()
+            ditto.executableURL = URL(fileURLWithPath: "/usr/bin/ditto")
+            ditto.arguments = ["-ck", executable.path, zip.path]
+            try ditto.run()
+            ditto.waitUntilExit()
+            archives[tool] = (zip, try digest(zip), try digest(executable))
+        }
+        let ffmpeg = try XCTUnwrap(archives["ffmpeg"])
+        let ffprobe = try XCTUnwrap(archives["ffprobe"])
+
+        let installed = try await DependencyInstaller.shared.installFfmpegBundle(
+            ffmpegURL: ffmpeg.zip, ffmpegArchiveSHA256: ffmpeg.archiveSHA, ffmpegExecutableSHA256: ffmpeg.executableSHA,
+            ffprobeURL: ffprobe.zip, ffprobeArchiveSHA256: ffprobe.archiveSHA, ffprobeExecutableSHA256: ffprobe.executableSHA,
+            appSupportDir: support)
+
+        XCTAssertEqual(try digest(installed.ffmpeg), ffmpeg.executableSHA)
+        XCTAssertEqual(try digest(installed.ffprobe), ffprobe.executableSHA)
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: support.path).sorted(), ["ffmpeg", "ffprobe"],
+                       "Archives and extraction directories must be removed")
+
+        // A tampered archive is rejected before anything is extracted or replaced.
+        do {
+            _ = try await DependencyInstaller.shared.installFfmpegBundle(
+                ffmpegURL: ffmpeg.zip, ffmpegArchiveSHA256: String(repeating: "0", count: 64), ffmpegExecutableSHA256: ffmpeg.executableSHA,
+                ffprobeURL: ffprobe.zip, ffprobeArchiveSHA256: ffprobe.archiveSHA, ffprobeExecutableSHA256: ffprobe.executableSHA,
+                appSupportDir: support)
+            XCTFail("A wrong archive digest must fail")
+        } catch {
+            XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: support.path).sorted(), ["ffmpeg", "ffprobe"])
         }
     }
 
