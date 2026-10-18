@@ -1540,6 +1540,17 @@ struct MediaInfo: Codable {
     }
 
     private func rankCandidateVideos(_ candidateVideos: [MediaFormat], options: DownloadOptions) -> [MediaFormat] {
+        if options.videoResolution == .worst {
+            // Lowest known height first (unknown heights last), then lowest bitrate;
+            // a requested codec still wins.
+            return candidateVideos.sorted { a, b in
+                let ra = a.videoRank(options: options), rb = b.videoRank(options: options)
+                if ra.matchesCodec != rb.matchesCodec { return ra.matchesCodec }
+                if (a.parsedHeight == nil) != (b.parsedHeight == nil) { return a.parsedHeight != nil }
+                if ra.height != rb.height { return ra.height < rb.height }
+                return ra.bitrate < rb.bitrate
+            }
+        }
         let eligibleVideos = candidateVideos.filter { video in
             guard let maxH = options.videoResolution?.maxHeight else { return true }
             if let h = video.parsedHeight {
