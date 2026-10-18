@@ -161,7 +161,8 @@ struct SiphonApp: App {
     }
 
     private func handleIncomingURL(_ url: URL) {
-        guard url.scheme == "siphon" || url.scheme == "siphon" else { return }
+        // Schemes are case-insensitive (RFC 3986), and macOS opens `SIPHON://` here too.
+        guard let scheme = url.scheme?.lowercased(), scheme == "siphon" || scheme == "siphon" else { return }
 
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
@@ -201,8 +202,10 @@ struct SiphonApp: App {
               !raw.contains("\r") && !raw.contains("\n") && !raw.contains("\0"),
               let url = URL(string: raw),
               let host = url.host, !host.isEmpty,
-              url.scheme == "http" || url.scheme == "https" else { return nil }
-        return (raw, url)
+              let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https" else { return nil }
+        // yt-dlp extractor patterns match a lowercase scheme only.
+        let normalized = scheme + raw.dropFirst(scheme.count)
+        return (normalized, URL(string: normalized) ?? url)
     }
 
     private static func logRejectedExternalTarget(_ rawValue: String?) {

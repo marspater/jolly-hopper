@@ -1988,6 +1988,13 @@ final class QueueAndErrorUXTests: XCTestCase {
 
     func testExternalDownloadTargetSyntax() {
         XCTAssertEqual(SiphonApp.externalDownloadTarget(from: "  https://example.com/v  ")?.raw, "https://example.com/v")
+        // Browsers may hand over an uppercase or mixed-case scheme; yt-dlp needs it lowercase.
+        for (raw, expected) in [("HTTPS://example.com/V?a=B", "https://example.com/V?a=B"),
+                                ("Http://example.com/V?a=B", "http://example.com/V?a=B")] {
+            let target = SiphonApp.externalDownloadTarget(from: raw)
+            XCTAssertEqual(target?.raw, expected, raw)
+            XCTAssertEqual(target?.url.absoluteString, expected, raw)
+        }
         for invalid in [nil, "", "ftp://example.com/v", "https://", "https://example.com/v\nx", "not a url"] {
             XCTAssertNil(SiphonApp.externalDownloadTarget(from: invalid), "\(String(describing: invalid))")
         }

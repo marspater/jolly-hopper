@@ -311,7 +311,8 @@ struct AddDownloadView: View {
         isLoading = false
         let clean = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
         appState.clearBrowserSessionIfOriginChanged(to: clean)
-        if clean.hasPrefix("http://") || clean.hasPrefix("https://") { fetchInfo(debounce: true) }
+        let lowered = clean.lowercased()
+        if lowered.hasPrefix("http://") || lowered.hasPrefix("https://") { fetchInfo(debounce: true) }
     }
 
     private func acceptExternalURL(_ newURL: String) {
@@ -1767,7 +1768,8 @@ struct AddDownloadView: View {
         for token in tokens {
             let line = String(token)
             let trimmed = line.trimmingCharacters(in: Self.batchUrlStripSet)
-            if (trimmed.hasPrefix("http://") || trimmed.hasPrefix("https://")) && !seen.contains(trimmed) {
+            let lowered = trimmed.lowercased()
+            if (lowered.hasPrefix("http://") || lowered.hasPrefix("https://")) && !seen.contains(trimmed) {
                 seen.insert(trimmed)
                 valid.append(trimmed)
             }
