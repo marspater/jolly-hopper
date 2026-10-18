@@ -407,9 +407,13 @@ final class DownloadExecutor: ObservableObject {
 
             // Applied on this attempt's own exit, before teardown frees the job for
             // a resume, so the next collision check always sees this job's files.
+            // A stopped attempt's file may be broken, and a Retry issued while it
+            // unwinds has already cleared ownership: it must not be claimed again.
             let finishedOutputs = OSAllocatedUnfairLock<[URL]>(initialState: [])
             defer {
-                for file in finishedOutputs.withLock({ $0 }) { recordFinishedOutput(file, for: download) }
+                if !stoppedAttemptIDs.contains(downloadId) {
+                    for file in finishedOutputs.withLock({ $0 }) { recordFinishedOutput(file, for: download) }
+                }
             }
 
             var executionOptions = download.options
