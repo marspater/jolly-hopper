@@ -119,13 +119,14 @@ class Download: ObservableObject, Identifiable {
         return title
     }
 
-    // Bolt Performance Optimization: Extract source domain once during initialization to avoid repeated URL parsing and regex evaluations during SwiftUI render passes
+    // Bolt Performance Optimization: Extract source domain once during initialization to avoid repeated URL parsing and regex evaluations during SwiftUI render passes.
+    // Short-circuits domain checks without allocating intermediate `"." + domain` strings on the heap.
     static func extractSourceDomain(from url: String) -> String {
         guard let urlObj = URL(string: url), let host = urlObj.host?.lowercased() else {
             return "Web"
         }
         let matchesDomain: (String) -> Bool = { domain in
-            host == domain || host.hasSuffix("." + domain)
+            host == domain || (host.hasSuffix(domain) && host.dropLast(domain.count).hasSuffix("."))
         }
 
         if matchesDomain("youtube.com") || matchesDomain("youtu.be") {
@@ -1634,25 +1635,25 @@ struct MediaInfo: Codable {
 public extension String {
     nonisolated private static let htmlEntityRegex = try? NSRegularExpression(pattern: "&(?:#[xX][0-9a-fA-F]{1,6}|#[0-9]{1,7}|[A-Za-z]+);")
 
-    // Bolt Performance Optimization: Cached static array of named HTML entities to avoid re-allocation on every invocation
-    private static let namedHTMLEntities: [(String, String)] = [
-        ("&quot;", "\""),
-        ("&apos;", "'"),
-        ("&amp;", "&"),
-        ("&lt;", "<"),
-        ("&gt;", ">"),
-        ("&nbsp;", " "),
-        ("&copy;", "©"),
-        ("&reg;", "®"),
-        ("&trade;", "™"),
-        ("&mdash;", "—"),
-        ("&ndash;", "–"),
-        ("&hellip;", "…"),
-        ("&lsquo;", "‘"),
-        ("&rsquo;", "’"),
-        ("&ldquo;", "“"),
-        ("&rdquo;", "”"),
-        ("&bull;", "•")
+    // Bolt Performance Optimization: Pre-compile static dictionary of named HTML entities to eliminate O(N) array search overhead with O(1) hash map lookups on every entity decoding call.
+    nonisolated private static let namedHTMLEntities: [String: String] = [
+        "&quot;": "\"",
+        "&apos;": "'",
+        "&amp;": "&",
+        "&lt;": "<",
+        "&gt;": ">",
+        "&nbsp;": " ",
+        "&copy;": "©",
+        "&reg;": "®",
+        "&trade;": "™",
+        "&mdash;": "—",
+        "&ndash;": "–",
+        "&hellip;": "…",
+        "&lsquo;": "‘",
+        "&rsquo;": "’",
+        "&ldquo;": "“",
+        "&rdquo;": "”",
+        "&bull;": "•"
     ]
 
     /// Decodes named, decimal (e.g. &#039; or &#39;), and hexadecimal (e.g. &#x27;) HTML entities into plain text.
@@ -1672,7 +1673,7 @@ public extension String {
                 replacement = UInt32(digits, radix: isHex ? 16 : 10)
                     .flatMap(UnicodeScalar.init).map(String.init)
             } else {
-                replacement = String.namedHTMLEntities.first { $0.0 == entity }?.1
+                replacement = String.namedHTMLEntities[entity]
             }
             if let replacement {
                 result.replaceCharacters(in: match.range, with: replacement)
