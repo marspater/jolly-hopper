@@ -1790,6 +1790,12 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertTrue(capturedArgsBox.value.contains("Origin: https://gayforfans.com"))
         XCTAssertTrue(capturedArgsBox.value.contains(where: { $0.contains("Chrome/126") }))
         XCTAssertFalse(capturedArgsBox.value.contains(where: { $0.contains("utm_source") }))
+        // The site is public: reading Chrome cookies would only raise a Keychain prompt.
+        XCTAssertFalse(capturedArgsBox.value.contains("--cookies-from-browser"))
+        XCTAssertTrue(capturedArgsBox.value.contains("--abort-on-unavailable-fragments"))
+        XCTAssertTrue(capturedArgsBox.value.contains("fragment:exp=1:8"))
+        // The site serves pages under /video/; /videos/ is a 404.
+        XCTAssertTrue(capturedArgsBox.value.contains(where: { $0.hasPrefix("https://gayforfans.com/video/8831/sample-title/") }))
         if let fIdx = capturedArgsBox.value.firstIndex(of: "-f") {
             XCTAssertEqual(capturedArgsBox.value[fIdx + 1], "b/best")
         }
@@ -2367,76 +2373,30 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertEqual(sources.first?.size, 18237192)
     }
 
-    func testGFFDirectManifestAndMetadataExtraction() async throws {
-        service.ytdlpPath = URL(fileURLWithPath: "/usr/local/bin/yt-dlp")
-        
-        let mainPageHTML = """
-        <!DOCTYPE html><html><head>
-        <title>Sample Workout - Fixture Site</title>
-        <meta property="og:image" content="https://gayforfans.com/contents/videos_screenshots/8000/8831/preview.jpg">
-        <script>
-        var flashvars = {
-            video_url: 'https://cdn.gayforfans.com/videos/8831/8831.mp4',
-            video_url_text: '1080p',
-            video_url_fhd: '1',
-            preview_url: 'https://gayforfans.com/contents/videos_screenshots/8000/8831/preview.jpg'
-        };
-        </script>
-        </head><body></body></html>
+    func testGFFPageParsingReadsPlayerManifest() {
+        let html = """
+        <html><head>
+        <title>Marco &amp; Zac | GayForFans</title>
+        <meta property="og:title" content="Marco &amp; Zac"
+        <meta property="og:image" content="https://cdn.gff.network/v/thumb.jpg"
+        </head><body>
+        <div class="gff-player" data-gff-player
+             data-manifest="https://gayforfans.com/play/fDFzsQTaPx3/manifest"
+             data-track="https://gayforfans.com/videos/fDFzsQTaPx3/play"
+             data-duration="1680" tabindex="0">
+        <video class="gff-video" poster="https://cdn.gff.network/v/thumb-card.jpg"></video>
+        </div></body></html>
         """
-        let mainB64 = mainPageHTML.data(using: .utf8)!.base64EncodedString()
-        
-        service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
-            if args.contains("--dump-pages") {
-                return mainB64
-            }
-            return "{}"
-        })
+        let page = "https://gayforfans.com/video/marco-zac-44ztd"
+        let media = YtdlpService.parseGFFPage(html, pageURL: page)
+        XCTAssertEqual(media?.streamURL, "https://gayforfans.com/play/fDFzsQTaPx3/manifest")
+        XCTAssertEqual(media?.title, "Marco & Zac")
+        XCTAssertEqual(media?.thumbnailURL, "https://cdn.gff.network/v/thumb.jpg")
+        XCTAssertEqual(media?.duration, 1680)
+        XCTAssertEqual(media?.embedURL, page)
 
-        let info = try await service.fetchInfo(url: "https://gayforfans.com/videos/8831/sample-workout/")
-        XCTAssertEqual(info.title, "Sample Workout - Fixture Site")
-        XCTAssertEqual(info.uploader, "Protected Site")
-        XCTAssertEqual(info.thumbnail, "https://gayforfans.com/contents/videos_screenshots/8000/8831/preview.jpg")
-        XCTAssertEqual(info.formats?.first?.formatId, "1080p")
-    }
-
-    func testGFFEmbedPageExtractionFallback() async throws {
-        service.ytdlpPath = URL(fileURLWithPath: "/usr/local/bin/yt-dlp")
-        
-        let mainPageHTML = """
-        <!DOCTYPE html><html><head><title>Fixture Site - Beach Sample Video</title></head>
-        <body>
-        <iframe src="https://gayforfans.com/embed/9921" width="100%" height="100%"></iframe>
-        </body></html>
-        """
-        let mainB64 = mainPageHTML.data(using: .utf8)!.base64EncodedString()
-
-        let embedPageHTML = """
-        <!DOCTYPE html><html><head><title>Embed</title></head><body>
-        <script>
-        var playerConfig = {
-            video_url: "https://cdn.gayforfans.com/videos/9921/master.m3u8",
-            preview_url: "https://cdn.gayforfans.com/thumbs/9921.jpg"
-        };
-        </script></body></html>
-        """
-        let embedB64 = embedPageHTML.data(using: .utf8)!.base64EncodedString()
-
-        service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
-            if args.contains("--dump-pages") {
-                if args.contains(where: { $0.contains("/videos/9921/") }) {
-                    return mainB64
-                } else if args.contains(where: { $0.contains("/embed/9921") }) {
-                    return embedB64
-                }
-            }
-            return "{}"
-        })
-
-        let info = try await service.fetchInfo(url: "https://gayforfans.com/videos/9921/beach-sample-video/")
-        XCTAssertEqual(info.title, "Fixture Site - Beach Sample Video")
-        XCTAssertEqual(info.uploader, "Protected Site")
-        XCTAssertEqual(info.thumbnail, "https://cdn.gayforfans.com/thumbs/9921.jpg")
+        // A page without the player (a 404 or listing page) resolves nothing.
+        XCTAssertNil(YtdlpService.parseGFFPage("<title>Not Found | GayForFans</title>", pageURL: page))
     }
 
     func testGFFErrorMappingAndCloudflare() async throws {
