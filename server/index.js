@@ -100,9 +100,39 @@ function extractDownloadUrl(payload) {
   return isTrustedReleaseUrl(candidateUrl) ? candidateUrl : DEFAULT_RELEASE_URL;
 }
 
+// The release fields the service publishes, or an error naming what failed.
+// A 403/429 without a token is almost always the shared-IP rate limit.
+async function parseReleaseResponse(res, hasToken) {
+  if (!res.ok) {
+    const hint = !hasToken && (res.status === 403 || res.status === 429) ? ' (rate limited; set GITHUB_TOKEN)' : '';
+    throw new Error(`GitHub API returned status ${res.status}${hint}`);
+  }
+  const payload = await res.json();
+  if (!payload.tag_name) {
+    throw new Error('GitHub API response missing tag_name');
+  }
+  return {
+    version: payload.tag_name,
+    name: payload.name || 'Siphon',
+    publishedAt: payload.published_at || new Date().toISOString(),
+    downloadUrl: extractDownloadUrl(payload),
+    notes: payload.body || ''
+  };
+}
+
 // Returns a release lookup with its own in-memory cache. `fetchImpl` is
-// injectable so tests never depend on the live GitHub API.
-function createReleaseFetcher(fetchImpl, cacheTtlMs, failureRetryMs) {
+// injectable so tests never depend on the live GitHub API. Unauthenticated
+// calls share GitHub's 60-per-hour limit with everything else behind the
+// host's outbound IP (Render's is shared); a token raises it to 5,000.
+function createReleaseFetcher(fetchImpl, cacheTtlMs, failureRetryMs, githubToken) {
+  const headers = {
+    'User-Agent': 'Siphon-Companion-Service',
+    'Accept': 'application/vnd.github.v3+json'
+  };
+  if (githubToken) {
+    headers.Authorization = `Bearer ${githubToken}`;
+  }
+
   let releaseCache = {
     data: null,
     expiresAt: 0
@@ -137,28 +167,9 @@ function createReleaseFetcher(fetchImpl, cacheTtlMs, failureRetryMs) {
     try {
       const res = await fetchImpl('https://api.github.com/repos/marspater/jolly-hopper/releases/latest', {
         signal: controller.signal,
-        headers: {
-          'User-Agent': 'Siphon-Companion-Service',
-          'Accept': 'application/vnd.github.v3+json'
-        }
+        headers
       });
-
-      if (!res.ok) {
-        throw new Error(`GitHub API returned status ${res.status}`);
-      }
-
-      const payload = await res.json();
-      if (!payload.tag_name) {
-        throw new Error('GitHub API response missing tag_name');
-      }
-
-      const cleanData = {
-        version: payload.tag_name,
-        name: payload.name || 'Siphon',
-        publishedAt: payload.published_at || new Date().toISOString(),
-        downloadUrl: extractDownloadUrl(payload),
-        notes: payload.body || ''
-      };
+      const cleanData = await parseReleaseResponse(res, Boolean(githubToken));
 
       releaseCache = {
         data: cleanData,
@@ -258,9 +269,10 @@ function parseRequestUrl(req) {
 function createServer({
   fetchImpl = globalThis.fetch,
   cacheTtlMs = RELEASE_CACHE_TTL_MS,
-  failureRetryMs = RELEASE_FAILURE_RETRY_MS
+  failureRetryMs = RELEASE_FAILURE_RETRY_MS,
+  githubToken = process.env.GITHUB_TOKEN
 } = {}) {
-  const getLatestRelease = createReleaseFetcher(fetchImpl, cacheTtlMs, failureRetryMs);
+  const getLatestRelease = createReleaseFetcher(fetchImpl, cacheTtlMs, failureRetryMs, githubToken);
   return http.createServer(async (req, res) => {
     try {
       if (req.method !== 'GET') {
@@ -310,7 +322,7 @@ if (require.main === module) {
     server.close(() => {
       process.exit(0);
     });
-    // Node 18 keeps idle keep-alive sockets open, which would stall close().
+    // Idle keep-alive sockets would otherwise stall close().
     server.closeIdleConnections?.();
     setTimeout(() => {
       server.closeAllConnections?.();

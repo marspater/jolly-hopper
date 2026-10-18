@@ -11,6 +11,8 @@ When setting up this service on Render:
 - **Build Command**: `npm install`
 - **Start Command**: `npm start`
 - **Health Check Path**: `/healthz` (or `/health`)
+- **Node.js**: 24 LTS, from `server/.node-version` (`engines` requires 24 or later)
+- **Environment**: `GITHUB_TOKEN` (optional, recommended). Unauthenticated GitHub API calls share a 60-per-hour limit with every service behind Render's outbound IP, which makes `/api/latest` answer 503. A fine-grained token with no extra permissions (public repository read) raises the limit to 5,000 per hour. It is sent only to `api.github.com` and never logged.
 
 The service listens on `PORT` (default `3000`). On Render (where `RENDER` is set) it binds to all interfaces so Render can route traffic to it; everywhere else it binds to `127.0.0.1`. Set `HOST` to override either.
 
