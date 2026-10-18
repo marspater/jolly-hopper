@@ -39,7 +39,8 @@ enum EgressBoundary {
                 kCFNetworkProxiesHTTPSProxy as String: endpoint.host,
                 kCFNetworkProxiesHTTPSPort as String: endpoint.port
             ]
-            let session = URLSession(configuration: configuration)
+            let session = URLSession(configuration: configuration,
+                                     delegate: ProxyCredentialDelegate(credential: endpoint.credential), delegateQueue: nil)
             // ponytail: cap cached routes at eight; retired sessions finish in-flight work.
             if sessions.count >= 8, let retiredPort = sessions.keys.first {
                 sessions.removeValue(forKey: retiredPort)?.finishTasksAndInvalidate()
@@ -47,6 +48,14 @@ enum EgressBoundary {
             sessions[endpoint.port] = session
             return session
         }
+    }
+
+    /// `Proxy-Authorization` for a plain-HTTP request through the bound proxy.
+    /// URLSession answers the proxy's 407 only for CONNECT (HTTPS), and a
+    /// session-wide header would also travel inside every HTTPS tunnel to the site.
+    static var proxyAuthorization: String? {
+        guard let credential = proxyEndpoint?.credential, let user = credential.user, let password = credential.password else { return nil }
+        return "Basic " + Data("\(user):\(password)".utf8).base64EncodedString()
     }
 
     static func retireSession(for port: UInt16) {
@@ -58,16 +67,45 @@ enum EgressBoundary {
     static var webKitProxyConfigurations: [ProxyConfiguration] {
         guard let endpoint = proxyEndpoint,
               let port = NWEndpoint.Port(rawValue: UInt16(endpoint.port)) else { return [] }
-        return [ProxyConfiguration(httpCONNECTProxy: .hostPort(host: NWEndpoint.Host(endpoint.host), port: port))]
+        let configuration = ProxyConfiguration(httpCONNECTProxy: .hostPort(host: NWEndpoint.Host(endpoint.host), port: port))
+        if let user = endpoint.credential?.user, let password = endpoint.credential?.password {
+            configuration.applyCredential(username: user, password: password)
+        }
+        return [configuration]
     }
 
-    private static var proxyEndpoint: (host: String, port: Int)? {
+    private static var proxyEndpoint: (host: String, port: Int, credential: URLCredential?)? {
         guard let proxyURL, let url = URL(string: proxyURL), let host = url.host, let port = url.port else { return nil }
-        return (host, port)
+        let credential = url.user.flatMap { user in
+            url.password.map { URLCredential(user: user.removingPercentEncoding ?? user,
+                                              password: $0.removingPercentEncoding ?? $0, persistence: .none) }
+        }
+        return (host, port, credential)
     }
 
     private static let sessionLock = NSLock()
     nonisolated(unsafe) private static var sessions: [Int: URLSession] = [:]
+}
+
+/// Answers the egress proxy's 407 on CONNECT with its per-launch credential. A
+/// task's own delegate that does not handle challenges falls back to this one.
+private final class ProxyCredentialDelegate: NSObject, URLSessionTaskDelegate, Sendable {
+    let credential: URLCredential?
+
+    init(credential: URLCredential?) {
+        self.credential = credential
+    }
+
+    func urlSession(
+        _ _: URLSession,
+        task _: URLSessionTask,
+        didReceive challenge: URLAuthenticationChallenge
+    ) async -> (URLSession.AuthChallengeDisposition, URLCredential?) {
+        guard challenge.protectionSpace.isProxy(), challenge.previousFailureCount == 0, let credential else {
+            return (.performDefaultHandling, nil)
+        }
+        return (.useCredential, credential)
+    }
 }
 
 /// A localhost-bound forward/tunneling proxy that enforces the public network boundary
@@ -77,7 +115,11 @@ enum EgressBoundary {
 /// and its resolved IP addresses are globally routable. Any private, loopback, link-local,
 /// or reserved destination is rejected with HTTP 403 Forbidden.
 public final class EgressProxyServer: @unchecked Sendable {
-    public static let shared = EgressProxyServer()
+    /// Any local process can reach 127.0.0.1. The shared proxy requires a
+    /// per-launch secret, so another app cannot route traffic through Siphon
+    /// (and around a per-app firewall rule).
+    public static let shared = EgressProxyServer(credential: UUID().uuidString.lowercased())
+    static let credentialUser = "siphon"
 
     public typealias TargetValidator = @Sendable (_ host: String, _ port: Int) -> Bool
     public typealias AddressResolver = @Sendable (_ host: String) -> [String]
@@ -85,13 +127,20 @@ public final class EgressProxyServer: @unchecked Sendable {
     private let queue = DispatchQueue(label: "com.marspater.siphon.egress-proxy", attributes: .concurrent)
     private let targetValidator: TargetValidator
     private let addressResolver: AddressResolver
+    /// Expected `Proxy-Authorization` value; nil accepts every local client.
+    private let expectedAuthorization: String?
+    private let credential: String?
     private let lock = NSLock()
 
     private(set) var listener: NWListener?
     private var startTask: Task<UInt16, Error>?
     public private(set) var port: UInt16 = 0
 
-    public init(targetValidator: TargetValidator? = nil, addressResolver: AddressResolver? = nil) {
+    public init(targetValidator: TargetValidator? = nil, addressResolver: AddressResolver? = nil, credential: String? = nil) {
+        self.credential = credential
+        self.expectedAuthorization = credential.map {
+            "Basic " + Data("\(Self.credentialUser):\($0)".utf8).base64EncodedString()
+        }
         self.targetValidator = targetValidator ?? { host, port in
             ExternalDownloadTargetPolicy.isAllowedTarget(host: host, port: port, resolveDNS: false)
         }
@@ -190,6 +239,12 @@ public final class EgressProxyServer: @unchecked Sendable {
         return assignedPort
     }
 
+    /// The URL clients use for this proxy on `port`, credential included.
+    public func proxyURL(port: UInt16) -> String {
+        guard let credential else { return "http://127.0.0.1:\(port)" }
+        return "http://\(Self.credentialUser):\(credential)@127.0.0.1:\(port)"
+    }
+
     public func stop() {
         lock.lock()
         listener?.cancel()
@@ -274,6 +329,15 @@ public final class EgressProxyServer: @unchecked Sendable {
 
         let method = parts[0].uppercased()
         let target = String(parts[1])
+
+        if let expectedAuthorization, !lines.dropFirst().contains(where: { line in
+            guard let header = RequestHeader(line), header.name == "proxy-authorization" else { return false }
+            return header.value == expectedAuthorization
+        }) {
+            sendResponse(client: client, status: "407 Proxy Authentication Required", body: "Proxy credential required\n",
+                         close: true, extraHeaders: "Proxy-Authenticate: Basic realm=\"Siphon\"\r\n")
+            return
+        }
 
         if method == "CONNECT" {
             handleConnect(client: client, target: target, remainingData: remainingData)
@@ -618,8 +682,8 @@ public final class EgressProxyServer: @unchecked Sendable {
         }
     }
 
-    private func sendResponse(client: NWConnection, status: String, body: String, close: Bool) {
-        let response = "HTTP/1.1 \(status)\r\nContent-Type: text/plain\r\nContent-Length: \(body.utf8.count)\r\nConnection: close\r\n\r\n\(body)"
+    private func sendResponse(client: NWConnection, status: String, body: String, close: Bool, extraHeaders: String = "") {
+        let response = "HTTP/1.1 \(status)\r\n\(extraHeaders)Content-Type: text/plain\r\nContent-Length: \(body.utf8.count)\r\nConnection: close\r\n\r\n\(body)"
         client.send(content: Data(response.utf8), completion: .contentProcessed { _ in
             if close {
                 client.cancel()

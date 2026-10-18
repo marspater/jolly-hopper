@@ -10,6 +10,9 @@ public final class DownloadProcessController: @unchecked Sendable {
     private var internalLifecycle: ProcessLifecycleState = .created
     private var activeProcess: Process?
     private var wasCancelled: Bool = false
+    /// Process group of an exited process whose descendants still hold its
+    /// output pipes. A group id stays reserved while any member is alive.
+    private var drainingProcessGroup: pid_t = 0
     private let lock = NSLock()
 
     public init() {
@@ -232,6 +235,16 @@ public final class DownloadProcessController: @unchecked Sendable {
         }
     }
 
+    /// The process exited but output is still draining; a cancel until
+    /// `endDrain()` stops `processGroup`, the descendants holding the pipes.
+    func beginDrain(processGroup: pid_t) {
+        lock.withLock { drainingProcessGroup = processGroup }
+    }
+
+    func endDrain() {
+        lock.withLock { drainingProcessGroup = 0 }
+    }
+
     /// Requests cancellation of the process and any active child process.
     public func cancel() {
         lock.lock()
@@ -239,8 +252,13 @@ public final class DownloadProcessController: @unchecked Sendable {
         let procToKill: Process?
         let pidToKill: pid_t
         switch internalLifecycle {
-        case .cancelling, .terminated:
+        case .cancelling:
             lock.unlock()
+            return
+        case .terminated:
+            let group = drainingProcessGroup
+            lock.unlock()
+            if group > 0 { kill(-group, SIGKILL) }
             return
         case .created, .failed:
             internalLifecycle = .cancelling(pid: 0)
@@ -602,7 +620,7 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
     /// download recovery strategies, which only inspect `.downloadFailed`.
     static func classifyFailure(errorOutput: String, exitCode: Int32) -> YtdlpError {
         let lower = errorOutput.lowercased()
-        if errorOutput.contains("Cloudflare") || (errorOutput.contains("403") && (errorOutput.contains("anti-bot") || lower.contains("cloudflare") || lower.contains("turnstile") || lower.contains("bot"))) || lower.contains("sign in to confirm you're not a bot") || lower.contains("sign in to confirm you’re not a bot") {
+        if errorOutput.contains("Cloudflare") || (errorOutput.contains("403") && (lower.contains("cloudflare") || lower.contains("turnstile") || mentionsBot(errorOutput))) || lower.contains("sign in to confirm you're not a bot") || lower.contains("sign in to confirm you’re not a bot") {
             return .cloudflareBlocked
         }
 
@@ -620,6 +638,11 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
         }
         let trimmed = cleanError.trimmingCharacters(in: .whitespacesAndNewlines)
         return .downloadFailed(trimmed.isEmpty ? "Process exited with code \(exitCode)" : cleanError)
+    }
+
+    /// "bot" or "anti-bot" as a word, not inside "both" or "robot".
+    static func mentionsBot(_ text: String) -> Bool {
+        text.range(of: #"(?i)\b(anti-)?bots?\b"#, options: .regularExpression) != nil
     }
 
     private func executeDownloadProcess(
@@ -649,7 +672,7 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
             process.environment = YtdlpService.createSanitizedEnvironment()
 
             let outputState = ThreadSafeOutputState()
-            let ffmpegProgress = FfmpegDownloadProgress()
+            let ffmpegProgress = FfmpegDownloadProgress(sectionDuration: FfmpegDownloadProgress.sectionDuration(in: args))
 
             // Bolt Performance Optimization: Process output lines using Substring slices and range searches to eliminate intermediate String array allocations during real-time output stream handling
             let processOutputLine: @Sendable (String) -> Void = { line in
@@ -830,11 +853,13 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
                 let exitCode = proc.terminationStatus
                 let reason = proc.terminationReason
                 let processGroup = Self.ownedProcessGroup(of: proc)
+                controller.beginDrain(processGroup: processGroup)
                 streamsDrained.whenDrained(within: drainTimeout, onTimeout: {
                     Self.stopOutputHolders(processGroup: processGroup)
                     outputPipe.fileHandleForReading.readabilityHandler = nil
                     errorPipe.fileHandleForReading.readabilityHandler = nil
                 }) {
+                    controller.endDrain()
                     // Each reader closes its handle at EOF. After a timeout the
                     // handles close on release, never under an in-flight read.
 
@@ -931,6 +956,28 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
 final class FfmpegDownloadProgress: @unchecked Sendable {
     private let lock = NSLock()
     private var duration: Double?
+    /// A `--download-sections` range: FFmpeg reports the whole source's
+    /// Duration but only writes the section, so that length is the total.
+    private let sectionDuration: Double?
+
+    init(sectionDuration: Double? = nil) {
+        self.sectionDuration = sectionDuration.flatMap { $0 > 0 ? $0 : nil }
+    }
+
+    /// Length of a single `*start-end` section in yt-dlp arguments.
+    static func sectionDuration(in args: [String]) -> Double? {
+        guard let index = args.firstIndex(of: "--download-sections"), index + 1 < args.count else { return nil }
+        let range = args[index + 1].drop { $0 == "*" }.split(separator: "-")
+        guard range.count == 2, let start = clockSeconds(range[0]), let end = clockSeconds(range[1]) else { return nil }
+        return end - start
+    }
+
+    /// `83`, `1:23` or `1:02:03.5` in seconds.
+    private static func clockSeconds(_ text: Substring) -> Double? {
+        let parts = text.split(separator: ":", omittingEmptySubsequences: false).map { Double($0) }
+        guard (1...3).contains(parts.count), parts.allSatisfy({ ($0 ?? -1) >= 0 }) else { return nil }
+        return parts.reduce(0) { $0 * 60 + ($1 ?? 0) }
+    }
 
     func parse(_ line: String) -> (fraction: Double, speed: String?, eta: String?)? {
         lock.lock()
@@ -945,6 +992,12 @@ final class FfmpegDownloadProgress: @unchecked Sendable {
             guard parts.count == 3, parts.allSatisfy({ $0.isFinite && $0 >= 0 }) else { return nil }
             return parts[0] * 3600 + parts[1] * 60 + parts[2]
         }
+        // Each FFmpeg run (one per playlist entry) describes its own input;
+        // a longer earlier entry must not shrink this one's progress.
+        if line.hasPrefix("Input #0") {
+            duration = nil
+            return nil
+        }
         if line.contains("Duration:") {
             if let parsed = seconds(token(after: "Duration:")), parsed > (duration ?? 0) {
                 duration = parsed
@@ -953,7 +1006,8 @@ final class FfmpegDownloadProgress: @unchecked Sendable {
         }
         guard line.trimmingCharacters(in: .whitespaces).hasPrefix("frame=") ||
                 line.trimmingCharacters(in: .whitespaces).hasPrefix("size=") else { return nil }
-        guard let duration, duration > 0, let elapsed = seconds(token(after: "time=")) else { return nil }
+        guard let duration = sectionDuration ?? duration, duration > 0,
+              let elapsed = seconds(token(after: "time=")) else { return nil }
         let speed = token(after: "speed=")
         let multiplier = speed.flatMap { Double($0.replacingOccurrences(of: "x", with: "")) }
         let eta: String?

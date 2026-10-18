@@ -224,7 +224,8 @@ struct ContentView: View {
             if (appState.selectedNavItem == .downloading || appState.selectedNavItem == .queued || appState.selectedNavItem == .home) &&
                 downloadManager.canStopDownloads {
                 Button {
-                    downloadManager.stopAllDownloads()
+                    // One banner per stopped job would flood Notification Center.
+                    downloadManager.stopAllDownloads(suppressNotification: true)
                 } label: {
                     Label(languageService.s("stop_all"), systemImage: "stop.circle")
                 }

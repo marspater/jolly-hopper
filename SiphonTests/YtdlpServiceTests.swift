@@ -1,5 +1,6 @@
 import XCTest
 import SQLite3
+import CryptoKit
 import WebKit
 import AppKit
 @testable import Siphon
@@ -1463,6 +1464,42 @@ final class YtdlpServiceTests: XCTestCase {
         if let idx = capturedArgsBox.value.firstIndex(of: "-f") {
             XCTAssertEqual(capturedArgsBox.value[idx + 1], "137+140")
         }
+    }
+
+    func testVideoOpenedFromAPlaylistIsNotPreviewedAsThePlaylist() {
+        for single in ["https://youtu.be/dQw4w9WgXcQ?list=PL123", "https://www.youtube.com/shorts/abc?list=PL1",
+                       "https://www.youtube.com/embed/abc?list=PL1", "https://www.youtube.com/watch?v=abc&list=PL1"] {
+            XCTAssertFalse(YtdlpService.isPlaylistURL(single), single)
+        }
+        XCTAssertTrue(YtdlpService.isPlaylistURL("https://www.youtube.com/playlist?list=PL123"))
+    }
+
+    func testAddSheetAndRowShareFailureWording() {
+        let lang = LanguageService()
+        let safari = YtdlpError.downloadFailed("ERROR: Safari cookies: Operation not permitted")
+        XCTAssertEqual(DownloadExecutor.errorMessage(for: safari, languageService: lang), lang.s("safari_fda_required"))
+        let forbidden = YtdlpError.downloadFailed("HTTP Error 403: Forbidden")
+        XCTAssertEqual(DownloadExecutor.errorMessage(for: forbidden, languageService: lang), lang.s("login_required"))
+    }
+
+    func testYtdlpInstallSwapsTheBinaryInPlace() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let source = root.appendingPathComponent("source-yt-dlp")
+        let script = Data("#!/bin/sh\nexit 0\n".utf8)
+        try script.write(to: source)
+        let appSupport = root.appendingPathComponent("Support")
+        try FileManager.default.createDirectory(at: appSupport, withIntermediateDirectories: true)
+        try Data("old".utf8).write(to: appSupport.appendingPathComponent("yt-dlp"))
+
+        let digest = SHA256.hash(data: script).map { String(format: "%02x", $0) }.joined()
+        let installed = try await DependencyInstaller.shared.installYtdlp(
+            downloadURL: source, expectedSHA256: digest, appSupportDir: appSupport)
+
+        XCTAssertEqual(try Data(contentsOf: installed), script)
+        let leftovers = try FileManager.default.contentsOfDirectory(atPath: appSupport.path).filter { $0 != "yt-dlp" }
+        XCTAssertTrue(leftovers.isEmpty, "No backup or staging file may remain: \(leftovers)")
     }
 
     func testWorstResolutionWithoutFormatsSelectsWorstVideo() async throws {

@@ -113,6 +113,12 @@ extension URLSession {
         delegate: (any URLSessionTaskDelegate)? = nil,
         limit: Int = 8 * 1024 * 1024
     ) async throws -> (Data, URLResponse) {
+        var request = request
+        if request.url?.scheme?.lowercased() == "http", configuration.connectionProxyDictionary != nil,
+           let authorization = EgressBoundary.proxyAuthorization {
+            // The proxy strips it before forwarding (hop-by-hop).
+            request.setValue(authorization, forHTTPHeaderField: "Proxy-Authorization")
+        }
         let (bytes, response) = try await self.bytes(for: request, delegate: delegate)
         guard response.expectedContentLength <= limit else { throw URLError(.dataLengthExceedsMaximum) }
         var data = Data()
@@ -704,7 +710,7 @@ final class DownloadExecutor: ObservableObject {
             routeSession = EgressBoundary.session
         } else {
             guard let port = try? await EgressProxyServer.shared.start(), !Task.isCancelled else { return nil }
-            routeSession = EgressBoundary.$proxyURL.withValue("http://127.0.0.1:\(port)") { EgressBoundary.session }
+            routeSession = EgressBoundary.$proxyURL.withValue(EgressProxyServer.shared.proxyURL(port: port)) { EgressBoundary.session }
         }
         guard let (data, response) = try? await routeSession.boundedData(
                   for: request,
@@ -769,7 +775,9 @@ final class DownloadExecutor: ObservableObject {
                 return String(format: lang.s("subtitle_download_failed"), details)
             case .downloadFailed(let reason), .commandFailed(let reason):
                 let lower = reason.lowercased()
-                if lower.contains("cloudflare") || lower.contains("cf-chl-") || lower.contains("anti-bot") || lower.contains("captcha") || lower.contains("turnstile") || lower.contains("just a moment...") {
+                if lower.contains("safari") && (lower.contains("full disk access") || lower.contains("operation not permitted") || lower.contains("cookies.binarycookies")) {
+                    return lang.s("safari_fda_required")
+                } else if lower.contains("cloudflare") || lower.contains("cf-chl-") || lower.contains("anti-bot") || lower.contains("captcha") || lower.contains("turnstile") || lower.contains("just a moment...") {
                     return lang.s("cloudflare_blocked")
                 } else if lower.contains("sign in") || lower.contains("private video") || lower.contains("login") || lower.contains("members-only") || lower.contains("403 forbidden") || lower.contains("http error 403") {
                     return lang.s("login_required")
