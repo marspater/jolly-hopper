@@ -6153,6 +6153,29 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: root.path), ["video.mp4"])
     }
 
+    func testVideoConversionSetsExplicitRateControl() {
+        var options = DownloadOptions.default
+        options.fileType = .mp4
+        #if arch(arm64)
+        let h264 = ("-q:v", "80"), h265 = ("-q:v", "80")
+        #else
+        let h264 = ("-crf", "18"), h265 = ("-crf", "20")
+        #endif
+        var cases: [(String, DownloadOptions, (String, String))] = []
+        options.conversionCodec = .h264
+        cases.append(("H.264", options, h264))
+        options.conversionCodec = .h265
+        cases.append(("HEVC", options, h265))
+        options.conversionCodec = ConversionCodec.none
+        options.hdrAction = .convertToSDR
+        cases.append(("SDR", options, h264))
+        for (label, options, (flag, value)) in cases {
+            let args = YtdlpService.videoConversionArguments(options: options)
+            XCTAssertEqual(args.firstIndex(of: flag).map { args[$0 + 1] }, value, "\(label): explicit rate control")
+            XCTAssertFalse(args.contains("-strict"), "\(label): stable encoders need no experimental flag")
+        }
+    }
+
     func testConversionKeepsOutputWhenExtensionDiffersOnlyInCase() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
