@@ -1790,6 +1790,12 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertTrue(capturedArgsBox.value.contains("Origin: https://gayforfans.com"))
         XCTAssertTrue(capturedArgsBox.value.contains(where: { $0.contains("Chrome/126") }))
         XCTAssertFalse(capturedArgsBox.value.contains(where: { $0.contains("utm_source") }))
+        // The site is public: reading Chrome cookies would only raise a Keychain prompt.
+        XCTAssertFalse(capturedArgsBox.value.contains("--cookies-from-browser"))
+        XCTAssertTrue(capturedArgsBox.value.contains("--abort-on-unavailable-fragments"))
+        XCTAssertTrue(capturedArgsBox.value.contains("fragment:exp=1:8"))
+        // The site serves pages under /video/; /videos/ is a 404.
+        XCTAssertTrue(capturedArgsBox.value.contains(where: { $0.hasPrefix("https://gayforfans.com/video/8831/sample-title/") }))
         if let fIdx = capturedArgsBox.value.firstIndex(of: "-f") {
             XCTAssertEqual(capturedArgsBox.value[fIdx + 1], "b/best")
         }
@@ -2367,76 +2373,63 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertEqual(sources.first?.size, 18237192)
     }
 
-    func testGFFDirectManifestAndMetadataExtraction() async throws {
-        service.ytdlpPath = URL(fileURLWithPath: "/usr/local/bin/yt-dlp")
-        
-        let mainPageHTML = """
-        <!DOCTYPE html><html><head>
-        <title>Sample Workout - Fixture Site</title>
-        <meta property="og:image" content="https://gayforfans.com/contents/videos_screenshots/8000/8831/preview.jpg">
-        <script>
-        var flashvars = {
-            video_url: 'https://cdn.gayforfans.com/videos/8831/8831.mp4',
-            video_url_text: '1080p',
-            video_url_fhd: '1',
-            preview_url: 'https://gayforfans.com/contents/videos_screenshots/8000/8831/preview.jpg'
-        };
-        </script>
-        </head><body></body></html>
+    func testGFFPageParsingReadsPlayerManifest() {
+        let html = """
+        <html><head>
+        <title>Marco &amp; Zac | GayForFans</title>
+        <meta property="og:title" content="Marco &amp; Zac"
+        <meta property="og:image" content="https://cdn.gff.network/v/thumb.jpg"
+        </head><body>
+        <div class="gff-player" data-gff-player
+             data-manifest="https://gayforfans.com/play/fDFzsQTaPx3/manifest"
+             data-track="https://gayforfans.com/videos/fDFzsQTaPx3/play"
+             data-duration="1680" tabindex="0">
+        <video class="gff-video" poster="https://cdn.gff.network/v/thumb-card.jpg"></video>
+        </div></body></html>
         """
-        let mainB64 = mainPageHTML.data(using: .utf8)!.base64EncodedString()
-        
-        service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
-            if args.contains("--dump-pages") {
-                return mainB64
-            }
-            return "{}"
-        })
+        let page = "https://gayforfans.com/video/marco-zac-44ztd"
+        let media = YtdlpService.parseGFFPage(html, pageURL: page)
+        XCTAssertEqual(media?.streamURL, "https://gayforfans.com/play/fDFzsQTaPx3/manifest")
+        XCTAssertEqual(media?.title, "Marco & Zac")
+        XCTAssertEqual(media?.thumbnailURL, "https://cdn.gff.network/v/thumb.jpg")
+        XCTAssertEqual(media?.duration, 1680)
+        XCTAssertEqual(media?.embedURL, page)
 
-        let info = try await service.fetchInfo(url: "https://gayforfans.com/videos/8831/sample-workout/")
-        XCTAssertEqual(info.title, "Sample Workout - Fixture Site")
-        XCTAssertEqual(info.uploader, "Protected Site")
-        XCTAssertEqual(info.thumbnail, "https://gayforfans.com/contents/videos_screenshots/8000/8831/preview.jpg")
-        XCTAssertEqual(info.formats?.first?.formatId, "1080p")
+        // A page without the player (a 404 or listing page) resolves nothing.
+        XCTAssertNil(YtdlpService.parseGFFPage("<title>Not Found | GayForFans</title>", pageURL: page))
     }
 
-    func testGFFEmbedPageExtractionFallback() async throws {
-        service.ytdlpPath = URL(fileURLWithPath: "/usr/local/bin/yt-dlp")
-        
-        let mainPageHTML = """
-        <!DOCTYPE html><html><head><title>Fixture Site - Beach Sample Video</title></head>
-        <body>
-        <iframe src="https://gayforfans.com/embed/9921" width="100%" height="100%"></iframe>
-        </body></html>
-        """
-        let mainB64 = mainPageHTML.data(using: .utf8)!.base64EncodedString()
+    func testGFFManifestRedirectAcceptsOnlyPublicPlaylists() {
+        let playlist = "https://cdn.gff.network/019e/videos/2026/07/02/clip/index.m3u8"
+        XCTAssertEqual(YtdlpService.acceptedGFFPlaylistURL(URL(string: playlist)), playlist)
+        // Not a playlist: keep the manifest route.
+        XCTAssertNil(YtdlpService.acceptedGFFPlaylistURL(URL(string: "https://gayforfans.com/play/abc/manifest")))
+        // Outside the public network boundary.
+        XCTAssertNil(YtdlpService.acceptedGFFPlaylistURL(URL(string: "http://127.0.0.1/index.m3u8")))
+        XCTAssertNil(YtdlpService.acceptedGFFPlaylistURL(URL(string: "file:///tmp/index.m3u8")))
+        XCTAssertNil(YtdlpService.acceptedGFFPlaylistURL(nil))
+    }
 
-        let embedPageHTML = """
-        <!DOCTYPE html><html><head><title>Embed</title></head><body>
-        <script>
-        var playerConfig = {
-            video_url: "https://cdn.gayforfans.com/videos/9921/master.m3u8",
-            preview_url: "https://cdn.gayforfans.com/thumbs/9921.jpg"
-        };
-        </script></body></html>
-        """
-        let embedB64 = embedPageHTML.data(using: .utf8)!.base64EncodedString()
-
-        service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
-            if args.contains("--dump-pages") {
-                if args.contains(where: { $0.contains("/videos/9921/") }) {
-                    return mainB64
-                } else if args.contains(where: { $0.contains("/embed/9921") }) {
-                    return embedB64
-                }
-            }
-            return "{}"
+    func testGFFCDNPlaylistDownloadSkipsBrowserCookies() async throws {
+        let previousBrowser = UserDefaults.standard.object(forKey: UserDefaultsKeys.browserForCookies)
+        UserDefaults.standard.set("chrome", forKey: UserDefaultsKeys.browserForCookies)
+        defer { UserDefaults.standard.set(previousBrowser, forKey: UserDefaultsKeys.browserForCookies) }
+        let capturedArgsBox = TestBox<[String]>([])
+        service.processRunner = MockYtdlpProcessRunner(mockDownload: { args in
+            capturedArgsBox.value = args
+            return "[download] Destination: /tmp/test.mp4\n"
         })
 
-        let info = try await service.fetchInfo(url: "https://gayforfans.com/videos/9921/beach-sample-video/")
-        XCTAssertEqual(info.title, "Fixture Site - Beach Sample Video")
-        XCTAssertEqual(info.uploader, "Protected Site")
-        XCTAssertEqual(info.thumbnail, "https://cdn.gayforfans.com/thumbs/9921.jpg")
+        // A playlist captured straight from the CDN, with no gayforfans.com page.
+        _ = try await service.download(
+            url: "https://cdn.gff.network/019e/videos/2026/07/02/clip/index.m3u8",
+            options: .default,
+            onProgress: { _, _, _ in /* Progress ignored in test */ },
+            onOutput: { _ in /* Output ignored in test */ }
+        )
+
+        XCTAssertFalse(capturedArgsBox.value.isEmpty)
+        XCTAssertFalse(capturedArgsBox.value.contains("--cookies-from-browser"))
     }
 
     func testGFFErrorMappingAndCloudflare() async throws {
@@ -3326,31 +3319,6 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertTrue(capturedArgsBox.value.contains(where: { $0.contains("Referer:https://www.boyfriend") }))
     }
 
-    func testBoyfriendTVBrowserCandidatesAutomaticallyUseInstalledSessions() {
-        let candidates = YtdlpService.boyfriendTVBrowserCandidates(
-            configured: nil,
-            installed: ["safari", "firefox", "chrome"],
-            hasFullDiskAccess: false
-        )
-
-        XCTAssertEqual(candidates.count, 3)
-        XCTAssertEqual(candidates[0], "chrome")
-        XCTAssertEqual(candidates[1], "firefox")
-        XCTAssertNil(candidates[2], "Anonymous transport should remain the final fallback")
-    }
-
-    func testBoyfriendTVBrowserCandidatesRespectConfiguredSessionWithoutProfileSpray() {
-        let candidates = YtdlpService.boyfriendTVBrowserCandidates(
-            configured: "firefox",
-            installed: ["chrome", "firefox", "brave"],
-            hasFullDiskAccess: true
-        )
-
-        XCTAssertEqual(candidates.count, 2)
-        XCTAssertEqual(candidates[0], "firefox")
-        XCTAssertNil(candidates[1], "Anonymous transport should remain the only fallback after the selected session")
-    }
-
     func testBoyfriendTVRawCookieBridgePreservesValuesAndScopesHost() throws {
         let url = try XCTUnwrap(URL(string: "https://www.boyfriendtv.com/videos/1710869/test/"))
         let cookies = YtdlpService.boyfriendTVCookies(
@@ -3552,7 +3520,6 @@ final class YtdlpServiceTests: XCTestCase {
         service.ytdlpPath = URL(fileURLWithPath: "/usr/local/bin/yt-dlp")
         UserDefaults.standard.set("none", forKey: UserDefaultsKeys.browserForCookies)
         defer { UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.browserForCookies) }
-        service.installedBrowsersProvider = { [] }
 
         let captured = TestBox<[String]>([])
         let stream = "https://cdn.boyfriendtv.com/key=test/media=hls4A/multi=854x480:v480/2026-09/_TPL_.mp4"
@@ -3578,6 +3545,48 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertTrue(captured.value.contains("generic:impersonate=chrome:macos"))
         XCTAssertFalse(captured.value.contains("--user-agent"))
         XCTAssertFalse(captured.value.contains(where: { $0.hasPrefix("Sec-Ch-Ua:") }))
+    }
+
+    func testBoyfriendTVResolverReadsCookiesOnlyFromConfiguredBrowser() async throws {
+        // Each extra Chromium browser read raises its own Keychain prompt, and the
+        // embed pages repeat the loop, so no other browser may be tried.
+        service.ytdlpPath = URL(fileURLWithPath: "/usr/local/bin/yt-dlp")
+        defer { UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.browserForCookies) }
+        service.boyfriendTVRenderedPageLoader = { _ in nil }
+        service.boyfriendTVRenderedStreamLoader = { _ in nil }
+
+        let cookieSources = TestBox<[String]>([])
+        let embedDumps = TestBox<Int>(0)
+        service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
+            if let idx = args.firstIndex(of: "--cookies-from-browser"), idx + 1 < args.count {
+                cookieSources.value.append(args[idx + 1])
+            }
+            if args.contains("--dump-pages") {
+                if args.last?.contains("/embed/") == true {
+                    embedDumps.value += 1
+                    return ""
+                }
+                // Player data without a stream sends the resolver to the embed pages.
+                return Data("<script>var videoPlayerData = {};</script>".utf8).base64EncodedString()
+            }
+            return "{}"
+        })
+
+        for (configured, expected) in [("edge", YtdlpService.cookiesFromBrowserArgument(for: "edge")), ("none", nil)] {
+            UserDefaults.standard.set(configured, forKey: UserDefaultsKeys.browserForCookies)
+            cookieSources.value = []
+            embedDumps.value = 0
+
+            _ = try? await service.fetchInfo(url: "https://www.boyfriendtv.com/videos/1710869/test/")
+
+            XCTAssertGreaterThan(embedDumps.value, 0, "embed pages must be exercised for \(configured)")
+            if let expected {
+                XCTAssertFalse(cookieSources.value.isEmpty)
+                XCTAssertEqual(Set(cookieSources.value), [expected])
+            } else {
+                XCTAssertEqual(cookieSources.value, [], "no browser is selected, so no browser may be read")
+            }
+        }
     }
 
     func testBoyfriendTVWebKitFallbackResolvesMainPageChallenge() async throws {
@@ -3627,7 +3636,6 @@ final class YtdlpServiceTests: XCTestCase {
         let login = "<html><body><p>To watch this video please <a href='/login'>login</a></p></body></html>"
         let renderedLoads = TestBox<[URL]>([])
         let dumpedPages = TestBox<[String]>([])
-        service.installedBrowsersProvider = { [] }
 
         service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
             if args.contains("--dump-pages") {
@@ -3658,7 +3666,6 @@ final class YtdlpServiceTests: XCTestCase {
     func testBoyfriendTVSignedOutWebKitPageStopsBeforeEmbeds() async throws {
         UserDefaults.standard.set("none", forKey: UserDefaultsKeys.browserForCookies)
         defer { UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.browserForCookies) }
-        service.installedBrowsersProvider = { [] }
 
         let login = "<html><body><p>To watch this video please <a href='/login'>login</a></p><iframe src='/embed/1684628/'></iframe></body></html>"
         let renderedLoads = TestBox<[URL]>([])
@@ -3686,7 +3693,6 @@ final class YtdlpServiceTests: XCTestCase {
     func testBoyfriendTVUsesTheSafariSignInWithoutSafarisCloudflareCookies() async throws {
         UserDefaults.standard.set("safari", forKey: UserDefaultsKeys.browserForCookies)
         defer { UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.browserForCookies) }
-        service.installedBrowsersProvider = { [] }
         @Sendable func cookie(_ domain: String, _ name: String, _ value: String) -> HTTPCookie {
             HTTPCookie(properties: [.domain: domain, .name: name, .value: value, .path: "/"])!
         }
@@ -3728,7 +3734,6 @@ final class YtdlpServiceTests: XCTestCase {
     func testBoyfriendTVSignedOutSafariFailsFastWithTheSafariSignInError() async throws {
         UserDefaults.standard.set("safari", forKey: UserDefaultsKeys.browserForCookies)
         defer { UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.browserForCookies) }
-        service.installedBrowsersProvider = { [] }
         service.safariCookiesProvider = {
             [HTTPCookie(properties: [.domain: ".boyfriendtv.com", .name: "configLang", .value: "es", .path: "/"])!]
         }
@@ -4114,7 +4119,6 @@ final class YtdlpServiceTests: XCTestCase {
     func testBoyfriendTVWebKitRuntimeRejectsPreviewMedia() async throws {
         UserDefaults.standard.set("none", forKey: UserDefaultsKeys.browserForCookies)
         defer { UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.browserForCookies) }
-        service.installedBrowsersProvider = { [] }
 
         let challenge = "<html><head><title>Just a moment...</title></head><body><script src='/cdn-cgi/challenge-platform/test'></script></body></html>"
         let challengeOutput = Data(challenge.utf8).base64EncodedString() + "\nERROR: HTTP Error 403: Forbidden"
@@ -4145,7 +4149,6 @@ final class YtdlpServiceTests: XCTestCase {
     func testBoyfriendTVWebKitChallengeTimeoutIsNotRepeatedAcrossMirrorsAndEmbeds() async throws {
         UserDefaults.standard.set("none", forKey: UserDefaultsKeys.browserForCookies)
         defer { UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.browserForCookies) }
-        service.installedBrowsersProvider = { [] }
 
         let challenge = "<html><head><title>Just a moment...</title></head><body><script src='/cdn-cgi/challenge-platform/test'></script></body></html>"
         let challengeOutput = Data(challenge.utf8).base64EncodedString() + "\nERROR: HTTP Error 403: Forbidden"
@@ -4180,7 +4183,6 @@ final class YtdlpServiceTests: XCTestCase {
     func testBoyfriendTVWebKitClearanceThenLoginReportsLoginNotCloudflare() async throws {
         UserDefaults.standard.set("none", forKey: UserDefaultsKeys.browserForCookies)
         defer { UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.browserForCookies) }
-        service.installedBrowsersProvider = { [] }
 
         let challenge = "<html><head><title>Just a moment...</title></head><body><script src='/cdn-cgi/challenge-platform/test'></script></body></html>"
         let challengeOutput = Data(challenge.utf8).base64EncodedString() + "\nERROR: HTTP Error 403: Forbidden"
