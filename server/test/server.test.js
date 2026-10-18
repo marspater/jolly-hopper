@@ -238,6 +238,22 @@ describe('GET /api/latest', () => {
     }
   });
 
+  test('logs a GITHUB_TOKEN hint on a rate limit, and never the token itself', async (t) => {
+    const logged = [];
+    t.mock.method(console, 'error', (...parts) => { logged.push(parts.join(' ')); });
+    for (const githubToken of [undefined, 'ghs_secret_value']) {
+      for (const status of [403, 429, 500]) {
+        logged.length = 0;
+        const { baseUrl } = await start([{ status, body: { message: 'API rate limit exceeded' } }], { githubToken });
+        assert.equal((await fetch(`${baseUrl}/api/latest`)).status, 503);
+        const line = logged.join('\n');
+        assert.match(line, new RegExp(`status ${status}`));
+        assert.equal(line.includes('set GITHUB_TOKEN'), !githubToken && status !== 500);
+        assert.ok(!line.includes('ghs_secret_value'), 'The token must never be logged');
+      }
+    }
+  });
+
   test('concurrent cold-cache requests share one upstream call', async () => {
     let calls = 0;
     let release;
