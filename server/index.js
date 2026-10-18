@@ -100,6 +100,26 @@ function extractDownloadUrl(payload) {
   return isTrustedReleaseUrl(candidateUrl) ? candidateUrl : DEFAULT_RELEASE_URL;
 }
 
+// The release fields the service publishes, or an error naming what failed.
+// A 403/429 without a token is almost always the shared-IP rate limit.
+async function parseReleaseResponse(res, hasToken) {
+  if (!res.ok) {
+    const hint = !hasToken && (res.status === 403 || res.status === 429) ? ' (rate limited; set GITHUB_TOKEN)' : '';
+    throw new Error(`GitHub API returned status ${res.status}${hint}`);
+  }
+  const payload = await res.json();
+  if (!payload.tag_name) {
+    throw new Error('GitHub API response missing tag_name');
+  }
+  return {
+    version: payload.tag_name,
+    name: payload.name || 'Siphon',
+    publishedAt: payload.published_at || new Date().toISOString(),
+    downloadUrl: extractDownloadUrl(payload),
+    notes: payload.body || ''
+  };
+}
+
 // Returns a release lookup with its own in-memory cache. `fetchImpl` is
 // injectable so tests never depend on the live GitHub API. Unauthenticated
 // calls share GitHub's 60-per-hour limit with everything else behind the
@@ -149,24 +169,7 @@ function createReleaseFetcher(fetchImpl, cacheTtlMs, failureRetryMs, githubToken
         signal: controller.signal,
         headers
       });
-
-      if (!res.ok) {
-        const hint = !githubToken && (res.status === 403 || res.status === 429) ? ' (rate limited; set GITHUB_TOKEN)' : '';
-        throw new Error(`GitHub API returned status ${res.status}${hint}`);
-      }
-
-      const payload = await res.json();
-      if (!payload.tag_name) {
-        throw new Error('GitHub API response missing tag_name');
-      }
-
-      const cleanData = {
-        version: payload.tag_name,
-        name: payload.name || 'Siphon',
-        publishedAt: payload.published_at || new Date().toISOString(),
-        downloadUrl: extractDownloadUrl(payload),
-        notes: payload.body || ''
-      };
+      const cleanData = await parseReleaseResponse(res, Boolean(githubToken));
 
       releaseCache = {
         data: cleanData,
