@@ -20,8 +20,9 @@ const RELEASE_PAYLOAD = {
 // Stubbed GitHub API: each call consumes the next scripted outcome.
 function scriptedFetch(outcomes) {
   const calls = [];
-  const fetchImpl = async (url) => {
+  const fetchImpl = async (url, init = {}) => {
     calls.push(url);
+    fetchImpl.lastHeaders = init.headers;
     const outcome = outcomes.shift();
     if (outcome instanceof Error) throw outcome;
     return new Response(typeof outcome.body === 'string' ? outcome.body : JSON.stringify(outcome.body), {
@@ -223,6 +224,18 @@ describe('GET /api/latest', () => {
     const second = await (await fetch(`${baseUrl}/api/latest`)).json();
     assert.equal(second.cached, true);
     assert.equal(calls.length, 1);
+  });
+
+  test('sends GITHUB_TOKEN as a bearer token only when one is configured', async () => {
+    for (const githubToken of ['ghs_example', undefined]) {
+      const { fetchImpl } = scriptedFetch([{ status: 200, body: RELEASE_PAYLOAD }]);
+      const server = createServer({ fetchImpl, githubToken });
+      servers.push(server);
+      const baseUrl = await listen(server);
+      assert.equal((await fetch(`${baseUrl}/api/latest`)).status, 200);
+      assert.equal(fetchImpl.lastHeaders.Authorization, githubToken ? `Bearer ${githubToken}` : undefined);
+      assert.equal(fetchImpl.lastHeaders['User-Agent'], 'Siphon-Companion-Service');
+    }
   });
 
   test('concurrent cold-cache requests share one upstream call', async () => {
