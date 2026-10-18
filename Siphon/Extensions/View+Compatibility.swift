@@ -533,10 +533,6 @@ public enum SiphonTheme {
         Color(nsColor: .separatorColor)
     }
 
-    public static var focusRing: Color {
-        Color(nsColor: .keyboardFocusIndicatorColor)
-    }
-
     public static var selection: Color {
         Color(nsColor: .selectedContentBackgroundColor)
     }
@@ -548,10 +544,6 @@ public enum SiphonTheme {
         light: Color.white.opacity(0.40),
         dark: Color.white.opacity(0.05)
     )
-
-    public static var destructiveSurface: Color {
-        statusFailed.opacity(0.12)
-    }
 
     // Semantic Radii Tokens (continuous corners):
     // 6 = tags, compact metadata, code blocks

@@ -289,8 +289,4 @@ final class DownloadQueue: ObservableObject {
         downloads.append(item)
         return true
     }
-
-    func move(from source: IndexSet, to destination: Int, in downloads: inout [Download]) {
-        downloads.move(fromOffsets: source, toOffset: destination)
-    }
 }

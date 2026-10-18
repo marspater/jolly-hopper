@@ -290,7 +290,7 @@ final class DownloadManagerTests: XCTestCase {
 
         XCTAssertEqual(manager.failedDownloads.count, 2)
 
-        manager.retryFailedDownloads()
+        manager.failedDownloads.forEach(manager.retryDownload)
 
         // Failed / stopped downloads should transition to .queued and reset progress/error details
         XCTAssertEqual(downloadStopped.status, .queued)
@@ -1514,7 +1514,6 @@ final class NotificationServiceTests: XCTestCase {
         NotificationService.shared.sendDownloadCompleted(filename: "sample_video.mp4")
         NotificationService.shared.sendDownloadFailed(filename: "sample_video.mp4")
         NotificationService.shared.sendDownloadStopped(filename: "sample_video.mp4")
-        NotificationService.shared.sendEncodingCompleted(filename: "sample_video.mp4", codec: "h264")
     }
 
     func testNotificationServiceUpdateAndAppNotifications() {
@@ -1530,7 +1529,6 @@ final class NotificationServiceTests: XCTestCase {
         NotificationService.shared.sendDownloadCompleted(filename: rawFilename, languageService: lang)
         NotificationService.shared.sendDownloadFailed(filename: rawFilename, languageService: lang)
         NotificationService.shared.sendDownloadStopped(filename: rawFilename, languageService: lang)
-        NotificationService.shared.sendEncodingCompleted(filename: rawFilename, codec: "h265", languageService: lang)
     }
 
     func testNotificationServiceUserPreferenceGating() {

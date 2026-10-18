@@ -415,7 +415,6 @@ final class DownloadTests: XCTestCase {
         XCTAssertNil(VideoResolution.best.maxHeight)
 
         XCTAssertTrue(VideoResolution.r1080p.ytdlpValue.contains("height<=1080"))
-        XCTAssertTrue(VideoResolution.r1080p.ytdlpCombinedValue.contains("bestaudio"))
     }
 
     func testCodecsAndPresets() {

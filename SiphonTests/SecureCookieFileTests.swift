@@ -165,9 +165,8 @@ final class SecureCookieFileTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: orphan2.path))
     }
 
-    func testCookieManagerCreateSecureCookieFile() async throws {
-        let manager = CookieManager()
-        let cookie = try await manager.createSecureCookieFile(
+    func testCreateSecureCookieFileWritesAllCookieSources() throws {
+        let cookie = try SecureCookieFile.create(
             url: "https://www.youtube.com/watch?v=98765",
             rawCookies: "SID=test123; HSID=test456",
             additionalCookies: [("PREF", "f1=50000")],
@@ -186,18 +185,6 @@ final class SecureCookieFileTests: XCTestCase {
         XCTAssertTrue(fileContent.contains("SID\ttest123"))
         XCTAssertTrue(fileContent.contains("PREF\tf1=50000"))
         XCTAssertTrue(fileContent.contains("EXTRA\tval"))
-    }
-
-    func testCookieManagerPurgeOrphanedFilesInstanceMethod() async {
-        guard let dir = CookieManager.getSecureTempCookiesDirectory() else { return }
-        let orphan = dir.appendingPathComponent("siphon_cookies_instance_orphan.txt")
-        try? "dummy".write(to: orphan, atomically: true, encoding: .utf8)
-        XCTAssertTrue(FileManager.default.fileExists(atPath: orphan.path))
-
-        let manager = CookieManager()
-        await manager.purgeOrphanedFiles()
-
-        XCTAssertFalse(FileManager.default.fileExists(atPath: orphan.path))
     }
 
     func testCookieManagerGetSecureTempCookiesDirectory() {

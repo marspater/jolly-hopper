@@ -317,10 +317,6 @@ final class DownloadQueueTests: XCTestCase {
         // Move to top
         XCTAssertTrue(queue.moveToTop(download: dl1, in: &downloads))
         XCTAssertEqual(downloads.map { $0.id }, [dl1.id, dl2.id, dl3.id])
-
-        // IndexSet move
-        queue.move(from: IndexSet(integer: 2), to: 0, in: &downloads)
-        XCTAssertEqual(downloads.map { $0.id }, [dl3.id, dl1.id, dl2.id])
     }
 
     func testReorderingSkipsDownloadsHiddenFromQueueTab() {
