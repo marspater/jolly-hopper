@@ -1484,16 +1484,44 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: support.path).sorted(), ["ffmpeg", "ffprobe"],
                        "Archives and extraction directories must be removed")
 
-        // A tampered archive is rejected before anything is extracted or replaced.
+        // A tampered archive (one byte changed, pinned digest unchanged) is
+        // rejected before anything is extracted or replaced.
+        var bytes = try Data(contentsOf: ffmpeg.zip)
+        bytes[bytes.count / 2] ^= 0xFF
+        let tampered = root.appendingPathComponent("tampered-ffmpeg.zip")
+        try bytes.write(to: tampered)
+        let installedBefore = try digest(installed.ffmpeg)
         do {
             _ = try await DependencyInstaller.shared.installFfmpegBundle(
-                ffmpegURL: ffmpeg.zip, ffmpegArchiveSHA256: String(repeating: "0", count: 64), ffmpegExecutableSHA256: ffmpeg.executableSHA,
+                ffmpegURL: tampered, ffmpegArchiveSHA256: ffmpeg.archiveSHA, ffmpegExecutableSHA256: ffmpeg.executableSHA,
                 ffprobeURL: ffprobe.zip, ffprobeArchiveSHA256: ffprobe.archiveSHA, ffprobeExecutableSHA256: ffprobe.executableSHA,
                 appSupportDir: support)
-            XCTFail("A wrong archive digest must fail")
+            XCTFail("A tampered archive must fail")
+        } catch {
+            XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: support.path).sorted(), ["ffmpeg", "ffprobe"])
+            XCTAssertEqual(try digest(installed.ffmpeg), installedBefore)
+        }
+
+        // An archive without the expected top-level executable is rejected.
+        do {
+            _ = try await DependencyInstaller.shared.installFfmpegBundle(
+                ffmpegURL: ffprobe.zip, ffmpegArchiveSHA256: ffprobe.archiveSHA, ffmpegExecutableSHA256: ffmpeg.executableSHA,
+                ffprobeURL: ffprobe.zip, ffprobeArchiveSHA256: ffprobe.archiveSHA, ffprobeExecutableSHA256: ffprobe.executableSHA,
+                appSupportDir: support)
+            XCTFail("An archive without ffmpeg must fail")
         } catch {
             XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: support.path).sorted(), ["ffmpeg", "ffprobe"])
         }
+
+        XCTAssertEqual(DependencyChecksums.ffmpegBuildURL(architecture: "arm64", build: "1_9.0.2", tool: "ffprobe").absoluteString,
+                       "https://ffmpeg.martin-riedl.de/download/macos/arm64/1_9.0.2/ffprobe.zip")
+        #if arch(arm64)
+        XCTAssertEqual(DependencyChecksums.ffmpegURL.absoluteString,
+                       "https://ffmpeg.martin-riedl.de/download/macos/arm64/1789931890_9.0.2/ffmpeg.zip")
+        #else
+        XCTAssertEqual(DependencyChecksums.ffmpegURL.absoluteString,
+                       "https://ffmpeg.martin-riedl.de/download/macos/amd64/1789931006_9.0.2/ffmpeg.zip")
+        #endif
     }
 
     func testCustomFormatIdSelectionFlagAppended() async throws {
