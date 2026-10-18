@@ -119,7 +119,9 @@ struct ContentView: View {
             Button(languageService.s("queue_recovery_discard"), role: .destructive) {
                 downloadManager.discardInterruptedJobs()
             }
-            Button(languageService.s("later"), role: .cancel) {}
+            Button(languageService.s("later"), role: .cancel) {
+                // Nothing to do: the alert closes and the jobs stay pending for next launch.
+            }
         } message: {
             Text(String(format: languageService.s("queue_recovery_message"), downloadManager.recoverableJobsCount))
         }

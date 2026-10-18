@@ -687,7 +687,7 @@ final class DownloadExecutorTests: XCTestCase {
 
         await executor.executeDownload(download, queue: queue, ytdlpVersion: "test", languageService: LanguageService())
         XCTAssertEqual(download.status, .paused)
-        XCTAssertEqual(download.filePaths, [output], "The finished file is recorded as the job's own")
+        XCTAssertEqual(Array(download.ownedOutputFiles.keys), [output], "The finished file is recorded as the job's own")
 
         download.status = .queued // as resumeDownload does
         hook.pause = nil
@@ -696,6 +696,11 @@ final class DownloadExecutorTests: XCTestCase {
         XCTAssertEqual(hook.runs, 2)
         XCTAssertEqual(download.resolvedOutputBaseName, "Post Fixture")
 
+        // Replaced under the same name (say, another job's output), it is a collision again.
+        try FileManager.default.removeItem(at: output)
+        try Data("other".utf8).write(to: output)
+        XCTAssertEqual(queue.planUniqueOutputPath(for: download).resolvedBaseName, "Post Fixture (1)")
+
         // A retry must not reuse a file a failed attempt left behind.
         let manager = DownloadManager()
         manager.ytdlpService.isUpdating = true
@@ -703,7 +708,7 @@ final class DownloadExecutorTests: XCTestCase {
         manager.downloads = [download]
         download.status = .failed
         manager.retryDownload(download)
-        XCTAssertTrue(download.filePaths.isEmpty)
+        XCTAssertTrue(download.ownedOutputFiles.isEmpty)
     }
 
     private final class PauseHook: @unchecked Sendable {
