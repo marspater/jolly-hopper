@@ -88,6 +88,16 @@ final class DownloadQueue: ObservableObject {
         })
     }
 
+    /// Collision keys of files in `folder` that this job's own earlier attempt
+    /// finished. A pause during Siphon's post-processing (conversion, integrity
+    /// check) leaves them there; resuming must reuse them, not report a collision.
+    nonisolated static func ownedOutputKeys(_ files: [URL], in folder: URL) -> Set<String> {
+        let folderPath = folder.standardizedFileURL.path
+        return Set(files.lazy
+            .filter { $0.deletingLastPathComponent().standardizedFileURL.path == folderPath }
+            .map { filenameCollisionKey($0.lastPathComponent) })
+    }
+
     private nonisolated static let videoContainerExtensions = ["mp4", "m4v", "mkv", "webm", "mov", "avi", "flv", "wmv", "ts"]
 
     /// The one "file exists" rule shared by the queue, the executor and the
@@ -144,7 +154,8 @@ final class DownloadQueue: ObservableObject {
         let folder = download.options.saveFolder
         let ext = YtdlpService.resolvedOutputFileExtension(for: download.options)
 
-        let existingFiles = Self.existingMediaFileKeys(in: folder, fileManager: fileManager)
+        let ownedFiles = Self.ownedOutputKeys(download.filePaths, in: folder)
+        let existingFiles = Self.existingMediaFileKeys(in: folder, fileManager: fileManager).subtracting(ownedFiles)
         // Overwrite consents to replacing the original name only. A name bumped
         // past another job's reservation must be free on disk too, or
         // --force-overwrites would clobber an unrelated file.
@@ -164,7 +175,7 @@ final class DownloadQueue: ObservableObject {
             if overwritesOriginal && baseName == originalName { return false }
             let path = folder.appendingPathComponent("\(baseName).\(ext)").path
             return Self.mediaFileCollides(baseName: baseName, options: download.options, existingMediaFileKeys: existingFiles) ||
-                fileManager.fileExists(atPath: path)
+                (fileManager.fileExists(atPath: path) && !ownedFiles.contains(Self.filenameCollisionKey("\(baseName).\(ext)")))
         }
         var candidatePath = folder.appendingPathComponent("\(candidateName).\(ext)").path
 
