@@ -6072,6 +6072,27 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: root.path), ["video.mp4"])
     }
 
+    func testVideoConversionSetsExplicitRateControl() {
+        var options = DownloadOptions.default
+        options.fileType = .mp4
+        var cases: [(String, DownloadOptions)] = []
+        for codec in [ConversionCodec.h264, .h265] {
+            options.conversionCodec = codec
+            cases.append(("\(codec)", options))
+        }
+        options.conversionCodec = ConversionCodec.none
+        options.hdrAction = .convertToSDR
+        cases.append(("SDR", options))
+        for (label, options) in cases {
+            let args = YtdlpService.videoConversionArguments(options: options)
+            #if arch(arm64)
+            XCTAssertEqual(args.firstIndex(of: "-q:v").map { args[$0 + 1] }, "70", "\(label): VideoToolbox needs constant quality")
+            #else
+            XCTAssertNotNil(args.firstIndex(of: "-crf"), "\(label): x264/x265 need an explicit CRF")
+            #endif
+        }
+    }
+
     func testConversionKeepsOutputWhenExtensionDiffersOnlyInCase() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
