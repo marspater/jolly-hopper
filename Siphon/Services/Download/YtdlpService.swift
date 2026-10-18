@@ -2623,13 +2623,17 @@ public struct DownloadResult: Sendable {
             default: args += ["-c:s", "mov_text"]
             }
             if needsRecode {
-                if try await sourceVideoAlreadyMatchesConversion(source, options: options, ffmpegDir: ffmpegDir,
-                                                                 processController: processController) {
+                let stream = try await probeVideoStream(source, ffmpegDir: ffmpegDir, processController: processController)
+                // Tone mapping needs a PQ or HLG source: on SDR video it only darkens
+                // the picture, and zscale cannot linearize an untagged transfer.
+                let toneMap = options.hdrAction == .convertToSDR && ["smpte2084", "arib-std-b67"].contains(stream?.transfer)
+                let codec = options.conversionCodec ?? .none
+                if !toneMap && (codec == .none || stream?.codec == codec.ffprobeCodecName) {
                     // Re-encoding a stream already in the target codec only costs a lossy generation.
                     args += ["-c:v", "copy"]
-                    if options.conversionCodec == .h265 && targetExtension == "mp4" { args += ["-tag:v", "hvc1"] }
+                    if codec == .h265 && targetExtension == "mp4" { args += ["-tag:v", "hvc1"] }
                 } else {
-                    args += Self.videoConversionArguments(options: options)
+                    args += Self.videoConversionArguments(options: options, toneMap: toneMap)
                 }
             }
         }
@@ -2655,32 +2659,23 @@ public struct DownloadResult: Sendable {
         return destination
     }
 
-    /// True when the first video stream already uses the requested conversion codec and
-    /// no tone mapping is needed, so the video can be stream-copied instead of re-encoded.
-    private func sourceVideoAlreadyMatchesConversion(_ source: URL, options: DownloadOptions, ffmpegDir: String,
-                                                     processController: DownloadProcessController?) async throws -> Bool {
-        guard options.hdrAction != .convertToSDR else { return false }
-        let expected: String
-        switch options.conversionCodec ?? .none {
-        case .none: return false
-        case .h264: expected = "h264"
-        case .h265: expected = "hevc"
-        case .vp9: expected = "vp9"
-        case .av1: expected = "av1"
-        }
+    /// The first video stream's codec and transfer function, or nil when ffprobe fails.
+    private func probeVideoStream(_ source: URL, ffmpegDir: String,
+                                  processController: DownloadProcessController?) async throws -> (codec: String, transfer: String)? {
         let ffprobe = URL(fileURLWithPath: ffmpegDir).appendingPathComponent("ffprobe")
         do {
             let output = try await processRunner.runCommand([
-                ffprobe.path, "-v", "error", "-select_streams", "V:0", "-show_entries", "stream=codec_name",
+                ffprobe.path, "-v", "error", "-select_streams", "V:0", "-show_entries", "stream=codec_name,color_transfer",
                 "-of", "csv=p=0", source.path
             ], processController: processController)
-            return output.trimmingCharacters(in: .whitespacesAndNewlines) == expected
+            let fields = output.trimmingCharacters(in: .whitespacesAndNewlines).split(separator: ",", omittingEmptySubsequences: false)
+            return (fields.first.map(String.init) ?? "", fields.count > 1 ? String(fields[1]) : "")
         } catch {
             if error is CancellationError { throw error }
             try Task.checkCancellation()
             guard processController?.isCancelled != true else { throw CancellationError() }
-            LoggerService.shared.log("Codec probe failed, converting anyway: \(error.localizedDescription)", level: .warning)
-            return false
+            LoggerService.shared.log("Video stream probe failed, converting without tone mapping: \(error.localizedDescription)", level: .warning)
+            return nil
         }
     }
 
@@ -2988,17 +2983,24 @@ public struct DownloadResult: Sendable {
         return args
     }
 
-    nonisolated static func videoConversionArguments(options: DownloadOptions) -> [String] {
+    /// `tonemap` works on linear light, so PQ/HLG is linearized first; feeding it
+    /// the coded signal leaves a dark, desaturated picture.
+    nonisolated static let hdrToSDRFilter =
+        "zscale=t=linear:npl=100,format=gbrpf32le,zscale=p=bt709,tonemap=hable:desat=0,zscale=t=bt709:m=bt709:r=tv,format=yuv420p"
+
+    /// Encoder arguments for a conversion; `toneMap` only for a PQ or HLG source.
+    nonisolated static func videoConversionArguments(options: DownloadOptions, toneMap: Bool) -> [String] {
         let conversionCodec = options.conversionCodec ?? .none
-        let isConvertToSDR = options.hdrAction == .convertToSDR
         var videoConvertorArgs: [String] = ["-y"]
-        if isConvertToSDR {
-            videoConvertorArgs.append(contentsOf: ["-vf", "tonemap=hable:desat=0,zscale=t=bt709:m=bt709:r=tv,format=yuv420p"])
+        if toneMap {
+            videoConvertorArgs.append(contentsOf: ["-vf", hdrToSDRFilter])
         }
 
         // Every encoder needs explicit rate control: without it VideoToolbox
         // falls back to a low default bitrate (~2 Mb/s HEVC, ~1.3 Mb/s H.264
         // at 1080p) and x265 to CRF 28, visibly degrading the source.
+        // libvpx-vp9 needs -b:v 0 for -crf to mean constant quality; its default
+        // output measured far worse (SSIM 0.83 at a higher bitrate than CRF 24).
         // VideoToolbox constant quality (-q:v) is supported on Apple Silicon only.
         #if arch(arm64)
         let h264Encoder = ["-c:v", "h264_videotoolbox", "-q:v", "80"]
@@ -3007,6 +3009,7 @@ public struct DownloadResult: Sendable {
         let h264Encoder = ["-c:v", "libx264", "-crf", "18"]
         let h265Encoder = ["-c:v", "libx265", "-crf", "20"]
         #endif
+        let vp9Encoder = ["-c:v", "libvpx-vp9", "-crf", "24", "-b:v", "0", "-row-mt", "1"]
 
         switch conversionCodec {
         case .av1:
@@ -3017,14 +3020,14 @@ public struct DownloadResult: Sendable {
                 videoConvertorArgs += ["-tag:v", "hvc1"]
             }
         case .vp9:
-            videoConvertorArgs.append(contentsOf: ["-c:v", "libvpx-vp9", "-strict", "experimental"])
+            videoConvertorArgs += vp9Encoder
         case .h264:
             videoConvertorArgs += h264Encoder
         case .none:
-            if isConvertToSDR && resolvedOutputFileExtension(for: options) == "webm" {
+            if toneMap && resolvedOutputFileExtension(for: options) == "webm" {
                 // WebM accepts only VP8/VP9/AV1 video.
-                videoConvertorArgs += ["-c:v", "libvpx-vp9"]
-            } else if isConvertToSDR {
+                videoConvertorArgs += vp9Encoder
+            } else if toneMap {
                 videoConvertorArgs += h264Encoder
             }
         }
@@ -3143,7 +3146,8 @@ public struct DownloadResult: Sendable {
         guard let raw else { return nil }
         let browser = raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         if browser == "none" || browser.isEmpty { return nil }
-        if browser == "helium" { return "chromium-based" }
+        // A Helium handoff reads Helium only; "chromium-based" searches every Chromium browser.
+        if browser == "helium" { return browser }
         return SupportedBrowser.allowedRawValues.contains(browser) ? browser : nil
     }
 

@@ -4,6 +4,7 @@
 //
 
 import Foundation
+import os
 import AppKit
 import ImageIO
 
@@ -114,8 +115,8 @@ extension URLSession {
         limit: Int = 8 * 1024 * 1024
     ) async throws -> (Data, URLResponse) {
         var request = request
-        if request.url?.scheme?.lowercased() == "http", configuration.connectionProxyDictionary != nil,
-           let authorization = EgressBoundary.proxyAuthorization {
+        if request.url?.scheme?.lowercased() == "http",
+           let authorization = EgressBoundary.proxyAuthorization(for: self) {
             // The proxy strips it before forwarding (hop-by-hop).
             request.setValue(authorization, forHTTPHeaderField: "Proxy-Authorization")
         }
@@ -404,6 +405,17 @@ final class DownloadExecutor: ObservableObject {
             }
             eventCoalescer = coalescer
 
+            // Applied on this attempt's own exit, before teardown frees the job for
+            // a resume, so the next collision check always sees this job's files.
+            // A stopped attempt's file may be broken, and a Retry issued while it
+            // unwinds has already cleared ownership: it must not be claimed again.
+            let finishedOutputs = OSAllocatedUnfairLock<[URL]>(initialState: [])
+            defer {
+                if !stoppedAttemptIDs.contains(downloadId) {
+                    for file in finishedOutputs.withLock({ $0 }) { recordFinishedOutput(file, for: download) }
+                }
+            }
+
             var executionOptions = download.options
             executionOptions.customFilename = download.resolvedOutputBaseName ?? executionOptions.customFilename
             let downloadResult = try await ytdlpService.download(
@@ -416,13 +428,10 @@ final class DownloadExecutor: ObservableObject {
                     let safeProgress = progress.isNaN ? 0 : max(0, min(1, progress))
                     coalescer.recordProgress(progress: safeProgress, speed: speed, eta: eta)
                 },
-                onOutput: { [weak self, weak download] line in
+                onOutput: { line in
                     // Recorded outside the coalescer, whose delivery stops at a pause.
                     if let file = Self.finishedOutputFile(in: line, saveFolder: folderPath) {
-                        Task { @MainActor in
-                            guard let self, let download else { return }
-                            self.recordFinishedOutput(file, for: download)
-                        }
+                        finishedOutputs.withLock { $0.append(file) }
                     }
                     coalescer.recordLogLine(line)
                 }
@@ -562,8 +571,7 @@ final class DownloadExecutor: ObservableObject {
 
     /// Remembers a finished file, and which file it is, so a resume after a
     /// pause in post-processing treats it as this job's own output (see
-    /// `DownloadQueue.ownedOutputKeys`). This hop is queued on the main actor
-    /// before the attempt's teardown, so no new attempt can start ahead of it.
+    /// `DownloadQueue.ownedOutputKeys`).
     private func recordFinishedOutput(_ file: URL, for download: Download) {
         guard let number = DownloadQueue.fileNumber(of: file) else { return }
         download.ownedOutputFiles[file] = number
