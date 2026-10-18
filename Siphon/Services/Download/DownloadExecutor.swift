@@ -311,7 +311,7 @@ final class DownloadExecutor: ObservableObject {
             // per entry by yt-dlp, so the job title says nothing about a collision.
             let options = download.options
             let isPlaylist = info.playlist != nil
-            let ownedFiles = DownloadQueue.ownedOutputKeys(download.filePaths, in: folderPath)
+            let ownedFiles = DownloadQueue.ownedOutputKeys(download.ownedOutputFiles, in: folderPath)
             let fileExists = await Task.detached {
                 !isPlaylist && DownloadQueue.mediaFileCollides(
                     baseName: sanitizedBaseName,
@@ -554,15 +554,13 @@ final class DownloadExecutor: ObservableObject {
         return path.hasPrefix("/") ? URL(fileURLWithPath: path) : saveFolder.appendingPathComponent(path)
     }
 
-    /// Remembers a finished file so a resume after a pause in post-processing
-    /// treats it as this job's own output (see `DownloadQueue.ownedOutputKeys`).
+    /// Remembers a finished file, and which file it is, so a resume after a
+    /// pause in post-processing treats it as this job's own output (see
+    /// `DownloadQueue.ownedOutputKeys`). This hop is queued on the main actor
+    /// before the attempt's teardown, so no new attempt can start ahead of it.
     private func recordFinishedOutput(_ file: URL, for download: Download) {
-        guard !download.filePaths.contains(file) else { return }
-        download.filePaths.append(file)
-        // The pause may already have written its history copy.
-        if download.status == .paused {
-            delegate?.executorDidRequestAddToHistory(download, skipSave: false)
-        }
+        guard let number = DownloadQueue.fileNumber(of: file) else { return }
+        download.ownedOutputFiles[file] = number
     }
 
     func stopDownload(
