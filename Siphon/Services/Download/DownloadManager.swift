@@ -378,6 +378,9 @@ class DownloadManager: ObservableObject {
         download.errorMessage = nil
         download.log = ""
         download.mediaInfo = nil
+        // A file left by the failed or stopped attempt may be the broken result;
+        // only a resumed pause may reuse it.
+        download.ownedOutputFiles = [:]
         updateStatus(for: download, to: .queued)
         objectWillChange.send()
 

@@ -114,8 +114,13 @@ struct ContentView: View {
             Button(languageService.s("queue_recovery_restore")) {
                 downloadManager.recoverInterruptedJobs()
             }
-            Button(languageService.s("queue_recovery_discard"), role: .cancel) {
+            // Discard deletes resumable partial data, so Escape must not reach it.
+            // Later keeps the interrupted jobs; they are offered again next launch.
+            Button(languageService.s("queue_recovery_discard"), role: .destructive) {
                 downloadManager.discardInterruptedJobs()
+            }
+            Button(languageService.s("later"), role: .cancel) {
+                // Nothing to do: the alert closes and the jobs stay pending for next launch.
             }
         } message: {
             Text(String(format: languageService.s("queue_recovery_message"), downloadManager.recoverableJobsCount))
