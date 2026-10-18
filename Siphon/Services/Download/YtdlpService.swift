@@ -22,20 +22,28 @@ struct DependencyChecksums {
     /// change. To bump, take the new release's per-architecture ZIP URLs, check
     /// the archive SHA-256 against the published `.sha256` files, and pin the
     /// SHA-256 of each extracted executable. Intel release builds end January 2027.
+    static func ffmpegBuildURL(architecture: String, build: String, tool: String) -> URL {
+        var components = URLComponents()
+        components.scheme = "https"
+        components.host = "ffmpeg.martin-riedl.de"
+        let site = components.url ?? URL(fileURLWithPath: NSOpenStepRootDirectory())
+        return site.appending(components: "download", "macos", architecture, build, "\(tool).zip")
+    }
+
     #if arch(arm64)
-    static let ffmpegURL = URL(string: "https://ffmpeg.martin-riedl.de/download/macos/arm64/1789931890_9.0.2/ffmpeg.zip") ?? URL(fileURLWithPath: "/")
+    static let ffmpegURL = ffmpegBuildURL(architecture: "arm64", build: "1789931890_9.0.2", tool: "ffmpeg")
     static let ffmpegArchiveSHA256 = "c8ed4c4e6978a03c485edbfe4e0a5dc2380f8a30bba5150531b31b094492d924"
     static let ffmpegExecutableSHA256 = "2e11c6f90993cdb79fff84d3f90044d28316b310e75b3e030cfc9a54f2c9d384"
 
-    static let ffprobeURL = URL(string: "https://ffmpeg.martin-riedl.de/download/macos/arm64/1789931890_9.0.2/ffprobe.zip") ?? URL(fileURLWithPath: "/")
+    static let ffprobeURL = ffmpegBuildURL(architecture: "arm64", build: "1789931890_9.0.2", tool: "ffprobe")
     static let ffprobeArchiveSHA256 = "fcbe839537485eaee7a7a8bc5cbc0f90d53617e80943e8a5b2e31cb851197ea6"
     static let ffprobeExecutableSHA256 = "2738aa46a7f9acbc8ab09a6715554c90f7de603171ac403726765685df6a0059"
     #else
-    static let ffmpegURL = URL(string: "https://ffmpeg.martin-riedl.de/download/macos/amd64/1789931006_9.0.2/ffmpeg.zip") ?? URL(fileURLWithPath: "/")
+    static let ffmpegURL = ffmpegBuildURL(architecture: "amd64", build: "1789931006_9.0.2", tool: "ffmpeg")
     static let ffmpegArchiveSHA256 = "7c6b4125b191cbf773832dc51f424cf2b6bb7da43007d1e066f95909e47cacd4"
     static let ffmpegExecutableSHA256 = "b25689cf2211c0582d317e849912769a1f1c93904fe102c485b5364a425633d1"
 
-    static let ffprobeURL = URL(string: "https://ffmpeg.martin-riedl.de/download/macos/amd64/1789931006_9.0.2/ffprobe.zip") ?? URL(fileURLWithPath: "/")
+    static let ffprobeURL = ffmpegBuildURL(architecture: "amd64", build: "1789931006_9.0.2", tool: "ffprobe")
     static let ffprobeArchiveSHA256 = "2322438ed2f6319a691291b247d09c69dcaa3a982460d1f269a7e1af335cfdfd"
     static let ffprobeExecutableSHA256 = "b5df9964b0c2048318fafedcd4e3bbafbc561033cee77de8da1840685d8a9d0d"
     #endif
@@ -88,7 +96,7 @@ actor DependencyInstaller {
     static func extractExecutable(named name: String, from archive: URL, into directory: URL) throws -> URL {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false, attributes: [.posixPermissions: 0o700])
         let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/ditto")
+        process.executableURL = URL(fileURLWithPath: NSOpenStepRootDirectory()).appending(components: "usr", "bin", "ditto")
         process.arguments = ["-xk", "--", archive.path, directory.path]
         process.environment = YtdlpService.createSanitizedEnvironment()
         process.standardOutput = FileHandle.nullDevice
