@@ -339,8 +339,6 @@ class YtdlpService: ObservableObject {
     var boyfriendTVRenderedPageLoader: ((URL) async throws -> String?)?
     // Test seam for media URLs that only exist in the live browser runtime.
     var boyfriendTVRenderedStreamLoader: ((URL) async throws -> String?)?
-    // Test seam for installed browser candidate discovery.
-    var installedBrowsersProvider: (() async -> [String])?
     // Persistent, so the user's recu.me clearance and sign-in survive relaunches.
     // Boundary-enforced jobs keep theirs in a second store, signed in separately.
     var recuWebDataStores: [String: WKWebsiteDataStore] = [:]
@@ -4102,46 +4100,6 @@ public struct DownloadResult: Sendable {
         return components.url?.absoluteString
     }
 
-    nonisolated static func boyfriendTVBrowserCandidates(
-        configured: String?,
-        installed: [String],
-        hasFullDiskAccess: Bool
-    ) -> [String?] {
-        var result: [String?] = []
-        var seen = Set<String>()
-
-        func appendBrowser(_ browser: String) {
-            let normalized = browser.lowercased()
-            guard normalized != "none",
-                  !normalized.isEmpty,
-                  normalized != "safari" || hasFullDiskAccess || configured?.lowercased() == "safari",
-                  seen.insert(normalized).inserted else {
-                return
-            }
-            result.append(normalized)
-        }
-
-        if let configured {
-            appendBrowser(configured)
-        }
-
-        // A selected browser is an explicit session choice. Do not spray a protected
-        // endpoint with unrelated browser profiles after a 403; Cloudflare can treat
-        // that as a new client on every request. Automatic discovery is only used
-        // when no usable browser was selected.
-        if result.isEmpty {
-            let installedSet = Set(installed.map { $0.lowercased() })
-            for browser in ["chrome", "brave", "edge", "vivaldi", "chromium", "firefox", "opera", "safari", "helium", "chromium-based"]
-                where installedSet.contains(browser) {
-                appendBrowser(browser)
-            }
-        }
-
-        // Keep one anonymous attempt as the final transport fallback.
-        result.append(nil)
-        return result
-    }
-
     nonisolated static func boyfriendTVCookieScope(for urlString: String) -> String? {
         let host = (URL(string: urlString)?.host ?? urlString).lowercased()
         if host == "boyfriend.tv" || host.hasSuffix(".boyfriend.tv") {
@@ -4742,22 +4700,9 @@ public struct DownloadResult: Sendable {
             }
         }
 
-        let installedBrowsers: [String]
-        if let provider = installedBrowsersProvider {
-            installedBrowsers = await provider()
-        } else {
-            installedBrowsers = await BrowserUtils.shared.getInstalledBrowsers().map(\.id)
-        }
-        let browsersToTry = Self.boyfriendTVBrowserCandidates(
-            configured: effectiveBrowserSource,
-            installed: installedBrowsers,
-            hasFullDiskAccess: Self.hasFullDiskAccess
-        )
-        let browserLabels = browsersToTry.compactMap { $0 }
-        LoggerService.shared.log(
-            "[BoyfriendTV] stage=session-recovery browser-candidates=\(browserLabels.count)",
-            level: .debug
-        )
+        // Only the selected browser: every other installed Chromium browser costs a
+        // Keychain prompt, and Cloudflare treats each profile as a new client.
+        let browsersToTry: [String?] = (effectiveBrowserSource.map { [$0] } ?? []) + [nil]
 
         if html.isEmpty, !safariSessionSignedOut, let ytdlp = ytdlpBinary {
             for candidatePage in pageCandidates {
@@ -5057,7 +5002,7 @@ public struct DownloadResult: Sendable {
             return BoyfriendTVExtractedMedia(streamURL: validStreamUrl, embedURL: embedUrl ?? targetUrl, title: title, thumbnailURL: thumbnailUrl)
         }
 
-        if safariCookieAccessDenied && (effectiveBrowserSource == "safari" || browserLabels.allSatisfy { $0 == "safari" }) {
+        if safariCookieAccessDenied && effectiveBrowserSource == "safari" {
             throw YtdlpError.safariCookiesFullDiskAccessRequired
         }
         try Task.checkCancellation()
@@ -5065,7 +5010,7 @@ public struct DownloadResult: Sendable {
             throw YtdlpError.cloudflareBlocked
         }
         if sawLoginPage || sawUnauthorized {
-            if browserLabels.isEmpty && rawCookies?.isEmpty != false {
+            if effectiveBrowserSource == nil && rawCookies?.isEmpty != false {
                 throw YtdlpError.protectedSiteNeedsBrowserCookies
             }
             throw YtdlpError.protectedSiteLoginRequired
