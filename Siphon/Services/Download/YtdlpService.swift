@@ -7820,49 +7820,7 @@ public struct DownloadResult: Sendable {
     }
 
     func createTempCookiesFileFromHeader(url: String, cookieHeader: String) -> URL? {
-        guard let urlObj = URL(string: url), let rawHost = urlObj.host, !rawHost.isEmpty else { return nil }
-        let host = sanitizeCookieToken(rawHost)
-        guard !host.isEmpty else { return nil }
-        guard let cookiesDir = CookieManager.getSecureTempCookiesDirectory() else { return nil }
-        let domain = host.hasPrefix(".") ? host : ".\(host)"
-        let requireSecureTransport = urlObj.scheme?.lowercased() == "https"
-        let tempCookiesURL = cookiesDir.appendingPathComponent("siphon_header_cookies_\(UUID().uuidString).txt")
-
-        var domains: [String] = [domain]
-        let lowerHost = host.lowercased()
-        if lowerHost.hasPrefix("www.") {
-            domains.append(".\(lowerHost.dropFirst(4))")
-        }
-        var seenDomains = Set<String>()
-        let uniqueDomains = domains.filter { seenDomains.insert($0).inserted }
-
-        var lines = ["# Netscape HTTP Cookie File"]
-        let pairs = cookieHeader.split(separator: ";")
-        let expiry = Int(Date().addingTimeInterval(86400 * 30).timeIntervalSince1970)
-
-        for pair in pairs {
-            let trimmedPair = pair.trimmingCharacters(in: .whitespacesAndNewlines)
-            let parts = trimmedPair.split(separator: "=", maxSplits: 1)
-            if parts.count == 2 {
-                let key = sanitizeCookieToken(parts[0].trimmingCharacters(in: .whitespacesAndNewlines))
-                let value = sanitizeCookieToken(parts[1].trimmingCharacters(in: .whitespacesAndNewlines))
-                if !key.isEmpty && !value.isEmpty {
-                    for d in uniqueDomains {
-                        lines.append("\(d)\tTRUE\t/\t\(requireSecureTransport ? "TRUE" : "FALSE")\t\(expiry)\t\(key)\t\(value)")
-                    }
-                }
-            }
-        }
-
-        let content = lines.joined(separator: "\n") + "\n"
-        guard let data = content.data(using: .utf8) else { return nil }
-
-        // Create file with 0o600 permissions upfront to prevent TOCTOU permission window
-        if FileManager.default.createFile(atPath: tempCookiesURL.path, contents: data, attributes: [.posixPermissions: 0o600]) {
-            return tempCookiesURL
-        } else {
-            return nil
-        }
+        try? SecureCookieFile.create(url: url, rawCookies: cookieHeader).detach()
     }
 }
 
