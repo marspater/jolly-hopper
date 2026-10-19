@@ -15,11 +15,14 @@ class LanguageService: ObservableObject {
     public static let shared = LanguageService()
     @AppStorage("selectedLanguage") var selectedLanguage: Language = .english
 
+    // Bolt Performance Optimization: Short-circuit underscore check and use single-pass character mapping
+    // to avoid Objective-C/NSString bridging allocations during fallback key translation.
     nonisolated static func s(_ key: String) -> String {
         if let translated = staticTranslations[key] {
             return translated
         }
-        return key.replacingOccurrences(of: "_", with: " ").capitalized
+        let spaceSeparated = key.contains("_") ? String(key.map { $0 == "_" ? " " : $0 }) : key
+        return spaceSeparated.capitalized
     }
 
     nonisolated func s(_ key: String) -> String {
