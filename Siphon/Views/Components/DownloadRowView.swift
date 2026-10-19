@@ -645,6 +645,7 @@ struct FileThumbnailView: View {
                 .foregroundColor(.secondary)
                 .frame(width: 28, height: 28)
                 .contentShape(Rectangle())
+                .accessibilityHidden(true)
         }
         // A plain button menu draws the label as authored (secondary), not accent-tinted.
         .menuStyle(.button)
@@ -663,6 +664,7 @@ struct FileThumbnailView: View {
                 } label: {
                     Image(systemName: "play.circle.fill")
                         .font(.system(size: 18, weight: .semibold))
+                        .accessibilityHidden(true)
                 }
                 .buttonStyle(.siphonIcon(size: 28))
                 .foregroundColor(SiphonTheme.accentText)
@@ -677,6 +679,7 @@ struct FileThumbnailView: View {
                     } label: {
                         Image(systemName: "play.circle.fill")
                             .font(.system(size: 18, weight: .semibold))
+                            .accessibilityHidden(true)
                     }
                     .buttonStyle(.siphonIcon(size: 28))
                     .foregroundColor(SiphonTheme.accentText)
@@ -777,6 +780,7 @@ struct FileThumbnailView: View {
                 } label: {
                     Image(systemName: "pause.circle.fill")
                         .font(.system(size: 18, weight: .semibold))
+                        .accessibilityHidden(true)
                 }
                 .buttonStyle(.siphonIcon(size: 28))
                 .foregroundColor(SiphonTheme.statusForeground(for: .queued, colorScheme: colorScheme))
@@ -818,6 +822,7 @@ struct FileThumbnailView: View {
                 } label: {
                     Image(systemName: "pause.circle")
                         .font(.system(size: 18, weight: .semibold))
+                        .accessibilityHidden(true)
                 }
                 .buttonStyle(.siphonIcon(size: 28))
                 .foregroundColor(SiphonTheme.statusForeground(for: .queued, colorScheme: colorScheme))
@@ -872,6 +877,7 @@ struct FileThumbnailView: View {
                 } label: {
                     Image(systemName: "play.circle.fill")
                         .font(.system(size: 18, weight: .semibold))
+                        .accessibilityHidden(true)
                 }
                 .disabled(download.requiresAdvancedArgumentsReview)
                 .buttonStyle(.siphonIcon(size: 28))
@@ -910,6 +916,7 @@ struct FileThumbnailView: View {
                 } label: {
                     Image(systemName: "arrow.clockwise.circle.fill")
                         .font(.system(size: 18, weight: .semibold))
+                        .accessibilityHidden(true)
                 }
                 .buttonStyle(.siphonIcon(size: 28))
                 .foregroundColor(SiphonTheme.statusForeground(for: .queued, colorScheme: colorScheme))
@@ -960,6 +967,7 @@ struct FileThumbnailView: View {
                     HStack(spacing: 4) {
                         Image(systemName: "square.and.arrow.down.on.square.fill")
                             .font(.system(size: 13))
+                            .accessibilityHidden(true)
                         Text(languageService.s("overwrite"))
                             .font(.siphonMetadataMedium)
                     }
@@ -975,6 +983,7 @@ struct FileThumbnailView: View {
                     HStack(spacing: 4) {
                         Image(systemName: "plus.square.on.square.fill")
                             .font(.system(size: 13))
+                            .accessibilityHidden(true)
                         Text(languageService.s("download_new_name"))
                             .font(.siphonMetadataMedium)
                     }
@@ -990,6 +999,7 @@ struct FileThumbnailView: View {
                     Image(systemName: "folder")
                         .font(.system(size: 15, weight: .regular))
                         .foregroundColor(.secondary)
+                        .accessibilityHidden(true)
                 }
                 .buttonStyle(.siphonIcon(size: 28))
                 .help(languageService.s("reveal_in_finder"))
