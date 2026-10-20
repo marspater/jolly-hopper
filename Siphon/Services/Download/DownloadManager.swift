@@ -650,7 +650,8 @@ class DownloadManager: ObservableObject {
 
     func openDownload(_ download: Download) {
         if download.status == .fileExists {
-            Task {
+            Task { [weak self] in
+                guard let self else { return }
                 if let path = await existingFile(for: download) {
                     openFile(path)
                 } else {
@@ -665,7 +666,8 @@ class DownloadManager: ObservableObject {
 
     /// Reveals the file that blocked a `.fileExists` download, or its folder.
     func revealExistingFile(for download: Download) {
-        Task {
+        Task { [weak self] in
+            guard let self else { return }
             let existing = await existingFile(for: download)
             let fallback = download.options.saveFolder.appendingPathComponent(
                 YtdlpService.sanitizeFilename(download.outputBaseName)
