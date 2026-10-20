@@ -75,6 +75,7 @@ class LoggerService: ObservableObject {
         "--netrc-cmd": "\"<COMMAND_REDACTED>\"",
         "--netrc-location": "\"<LOCATION_REDACTED>\"",
         "--config-location": "\"<LOCATION_REDACTED>\"",
+        "--config-locations": "\"<LOCATION_REDACTED>\"",
         "--exec": "\"<EXEC_REDACTED>\"",
         "--extractor-args": "\"<ARGS_REDACTED>\"",
         "--postprocessor-args": "\"<ARGS_REDACTED>\"",
