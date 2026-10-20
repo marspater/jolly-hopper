@@ -476,7 +476,7 @@ class YtdlpService: ObservableObject {
                     webKitSessionWaiters.append((id, continuation))
                 }
             } onCancel: {
-                Task { @MainActor in self.cancelWebKitSessionWait(id) }
+                Task { @MainActor [weak self] in self?.cancelWebKitSessionWait(id) }
             }
         } else {
             webKitSessionBusy = true
@@ -941,7 +941,7 @@ class YtdlpService: ObservableObject {
                 expectedSHA256: DependencyChecksums.ytdlpExecutableSHA256,
                 appSupportDir: appSupport,
                 onProgress: { [weak self] p in
-                    Task { @MainActor in
+                    Task { @MainActor [weak self] in
                         self?.updateProgress = p
                     }
                 }
@@ -1195,7 +1195,7 @@ class YtdlpService: ObservableObject {
                 } catch {
                     if error is CancellationError { throw error }
                     try Task.checkCancellation()
-                    // If yt-dlp dump-json fails on the stream template, synthesize MediaInfo directly
+                    LoggerService.shared.log("BoyfriendTV stream metadata probe failed: \(error.localizedDescription); synthesizing MediaInfo directly", level: .debug)
                 }
                 try Task.checkCancellation()
 
@@ -3542,8 +3542,8 @@ public struct DownloadResult: Sendable {
                 }
             }
         } onCancel: {
-            Task { @MainActor in
-                webView.evaluateJavaScript("window.__siphonRecuAbort?.abort()", in: nil, in: .defaultClient) { _ in
+            Task { @MainActor [weak webView] in
+                webView?.evaluateJavaScript("window.__siphonRecuAbort?.abort()", in: nil, in: .defaultClient) { _ in
                     // The aborted fetch resumes the waiting request above.
                 }
             }
@@ -3594,6 +3594,9 @@ public struct DownloadResult: Sendable {
             _ = windowDelegate
             configuration.userContentController.removeScriptMessageHandler(forName: "siphonCapture")
             webView.stopLoading()
+            webView.navigationDelegate = nil
+            window?.contentView = nil
+            window?.delegate = nil
             window?.close()
         }
 
@@ -3932,8 +3935,12 @@ public struct DownloadResult: Sendable {
         let windowDelegate = BrowserSessionWindowDelegate()
         defer {
             _ = navigationDelegate
+            _ = windowDelegate
             configuration.userContentController.removeScriptMessageHandler(forName: "siphonCapture")
             webView.stopLoading()
+            webView.navigationDelegate = nil
+            window?.contentView = nil
+            window?.delegate = nil
             window?.close()
         }
 
@@ -4477,6 +4484,9 @@ public struct DownloadResult: Sendable {
             _ = navigationDelegate
             _ = windowDelegate
             webView.stopLoading()
+            webView.navigationDelegate = nil
+            window?.contentView = nil
+            window?.delegate = nil
             window?.close()
         }
 
@@ -5893,8 +5903,8 @@ public struct DownloadResult: Sendable {
     /// released per iteration, so memory stays flat for multi-GB videos.
     nonisolated static func decryptBestCamFile(at fileURL: URL, filename: String) throws {
         let headerHandle = try FileHandle(forReadingFrom: fileURL)
+        defer { try? headerHandle.close() }
         let header = try headerHandle.read(upToCount: 12) ?? Data()
-        try headerHandle.close()
         if header.count >= 8, header[4..<8] == Data("ftyp".utf8) { return }
         let keyHex = BestCamStreamCipher.deriveKeyHex(from: filename)
         guard let keyData = keyHex.data(using: .ascii), keyData.count == 32 else {
@@ -5967,8 +5977,8 @@ public struct DownloadResult: Sendable {
         try? readHandle.close()
         try? writeHandle.close()
         let outputHandle = try FileHandle(forReadingFrom: tempOutputURL)
+        defer { try? outputHandle.close() }
         let outputHeader = try outputHandle.read(upToCount: 12) ?? Data()
-        try outputHandle.close()
         guard outputHeader.count >= 8, outputHeader[4..<8] == Data("ftyp".utf8) else {
             throw YtdlpError.downloadFailed(LanguageService.s("media_integrity_failed"))
         }

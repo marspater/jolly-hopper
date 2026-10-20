@@ -109,6 +109,10 @@ final class NotificationService: NSObject, @unchecked Sendable, UNUserNotificati
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             let process = Process()
             let errorPipe = Pipe()
+            defer {
+                try? errorPipe.fileHandleForReading.close()
+                try? errorPipe.fileHandleForWriting.close()
+            }
             process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
             process.arguments = [
                 "-e", "on run argv",

@@ -391,7 +391,7 @@ public final class UpdateChecker: ObservableObject {
 
         do {
             let downloadedPkgURL = try await downloader.download(from: url) { [weak self] progress in
-                Task { @MainActor in
+                Task { @MainActor [weak self] in
                     guard self?.updateOperationID == operationID else { return }
                     self?.updateProgress = progress
                 }

@@ -2271,6 +2271,29 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: directory.path), ["stream.mp4"])
     }
 
+    func testBestCamDecryptionClosesFileHandlesAndCleansUpOnIntegrityFailure() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("bestcam_failure_\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let fileURL = directory.appendingPathComponent("stream.mp4")
+        let corruptPayload = Data(repeating: 0xAA, count: 1024)
+        try corruptPayload.write(to: fileURL)
+
+        XCTAssertThrowsError(try YtdlpService.decryptBestCamFile(at: fileURL, filename: "7c9a1f00ba871cce7861afcf0dfe6.255724278.4")) { error in
+            guard case YtdlpError.downloadFailed(let message) = error else {
+                XCTFail("Expected YtdlpError.downloadFailed but got \(error)")
+                return
+            }
+            XCTAssertEqual(message, LanguageService.s("media_integrity_failed"))
+        }
+
+        // Verify the original file is preserved and no temporary decrypted files leak into the directory
+        let remainingFiles = try FileManager.default.contentsOfDirectory(atPath: directory.path)
+        XCTAssertEqual(remainingFiles, ["stream.mp4"])
+        XCTAssertEqual(try Data(contentsOf: fileURL), corruptPayload)
+    }
+
     func testDependencyDownloadReportsHTTPErrorsInsteadOfChecksumMismatch() async throws {
         MockURLProtocol.requestHandler = { request in
             let response = try XCTUnwrap(HTTPURLResponse(url: try XCTUnwrap(request.url), statusCode: 503, httpVersion: nil, headerFields: nil))
