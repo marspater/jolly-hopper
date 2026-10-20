@@ -15,11 +15,18 @@ class LanguageService: ObservableObject {
     public static let shared = LanguageService()
     @AppStorage("selectedLanguage") var selectedLanguage: Language = .english
 
+    // Bolt Performance Optimization: Single-pass character replacement avoiding
+    // preliminary scans, intermediate array allocations, and NSString bridging.
     nonisolated static func s(_ key: String) -> String {
         if let translated = staticTranslations[key] {
             return translated
         }
-        return key.replacingOccurrences(of: "_", with: " ").capitalized
+        var spaceSeparated = ""
+        spaceSeparated.reserveCapacity(key.utf8.count)
+        for char in key {
+            spaceSeparated.append(char == "_" ? " " : char)
+        }
+        return spaceSeparated.capitalized
     }
 
     nonisolated func s(_ key: String) -> String {
