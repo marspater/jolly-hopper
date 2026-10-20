@@ -4,6 +4,7 @@ import CryptoKit
 import WebKit
 import AppKit
 import Security
+import VideoToolbox
 @testable import Siphon
 
 final class TestBox<T>: @unchecked Sendable {
@@ -6249,10 +6250,11 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertEqual(try String(contentsOf: source, encoding: .utf8), "HEVC output")
         let conversion = try XCTUnwrap(commands.value.first { $0.first?.hasSuffix("ffmpeg") == true })
         #if arch(arm64)
-        XCTAssertTrue(conversion.contains("hevc_videotoolbox"))
+        let expectsVideoToolbox = YtdlpService.hasHardwareEncoder(kCMVideoCodecType_HEVC)
         #else
-        XCTAssertTrue(conversion.contains("libx265"))
+        let expectsVideoToolbox = false
         #endif
+        XCTAssertTrue(conversion.contains(expectsVideoToolbox ? "hevc_videotoolbox" : "libx265"))
         XCTAssertTrue(conversion.contains("hvc1"))
         XCTAssertTrue(conversion.contains("0:s?"), "Keep embedded subtitles during conversion")
         XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: root.path), ["video.mp4"])
