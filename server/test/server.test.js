@@ -313,7 +313,9 @@ describe('GET /api/latest', () => {
       'https://attacker.example.com/malicious.dmg',
       'https://evil.github.com.attacker.com/Siphon.dmg',
       'https://github.com.evil.org/download.dmg',
-      'https://evil-github.com/download.dmg'
+      'https://evil-github.com/download.dmg',
+      'https://github.com/attacker/malware/releases/download/v1.0/Siphon.dmg',
+      'https://api.github.com/repos/attacker/malware/releases/assets/12345'
     ];
 
     for (const url of untrustedUrls) {

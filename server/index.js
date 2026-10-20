@@ -84,7 +84,21 @@ function isTrustedReleaseUrl(targetUrl) {
   }
   try {
     const parsed = new URL(targetUrl);
-    return parsed.protocol === 'https:' && TRUSTED_RELEASE_HOSTS.has(parsed.hostname.toLowerCase());
+    if (parsed.protocol !== 'https:') {
+      return false;
+    }
+    const host = parsed.hostname.toLowerCase();
+    const path = parsed.pathname.toLowerCase();
+    if (host === 'github.com') {
+      return path.startsWith('/marspater/jolly-hopper/');
+    }
+    if (host === 'api.github.com') {
+      return path.startsWith('/repos/marspater/jolly-hopper/');
+    }
+    if (host === 'objects.githubusercontent.com') {
+      return true;
+    }
+    return false;
   } catch {
     return false;
   }
