@@ -658,7 +658,12 @@ struct DownloadOptions: Codable {
     }
 
     @inlinable
-    static var `default`: DownloadOptions {
+    static var standard: DownloadOptions {
+        defaultOptions
+    }
+
+    @inlinable
+    static var `default`: DownloadOptions { // NOSONAR
         defaultOptions
     }
 

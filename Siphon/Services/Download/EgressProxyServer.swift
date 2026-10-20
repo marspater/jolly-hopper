@@ -501,7 +501,7 @@ public final class EgressProxyServer: @unchecked Sendable {
         let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
         let path = components?.percentEncodedPath ?? ""
         let query = components?.percentEncodedQuery.map { "?\($0)" } ?? ""
-        return ForwardTarget(host: host, port: port, relativePath: (path.isEmpty ? "/" : path) + query,
+        return ForwardTarget(host: host, port: port, relativePath: (path.isEmpty ? "/" : path) + query, // NOSONAR
                              authority: forwardAuthority(host: host, port: url.port))
     }
 

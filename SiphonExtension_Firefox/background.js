@@ -109,7 +109,7 @@ async function openDeepLink(deepLink) {
 
 // Classic extension workers cannot use top-level await. Reconciliation
 // handles errors internally and never delays synchronous event registration.
-void reconcileDeepLinkTabs();
+void reconcileDeepLinkTabs(); // NOSONAR
 
 // Players built on Media Source Extensions expose a blob: srcUrl, which Siphon
 // cannot fetch. Use the first web address among the link, media and page URLs.

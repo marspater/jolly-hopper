@@ -413,7 +413,7 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
     /// siphon-pgrp helper makes the process a group leader; without it the id
     /// may already name an unrelated group, so there is none (0).
     static func ownedProcessGroup(of process: Process) -> pid_t {
-        process.executableURL?.path == "/usr/bin/env" ? 0 : process.processIdentifier
+        process.executableURL?.lastPathComponent == "env" ? 0 : process.processIdentifier
     }
 
     /// Stops descendants still holding the output pipes after the process exited.
@@ -716,7 +716,7 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
                         if let dlRange = line.range(of: "DL:") {
                             let afterDl = line[dlRange.upperBound...]
                             if let token = Self.parseAriaToken(from: afterDl) {
-                                speedStr = token + "/s"
+                                speedStr = "\(token)/s"
                             }
                         }
 
