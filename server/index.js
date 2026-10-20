@@ -149,7 +149,8 @@ function createReleaseFetcher(fetchImpl, cacheTtlMs, failureRetryMs, githubToken
   }
 
   let releaseCache = {
-    data: null,
+    cachedResponse: null,
+    staleResponse: null,
     expiresAt: 0
   };
 
@@ -162,11 +163,11 @@ function createReleaseFetcher(fetchImpl, cacheTtlMs, failureRetryMs, githubToken
   let inFlight = null;
 
   return function getLatestRelease() {
-    if (releaseCache.data && Date.now() < releaseCache.expiresAt) {
-      return Promise.resolve({ ...releaseCache.data, cached: true });
+    if (releaseCache.cachedResponse && Date.now() < releaseCache.expiresAt) {
+      return Promise.resolve(releaseCache.cachedResponse);
     }
     if (!inFlight && Date.now() < retryAfter) {
-      return Promise.resolve(staleOrNull());
+      return Promise.resolve(releaseCache.staleResponse);
     }
     if (!inFlight) {
       inFlight = refresh().finally(() => { inFlight = null; });
@@ -186,8 +187,14 @@ function createReleaseFetcher(fetchImpl, cacheTtlMs, failureRetryMs, githubToken
       });
       const cleanData = await parseReleaseResponse(res, Boolean(githubToken));
 
+      // Bolt Performance Optimization: Pre-compute frozen cached and stale response objects
+      // to eliminate repeated object spread copies on every cache hit or stale fallback request.
+      const cachedResponse = Object.freeze({ ...cleanData, cached: true });
+      const staleResponse = Object.freeze({ ...cleanData, cached: true, stale: true });
+
       releaseCache = {
-        data: cleanData,
+        cachedResponse,
+        staleResponse,
         expiresAt: now + cacheTtlMs
       };
 
@@ -195,14 +202,10 @@ function createReleaseFetcher(fetchImpl, cacheTtlMs, failureRetryMs, githubToken
     } catch (error) {
       console.error('Failed to refresh release metadata:', error instanceof Error ? error.message : String(error));
       retryAfter = Date.now() + failureRetryMs;
-      return staleOrNull();
+      return releaseCache.staleResponse;
     } finally {
       clearTimeout(timeout);
     }
-  }
-
-  function staleOrNull() {
-    return releaseCache.data ? { ...releaseCache.data, cached: true, stale: true } : null;
   }
 }
 
