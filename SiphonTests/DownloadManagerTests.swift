@@ -324,6 +324,25 @@ final class DownloadManagerTests: XCTestCase {
         XCTAssertEqual(lang.s("cleared"), "Cleared")
     }
 
+    func testLanguageServiceStaticAndFallbackNormalization() {
+        // 1. Static translation keys return their configured translation
+        XCTAssertEqual(LanguageService.s("converting_gif_to_video"), "Converting GIF to video...")
+        XCTAssertEqual(LanguageService.s("gif_conversion_failed"), "The GIF was downloaded but could not be converted to video. Siphon kept the GIF file.")
+        XCTAssertEqual(LanguageService.s("hdr_probe_failed"), "Siphon could not read the video's dynamic range, so it did not convert the download to SDR. Siphon kept the original file.")
+
+        // 2. Fallback keys without underscores are capitalized correctly
+        XCTAssertEqual(LanguageService.s("simple"), "Simple")
+        XCTAssertEqual(LanguageService.s("alreadycapitalized"), "Alreadycapitalized")
+
+        // 3. Fallback keys with underscores are converted to spaces and capitalized correctly
+        XCTAssertEqual(LanguageService.s("custom_missing_key"), "Custom Missing Key")
+        XCTAssertEqual(LanguageService.s("untranslated_feature_flag"), "Untranslated Feature Flag")
+
+        // 4. Keys containing multiple underscores preserve the prior normalization behavior
+        XCTAssertEqual(LanguageService.s("multiple_words_fallback_test_key"), "Multiple Words Fallback Test Key")
+        XCTAssertEqual(LanguageService.s("__double_underscore__"), "  Double Underscore  ")
+    }
+
     func testCustomFilenameCollisionResolution() async {
         let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent("testCustomFilenameCollisionResolution_\(UUID().uuidString)")
         try? FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
