@@ -262,7 +262,7 @@ async function handleReleaseApi(req, res, pathname, getLatestRelease) {
   return true;
 }
 
-const INVALID_HOST_PATTERN = new RegExp('[/@?#\\s]');
+const INVALID_HOST_PATTERN = /[/@?#\s]/;
 
 function parseRequestUrl(req) {
   const host = req.headers.host;

@@ -90,9 +90,12 @@ public final class UpdateChecker: ObservableObject {
         #endif
         let lowerTag = tag.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         let cleanTag = lowerTag.hasPrefix("v") ? String(lowerTag.dropFirst()) : lowerTag
-        let accepted = archSuffixes.flatMap { arch in
-            ["dmg", "zip"].flatMap { ext in
-                [cleanTag, "v" + cleanTag].map { "siphon-\($0)\(arch).\(ext)" }
+        var accepted: [String] = []
+        for arch in archSuffixes {
+            for ext in ["dmg", "zip"] {
+                for prefix in [cleanTag, "v" + cleanTag] {
+                    accepted.append("siphon-\(prefix)\(arch).\(ext)")
+                }
             }
         }
         let byName = Dictionary(
