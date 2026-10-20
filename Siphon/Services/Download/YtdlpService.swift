@@ -3210,14 +3210,18 @@ public struct DownloadResult: Sendable {
         args.append(contentsOf: ["--js-runtimes", "\(runtime.engine):\(runtime.path)"])
     }
 
+    /// Opens a hardware-only compression session: virtual machines list VideoToolbox
+    /// hardware encoders but fail to open them (-12903), so the encoder list is not enough.
     nonisolated static func hasHardwareEncoder(_ codec: CMVideoCodecType) -> Bool {
-        var list: CFArray?
-        guard VTCopyVideoEncoderList(nil, &list) == noErr,
-              let encoders = list as? [[String: Any]] else { return false }
-        return encoders.contains {
-            ($0[kVTVideoEncoderList_CodecType as String] as? NSNumber)?.uint32Value == codec
-                && ($0[kVTVideoEncoderList_IsHardwareAccelerated as String] as? Bool) == true
-        }
+        let spec = [kVTVideoEncoderSpecification_RequireHardwareAcceleratedVideoEncoder: true] as CFDictionary
+        var session: VTCompressionSession?
+        let status = VTCompressionSessionCreate(
+            allocator: nil, width: 1280, height: 720, codecType: codec, encoderSpecification: spec,
+            imageBufferAttributes: nil, compressedDataAllocator: nil, outputCallback: nil, refcon: nil,
+            compressionSessionOut: &session)
+        guard status == noErr, let session else { return false }
+        VTCompressionSessionInvalidate(session)
+        return true
     }
 
     nonisolated static func findJsRuntime() -> (engine: String, path: String)? {
