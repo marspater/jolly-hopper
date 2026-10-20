@@ -315,7 +315,8 @@ describe('GET /api/latest', () => {
       'https://github.com.evil.org/download.dmg',
       'https://evil-github.com/download.dmg',
       'https://github.com/attacker/malware/releases/download/v1.0/Siphon.dmg',
-      'https://api.github.com/repos/attacker/malware/releases/assets/12345'
+      'https://api.github.com/repos/attacker/malware/releases/assets/12345',
+      'https://objects.githubusercontent.com/github-production-release-asset/Siphon.dmg'
     ];
 
     for (const url of untrustedUrls) {
@@ -332,10 +333,9 @@ describe('GET /api/latest', () => {
     }
   });
 
-  test('accepts trusted GitHub release asset URLs and objects.githubusercontent.com URLs', async () => {
+  test('accepts trusted GitHub release asset URLs within repository scope', async () => {
     const trustedUrls = [
       'https://github.com/marspater/jolly-hopper/releases/download/v1.0.0/Siphon.dmg',
-      'https://objects.githubusercontent.com/github-production-release-asset/Siphon.dmg',
       'https://api.github.com/repos/marspater/jolly-hopper/releases/assets/12345'
     ];
 
