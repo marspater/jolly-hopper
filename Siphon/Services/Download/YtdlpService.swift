@@ -3033,9 +3033,11 @@ public struct DownloadResult: Sendable {
         // libvpx-vp9 needs -b:v 0 for -crf to mean constant quality; its default
         // output measured far worse (SSIM 0.83 at a higher bitrate than CRF 24).
         // VideoToolbox constant quality (-q:v) is supported on Apple Silicon only.
+        // -allow_sw lets VideoToolbox fall back to its software encoder when no
+        // hardware session is available (virtual machines, busy media engine).
         #if arch(arm64)
-        let h264Encoder = ["-c:v", "h264_videotoolbox", "-q:v", "80"]
-        let h265Encoder = ["-c:v", "hevc_videotoolbox", "-q:v", "80"]
+        let h264Encoder = ["-c:v", "h264_videotoolbox", "-allow_sw", "1", "-q:v", "80"]
+        let h265Encoder = ["-c:v", "hevc_videotoolbox", "-allow_sw", "1", "-q:v", "80"]
         #else
         let h264Encoder = ["-c:v", "libx264", "-crf", "18"]
         let h265Encoder = ["-c:v", "libx265", "-crf", "20"]
@@ -3202,8 +3204,11 @@ public struct DownloadResult: Sendable {
     }
 
     private func appendJsRuntimeArgs(to args: inout [String]) {
-        guard !args.contains("--js-runtimes") else { return }
+        guard !args.contains("--js-runtimes"), let runtime = Self.findJsRuntime() else { return }
+        args.append(contentsOf: ["--js-runtimes", "\(runtime.engine):\(runtime.path)"])
+    }
 
+    nonisolated static func findJsRuntime() -> (engine: String, path: String)? {
         let fileManager = FileManager.default
         let homeDir = NSHomeDirectory()
 
@@ -3221,12 +3226,7 @@ public struct DownloadResult: Sendable {
             ("quickjs", "/usr/local/bin/qjs")
         ]
 
-        for candidate in candidatePaths {
-            if fileManager.isExecutableFile(atPath: candidate.path) {
-                args.append(contentsOf: ["--js-runtimes", "\(candidate.engine):\(candidate.path)"])
-                return
-            }
-        }
+        return candidatePaths.first { fileManager.isExecutableFile(atPath: $0.path) }
     }
 
     private func isRecuURL(_ urlOrHost: String) -> Bool {

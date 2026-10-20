@@ -5916,6 +5916,9 @@ final class YtdlpServiceTests: XCTestCase {
     }
 
     func testJsRuntimeArgsAppendedInDownload() async throws {
+        guard YtdlpService.findJsRuntime() != nil else {
+            throw XCTSkip("No JS runtime (node/bun/deno/qjs) installed at a known path")
+        }
         let capturedArgsBox = TestBox<[String]>([])
         service.processRunner = MockYtdlpProcessRunner(mockDownload: { args in
             capturedArgsBox.value = args
