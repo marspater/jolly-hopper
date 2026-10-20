@@ -4,7 +4,8 @@ const path = require('node:path');
 
 const PACKAGE_VERSION = (() => {
   try {
-    return require('./package.json').version || '1.0.0';
+    const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, 'package.json'), 'utf8'));
+    return pkg.version || '1.0.0';
   } catch {
     return '1.0.0';
   }

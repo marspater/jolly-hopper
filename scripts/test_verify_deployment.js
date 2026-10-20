@@ -150,3 +150,34 @@ test('verifyDeployment tolerates intermediate network/500 errors before rollout 
   assert.equal(result.ok, true);
   assert.equal(calls, 3);
 });
+
+test('verifyDeployment retries and fails on version mismatch', async () => {
+  const logs = [];
+  const fakeFetch = async () => new Response(JSON.stringify({
+    status: 'ok',
+    version: '1.0.0',
+    commit: 'targetcommit999'
+  }), { status: 200 });
+
+  let virtualTime = 1000;
+  let sleepCount = 0;
+  const result = await verifyDeployment({
+    url: 'https://example.com/healthz',
+    expectedCommit: 'targetcommit999',
+    expectedVersion: '2.0.0',
+    timeoutSeconds: 30,
+    intervalSeconds: 10,
+    fetchImpl: fakeFetch,
+    sleepImpl: async (ms) => {
+      sleepCount++;
+      virtualTime += ms;
+    },
+    nowImpl: () => virtualTime,
+    logger: { log: (msg) => logs.push(msg), error: (msg) => logs.push(msg) }
+  });
+
+  assert.equal(result.ok, false);
+  assert.match(result.error, /timed out/i);
+  assert.ok(logs.some((l) => l.includes("version '1.0.0' does not match expected '2.0.0'")));
+  assert.ok(sleepCount >= 3);
+});

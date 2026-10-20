@@ -1,6 +1,4 @@
 #!/usr/bin/env node
-const http = require('node:http');
-const https = require('node:https');
 
 function commitsMatch(deployed, expected) {
   if (!deployed || !expected) return false;

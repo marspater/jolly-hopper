@@ -48,8 +48,10 @@ const validatedFiles = rawTestFiles.map((file) => {
   return safePath(file);
 });
 
+const testRunnerBin = process.env.TEST_RUNNER_BIN || process.execPath;
+
 const result = spawnSync(
-  process.execPath,
+  testRunnerBin,
   [
     '--test',
     '--test-reporter=spec',

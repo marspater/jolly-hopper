@@ -60,7 +60,7 @@ describe('Siphon Companion Server', () => {
     const data = await res.json();
     assert.equal(data.status, 'ok');
     assert.equal(data.service, 'siphon-companion');
-    assert.equal(data.version, '1.0.0');
+    assert.equal(data.version, PACKAGE_VERSION);
     assert.equal(typeof data.commit, 'string');
     assert.ok(data.timestamp);
   });
@@ -105,7 +105,7 @@ describe('Siphon Companion Server', () => {
     assert.equal(res.headers.get('content-type'), 'application/json');
     const data = await res.json();
     assert.equal(data.status, 'ok');
-    assert.equal(data.version, '1.0.0');
+    assert.equal(data.version, PACKAGE_VERSION);
     assert.equal(typeof data.commit, 'string');
   });
 
