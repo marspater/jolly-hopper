@@ -1112,6 +1112,12 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertEqual(posix?.intValue, 0o700, "Extracted binary must have restricted 0o700 POSIX permissions")
     }
 
+    func testCreateTempCookiesFileFromHeaderRejectsInvalidCookieHeader() {
+        XCTAssertNil(service.createTempCookiesFileFromHeader(url: "https://example.com/v", cookieHeader: "   "))
+        XCTAssertNil(service.createTempCookiesFileFromHeader(url: "https://example.com/v", cookieHeader: ";;"))
+        XCTAssertNil(service.createTempCookiesFileFromHeader(url: "https://example.com/v", cookieHeader: "invalid_no_equals"))
+    }
+
     func testTempCookiesFileCreationPermissions() throws {
         let secureCookiesDir = CookieManager.getSecureTempCookiesDirectory()
         XCTAssertNotNil(secureCookiesDir)
