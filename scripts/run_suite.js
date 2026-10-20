@@ -66,8 +66,13 @@ if (fs.existsSync(tempJunit)) {
   const safeTemp = safePath(tempJunit);
   let xml = fs.readFileSync(safeTemp, 'utf8');
 
-  // Strip XML comments
-  xml = xml.replace(/<!--[\s\S]*?-->/g, '').trim();
+  // Strip XML comments recursively to prevent multi-character sanitization bypass (CodeQL: js/incomplete-multi-character-sanitization)
+  let prevXml;
+  do {
+    prevXml = xml;
+    xml = xml.replace(/<!--[\s\S]*?-->/g, '');
+  } while (xml !== prevXml);
+  xml = xml.trim();
 
   // Wrap top-level <testcase> elements in <testsuite> elements
   const match = xml.match(/^([\s\S]*?<testsuites[^>]*>)([\s\S]*?)(<\/testsuites>[\s\S]*)$/i);

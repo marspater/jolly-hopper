@@ -3056,9 +3056,9 @@ final class YtdlpServiceTests: XCTestCase {
         if let idx = genericArgs.firstIndex(of: "--http-chunk-size") {
             XCTAssertEqual(genericArgs[idx + 1], "10M")
         }
-        XCTAssertTrue(genericArgs.contains("--buffer-size"), "All downloads receive 16K buffer baseline")
+        XCTAssertTrue(genericArgs.contains("--buffer-size"), "All downloads receive 64K buffer baseline")
         if let idx = genericArgs.firstIndex(of: "--buffer-size") {
-            XCTAssertEqual(genericArgs[idx + 1], "16K")
+            XCTAssertEqual(genericArgs[idx + 1], "64K")
         }
         XCTAssertFalse(genericArgs.contains("--throttled-rate"), "Generic progressive stream must not force throttled rate re-extraction")
         XCTAssertFalse(genericArgs.contains("--concurrent-fragments"), "Direct MP4 must not have concurrent-fragments flag")
@@ -3073,7 +3073,7 @@ final class YtdlpServiceTests: XCTestCase {
 
         let thisVidArgs = capturedArgsBox.value
         XCTAssertTrue(thisVidArgs.contains("--http-chunk-size"), "ThisVid direct stream should receive 10MB chunking to defeat server rate limits")
-        XCTAssertTrue(thisVidArgs.contains("--buffer-size"), "ThisVid receives 16K buffer baseline")
+        XCTAssertTrue(thisVidArgs.contains("--buffer-size"), "ThisVid receives 64K buffer baseline")
         XCTAssertTrue(thisVidArgs.contains("--throttled-rate"), "ThisVid direct stream should receive throttled rate recovery")
         XCTAssertFalse(thisVidArgs.contains("--concurrent-fragments"), "ThisVid direct MP4 must not have concurrent-fragments flag")
 
@@ -3104,7 +3104,7 @@ final class YtdlpServiceTests: XCTestCase {
 
         let selectedDirectArgs = capturedArgsBox.value
         XCTAssertTrue(selectedDirectArgs.contains("--http-chunk-size"), "YouTube streams require 10MB chunking")
-        XCTAssertTrue(selectedDirectArgs.contains("--buffer-size"), "YouTube receives 16K buffer")
+        XCTAssertTrue(selectedDirectArgs.contains("--buffer-size"), "YouTube receives 64K buffer")
         XCTAssertTrue(selectedDirectArgs.contains("--throttled-rate"), "YouTube streams require throttled rate recovery")
         XCTAssertFalse(selectedDirectArgs.contains("--concurrent-fragments"), "Direct MP4 format must not have concurrent-fragments even when DASH exists on same page")
 
@@ -4532,7 +4532,7 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertFalse(capturedArgs.value.contains("--http-chunk-size"))
         XCTAssertTrue(capturedArgs.value.contains("--abort-on-unavailable-fragments"))
         let index = try XCTUnwrap(capturedArgs.value.firstIndex(of: "--concurrent-fragments"))
-        XCTAssertEqual(capturedArgs.value[index + 1], "1", "The CDN rate-limits parallel segment requests")
+        XCTAssertEqual(capturedArgs.value[index + 1], "3", "The CDN supports 3 concurrent fragments with zero rate limits")
     }
 
     func testRecuDownloadRefreshesExpiredPlaylistOnHTTP410() async throws {
