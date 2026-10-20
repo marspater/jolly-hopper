@@ -798,6 +798,7 @@ struct SponsorView: View {
                 Image(systemName: "star.fill")
                     .foregroundColor(SiphonTheme.statusQueuedText)
                     .font(.system(size: 11, weight: .semibold))
+                    .accessibilityHidden(true)
                 Text(languageService.s("star_github"))
                     .font(.siphonSecondaryMedium)
                     .foregroundColor(.primary)
@@ -805,6 +806,7 @@ struct SponsorView: View {
                 Image(systemName: "arrow.up.right")
                     .font(.system(size: 10, weight: .medium))
                     .foregroundColor(.secondary)
+                    .accessibilityHidden(true)
             }
             .padding(.horizontal, SiphonTheme.spacing12)
             .padding(.vertical, SiphonTheme.spacing8)
