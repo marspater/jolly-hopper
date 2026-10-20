@@ -1,0 +1,74 @@
+version: 2.1
+
+executors:
+  node-executor:
+    docker:
+      - image: cimg/node:24.0
+    resource_class: medium
+
+jobs:
+  deploy-companion:
+    executor: node-executor
+    environment:
+      COMPONENT_NAME: "<< pipeline.deploy.component_name >>"
+      ENVIRONMENT_NAME: "<< pipeline.deploy.environment_name >>"
+      TARGET_VERSION: "<< pipeline.deploy.target_version >>"
+    steps:
+      - checkout
+      - run:
+          name: Plan deployment
+          command: |
+            circleci run release plan siphon-companion \
+              --environment-name="${ENVIRONMENT_NAME}" \
+              --component-name="${COMPONENT_NAME}" \
+              --target-version="${TARGET_VERSION}"
+      - run:
+          name: Deploy companion service
+          command: |
+            set -euo pipefail
+            echo "Deploying ${COMPONENT_NAME} (${TARGET_VERSION}) to ${ENVIRONMENT_NAME}..."
+            curl --fail --silent --show-error --location \
+              --proto '=https' \
+              --proto-redir '=https' \
+              --connect-timeout 10 \
+              --max-time 90 \
+              --retry 2 \
+              https://jolly-hopper.onrender.com/healthz
+      - run:
+          name: Update deployment status to running
+          command: circleci run release update siphon-companion --status=RUNNING
+      - run:
+          name: Update deployment status to failed
+          command: circleci run release update siphon-companion --status=FAILED
+          when: on_fail
+
+  cancel-deploy-companion:
+    docker:
+      - image: cimg/base:stable
+    steps:
+      - run:
+          name: Update planned release to CANCELED
+          command: |
+            circleci run release update siphon-companion \
+              --status=CANCELED
+
+  release-companion:
+    type: release
+    plan_name: siphon-companion
+    validation:
+      enabled: true
+      webhooks:
+        - name: alerts
+          provider: alertmanager
+
+workflows:
+  deploy:
+    jobs:
+      - deploy-companion
+      - cancel-deploy-companion:
+          requires:
+            - deploy-companion:
+              - canceled
+      - release-companion:
+          requires:
+            - deploy-companion

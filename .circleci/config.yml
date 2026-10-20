@@ -149,9 +149,68 @@ jobs:
           path: /tmp/conversion.log
           destination: logs/conversion.log
 
+  deploy-companion:
+    executor: node-executor
+    steps:
+      - checkout
+      - run:
+          name: Determine target version
+          command: |
+            set -euo pipefail
+            APP_VERSION=$(node -p "require('./server/package.json').version || '1.0.0'")
+            REVISION="${CIRCLE_SHA1:-unknown}"
+            echo "export APP_VERSION=\"${APP_VERSION}-${REVISION:0:7}\"" >> "$BASH_ENV"
+      - run:
+          name: Plan deployment
+          command: |
+            circleci run release plan siphon-companion \
+              --environment-name="production" \
+              --component-name="siphon-companion" \
+              --target-version="${APP_VERSION}"
+      - run:
+          name: Deploy companion service
+          command: |
+            set -euo pipefail
+            echo "Deploying Siphon companion service to Render (production)..."
+            curl --fail --silent --show-error --location \
+              --proto '=https' \
+              --proto-redir '=https' \
+              --connect-timeout 10 \
+              --max-time 90 \
+              --retry 2 \
+              https://jolly-hopper.onrender.com/healthz
+      - run:
+          name: Update deployment status to running
+          command: circleci run release update siphon-companion --status=RUNNING
+      - run:
+          name: Update deployment status to failed
+          command: circleci run release update siphon-companion --status=FAILED
+          when: on_fail
+
+  release-companion:
+    type: release
+    plan_name: siphon-companion
+    validation:
+      enabled: true
+      webhooks:
+        - name: alerts
+          provider: alertmanager
+
 workflows:
   test-and-verify:
     jobs:
       - scripting
       - xcode-test
       - conversion-test
+      - deploy-companion:
+          requires:
+            - scripting
+          filters:
+            branches:
+              only: main
+      - release-companion:
+          requires:
+            - deploy-companion
+          filters:
+            branches:
+              only: main
