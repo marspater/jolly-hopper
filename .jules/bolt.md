@@ -82,3 +82,7 @@
 ## 2026-10-16 - Zero-Allocation Buffer Pointer Inspection for IP Address Validation
 **Learning:** Passing raw binary buffers (such as socket addresses or `in6_addr` IPv6 structures) into validation helpers via `Array($0)`, `[UInt8](repeating: 0, count: 16)`, or array slicing (`Array(bytes[12..<16])`) causes repetitive heap array allocations on every resolved socket address check in network loops. Accepting `UnsafeRawBufferPointer` directly and unpacking scalar bytes into registers eliminates all heap allocations during address validation.
 **Action:** Use `UnsafeRawBufferPointer` and scalar parameter overloads for raw binary address buffer checks instead of copying buffer bytes into Swift `[UInt8]` arrays.
+
+## 2026-10-17 - Pre-Computing Frozen Response Objects for High-Frequency Cache Hits
+**Learning:** Returning fresh object literals constructed via object spread (`{ ...releaseCache.data, cached: true }`) on every cache hit or stale fallback creates repetitive heap object allocations and garbage collection pressure under heavy HTTP traffic. Pre-computing and freezing response objects (`cachedResponse`, `staleResponse`) when cache data is updated allows returning existing immutable object references directly.
+**Action:** Pre-compute and freeze cached response payloads upon cache population rather than allocating object copies on every read.
