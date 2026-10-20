@@ -29,3 +29,8 @@
 **Vulnerability:** Binary cookie record offsets and string field offsets (`domainAt`, `nameAt`, `pathAt`, `valueAt`) read from `Cookies.binarycookies` were not checked against record and page size bounds, allowing malformed files to trigger integer overflow traps.
 **Learning:** Unsafe binary data parsing where offsets are added to a base address can trigger runtime arithmetic overflow panics if offsets exceed `pageSize` or `size`.
 **Prevention:** Always validate that record offsets (`offset < pageSize`) and string field offsets (`domainAt < size`, etc.) are within bounds before performing pointer or index arithmetic.
+
+## 2026-04-03 - Unscoped GitHub Domain Validation in Companion Release Fetcher
+**Vulnerability:** Validating release asset URLs by checking only the domain name (`github.com`) allowed release assets from attacker-controlled GitHub repositories to pass validation and be served as update URLs.
+**Learning:** Checking hostname hostnames alone on shared platforms (such as `github.com` or `api.github.com`) fails to restrict trust boundaries to the specific repository scope.
+**Prevention:** Always validate both hostname and repository URL path prefixes (`/owner/repo/`) when validating asset download links on multi-tenant developer platforms.

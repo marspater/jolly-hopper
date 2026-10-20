@@ -72,11 +72,6 @@ function sendStaticResponse(res, staticResponse) {
 const RELEASE_CACHE_TTL_MS = 15 * 60 * 1000;
 const RELEASE_FAILURE_RETRY_MS = 30 * 1000;
 const DEFAULT_RELEASE_URL = 'https://github.com/marspater/jolly-hopper/releases/latest';
-const TRUSTED_RELEASE_HOSTS = new Set([
-  'github.com',
-  'api.github.com',
-  'objects.githubusercontent.com'
-]);
 
 function isTrustedReleaseUrl(targetUrl) {
   if (typeof targetUrl !== 'string' || !targetUrl.startsWith('https://')) {
@@ -84,7 +79,18 @@ function isTrustedReleaseUrl(targetUrl) {
   }
   try {
     const parsed = new URL(targetUrl);
-    return parsed.protocol === 'https:' && TRUSTED_RELEASE_HOSTS.has(parsed.hostname.toLowerCase());
+    if (parsed.protocol !== 'https:') {
+      return false;
+    }
+    const host = parsed.hostname.toLowerCase();
+    const path = parsed.pathname.toLowerCase();
+    if (host === 'github.com') {
+      return path.startsWith('/marspater/jolly-hopper/');
+    }
+    if (host === 'api.github.com') {
+      return path.startsWith('/repos/marspater/jolly-hopper/');
+    }
+    return false;
   } catch {
     return false;
   }
