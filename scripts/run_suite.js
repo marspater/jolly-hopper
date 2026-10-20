@@ -48,8 +48,10 @@ const validatedFiles = rawTestFiles.map((file) => {
   return safePath(file);
 });
 
+const testRunnerBin = process.env.TEST_RUNNER_BIN || process.execPath;
+
 const result = spawnSync(
-  process.execPath,
+  testRunnerBin,
   [
     '--test',
     '--test-reporter=spec',
@@ -122,4 +124,14 @@ if (fs.existsSync(tempJunit)) {
   try { fs.unlinkSync(safeTemp); } catch {}
 }
 
-process.exit(result.status ?? 0);
+if (result.error) {
+  console.error('Failed to spawn test runner:', result.error.message || result.error);
+  process.exit(1);
+}
+
+if (result.status === null) {
+  console.error(`Test runner terminated unexpectedly by signal: ${result.signal || 'unknown'}`);
+  process.exit(1);
+}
+
+process.exit(result.status);

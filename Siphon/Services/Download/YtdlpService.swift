@@ -7268,12 +7268,10 @@ public struct DownloadResult: Sendable {
             args.append(contentsOf: ["--add-header", "Sec-Fetch-Site:cross-site"])
             args.append(contentsOf: ["--add-header", "Sec-Fetch-Mode:cors"])
             args.append(contentsOf: ["--add-header", "Sec-Fetch-Dest:empty"])
-            // Recu's CDN limits parallel burst sizes. Benchmarks show concurrency of 3
-            // provides ~3x download speed with zero 429 rate limits, whereas higher bursts
-            // (>4) trigger 429 throttling. Exponential fragment retry backoff handles any
-            // transient rate limits gracefully.
+            // Recu's CDN serves about one segment per second per client and answers
+            // parallel requests with 429, so extra fragment workers only add retries.
             if let index = args.firstIndex(of: "--concurrent-fragments"), index + 1 < args.count {
-                args[index + 1] = "3"
+                args[index + 1] = "1"
             }
         } else if isGayPornTubeURL(url) {
             args.append(contentsOf: ["--add-header", "Referer:\(url)"])
