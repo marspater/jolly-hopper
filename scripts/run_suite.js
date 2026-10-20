@@ -2,17 +2,51 @@ const { spawnSync } = require('node:child_process');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const junitOutput = process.argv[2];
-const testFiles = process.argv.slice(3);
+const rawJunitOutput = process.argv[2];
+const rawTestFiles = process.argv.slice(3);
 
-if (!junitOutput || testFiles.length === 0) {
+if (!rawJunitOutput || rawTestFiles.length === 0) {
   console.error('Usage: run_suite.js <output-junit-path> <test-files...>');
   process.exit(1);
 }
 
-fs.mkdirSync(path.dirname(junitOutput), { recursive: true });
+function safePath(filePath) {
+  const resolved = fs.realpathSync(filePath);
+  const baseDir = fs.realpathSync(process.cwd());
+  if (resolved !== baseDir && !resolved.startsWith(baseDir + path.sep)) {
+    throw new Error(`path '${filePath}' is outside the allowed directory`);
+  }
+  return resolved;
+}
 
-const tempJunit = path.join(path.dirname(junitOutput), `raw-${path.basename(junitOutput)}`);
+function safeOutputPath(filePath) {
+  const dir = path.dirname(filePath);
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+  const realDir = fs.realpathSync(dir);
+  const baseDir = fs.realpathSync(process.cwd());
+  if (realDir !== baseDir && !realDir.startsWith(baseDir + path.sep)) {
+    throw new Error(`path '${filePath}' is outside the allowed directory`);
+  }
+  const basename = path.basename(filePath);
+  if (!/^[A-Za-z0-9_.-]+$/.test(basename)) {
+    throw new Error(`invalid filename: '${basename}'`);
+  }
+  return path.join(realDir, basename);
+}
+
+// Validate output paths against traversal
+const junitOutput = safeOutputPath(rawJunitOutput);
+const tempJunit = safeOutputPath(path.join(path.dirname(rawJunitOutput), `raw-${path.basename(rawJunitOutput)}`));
+
+// Validate test files against argument injection and traversal
+const validatedFiles = rawTestFiles.map((file) => {
+  if (!file || !/^[A-Za-z0-9_./-]+$/.test(file) || file.startsWith('-')) {
+    throw new Error(`Invalid test file argument: ${file}`);
+  }
+  return safePath(file);
+});
 
 const result = spawnSync(
   process.execPath,
@@ -22,13 +56,15 @@ const result = spawnSync(
     '--test-reporter-destination=stdout',
     '--test-reporter=junit',
     `--test-reporter-destination=${tempJunit}`,
-    ...testFiles
+    '--',
+    ...validatedFiles
   ],
   { stdio: ['inherit', 'inherit', 'inherit'] }
 );
 
 if (fs.existsSync(tempJunit)) {
-  let xml = fs.readFileSync(tempJunit, 'utf8');
+  const safeTemp = safePath(tempJunit);
+  let xml = fs.readFileSync(safeTemp, 'utf8');
 
   // Strip XML comments
   xml = xml.replace(/<!--[\s\S]*?-->/g, '').trim();
@@ -78,7 +114,7 @@ if (fs.existsSync(tempJunit)) {
   }
 
   fs.writeFileSync(junitOutput, xml, 'utf8');
-  try { fs.unlinkSync(tempJunit); } catch {}
+  try { fs.unlinkSync(safeTemp); } catch {}
 }
 
 process.exit(result.status ?? 0);

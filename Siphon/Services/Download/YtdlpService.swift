@@ -1388,16 +1388,15 @@ class YtdlpService: ObservableObject {
             additionalCookies.append((name: sc.name, value: sc.value))
         }
 
-        if (rawCookies?.isEmpty == false) || !additionalCookies.isEmpty {
-            if let cookieFile = try? SecureCookieFile.create(url: url, rawCookies: rawCookies, additionalCookies: additionalCookies) {
-                secureCookieFile = cookieFile
-                args.append(contentsOf: ["--cookies", cookieFile.path])
-                if sucuriCookie != nil {
-                    LoggerService.shared.log("Using temporary Sucuri cookie in consolidated file for \(hostForLog(url)) (cookie values not logged)", level: .info)
-                }
-                if let raw = rawCookies, !raw.isEmpty {
-                    LoggerService.shared.log("Using session cookies passed from browser extension for \(hostForLog(url))", level: .info)
-                }
+        if (rawCookies?.isEmpty == false) || !additionalCookies.isEmpty,
+           let cookieFile = try? SecureCookieFile.create(url: url, rawCookies: rawCookies, additionalCookies: additionalCookies) {
+            secureCookieFile = cookieFile
+            args.append(contentsOf: ["--cookies", cookieFile.path])
+            if sucuriCookie != nil {
+                LoggerService.shared.log("Using temporary Sucuri cookie in consolidated file for \(hostForLog(url)) (cookie values not logged)", level: .info)
+            }
+            if let raw = rawCookies, !raw.isEmpty {
+                LoggerService.shared.log("Using session cookies passed from browser extension for \(hostForLog(url))", level: .info)
             }
         }
         if rawCookies?.isEmpty != false {
@@ -1486,16 +1485,15 @@ class YtdlpService: ObservableObject {
             additionalCookies.append((name: sc.name, value: sc.value))
         }
 
-        if (rawCookies?.isEmpty == false) || !additionalCookies.isEmpty {
-            if let cookieFile = try? SecureCookieFile.create(url: url, rawCookies: rawCookies, additionalCookies: additionalCookies) {
-                secureCookieFile = cookieFile
-                args.append(contentsOf: ["--cookies", cookieFile.path])
-                if sucuriCookie != nil {
-                    LoggerService.shared.log("Using temporary Sucuri cookie in consolidated file for \(hostForLog(url)) (cookie values not logged)", level: .info)
-                }
-                if let raw = rawCookies, !raw.isEmpty {
-                    LoggerService.shared.log("Using session cookies passed from browser extension for \(hostForLog(url))", level: .info)
-                }
+        if (rawCookies?.isEmpty == false) || !additionalCookies.isEmpty,
+           let cookieFile = try? SecureCookieFile.create(url: url, rawCookies: rawCookies, additionalCookies: additionalCookies) {
+            secureCookieFile = cookieFile
+            args.append(contentsOf: ["--cookies", cookieFile.path])
+            if sucuriCookie != nil {
+                LoggerService.shared.log("Using temporary Sucuri cookie in consolidated file for \(hostForLog(url)) (cookie values not logged)", level: .info)
+            }
+            if let raw = rawCookies, !raw.isEmpty {
+                LoggerService.shared.log("Using session cookies passed from browser extension for \(hostForLog(url))", level: .info)
             }
         }
         if rawCookies?.isEmpty != false {
@@ -1611,16 +1609,15 @@ class YtdlpService: ObservableObject {
             additionalCookies.append((name: sc.name, value: sc.value))
         }
 
-        if (rawCookies?.isEmpty == false) || !additionalCookies.isEmpty {
-            if let cookieFile = try? SecureCookieFile.create(url: url, rawCookies: rawCookies, additionalCookies: additionalCookies) {
-                secureCookieFile = cookieFile
-                args.append(contentsOf: ["--cookies", cookieFile.path])
-                if sucuriCookie != nil {
-                    LoggerService.shared.log("Using temporary Sucuri cookie in consolidated file for \(hostForLog(url)) (cookie values not logged)", level: .info)
-                }
-                if let raw = rawCookies, !raw.isEmpty {
-                    LoggerService.shared.log("Using session cookies passed from browser extension for \(hostForLog(url))", level: .info)
-                }
+        if (rawCookies?.isEmpty == false) || !additionalCookies.isEmpty,
+           let cookieFile = try? SecureCookieFile.create(url: url, rawCookies: rawCookies, additionalCookies: additionalCookies) {
+            secureCookieFile = cookieFile
+            args.append(contentsOf: ["--cookies", cookieFile.path])
+            if sucuriCookie != nil {
+                LoggerService.shared.log("Using temporary Sucuri cookie in consolidated file for \(hostForLog(url)) (cookie values not logged)", level: .info)
+            }
+            if let raw = rawCookies, !raw.isEmpty {
+                LoggerService.shared.log("Using session cookies passed from browser extension for \(hostForLog(url))", level: .info)
             }
         }
         if rawCookies?.isEmpty != false {
@@ -2145,20 +2142,19 @@ public struct DownloadResult: Sendable {
             || Self.isGFFMediaURL(normalizedURL) || Self.isGFFMediaURL(targetURL)
         if skipsAccountCookies {
             LoggerService.shared.log("Protected-site stream download uses the resolved CDN URL without forwarding account cookies", level: .debug)
-        } else if (options.rawCookies?.isEmpty == false) || !additionalCookies.isEmpty {
-            if let cookieFile = try? SecureCookieFile.create(
-                url: targetURL,
-                rawCookies: options.rawCookies,
-                additionalCookies: additionalCookies
-            ) {
-                secureCookieFiles.append(cookieFile)
-                args.append(contentsOf: ["--cookies", cookieFile.path])
-                if sucuriCookie != nil {
-                    LoggerService.shared.log("Using temporary Sucuri cookie in consolidated file for \(hostForLog(normalizedURL)) (cookie values not logged)", level: .info)
-                }
-                if let raw = options.rawCookies, !raw.isEmpty {
-                    LoggerService.shared.log("Using session cookies passed from browser extension for \(hostForLog(targetURL))", level: .info)
-                }
+        } else if (options.rawCookies?.isEmpty == false) || !additionalCookies.isEmpty,
+                  let cookieFile = try? SecureCookieFile.create(
+                      url: targetURL,
+                      rawCookies: options.rawCookies,
+                      additionalCookies: additionalCookies
+                  ) {
+            secureCookieFiles.append(cookieFile)
+            args.append(contentsOf: ["--cookies", cookieFile.path])
+            if sucuriCookie != nil {
+                LoggerService.shared.log("Using temporary Sucuri cookie in consolidated file for \(hostForLog(normalizedURL)) (cookie values not logged)", level: .info)
+            }
+            if let raw = options.rawCookies, !raw.isEmpty {
+                LoggerService.shared.log("Using session cookies passed from browser extension for \(hostForLog(targetURL))", level: .info)
             }
         }
         if !skipsAccountCookies, options.rawCookies?.isEmpty != false {

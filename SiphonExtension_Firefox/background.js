@@ -47,16 +47,16 @@ async function closeDeepLinkTab(tabId, record) {
 async function reconcileDeepLinkTabs(closeAll = false) {
     try {
         const records = await browser.storage.session.get(null);
-        for (const [key, record] of Object.entries(records)) {
-            if (!key.startsWith(DEEP_LINK_TAB_PREFIX)) continue;
+        await Promise.all(Object.entries(records).map(async ([key, record]) => {
+            if (!key.startsWith(DEEP_LINK_TAB_PREFIX)) return;
             const tabId = Number(key.slice(DEEP_LINK_TAB_PREFIX.length));
-            if (!Number.isInteger(tabId) || !Number.isFinite(record.deadline)) continue;
+            if (!Number.isInteger(tabId) || !Number.isFinite(record.deadline)) return;
             if (closeAll || record.deadline <= Date.now()) {
                 await closeDeepLinkTab(tabId, record);
             } else {
                 await browser.alarms.create(key, { when: record.deadline });
             }
-        }
+        }));
     } catch (error) {
         reportCleanupFailure(error);
     }
