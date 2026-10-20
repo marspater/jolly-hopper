@@ -6335,7 +6335,8 @@ final class YtdlpServiceTests: XCTestCase {
         var options = DownloadOptions.default
         options.fileType = .mp4
         #if arch(arm64)
-        let h264 = ("-q:v", "80"), h265 = ("-q:v", "80")
+        let h264 = YtdlpService.hasHardwareEncoder(kCMVideoCodecType_H264) ? ("-q:v", "80") : ("-crf", "18")
+        let h265 = YtdlpService.hasHardwareEncoder(kCMVideoCodecType_HEVC) ? ("-q:v", "80") : ("-crf", "20")
         #else
         let h264 = ("-crf", "18"), h265 = ("-crf", "20")
         #endif
