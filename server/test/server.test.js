@@ -1,7 +1,7 @@
 const { test, describe, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const http = require('node:http');
-const { createServer, listenHost } = require('../index.js');
+const { createServer, listenHost, resolveCommit, PACKAGE_VERSION } = require('../index.js');
 
 async function listen(server) {
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
@@ -53,13 +53,15 @@ describe('Siphon Companion Server', () => {
     await new Promise((resolve) => server.close(resolve));
   });
 
-  test('GET / returns 200 with service info', async () => {
+  test('GET / returns 200 with service info including version and commit', async () => {
     const res = await fetch(`${baseUrl}/`);
     assert.equal(res.status, 200);
     assert.equal(res.headers.get('content-type'), 'application/json');
     const data = await res.json();
     assert.equal(data.status, 'ok');
     assert.equal(data.service, 'siphon-companion');
+    assert.equal(data.version, '1.0.0');
+    assert.equal(typeof data.commit, 'string');
     assert.ok(data.timestamp);
   });
 
@@ -103,6 +105,31 @@ describe('Siphon Companion Server', () => {
     assert.equal(res.headers.get('content-type'), 'application/json');
     const data = await res.json();
     assert.equal(data.status, 'ok');
+    assert.equal(data.version, '1.0.0');
+    assert.equal(typeof data.commit, 'string');
+  });
+
+  test('GET /healthz reports custom injected version and commit', async () => {
+    const revServer = createServer({ version: '2.5.0', commit: 'abc1234567890def' });
+    const revUrl = await listen(revServer);
+    try {
+      const res = await fetch(`${revUrl}/healthz`);
+      assert.equal(res.status, 200);
+      const data = await res.json();
+      assert.equal(data.status, 'ok');
+      assert.equal(data.version, '2.5.0');
+      assert.equal(data.commit, 'abc1234567890def');
+    } finally {
+      await new Promise((resolve) => revServer.close(resolve));
+    }
+  });
+
+  test('resolveCommit picks up commit from environment variables in priority order', () => {
+    assert.equal(resolveCommit({ RENDER_GIT_COMMIT: 'render-commit', GIT_COMMIT: 'git-commit' }), 'render-commit');
+    assert.equal(resolveCommit({ GIT_COMMIT: 'git-commit', REVISION: 'rev' }), 'git-commit');
+    assert.equal(resolveCommit({ REVISION: 'rev', COMMIT_SHA: 'sha' }), 'rev');
+    assert.equal(resolveCommit({ COMMIT_SHA: 'sha' }), 'sha');
+    assert.equal(resolveCommit({}), '');
   });
 
   test('GET /mock/subtitles.vtt returns valid WebVTT content', async () => {
