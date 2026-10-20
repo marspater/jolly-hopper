@@ -2538,4 +2538,53 @@ final class SiphonFontCoverageTests: XCTestCase {
             }
         }
     }
+
+    @MainActor
+    func testSponsorViewIconsAreAccessibilityHiddenFromVoiceOver() {
+        let lang = LanguageService()
+        XCTAssertEqual(lang.s("star_github"), "Star on GitHub")
+
+        guard let files = try? sourceFiles() else {
+            XCTFail("Could not read source files")
+            return
+        }
+
+        for (name, lines) in files where name.contains("ContentView.swift") {
+            for (index, line) in lines.enumerated() {
+                if line.contains("struct SponsorView: View") {
+                    let end = min(lines.count, index + 45)
+                    let sponsorLines = lines[index..<end]
+                    let window = sponsorLines.joined(separator: "\n")
+
+                    XCTAssertTrue(
+                        window.contains("Image(systemName: \"star.fill\")"),
+                        "SponsorView must include star icon"
+                    )
+                    XCTAssertTrue(
+                        window.contains("Image(systemName: \"arrow.up.right\")"),
+                        "SponsorView must include arrow icon"
+                    )
+
+                    let starIndex = sponsorLines.firstIndex(where: { $0.contains("Image(systemName: \"star.fill\")") })!
+                    let starWindow = lines[starIndex..<min(lines.count, starIndex + 5)].joined(separator: "\n")
+                    XCTAssertTrue(
+                        starWindow.contains(".accessibilityHidden(true)"),
+                        "SponsorView star.fill icon must be accessibilityHidden(true) from VoiceOver"
+                    )
+
+                    let arrowIndex = sponsorLines.firstIndex(where: { $0.contains("Image(systemName: \"arrow.up.right\")") })!
+                    let arrowWindow = lines[arrowIndex..<min(lines.count, arrowIndex + 5)].joined(separator: "\n")
+                    XCTAssertTrue(
+                        arrowWindow.contains(".accessibilityHidden(true)"),
+                        "SponsorView arrow.up.right icon must be accessibilityHidden(true) from VoiceOver"
+                    )
+
+                    XCTAssertTrue(
+                        window.contains(".accessibilityLabel(languageService.s(\"star_github\"))"),
+                        "SponsorView button must announce explicit star_github accessibility label"
+                    )
+                }
+            }
+        }
+    }
 }
