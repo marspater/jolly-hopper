@@ -23,6 +23,7 @@ build_release_universal/
 build_log.txt
 dist/
 dmg_stage/
+test-results/
 *.app
 *.dmg
 

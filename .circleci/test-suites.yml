@@ -1,0 +1,8 @@
+---
+name: scripts
+discover: find server/test scripts -type f \( -name 'test_*.js' -o -name '*.test.js' \) | sort
+run: node scripts/run_suite.js "<< outputs.junit >>" << test.atoms >>
+outputs:
+  junit: test-results/junit.xml
+options:
+  store-test-results: true

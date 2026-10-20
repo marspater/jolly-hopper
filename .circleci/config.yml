@@ -33,7 +33,8 @@ jobs:
               server/index.js \
               server/test/server.test.js \
               scripts/capture_original_mp4.js \
-              scripts/test_capture_original_mp4.js
+              scripts/test_capture_original_mp4.js \
+              scripts/run_suite.js
             do
               node --check "$file"
             done
@@ -64,17 +65,8 @@ jobs:
               exit 1
             fi
       - run:
-          name: Test companion server
-          command: npm test --prefix server
-      - run:
-          name: Test Chrome handoff lifecycle
-          command: node --test scripts/test_chrome_handoff.js
-      - run:
-          name: Test native launcher shutdown ordering
-          command: node --test scripts/test_build_and_run.js
-      - run:
-          name: Test original MP4 capture script
-          command: node scripts/test_capture_original_mp4.js
+          name: Run testsuite with Smarter Testing
+          command: circleci testsuite run "scripts"
       - run:
           name: Check shell script syntax
           command: |
