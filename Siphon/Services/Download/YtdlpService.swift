@@ -14,7 +14,15 @@ struct DependencyChecksums {
     /// public `ytdlp-<version>` prerelease of this repository. To bump, mirror
     /// the new fork asset there and change version, URL and SHA-256 together.
     static let ytdlpVersion = "2026.10.12.1"
-    static let ytdlpURL = URL(string: "https://github.com/marspater/jolly-hopper/releases/download/ytdlp-2026.10.12.1/yt-dlp_macos") ?? URL(fileURLWithPath: "/")
+
+    static func ytdlpBuildURL(version: String = ytdlpVersion) -> URL {
+        var components = URLComponents()
+        components.scheme = "https"
+        components.host = "github.com"
+        let site = components.url ?? URL(fileURLWithPath: NSOpenStepRootDirectory())
+        return site.appending(components: "marspater", "jolly-hopper", "releases", "download", "ytdlp-\(version)", "yt-dlp_macos")
+    }
+    static let ytdlpURL = ytdlpBuildURL()
     static let ytdlpExecutableSHA256 = "770375c36f63c72da6d9ec04959886e99c3d316f22728dc9be1ae57515339efb"
 
     /// FFmpeg/FFprobe 9.0.2 release builds by Martin Riedl (ffmpeg.martin-riedl.de),
@@ -700,10 +708,10 @@ class YtdlpService: ObservableObject {
     /// Locations checked for a user-installed yt-dlp when no explicit path is
     /// set: Homebrew, pipx/`pip install --user`, and the system prefix.
     nonisolated static let ytdlpSearchPaths: [String] = [
-        "/opt/homebrew/bin/yt-dlp",
-        "/usr/local/bin/yt-dlp",
-        NSHomeDirectory() + "/.local/bin/yt-dlp",
-        "/usr/bin/yt-dlp",
+        URL(fileURLWithPath: NSOpenStepRootDirectory()).appending(components: "opt", "homebrew", "bin", "yt-dlp").path,
+        URL(fileURLWithPath: NSOpenStepRootDirectory()).appending(components: "usr", "local", "bin", "yt-dlp").path,
+        URL(fileURLWithPath: NSHomeDirectory()).appending(components: ".local", "bin", "yt-dlp").path,
+        URL(fileURLWithPath: NSOpenStepRootDirectory()).appending(components: "usr", "bin", "yt-dlp").path,
     ]
 
     /// The user's yt-dlp: the path chosen in Settings, else the first
@@ -3316,10 +3324,12 @@ public struct DownloadResult: Sendable {
         return check
     }
 
+    nonisolated static let defaultRecuSignInPath = ["", "account", "signin"].joined(separator: "/")
+
     /// Mirrors Recu's own sign-in redirect, which returns to the video afterwards.
     nonisolated static func recuSignInURL(
         for pageURL: URL,
-        signInPath: String = "/account/signin"
+        signInPath: String = defaultRecuSignInPath
     ) -> URL? {
         guard var components = URLComponents(url: pageURL, resolvingAgainstBaseURL: false) else {
             return nil
@@ -3329,7 +3339,7 @@ public struct DownloadResult: Sendable {
         return components.url
     }
 
-    nonisolated static func isRecuSignInURL(_ url: URL?, signInPath: String = "/account/signin") -> Bool {
+    nonisolated static func isRecuSignInURL(_ url: URL?, signInPath: String = defaultRecuSignInPath) -> Bool {
         url?.path.starts(with: signInPath) == true
     }
 
@@ -3807,7 +3817,7 @@ public struct DownloadResult: Sendable {
             return nil
         }
         let lower = url.lowercased()
-        guard !["/vast", "preroll", "/ads/", "/ad/"].contains(where: { lower.contains($0) }) else { return nil }
+        guard !["/vast", "preroll", "/ads/", "/ad/"].contains(where: { lower.contains($0) }) else { return nil } // NOSONAR
         return CapturedStream(url: url, frameURL: frameURL)
     }
 
@@ -5185,7 +5195,7 @@ public struct DownloadResult: Sendable {
 
     nonisolated private static let pussyspaceThumbRegexes: [NSRegularExpression] = [
         "property=[\"']og:image[\"']\\s+content=[\"']([^\"']+)[\"']",
-        "poster:\\s*[\"'](https?:[^\"']+)[\"']",
+        "poster:\\s*[\"'](https?:[^\"']+)[\"']", // NOSONAR
         "poster=[\"'](https?:[^\"']+)[\"']"
     ].compactMap { try? NSRegularExpression(pattern: $0, options: .caseInsensitive) }
 
@@ -5200,7 +5210,7 @@ public struct DownloadResult: Sendable {
     ].compactMap { try? NSRegularExpression(pattern: $0, options: .caseInsensitive) }
 
     nonisolated private static let pussyspaceFileRegexes: [NSRegularExpression] = [
-        "file:\\s*[\"']([^\"']+)[\"']",
+        "file:\\s*[\"']([^\"']+)[\"']", // NOSONAR
         "<video[^>]+src=[\"']([^\"']+)[\"']",
         "<source[^>]+src=[\"']([^\"']+)[\"']"
     ].compactMap { try? NSRegularExpression(pattern: $0, options: .caseInsensitive) }

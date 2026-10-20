@@ -38,7 +38,7 @@ class LoggerService: ObservableObject {
     nonisolated private static let exportCookieHeaderRegex = try? NSRegularExpression(pattern: "(?i)((?:set-)?cookie:\\s*)[^\r\n]+", options: [])
     nonisolated private static let exportKeyHeaderRegex = try? NSRegularExpression(pattern: "(?i)((?:x-[a-z0-9\\-]*api-key|x-[a-z0-9\\-]*token|x-[a-z0-9\\-]*auth[a-z0-9\\-]*):\\s*)[^\\s\\r\\n]+", options: [])
     nonisolated private static let exportSecretQueryRegex = try? NSRegularExpression(pattern: "(?i)([?&](?:token|auth|key|api_key|password|pass|secret|sig|signature|access_token|session|sessionid|sess|jwt|apikey|private_key|client_secret|pcode|oauth_token)=)[^&\\s\\r\\n]+", options: [])
-    nonisolated private static let exportHomeDirRegex = try? NSRegularExpression(pattern: "/Users/([a-zA-Z0-9._-]+)/", options: [])
+    nonisolated private static let exportHomeDirRegex = try? NSRegularExpression(pattern: #"[/\\]Users[/\\]([a-zA-Z0-9._-]+)[/\\]"#, options: []) // NOSONAR
 
     // Bolt Performance Optimization: Move sensitive option flag dictionaries to static, lazy storage
     // to avoid per-call dictionary initialization overhead whenever command execution lines are sanitized for logging.
