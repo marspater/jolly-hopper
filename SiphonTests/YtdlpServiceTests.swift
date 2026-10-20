@@ -4532,7 +4532,7 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertFalse(capturedArgs.value.contains("--http-chunk-size"))
         XCTAssertTrue(capturedArgs.value.contains("--abort-on-unavailable-fragments"))
         let index = try XCTUnwrap(capturedArgs.value.firstIndex(of: "--concurrent-fragments"))
-        XCTAssertEqual(capturedArgs.value[index + 1], "3", "The CDN supports 3 concurrent fragments with zero rate limits")
+        XCTAssertEqual(capturedArgs.value[index + 1], "1", "The CDN rate-limits parallel segment requests")
     }
 
     func testRecuDownloadRefreshesExpiredPlaylistOnHTTP410() async throws {

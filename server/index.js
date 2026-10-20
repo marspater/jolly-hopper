@@ -2,6 +2,19 @@ const fs = require('node:fs');
 const http = require('node:http');
 const path = require('node:path');
 
+const PACKAGE_VERSION = (() => {
+  try {
+    const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, 'package.json'), 'utf8'));
+    return pkg.version || '1.0.0';
+  } catch {
+    return '1.0.0';
+  }
+})();
+
+function resolveCommit(env = process.env) {
+  return env.RENDER_GIT_COMMIT || env.GIT_COMMIT || env.REVISION || env.COMMIT_SHA || '';
+}
+
 // 1 s, 16x16 H.264 + AAC fixtures generated with the pinned FFmpeg; both
 // decode cleanly with ffprobe.
 const SAMPLE_MP4 = fs.readFileSync(path.join(__dirname, 'fixtures', 'video.mp4'));
@@ -214,13 +227,15 @@ function sendJson(res, statusCode, data) {
   res.end(payload);
 }
 
-function handleHealthCheck(req, res, pathname) {
+function handleHealthCheck(req, res, pathname, { version = PACKAGE_VERSION, commit = '' } = {}) {
   if (req.method !== 'GET' || (pathname !== '/' && pathname !== '/health' && pathname !== '/healthz')) {
     return false;
   }
   sendJson(res, 200, {
     status: 'ok',
     service: 'siphon-companion',
+    version,
+    commit,
     timestamp: new Date().toISOString()
   });
   return true;
@@ -280,9 +295,12 @@ function createServer({
   fetchImpl = globalThis.fetch,
   cacheTtlMs = RELEASE_CACHE_TTL_MS,
   failureRetryMs = RELEASE_FAILURE_RETRY_MS,
-  githubToken = process.env.GITHUB_TOKEN
+  githubToken = process.env.GITHUB_TOKEN,
+  version = PACKAGE_VERSION,
+  commit = resolveCommit()
 } = {}) {
   const getLatestRelease = createReleaseFetcher(fetchImpl, cacheTtlMs, failureRetryMs, githubToken);
+  const healthContext = { version, commit };
   return http.createServer(async (req, res) => {
     try {
       if (req.method !== 'GET') {
@@ -297,7 +315,7 @@ function createServer({
       }
 
       const pathname = url.pathname;
-      if (handleHealthCheck(req, res, pathname)) return;
+      if (handleHealthCheck(req, res, pathname, healthContext)) return;
       if (handleMockFixtures(req, res, pathname)) return;
       if (await handleReleaseApi(req, res, pathname, getLatestRelease)) return;
 
@@ -344,4 +362,4 @@ if (require.main === module) {
   process.on('SIGINT', shutdown);
 }
 
-module.exports = { createServer, listenHost };
+module.exports = { createServer, listenHost, resolveCommit, PACKAGE_VERSION };
