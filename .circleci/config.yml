@@ -172,13 +172,31 @@ jobs:
           command: |
             set -euo pipefail
             echo "Deploying Siphon companion service to Render (production)..."
-            curl --fail --silent --show-error --location \
-              --proto '=https' \
-              --proto-redir '=https' \
-              --connect-timeout 10 \
-              --max-time 90 \
-              --retry 2 \
-              https://jolly-hopper.onrender.com/healthz
+            if [ -n "${RENDER_DEPLOY_HOOK_URL:-}" ]; then
+              echo "Triggering Render deploy via deploy hook..."
+              curl --fail --silent --show-error --location --request POST "${RENDER_DEPLOY_HOOK_URL}"
+            else
+              echo "RENDER_DEPLOY_HOOK_URL not configured; relying on automated GitHub push deployment."
+            fi
+
+            echo "Polling companion service health at https://jolly-hopper.onrender.com/healthz..."
+            MAX_ATTEMPTS=12
+            SLEEP_SEC=10
+            for i in $(seq 1 "$MAX_ATTEMPTS"); do
+              if curl --fail --silent --show-error --location \
+                --proto '=https' \
+                --proto-redir '=https' \
+                --connect-timeout 10 \
+                --max-time 30 \
+                https://jolly-hopper.onrender.com/healthz; then
+                echo "Companion service is up and healthy."
+                exit 0
+              fi
+              echo "Waiting for service to become healthy (attempt $i/$MAX_ATTEMPTS)..."
+              sleep "$SLEEP_SEC"
+            done
+            echo "Health check timed out after $(( MAX_ATTEMPTS * SLEEP_SEC ))s" >&2
+            exit 1
       - run:
           name: Update deployment status to running
           command: circleci run release update siphon-companion --status=RUNNING

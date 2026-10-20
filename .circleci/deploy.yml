@@ -1,5 +1,19 @@
 version: 2.1
 
+parameters:
+  component_name:
+    type: string
+    default: ""
+    description: "Component name (optional override when triggered outside CircleCI Deploys UI)"
+  environment_name:
+    type: string
+    default: ""
+    description: "Environment name (optional override when triggered outside CircleCI Deploys UI)"
+  target_version:
+    type: string
+    default: ""
+    description: "Target version (optional override when triggered outside CircleCI Deploys UI)"
+
 executors:
   node-executor:
     docker:
@@ -10,11 +24,24 @@ jobs:
   deploy-companion:
     executor: node-executor
     environment:
-      COMPONENT_NAME: "<< pipeline.deploy.component_name >>"
-      ENVIRONMENT_NAME: "<< pipeline.deploy.environment_name >>"
-      TARGET_VERSION: "<< pipeline.deploy.target_version >>"
+      DEPLOY_COMPONENT: "<< pipeline.deploy.component_name >>"
+      DEPLOY_ENV: "<< pipeline.deploy.environment_name >>"
+      DEPLOY_VERSION: "<< pipeline.deploy.target_version >>"
+      PARAM_COMPONENT: "<< pipeline.parameters.component_name >>"
+      PARAM_ENV: "<< pipeline.parameters.environment_name >>"
+      PARAM_VERSION: "<< pipeline.parameters.target_version >>"
     steps:
       - checkout
+      - run:
+          name: Resolve deploy parameters
+          command: |
+            set -euo pipefail
+            COMPONENT_NAME="${DEPLOY_COMPONENT:-${PARAM_COMPONENT:-siphon-companion}}"
+            ENVIRONMENT_NAME="${DEPLOY_ENV:-${PARAM_ENV:-production}}"
+            TARGET_VERSION="${DEPLOY_VERSION:-${PARAM_VERSION:-latest}}"
+            echo "export COMPONENT_NAME=\"${COMPONENT_NAME}\"" >> "$BASH_ENV"
+            echo "export ENVIRONMENT_NAME=\"${ENVIRONMENT_NAME}\"" >> "$BASH_ENV"
+            echo "export TARGET_VERSION=\"${TARGET_VERSION}\"" >> "$BASH_ENV"
       - run:
           name: Plan deployment
           command: |
@@ -27,13 +54,31 @@ jobs:
           command: |
             set -euo pipefail
             echo "Deploying ${COMPONENT_NAME} (${TARGET_VERSION}) to ${ENVIRONMENT_NAME}..."
-            curl --fail --silent --show-error --location \
-              --proto '=https' \
-              --proto-redir '=https' \
-              --connect-timeout 10 \
-              --max-time 90 \
-              --retry 2 \
-              https://jolly-hopper.onrender.com/healthz
+            if [ -n "${RENDER_DEPLOY_HOOK_URL:-}" ]; then
+              echo "Triggering Render deploy via deploy hook..."
+              curl --fail --silent --show-error --location --request POST "${RENDER_DEPLOY_HOOK_URL}"
+            else
+              echo "RENDER_DEPLOY_HOOK_URL not configured; relying on automated GitHub push deployment."
+            fi
+
+            echo "Polling companion service health at https://jolly-hopper.onrender.com/healthz..."
+            MAX_ATTEMPTS=12
+            SLEEP_SEC=10
+            for i in $(seq 1 "$MAX_ATTEMPTS"); do
+              if curl --fail --silent --show-error --location \
+                --proto '=https' \
+                --proto-redir '=https' \
+                --connect-timeout 10 \
+                --max-time 30 \
+                https://jolly-hopper.onrender.com/healthz; then
+                echo "Companion service is up and healthy."
+                exit 0
+              fi
+              echo "Waiting for service to become healthy (attempt $i/$MAX_ATTEMPTS)..."
+              sleep "$SLEEP_SEC"
+            done
+            echo "Health check timed out after $(( MAX_ATTEMPTS * SLEEP_SEC ))s" >&2
+            exit 1
       - run:
           name: Update deployment status to running
           command: circleci run release update siphon-companion --status=RUNNING
