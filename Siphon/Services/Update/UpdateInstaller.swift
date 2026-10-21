@@ -313,7 +313,7 @@ public final class UpdateInstaller: Sendable {
     private func mountDMG(dmgURL: URL) throws -> String {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/hdiutil")
-        process.arguments = ["attach", dmgURL.path, "-nobrowse", "-readonly", "-plist"]
+        process.arguments = ["attach", "-nobrowse", "-readonly", "-plist", "--", dmgURL.path]
         process.environment = YtdlpService.createSanitizedEnvironment()
 
         let pipe = Pipe()
@@ -354,7 +354,7 @@ public final class UpdateInstaller: Sendable {
     private func unmountDMG(mountPoint: String) throws {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/hdiutil")
-        process.arguments = ["detach", mountPoint, "-force"]
+        process.arguments = ["detach", "-force", "--", mountPoint]
         process.environment = YtdlpService.createSanitizedEnvironment()
         process.standardOutput = FileHandle.nullDevice
         let errorPipe = Pipe()
