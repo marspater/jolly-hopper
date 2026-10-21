@@ -98,21 +98,26 @@ jobs:
               CODE_SIGN_IDENTITY="" \
               CODE_SIGNING_REQUIRED=NO \
               CODE_SIGNING_ALLOWED=NO
-      - run:
-          name: Test (Release)
-          when: always
-          no_output_timeout: 30m
-          command: |
-            xcodebuild test \
-              -project Siphon.xcodeproj \
-              -scheme Siphon \
-              -destination 'platform=macOS' \
-              -configuration Release \
-              MACOSX_DEPLOYMENT_TARGET=15.0 \
-              ENABLE_TESTABILITY=YES \
-              CODE_SIGN_IDENTITY="" \
-              CODE_SIGNING_REQUIRED=NO \
-              CODE_SIGNING_ALLOWED=NO
+      # The Release pass repeats the whole suite on macOS, so it runs only on main.
+      - when:
+          condition:
+            equal: [main, << pipeline.git.branch >>]
+          steps:
+            - run:
+                name: Test (Release)
+                when: always
+                no_output_timeout: 30m
+                command: |
+                  xcodebuild test \
+                    -project Siphon.xcodeproj \
+                    -scheme Siphon \
+                    -destination 'platform=macOS' \
+                    -configuration Release \
+                    MACOSX_DEPLOYMENT_TARGET=15.0 \
+                    ENABLE_TESTABILITY=YES \
+                    CODE_SIGN_IDENTITY="" \
+                    CODE_SIGNING_REQUIRED=NO \
+                    CODE_SIGNING_ALLOWED=NO
 
   conversion-test:
     executor: macos-executor
@@ -215,8 +220,13 @@ workflows:
   test-and-verify:
     jobs:
       - scripting
-      - xcode-test
-      - conversion-test
+      # Start macOS machines only after the cheap Docker checks pass.
+      - xcode-test:
+          requires:
+            - scripting
+      - conversion-test:
+          requires:
+            - scripting
       - deploy-companion:
           requires:
             - scripting

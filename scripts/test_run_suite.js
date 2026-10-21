@@ -108,3 +108,26 @@ test('run_suite.js reports spawn errors and exits non-zero', () => {
     fs.rmSync(tempDir, { recursive: true, force: true });
   }
 });
+
+test('run_suite.js reports repo-relative file paths so results match discovered atoms', () => {
+  const tempDir = fs.mkdtempSync(path.join(process.cwd(), 'scripts', '.test-out-'));
+  const testFile = path.join(process.cwd(), 'scripts', 'fixture_relative_paths.js');
+  try {
+    fs.writeFileSync(testFile, 'const { test, describe } = require("node:test"); test("top", () => {}); describe("group", () => { test("nested", () => {}); });\n');
+    const junitOut = path.join(tempDir, 'junit.xml');
+
+    const result = spawnSync(process.execPath, [
+      path.join(process.cwd(), 'scripts', 'run_suite.js'),
+      junitOut,
+      'scripts/fixture_relative_paths.js'
+    ], { encoding: 'utf8', env: cleanEnv() });
+
+    assert.equal(result.status, 0, result.stderr);
+    const files = [...fs.readFileSync(junitOut, 'utf8').matchAll(/<testcase [^>]*file="([^"]+)"/g)].map((m) => m[1]);
+    assert.equal(files.length, 2, 'Both top-level and nested testcases must carry a file attribute');
+    assert.deepEqual([...new Set(files)], ['scripts/fixture_relative_paths.js']);
+  } finally {
+    try { fs.unlinkSync(testFile); } catch {}
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});
