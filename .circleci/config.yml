@@ -182,8 +182,10 @@ jobs:
               echo "RENDER_DEPLOY_HOOK_URL not configured; relying on automated GitHub push deployment."
             fi
 
+            # Render deploys from rootDir server/, so pushes that leave it untouched
+            # keep serving the last commit that changed it.
             node scripts/verify_deployment.js https://jolly-hopper.onrender.com/healthz \
-              --commit "${CIRCLE_SHA1:-}" \
+              --commit "$(git log -1 --format=%H -- server)" \
               --version "${APP_VERSION:-}" \
               --timeout 180 \
               --interval 10
