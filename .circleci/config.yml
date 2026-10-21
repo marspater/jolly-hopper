@@ -161,8 +161,15 @@ jobs:
           command: |
             set -euo pipefail
             APP_VERSION=$(node -p "require('./server/package.json').version || '1.0.0'")
-            REVISION="${CIRCLE_SHA1:-unknown}"
-            echo "export APP_VERSION=\"${APP_VERSION}-${REVISION:0:7}\"" >> "$BASH_ENV"
+            # Render deploys from rootDir server/, so pushes that leave it untouched
+            # keep serving the last commit that changed it.
+            SERVER_REVISION=$(git log -1 --format=%H -- server)
+            if [ -z "$SERVER_REVISION" ]; then
+              echo "Could not resolve the last server/ commit (shallow checkout?)" >&2
+              exit 1
+            fi
+            echo "export SERVER_REVISION=\"${SERVER_REVISION}\"" >> "$BASH_ENV"
+            echo "export APP_VERSION=\"${APP_VERSION}-${SERVER_REVISION:0:7}\"" >> "$BASH_ENV"
       - run:
           name: Plan deployment
           command: |
@@ -182,11 +189,9 @@ jobs:
               echo "RENDER_DEPLOY_HOOK_URL not configured; relying on automated GitHub push deployment."
             fi
 
-            # Render deploys from rootDir server/, so pushes that leave it untouched
-            # keep serving the last commit that changed it.
             node scripts/verify_deployment.js https://jolly-hopper.onrender.com/healthz \
-              --commit "$(git log -1 --format=%H -- server)" \
-              --version "${APP_VERSION:-}" \
+              --commit "${SERVER_REVISION}" \
+              --version "${APP_VERSION}" \
               --timeout 180 \
               --interval 10
       - run:
