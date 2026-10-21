@@ -3,6 +3,7 @@ import CryptoKit
 import CommonCrypto
 import AppKit
 import WebKit
+import VideoToolbox
 
 struct DependencyChecksums {
     /// Siphon downloads and pins the Siphon build of yt-dlp (marspater/yt-dlp,
@@ -3032,14 +3033,17 @@ public struct DownloadResult: Sendable {
         // at 1080p) and x265 to CRF 28, visibly degrading the source.
         // libvpx-vp9 needs -b:v 0 for -crf to mean constant quality; its default
         // output measured far worse (SSIM 0.83 at a higher bitrate than CRF 24).
-        // VideoToolbox constant quality (-q:v) is supported on Apple Silicon only.
+        // VideoToolbox constant quality (-q:v) is supported on Apple Silicon
+        // hardware encoders only; Intel Macs and VMs without a media engine use x264/x265.
         #if arch(arm64)
-        let h264Encoder = ["-c:v", "h264_videotoolbox", "-q:v", "80"]
-        let h265Encoder = ["-c:v", "hevc_videotoolbox", "-q:v", "80"]
+        let hardwareH264 = Self.hasHardwareEncoder(kCMVideoCodecType_H264)
+        let hardwareHEVC = Self.hasHardwareEncoder(kCMVideoCodecType_HEVC)
         #else
-        let h264Encoder = ["-c:v", "libx264", "-crf", "18"]
-        let h265Encoder = ["-c:v", "libx265", "-crf", "20"]
+        let hardwareH264 = false
+        let hardwareHEVC = false
         #endif
+        let h264Encoder = hardwareH264 ? ["-c:v", "h264_videotoolbox", "-q:v", "80"] : ["-c:v", "libx264", "-crf", "18"]
+        let h265Encoder = hardwareHEVC ? ["-c:v", "hevc_videotoolbox", "-q:v", "80"] : ["-c:v", "libx265", "-crf", "20"]
         let vp9Encoder = ["-c:v", "libvpx-vp9", "-crf", "24", "-b:v", "0", "-row-mt", "1"]
 
         switch conversionCodec {
@@ -3202,8 +3206,25 @@ public struct DownloadResult: Sendable {
     }
 
     private func appendJsRuntimeArgs(to args: inout [String]) {
-        guard !args.contains("--js-runtimes") else { return }
+        guard !args.contains("--js-runtimes"), let runtime = Self.findJsRuntime() else { return }
+        args.append(contentsOf: ["--js-runtimes", "\(runtime.engine):\(runtime.path)"])
+    }
 
+    /// Opens a hardware-only compression session: virtual machines list VideoToolbox
+    /// hardware encoders but fail to open them (-12903), so the encoder list is not enough.
+    nonisolated static func hasHardwareEncoder(_ codec: CMVideoCodecType) -> Bool {
+        let spec = [kVTVideoEncoderSpecification_RequireHardwareAcceleratedVideoEncoder: true] as CFDictionary
+        var session: VTCompressionSession?
+        let status = VTCompressionSessionCreate(
+            allocator: nil, width: 1280, height: 720, codecType: codec, encoderSpecification: spec,
+            imageBufferAttributes: nil, compressedDataAllocator: nil, outputCallback: nil, refcon: nil,
+            compressionSessionOut: &session)
+        guard status == noErr, let session else { return false }
+        VTCompressionSessionInvalidate(session)
+        return true
+    }
+
+    nonisolated static func findJsRuntime() -> (engine: String, path: String)? {
         let fileManager = FileManager.default
         let homeDir = NSHomeDirectory()
 
@@ -3221,12 +3242,7 @@ public struct DownloadResult: Sendable {
             ("quickjs", "/usr/local/bin/qjs")
         ]
 
-        for candidate in candidatePaths {
-            if fileManager.isExecutableFile(atPath: candidate.path) {
-                args.append(contentsOf: ["--js-runtimes", "\(candidate.engine):\(candidate.path)"])
-                return
-            }
-        }
+        return candidatePaths.first { fileManager.isExecutableFile(atPath: $0.path) }
     }
 
     private func isRecuURL(_ urlOrHost: String) -> Bool {

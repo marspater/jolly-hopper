@@ -4,6 +4,7 @@ import CryptoKit
 import WebKit
 import AppKit
 import Security
+import VideoToolbox
 @testable import Siphon
 
 final class TestBox<T>: @unchecked Sendable {
@@ -5916,6 +5917,9 @@ final class YtdlpServiceTests: XCTestCase {
     }
 
     func testJsRuntimeArgsAppendedInDownload() async throws {
+        guard YtdlpService.findJsRuntime() != nil else {
+            throw XCTSkip("No JS runtime (node/bun/deno/qjs) installed at a known path")
+        }
         let capturedArgsBox = TestBox<[String]>([])
         service.processRunner = MockYtdlpProcessRunner(mockDownload: { args in
             capturedArgsBox.value = args
@@ -6246,10 +6250,11 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertEqual(try String(contentsOf: source, encoding: .utf8), "HEVC output")
         let conversion = try XCTUnwrap(commands.value.first { $0.first?.hasSuffix("ffmpeg") == true })
         #if arch(arm64)
-        XCTAssertTrue(conversion.contains("hevc_videotoolbox"))
+        let expectsVideoToolbox = YtdlpService.hasHardwareEncoder(kCMVideoCodecType_HEVC)
         #else
-        XCTAssertTrue(conversion.contains("libx265"))
+        let expectsVideoToolbox = false
         #endif
+        XCTAssertTrue(conversion.contains(expectsVideoToolbox ? "hevc_videotoolbox" : "libx265"))
         XCTAssertTrue(conversion.contains("hvc1"))
         XCTAssertTrue(conversion.contains("0:s?"), "Keep embedded subtitles during conversion")
         XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: root.path), ["video.mp4"])
@@ -6330,7 +6335,8 @@ final class YtdlpServiceTests: XCTestCase {
         var options = DownloadOptions.default
         options.fileType = .mp4
         #if arch(arm64)
-        let h264 = ("-q:v", "80"), h265 = ("-q:v", "80")
+        let h264 = YtdlpService.hasHardwareEncoder(kCMVideoCodecType_H264) ? ("-q:v", "80") : ("-crf", "18")
+        let h265 = YtdlpService.hasHardwareEncoder(kCMVideoCodecType_HEVC) ? ("-q:v", "80") : ("-crf", "20")
         #else
         let h264 = ("-crf", "18"), h265 = ("-crf", "20")
         #endif
