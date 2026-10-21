@@ -50,88 +50,55 @@ const validatedFiles = rawTestFiles.map((file) => {
 
 const testRunnerBin = process.env.TEST_RUNNER_BIN || process.execPath;
 
-const result = spawnSync(
-  testRunnerBin,
-  [
-    '--test',
-    '--test-reporter=spec',
-    '--test-reporter-destination=stdout',
-    '--test-reporter=junit',
-    `--test-reporter-destination=${tempJunit}`,
-    '--',
-    ...validatedFiles
-  ],
-  { stdio: ['inherit', 'inherit', 'inherit'] }
-);
-
-if (fs.existsSync(tempJunit)) {
-  const safeTemp = safePath(tempJunit);
-  let xml = fs.readFileSync(safeTemp, 'utf8');
-
+function stripComments(xml) {
   // Strip XML comments recursively to prevent multi-character sanitization bypass (CodeQL: js/incomplete-multi-character-sanitization)
   let prevXml;
   do {
     prevXml = xml;
     xml = xml.replace(/<!--[\s\S]*?-->/g, '');
   } while (xml !== prevXml);
-  xml = xml.trim();
+  return xml;
+}
 
-  // Wrap top-level <testcase> elements in <testsuite> elements
-  const match = xml.match(/^([\s\S]*?<testsuites[^>]*>)([\s\S]*?)(<\/testsuites>[\s\S]*)$/i);
-  if (match) {
-    const [, header, body, footer] = match;
-    const lines = body.split('\n');
-    let newBody = '';
-    let currentOrphanSuite = null;
-    let inSuite = false;
+// Run each file in its own process so every result can be attributed to the atom that discover listed:
+// older node:test JUnit reporters omit the file attribute, and newer ones report absolute paths.
+let exitStatus = 0;
+let suites = '';
+for (const file of validatedFiles) {
+  const relPath = path.relative(process.cwd(), file);
+  const result = spawnSync(
+    testRunnerBin,
+    [
+      '--test',
+      '--test-reporter=spec',
+      '--test-reporter-destination=stdout',
+      '--test-reporter=junit',
+      `--test-reporter-destination=${tempJunit}`,
+      '--',
+      file
+    ],
+    { stdio: ['inherit', 'inherit', 'inherit'] }
+  );
 
-    for (const line of lines) {
-      const trimmed = line.trim();
-      if (trimmed.startsWith('<testsuite')) {
-        if (currentOrphanSuite) {
-          newBody += `\t</testsuite>\n`;
-          currentOrphanSuite = null;
-        }
-        inSuite = true;
-        newBody += line + '\n';
-      } else if (trimmed.startsWith('</testsuite>')) {
-        inSuite = false;
-        newBody += line + '\n';
-      } else if (!inSuite && trimmed.startsWith('<testcase')) {
-        const fileMatch = trimmed.match(/file="([^"]+)"/);
-        const fileAttr = fileMatch ? fileMatch[1] : '';
-        const relPath = fileAttr ? path.relative(process.cwd(), fileAttr) : 'tests';
-
-        if (currentOrphanSuite !== relPath) {
-          if (currentOrphanSuite) {
-            newBody += `\t</testsuite>\n`;
-          }
-          currentOrphanSuite = relPath;
-          newBody += `\t<testsuite name="${relPath}" file="${relPath}">\n`;
-        }
-        newBody += '\t' + line + '\n';
-      } else {
-        newBody += (currentOrphanSuite ? '\t' : '') + line + '\n';
-      }
-    }
-    if (currentOrphanSuite) {
-      newBody += `\t</testsuite>\n`;
-    }
-    xml = `${header}\n${newBody}${footer}`;
+  if (fs.existsSync(tempJunit)) {
+    const safeTemp = safePath(tempJunit);
+    const xml = stripComments(fs.readFileSync(safeTemp, 'utf8'));
+    const body = (xml.match(/<testsuites[^>]*>([\s\S]*?)<\/testsuites>/i) || [, ''])[1]
+      .replace(/<testcase\b([^>]*?)(\s+file="[^"]*")?(\s*\/?>)/g, `<testcase$1 file="${relPath}"$3`);
+    suites += `\t<testsuite name="${relPath}" file="${relPath}">${body}</testsuite>\n`;
+    try { fs.unlinkSync(safeTemp); } catch {}
   }
 
-  fs.writeFileSync(junitOutput, xml, 'utf8');
-  try { fs.unlinkSync(safeTemp); } catch {}
+  if (result.error) {
+    console.error('Failed to spawn test runner:', result.error.message || result.error);
+    exitStatus = 1;
+  } else if (result.status === null) {
+    console.error(`Test runner terminated unexpectedly by signal: ${result.signal || 'unknown'}`);
+    exitStatus = 1;
+  } else if (result.status !== 0 && exitStatus === 0) {
+    exitStatus = result.status;
+  }
 }
 
-if (result.error) {
-  console.error('Failed to spawn test runner:', result.error.message || result.error);
-  process.exit(1);
-}
-
-if (result.status === null) {
-  console.error(`Test runner terminated unexpectedly by signal: ${result.signal || 'unknown'}`);
-  process.exit(1);
-}
-
-process.exit(result.status);
+fs.writeFileSync(junitOutput, `<?xml version="1.0" encoding="utf-8"?>\n<testsuites>\n${suites}</testsuites>\n`, 'utf8');
+process.exit(exitStatus);

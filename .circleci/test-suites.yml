@@ -2,7 +2,26 @@
 name: scripts
 discover: find server/test scripts -type f \( -name 'test_*.js' -o -name '*.test.js' \) | sort
 run: node scripts/run_suite.js "<< outputs.junit >>" << test.atoms >>
+analysis: node --test --experimental-test-coverage --test-reporter=lcov --test-reporter-destination="<< outputs.lcov >>" << test.atoms >>
 outputs:
   junit: test-results/junit.xml
 options:
   store-test-results: true
+  test-impact-analysis: true
+  impact-key: jolly-hopper-scripts
+  full-test-run-paths:
+    - .circleci/test-suites.yml
+    - server/package.json
+  # These atoms exercise code through a child process or by reading source text,
+  # which in-process coverage cannot see.
+  test-selection-rules:
+    - test-atom: scripts/test_run_suite.js
+      include:
+        - scripts/run_suite.js
+    - test-atom: scripts/test_build_and_run.js
+      include:
+        - scripts/build_and_run.sh
+    - test-atom: scripts/test_chrome_handoff.js
+      include:
+        - SiphonExtension_*/background.js
+        - SiphonExtension_*/manifest.json
