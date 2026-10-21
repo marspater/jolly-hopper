@@ -131,3 +131,35 @@ test('run_suite.js reports repo-relative file paths so results match discovered 
     fs.rmSync(tempDir, { recursive: true, force: true });
   }
 });
+
+test('run_suite.js attributes results to the atom when the reporter omits file attributes', () => {
+  const tempDir = fs.mkdtempSync(path.join(process.cwd(), 'scripts', '.test-out-'));
+  const testFile = path.join(process.cwd(), 'scripts', 'fixture_no_file_attr.js');
+  try {
+    fs.writeFileSync(testFile, '');
+    // Mimics older node:test JUnit reporters, which write testcases without a file attribute.
+    const mockRunner = path.join(tempDir, 'mock_runner.js');
+    fs.writeFileSync(mockRunner, `const dest = process.argv.find((a) => a.startsWith('--test-reporter-destination=') && !a.endsWith('=stdout')).split('=')[1];
+require('node:fs').writeFileSync(dest, '<testsuites><testcase name="a" classname="test"/><testsuite name="g"><testcase name="b"></testcase></testsuite></testsuites>');
+`);
+    const runnerWrapper = path.join(tempDir, 'runner_wrapper.sh');
+    fs.writeFileSync(runnerWrapper, `#!/bin/sh\nexec "${process.execPath}" "${mockRunner}" "$@"\n`);
+    fs.chmodSync(runnerWrapper, 0o755);
+    const env = cleanEnv();
+    env.TEST_RUNNER_BIN = runnerWrapper;
+    const junitOut = path.join(tempDir, 'junit.xml');
+
+    const result = spawnSync(process.execPath, [
+      path.join(process.cwd(), 'scripts', 'run_suite.js'),
+      junitOut,
+      'scripts/fixture_no_file_attr.js'
+    ], { encoding: 'utf8', env });
+
+    assert.equal(result.status, 0, result.stderr);
+    const files = [...fs.readFileSync(junitOut, 'utf8').matchAll(/<testcase [^>]*file="([^"]+)"/g)].map((m) => m[1]);
+    assert.deepEqual(files, ['scripts/fixture_no_file_attr.js', 'scripts/fixture_no_file_attr.js']);
+  } finally {
+    try { fs.unlinkSync(testFile); } catch {}
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});
