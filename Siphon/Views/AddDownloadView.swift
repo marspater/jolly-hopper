@@ -632,6 +632,7 @@ struct AddDownloadView: View {
                         Image(systemName: pasteFeedback.isShowing ? "checkmark" : "doc.on.clipboard")
                             .font(.system(size: 12, weight: .medium))
                             .contentTransition(.symbolEffect(.replace))
+                            .accessibilityHidden(true)
                         Text(languageService.s("paste"))
                             .font(.siphonSecondaryMedium)
                     }
@@ -639,7 +640,6 @@ struct AddDownloadView: View {
                 }
                 .buttonStyle(.siphonSecondary)
                 .help(languageService.s("paste_from_clipboard"))
-                .accessibilityLabel(pasteFeedback.isShowing ? languageService.s("paste") : languageService.s("paste_from_clipboard"))
 
                 Button {
                     fetchInfo()
@@ -666,7 +666,6 @@ struct AddDownloadView: View {
                 .buttonStyle(.siphonPrimary)
                 .disabled(urlInput.isEmpty || isLoading)
                 .help(languageService.s(isLoading ? "fetching" : "fetch_info"))
-                .accessibilityLabel(languageService.s("fetch_info"))
                 .accessibilityValue(isLoading ? languageService.s("fetching") : "")
             }
         }
