@@ -76,6 +76,10 @@ if (fs.existsSync(tempJunit)) {
   } while (xml !== prevXml);
   xml = xml.trim();
 
+  // node:test reports absolute file paths; discover lists repo-relative ones, so CircleCI cannot match results to atoms.
+  xml = xml.replace(/ file="([^"]+)"/g, (attr, file) =>
+    path.isAbsolute(file) ? ` file="${path.relative(process.cwd(), file)}"` : attr);
+
   // Wrap top-level <testcase> elements in <testsuite> elements
   const match = xml.match(/^([\s\S]*?<testsuites[^>]*>)([\s\S]*?)(<\/testsuites>[\s\S]*)$/i);
   if (match) {
