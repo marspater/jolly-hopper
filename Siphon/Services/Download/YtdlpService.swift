@@ -549,8 +549,22 @@ class YtdlpService: ObservableObject {
         "mp3", "m4a", "aac", "flac", "wav", "opus", "ogg", "alac", "aiff"
     ]
 
+    // Bolt Performance Optimization: Use native Swift Substring slicing on `path`
+    // instead of bridging to Objective-C `(path as NSString).pathExtension`.
+    // Correctly handles hidden dotfiles (e.g. `.mp3` or `/dir/.m4a`) and eliminates
+    // temporary Objective-C `NSString` allocations during output stream line parsing
+    // and queue deduplication loops.
     nonisolated static func isMediaFilePath(_ path: String) -> Bool {
-        let ext = (path as NSString).pathExtension.lowercased()
+        guard let dotIndex = path.lastIndex(of: "."),
+              dotIndex > path.startIndex,
+              dotIndex < path.index(before: path.endIndex),
+              path[path.index(before: dotIndex)] != "/" else {
+            return false
+        }
+        if let lastSlash = path.lastIndex(of: "/"), lastSlash > dotIndex {
+            return false
+        }
+        let ext = path[path.index(after: dotIndex)...].lowercased()
         return supportedMediaExtensions.contains(ext)
     }
 
