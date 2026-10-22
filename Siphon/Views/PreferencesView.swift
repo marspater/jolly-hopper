@@ -319,6 +319,7 @@ struct PreferencesView: View {
                     Image(systemName: "folder.fill")
                         .foregroundColor(SiphonTheme.accentText)
                         .font(.siphonPrimary)
+                        .accessibilityHidden(true)
 
                     Text(defaultSaveFolder.isEmpty ? "~/Downloads" : defaultSaveFolder)
                         .font(.siphonSecondaryMonoMedium)
@@ -361,6 +362,7 @@ struct PreferencesView: View {
                 } label: {
                     HStack(spacing: 6) {
                         Image(systemName: "folder.badge.plus")
+                            .accessibilityHidden(true)
                         Text(languageService.s("choose_folder"))
                     }
                 }
@@ -1069,6 +1071,7 @@ struct PreferencesView: View {
                 Image(systemName: "puzzlepiece.extension.fill")
                     .foregroundColor(SiphonTheme.accentText)
                     .font(.siphonStandard)
+                    .accessibilityHidden(true)
                 Text(languageService.s("chromium_extension_supported"))
                     .font(.siphonMetadataSemibold)
                     .foregroundColor(SiphonTheme.accentText)
@@ -1089,6 +1092,7 @@ struct PreferencesView: View {
                     Image(systemName: "checkmark.seal.fill")
                         .foregroundColor(SiphonTheme.statusCompletedText)
                         .font(.siphonStandard)
+                        .accessibilityHidden(true)
                     Text(languageService.s("safari_fda_granted_feedback"))
                         .font(.siphonMetadataSemibold)
                         .foregroundColor(SiphonTheme.statusCompletedText)
@@ -1178,6 +1182,7 @@ struct PreferencesView: View {
             Image(systemName: hasFullDiskAccess ? "checkmark.circle.fill" : "exclamationmark.circle.fill")
                 .foregroundColor(hasFullDiskAccess ? SiphonTheme.statusCompletedText : SiphonTheme.statusQueuedText)
                 .font(.siphonMetadata)
+                .accessibilityHidden(true)
             Text(message)
                 .font(.siphonMetadata)
                 .foregroundColor(.secondary)
@@ -1297,6 +1302,7 @@ struct PreferencesView: View {
                             .foregroundColor(SiphonTheme.statusQueuedText)
                             .font(.siphonStandard)
                             .padding(.top, 1)
+                            .accessibilityHidden(true)
 
                         Text(languageService.s("legal_disclaimer_message"))
                             .font(.siphonMetadata)
