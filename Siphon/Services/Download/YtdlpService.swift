@@ -2498,12 +2498,12 @@ public struct DownloadResult: Sendable {
                 }
 
                 // Strategy 6: aria2c download error -> Fallback to native downloader
-                if !errText.isEmpty, (errText.contains("aria2c") || errText.contains("aria2")), currentArgs.contains("aria2c"), !triedStrategies.contains(.disableAria2c) {
+                if !errText.isEmpty, (errText.contains("aria2c") || errText.contains("aria2")), currentArgs.contains(where: { $0.hasSuffix("aria2c") }), !triedStrategies.contains(.disableAria2c) {
                     triedStrategies.insert(.disableAria2c)
                     LoggerService.shared.log("Aria2c multi-connection download error encountered (\(errText.trimmingCharacters(in: .whitespacesAndNewlines))). Falling back to native downloader...", level: .warning)
                     onOutput("[Siphon Info] Aria2c multi-connection unavailable. Retrying with native downloader...\n")
                     var cleanArgs = currentArgs
-                    if let idx = cleanArgs.firstIndex(of: "--downloader"), idx + 1 < cleanArgs.count, cleanArgs[idx + 1] == "aria2c" {
+                    if let idx = cleanArgs.firstIndex(of: "--downloader"), idx + 1 < cleanArgs.count, cleanArgs[idx + 1].hasSuffix("aria2c") {
                         cleanArgs.remove(at: idx + 1)
                         cleanArgs.remove(at: idx)
                     }
@@ -7561,6 +7561,20 @@ public struct DownloadResult: Sendable {
                 args.append(contentsOf: ["--add-header", "Origin:\(origin)"])
             }
         }
+        // Single-file CDNs here throttle each connection. aria2c, when Homebrew
+        // installed it, splits the file over four connections. Scoped to https
+        // so HLS (recu, GayForFans, BoyfriendTV pacing) stays native; a failure
+        // falls back to the native downloader (see disableAria2c).
+        let singleFileSite = isGayteamURL(url) || isGuywhURL(url) || isBestCamURL(url) ||
+            parsedHost.contains("abyss") || parsedHost.contains("sssrr.org") ||
+            isStarwankURL(url) || isPussyspaceURL(url)
+        if singleFileSite, !args.contains("--downloader"), Self.findAria2cPath() != nil {
+            args.append(contentsOf: [
+                "--downloader", "https:aria2c",
+                "--downloader-args", "aria2c:-s 4 -x 4 -k 1M --min-split-size=1M --summary-interval=1"
+            ])
+        }
+
         if usesBrowserTransport(url) && !isRecu {
             refreshBrowserTransportIdentity(for: url, args: &args)
             // Smaller request bursts and bounded exponential backoff for sensitive hosts.
