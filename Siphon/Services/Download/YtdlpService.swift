@@ -507,6 +507,12 @@ class YtdlpService: ObservableObject {
     ) -> WKWebsiteDataStore {
         let route = EgressBoundary.proxyURL ?? ""
         if let store = stores[route] { return store }
+        if !route.isEmpty {
+            // A restarted proxy listens on a new port; the entry for the dead
+            // one is never used again. (WebKit hands back the same object per
+            // identifier, so the new entry's proxy setting replaces the old.)
+            stores = stores.filter { $0.key.isEmpty }
+        }
         let store = make()
         store.proxyConfigurations = EgressBoundary.webKitProxyConfigurations
         stores[route] = store
@@ -3576,9 +3582,9 @@ public struct DownloadResult: Sendable {
             userAgent: navigator.userAgent
         });
         """
-        let json: String? = await withCheckedContinuation { continuation in
+        let json: String? = await pageScriptResult { finish in
             webView.callAsyncJavaScript(script, arguments: ["videoID": videoID], in: nil, in: .defaultClient) { result in
-                continuation.resume(returning: (try? result.get()) as? String)
+                finish((try? result.get()) as? String)
             }
         }
         guard let data = json?.data(using: .utf8) else { return nil }
@@ -4383,14 +4389,31 @@ public struct DownloadResult: Sendable {
         LoggerService.shared.log("[BoyfriendTV] stage=webkit-session safari-cookies=\(cookies.count)", level: .debug)
     }
 
+    /// WebKit gives a page script no deadline, and a page busy in its own
+    /// script never answers. Waiting on one held the job, its site's WebKit
+    /// session and the window; this gives up after `timeout` or on Stop.
+    static let pageScriptTimeout: TimeInterval = 5
+
+    func pageScriptResult<T: Sendable>(
+        timeout: TimeInterval = YtdlpService.pageScriptTimeout,
+        _ start: (@escaping @Sendable (T?) -> Void) -> Void
+    ) async -> T? {
+        let once = ResumeOnce<T?>()
+        return await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
+                once.attach(continuation)
+                start { once.resume($0) }
+                DispatchQueue.main.asyncAfter(deadline: .now() + timeout) { once.resume(nil) }
+            }
+        } onCancel: {
+            once.resume(nil)
+        }
+    }
+
     private func boyfriendTVWebViewDocumentHTML(_ webView: WKWebView) async -> String? {
-        await withCheckedContinuation { continuation in
+        await pageScriptResult { finish in
             webView.evaluateJavaScript("document.documentElement.outerHTML") { value, error in
-                guard error == nil else {
-                    continuation.resume(returning: nil)
-                    return
-                }
-                continuation.resume(returning: value as? String)
+                finish(error == nil ? value as? String : nil)
             }
         }
     }
@@ -4443,13 +4466,9 @@ public struct DownloadResult: Sendable {
         })();
         """
 
-        let values: [String]? = await withCheckedContinuation { continuation in
+        let values: [String]? = await pageScriptResult { finish in
             webView.evaluateJavaScript(script) { value, error in
-                guard error == nil, let values = value as? [String] else {
-                    continuation.resume(returning: nil)
-                    return
-                }
-                continuation.resume(returning: values)
+                finish(error == nil ? value as? [String] : nil)
             }
         }
 
@@ -8184,6 +8203,37 @@ final class ThreadSafeOutputState: @unchecked Sendable {
 /// Thread-safe continuation wrapper that prevents double-resume crashes.
 /// If `process.run()` throws AND the terminationHandler fires, only the first
 /// resume call will go through; subsequent calls are safely ignored.
+/// Resumes a non-throwing continuation once, whichever of several sources
+/// (result, deadline, cancellation) comes first, even before it is attached.
+final class ResumeOnce<T: Sendable>: @unchecked Sendable {
+    private let lock = NSLock()
+    private var continuation: CheckedContinuation<T, Never>?
+    private var result: T?
+    private var finished = false
+
+    func attach(_ continuation: CheckedContinuation<T, Never>) {
+        lock.lock()
+        if finished, let result {
+            lock.unlock()
+            continuation.resume(returning: result)
+            return
+        }
+        self.continuation = continuation
+        lock.unlock()
+    }
+
+    func resume(_ value: T) {
+        lock.lock()
+        guard !finished else { lock.unlock(); return }
+        finished = true
+        let continuation = self.continuation
+        self.continuation = nil
+        if continuation == nil { result = value }
+        lock.unlock()
+        continuation?.resume(returning: value)
+    }
+}
+
 final class SafeContinuation<T: Sendable>: @unchecked Sendable {
     private var continuation: CheckedContinuation<T, Error>?
     private let lock = NSLock()
