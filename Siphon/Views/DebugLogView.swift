@@ -37,7 +37,7 @@ struct DebugLogView: View {
                     .overlay(SiphonTheme.cardBorder(cornerRadius: SiphonTheme.radiusControl))
 
                 ReadOnlyLogView(
-                    text: logger.logs.isEmpty ? languageService.s("no_log_output") : logger.logs.joined(separator: "\n"),
+                    text: logger.joinedLogs.isEmpty ? languageService.s("no_log_output") : logger.joinedLogs,
                     fontSize: 11
                 )
                 .padding(SiphonTheme.spacing8)
@@ -50,7 +50,7 @@ struct DebugLogView: View {
                 Button {
                     let pasteboard = NSPasteboard.general
                     pasteboard.clearContents()
-                    pasteboard.setString(LoggerService.sanitizeLogContentForExport(logger.logs.joined(separator: "\n")), forType: .string)
+                    pasteboard.setString(LoggerService.sanitizeLogContentForExport(logger.joinedLogs), forType: .string)
                     copyFeedback.show(languageService.s("copied"), isSuccess: true, duration: 1.5)
                 } label: {
                     HStack(spacing: 6) {

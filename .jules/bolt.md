@@ -86,3 +86,7 @@
 ## 2026-10-17 - Pre-Computing Frozen Response Objects for High-Frequency Cache Hits
 **Learning:** Returning fresh object literals constructed via object spread (`{ ...releaseCache.data, cached: true }`) on every cache hit or stale fallback creates repetitive heap object allocations and garbage collection pressure under heavy HTTP traffic. Pre-computing and freezing response objects (`cachedResponse`, `staleResponse`) when cache data is updated allows returning existing immutable object references directly.
 **Action:** Pre-compute and freeze cached response payloads upon cache population rather than allocating object copies on every read.
+
+## 2026-10-18 - Maintaining Pre-Joined String Buffers for High-Frequency Log Views
+**Learning:** Calling `logs.joined(separator: "\n")` inside SwiftUI view bodies or log export callbacks re-executes an $O(N)$ string array concatenation across up to 1,000 log entries on every re-render. Maintaining a pre-joined `@Published private(set) var joinedLogs: String` property with $O(1)$ amortized string appends during log events eliminates repeated string array joining allocations entirely.
+**Action:** Maintain a pre-joined String property on log buffer singletons and append to it incrementally instead of calling `.joined(separator:)` in view render passes.

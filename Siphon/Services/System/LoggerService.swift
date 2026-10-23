@@ -6,6 +6,7 @@ class LoggerService: ObservableObject {
     static let shared = LoggerService()
 
     @Published var logs: [String] = []
+    @Published private(set) var joinedLogs: String = ""
     let logFileURL: URL
     private let maxLogEntries = 1000
     private var logGeneration = 0
@@ -209,6 +210,7 @@ class LoggerService: ObservableObject {
                 let persisted = Set(initialLogs)
                 let merged = initialLogs + self.logs.filter { !persisted.contains($0) }
                 self.logs = Array(merged.suffix(maxEntries))
+                self.joinedLogs = self.logs.joined(separator: "\n")
             }
         }
     }
@@ -272,11 +274,17 @@ class LoggerService: ObservableObject {
         let sanitizedMessage = Self.sanitizeDiagnosticText(message)
         let entry = "[\(timestamp)] [\(level.rawValue)] \(sanitizedMessage)"
 
-        // Bolt Performance Optimization: Amortize O(N) array element shifts during high-frequency logging
-        // by batch-trimming oldest entries when the buffer exceeds maxLogEntries + 50 instead of shifting on every single log call.
+        // Bolt Performance Optimization: Maintain pre-joined string and amortize O(N) array element shifts during high-frequency logging.
+        // Appending to `joinedLogs` is O(1) amortized compared to re-joining the entire 1000-element array on every log event and view render.
         logs.append(entry)
         if logs.count > maxLogEntries + 50 {
             logs.removeFirst(logs.count - maxLogEntries)
+            joinedLogs = logs.joined(separator: "\n")
+        } else if joinedLogs.isEmpty {
+            joinedLogs = entry
+        } else {
+            joinedLogs.append("\n")
+            joinedLogs.append(entry)
         }
 
         let fileURL = logFileURL
@@ -340,6 +348,7 @@ class LoggerService: ObservableObject {
     func clearLogs() {
         logGeneration += 1
         logs.removeAll()
+        joinedLogs = ""
         let fileURL = logFileURL
         fileQueue.async {
             if !FileManager.default.createFile(atPath: fileURL.path, contents: Data(), attributes: [.posixPermissions: 0o600]) {
