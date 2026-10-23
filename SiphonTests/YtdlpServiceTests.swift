@@ -4545,6 +4545,23 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertEqual(capturedArgs.value[index + 1], "1", "The CDN rate-limits parallel segment requests")
     }
 
+    func testPageScriptGivesUpOnASilentPageAndOnStop() async throws {
+        let started = Date()
+        let silent: String? = await service.pageScriptResult(timeout: 0.2) { (_: @escaping @Sendable (String?) -> Void) in }
+        XCTAssertNil(silent)
+        XCTAssertLessThan(Date().timeIntervalSince(started), 2)
+
+        let answered: String? = await service.pageScriptResult { finish in finish("html") }
+        XCTAssertEqual(answered, "html")
+
+        let task = Task { @MainActor in
+            await self.service.pageScriptResult(timeout: 60) { (_: @escaping @Sendable (String?) -> Void) in }
+        }
+        task.cancel()
+        let stopped = await task.value
+        XCTAssertNil(stopped, "Stop must not wait out the deadline")
+    }
+
     func testRecuPacingSurvivesUserConcurrentFragments() async throws {
         let pageURL = "https://recu.me/polarny05/video/112873588/play"
         let stream = "https://cdn.example.test/master.m3u8?uid=ab1234cd&request_id=f00dbeef&expires=1790000321&md5=x"
