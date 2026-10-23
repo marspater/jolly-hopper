@@ -445,6 +445,12 @@ public final class UpdateChecker: ObservableObject {
         default:
             updateError = error.localizedDescription
             LoggerService.shared.log("Update download or install failed: \(error.localizedDescription)", level: .error)
+            // The update alert has closed by now; without this the failure
+            // only reaches the debug log.
+            NotificationService.shared.sendAppUpdateNotification(
+                title: LanguageService.s("update_failed_title"),
+                body: error.localizedDescription
+            )
         }
     }
 

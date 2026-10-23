@@ -30,6 +30,8 @@ public enum ImageUtilities {
         let asset = AVURLAsset(url: url)
         let generator = AVAssetImageGenerator(asset: asset)
         configureImageGenerator(generator)
+        // Without a limit this decodes (and the row cache keeps) a full 4K frame.
+        generator.maximumSize = CGSize(width: size.width * scale, height: size.height * scale)
 
         let time = CMTime(seconds: 1, preferredTimescale: 60)
         if let cgImage = try? await generator.image(at: time).image {

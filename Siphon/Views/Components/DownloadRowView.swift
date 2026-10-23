@@ -586,7 +586,9 @@ struct FileThumbnailView: View {
                     }
             }
         }
-        .task {
+        .task(id: fileURL) {
+            // A row keeps its identity when the job's file moves; show the new file.
+            thumbnailImage = ThumbnailCache.images.object(forKey: fileURL as NSURL)
             await generateThumbnail()
         }
     }

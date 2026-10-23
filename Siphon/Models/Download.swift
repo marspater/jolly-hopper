@@ -41,9 +41,18 @@ class Download: ObservableObject, Identifiable {
     @Published var eta: String?
     @Published var filePaths: [URL] = []
     /// Files this job's own attempt finished in its save folder, with their
-    /// file system numbers. Memory only: after a relaunch, or once the file is
-    /// replaced, a file with the same name is a collision again.
+    /// file system numbers. Persisted with paused and recovered jobs so a
+    /// resume after relaunch reuses them; once the file is replaced, its number
+    /// changes and a file with the same name is a collision again.
     var ownedOutputFiles: [URL: Int] = [:]
+
+    nonisolated static func encodeOwnedOutputFiles(_ files: [URL: Int]) -> [String: Int]? {
+        files.isEmpty ? nil : Dictionary(uniqueKeysWithValues: files.map { ($0.key.path, $0.value) })
+    }
+
+    nonisolated static func decodeOwnedOutputFiles(_ files: [String: Int]?) -> [URL: Int] {
+        Dictionary(uniqueKeysWithValues: (files ?? [:]).map { (URL(fileURLWithPath: $0.key), $0.value) })
+    }
     var hasPlayableOutput: Bool {
         !filePaths.isEmpty && (status == .completed || (status == .failed && hasPartialFailure))
     }
@@ -2206,6 +2215,8 @@ struct ChapterInfo: Codable {
 }
 
 struct HistoricDownload: Codable, Identifiable {
+    static let maxLogCharacters = 8_000
+
     let id: UUID
     let url: String
     var title: String
@@ -2223,10 +2234,11 @@ struct HistoricDownload: Codable, Identifiable {
     let requiresAdvancedArgumentsReview: Bool?
     let hasPartialFailure: Bool?
     let resolvedOutputBaseName: String?
+    let ownedOutputFiles: [String: Int]?
     let options: DownloadOptions
 
     enum CodingKeys: String, CodingKey {
-        case resolvedOutputBaseName, id, url, title, filePath, filePaths, downloadDate, fileType, status, thumbnailURL, duration, errorMessage, log, progress, scratchDirectoryPath, browserCookieSource, requiresAdvancedArgumentsReview, hasPartialFailure, options
+        case resolvedOutputBaseName, id, url, title, filePath, filePaths, downloadDate, fileType, status, thumbnailURL, duration, errorMessage, log, progress, scratchDirectoryPath, browserCookieSource, requiresAdvancedArgumentsReview, hasPartialFailure, ownedOutputFiles, options
     }
 
     @MainActor
@@ -2246,14 +2258,19 @@ struct HistoricDownload: Codable, Identifiable {
                 LoggerService.sanitizeDiagnosticText($0)
             )
         }
+        // History lives in UserDefaults and is rewritten whole on every save;
+        // 500 full 50k-character logs would make each write ~25 MB.
         self.log = LoggerService.sanitizeLogContentForExport(
-            LoggerService.sanitizeDiagnosticText(download.log)
+            LoggerService.sanitizeDiagnosticText(String(download.log.suffix(Self.maxLogCharacters)))
         )
         self.progress = download.progress
         self.scratchDirectoryPath = download.status == .paused
             ? download.scratchDirectory.flatMap {
                 ScratchDirectoryPolicy.isOwned($0) ? $0.path : nil
             }
+            : nil
+        self.ownedOutputFiles = download.status == .paused
+            ? Download.encodeOwnedOutputFiles(download.ownedOutputFiles)
             : nil
         switch download.status {
         case .paused, .failed, .stopped, .fileExists:
@@ -2295,6 +2312,7 @@ struct HistoricDownload: Codable, Identifiable {
         self.browserCookieSource = try container.decodeIfPresent(String.self, forKey: .browserCookieSource)
         self.requiresAdvancedArgumentsReview = try container.decodeIfPresent(Bool.self, forKey: .requiresAdvancedArgumentsReview)
         self.hasPartialFailure = try container.decodeIfPresent(Bool.self, forKey: .hasPartialFailure)
+        self.ownedOutputFiles = try container.decodeIfPresent([String: Int].self, forKey: .ownedOutputFiles)
         self.options = try container.decode(DownloadOptions.self, forKey: .options)
 
         // Legacy deserialization fallback: read single filePath only if filePaths is not present
@@ -2326,6 +2344,7 @@ struct HistoricDownload: Codable, Identifiable {
         try container.encodeIfPresent(browserCookieSource, forKey: .browserCookieSource)
         try container.encodeIfPresent(requiresAdvancedArgumentsReview, forKey: .requiresAdvancedArgumentsReview)
         try container.encodeIfPresent(hasPartialFailure, forKey: .hasPartialFailure)
+        try container.encodeIfPresent(ownedOutputFiles, forKey: .ownedOutputFiles)
         try container.encodeIfPresent(thumbnailURL, forKey: .thumbnailURL)
         try container.encodeIfPresent(duration, forKey: .duration)
     }
@@ -2354,7 +2373,14 @@ struct HistoricDownload: Codable, Identifiable {
         download.requiresAdvancedArgumentsReview = self.requiresAdvancedArgumentsReview ?? false
         download.hasPartialFailure = self.hasPartialFailure ?? (self.status == .completed && self.errorMessage != nil)
         let restoredStatus = download.hasPartialFailure && self.status == .completed ? DownloadStatus.failed : self.status
-        download.status = download.requiresAdvancedArgumentsReview ? .paused : restoredStatus
+        // Review only holds back jobs that would run on their own. Failed,
+        // stopped and file-exists jobs keep their state; retry is gated on review.
+        switch restoredStatus {
+        case .queued, .fetching, .downloading, .processing:
+            download.status = download.requiresAdvancedArgumentsReview ? .paused : restoredStatus
+        default:
+            download.status = restoredStatus
+        }
         download.progress = self.progress
         if let path = self.scratchDirectoryPath {
             let scratchDirectory = URL(fileURLWithPath: path)
@@ -2367,6 +2393,7 @@ struct HistoricDownload: Codable, Identifiable {
         download.duration = self.duration
         download.errorMessage = self.errorMessage
         download.log = self.log
+        download.ownedOutputFiles = Download.decodeOwnedOutputFiles(self.ownedOutputFiles)
         if self.filePaths.isEmpty {
             download.filePaths = []
         } else if self.filePaths.count == 1 {

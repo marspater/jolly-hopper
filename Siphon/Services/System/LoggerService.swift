@@ -399,7 +399,9 @@ class LoggerService: ObservableObject {
 
         return try await Task.detached(priority: .userInitiated) { [fileURL] () -> URL in
             let fileManager = FileManager.default
-            let exportFilename = "Siphon_Exported_Logs_\(Int(Date().timeIntervalSince1970)).log"
+            // One fixed name: each export replaces the last instead of
+            // leaving another copy of the log in the temporary folder.
+            let exportFilename = "Siphon_Exported_Logs.log"
             let exportURL = fileManager.temporaryDirectory.appendingPathComponent(exportFilename)
 
             let rawData: Data

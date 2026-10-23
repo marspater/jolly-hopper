@@ -123,6 +123,7 @@ extension URLSession {
         let (bytes, response) = try await self.bytes(for: request, delegate: delegate)
         guard response.expectedContentLength <= limit else { throw URLError(.dataLengthExceedsMaximum) }
         var data = Data()
+        data.reserveCapacity(Int(max(0, response.expectedContentLength)))
         for try await byte in bytes {
             data.append(byte)
             if data.count > limit { throw URLError(.dataLengthExceedsMaximum) }

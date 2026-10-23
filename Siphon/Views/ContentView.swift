@@ -59,18 +59,23 @@ struct ContentView: View {
                         appState.showAddDownloadSheet = false
                     }
                 }
-                .task {
+                .onAppear {
                     // When Siphon only hosts the unit tests, do not load or persist
                     // the user's history, install binaries, or query GitHub.
-                    guard !NotificationService.isRunningTests else { return }
+                    guard !NotificationService.isRunningTests, !appState.didStartLaunchTasks else { return }
+                    appState.didStartLaunchTasks = true
                     downloadManager.initialize(languageService: languageService)
-                    await appState.initializeApplicationServices(
-                        ytdlpService: downloadManager.ytdlpService,
-                        languageService: languageService
-                    )
-                    await updateChecker.checkForUpdates()
-                    if updateChecker.hasUpdate {
-                        showUpdateAlert = true
+                    // Not tied to this window: background mode closes it right
+                    // after launch, which would cancel a view task midway.
+                    Task {
+                        await appState.initializeApplicationServices(
+                            ytdlpService: downloadManager.ytdlpService,
+                            languageService: languageService
+                        )
+                        await updateChecker.checkForUpdates()
+                        if updateChecker.hasUpdate {
+                            showUpdateAlert = true
+                        }
                     }
                 }
                 .onChange(of: languageService.selectedLanguage) { _, _ in

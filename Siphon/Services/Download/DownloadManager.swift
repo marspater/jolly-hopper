@@ -248,8 +248,12 @@ class DownloadManager: ObservableObject {
             }
         }
         if !pendingRecoveryJobs.isEmpty {
-            let activeIDs = Set(activeJobs.lazy.map(\.id))
-            let remainingPending = pendingRecoveryJobs.filter { !activeIDs.contains($0.id) }
+            // A same-ID row that is running again or has finished since the
+            // prompt supersedes the interrupted record; offering it again
+            // would re-queue (or discard) finished work.
+            var supersededIDs = Set(activeJobs.lazy.map(\.id))
+            supersededIDs.formUnion(downloads.lazy.filter { $0.status == .completed }.map(\.id))
+            let remainingPending = pendingRecoveryJobs.filter { !supersededIDs.contains($0.id) }
             activeJobs.append(contentsOf: remainingPending)
         }
         queueRecoveryWriteFailed = !recoveryStore.persist(activeJobs: activeJobs)
