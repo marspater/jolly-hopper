@@ -123,6 +123,7 @@ extension URLSession {
         let (bytes, response) = try await self.bytes(for: request, delegate: delegate)
         guard response.expectedContentLength <= limit else { throw URLError(.dataLengthExceedsMaximum) }
         var data = Data()
+        data.reserveCapacity(Int(max(0, response.expectedContentLength)))
         for try await byte in bytes {
             data.append(byte)
             if data.count > limit { throw URLError(.dataLengthExceedsMaximum) }
@@ -269,7 +270,10 @@ final class DownloadExecutor: ObservableObject {
             activeTasks.removeValue(forKey: downloadId)
             activeControllers.removeValue(forKey: downloadId)
             lastRecoveryProgressBucket.removeValue(forKey: downloadId)
-            if stoppedAttemptIDs.remove(downloadId) != nil || (download.status != .paused && download.status != .queued) {
+            // A file-exists job keeps its scratch: Overwrite or New Name resumes
+            // a paused attempt's partial data instead of downloading it again.
+            if stoppedAttemptIDs.remove(downloadId) != nil ||
+                (download.status != .paused && download.status != .queued && download.status != .fileExists) {
                 Self.cleanupTemporaryFiles(for: downloadCopy, force: true)
             }
             delegate?.executorDidFinishDownload()

@@ -246,6 +246,8 @@ class LanguageService: ObservableObject {
         "single_video": "Single Video",
         "subtitle_lang_hint": "Language code, e.g. en",
         "update_ready_title": "Update Installed",
+        "update_failed_title": "Update Failed",
+        "clear_sites_failed": "Some site data could not be cleared. Close any open site windows and try again.",
         "update_ready_message": "Restart Siphon to finish updating.",
         "language_changed_title": "Language Changed",
         "language_changed_message": "Some text updates after Siphon restarts.",

@@ -50,6 +50,8 @@ struct AddDownloadView: View {
 
     @State private var downloadSubtitles: Bool = false
     @StateObject private var pasteFeedback = TransientFeedbackState()
+    @StateObject private var importFeedback = TransientFeedbackState()
+    @State private var existingFileCheckTask: Task<Void, Never>?
     @State private var selectedSubtitleLangs: Set<String> = []
     @State private var availableSubtitles: [SubtitleOption] = []
     @State private var batchSubtitleLanguages = "en"
@@ -347,6 +349,10 @@ struct AddDownloadView: View {
     private func tearDownForm() {
         fetchTask?.cancel()
         fetchTask = nil
+        // Closing the window abandons the click: the job must not start later
+        // without the external target (and its network boundary) just cleared.
+        existingFileCheckTask?.cancel()
+        existingFileCheckTask = nil
         playlistTask?.cancel()
         playlistTask = nil
         appState.clearBrowserSession()
@@ -440,6 +446,13 @@ struct AddDownloadView: View {
                     }
                     .buttonStyle(.siphonSecondary)
                     .disabled(batchUrlsText.isEmpty)
+
+                    if let feedback = importFeedback.current {
+                        Text(feedback.message)
+                            .font(.siphonMetadata)
+                            .foregroundColor(SiphonTheme.statusFailedText)
+                            .lineLimit(2)
+                    }
 
                     Spacer()
                 }
@@ -1736,7 +1749,7 @@ struct AddDownloadView: View {
                 // The check is async; a second click meanwhile would queue the job twice.
                 guard !isCheckingExistingFile else { return }
                 isCheckingExistingFile = true
-                Task {
+                existingFileCheckTask = Task {
                     defer { isCheckingExistingFile = false }
                     let fileExists = await Task.detached { [folder, options] in
                         DownloadQueue.mediaFileCollides(
@@ -1745,6 +1758,7 @@ struct AddDownloadView: View {
                             existingMediaFileKeys: DownloadQueue.existingMediaFileKeys(in: folder)
                         )
                     }.value
+                    guard !Task.isCancelled else { return }
 
                     if fileExists {
                         existingFilePath = pathString
@@ -1779,22 +1793,35 @@ struct AddDownloadView: View {
         return valid
     }
 
+    /// A URL list is small text. Larger or undecodable files are rejected
+    /// instead of being loaded whole; the encoding (UTF-16 from Windows,
+    /// Latin-1) is detected rather than assumed to be UTF-8.
+    nonisolated static func readURLList(at url: URL, maxBytes: Int = 5 * 1024 * 1024) -> String? {
+        guard let size = try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize, size <= maxBytes else { return nil }
+        var encoding = String.Encoding.utf8
+        if let content = try? String(contentsOf: url, usedEncoding: &encoding) { return content }
+        return try? String(contentsOf: url, encoding: .isoLatin1)
+    }
+
     private func importBatchFromFile() {
         let panel = NSOpenPanel()
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
         panel.canCreateDirectories = false
         panel.canChooseFiles = true
-        panel.allowedContentTypes = [.plainText, .text, .item]
+        panel.allowedContentTypes = [.text]
 
         if panel.runModal() == .OK, let selectedURL = panel.url {
             Task {
-                if let content = await Task.detached(priority: .userInitiated, operation: {
-                    try? String(contentsOf: selectedURL, encoding: .utf8)
-                }).value {
-                    let existing = batchUrlsText.isEmpty ? "" : batchUrlsText + "\n"
-                    batchUrlsText = existing + content
+                let content = await Task.detached(priority: .userInitiated) {
+                    Self.readURLList(at: selectedURL)
+                }.value
+                guard let content, !extractBatchUrls(from: content).isEmpty else {
+                    importFeedback.show(languageService.s("no_valid_urls"), isSuccess: false, duration: 4)
+                    return
                 }
+                let existing = batchUrlsText.isEmpty ? "" : batchUrlsText + "\n"
+                batchUrlsText = existing + content
             }
         }
     }

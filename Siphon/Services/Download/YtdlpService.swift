@@ -84,10 +84,38 @@ actor DependencyInstaller {
         }
     }
 
+    /// A stalled transfer would otherwise keep `isUpdating` set, and with it
+    /// every queued download, until the app quits.
+    static let defaultSession: URLSession = {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.timeoutIntervalForRequest = 60
+        configuration.timeoutIntervalForResource = 15 * 60
+        return URLSession(configuration: configuration)
+    }()
+
+    /// Runs a trial invocation off the actor's thread. A binary that never
+    /// exits is killed after `timeout` instead of blocking installation forever.
+    static func runToExit(_ process: Process, name: String, timeout: TimeInterval = 60) async throws -> Int32 {
+        let exited = DispatchSemaphore(value: 0)
+        process.terminationHandler = { _ in exited.signal() }
+        try process.run()
+        let finished = await withCheckedContinuation { continuation in
+            DispatchQueue.global(qos: .utility).async {
+                continuation.resume(returning: exited.wait(timeout: .now() + timeout) == .success)
+            }
+        }
+        guard finished else {
+            kill(process.processIdentifier, SIGKILL)
+            throw InstallError.executionFailed(binary: name, message: "Timed out after \(Int(timeout)) seconds")
+        }
+        return process.terminationStatus
+    }
+
     /// URLSession treats an HTTP error page as a successful download, which
     /// would otherwise surface as a misleading SHA-256 mismatch.
-    static func download(_ url: URL, named file: String, to destination: URL) async throws {
-        let (temporaryURL, response) = try await URLSession.shared.download(from: url)
+    static func download(_ url: URL, named file: String, to destination: URL,
+                         session: URLSession = defaultSession) async throws {
+        let (temporaryURL, response) = try await session.download(from: url)
         if let statusCode = (response as? HTTPURLResponse)?.statusCode, !(200..<300).contains(statusCode) {
             try? FileManager.default.removeItem(at: temporaryURL)
             throw InstallError.downloadFailed(file: file, statusCode: statusCode)
@@ -163,14 +191,13 @@ actor DependencyInstaller {
         process.standardError = FileHandle.nullDevice
         process.environment = YtdlpService.createSanitizedEnvironment()
         do {
-            try process.run()
-            process.waitUntilExit()
-            guard process.terminationStatus == 0 else {
-                try? FileManager.default.removeItem(at: tempStaging)
-                throw InstallError.executionFailed(binary: "yt-dlp", message: "Exited with code \(process.terminationStatus)")
+            let status = try await Self.runToExit(process, name: "yt-dlp")
+            guard status == 0 else {
+                throw InstallError.executionFailed(binary: "yt-dlp", message: "Exited with code \(status)")
             }
+        } catch let error as InstallError {
+            throw error
         } catch {
-            try? FileManager.default.removeItem(at: tempStaging)
             throw InstallError.executionFailed(binary: "yt-dlp", message: error.localizedDescription)
         }
 
@@ -239,10 +266,9 @@ actor DependencyInstaller {
             proc.environment = YtdlpService.createSanitizedEnvironment()
             proc.standardOutput = FileHandle.nullDevice
             proc.standardError = FileHandle.nullDevice
-            try proc.run()
-            proc.waitUntilExit()
-            guard proc.terminationStatus == 0 else {
-                throw InstallError.executionFailed(binary: binURL.lastPathComponent, message: "Exited with code \(proc.terminationStatus)")
+            let status = try await Self.runToExit(proc, name: binURL.lastPathComponent)
+            guard status == 0 else {
+                throw InstallError.executionFailed(binary: binURL.lastPathComponent, message: "Exited with code \(status)")
             }
         }
         try await testVersion(extractedFfmpeg)
@@ -308,6 +334,12 @@ actor DependencyInstaller {
 @MainActor
 class YtdlpService: ObservableObject {
     @Published var isAvailable: Bool = false
+    /// False until the first binary setup finishes. A deep link that cold-launches
+    /// the app queues its job before yt-dlp is located; the queue waits for this.
+    @Published private(set) var hasCompletedInitialSetup = false
+    var queueWaitsForInitialSetup: Bool {
+        !hasCompletedInitialSetup && processRunner is DefaultYtdlpProcessRunner && !NotificationService.isRunningTests
+    }
     @Published var version: String?
     @Published var isUpdating: Bool = false
     @Published var updateProgress: Double = 0
@@ -372,24 +404,40 @@ class YtdlpService: ObservableObject {
         }
     }
 
+    /// Returns false when a store could not be removed. Its data is wiped
+    /// through `removeData` first; WebKit refuses to remove a store in use.
+    @discardableResult
     private func clearWebsiteDataStores(
-        activeStores: [WKWebsiteDataStore],
+        _ stores: ReferenceWritableKeyPath<YtdlpService, [String: WKWebsiteDataStore]>,
         identifiers: [String],
         siteName: String
-    ) async {
-        for store in activeStores {
-            await store.removeData(ofTypes: WKWebsiteDataStore.allWebsiteDataTypes(), modifiedSince: .distantPast)
-        }
+    ) async -> Bool {
+        do {
+            let activeStores = Array(self[keyPath: stores].values)
+            self[keyPath: stores].removeAll()
+            for store in activeStores {
+                await store.removeData(ofTypes: WKWebsiteDataStore.allWebsiteDataTypes(), modifiedSince: .distantPast)
+            }
+        } // The last references to the stores end here, before removal.
+        var removedAll = true
         for identifier in identifiers {
             guard let uuid = UUID(uuidString: identifier) else { continue }
-            if let remover = websiteDataStoreRemover {
-                try? await remover(uuid)
-            } else {
-                try? await WKWebsiteDataStore.remove(forIdentifier: uuid)
-                Self.removeWebsiteDataStoreDirectory(for: identifier)
+            do {
+                if let remover = websiteDataStoreRemover {
+                    try await remover(uuid)
+                } else {
+                    try await WKWebsiteDataStore.remove(forIdentifier: uuid)
+                    Self.removeWebsiteDataStoreDirectory(for: identifier)
+                }
+            } catch {
+                removedAll = false
+                LoggerService.shared.log("[ProtectedSite] Could not remove a \(siteName) data store: \(error.localizedDescription)", level: .warning)
             }
         }
-        LoggerService.shared.log("[ProtectedSite] Cleared \(siteName) cookies, session tokens, and cache.", level: .info)
+        if removedAll {
+            LoggerService.shared.log("[ProtectedSite] Cleared \(siteName) cookies, session tokens, and cache.", level: .info)
+        }
+        return removedAll
     }
 
     static func removeWebsiteDataStoreDirectory(for identifier: String) {
@@ -402,49 +450,45 @@ class YtdlpService: ObservableObject {
         try? FileManager.default.removeItem(at: storeDirUpper)
     }
 
-    func clearRecuWebData() async {
-        let stores = Array(recuWebDataStores.values)
-        recuWebDataStores.removeAll()
-        await clearWebsiteDataStores(
-            activeStores: stores,
-            identifiers: [Self.recuDataStoreIdentifier, Self.recuBoundaryDataStoreIdentifier],
-            siteName: "recu.me"
-        )
+    @discardableResult
+    func clearRecuWebData() async -> Bool {
+        await clearWebsiteDataStores(\.recuWebDataStores, identifiers: [Self.recuDataStoreIdentifier, Self.recuBoundaryDataStoreIdentifier], siteName: "recu.me")
     }
 
-    func clearBoyfriendTVWebData() async {
-        let stores = Array(boyfriendTVWebDataStores.values)
-        boyfriendTVWebDataStores.removeAll()
-        await clearWebsiteDataStores(
-            activeStores: stores,
-            identifiers: [Self.boyfriendTVDataStoreIdentifier, Self.boyfriendTVBoundaryDataStoreIdentifier],
-            siteName: "boyfriend.tv"
-        )
+    @discardableResult
+    func clearBoyfriendTVWebData() async -> Bool {
+        await clearWebsiteDataStores(\.boyfriendTVWebDataStores, identifiers: [Self.boyfriendTVDataStoreIdentifier, Self.boyfriendTVBoundaryDataStoreIdentifier], siteName: "boyfriend.tv")
     }
 
-    func clearGayteamWebData() async {
-        let stores = Array(gayteamWebDataStores.values)
-        gayteamWebDataStores.removeAll()
-        await clearWebsiteDataStores(
-            activeStores: stores,
-            identifiers: [Self.gayteamDataStoreIdentifier, Self.gayteamBoundaryDataStoreIdentifier],
-            siteName: "gayteam"
-        )
+    @discardableResult
+    func clearGayteamWebData() async -> Bool {
+        await clearWebsiteDataStores(\.gayteamWebDataStores, identifiers: [Self.gayteamDataStoreIdentifier, Self.gayteamBoundaryDataStoreIdentifier], siteName: "gayteam")
     }
 
-    func clearAllProtectedSitesWebData() async {
-        await clearRecuWebData()
-        await clearBoyfriendTVWebData()
-        await clearGayteamWebData()
+    /// Refuses while a site window is open: WebKit will not remove a store
+    /// in use, and clearing under a live sign-in would break that job.
+    @discardableResult
+    func clearAllProtectedSitesWebData() async -> Bool {
+        guard !webKitSessionBusy else {
+            LoggerService.shared.log("[ProtectedSite] Not clearing site data while a site window is in use.", level: .warning)
+            return false
+        }
+        let recu = await clearRecuWebData()
+        let boyfriendTV = await clearBoyfriendTVWebData()
+        let gayteam = await clearGayteamWebData()
+        return recu && boyfriendTV && gayteam
     }
     // Test seam for Safari's saved cookies. Production reads Safari's cookie store.
     var safariCookiesProvider: @Sendable () -> [HTTPCookie] = { SafariCookieReader.cookies() }
     // Test seam for the player capture session. Production uses WKWebView.
     var browserCaptureLoader: ((URL) async throws -> BrowserCapture)?
-    // One WebKit page session at a time. Parallel jobs would each open their own
-    // sign-in or verification window; queued, they reuse the first one's result.
-    private var webKitSessionBusy = false
-    private var webKitSessionWaiters: [(id: UUID, continuation: CheckedContinuation<Void, Error>)] = []
+    // One WebKit page session at a time per site. Parallel jobs would each open
+    // their own sign-in or verification window; queued, they reuse the first
+    // one's result. Sites have separate stores, so one site's wait for the user
+    // (a Gayteam capture can take minutes) never holds up another's.
+    private var busyWebKitSites: Set<String> = []
+    private var webKitSessionBusy: Bool { !busyWebKitSites.isEmpty }
+    private var webKitSessionWaiters: [(id: UUID, site: String, continuation: CheckedContinuation<Void, Error>)] = []
     // When the user closes a site's window, jobs already queued for that site stop
     // without opening one each. A later retry opens it again.
     private var sessionWindowClosedAt: [String: Date] = [:]
@@ -469,25 +513,25 @@ class YtdlpService: ObservableObject {
         return store
     }
 
-    func withExclusiveWebKitSession<T>(_ body: () async throws -> T) async throws -> T {
-        if webKitSessionBusy {
+    func withExclusiveWebKitSession<T>(site: String = "", _ body: () async throws -> T) async throws -> T {
+        if busyWebKitSites.contains(site) {
             let id = UUID()
             try await withTaskCancellationHandler {
                 try await withCheckedThrowingContinuation { continuation in
-                    webKitSessionWaiters.append((id, continuation))
+                    webKitSessionWaiters.append((id, site, continuation))
                 }
             } onCancel: {
                 Task { @MainActor [weak self] in self?.cancelWebKitSessionWait(id) }
             }
         } else {
-            webKitSessionBusy = true
+            busyWebKitSites.insert(site)
         }
-        // The session passes straight to the next waiter, so it is never free in between.
+        // The session passes straight to the site's next waiter, so it is never free in between.
         defer {
-            if webKitSessionWaiters.isEmpty {
-                webKitSessionBusy = false
+            if let next = webKitSessionWaiters.firstIndex(where: { $0.site == site }) {
+                webKitSessionWaiters.remove(at: next).continuation.resume()
             } else {
-                webKitSessionWaiters.removeFirst().continuation.resume()
+                busyWebKitSites.remove(site)
             }
         }
         return try await body()
@@ -704,6 +748,7 @@ class YtdlpService: ObservableObject {
         activeSetupTask = task
         await task.value
         activeSetupTask = nil
+        hasCompletedInitialSetup = true
     }
 
     /// Locations checked for a user-installed yt-dlp when no explicit path is
@@ -2178,11 +2223,18 @@ public struct DownloadResult: Sendable {
         // Prepare local scratch thumbnail if available to guarantee embedding for direct stream downloads
         let thumbnailCandidateURL = customThumbnailURL ?? mediaInfo?.thumbnail
         let scratchThumbnailURL = scratchDirectory.appendingPathComponent("custom_cover.jpg")
+        // Fetched alongside yt-dlp (up to 15 s) instead of before it; the
+        // poster is only needed after the download. Inherits the egress binding.
+        var thumbnailTask: Task<Bool, Never>?
         if (options.embedThumbnail || options.downloadThumbnail), let thumbStr = thumbnailCandidateURL, !thumbStr.isEmpty {
-            // Recu signs its poster for the session's user-agent, like its playlist.
-            _ = await downloadThumbnailLocally(from: thumbStr, to: scratchThumbnailURL,
-                                               userAgent: recuUserAgent, referer: recuUserAgent == nil ? nil : customEmbedURL)
+            let thumbnailReferer = recuUserAgent == nil ? nil : customEmbedURL
+            thumbnailTask = Task { [recuUserAgent] in
+                // Recu signs its poster for the session's user-agent, like its playlist.
+                await self.downloadThumbnailLocally(from: thumbStr, to: scratchThumbnailURL,
+                                                    userAgent: recuUserAgent, referer: thumbnailReferer)
+            }
         }
+        defer { thumbnailTask?.cancel() }
 
         appendSiteSpecificArgs(for: customEmbedURL ?? targetURL, options: options, mediaInfo: mediaInfo, rawUserAgent: sucuriCookie == nil ? recuUserAgent : Self.sucuriUserAgent, to: &args)
         // Recu recordings are signed VOD streams; a skipped segment would leave
@@ -2276,7 +2328,7 @@ public struct DownloadResult: Sendable {
                     LoggerService.shared.log("Recu CDN link returned HTTP 410; refreshing the protected-site session once", level: .info)
                     onOutput("[Siphon Info] Recu media link expired. Refreshing the protected-site session and retrying...\n")
 
-                    let refreshed = try await resolveRecuMediaInfo(url: normalizedURL)
+                    let refreshed = try await resolveRecuMediaInfo(url: normalizedURL, reuseRecent: false)
                     var refreshedArgs = currentArgs
 
                     if let separator = refreshedArgs.lastIndex(of: "--"), separator + 1 < refreshedArgs.count {
@@ -2507,6 +2559,7 @@ public struct DownloadResult: Sendable {
             }
         }
 
+        _ = await thumbnailTask?.value
         let providedThumbnail = FileManager.default.fileExists(atPath: scratchThumbnailURL.path) ? scratchThumbnailURL : nil
         let scratchFiles = options.embedThumbnail
             ? ((try? FileManager.default.contentsOfDirectory(at: scratchDirectory, includingPropertiesForKeys: nil)) ?? [])
@@ -2718,7 +2771,10 @@ public struct DownloadResult: Sendable {
         let ffmpeg = URL(fileURLWithPath: ffmpegDir).appendingPathComponent("ffmpeg")
         do {
             _ = try await processRunner.runCommand([
+                // Keyframes only: encrypted or garbage samples still fail to
+                // decode, without a full software decode of hours of video.
                 ffmpeg.path, "-nostdin", "-v", "error", "-xerror", "-err_detect", "explode",
+                "-skip_frame:v", "nokey",
                 "-i", mediaFile.path, "-map", "0:V?", "-map", "0:a?",
                 "-abort_on", "empty_output_stream", "-f", "null", "-"
             ], processController: processController)
@@ -3746,13 +3802,32 @@ public struct DownloadResult: Sendable {
         }
     }
 
-    private func resolveRecuMediaInfo(url: String) async throws -> RecuExtractedMedia {
+    // Preview and download each resolved recu through a full WebKit page load
+    // and an API call. The download reuses the preview's result once; a stale
+    // playlist still gets the HTTP 410 refresh, which bypasses this.
+    private static let recuMediaReuseInterval: TimeInterval = 5 * 60
+    private var recentRecuMedia: [String: (media: RecuExtractedMedia, resolvedAt: Date)] = [:]
+
+    private func resolveRecuMediaInfo(url: String, reuseRecent: Bool = true) async throws -> RecuExtractedMedia {
         guard let identity = Self.recuVideoIdentity(from: url),
               let pageURL = URL(string: "https://recu.me/\(identity.model)/video/\(identity.videoID)/play") else {
             throw YtdlpError.downloadFailed("Unsupported protected-site URL. Expected /<model>/video/<id>/play.")
         }
+        if let recent = recentRecuMedia.removeValue(forKey: identity.videoID), reuseRecent,
+           Date().timeIntervalSince(recent.resolvedAt) < Self.recuMediaReuseInterval {
+            return recent.media
+        }
+        let media = try await resolveRecuMediaUncached(identity: identity, pageURL: pageURL)
+        recentRecuMedia[identity.videoID] = (media, Date())
+        return media
+    }
+
+    private func resolveRecuMediaUncached(
+        identity: (model: String, videoID: String),
+        pageURL: URL
+    ) async throws -> RecuExtractedMedia {
         let requestedAt = Date()
-        let session = try await withExclusiveWebKitSession {
+        let session = try await withExclusiveWebKitSession(site: "recu.me") {
             try Task.checkCancellation()
             guard mayOpenSessionWindow(for: "recu.me", requestedAt: requestedAt) else {
                 throw YtdlpError.downloadFailed(LanguageService.s("verification_window_closed"))
@@ -4026,7 +4101,7 @@ public struct DownloadResult: Sendable {
         } else {
             guard processRunner is DefaultYtdlpProcessRunner else { throw YtdlpError.cloudflareBlocked }
             let requestedAt = Date()
-            capture = try await withExclusiveWebKitSession {
+            capture = try await withExclusiveWebKitSession(site: "gayteam.club") {
                 try await captureBrowserStreams(
                     pageURL: pageURL,
                     siteHost: "gayteam.club",
@@ -4467,7 +4542,7 @@ public struct DownloadResult: Sendable {
             return nil
         }
         let requestedAt = Date()
-        return try await withExclusiveWebKitSession {
+        return try await withExclusiveWebKitSession(site: "boyfriendtv") {
             try await renderBoyfriendTVPage(url, stage: stage, rawCookies: rawCookies, requestedAt: requestedAt)
         }
     }
@@ -4808,7 +4883,7 @@ public struct DownloadResult: Sendable {
         if html.isEmpty && !sawLoginPage && (processRunner is DefaultYtdlpProcessRunner) {
             for candidatePage in pageCandidates {
                 var request = URLRequest(url: candidatePage)
-                request.timeoutInterval = 3.0
+                request.timeoutInterval = 10.0
                 let effectiveUA: String = {
                     let trimmed = rawUserAgent?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
                     if !trimmed.isEmpty { return trimmed }
@@ -5002,7 +5077,7 @@ public struct DownloadResult: Sendable {
                 // Cheap HTTP fallback before escalating this embed to WebKit.
                 if streamUrl == nil, let embedPageURL = URL(string: embed), (processRunner is DefaultYtdlpProcessRunner) {
                     var embedRequest = URLRequest(url: embedPageURL)
-                    embedRequest.timeoutInterval = 3.0
+                    embedRequest.timeoutInterval = 10.0
                     let effectiveUA: String = {
                         let trimmed = rawUserAgent?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
                         if !trimmed.isEmpty { return trimmed }
@@ -5475,7 +5550,7 @@ public struct DownloadResult: Sendable {
         // 1. Try URLSession direct fetch with standard browser headers
         if processRunner is DefaultYtdlpProcessRunner {
             var request = URLRequest(url: pageURL)
-            request.timeoutInterval = 5.0
+            request.timeoutInterval = 10.0
             request.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36", forHTTPHeaderField: "User-Agent")
             request.setValue("https://guywh.com/", forHTTPHeaderField: "Referer")
             request.setValue("https://guywh.com", forHTTPHeaderField: "Origin")
@@ -5495,11 +5570,11 @@ public struct DownloadResult: Sendable {
         if html.isEmpty {
             let ytdlpBinary = resolvedYtdlpBinary
             if let ytdlp = ytdlpBinary {
-                var dumpArgs = [ytdlp.path, "--ignore-config", "--dump-pages"]
+                var dumpArgs = [ytdlp.path, "--ignore-config", "--dump-pages", "--skip-download", "--no-playlist"]
                 appendSiteSpecificArgs(for: targetUrl, to: &dumpArgs)
                 dumpArgs.append("--")
                 dumpArgs.append(targetUrl)
-                if let output = try? await processRunner.runCommand(dumpArgs) {
+                if let output = await dumpPagesOutput(dumpArgs) {
                     var chunks: [String] = []
                     for line in output.split(whereSeparator: \.isNewline) {
                         let trimmed = String(line).trimmingCharacters(in: .whitespaces)
@@ -5596,7 +5671,7 @@ public struct DownloadResult: Sendable {
         // If stream URL was not in main page, attempt embed page fetch
         if streamURL == nil, let embedPageURL = URL(string: embedURL), (processRunner is DefaultYtdlpProcessRunner) {
             var embedReq = URLRequest(url: embedPageURL)
-            embedReq.timeoutInterval = 5.0
+            embedReq.timeoutInterval = 10.0
             embedReq.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36", forHTTPHeaderField: "User-Agent")
             embedReq.setValue("https://guywh.com/", forHTTPHeaderField: "Referer")
             if let (data, response) = try? await EgressBoundary.session.boundedData(for: embedReq),
@@ -6176,11 +6251,11 @@ public struct DownloadResult: Sendable {
             if html.isEmpty {
                 let ytdlpBinary = resolvedYtdlpBinary
                 if let ytdlp = ytdlpBinary {
-                    var dumpArgs = [ytdlp.path, "--ignore-config", "--dump-pages"]
+                    var dumpArgs = [ytdlp.path, "--ignore-config", "--dump-pages", "--skip-download", "--no-playlist"]
                     appendSiteSpecificArgs(for: targetUrl, to: &dumpArgs)
                     dumpArgs.append("--")
                     dumpArgs.append(targetUrl)
-                    if let output = try? await processRunner.runCommand(dumpArgs) {
+                    if let output = await dumpPagesOutput(dumpArgs) {
                         var chunks: [String] = []
                         for line in output.split(whereSeparator: \.isNewline) {
                             let trimmed = String(line).trimmingCharacters(in: .whitespaces)
@@ -6279,11 +6354,11 @@ public struct DownloadResult: Sendable {
         if datasB64 == nil && infoJSON == nil {
             let ytdlpBinary = resolvedYtdlpBinary
             if let ytdlp = ytdlpBinary {
-                var dumpArgs = [ytdlp.path, "--ignore-config", "--dump-pages"]
+                var dumpArgs = [ytdlp.path, "--ignore-config", "--dump-pages", "--skip-download", "--no-playlist"]
                 appendSiteSpecificArgs(for: embedURL, to: &dumpArgs)
                 dumpArgs.append("--")
                 dumpArgs.append(embedURL)
-                if let output = try? await processRunner.runCommand(dumpArgs) {
+                if let output = await dumpPagesOutput(dumpArgs) {
                     for line in output.split(whereSeparator: \.isNewline) {
                         let trimmed = String(line).trimmingCharacters(in: .whitespaces)
                         if !trimmed.starts(with: "#") && !trimmed.starts(with: "[") && !trimmed.starts(with: "WARNING") && !trimmed.starts(with: "ERROR"),
@@ -6358,6 +6433,21 @@ public struct DownloadResult: Sendable {
         )
     }
 
+    /// `--dump-pages` prints every page it fetched even when extraction then
+    /// fails with exit code 1, which is the usual case for these fallbacks.
+    private func dumpPagesOutput(_ args: [String]) async -> String? {
+        do {
+            return try await processRunner.runCommand(args)
+        } catch YtdlpError.commandFailed(let output) {
+            return output
+        } catch {
+            if !(error is CancellationError) {
+                LoggerService.shared.log("[ProtectedSite] yt-dlp page dump failed: \(error.localizedDescription)", level: .debug)
+            }
+            return nil
+        }
+    }
+
     private func fetchProtectedPageHTML(
         pageURL: URL,
         targetURL: String,
@@ -6393,10 +6483,10 @@ public struct DownloadResult: Sendable {
         }
 
         if html.isEmpty, let ytdlp = resolvedYtdlpBinary {
-            var dumpArgs = [ytdlp.path, "--ignore-config", "--dump-pages"]
+            var dumpArgs = [ytdlp.path, "--ignore-config", "--dump-pages", "--skip-download", "--no-playlist"]
             appendSiteSpecificArgs(for: targetURL, to: &dumpArgs)
             dumpArgs.append(contentsOf: ["--", targetURL])
-            if let output = try? await processRunner.runCommand(dumpArgs) {
+            if let output = await dumpPagesOutput(dumpArgs) {
                 let chunks = output.split(whereSeparator: \.isNewline).compactMap { line -> String? in
                     let trimmed = String(line).trimmingCharacters(in: .whitespaces)
                     guard !trimmed.starts(with: "#"),
@@ -7165,6 +7255,17 @@ public struct DownloadResult: Sendable {
                lower.contains("connection reset")
     }
 
+    nonisolated static func removeImpersonation(from args: inout [String]) {
+        var index = 0
+        while index + 1 < args.count {
+            if args[index] == "--extractor-args" && args[index + 1].hasPrefix("generic:impersonate") {
+                args.removeSubrange(index...(index + 1))
+            } else {
+                index += 1
+            }
+        }
+    }
+
     private func appendSiteSpecificArgs(for url: String, options: DownloadOptions? = nil, mediaInfo: MediaInfo? = nil, rawUserAgent: String? = nil, to args: inout [String]) {
         let lowerUrl = url.lowercased()
         let parsedHost = (URL(string: url)?.host ?? url).lowercased()
@@ -7180,6 +7281,12 @@ public struct DownloadResult: Sendable {
         // Retries, socket timeouts & performance optimization flags
         args.append(contentsOf: ["--retries", "10"])
         args.append(contentsOf: ["--fragment-retries", "10"])
+        // yt-dlp retries immediately by default, so a 429/503 burst uses up
+        // every retry in a second. Site rules below may tighten this; user
+        // arguments (earlier in `args`) win when they set their own.
+        if !args.contains("--retry-sleep") {
+            args.append(contentsOf: ["--retry-sleep", "http:exp=1:20", "--retry-sleep", "fragment:exp=1:20"])
+        }
         args.append(contentsOf: ["--socket-timeout", "15"])
         args.append("--no-mtime")
 
@@ -7264,7 +7371,7 @@ public struct DownloadResult: Sendable {
 
         if isBoyfriendTV {
             if !isSafari && !isFirefox {
-                if let uaIdx = args.firstIndex(of: "--user-agent") {
+                if let uaIdx = args.lastIndex(of: "--user-agent") {
                     args[uaIdx + 1] = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
                 } else {
                     args.append(contentsOf: ["--user-agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"])
@@ -7275,7 +7382,9 @@ public struct DownloadResult: Sendable {
             args.append(contentsOf: ["--add-header", "Accept:*/*"])
             let referer = lowerUrl.contains("/embed/") ? url : "\(baseDomain)/"
             args.append(contentsOf: ["--add-header", "Referer:\(referer)"])
-            args.append(contentsOf: ["--downloader", "ffmpeg"])
+            // Native HLS honors -N (set below) and yt-dlp's encryption checks;
+            // FFmpeg fetched one segment at a time. The live-HLS retry still
+            // switches to FFmpeg when the native downloader cannot handle a stream.
             args.append(contentsOf: ["--hls-use-mpegts"])
         } else if isRecu {
             args.append(contentsOf: ["--add-header", "Origin:https://recu.me"])
@@ -7286,7 +7395,7 @@ public struct DownloadResult: Sendable {
             args.append(contentsOf: ["--add-header", "Sec-Fetch-Dest:empty"])
             // Recu's CDN serves about one segment per second per client and answers
             // parallel requests with 429, so extra fragment workers only add retries.
-            if let index = args.firstIndex(of: "--concurrent-fragments"), index + 1 < args.count {
+            if let index = args.lastIndex(of: "--concurrent-fragments"), index + 1 < args.count {
                 args[index + 1] = "1"
             }
         } else if isGayPornTubeURL(url) {
@@ -7298,8 +7407,6 @@ public struct DownloadResult: Sendable {
             args.append(contentsOf: ["--hls-use-mpegts"])
         } else if parsedHost == "justthegays.com" || parsedHost.hasSuffix(".justthegays.com") || parsedHost == "justthegays.tv" || parsedHost.hasSuffix(".justthegays.tv") {
             args.append(contentsOf: ["--add-header", "Referer:https://justthegays.com/"])
-            args.append(contentsOf: ["--downloader", "ffmpeg"])
-            args.append(contentsOf: ["--downloader-args", "ffmpeg_i:-analyzeduration 20M -probesize 20M"])
             args.append(contentsOf: ["--hls-use-mpegts"])
         } else if isThisVid {
             args.append(contentsOf: ["--add-header", "Referer:https://thisvid.com/"])
@@ -7321,7 +7428,7 @@ public struct DownloadResult: Sendable {
             }
         } else if isGuywhURL(parsedHost) || isGuywhURL(url) || parsedHost.contains("guywh") {
             if !isSafari {
-                if let uaIdx = args.firstIndex(of: "--user-agent") {
+                if let uaIdx = args.lastIndex(of: "--user-agent") {
                     args[uaIdx + 1] = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
                 } else {
                     args.append(contentsOf: ["--user-agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"])
@@ -7330,9 +7437,13 @@ public struct DownloadResult: Sendable {
             args.append(contentsOf: ["--add-header", "Referer: https://guywh.com/"])
             args.append(contentsOf: ["--add-header", "Origin: https://guywh.com"])
             args.append(contentsOf: ["--add-header", "Accept: */*"])
-        } else if isGFFURL(parsedHost) || isGFFURL(url) || parsedHost.contains("gayforfans") {
+        } else if isGFFURL(parsedHost) || isGFFURL(url) || parsedHost.contains("gayforfans") || Self.isGFFMediaURL(url) {
+            // Cloudflare on cdn.gff.network answers 403 to every curl_cffi
+            // fingerprint (Safari, Chrome, any target) and 200 to yt-dlp's
+            // plain client, so GayForFans never impersonates.
+            Self.removeImpersonation(from: &args)
             if !isSafari {
-                if let uaIdx = args.firstIndex(of: "--user-agent") {
+                if let uaIdx = args.lastIndex(of: "--user-agent") {
                     args[uaIdx + 1] = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
                 } else {
                     args.append(contentsOf: ["--user-agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"])
@@ -7344,7 +7455,7 @@ public struct DownloadResult: Sendable {
             // The CDN answers segment bursts with 503. Eight workers without
             // backoff exhaust retries and skip segments; four with backoff finish
             // a 28-minute video in about 30 s. A skipped segment is a broken file.
-            if let index = args.firstIndex(of: "--concurrent-fragments"), index + 1 < args.count {
+            if let index = args.lastIndex(of: "--concurrent-fragments"), index + 1 < args.count {
                 args[index + 1] = "4"
             }
             args.append(contentsOf: ["--retry-sleep", "http:exp=1:8",
@@ -7352,7 +7463,7 @@ public struct DownloadResult: Sendable {
                                      "--abort-on-unavailable-fragments"])
         } else if isBestCamURL(parsedHost) || isBestCamURL(url) || parsedHost.contains("sssrr.org") || parsedHost.contains("abyssplayer") || parsedHost.contains("abyss.to") {
             if !isSafari {
-                if let uaIdx = args.firstIndex(of: "--user-agent") {
+                if let uaIdx = args.lastIndex(of: "--user-agent") {
                     args[uaIdx + 1] = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
                 } else {
                     args.append(contentsOf: ["--user-agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"])
@@ -7363,7 +7474,7 @@ public struct DownloadResult: Sendable {
             args.append(contentsOf: ["--add-header", "Accept: */*"])
         } else if isStarwankURL(parsedHost) || isStarwankURL(url) || parsedHost.contains("starwank") || parsedHost.contains("fapnado") {
             if !isSafari {
-                if let uaIdx = args.firstIndex(of: "--user-agent") {
+                if let uaIdx = args.lastIndex(of: "--user-agent") {
                     args[uaIdx + 1] = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
                 } else {
                     args.append(contentsOf: ["--user-agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"])
@@ -7374,7 +7485,7 @@ public struct DownloadResult: Sendable {
             args.append(contentsOf: ["--add-header", "Accept: */*"])
         } else if isPussyspaceURL(parsedHost) || isPussyspaceURL(url) || parsedHost.contains("pussyspace") {
             if !isSafari {
-                if let uaIdx = args.firstIndex(of: "--user-agent") {
+                if let uaIdx = args.lastIndex(of: "--user-agent") {
                     args[uaIdx + 1] = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
                 } else {
                     args.append(contentsOf: ["--user-agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"])
@@ -7409,7 +7520,7 @@ public struct DownloadResult: Sendable {
             refreshBrowserTransportIdentity(for: url, args: &args)
             // Smaller request bursts and bounded exponential backoff for sensitive hosts.
             for flag in ["--retries", "--fragment-retries", "--concurrent-fragments"] {
-                if let index = args.firstIndex(of: flag), index + 1 < args.count {
+                if let index = args.lastIndex(of: flag), index + 1 < args.count {
                     args[index + 1] = flag == "--concurrent-fragments" ? "2" : "3"
                 }
             }
@@ -7606,7 +7717,7 @@ public struct DownloadResult: Sendable {
         guard sucuriDomains.contains(where: { host == $0 || host.hasSuffix("." + $0) }) else { return nil }
 
         var request = URLRequest(url: parsedURL)
-        request.timeoutInterval = 3.0
+        request.timeoutInterval = 10.0
         request.setValue(Self.sucuriUserAgent, forHTTPHeaderField: "User-Agent")
 
         do {

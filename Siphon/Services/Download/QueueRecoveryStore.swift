@@ -18,6 +18,7 @@ struct QueueRecoveryRecord: Codable, Identifiable, Sendable {
     let status: DownloadStatus
     let progress: Double
     let scratchDirectoryPath: String?
+    let ownedOutputFiles: [String: Int]?
     let browserCookieSource: String?
     let thumbnailURL: URL?
     let duration: String?
@@ -48,6 +49,7 @@ struct QueueRecoveryRecord: Codable, Identifiable, Sendable {
         self.scratchDirectoryPath = download.scratchDirectory.flatMap {
             ScratchDirectoryPolicy.isOwned($0) ? $0.path : nil
         }
+        self.ownedOutputFiles = Download.encodeOwnedOutputFiles(download.ownedOutputFiles)
         self.thumbnailURL = download.thumbnailURL
         self.duration = download.duration
         self.errorMessage = download.errorMessage.map {
@@ -88,6 +90,7 @@ struct QueueRecoveryRecord: Codable, Identifiable, Sendable {
         download.duration = self.duration
         download.errorMessage = self.errorMessage
         download.log = self.log
+        download.ownedOutputFiles = Download.decodeOwnedOutputFiles(self.ownedOutputFiles)
         return download
     }
 }
@@ -98,11 +101,36 @@ struct QueueRecoverySnapshot: Codable, Sendable {
     let isCleanShutdown: Bool
     let jobs: [QueueRecoveryRecord]
 
+    /// Jobs that failed to decode (an unknown value after a downgrade, a
+    /// damaged entry). The rest of the snapshot is still restored.
+    private(set) var skippedJobCount = 0
+
+    enum CodingKeys: String, CodingKey {
+        case version, timestamp, isCleanShutdown, jobs
+    }
+
     init(version: Int = 1, timestamp: Date = Date(), isCleanShutdown: Bool = false, jobs: [QueueRecoveryRecord]) {
         self.version = version
         self.timestamp = timestamp
         self.isCleanShutdown = isCleanShutdown
         self.jobs = jobs
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.version = try container.decode(Int.self, forKey: .version)
+        self.timestamp = try container.decode(Date.self, forKey: .timestamp)
+        self.isCleanShutdown = try container.decode(Bool.self, forKey: .isCleanShutdown)
+        let entries = try container.decode([LossyRecord].self, forKey: .jobs)
+        self.jobs = entries.compactMap(\.record)
+        self.skippedJobCount = entries.count - jobs.count
+    }
+
+    private struct LossyRecord: Decodable {
+        let record: QueueRecoveryRecord?
+        init(from decoder: Decoder) throws {
+            record = try? QueueRecoveryRecord(from: decoder)
+        }
     }
 }
 
@@ -167,13 +195,31 @@ final class QueueRecoveryStore {
                 LoggerService.shared.log("Ignoring queue recovery snapshot with unknown version \(snapshot.version)", level: .warning)
                 return []
             }
+            if snapshot.skippedJobCount > 0 {
+                LoggerService.shared.log("Skipped \(snapshot.skippedJobCount) unreadable queue recovery entries", level: .warning)
+            }
             guard !snapshot.isCleanShutdown && !snapshot.jobs.isEmpty else {
                 return []
             }
             return snapshot.jobs.map { $0.toDownload() }
         } catch {
-            LoggerService.shared.log("Failed to load queue recovery snapshot: \(error.localizedDescription)", level: .warning)
+            LoggerService.shared.log("Failed to load queue recovery snapshot: \(error.localizedDescription)", level: .error)
+            preserveUnreadableSnapshot()
             return []
+        }
+    }
+
+    /// The next persist overwrites the snapshot; keep the unreadable one
+    /// beside it so the interrupted jobs are not lost without a trace.
+    private func preserveUnreadableSnapshot() {
+        let backup = fileURL.appendingPathExtension("corrupt")
+        do {
+            if fileManager.fileExists(atPath: backup.path) {
+                try fileManager.removeItem(at: backup)
+            }
+            try fileManager.moveItem(at: fileURL, to: backup)
+        } catch {
+            LoggerService.shared.log("Failed to preserve unreadable queue recovery snapshot: \(error.localizedDescription)", level: .error)
         }
     }
 

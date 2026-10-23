@@ -267,7 +267,7 @@ final class DownloadHistoryStoreTests: XCTestCase {
         try FileManager.default.createDirectory(at: scratch, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: scratch) }
 
-        for status in [DownloadStatus.stopped, .failed, .completed, .fileExists] {
+        for status in [DownloadStatus.stopped, .failed, .completed] {
             let download = Download(
                 url: "https://example.com/terminal/\(status.rawValue)",
                 options: .default,
@@ -279,9 +279,15 @@ final class DownloadHistoryStoreTests: XCTestCase {
             let historic = HistoricDownload(download: download)
             XCTAssertNil(
                 historic.scratchDirectoryPath,
-                "Only paused jobs should retain resumable scratch paths in history"
+                "Only paused and file-exists jobs should retain resumable scratch paths in history"
             )
         }
+
+        let collided = Download(url: "https://example.com/terminal/collided", options: .default, title: "Collided")
+        collided.status = .fileExists
+        collided.scratchDirectory = scratch
+        XCTAssertEqual(HistoricDownload(download: collided).scratchDirectoryPath, scratch.path,
+                       "Overwrite or New Name resumes the paused attempt's partial data")
     }
 
 }

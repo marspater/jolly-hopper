@@ -653,6 +653,8 @@ final class YtdlpServiceTests: XCTestCase {
             XCTAssertTrue(args.contains("-xerror"))
             XCTAssertTrue(args.contains("explode"))
             XCTAssertTrue(args.contains("0:V?") && args.contains("0:a?"))
+            XCTAssertTrue(args.contains("-skip_frame:v") && args.contains("nokey"),
+                          "Decode keyframes only; a full decode of long recordings takes minutes")
             XCTAssertFalse(args.contains("-t"), "Check the entire file, including later corrupt fragments")
             XCTAssertEqual(args.last, "-", "Validation must not overwrite the downloaded file")
             throw YtdlpError.commandFailed("corrupt decoded frame in stream 0")
@@ -2300,16 +2302,16 @@ final class YtdlpServiceTests: XCTestCase {
             let response = try XCTUnwrap(HTTPURLResponse(url: try XCTUnwrap(request.url), statusCode: 503, httpVersion: nil, headerFields: nil))
             return (response, Data("Service Unavailable".utf8))
         }
-        URLProtocol.registerClass(MockURLProtocol.self)
-        defer {
-            URLProtocol.unregisterClass(MockURLProtocol.self)
-            MockURLProtocol.requestHandler = nil
-        }
+        defer { MockURLProtocol.requestHandler = nil }
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [MockURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        defer { session.invalidateAndCancel() }
         let destination = FileManager.default.temporaryDirectory.appendingPathComponent("dependency_\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: destination) }
 
         do {
-            try await DependencyInstaller.download(DependencyChecksums.ytdlpURL, named: "yt-dlp", to: destination)
+            try await DependencyInstaller.download(DependencyChecksums.ytdlpURL, named: "yt-dlp", to: destination, session: session)
             XCTFail("An HTTP error page must not be staged as a dependency")
         } catch DependencyInstaller.InstallError.downloadFailed(let file, let statusCode) {
             XCTAssertEqual(file, "yt-dlp")
@@ -2489,6 +2491,10 @@ final class YtdlpServiceTests: XCTestCase {
 
         XCTAssertFalse(capturedArgsBox.value.isEmpty)
         XCTAssertFalse(capturedArgsBox.value.contains("--cookies-from-browser"))
+        XCTAssertFalse(capturedArgsBox.value.contains { $0.hasPrefix("generic:impersonate") },
+                       "The GFF CDN answers 403 to every impersonated fingerprint")
+        let workers = try XCTUnwrap(capturedArgsBox.value.lastIndex(of: "--concurrent-fragments"))
+        XCTAssertEqual(capturedArgsBox.value[workers + 1], "4", "A captured CDN playlist keeps the 503 pacing")
     }
 
     func testGFFErrorMappingAndCloudflare() async throws {
@@ -3063,6 +3069,8 @@ final class YtdlpServiceTests: XCTestCase {
         }
         XCTAssertFalse(genericArgs.contains("--throttled-rate"), "Generic progressive stream must not force throttled rate re-extraction")
         XCTAssertFalse(genericArgs.contains("--concurrent-fragments"), "Direct MP4 must not have concurrent-fragments flag")
+        XCTAssertTrue(genericArgs.contains("http:exp=1:20") && genericArgs.contains("fragment:exp=1:20"),
+                      "Generic retries back off instead of spending every retry within a second")
 
         // Test B: Known rate-limited single-stream CDN (e.g. ThisVid) -> targeted 10MB chunking & throttled-rate recovery
         _ = try await service.download(
@@ -3146,6 +3154,7 @@ final class YtdlpServiceTests: XCTestCase {
         if let idx = hlsArgs.firstIndex(of: "--concurrent-fragments") {
             XCTAssertEqual(hlsArgs[idx + 1], "2", "BoyfriendTV must use a smaller request burst")
         }
+        XCTAssertFalse(hlsArgs.contains("--downloader"), "FFmpeg ignores -N; BoyfriendTV HLS uses the native downloader")
     }
 
     func testRangeErrorRetryFallback() async throws {
@@ -4534,6 +4543,59 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertTrue(capturedArgs.value.contains("--abort-on-unavailable-fragments"))
         let index = try XCTUnwrap(capturedArgs.value.firstIndex(of: "--concurrent-fragments"))
         XCTAssertEqual(capturedArgs.value[index + 1], "1", "The CDN rate-limits parallel segment requests")
+    }
+
+    func testRecuPacingSurvivesUserConcurrentFragments() async throws {
+        let pageURL = "https://recu.me/polarny05/video/112873588/play"
+        let stream = "https://cdn.example.test/master.m3u8?uid=ab1234cd&request_id=f00dbeef&expires=1790000321&md5=x"
+        let capturedArgs = TestBox<[String]>([])
+        service.recuBrowserSessionLoader = { _, _ in
+            YtdlpService.RecuBrowserSession(pageHTML: "<html></html>", playlistURL: stream, userAgent: "Mozilla/5.0 WebKitFixture")
+        }
+        service.processRunner = MockYtdlpProcessRunner(mockDownload: { args in
+            capturedArgs.value = args
+            return "/tmp/recu-test.mp4"
+        })
+        var options = DownloadOptions.default
+        options.embedThumbnail = false
+        options.embedMetadata = false
+        options.additionalArguments = "--concurrent-fragments 16"
+        let info = MediaInfo(id: "112873588", title: "Recording", webpageUrl: pageURL, originalUrl: stream,
+                             formatProtocol: "m3u8_native", manifestUrl: stream)
+
+        _ = try await service.download(url: pageURL, options: options, mediaInfo: info,
+                                       onProgress: { _, _, _ in }, onOutput: { _ in })
+
+        // yt-dlp takes the last value; it must be Siphon's pacing, not the user's 16.
+        let index = try XCTUnwrap(capturedArgs.value.lastIndex(of: "--concurrent-fragments"))
+        XCTAssertEqual(capturedArgs.value[index + 1], "1")
+    }
+
+    func testRecuDownloadReusesPreviewResolutionOnce() async throws {
+        let pageURL = "https://recu.me/polarny05/video/112873588/play"
+        let stream = "https://cdn.example.test/master.m3u8?uid=ab1234cd&request_id=f00dbeef&expires=1790000321&md5=x"
+        let sessionCalls = TestBox<Int>(0)
+        service.recuBrowserSessionLoader = { _, _ in
+            sessionCalls.value += 1
+            return YtdlpService.RecuBrowserSession(pageHTML: "<html></html>", playlistURL: stream, userAgent: "Mozilla/5.0 WebKitFixture")
+        }
+        service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
+            // The integrity check passes; the yt-dlp playlist probe is unavailable.
+            if args.contains("-skip_frame:v") { return "" }
+            throw YtdlpError.commandFailed("probe unavailable in unit test")
+        }, mockDownload: { _ in "/tmp/recu-test.mp4" })
+        var options = DownloadOptions.default
+        options.embedThumbnail = false
+        options.embedMetadata = false
+
+        let info = try await service.fetchInfo(url: pageURL)
+        XCTAssertEqual(sessionCalls.value, 1)
+        _ = try await service.download(url: pageURL, options: options, mediaInfo: info,
+                                       onProgress: { _, _, _ in }, onOutput: { _ in })
+        XCTAssertEqual(sessionCalls.value, 1, "The download reuses the preview's fresh session")
+        _ = try await service.download(url: pageURL, options: options, mediaInfo: info,
+                                       onProgress: { _, _, _ in }, onOutput: { _ in })
+        XCTAssertEqual(sessionCalls.value, 2, "A resolution is reused at most once")
     }
 
     func testRecuDownloadRefreshesExpiredPlaylistOnHTTP410() async throws {
@@ -5980,11 +6042,7 @@ final class YtdlpServiceTests: XCTestCase {
 
         let args = capturedArgsBox.value
         XCTAssertTrue(args.contains("Referer:https://justthegays.com/"))
-        XCTAssertTrue(args.contains("--downloader"))
-        if let idx = args.firstIndex(of: "--downloader") {
-            XCTAssertEqual(args[idx + 1], "ffmpeg")
-        }
-        XCTAssertTrue(args.contains("--downloader-args"))
+        XCTAssertFalse(args.contains("--downloader"), "Native downloads keep -N and yt-dlp's encryption checks")
         XCTAssertTrue(args.contains("--hls-use-mpegts"))
     }
 
