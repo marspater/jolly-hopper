@@ -1803,6 +1803,22 @@ final class YtdlpServiceTests: XCTestCase {
         }
     }
 
+    func testGuywhStreamURLKeepsAccessTokenAndLoadsAsMP4() throws {
+        let signed = "https://guywh.com/get_file/3/5b8b/24000/24724/24724.mp4/?v-acctoken=MjQ1NnwxfDB8"
+        let html = """
+        "contentUrl": "https://guywh.com/get_file/3/5b8b/24000/24724/24724.mp4/",
+        var flashvars = { video_id: '24724', video_url: '\(signed)', video_url_hd: '1' };
+        """
+        XCTAssertEqual(YtdlpService.guywhStreamURL(in: html), signed)
+
+        let data = try XCTUnwrap(YtdlpService.directMP4InfoJSON(streamURL: signed, pageURL: "https://guywh.com/videos/24724/x/", title: "Clip"))
+        let info = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: String])
+        XCTAssertEqual(info["url"], signed)
+        XCTAssertEqual(info["ext"], "mp4")
+        XCTAssertEqual(info["id"], "24724")
+        XCTAssertEqual(info["title"], "Clip")
+    }
+
     func testGFFURLNormalizationAndHeaders() async throws {
         let previousBrowser = UserDefaults.standard.object(forKey: UserDefaultsKeys.browserForCookies)
         UserDefaults.standard.set("chrome", forKey: UserDefaultsKeys.browserForCookies)
