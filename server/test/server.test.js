@@ -342,6 +342,8 @@ describe('GET /api/latest', () => {
       'https://github.com.evil.org/download.dmg',
       'https://evil-github.com/download.dmg',
       'https://github.com/attacker/malware/releases/download/v1.0/Siphon.dmg',
+      'https://github.com/marspater/jolly-hopper/raw/main/Siphon.dmg',
+      'https://github.com/marspater/jolly-hopper/archive/refs/tags/v1.0.0.zip',
       'https://api.github.com/repos/attacker/malware/releases/assets/12345',
       'https://objects.githubusercontent.com/github-production-release-asset/Siphon.dmg'
     ];
