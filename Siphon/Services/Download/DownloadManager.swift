@@ -55,6 +55,16 @@ class DownloadManager: ObservableObject {
             }
             .store(in: &cancellables)
 
+        ytdlpService.$hasCompletedInitialSetup
+            .removeDuplicates()
+            .filter { $0 }
+            .sink { [weak self] _ in
+                Task { @MainActor [weak self] in
+                    self?.processQueue()
+                }
+            }
+            .store(in: &cancellables)
+
         // Only the concurrency limit changes what the queue may start. Observing
         // every defaults write rescanned the queue on each history save too.
         userDefaults.publisher(for: \.maxConcurrentDownloads)
@@ -298,7 +308,7 @@ class DownloadManager: ObservableObject {
     /// Event-driven queue dispatcher: schedules queued downloads whenever a concurrent slot becomes available.
     func processQueue() {
         guard !isShuttingDown else { return }
-        guard !ytdlpService.isUpdating else { return }
+        guard !ytdlpService.isUpdating, !ytdlpService.queueWaitsForInitialSetup else { return }
         guard !isProcessingQueue else { return }
         isProcessingQueue = true
         defer { isProcessingQueue = false }

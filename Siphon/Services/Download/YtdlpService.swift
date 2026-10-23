@@ -334,6 +334,12 @@ actor DependencyInstaller {
 @MainActor
 class YtdlpService: ObservableObject {
     @Published var isAvailable: Bool = false
+    /// False until the first binary setup finishes. A deep link that cold-launches
+    /// the app queues its job before yt-dlp is located; the queue waits for this.
+    @Published private(set) var hasCompletedInitialSetup = false
+    var queueWaitsForInitialSetup: Bool {
+        !hasCompletedInitialSetup && processRunner is DefaultYtdlpProcessRunner && !NotificationService.isRunningTests
+    }
     @Published var version: String?
     @Published var isUpdating: Bool = false
     @Published var updateProgress: Double = 0
@@ -756,6 +762,7 @@ class YtdlpService: ObservableObject {
         activeSetupTask = task
         await task.value
         activeSetupTask = nil
+        hasCompletedInitialSetup = true
     }
 
     /// Locations checked for a user-installed yt-dlp when no explicit path is
@@ -7403,8 +7410,6 @@ public struct DownloadResult: Sendable {
             args.append(contentsOf: ["--hls-use-mpegts"])
         } else if parsedHost == "justthegays.com" || parsedHost.hasSuffix(".justthegays.com") || parsedHost == "justthegays.tv" || parsedHost.hasSuffix(".justthegays.tv") {
             args.append(contentsOf: ["--add-header", "Referer:https://justthegays.com/"])
-            args.append(contentsOf: ["--downloader", "ffmpeg"])
-            args.append(contentsOf: ["--downloader-args", "ffmpeg_i:-analyzeduration 20M -probesize 20M"])
             args.append(contentsOf: ["--hls-use-mpegts"])
         } else if isThisVid {
             args.append(contentsOf: ["--add-header", "Referer:https://thisvid.com/"])

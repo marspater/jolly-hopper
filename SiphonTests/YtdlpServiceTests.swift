@@ -6038,11 +6038,7 @@ final class YtdlpServiceTests: XCTestCase {
 
         let args = capturedArgsBox.value
         XCTAssertTrue(args.contains("Referer:https://justthegays.com/"))
-        XCTAssertTrue(args.contains("--downloader"))
-        if let idx = args.firstIndex(of: "--downloader") {
-            XCTAssertEqual(args[idx + 1], "ffmpeg")
-        }
-        XCTAssertTrue(args.contains("--downloader-args"))
+        XCTAssertFalse(args.contains("--downloader"), "Native downloads keep -N and yt-dlp's encryption checks")
         XCTAssertTrue(args.contains("--hls-use-mpegts"))
     }
 
