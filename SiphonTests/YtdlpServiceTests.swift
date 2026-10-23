@@ -4562,6 +4562,16 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertNil(stopped, "Stop must not wait out the deadline")
     }
 
+    func testResolvedStreamLinksExpireAfterAnHour() {
+        let now = Date()
+        var info = MediaInfo(id: "x", title: "x")
+        XCTAssertTrue(YtdlpService.resolvedStreamIsFresh(info, now: now), "Hand-built metadata has no resolve time")
+        info.fetchedAt = now.addingTimeInterval(-59 * 60)
+        XCTAssertTrue(YtdlpService.resolvedStreamIsFresh(info, now: now))
+        info.fetchedAt = now.addingTimeInterval(-61 * 60)
+        XCTAssertFalse(YtdlpService.resolvedStreamIsFresh(info, now: now), "A job queued past the hour resolves again")
+    }
+
     func testRecuPacingSurvivesUserConcurrentFragments() async throws {
         let pageURL = "https://recu.me/polarny05/video/112873588/play"
         let stream = "https://cdn.example.test/master.m3u8?uid=ab1234cd&request_id=f00dbeef&expires=1790000321&md5=x"
