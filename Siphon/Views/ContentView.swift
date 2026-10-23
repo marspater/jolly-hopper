@@ -38,6 +38,14 @@ struct ContentView: View {
     @AppStorage("showMenuBarIcon") private var showMenuBarIcon: Bool = true
     @AppStorage(UserDefaultsKeys.theme) private var theme: String = "system"
 
+    /// The What's New sheet's dismissal handler: runs once the sheet is gone,
+    /// when the window can present the update alert held back behind it.
+    private func presentPendingUpdateAlert() {
+        guard updateAlertPending else { return }
+        updateAlertPending = false
+        showUpdateAlert = true
+    }
+
     var body: some View {
         ZStack {
             mainLayout
@@ -95,13 +103,7 @@ struct ContentView: View {
                 .onChange(of: showMenuBarIcon) { _, newValue in
                     MenuBarManager.shared.setVisible(newValue)
                 }
-                .sheet(isPresented: $appState.showWhatsNew, onDismiss: {
-                    // Runs once the sheet is gone, when the window can present again.
-                    if updateAlertPending {
-                        updateAlertPending = false
-                        showUpdateAlert = true
-                    }
-                }) {
+                .sheet(isPresented: $appState.showWhatsNew, onDismiss: presentPendingUpdateAlert) {
                     WhatsNewSheetView()
                 }
                 .alert(item: $appState.ytdlpUpdateMessage) { status in
