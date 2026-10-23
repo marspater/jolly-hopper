@@ -1896,6 +1896,9 @@ final class YtdlpServiceTests: XCTestCase {
         if let fIdx = capturedArgsBox.value.firstIndex(of: "-f") {
             XCTAssertEqual(capturedArgsBox.value[fIdx + 1], "b/best")
         }
+        // aria2c only when installed, and only for https so HLS stays native.
+        XCTAssertEqual(capturedArgsBox.value.contains("https:aria2c"), YtdlpService.findAria2cPath() != nil)
+        XCTAssertFalse(capturedArgsBox.value.contains("aria2c"), "An unscoped aria2c would also take HLS")
     }
 
     func testStarwankParseMediaFromVideoPageHTML() {
