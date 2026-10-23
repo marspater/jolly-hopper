@@ -31,6 +31,7 @@ struct ContentView: View {
     @EnvironmentObject var languageService: LanguageService
     @EnvironmentObject var updateChecker: UpdateChecker
     @State private var showUpdateAlert = false
+    @State private var updateAlertPending = false
     @State private var confirmClearHistory = false
     @Environment(\.openWindow) private var openWindow
     @State private var columnVisibility: NavigationSplitViewVisibility = .detailOnly
@@ -74,10 +75,17 @@ struct ContentView: View {
                         )
                         await updateChecker.checkForUpdates()
                         if updateChecker.hasUpdate {
-                            showUpdateAlert = true
+                            // A window shows one presentation at a time: an alert
+                            // raised under the What's New sheet is dropped.
+                            if appState.showWhatsNew {
+                                updateAlertPending = true
+                            } else {
+                                showUpdateAlert = true
+                            }
                         }
                     }
                 }
+
                 .onChange(of: languageService.selectedLanguage) { _, _ in
                     MenuBarManager.shared.updateMenu()
                 }
@@ -87,7 +95,13 @@ struct ContentView: View {
                 .onChange(of: showMenuBarIcon) { _, newValue in
                     MenuBarManager.shared.setVisible(newValue)
                 }
-                .sheet(isPresented: $appState.showWhatsNew) {
+                .sheet(isPresented: $appState.showWhatsNew, onDismiss: {
+                    // Runs once the sheet is gone, when the window can present again.
+                    if updateAlertPending {
+                        updateAlertPending = false
+                        showUpdateAlert = true
+                    }
+                }) {
                     WhatsNewSheetView()
                 }
                 .alert(item: $appState.ytdlpUpdateMessage) { status in

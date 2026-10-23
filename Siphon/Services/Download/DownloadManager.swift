@@ -569,6 +569,9 @@ class DownloadManager: ObservableObject {
         for item in items {
             if item.status == .downloading || item.status == .fetching || item.status == .processing || item.status == .queued || item.status == .paused {
                 stopDownload(item, suppressNotification: true, skipSaveAndBroadcast: true)
+            } else if item.status == .fileExists {
+                // File-exists jobs keep their scratch for a resume; removing one ends it.
+                DownloadExecutor.cleanupTemporaryFiles(for: item)
             }
         }
 

@@ -2491,6 +2491,10 @@ final class YtdlpServiceTests: XCTestCase {
 
         XCTAssertFalse(capturedArgsBox.value.isEmpty)
         XCTAssertFalse(capturedArgsBox.value.contains("--cookies-from-browser"))
+        XCTAssertFalse(capturedArgsBox.value.contains { $0.hasPrefix("generic:impersonate") },
+                       "The GFF CDN answers 403 to every impersonated fingerprint")
+        let workers = try XCTUnwrap(capturedArgsBox.value.lastIndex(of: "--concurrent-fragments"))
+        XCTAssertEqual(capturedArgsBox.value[workers + 1], "4", "A captured CDN playlist keeps the 503 pacing")
     }
 
     func testGFFErrorMappingAndCloudflare() async throws {

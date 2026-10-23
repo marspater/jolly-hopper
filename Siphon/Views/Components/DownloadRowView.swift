@@ -610,7 +610,7 @@ struct FileThumbnailView: View {
     private func generateThumbnail() async {
         guard thumbnailImage == nil else { return }
         if let image = await ImageUtilities.generateThumbnail(for: fileURL) {
-            ThumbnailCache.images.setObject(image, forKey: fileURL as NSURL)
+            ThumbnailCache.store(image, for: fileURL)
             await MainActor.run {
                 self.thumbnailImage = image
             }
@@ -1342,8 +1342,16 @@ enum ThumbnailCache {
     nonisolated(unsafe) static let images: NSCache<NSURL, NSImage> = {
         let cache = NSCache<NSURL, NSImage>()
         cache.countLimit = 300
+        cache.totalCostLimit = 128 * 1024 * 1024
         return cache
     }()
+
+    /// Caches `image` at its decoded size, so the cost limit bounds memory
+    /// rather than the image count alone.
+    static func store(_ image: NSImage, for url: URL) {
+        let pixels = image.representations.map { $0.pixelsWide * $0.pixelsHigh }.max() ?? 0
+        images.setObject(image, forKey: url as NSURL, cost: max(pixels, 1) * 4)
+    }
 
     /// Decodes off the main thread at no more than 480 px, enough for the
     /// largest thumbnail slot on a 2x display.
@@ -1414,7 +1422,7 @@ struct ThumbnailImage<Content: View>: View {
                 let image = await Task.detached(priority: .utility) { data.flatMap(ThumbnailCache.decoded) }.value
                 guard !Task.isCancelled else { return }
                 if let image {
-                    ThumbnailCache.images.setObject(image, forKey: url as NSURL)
+                    ThumbnailCache.store(image, for: url)
                     phase = .success(Image(nsImage: image))
                 } else {
                     phase = .failure(URLError(.cannotDecodeContentData))

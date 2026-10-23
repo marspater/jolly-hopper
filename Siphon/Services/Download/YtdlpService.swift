@@ -404,17 +404,21 @@ class YtdlpService: ObservableObject {
         }
     }
 
-    /// Returns false when a store could not be removed. Its data was still
-    /// wiped through `removeData`, but WebKit keeps a store that is in use.
+    /// Returns false when a store could not be removed. Its data is wiped
+    /// through `removeData` first; WebKit refuses to remove a store in use.
     @discardableResult
     private func clearWebsiteDataStores(
-        activeStores: [WKWebsiteDataStore],
+        _ stores: ReferenceWritableKeyPath<YtdlpService, [String: WKWebsiteDataStore]>,
         identifiers: [String],
         siteName: String
     ) async -> Bool {
-        for store in activeStores {
-            await store.removeData(ofTypes: WKWebsiteDataStore.allWebsiteDataTypes(), modifiedSince: .distantPast)
-        }
+        do {
+            let activeStores = Array(self[keyPath: stores].values)
+            self[keyPath: stores].removeAll()
+            for store in activeStores {
+                await store.removeData(ofTypes: WKWebsiteDataStore.allWebsiteDataTypes(), modifiedSince: .distantPast)
+            }
+        } // The last references to the stores end here, before removal.
         var removedAll = true
         for identifier in identifiers {
             guard let uuid = UUID(uuidString: identifier) else { continue }
@@ -448,35 +452,17 @@ class YtdlpService: ObservableObject {
 
     @discardableResult
     func clearRecuWebData() async -> Bool {
-        let stores = Array(recuWebDataStores.values)
-        recuWebDataStores.removeAll()
-        return await clearWebsiteDataStores(
-            activeStores: stores,
-            identifiers: [Self.recuDataStoreIdentifier, Self.recuBoundaryDataStoreIdentifier],
-            siteName: "recu.me"
-        )
+        await clearWebsiteDataStores(\.recuWebDataStores, identifiers: [Self.recuDataStoreIdentifier, Self.recuBoundaryDataStoreIdentifier], siteName: "recu.me")
     }
 
     @discardableResult
     func clearBoyfriendTVWebData() async -> Bool {
-        let stores = Array(boyfriendTVWebDataStores.values)
-        boyfriendTVWebDataStores.removeAll()
-        return await clearWebsiteDataStores(
-            activeStores: stores,
-            identifiers: [Self.boyfriendTVDataStoreIdentifier, Self.boyfriendTVBoundaryDataStoreIdentifier],
-            siteName: "boyfriend.tv"
-        )
+        await clearWebsiteDataStores(\.boyfriendTVWebDataStores, identifiers: [Self.boyfriendTVDataStoreIdentifier, Self.boyfriendTVBoundaryDataStoreIdentifier], siteName: "boyfriend.tv")
     }
 
     @discardableResult
     func clearGayteamWebData() async -> Bool {
-        let stores = Array(gayteamWebDataStores.values)
-        gayteamWebDataStores.removeAll()
-        return await clearWebsiteDataStores(
-            activeStores: stores,
-            identifiers: [Self.gayteamDataStoreIdentifier, Self.gayteamBoundaryDataStoreIdentifier],
-            siteName: "gayteam"
-        )
+        await clearWebsiteDataStores(\.gayteamWebDataStores, identifiers: [Self.gayteamDataStoreIdentifier, Self.gayteamBoundaryDataStoreIdentifier], siteName: "gayteam")
     }
 
     /// Refuses while a site window is open: WebKit will not remove a store
@@ -7269,6 +7255,17 @@ public struct DownloadResult: Sendable {
                lower.contains("connection reset")
     }
 
+    nonisolated static func removeImpersonation(from args: inout [String]) {
+        var index = 0
+        while index + 1 < args.count {
+            if args[index] == "--extractor-args" && args[index + 1].hasPrefix("generic:impersonate") {
+                args.removeSubrange(index...(index + 1))
+            } else {
+                index += 1
+            }
+        }
+    }
+
     private func appendSiteSpecificArgs(for url: String, options: DownloadOptions? = nil, mediaInfo: MediaInfo? = nil, rawUserAgent: String? = nil, to args: inout [String]) {
         let lowerUrl = url.lowercased()
         let parsedHost = (URL(string: url)?.host ?? url).lowercased()
@@ -7440,7 +7437,11 @@ public struct DownloadResult: Sendable {
             args.append(contentsOf: ["--add-header", "Referer: https://guywh.com/"])
             args.append(contentsOf: ["--add-header", "Origin: https://guywh.com"])
             args.append(contentsOf: ["--add-header", "Accept: */*"])
-        } else if isGFFURL(parsedHost) || isGFFURL(url) || parsedHost.contains("gayforfans") {
+        } else if isGFFURL(parsedHost) || isGFFURL(url) || parsedHost.contains("gayforfans") || Self.isGFFMediaURL(url) {
+            // Cloudflare on cdn.gff.network answers 403 to every curl_cffi
+            // fingerprint (Safari, Chrome, any target) and 200 to yt-dlp's
+            // plain client, so GayForFans never impersonates.
+            Self.removeImpersonation(from: &args)
             if !isSafari {
                 if let uaIdx = args.lastIndex(of: "--user-agent") {
                     args[uaIdx + 1] = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"

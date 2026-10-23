@@ -2264,7 +2264,7 @@ struct HistoricDownload: Codable, Identifiable {
             LoggerService.sanitizeDiagnosticText(String(download.log.suffix(Self.maxLogCharacters)))
         )
         self.progress = download.progress
-        self.scratchDirectoryPath = download.status == .paused
+        self.scratchDirectoryPath = download.status == .paused || download.status == .fileExists
             ? download.scratchDirectory.flatMap {
                 ScratchDirectoryPolicy.isOwned($0) ? $0.path : nil
             }
