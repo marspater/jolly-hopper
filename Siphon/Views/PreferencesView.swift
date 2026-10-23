@@ -319,6 +319,7 @@ struct PreferencesView: View {
                     Image(systemName: "folder.fill")
                         .foregroundColor(SiphonTheme.accentText)
                         .font(.siphonPrimary)
+                        .accessibilityHidden(true)
 
                     Text(defaultSaveFolder.isEmpty ? "~/Downloads" : defaultSaveFolder)
                         .font(.siphonSecondaryMonoMedium)
@@ -361,6 +362,7 @@ struct PreferencesView: View {
                 } label: {
                     HStack(spacing: 6) {
                         Image(systemName: "folder.badge.plus")
+                            .accessibilityHidden(true)
                         Text(languageService.s("choose_folder"))
                     }
                 }
