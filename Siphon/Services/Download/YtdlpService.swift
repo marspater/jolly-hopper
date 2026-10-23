@@ -585,6 +585,18 @@ class YtdlpService: ObservableObject {
     /// download starts; YouTube's last hours, other CDNs much less.
     static let reusableInfoMaxAge: TimeInterval = 10 * 60
 
+    /// How long a site resolver's stream link is reused. A job that waited
+    /// longer in the queue resolves again rather than failing with 403/410
+    /// until the user retries; signed links here last an hour or more.
+    nonisolated static let resolvedStreamMaxAge: TimeInterval = 60 * 60
+
+    /// False once a resolved stream link is older than `resolvedStreamMaxAge`.
+    /// Metadata without a resolve time (built by hand) counts as fresh.
+    nonisolated static func resolvedStreamIsFresh(_ mediaInfo: MediaInfo?, now: Date = Date()) -> Bool {
+        guard let fetchedAt = mediaInfo?.fetchedAt else { return true }
+        return now.timeIntervalSince(fetchedAt) < resolvedStreamMaxAge
+    }
+
     nonisolated static func isPathContained(targetURL: URL, inside parentDirectoryURL: URL) -> Bool {
         let root = parentDirectoryURL.standardizedFileURL.resolvingSymlinksInPath()
         let candidate = targetURL.standardizedFileURL.resolvingSymlinksInPath()
@@ -1097,7 +1109,7 @@ class YtdlpService: ObservableObject {
                 LoggerService.shared.log("Playlist summary unavailable for \(hostForLog(normalizedURL)) (\(error.localizedDescription)); trying single-video metadata", level: .info)
             }
         }
-        let info: MediaInfo
+        var info: MediaInfo
         do {
             info = try await fetchSingleVideoInfo(
                 path: path.path,
@@ -1114,6 +1126,9 @@ class YtdlpService: ObservableObject {
                 browserCookieSource: browserCookieSource
             )
         }
+        // Site resolvers return signed or session-bound stream links; the
+        // download checks their age before reusing them.
+        if info.fetchedAt == nil { info.fetchedAt = Date() }
         if let json = info.rawJSON, Self.isTwinkabooPromo(pageURL: normalizedURL, infoJSON: json) {
             LoggerService.shared.log("[ProtectedSite] twinkaboo returned only its sponsored promo; not saving it as the video", level: .warning)
             throw YtdlpError.downloadFailed("Twinkaboo plays this video through an encrypted player that Siphon doesn't support. The only other video on the page is the site's sponsored promo, so Siphon didn't download anything.")
@@ -1760,6 +1775,7 @@ public struct DownloadResult: Sendable {
         fallbackEmbedURL: String,
         fallbackIsAllowed: (String) -> Bool = { _ in true }
     ) -> ReusedDirectMedia? {
+        guard Self.resolvedStreamIsFresh(mediaInfo) else { return nil }
         if let selectedId = selectedFormatId,
            let matched = mediaInfo?.formats?.first(where: {
                $0.formatId.lowercased() == selectedId.lowercased() ||
@@ -1888,7 +1904,8 @@ public struct DownloadResult: Sendable {
             customThumbnailURL = recuMedia.thumbnailURL
             recuUserAgent = recuMedia.userAgent
         } else if isBoyfriendTVURL(url) {
-            if let streamURL = mediaInfo?.manifestUrl ?? mediaInfo?.originalUrl, !streamURL.isEmpty, streamURL.contains("boyfriend") {
+            if let streamURL = mediaInfo?.manifestUrl ?? mediaInfo?.originalUrl, !streamURL.isEmpty, streamURL.contains("boyfriend"),
+               Self.resolvedStreamIsFresh(mediaInfo) {
                 targetURL = resolveBoyfriendTVStreamURLForDownload(streamURL: streamURL, options: options)
                 customResolvedTitle = mediaInfo?.title
                 customEmbedURL = mediaInfo?.webpageUrl
@@ -1909,7 +1926,7 @@ public struct DownloadResult: Sendable {
             // for a recovered queue item, which has no capture time) capture again.
             let media: MediaInfo
             if let mediaInfo, let stream = mediaInfo.manifestUrl, !stream.isEmpty, !isGayteamURL(stream),
-               let fetchedAt = mediaInfo.fetchedAt, Date().timeIntervalSince(fetchedAt) < 60 * 60 {
+               let fetchedAt = mediaInfo.fetchedAt, Date().timeIntervalSince(fetchedAt) < Self.resolvedStreamMaxAge {
                 media = mediaInfo
             } else {
                 media = try await resolveGayteamMediaInfo(url: normalizedURL, path: path.path, proxy: EgressBoundary.proxyURL)
