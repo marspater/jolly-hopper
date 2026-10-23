@@ -150,6 +150,16 @@ for (const extension of ["Chrome", "Firefox", "Safari"]) {
         assert.equal(new URL(browser.tabs.get(1).url).searchParams.get("url"), "HTTPS://example.com/video");
     });
 
+    test(`${extension}: untrusted or malformed host parameter falls back safely to download`, async () => {
+        const browser = mockBrowser(extension);
+        const worker = browser.startWorker();
+        await worker.triggerDownload("https://example.com/video", "invalid-host?injected=true");
+        await flush();
+        const tabUrl = new URL(browser.tabs.get(1).url);
+        assert.equal(tabUrl.hostname, "download");
+        assert.equal(tabUrl.searchParams.get("injected"), null);
+    });
+
 }
 
 for (const extension of ["Firefox", "Safari"]) {

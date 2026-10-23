@@ -149,8 +149,9 @@ async function detectBrowserSource() {
 async function triggerDownload(url, host = "download") {
     if (!firstWebURL(url)) return;
 
+    const safeHost = host === "fast-download" ? "fast-download" : "download";
     const browserSource = await detectBrowserSource();
-    let deepLink = `siphon://${host}?url=${encodeURIComponent(url)}&browser=${encodeURIComponent(browserSource)}`;
+    let deepLink = `siphon://${safeHost}?url=${encodeURIComponent(url)}&browser=${encodeURIComponent(browserSource)}`;
     const userAgent = typeof navigator !== "undefined" ? navigator.userAgent : "";
     if (userAgent) {
         deepLink += `&ua=${encodeURIComponent(userAgent)}`;

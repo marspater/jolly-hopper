@@ -119,7 +119,8 @@ function firstWebURL(...candidates) {
 
 async function triggerDownload(url, host = "download") {
     if (!firstWebURL(url)) return;
-    await openDeepLink("siphon://" + host + "?url=" + encodeURIComponent(url) + "&browser=firefox&ua=" + encodeURIComponent(navigator.userAgent || ""));
+    const safeHost = host === "fast-download" ? "fast-download" : "download";
+    await openDeepLink("siphon://" + safeHost + "?url=" + encodeURIComponent(url) + "&browser=firefox&ua=" + encodeURIComponent(navigator.userAgent || ""));
 }
 
 browser.action.onClicked.addListener(async (tab) => {
