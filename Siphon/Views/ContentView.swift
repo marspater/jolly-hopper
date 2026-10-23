@@ -31,11 +31,20 @@ struct ContentView: View {
     @EnvironmentObject var languageService: LanguageService
     @EnvironmentObject var updateChecker: UpdateChecker
     @State private var showUpdateAlert = false
+    @State private var updateAlertPending = false
     @State private var confirmClearHistory = false
     @Environment(\.openWindow) private var openWindow
     @State private var columnVisibility: NavigationSplitViewVisibility = .detailOnly
     @AppStorage("showMenuBarIcon") private var showMenuBarIcon: Bool = true
     @AppStorage(UserDefaultsKeys.theme) private var theme: String = "system"
+
+    /// The What's New sheet's dismissal handler: runs once the sheet is gone,
+    /// when the window can present the update alert held back behind it.
+    private func presentPendingUpdateAlert() {
+        guard updateAlertPending else { return }
+        updateAlertPending = false
+        showUpdateAlert = true
+    }
 
     var body: some View {
         ZStack {
@@ -59,20 +68,32 @@ struct ContentView: View {
                         appState.showAddDownloadSheet = false
                     }
                 }
-                .task {
+                .onAppear {
                     // When Siphon only hosts the unit tests, do not load or persist
                     // the user's history, install binaries, or query GitHub.
-                    guard !NotificationService.isRunningTests else { return }
+                    guard !NotificationService.isRunningTests, !appState.didStartLaunchTasks else { return }
+                    appState.didStartLaunchTasks = true
                     downloadManager.initialize(languageService: languageService)
-                    await appState.initializeApplicationServices(
-                        ytdlpService: downloadManager.ytdlpService,
-                        languageService: languageService
-                    )
-                    await updateChecker.checkForUpdates()
-                    if updateChecker.hasUpdate {
-                        showUpdateAlert = true
+                    // Not tied to this window: background mode closes it right
+                    // after launch, which would cancel a view task midway.
+                    Task {
+                        await appState.initializeApplicationServices(
+                            ytdlpService: downloadManager.ytdlpService,
+                            languageService: languageService
+                        )
+                        await updateChecker.checkForUpdates()
+                        if updateChecker.hasUpdate {
+                            // A window shows one presentation at a time: an alert
+                            // raised under the What's New sheet is dropped.
+                            if appState.showWhatsNew {
+                                updateAlertPending = true
+                            } else {
+                                showUpdateAlert = true
+                            }
+                        }
                     }
                 }
+
                 .onChange(of: languageService.selectedLanguage) { _, _ in
                     MenuBarManager.shared.updateMenu()
                 }
@@ -82,7 +103,7 @@ struct ContentView: View {
                 .onChange(of: showMenuBarIcon) { _, newValue in
                     MenuBarManager.shared.setVisible(newValue)
                 }
-                .sheet(isPresented: $appState.showWhatsNew) {
+                .sheet(isPresented: $appState.showWhatsNew, onDismiss: presentPendingUpdateAlert) {
                     WhatsNewSheetView()
                 }
                 .alert(item: $appState.ytdlpUpdateMessage) { status in

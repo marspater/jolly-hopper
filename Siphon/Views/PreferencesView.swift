@@ -59,6 +59,7 @@ struct PreferencesView: View {
     @State private var permissionCheckMessage: String?
     @State private var isClearingAllSites: Bool = false
     @State private var showAllSitesClearedFeedback: Bool = false
+    @State private var clearAllSitesFailed: Bool = false
     @State private var showClearAllSitesConfirmation: Bool = false
 
     private var presetFilteredResolutions: [VideoResolution] {
@@ -447,6 +448,14 @@ struct PreferencesView: View {
                     .font(.siphonMetadata)
                     .foregroundColor(SiphonTheme.statusCompletedText)
             } else {
+                if let error = updateChecker.updateError {
+                    Text("\(languageService.s("update_failed_title")): \(error)")
+                        .font(.siphonMetadata)
+                        .foregroundColor(SiphonTheme.statusFailedText)
+                        .multilineTextAlignment(.trailing)
+                        .frame(maxWidth: 280, alignment: .trailing)
+                        .textSelection(.enabled)
+                }
                 Button(languageService.s("update_now")) {
                     Task {
                         await updateChecker.downloadAndInstallUpdate()
@@ -1213,6 +1222,12 @@ struct PreferencesView: View {
             if isClearingAllSites {
                 ProgressView()
                     .controlSize(.small)
+            } else if showAllSitesClearedFeedback && clearAllSitesFailed {
+                Text(languageService.s("clear_sites_failed"))
+                    .font(.siphonMetadataSemibold)
+                    .foregroundColor(SiphonTheme.statusFailedText)
+                    .multilineTextAlignment(.trailing)
+                    .frame(maxWidth: 240, alignment: .trailing)
             } else if showAllSitesClearedFeedback {
                 HStack(spacing: 4) {
                     Image(systemName: "checkmark")
@@ -1236,7 +1251,7 @@ struct PreferencesView: View {
         guard !isClearingAllSites else { return }
         isClearingAllSites = true
         Task {
-            await downloadManager.ytdlpService.clearAllProtectedSitesWebData()
+            clearAllSitesFailed = !(await downloadManager.ytdlpService.clearAllProtectedSitesWebData())
             isClearingAllSites = false
             withAnimation(SiphonAnimation.snappySpring) {
                 showAllSitesClearedFeedback = true

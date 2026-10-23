@@ -622,27 +622,67 @@ public final class EgressProxyServer: @unchecked Sendable {
     private static let upstreamConnectTimeout: TimeInterval = 15
     private static let perAddressConnectTimeout: TimeInterval = 5
 
-    /// Tries the validated addresses in resolver order, moving on when one fails,
-    /// since pinning addresses gives up NWConnection's own Happy Eyeballs fallback.
-    /// One deadline bounds the whole walk, however many addresses DNS returned.
+    /// Delay before the next address joins the race (RFC 8305 recommends 250 ms).
+    static let connectionAttemptDelay: TimeInterval = 0.25
+
+    /// Races the validated addresses, Happy Eyeballs style, since pinning
+    /// addresses gives up NWConnection's own fallback: families alternate, each
+    /// next address starts 250 ms later or as soon as the previous one fails,
+    /// and the first to connect wins. A silently dropping IPv6 path then costs
+    /// 250 ms per connection instead of a 5 s timeout. One deadline bounds the
+    /// whole race, however many addresses DNS returned.
     private func connectUpstream(
         addresses: ArraySlice<String>,
         port: Int,
         deadline: DispatchTime = .now() + EgressProxyServer.upstreamConnectTimeout,
         completion: @escaping @Sendable (Result<NWConnection, Error>) -> Void
     ) {
-        guard let address = addresses.first, DispatchTime.now() < deadline else {
-            completion(.failure(NSError(domain: "EgressProxyServer", code: -2, userInfo: [NSLocalizedDescriptionKey: "Upstream connect timed out"])))
+        let ordered = Self.interleavedByFamily(Array(addresses))
+        let timedOut = NSError(domain: "EgressProxyServer", code: -2, userInfo: [NSLocalizedDescriptionKey: "Upstream connect timed out"])
+        guard !ordered.isEmpty else {
+            completion(.failure(timedOut))
             return
         }
-        let attemptDeadline = min(deadline, .now() + Self.perAddressConnectTimeout)
-        connectUpstream(address: address, port: port, deadline: attemptDeadline) { [weak self] result in
-            if case .failure = result, addresses.count > 1, let self {
-                self.connectUpstream(addresses: addresses.dropFirst(), port: port, deadline: deadline, completion: completion)
-            } else {
-                completion(result)
+        let race = UpstreamRace(attempts: ordered.count, completion: completion)
+
+        @Sendable func attempt(_ index: Int) {
+            guard index < ordered.count, !race.isFinished else { return }
+            guard DispatchTime.now() < deadline else {
+                for _ in index..<ordered.count { race.fail(timedOut) }
+                return
+            }
+            let startedNext = AtomicBox(false)
+            let startNext: @Sendable () -> Void = {
+                if startedNext.compareAndSet(expected: false, newValue: true) { attempt(index + 1) }
+            }
+            queue.asyncAfter(deadline: .now() + Self.connectionAttemptDelay, execute: startNext)
+            let attemptDeadline = min(deadline, .now() + Self.perAddressConnectTimeout)
+            connectUpstream(address: ordered[index], port: port, deadline: attemptDeadline) { result in
+                switch result {
+                case .success(let connection):
+                    if !race.win(connection) { connection.cancel() }
+                case .failure(let error):
+                    startNext()
+                    race.fail(error)
+                }
             }
         }
+        attempt(0)
+    }
+
+    /// Alternates address families, starting with the resolver's first choice
+    /// and keeping its order within each family.
+    static func interleavedByFamily(_ addresses: [String]) -> [String] {
+        guard let first = addresses.first else { return [] }
+        let firstIsV6 = IPv6Address(first) != nil
+        let preferred = addresses.filter { (IPv6Address($0) != nil) == firstIsV6 }
+        let other = addresses.filter { (IPv6Address($0) != nil) != firstIsV6 }
+        var result: [String] = []
+        for index in 0..<max(preferred.count, other.count) {
+            if index < preferred.count { result.append(preferred[index]) }
+            if index < other.count { result.append(other[index]) }
+        }
+        return result
     }
 
     private func connectUpstream(address: String, port: Int, deadline: DispatchTime, completion: @escaping @Sendable (Result<NWConnection, Error>) -> Void) {
@@ -842,6 +882,43 @@ private extension Substring {
             }
         }
         return self[start..<end]
+    }
+}
+
+/// One upstream connect race: the first connection wins; the race fails only
+/// after every attempt has failed.
+private final class UpstreamRace: @unchecked Sendable {
+    private let lock = NSLock()
+    private var finished = false
+    private var remaining: Int
+    private let completion: @Sendable (Result<NWConnection, Error>) -> Void
+
+    init(attempts: Int, completion: @escaping @Sendable (Result<NWConnection, Error>) -> Void) {
+        self.remaining = attempts
+        self.completion = completion
+    }
+
+    var isFinished: Bool { lock.withLock { finished } }
+
+    /// Returns false when another attempt already won; the caller cancels its connection.
+    func win(_ connection: NWConnection) -> Bool {
+        let won = lock.withLock { () -> Bool in
+            guard !finished else { return false }
+            finished = true
+            return true
+        }
+        if won { completion(.success(connection)) }
+        return won
+    }
+
+    func fail(_ error: Error) {
+        let lost = lock.withLock { () -> Bool in
+            remaining -= 1
+            guard !finished, remaining == 0 else { return false }
+            finished = true
+            return true
+        }
+        if lost { completion(.failure(error)) }
     }
 }
 

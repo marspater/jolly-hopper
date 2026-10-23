@@ -318,6 +318,9 @@ public final class AppState: ObservableObject {
     @Published public private(set) var externalTargetURL: String?
 
     @Published var ytdlpVersion: String?
+    /// Launch work (binary setup, update check) runs once per process, not
+    /// once per main window: reopening the window must not repeat it.
+    var didStartLaunchTasks = false
     @Published var showWhatsNew: Bool = false
     @Published var whatsNewFeatures: [ReleaseFeature] = []
     @Published var ytdlpUpdateMessage: YtdlpUpdateMessage?

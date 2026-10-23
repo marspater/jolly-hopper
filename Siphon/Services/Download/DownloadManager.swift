@@ -55,6 +55,16 @@ class DownloadManager: ObservableObject {
             }
             .store(in: &cancellables)
 
+        ytdlpService.$hasCompletedInitialSetup
+            .removeDuplicates()
+            .filter { $0 }
+            .sink { [weak self] _ in
+                Task { @MainActor [weak self] in
+                    self?.processQueue()
+                }
+            }
+            .store(in: &cancellables)
+
         // Only the concurrency limit changes what the queue may start. Observing
         // every defaults write rescanned the queue on each history save too.
         userDefaults.publisher(for: \.maxConcurrentDownloads)
@@ -248,8 +258,12 @@ class DownloadManager: ObservableObject {
             }
         }
         if !pendingRecoveryJobs.isEmpty {
-            let activeIDs = Set(activeJobs.lazy.map(\.id))
-            let remainingPending = pendingRecoveryJobs.filter { !activeIDs.contains($0.id) }
+            // A same-ID row that is running again or has finished since the
+            // prompt supersedes the interrupted record; offering it again
+            // would re-queue (or discard) finished work.
+            var supersededIDs = Set(activeJobs.lazy.map(\.id))
+            supersededIDs.formUnion(downloads.lazy.filter { $0.status == .completed }.map(\.id))
+            let remainingPending = pendingRecoveryJobs.filter { !supersededIDs.contains($0.id) }
             activeJobs.append(contentsOf: remainingPending)
         }
         queueRecoveryWriteFailed = !recoveryStore.persist(activeJobs: activeJobs)
@@ -294,7 +308,7 @@ class DownloadManager: ObservableObject {
     /// Event-driven queue dispatcher: schedules queued downloads whenever a concurrent slot becomes available.
     func processQueue() {
         guard !isShuttingDown else { return }
-        guard !ytdlpService.isUpdating else { return }
+        guard !ytdlpService.isUpdating, !ytdlpService.queueWaitsForInitialSetup else { return }
         guard !isProcessingQueue else { return }
         isProcessingQueue = true
         defer { isProcessingQueue = false }
@@ -555,6 +569,9 @@ class DownloadManager: ObservableObject {
         for item in items {
             if item.status == .downloading || item.status == .fetching || item.status == .processing || item.status == .queued || item.status == .paused {
                 stopDownload(item, suppressNotification: true, skipSaveAndBroadcast: true)
+            } else if item.status == .fileExists {
+                // File-exists jobs keep their scratch for a resume; removing one ends it.
+                DownloadExecutor.cleanupTemporaryFiles(for: item)
             }
         }
 

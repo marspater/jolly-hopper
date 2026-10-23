@@ -269,6 +269,37 @@ final class EgressProxyTests: XCTestCase {
         XCTAssertEqual(server.hitCount, 1)
     }
 
+    func testProxyRacesPastAnAddressThatNeverAnswers() async throws {
+        // 192.0.2.1 (TEST-NET-1) is never routed, like a silently dropping IPv6
+        // path. Walking addresses in order would wait out its 5 s timeout.
+        let server = MockHTTPServer()
+        let serverPort = try server.start { _ in (200, [:], Data("REACHED".utf8)) }
+        defer { server.stop() }
+        let proxy = EgressProxyServer(
+            targetValidator: { _, port in port == Int(serverPort) },
+            addressResolver: { _ in ["192.0.2.1", "127.0.0.1"] }
+        )
+        let proxyPort = try await proxy.start()
+        defer { proxy.stop() }
+
+        let started = Date()
+        let response = try await sendThroughProxy(
+            port: proxyPort,
+            "GET http://mock.example:\(serverPort)/ HTTP/1.1\r\nHost: mock.example:\(serverPort)\r\nConnection: close\r\n\r\n"
+        )
+        XCTAssertTrue(response.hasPrefix("HTTP/1.1 200"), "Expected 200, got: \(response)")
+        XCTAssertLessThan(Date().timeIntervalSince(started), 2, "The next address joins after 250 ms")
+    }
+
+    func testUpstreamAddressesAlternateFamilies() {
+        XCTAssertEqual(
+            EgressProxyServer.interleavedByFamily(["2001:db8::1", "2001:db8::2", "192.0.2.1", "192.0.2.2", "192.0.2.3"]),
+            ["2001:db8::1", "192.0.2.1", "2001:db8::2", "192.0.2.2", "192.0.2.3"]
+        )
+        XCTAssertEqual(EgressProxyServer.interleavedByFamily(["192.0.2.1", "2001:db8::1"]), ["192.0.2.1", "2001:db8::1"])
+        XCTAssertEqual(EgressProxyServer.interleavedByFamily([]), [])
+    }
+
     func testProxyForwardsPercentEncodedPathUnchanged() async throws {
         let receivedPath = LockedValue<String?>(nil)
         let server = MockHTTPServer()

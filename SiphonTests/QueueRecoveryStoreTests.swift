@@ -38,6 +38,65 @@ final class QueueRecoveryStoreTests: XCTestCase {
         XCTAssertFalse(restored.hasPlayableOutput)
     }
 
+    func testFailedJobWithReviewedArgumentsKeepsItsStatus() {
+        let job = Download(url: "https://example.com/playlist", options: .default)
+        job.options.additionalArguments = "--limit-rate 1M"
+        job.status = .failed
+        job.hasPartialFailure = true
+        job.filePaths = [URL(fileURLWithPath: "/tmp/finished.mp4")]
+        let restored = HistoricDownload(download: job).toDownload()
+        XCTAssertEqual(restored.status, .failed, "Only jobs that would run on their own are held as paused")
+        XCTAssertTrue(restored.requiresAdvancedArgumentsReview)
+        XCTAssertTrue(restored.hasPlayableOutput)
+
+        let queued = Download(url: "https://example.com/video", options: .default)
+        queued.options.additionalArguments = "--limit-rate 1M"
+        queued.status = .queued
+        XCTAssertEqual(HistoricDownload(download: queued).toDownload().status, .paused)
+    }
+
+    func testOwnedOutputFilesSurvivePausedHistoryAndRecovery() throws {
+        let output = URL(fileURLWithPath: "/tmp/owned-output.mp4")
+        let job = Download(url: "https://example.com/video", options: .default)
+        job.status = .paused
+        job.ownedOutputFiles = [output: 4242]
+        let fromHistory = try JSONDecoder().decode(HistoricDownload.self,
+                                                   from: JSONEncoder().encode(HistoricDownload(download: job))).toDownload()
+        XCTAssertEqual(fromHistory.ownedOutputFiles, [output: 4242])
+        let record = try JSONDecoder().decode(QueueRecoveryRecord.self,
+                                              from: JSONEncoder().encode(QueueRecoveryRecord(download: job)))
+        XCTAssertEqual(record.toDownload().ownedOutputFiles, [output: 4242])
+
+        job.status = .failed
+        XCTAssertTrue(HistoricDownload(download: job).toDownload().ownedOutputFiles.isEmpty,
+                      "Only a resumed pause may reuse its output")
+    }
+
+    func testUnreadableRecoveryEntryDoesNotDropOtherJobs() throws {
+        let store = QueueRecoveryStore(fileURL: recoveryFileURL)
+        let first = Download(url: "https://example.com/one", options: .default)
+        first.status = .downloading
+        let second = Download(url: "https://example.com/two", options: .default)
+        second.status = .queued
+        XCTAssertTrue(store.persist(activeJobs: [first, second]))
+
+        var json = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: recoveryFileURL)) as? [String: Any])
+        var jobs = try XCTUnwrap(json["jobs"] as? [[String: Any]])
+        jobs[0]["options"] = "not options"
+        json["jobs"] = jobs
+        try JSONSerialization.data(withJSONObject: json).write(to: recoveryFileURL)
+
+        XCTAssertEqual(store.loadInterruptedJobs().map(\.id), [second.id])
+    }
+
+    func testUnreadableRecoverySnapshotIsPreservedBeforeOverwrite() throws {
+        try Data("{ not json".utf8).write(to: recoveryFileURL)
+        let store = QueueRecoveryStore(fileURL: recoveryFileURL)
+        XCTAssertTrue(store.loadInterruptedJobs().isEmpty)
+        let backup = recoveryFileURL.appendingPathExtension("corrupt")
+        XCTAssertEqual(try String(contentsOf: backup, encoding: .utf8), "{ not json")
+    }
+
     private var tempDir: URL!
     private var recoveryFileURL: URL!
     private var originalHistory: Any?

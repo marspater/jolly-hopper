@@ -89,8 +89,12 @@ struct DebugLogView: View {
 
                 Button {
                     Task {
-                        if let url = try? await logger.exportLogs() {
+                        do {
+                            let url = try await logger.exportLogs()
                             NSWorkspace.shared.activateFileViewerSelecting([url])
+                        } catch {
+                            logger.log("Failed to export logs: \(error.localizedDescription)", level: .error)
+                            NSAlert(error: error).runModal()
                         }
                     }
                 } label: {
