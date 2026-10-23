@@ -816,25 +816,34 @@ class YtdlpService: ObservableObject {
             return
         }
         if !DependencyChecksums.managedYtdlpEnabled {
-            ytdlpPath = nil
-            isAvailable = false
-            version = nil
+            // Validate before touching the current path, then switch in one step:
+            // clearing it first left a window where a starting job found no yt-dlp.
+            let clear = {
+                self.ytdlpPath = nil
+                self.isAvailable = false
+                self.version = nil
+            }
             guard let candidate = Self.userYtdlpPath() else {
+                clear()
                 LoggerService.shared.log("No yt-dlp found. Set its path in Settings > Advanced.", level: .warning)
                 return
             }
             // Commit only a binary that identifies itself as yt-dlp.
+            let candidateVersion: String
             do {
                 let output = try await processRunner.runCommand([candidate.path, "--ignore-config", "--version"])
                 guard Self.isYtdlpVersion(output) else {
+                    clear()
                     LoggerService.shared.log("\(candidate.path) is not yt-dlp (unexpected --version output).", level: .warning)
                     return
                 }
-                version = output.trimmingCharacters(in: .whitespacesAndNewlines)
+                candidateVersion = output.trimmingCharacters(in: .whitespacesAndNewlines)
             } catch {
+                clear()
                 LoggerService.shared.log("\(candidate.path) failed its yt-dlp version check: \(error.localizedDescription)", level: .warning)
                 return
             }
+            version = candidateVersion
             ytdlpPath = candidate
             isAvailable = true
             LoggerService.shared.log("Using user-provided yt-dlp at \(candidate.path)", level: .info)
@@ -4757,7 +4766,7 @@ public struct DownloadResult: Sendable {
                 try Task.checkCancellation()
                 let output: String
                 do {
-                    output = try await processRunner.runCommand(args)
+                    output = try await runMetadataCommand(args)
                 } catch is CancellationError {
                     throw CancellationError()
                 } catch {
@@ -6473,7 +6482,7 @@ public struct DownloadResult: Sendable {
     /// fails with exit code 1, which is the usual case for these fallbacks.
     private func dumpPagesOutput(_ args: [String]) async -> String? {
         do {
-            return try await processRunner.runCommand(args)
+            return try await runMetadataCommand(args)
         } catch YtdlpError.commandFailed(let output) {
             return output
         } catch {
@@ -7658,9 +7667,38 @@ public struct DownloadResult: Sendable {
         return cleanArgs
     }
 
+    /// A metadata run that never exits (a stalled CDN, a hung extractor) held
+    /// the job in Fetching, and its download slot, until the user pressed Stop.
+    /// Only yt-dlp processes are bounded: a site window waiting for the user
+    /// (Gayteam, BoyfriendTV sign-in) is not a process and keeps its own limits.
+    var metadataCommandTimeout: TimeInterval = 120
+
+    private func runMetadataCommand(_ args: [String]) async throws -> String {
+        let runner = processRunner
+        let timeout = metadataCommandTimeout
+        struct TimedOut: Error {}
+        do {
+            return try await withThrowingTaskGroup(of: String.self) { group in
+                // Cancelling the run's task stops its process (the runner's
+                // cancellation handler terminates the process tree).
+                group.addTask { try await runner.runCommand(args) }
+                group.addTask {
+                    try await Task.sleep(nanoseconds: UInt64(timeout * 1_000_000_000))
+                    throw TimedOut()
+                }
+                defer { group.cancelAll() }
+                guard let output = try await group.next() else { throw CancellationError() }
+                return output
+            }
+        } catch is TimedOut {
+            LoggerService.shared.log("yt-dlp metadata run exceeded \(Int(timeout)) s; stopped it", level: .warning)
+            throw YtdlpError.downloadFailed(LanguageService.s("metadata_timed_out"))
+        }
+    }
+
     private func runTransportCommand(_ args: [String]) async throws -> String {
         do {
-            return try await processRunner.runCommand(args)
+            return try await runMetadataCommand(args)
         } catch {
             try Task.checkCancellation()
             guard usesBrowserTransport(args.last ?? ""),
@@ -7671,7 +7709,7 @@ public struct DownloadResult: Sendable {
                 try await Task.sleep(nanoseconds: 1_000_000_000)
             }
             try Task.checkCancellation()
-            return try await processRunner.runCommand(args)
+            return try await runMetadataCommand(args)
         }
     }
 

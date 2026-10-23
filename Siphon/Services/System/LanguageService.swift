@@ -247,6 +247,7 @@ class LanguageService: ObservableObject {
         "subtitle_lang_hint": "Language code, e.g. en",
         "update_ready_title": "Update Installed",
         "update_failed_title": "Update Failed",
+        "metadata_timed_out": "yt-dlp did not finish reading this page within 2 minutes, so Siphon stopped it. Try again, or check the link and your connection.",
         "clear_sites_failed": "Some site data could not be cleared. Close any open site windows and try again.",
         "update_ready_message": "Restart Siphon to finish updating.",
         "language_changed_title": "Language Changed",
