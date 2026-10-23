@@ -4572,6 +4572,21 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertFalse(YtdlpService.resolvedStreamIsFresh(info, now: now), "A job queued past the hour resolves again")
     }
 
+    func testMetadataRunThatNeverExitsIsStopped() async throws {
+        service.metadataCommandTimeout = 0.3
+        service.processRunner = MockYtdlpProcessRunner(mockCommand: { _ in
+            try await Task.sleep(nanoseconds: 30_000_000_000)
+            return "{}"
+        })
+        let started = Date()
+        do {
+            _ = try await service.fetchInfo(url: "https://example.com/video")
+            XCTFail("A hung metadata run must fail")
+        } catch {
+            XCTAssertLessThan(Date().timeIntervalSince(started), 10)
+        }
+    }
+
     func testRecuPacingSurvivesUserConcurrentFragments() async throws {
         let pageURL = "https://recu.me/polarny05/video/112873588/play"
         let stream = "https://cdn.example.test/master.m3u8?uid=ab1234cd&request_id=f00dbeef&expires=1790000321&md5=x"

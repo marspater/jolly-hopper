@@ -644,7 +644,9 @@ final class DownloadManagerTests: XCTestCase {
 
         // Assert download title was NOT updated and status remains .stopped
         XCTAssertEqual(download.status, .stopped, "Status should remain stopped")
-        XCTAssertEqual(download.title, "___FETCHING___", "Title should not be overwritten with fetched title after cancellation")
+        // Stop now cancels the metadata run itself, so the stopped job gets the
+        // URL-derived title like any stopped job, never the fetched one.
+        XCTAssertNotEqual(download.title, "Fetched Title Should Not Be Set", "Title should not be overwritten with fetched title after cancellation")
     }
 
     func testProcessDownloadHandlesYtdlpErrorCases() async {
