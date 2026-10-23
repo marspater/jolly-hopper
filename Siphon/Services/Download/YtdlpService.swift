@@ -2187,14 +2187,21 @@ public struct DownloadResult: Sendable {
         // (saves a round of site requests and ~1-2 s). Only for the URL it was
         // fetched from, only while its signed stream URLs are surely fresh.
         var infoJSONFile: URL?
-        if targetURL == normalizedURL,
+        var infoJSON: Data?
+        let isDirectMP4Info = isGuywhURL(url) && targetURL != normalizedURL
+        if isDirectMP4Info {
+            infoJSON = Self.directMP4InfoJSON(streamURL: targetURL, pageURL: normalizedURL, title: customResolvedTitle)
+        } else if targetURL == normalizedURL,
            !Self.requiresHlsVariantQuery(targetURL),
            mediaInfo?.playlist == nil,
            let raw = mediaInfo?.rawJSON,
            let fetchedAt = mediaInfo?.fetchedAt,
            Date().timeIntervalSince(fetchedAt) < Self.reusableInfoMaxAge {
+            infoJSON = raw
+        }
+        if let infoJSON {
             let file = scratchDirectory.appendingPathComponent("siphon_info.json")
-            if FileManager.default.createFile(atPath: file.path, contents: raw, attributes: [.posixPermissions: 0o600]) {
+            if FileManager.default.createFile(atPath: file.path, contents: infoJSON, attributes: [.posixPermissions: 0o600]) {
                 infoJSONFile = file
                 args.append(contentsOf: ["--load-info-json", file.path])
             }
@@ -2305,6 +2312,8 @@ public struct DownloadResult: Sendable {
         }
 
         var triedStrategies = Set<DownloadRecoveryStrategy>()
+        // Extracting the stream link again only reaches the extension yt-dlp refuses.
+        if isDirectMP4Info { triedStrategies.insert(.freshExtraction) }
         var currentArgs = args
         // The URL stays in the arguments (cookie export and the fresh-extraction
         // fallback need it), so yt-dlp's expected notice about it is not job output.
@@ -5671,20 +5680,8 @@ public struct DownloadResult: Sendable {
         }
 
         // Extract Stream URL & Quality
-        var streamURL: String? = nil
+        var streamURL = Self.guywhStreamURL(in: html)
         var quality: String? = nil
-
-        for regex in Self.guywhStreamRegexes {
-            if let match = regex.firstMatch(in: html, options: [], range: NSRange(location: 0, length: (html as NSString).length)),
-               match.numberOfRanges > 1 {
-                let candidate = (html as NSString).substring(with: match.range(at: 1))
-                    .replacingOccurrences(of: "\\/", with: "/")
-                if candidate.hasPrefix("http") {
-                    streamURL = candidate
-                    break
-                }
-            }
-        }
 
         // Extract Quality Text if present
         if html.contains("video_url_fhd: '1'") || html.contains("video_url_fhd: 1") {
@@ -5723,17 +5720,7 @@ public struct DownloadResult: Sendable {
                let httpResponse = response as? HTTPURLResponse,
                (200...299).contains(httpResponse.statusCode),
                let embedHtml = String(data: data, encoding: .utf8) {
-                for regex in Self.guywhStreamRegexes {
-                    if let match = regex.firstMatch(in: embedHtml, options: [], range: NSRange(location: 0, length: (embedHtml as NSString).length)),
-                       match.numberOfRanges > 1 {
-                        let candidate = (embedHtml as NSString).substring(with: match.range(at: 1))
-                            .replacingOccurrences(of: "\\/", with: "/")
-                        if candidate.hasPrefix("http") {
-                            streamURL = candidate
-                            break
-                        }
-                    }
-                }
+                streamURL = Self.guywhStreamURL(in: embedHtml)
             }
         }
 
@@ -5747,6 +5734,40 @@ public struct DownloadResult: Sendable {
             duration: nil,
             quality: quality
         )
+    }
+
+    /// The player's stream link, query included: the `v-acctoken` the page signs
+    /// `video_url` with is what keeps `get_file` from answering 403.
+    nonisolated static func guywhStreamURL(in html: String) -> String? {
+        let range = NSRange(location: 0, length: (html as NSString).length)
+        for regex in guywhStreamRegexes {
+            if let match = regex.firstMatch(in: html, options: [], range: range), match.numberOfRanges > 1 {
+                let candidate = (html as NSString).substring(with: match.range(at: 1))
+                    .replacingOccurrences(of: "\\/", with: "/")
+                if candidate.hasPrefix("http") { return candidate }
+            }
+        }
+        return nil
+    }
+
+    /// yt-dlp metadata for a direct MP4 link, loaded with `--load-info-json`.
+    /// Guywh's `get_file` link redirects to `remote_control.php`, whose extension
+    /// yt-dlp's generic extractor refuses as unsafe. Naming the MP4 here lets
+    /// yt-dlp download it (following the redirect) without extracting, so no
+    /// unsafe extension is allowed anywhere.
+    nonisolated static func directMP4InfoJSON(streamURL: String, pageURL: String, title: String?) -> Data? {
+        let fileName = URL(string: streamURL)?.deletingPathExtension().lastPathComponent ?? ""
+        let id = fileName.isEmpty || fileName == "/" ? "video" : fileName
+        let info: [String: Any] = [
+            "id": id,
+            "title": title ?? id,
+            "url": streamURL,
+            "ext": "mp4",
+            "webpage_url": pageURL,
+            "extractor": "generic",
+            "extractor_key": "Generic"
+        ]
+        return try? JSONSerialization.data(withJSONObject: info)
     }
 
     // MARK: - GFF Extractor
