@@ -23,7 +23,10 @@ jobs:
               echo "Could not resolve the last server/ commit (shallow checkout?)" >&2
               exit 1
             fi
-            echo "export SERVER_REVISION=\"${SERVER_REVISION}\"" >> "$BASH_ENV"
+            # Render may be running any later commit with the same server/ tree
+            # (e.g. after a force-push it redeploys HEAD), so accept them all.
+            ACCEPTED_COMMITS=$({ echo "$SERVER_REVISION"; git rev-list "${SERVER_REVISION}..HEAD"; } | paste -sd, -)
+            echo "export ACCEPTED_COMMITS=\"${ACCEPTED_COMMITS}\"" >> "$BASH_ENV"
             echo "export APP_VERSION=\"${APP_VERSION}-${SERVER_REVISION:0:7}\"" >> "$BASH_ENV"
       - run:
           name: Plan deployment
@@ -45,7 +48,7 @@ jobs:
             fi
 
             node scripts/verify_deployment.js https://jolly-hopper.onrender.com/healthz \
-              --commit "${SERVER_REVISION}" \
+              --commit "${ACCEPTED_COMMITS}" \
               --version "${APP_VERSION}" \
               --timeout 180 \
               --interval 10

@@ -62,7 +62,9 @@ async function queryHealthEndpoint(url, fetchImpl) {
 function checkMatch({ payload, expectedCommit, expectedVersion }) {
   const lastSeenCommit = payload?.commit ?? '';
   const lastSeenVersion = payload?.version ?? '';
-  const commitMatches = !expectedCommit || commitsMatch(lastSeenCommit, expectedCommit);
+  // expectedCommit may list several commits (comma-separated) that all ship the same server/ tree.
+  const commitMatches = !expectedCommit
+    || String(expectedCommit).split(',').some((c) => commitsMatch(lastSeenCommit, c));
 
   let versionMatches = true;
   if (expectedVersion && expectedVersion !== 'latest') {

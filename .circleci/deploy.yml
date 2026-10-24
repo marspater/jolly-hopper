@@ -68,8 +68,11 @@ jobs:
               echo "Could not resolve the last server/ commit (shallow checkout?)" >&2
               exit 1
             fi
+            # Render may be running any later commit with the same server/ tree
+            # (e.g. after a force-push it redeploys HEAD), so accept them all.
+            ACCEPTED_COMMITS=$({ echo "$SERVER_REVISION"; git rev-list "${SERVER_REVISION}..HEAD"; } | paste -sd, -)
             node scripts/verify_deployment.js https://jolly-hopper.onrender.com/healthz \
-              --commit "${SERVER_REVISION}" \
+              --commit "${ACCEPTED_COMMITS}" \
               --version "${TARGET_VERSION:-}" \
               --timeout 180 \
               --interval 10
