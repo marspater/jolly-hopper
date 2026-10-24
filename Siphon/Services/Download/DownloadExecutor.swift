@@ -96,7 +96,9 @@ final class DownloadEventCoalescer: @unchecked Sendable {
         let p = pendingProgress
         let lines = pendingLogLines
         pendingProgress = nil
-        pendingLogLines.removeAll()
+        // Bolt Performance Optimization: Preserve array buffer capacity across flush cycles
+        // to avoid repetitive heap allocation and GC churn during high-frequency log updates.
+        pendingLogLines.removeAll(keepingCapacity: true)
         pendingLogBytes = 0
         lock.unlock()
 
