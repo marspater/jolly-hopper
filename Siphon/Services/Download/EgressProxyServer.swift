@@ -672,11 +672,12 @@ public final class EgressProxyServer: @unchecked Sendable {
 
     /// Alternates address families, starting with the resolver's first choice
     /// and keeping its order within each family.
-    static func interleavedByFamily(_ addresses: [String]) -> [String] {
+    static func interleavedByFamily(_ addresses: [String], preferIPv4: Bool = (!NetworkEnvironmentService.shared.supportsIPv6 || NetworkEnvironmentService.shared.isVPNActive)) -> [String] {
         guard let first = addresses.first else { return [] }
-        let firstIsV6 = IPv6Address(first) != nil
-        let preferred = addresses.filter { (IPv6Address($0) != nil) == firstIsV6 }
-        let other = addresses.filter { (IPv6Address($0) != nil) != firstIsV6 }
+        let hasV4 = addresses.contains { IPv4Address($0) != nil }
+        let preferV6 = !preferIPv4 && (IPv6Address(first) != nil || !hasV4)
+        let preferred = addresses.filter { (IPv6Address($0) != nil) == preferV6 }
+        let other = addresses.filter { (IPv6Address($0) != nil) != preferV6 }
         var result: [String] = []
         for index in 0..<max(preferred.count, other.count) {
             if index < preferred.count { result.append(preferred[index]) }
