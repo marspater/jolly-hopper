@@ -183,6 +183,39 @@ final class QueueRecoveryStoreTests: XCTestCase {
         XCTAssertTrue(recoverable.isEmpty, "Corrupt file must yield empty list without crashing")
     }
 
+    func testUnsupportedSchemaVersionSnapshotPreservedAndNotOverwrittenOnShutdown() throws {
+        let v2JSON = """
+        {
+            "version": 2,
+            "timestamp": "2026-10-24T00:00:00Z",
+            "isCleanShutdown": false,
+            "jobs": [
+                {
+                    "id": "11111111-1111-1111-1111-111111111111",
+                    "url": "https://example.com/future-job",
+                    "status": "downloading"
+                }
+            ]
+        }
+        """
+        try v2JSON.write(to: recoveryFileURL, atomically: true, encoding: .utf8)
+
+        let store = QueueRecoveryStore(fileURL: recoveryFileURL)
+        let recoverable = store.loadInterruptedJobs()
+        XCTAssertTrue(recoverable.isEmpty, "Unsupported schema version should yield empty list in older store")
+        XCTAssertTrue(store.hasUnsupportedSchemaSnapshot, "Store must record presence of unsupported schema snapshot")
+
+        let backupURL = recoveryFileURL.appendingPathExtension("unsupported-v2")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: backupURL.path), "Unsupported snapshot must be backed up")
+
+        let cleanShutdownSucceeded = store.markCleanShutdown()
+        XCTAssertTrue(cleanShutdownSucceeded)
+
+        let dataAfterShutdown = try Data(contentsOf: recoveryFileURL)
+        let jsonAfterShutdown = try JSONSerialization.jsonObject(with: dataAfterShutdown) as? [String: Any]
+        XCTAssertEqual(jsonAfterShutdown?["version"] as? Int, 2, "Unsupported future-version snapshot must not be overwritten by clean shutdown")
+    }
+
     func testClearRecoveryState() {
         let store = QueueRecoveryStore(fileURL: recoveryFileURL)
         let dl = Download(url: "https://example.com/video1", options: .default, title: "Video 1")

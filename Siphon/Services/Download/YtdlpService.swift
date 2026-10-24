@@ -1583,8 +1583,8 @@ class YtdlpService: ObservableObject {
             }
             let isTransientNet = !usesBrowserTransport(url) && Self.isTransientNetworkError(String(describing: error))
             if allowPhantomJSRetry && (Self.isPhantomJSError(error) || isTransientNet) {
-                let reason = Self.isPhantomJSError(error) ? "PornHub challenge / PhantomJS error" : "Transient network/VPN error"
-                LoggerService.shared.log("\(reason) encountered. Retrying metadata extraction...", level: .warning)
+                let reason = Self.isPhantomJSError(error) ? "Anti-bot challenge / PhantomJS error" : "Transient network/VPN error"
+                LoggerService.shared.log("\(reason) encountered. Retrying metadata extraction with fresh connection...", level: .warning)
                 if processRunner is DefaultYtdlpProcessRunner {
                     try await Task.sleep(nanoseconds: 1_500_000_000)
                 }
@@ -2593,11 +2593,11 @@ public struct DownloadResult: Sendable {
                     continue
                 }
 
-                // Strategy 7: PornHub challenge / PhantomJS fallback -> Retry with fresh connection
+                // Strategy 7: Anti-bot challenge / PhantomJS fallback -> Retry with fresh connection
                 if !errText.isEmpty, Self.isPhantomJSError(errText), !triedStrategies.contains(.retryPhantomJSChallenge) {
                     triedStrategies.insert(.retryPhantomJSChallenge)
-                    LoggerService.shared.log("PornHub challenge / PhantomJS error encountered (\(errText.trimmingCharacters(in: .whitespacesAndNewlines))). Retrying download after cookie sync...", level: .warning)
-                    onOutput("[Siphon Info] Site anti-bot challenge encountered. Retrying download stream...\n")
+                    LoggerService.shared.log("Anti-bot challenge / PhantomJS error encountered (\(errText.trimmingCharacters(in: .whitespacesAndNewlines))). Retrying download with fresh connection...", level: .warning)
+                    onOutput("[Siphon Info] Site anti-bot challenge encountered. Retrying download stream with fresh connection...\n")
                     if processRunner is DefaultYtdlpProcessRunner {
                         try await Task.sleep(nanoseconds: 1_500_000_000)
                     }
@@ -7467,7 +7467,7 @@ public struct DownloadResult: Sendable {
         let isVPN = NetworkEnvironmentService.shared.isVPNActive
         let socketTimeout = isVPN ? "30" : "15"
         args.append(contentsOf: ["--socket-timeout", socketTimeout])
-        if (isVPN || !NetworkEnvironmentService.shared.supportsIPv6) && !args.contains("-4") && !args.contains("--force-ipv4") {
+        if !NetworkEnvironmentService.shared.supportsIPv6 && !args.contains("-4") && !args.contains("--force-ipv4") {
             args.append("--force-ipv4")
         }
         args.append("--no-mtime")

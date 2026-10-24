@@ -26,7 +26,6 @@ public final class NetworkEnvironmentService: @unchecked Sendable {
 
     // Secondary Insights state
     private var secondaryNordConfirmed: Bool = false
-    private var inFlightInsightsTask: Task<Void, Never>?
 
     public var overrideIsVPNActive: Bool? {
         get { lock.withLock { storedOverrideIsVPNActive } }
@@ -110,12 +109,11 @@ public final class NetworkEnvironmentService: @unchecked Sendable {
 
     deinit {
         monitor?.cancel()
-        inFlightInsightsTask?.cancel()
     }
 
     public static let defaultInsightsEndpoint = URL(string: "https://api.nordvpn.com/v1/helpers/ips/insights")
 
-    /// Optional, non-blocking secondary check against NordVPN Insights endpoint.
+    /// Optional, non-blocking check against NordVPN Insights endpoint.
     /// Local detection via NWPathMonitor remains the primary authoritative signal.
     /// This request is purely best-effort, never blocks downloads or startup,
     /// and gracefully degrades if the undocumented endpoint changes or fails.
@@ -160,39 +158,9 @@ public final class NetworkEnvironmentService: @unchecked Sendable {
         }
     }
 
-    private func recordSecondaryNordConfirmation() {
-        lock.withLock {
-            secondaryNordConfirmed = true
-        }
-        Task { @MainActor in
-            LoggerService.shared.log("[Network] NordVPN confirmed via secondary Insights check.", level: .info)
-        }
-    }
-
-    private func triggerOptionalSecondaryInsightsCheck(session: URLSession? = nil) {
-        if NotificationService.isRunningTests && session == nil {
-            return
-        }
-
-        let task = Task.detached(priority: .utility) { [weak self] in
-            guard let self else { return }
-            let isConfirmed = await Self.performInsightsCheck(session: session)
-            if !Task.isCancelled && isConfirmed {
-                self.recordSecondaryNordConfirmation()
-            }
-        }
-
-        lock.withLock {
-            inFlightInsightsTask?.cancel()
-            inFlightInsightsTask = task
-        }
-    }
-
     public func resetSecondaryInsightsForTesting() {
         lock.withLock {
             secondaryNordConfirmed = false
-            inFlightInsightsTask?.cancel()
-            inFlightInsightsTask = nil
         }
     }
 
@@ -212,7 +180,6 @@ public final class NetworkEnvironmentService: @unchecked Sendable {
         let isVPNActive: Bool
         let isNordVPN: Bool
         let ipv6Supported: Bool
-        let shouldTriggerInsights: Bool
     }
 
     private func computePathUpdate(_ path: NWPath) -> NetworkStateChange {
@@ -222,25 +189,16 @@ public final class NetworkEnvironmentService: @unchecked Sendable {
         let changed = (lastReportedVPNState != active)
         lastReportedVPNState = active
 
-        let shouldTrigger = updateInsightsLifecycle(active: active, changed: changed, localNord: localNord)
+        if !active {
+            secondaryNordConfirmed = false
+        }
+
         return NetworkStateChange(
             vpnChanged: changed,
             isVPNActive: active,
             isNordVPN: localNord || secondaryNordConfirmed,
-            ipv6Supported: path.supportsIPv6,
-            shouldTriggerInsights: shouldTrigger
+            ipv6Supported: path.supportsIPv6
         )
-    }
-
-    private func updateInsightsLifecycle(active: Bool, changed: Bool, localNord: Bool) -> Bool {
-        guard active else {
-            secondaryNordConfirmed = false
-            inFlightInsightsTask?.cancel()
-            inFlightInsightsTask = nil
-            return false
-        }
-        if changed { return true }
-        return !localNord && !secondaryNordConfirmed
     }
 
     private func logStateChange(_ change: NetworkStateChange) {
@@ -257,11 +215,6 @@ public final class NetworkEnvironmentService: @unchecked Sendable {
 
     private func handlePathUpdate(_ path: NWPath) {
         let change = lock.withLock { computePathUpdate(path) }
-
-        if change.shouldTriggerInsights {
-            triggerOptionalSecondaryInsightsCheck()
-        }
-
         logStateChange(change)
     }
 }

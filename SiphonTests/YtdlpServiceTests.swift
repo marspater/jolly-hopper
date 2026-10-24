@@ -5604,9 +5604,13 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertTrue(YtdlpService.isTransientNetworkError("ERROR: [download] got error: nodename nor servname provided, or not known"))
     }
 
-    func testForceIPv4ArgumentAppendedWhenVPNActive() async throws {
+    func testForceIPv4ArgumentAppendedWhenIPv6Unsupported() async throws {
         NetworkEnvironmentService.shared.overrideIsVPNActive = true
-        defer { NetworkEnvironmentService.shared.overrideIsVPNActive = nil }
+        NetworkEnvironmentService.shared.overrideSupportsIPv6 = false
+        defer {
+            NetworkEnvironmentService.shared.overrideIsVPNActive = nil
+            NetworkEnvironmentService.shared.overrideSupportsIPv6 = nil
+        }
 
         service.ytdlpPath = URL(fileURLWithPath: "/usr/local/bin/yt-dlp")
         let capturedArgsBox = TestBox<[String]>([])
@@ -5626,6 +5630,37 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertTrue(capturedArgsBox.value.contains("--force-ipv4"), "yt-dlp should be given --force-ipv4 when VPN is active")
         if let idx = capturedArgsBox.value.firstIndex(of: "--socket-timeout"), idx + 1 < capturedArgsBox.value.count {
             XCTAssertEqual(capturedArgsBox.value[idx + 1], "30", "Socket timeout should be 30s when VPN is active")
+        } else {
+            XCTFail("Missing --socket-timeout in command args")
+        }
+    }
+
+    func testForceIPv4NotAppendedWhenIPv6SupportedEvenWithVPN() async throws {
+        NetworkEnvironmentService.shared.overrideIsVPNActive = true
+        NetworkEnvironmentService.shared.overrideSupportsIPv6 = true
+        defer {
+            NetworkEnvironmentService.shared.overrideIsVPNActive = nil
+            NetworkEnvironmentService.shared.overrideSupportsIPv6 = nil
+        }
+
+        service.ytdlpPath = URL(fileURLWithPath: "/usr/local/bin/yt-dlp")
+        let capturedArgsBox = TestBox<[String]>([])
+        service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
+            capturedArgsBox.value = args
+            return """
+            {
+                "id": "vpn123",
+                "title": "VPN Test Video",
+                "duration": 60,
+                "formats": [{"format_id": "best", "ext": "mp4", "protocol": "https"}]
+            }
+            """
+        })
+
+        _ = try await service.fetchInfo(url: "https://example.com/video")
+        XCTAssertFalse(capturedArgsBox.value.contains("--force-ipv4"), "yt-dlp should not force IPv4 when IPv6 is supported")
+        if let idx = capturedArgsBox.value.firstIndex(of: "--socket-timeout"), idx + 1 < capturedArgsBox.value.count {
+            XCTAssertEqual(capturedArgsBox.value[idx + 1], "30", "Socket timeout should still be 30s when VPN is active")
         } else {
             XCTFail("Missing --socket-timeout in command args")
         }
