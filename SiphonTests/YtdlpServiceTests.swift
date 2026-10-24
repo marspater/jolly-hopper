@@ -1877,6 +1877,24 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertEqual(formats.first?.formatId, "1080")
         XCTAssertEqual(formats.first?.resolution, "1920x1080")
         XCTAssertEqual(formats.last?.formatId, "240")
+
+        XCTAssertEqual(YtdlpService.resolveBeegStreamURL("key=a,end=1/multi=640x360:360p:avc/_TPL_/1.mp4.m3u8"),
+                       "https://video.beeg.com/key=a,end=1/multi=640x360:360p:avc/_TPL_/1.mp4.m3u8")
+        XCTAssertEqual(YtdlpService.resolveBeegStreamURL("/key=a/1.mp4.m3u8"), "https://video.beeg.com/key=a/1.mp4.m3u8")
+        XCTAssertEqual(YtdlpService.resolveBeegStreamURL("https://video.beeg.com/k/1.m3u8"), "https://video.beeg.com/k/1.m3u8")
+        for rejected in [
+            "file:///etc/passwd",
+            "http://video.beeg.com/k/1.m3u8",
+            "https://127.0.0.1/k/1.m3u8",
+            "https://192.168.1.10/k/1.m3u8",
+            "https://user:pass@video.beeg.com/k/1.m3u8",
+            "https://attacker.example/k/1.m3u8",
+            "https://attacker.example/?next=video.beeg.com",
+            "https://video.beeg.com.attacker.example/k/1.m3u8",
+            "https://beeg.com/-0773966699255726"
+        ] {
+            XCTAssertNil(YtdlpService.resolveBeegStreamURL(rejected), "\(rejected) must not become a stream URL")
+        }
     }
 
     func testBeegFetchInfoResolvesDirectHLSAndMetadata() async throws {

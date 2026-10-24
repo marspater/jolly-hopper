@@ -607,12 +607,15 @@ class YtdlpService: ObservableObject {
         return candidate.path == root.path || candidate.path.hasPrefix(root.path + "/")
     }
 
-    nonisolated static let supportedMediaExtensions: Set<String> = [
+    nonisolated static let videoMediaExtensions: Set<String> = [
         "mp4", "m4v", "mkv", "webm", "mov", "avi", "flv", "wmv", "ts",
-        "mpg", "mpeg", "3gp", "3g2", "ogv", "m2ts", "mts", "f4v",
+        "mpg", "mpeg", "3gp", "3g2", "ogv", "m2ts", "mts", "f4v"
+    ]
+
+    nonisolated static let supportedMediaExtensions: Set<String> = videoMediaExtensions.union([
         "mp3", "m4a", "aac", "flac", "wav", "opus", "ogg", "alac", "aiff",
         "aif", "oga", "mka", "m4b", "wma", "weba", "mp2"
-    ]
+    ])
 
     nonisolated static func isMediaFilePath(_ path: String) -> Bool {
         let ext = (path as NSString).pathExtension.lowercased()
@@ -2060,7 +2063,8 @@ public struct DownloadResult: Sendable {
                 customThumbnailURL = btvMedia.thumbnailURL
             }
         } else if isBeegURL(url) {
-            if let streamURL = mediaInfo?.manifestUrl ?? mediaInfo?.originalUrl, !streamURL.isEmpty, streamURL.contains("video.beeg.com"),
+            if let streamURL = mediaInfo?.manifestUrl ?? mediaInfo?.originalUrl,
+               let parsedStream = URL(string: streamURL), Self.isBeegStreamURL(parsedStream),
                Self.resolvedStreamIsFresh(mediaInfo) {
                 targetURL = streamURL
                 customResolvedTitle = mediaInfo?.title
@@ -5740,7 +5744,7 @@ public struct DownloadResult: Sendable {
 
     private static let beegHost = "beeg.com"
     private static let beegStoreHost = "store.externulls.com"
-    private static let beegVideoHost = "video.beeg.com"
+    nonisolated private static let beegVideoHost = "video.beeg.com"
     private static let beegThumbsHost = "thumbs.externulls.com"
 
     nonisolated static func beegURL(host: String, pathComponents: [String] = []) -> URL? {
@@ -5820,6 +5824,20 @@ public struct DownloadResult: Sendable {
         return formats.map(\.format)
     }
 
+    /// The only stream URLs handed to yt-dlp: https on the video CDN host, no credentials.
+    nonisolated static func isBeegStreamURL(_ url: URL) -> Bool {
+        url.scheme?.lowercased() == "https" && url.host?.lowercased() == beegVideoHost
+            && url.user == nil && url.password == nil
+    }
+
+    /// play_url returns either an absolute URL or a path relative to the video CDN.
+    nonisolated static func resolveBeegStreamURL(_ playText: String) -> String? {
+        guard let base = beegURL(host: beegVideoHost),
+              let url = URL(string: playText, relativeTo: base)?.absoluteURL,
+              isBeegStreamURL(url) else { return nil }
+        return url.absoluteString
+    }
+
     func resolveBeegMediaInfo(url: String, proxy _: String? = nil) async throws -> BeegExtractedMedia? {
         if let custom = beegMediaResolver {
             return try await custom(url)
@@ -5850,15 +5868,9 @@ public struct DownloadResult: Sendable {
             return nil
         }
 
-        let streamURL: String
-        if playText.hasPrefix("http://") || playText.hasPrefix("https://") {
-            streamURL = playText
-        } else if let base = Self.beegURL(host: Self.beegVideoHost),
-                  let combined = URL(string: playText, relativeTo: base) {
-            streamURL = combined.absoluteString
-        } else {
-            let cleanPath = playText.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-            streamURL = Self.beegURL(host: Self.beegVideoHost, pathComponents: [cleanPath])?.absoluteString ?? playText
+        guard let streamURL = Self.resolveBeegStreamURL(playText) else {
+            LoggerService.shared.log("Beeg: play_url response for ID \(videoID) is not an https URL on the video CDN", level: .warning)
+            return nil
         }
 
         var title = "Beeg Video \(videoID)"
