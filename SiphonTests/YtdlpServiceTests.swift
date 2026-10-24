@@ -1877,6 +1877,12 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertEqual(formats.first?.formatId, "1080")
         XCTAssertEqual(formats.first?.resolution, "1920x1080")
         XCTAssertEqual(formats.last?.formatId, "240")
+
+        XCTAssertEqual(YtdlpService.resolveBeegStreamURL("key=a,end=1/multi=640x360:360p:avc/_TPL_/1.mp4.m3u8"),
+                       "https://video.beeg.com/key=a,end=1/multi=640x360:360p:avc/_TPL_/1.mp4.m3u8")
+        XCTAssertEqual(YtdlpService.resolveBeegStreamURL("/key=a/1.mp4.m3u8"), "https://video.beeg.com/key=a/1.mp4.m3u8")
+        XCTAssertEqual(YtdlpService.resolveBeegStreamURL("https://video.beeg.com/k/1.m3u8"), "https://video.beeg.com/k/1.m3u8")
+        XCTAssertNil(YtdlpService.resolveBeegStreamURL("file:///etc/passwd"))
     }
 
     func testBeegFetchInfoResolvesDirectHLSAndMetadata() async throws {

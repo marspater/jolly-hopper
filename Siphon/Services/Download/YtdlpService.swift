@@ -5740,7 +5740,7 @@ public struct DownloadResult: Sendable {
 
     private static let beegHost = "beeg.com"
     private static let beegStoreHost = "store.externulls.com"
-    private static let beegVideoHost = "video.beeg.com"
+    nonisolated private static let beegVideoHost = "video.beeg.com"
     private static let beegThumbsHost = "thumbs.externulls.com"
 
     nonisolated static func beegURL(host: String, pathComponents: [String] = []) -> URL? {
@@ -5820,6 +5820,14 @@ public struct DownloadResult: Sendable {
         return formats.map(\.format)
     }
 
+    /// play_url returns either an absolute URL or a path relative to the video CDN.
+    nonisolated static func resolveBeegStreamURL(_ playText: String) -> String? {
+        guard let base = beegURL(host: beegVideoHost),
+              let url = URL(string: playText, relativeTo: base),
+              ["http", "https"].contains(url.scheme?.lowercased()) else { return nil }
+        return url.absoluteString
+    }
+
     func resolveBeegMediaInfo(url: String, proxy _: String? = nil) async throws -> BeegExtractedMedia? {
         if let custom = beegMediaResolver {
             return try await custom(url)
@@ -5850,15 +5858,9 @@ public struct DownloadResult: Sendable {
             return nil
         }
 
-        let streamURL: String
-        if playText.hasPrefix("http://") || playText.hasPrefix("https://") {
-            streamURL = playText
-        } else if let base = Self.beegURL(host: Self.beegVideoHost),
-                  let combined = URL(string: playText, relativeTo: base) {
-            streamURL = combined.absoluteString
-        } else {
-            let cleanPath = playText.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-            streamURL = Self.beegURL(host: Self.beegVideoHost, pathComponents: [cleanPath])?.absoluteString ?? playText
+        guard let streamURL = Self.resolveBeegStreamURL(playText) else {
+            LoggerService.shared.log("Beeg: play_url response for ID \(videoID) is not a valid http(s) URL", level: .warning)
+            return nil
         }
 
         var title = "Beeg Video \(videoID)"
