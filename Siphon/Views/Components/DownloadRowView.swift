@@ -174,7 +174,8 @@ struct DownloadRowView: View {
                                 }
                             }
                         }
-                    } else if download.status == .failed || download.status == .stopped || download.errorMessage != nil {
+                    } else if download.errorUXInfo(lang: languageService) != nil {
+                        // A user stop carries no error; it falls through to the "Stopped" badge.
                         errorSection
                     } else {
                         HStack(spacing: 8) {
@@ -338,6 +339,7 @@ struct DownloadRowView: View {
                             .buttonStyle(.siphonSecondary)
                             .controlSize(.small)
                             .tint(nil)
+                            .disabled(download.requiresAdvancedArgumentsReview)
 
                         case .changeFolder:
                             Button {
@@ -359,6 +361,7 @@ struct DownloadRowView: View {
                             .buttonStyle(.siphonSecondary)
                             .controlSize(.small)
                             .tint(nil)
+                            .disabled(download.requiresAdvancedArgumentsReview)
 
                         case .noAction:
                             EmptyView()
@@ -453,7 +456,7 @@ struct DownloadRowView: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(thumbnailAccessibilityLabel)
-                .accessibilityHint("Press Space to preview media")
+                .accessibilityHint(languageService.s("thumbnail_preview_hint"))
             } else {
                 thumbnailContent
                     .accessibilityElement(children: .combine)
@@ -473,7 +476,9 @@ struct DownloadRowView: View {
     }
 
     private var thumbnailAccessibilityLabel: String {
-        download.displayTitle.isEmpty ? "Media preview" : "\(download.displayTitle) thumbnail"
+        download.displayTitle.isEmpty
+            ? languageService.s("thumbnail_media_preview")
+            : String(format: languageService.s("thumbnail_accessibility_label"), download.displayTitle)
     }
 
     private var isHDRMedia: Bool {
@@ -530,6 +535,7 @@ struct DownloadRowView: View {
                         .shadow(radius: 3)
                         .accessibilityHidden(true)
                 }
+                .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusControl, style: .continuous))
                 .transition(.opacity)
             }
 
@@ -920,6 +926,7 @@ struct FileThumbnailView: View {
                         .font(.system(size: 18, weight: .semibold))
                         .accessibilityHidden(true)
                 }
+                .disabled(download.requiresAdvancedArgumentsReview)
                 .buttonStyle(.siphonIcon(size: 28))
                 .foregroundColor(SiphonTheme.statusForeground(for: .queued, colorScheme: colorScheme))
                 .help(languageService.s("retry"))
@@ -931,6 +938,7 @@ struct FileThumbnailView: View {
                     } label: {
                         Label(languageService.s("retry"), systemImage: "arrow.clockwise")
                     }
+                    .disabled(download.requiresAdvancedArgumentsReview)
 
                     Button {
                         appState.reopenInAddSheet(download)
@@ -975,6 +983,7 @@ struct FileThumbnailView: View {
                     }
                     .foregroundColor(SiphonTheme.statusForeground(for: .queued, colorScheme: colorScheme))
                 }
+                .disabled(download.requiresAdvancedArgumentsReview)
                 .buttonStyle(.siphonGhost)
                 .help(languageService.s("overwrite"))
                 .accessibilityLabel(languageService.s("overwrite"))
@@ -991,6 +1000,7 @@ struct FileThumbnailView: View {
                     }
                     .foregroundColor(SiphonTheme.accentText)
                 }
+                .disabled(download.requiresAdvancedArgumentsReview)
                 .buttonStyle(.siphonGhost)
                 .help(languageService.s("download_new_name"))
                 .accessibilityLabel(languageService.s("download_new_name"))
@@ -1102,6 +1112,8 @@ struct FileThumbnailView: View {
 
             Divider()
         } else if download.status == .queued {
+            let canMoveUp = downloadManager.canMoveDownloadUp(download)
+            let canMoveDown = downloadManager.canMoveDownloadDown(download)
             Button {
                 downloadManager.pauseDownload(download)
             } label: {
@@ -1113,24 +1125,28 @@ struct FileThumbnailView: View {
             } label: {
                 Label(languageService.s("move_to_top"), systemImage: "arrow.up.to.line")
             }
+            .disabled(!canMoveUp)
 
             Button {
                 downloadManager.moveDownloadUp(download)
             } label: {
                 Label(languageService.s("move_up"), systemImage: "arrow.up")
             }
+            .disabled(!canMoveUp)
 
             Button {
                 downloadManager.moveDownloadDown(download)
             } label: {
                 Label(languageService.s("move_down"), systemImage: "arrow.down")
             }
+            .disabled(!canMoveDown)
 
             Button {
                 downloadManager.moveDownloadToBottom(download)
             } label: {
                 Label(languageService.s("move_to_bottom"), systemImage: "arrow.down.to.line")
             }
+            .disabled(!canMoveDown)
 
             Divider()
         } else if download.status == .fileExists {
@@ -1139,12 +1155,14 @@ struct FileThumbnailView: View {
             } label: {
                 Label(languageService.s("overwrite"), systemImage: "square.and.arrow.down.on.square.fill")
             }
+            .disabled(download.requiresAdvancedArgumentsReview)
 
             Button {
                 downloadManager.resumeWithNewName(download)
             } label: {
                 Label(languageService.s("download_new_name"), systemImage: "plus.square.on.square.fill")
             }
+            .disabled(download.requiresAdvancedArgumentsReview)
 
             Button {
                 downloadManager.revealExistingFile(for: download)
@@ -1165,6 +1183,7 @@ struct FileThumbnailView: View {
             } label: {
                 Label(languageService.s("retry"), systemImage: "arrow.clockwise")
             }
+            .disabled(download.requiresAdvancedArgumentsReview)
 
             Divider()
         }

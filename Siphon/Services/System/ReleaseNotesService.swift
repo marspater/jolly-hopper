@@ -89,7 +89,7 @@ final class ReleaseNotesService {
                 let icon: String
                 if lower.contains("font") || lower.contains("typography") || lower.contains("rebrand") || lower.contains("geist") {
                     icon = "textformat"
-                } else if lower.contains("glass") || lower.contains("translucen") || lower.contains("material") || lower.contains("ui") || lower.contains("layout") {
+                } else if lower.contains("glass") || lower.contains("translucen") || lower.contains("material") || lower.split(whereSeparator: { !$0.isLetter }).contains("ui") || lower.contains("layout") {
                     icon = "macwindow"
                 } else if lower.contains("anti-bot") || lower.contains("stream") || lower.contains("engine") || lower.contains("download") || lower.contains("speed") {
                     icon = "bolt.fill"

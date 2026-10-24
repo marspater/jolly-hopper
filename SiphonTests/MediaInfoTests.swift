@@ -51,6 +51,31 @@ final class MediaInfoTests: XCTestCase {
     }
 
     @MainActor
+    func testPortraitFormatsUseShortSideForResolutionCeiling() {
+        XCTAssertEqual(MediaFormat(formatId: "v", ext: "mp4", resolution: "1080x1920").parsedHeight, 1080)
+        let info = MediaInfo(id: "short", title: "Portrait", formats: [
+            MediaFormat(formatId: "720", ext: "mp4", resolution: "720x1280", vcodec: "avc1", acodec: "none"),
+            MediaFormat(formatId: "1080", ext: "mp4", resolution: "1080x1920", vcodec: "avc1", acodec: "none"),
+            MediaFormat(formatId: "a", ext: "m4a", vcodec: "none", acodec: "mp4a.40.2", abr: 128)
+        ])
+        var options = DownloadOptions.default
+        options.videoResolution = .r1080p
+        options.resolutionFallbackPolicy = .strictCeiling
+        XCTAssertEqual(info.resolveSelectedFormats(options: options).first?.id, "1080")
+        XCTAssertEqual(info.maxFormatHeight, 1080)
+    }
+
+    @MainActor
+    func testRequestedAACMatchesMP4AAudio() {
+        var options = DownloadOptions.default
+        options.audioCodec = .aac
+        let aac = MediaFormat(formatId: "140", ext: "m4a", vcodec: "none", acodec: "mp4a.40.2", abr: 129)
+        let opus = MediaFormat(formatId: "251", ext: "webm", vcodec: "none", acodec: "opus", abr: 160)
+        XCTAssertTrue(MediaFormat.compareAudioFormats(aac, opus, options: options))
+        XCTAssertGreaterThan(aac.audioQualityScore(options: options), opus.audioQualityScore(options: options))
+    }
+
+    @MainActor
     func testWorstResolutionPicksLowestKnownHeight() {
         let info = MediaInfo(id: "test", title: "Worst", formats: [
             MediaFormat(formatId: "unknown", ext: "mp4", vcodec: "avc1", acodec: "none"),

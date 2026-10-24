@@ -60,6 +60,17 @@ final class ReleaseNotesServiceTests: XCTestCase {
         XCTAssertEqual(features[2].icon, "bolt.fill")
     }
 
+    func testParseReleaseFeaturesMatchesUIAsWholeWord() {
+        let service = ReleaseNotesService(userDefaults: testDefaults)
+        let markdown = """
+        - Pinned yt-dlp: Siphon downloads a pinned, SHA-256-verified build of its yt-dlp fork.
+        - Calmer Window: A quieter UI for the queue.
+        """
+
+        let features = service.parseReleaseFeatures(from: markdown)
+        XCTAssertEqual(features.map(\.icon), ["bolt.fill", "macwindow"])
+    }
+
     func testCheckAndFetchWhatsNewFirstRun() async {
         let service = ReleaseNotesService(userDefaults: testDefaults)
         let result = await service.checkAndFetchWhatsNew(appVersion: "5.3.0", languageService: nil)

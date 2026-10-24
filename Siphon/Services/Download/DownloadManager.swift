@@ -509,10 +509,15 @@ class DownloadManager: ObservableObject {
         for download in downloads where DownloadExecutor.shouldCleanupTemporaryFiles(for: download.status) {
             DownloadExecutor.cleanupTemporaryFiles(for: download)
         }
-        if pendingRecoveryJobs.isEmpty {
+        // A same-ID row that finished since the prompt supersedes its record,
+        // as in persistQueueRecoveryState. Jobs cancelled by this quit stay
+        // recoverable.
+        let completedIDs = Set(downloads.lazy.filter { $0.status == .completed }.map(\.id))
+        let remainingPending = pendingRecoveryJobs.filter { !completedIDs.contains($0.id) }
+        if remainingPending.isEmpty {
             queueRecoveryWriteFailed = !recoveryStore.markCleanShutdown()
         } else {
-            queueRecoveryWriteFailed = !recoveryStore.persist(activeJobs: pendingRecoveryJobs)
+            queueRecoveryWriteFailed = !recoveryStore.persist(activeJobs: remainingPending)
         }
     }
 

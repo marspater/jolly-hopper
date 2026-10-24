@@ -459,6 +459,24 @@ final class DownloadTests: XCTestCase {
         XCTAssertEqual(historic.title, "Summer Fun")
     }
 
+    func testURLValidatorLowercasesScheme() throws {
+        let url = try XCTUnwrap(URL(string: "https://vimeo.com/76979871"))
+        XCTAssertEqual(DownloadURLValidator.validate("Https://vimeo.com/76979871"), .valid(url: url, original: url.absoluteString))
+        XCTAssertEqual(DownloadURLValidator.extractURLs(from: "HTTP://example.com/V"), ["http://example.com/V"])
+    }
+
+    func testFormatSubtitleShowsResolvedHeightAndSingularLanguage() {
+        var options = DownloadOptions.default
+        options.videoResolution = .r1080p
+        options.downloadSubtitles = true
+        options.subtitleLanguages = ["en"]
+        options.subtitleFormat = nil
+        let download = Download(url: "https://www.youtube.com/watch?v=123", options: options)
+        XCTAssertEqual(download.formatSubtitle(lang: LanguageService()), "YouTube • 1080p • MP4 • 1 language selected")
+        download.diagnostics.resolvedHeight = 720
+        XCTAssertEqual(download.formatSubtitle(lang: LanguageService()), "YouTube • 720p • MP4 • 1 language selected")
+    }
+
     func testDefaultFromPreferencesAppliesSelectedCustomPreset() throws {
         let suiteName = "testDefaults_\(UUID().uuidString)"
         let testDefaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
@@ -478,6 +496,9 @@ final class DownloadTests: XCTestCase {
         XCTAssertTrue(options.sponsorBlock)
 
         let plain = DownloadOptions.defaultFromPreferences(userDefaults: testDefaults, applyingSelectedCustomPreset: false)
+        // Unset codec keys fall back to what Settings shows on a fresh install.
+        XCTAssertEqual(plain.videoCodec, .h264)
+        XCTAssertEqual(plain.audioCodec, .aac)
         XCTAssertFalse(plain.downloadSubtitles)
         XCTAssertFalse(plain.splitChapters)
         XCTAssertFalse(plain.sponsorBlock)

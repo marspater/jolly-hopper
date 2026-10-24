@@ -23,9 +23,9 @@ struct AddDownloadView: View {
     private func showsFocus(_ field: InputField) -> Bool {
         focusedField == field && appearsActive
     }
-    @AppStorage("selectedPreset") private var selectedPreset: String = "best_quality"
-    @AppStorage("selectedCustomPresetId") private var selectedCustomPresetIdString: String = ""
-    @AppStorage("defaultAdditionalArguments") private var defaultAdditionalArguments: String = ""
+    @AppStorage(UserDefaultsKeys.selectedPreset) private var selectedPreset: String = DownloadPreset.maxCompatibility.rawValue
+    @AppStorage(UserDefaultsKeys.selectedCustomPresetId) private var selectedCustomPresetIdString: String = ""
+    @AppStorage(UserDefaultsKeys.defaultAdditionalArguments) private var defaultAdditionalArguments: String = ""
 
     @State private var urlInput: String = ""
     @State private var isLoading: Bool = false
@@ -392,7 +392,7 @@ struct AddDownloadView: View {
                     Spacer()
                     let count = extractBatchUrls(from: batchUrlsText).count
                     if count > 0 {
-                        Text(String(format: languageService.s("batch_url_count"), count))
+                        Text(count == 1 ? languageService.s("batch_url_count_one") : String(format: languageService.s("batch_url_count"), count))
                             .font(.siphonMetadataMonoSemibold)
                             .padding(.horizontal, 8)
                             .padding(.vertical, 3)
@@ -870,6 +870,7 @@ struct AddDownloadView: View {
                                 selectedPreset = preset.rawValue
                                 selectedCustomPresetIdString = ""
                                 applyPreset(preset)
+                                saveFormatDefaults(preset.videoCodec, preset.audioCodec, preset.videoResolution, preset.fileType)
                                 selectedPresetName = preset.title(lang: languageService)
                             } label: {
                                 HStack {
@@ -896,6 +897,7 @@ struct AddDownloadView: View {
                                     selectedPreset = ""
                                     selectedCustomPresetIdString = preset.id.uuidString
                                     applyCustomPreset(preset)
+                                    saveFormatDefaults(preset.videoCodec, preset.audioCodec, preset.videoResolution, preset.fileType)
                                     selectedPresetName = preset.name
                                 } label: {
                                     HStack {
@@ -979,7 +981,7 @@ struct AddDownloadView: View {
                         )
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .accessibilityLabel(languageService.s("quality"))
-                        .onChange(of: selectedCodec) { _, newCodec in
+                        .onChange(of: selectedCodec, initial: true) { _, newCodec in
                             if newCodec == "h264" && (videoResolution == .r1440p || videoResolution == .r2160p || videoResolution == .best) {
                                 videoResolution = .r1080p
                             }
@@ -1002,6 +1004,7 @@ struct AddDownloadView: View {
                     Image(systemName: "info.circle.fill")
                         .foregroundColor(SiphonTheme.accentText)
                         .font(.siphonMetadata)
+                        .accessibilityHidden(true)
                     Text(languageService.s("h264_preset_info"))
                         .font(.siphonMetadata)
                         .foregroundColor(.secondary)
@@ -1024,7 +1027,18 @@ struct AddDownloadView: View {
     private func videoCodecLabel(for codec: VideoCodec) -> String {
         let title = codec.title(lang: languageService)
         guard codec != .auto, !availableCodecs.isEmpty else { return title }
-        return availableCodecIDs.contains(codec.rawValue) ? "\(title) • Detected" : "\(title) • Fallback if unavailable"
+        let note = languageService.s(availableCodecIDs.contains(codec.rawValue) ? "codec_detected" : "codec_fallback_if_unavailable")
+        return "\(title) • \(note)"
+    }
+
+    /// The preset choice is saved for Settings and later downloads, so its
+    /// format values are too, as Settings does when a preset is picked there.
+    private func saveFormatDefaults(_ videoCodec: VideoCodec, _ audioCodec: AudioCodec, _ resolution: VideoResolution, _ fileType: MediaFileType) {
+        let defaults = UserDefaults.standard
+        defaults.set(videoCodec.rawValue, forKey: UserDefaultsKeys.defaultVideoCodec)
+        defaults.set(audioCodec.rawValue, forKey: UserDefaultsKeys.defaultAudioCodec)
+        defaults.set(resolution.rawValue, forKey: UserDefaultsKeys.defaultVideoResolution)
+        defaults.set(fileType.rawValue.lowercased(), forKey: UserDefaultsKeys.defaultFileType)
     }
 
     private func applyPreset(_ preset: DownloadPreset) {
@@ -1272,6 +1286,8 @@ struct AddDownloadView: View {
                                     Spacer()
                                     if selectedSubtitleLangs.isEmpty {
                                         Text(languageService.s("select"))
+                                    } else if selectedSubtitleLangs.count == 1 {
+                                        Text(languageService.s("subtitles_selected_one"))
                                     } else {
                                         Text(String(
                                             format: languageService.s("subtitles_selected"),
@@ -1434,6 +1450,7 @@ struct AddDownloadView: View {
                 Image(systemName: "exclamationmark.triangle.fill")
                     .foregroundColor(SiphonTheme.statusForeground(for: .failed, colorScheme: colorScheme))
                     .font(.siphonStandard)
+                    .accessibilityHidden(true)
                 Text(error)
                     .font(.siphonSecondaryMedium)
                     .foregroundColor(SiphonTheme.statusForeground(for: .failed, colorScheme: colorScheme))
@@ -1524,7 +1541,7 @@ struct AddDownloadView: View {
                 Button {
                     startDownload()
                 } label: {
-                    Text(String(format: languageService.s("queue_batch"), count))
+                    Text(count == 1 ? languageService.s("queue_batch_one") : String(format: languageService.s("queue_batch"), count))
                 }
                 .buttonStyle(.siphonPrimary)
                 .disabled(count == 0)
@@ -1981,13 +1998,9 @@ struct AddDownloadView: View {
                 videoResolution = res
             }
 
-            if let vcodec = defaults.string(forKey: UserDefaultsKeys.defaultVideoCodec) {
-                selectedCodec = vcodec
-            }
-
-            if let acodec = defaults.string(forKey: UserDefaultsKeys.defaultAudioCodec) {
-                selectedAudioCodec = acodec
-            }
+            // Same fallbacks as Settings, so a fresh install matches what it shows.
+            selectedCodec = defaults.string(forKey: UserDefaultsKeys.defaultVideoCodec) ?? "h264"
+            selectedAudioCodec = defaults.string(forKey: UserDefaultsKeys.defaultAudioCodec) ?? "aac"
 
             if let fallback = defaults.string(forKey: UserDefaultsKeys.resolutionFallbackPolicy) {
                 resolutionFallbackPolicyRaw = fallback

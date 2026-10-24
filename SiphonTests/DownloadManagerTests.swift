@@ -1637,6 +1637,29 @@ final class NotificationServiceTests: XCTestCase {
     }
 
     @MainActor
+    func testShutdownDropsPendingRecoveryJobThatCompletedSincePrompt() {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let storeURL = root.appendingPathComponent("recovery.json")
+        let store = QueueRecoveryStore(fileURL: storeURL)
+        let manager = DownloadManager(recoveryFileURL: storeURL)
+
+        let interrupted = Download(url: "https://example.com/interrupted", options: .default, title: "Interrupted Job")
+        interrupted.status = .downloading
+        manager.pendingRecoveryJobs = [interrupted]
+
+        // Resumed from its history row after "Later" and finished.
+        let finished = Download(url: interrupted.url, options: .default, title: "Interrupted Job", id: interrupted.id)
+        finished.status = .completed
+        manager.downloads.append(finished)
+
+        manager.shutdown()
+        XCTAssertTrue(store.loadInterruptedJobs().isEmpty)
+    }
+
+    @MainActor
     func testAppDelegateWillTerminateShutsDownDownloadManager() {
         let appDelegate = AppDelegate()
         let manager = DownloadManager()

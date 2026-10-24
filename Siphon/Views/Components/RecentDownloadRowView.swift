@@ -55,11 +55,11 @@ struct RecentDownloadRowView: View {
         .padding(.horizontal, SiphonTheme.spacing14)
         .padding(.vertical, 8)
         .background(
-            SiphonTheme.cardBackground(cornerRadius: SiphonTheme.radiusControl, isHovered: isHovered)
+            SiphonTheme.cardBackground(cornerRadius: SiphonTheme.radiusCard, isHovered: isHovered)
         )
         .overlay(
-            SiphonTheme.borderSubtle(
-                cornerRadius: SiphonTheme.radiusControl,
+            SiphonTheme.cardBorder(
+                cornerRadius: SiphonTheme.radiusCard,
                 isHovered: isHovered,
                 accentColor: activeTint
             )
@@ -190,8 +190,8 @@ struct RecentDownloadRowView: View {
                     case .r480p: return "480p"
                     case .r360p: return "360p"
                     case .r240p: return "240p"
-                    case .best: return "Best"
-                    case .worst: return "Worst"
+                    case .best: return languageService.s("res_best")
+                    case .worst: return languageService.s("res_worst")
                     }
                 }()
                 SiphonTagBadge(text: resText, isMonospaced: true)
@@ -264,7 +264,12 @@ struct RecentDownloadRowView: View {
     private var primaryActionView: some View {
         if download.requiresAdvancedArgumentsReview {
             Button {
-                appState.selectedNavItem = .queued
+                // Open the page that lists this job and its review callout.
+                switch download.status {
+                case .failed, .stopped: appState.selectedNavItem = .failed
+                case .fileExists, .completed: appState.selectedNavItem = .recent
+                default: appState.selectedNavItem = .queued
+                }
             } label: {
                 Image(systemName: "exclamationmark.triangle")
                     .foregroundStyle(SiphonTheme.statusQueuedText)

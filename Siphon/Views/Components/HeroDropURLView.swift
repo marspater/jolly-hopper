@@ -375,7 +375,10 @@ struct HeroDropURLView: View {
                     feedback.show(languageService.s("no_valid_urls"), isSuccess: false, icon: "exclamationmark.circle.fill")
                 } else {
                     startDownloads(urls: urls)
-                    feedback.show(String(format: languageService.s("hero_started_downloads"), urls.count), isSuccess: true, icon: "checkmark.circle.fill")
+                    let message = urls.count == 1
+                        ? languageService.s("hero_started_download")
+                        : String(format: languageService.s("hero_started_downloads"), urls.count)
+                    feedback.show(message, isSuccess: true, icon: "checkmark.circle.fill")
                 }
             }
         }
@@ -414,7 +417,8 @@ struct HeroDropURLView: View {
 
     private func handlePlainTextDrop(_ provider: NSItemProvider) {
         provider.loadItem(forTypeIdentifier: UTType.utf8PlainText.identifier, options: nil) { item, _ in
-            guard let text = item as? String else { return }
+            // Cross-app text drags arrive as pasteboard Data, not String.
+            let text = (item as? String) ?? (item as? Data).flatMap { String(data: $0, encoding: .utf8) } ?? ""
             let urls = DownloadURLValidator.extractURLs(from: text)
             Task { @MainActor in
                 if urls.count > 1 {
