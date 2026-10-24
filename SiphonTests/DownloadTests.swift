@@ -420,12 +420,6 @@ final class DownloadTests: XCTestCase {
     func testCodecsAndPresets() {
         let lang = LanguageService()
 
-        XCTAssertEqual(VideoCodec.h264.ytdlpFilter, "[vcodec^=avc1]")
-        XCTAssertNil(VideoCodec.auto.ytdlpFilter)
-
-        XCTAssertEqual(AudioCodec.aac.ytdlpFilter, "[acodec^=mp4a]")
-        XCTAssertNil(AudioCodec.auto.ytdlpFilter)
-
         for preset in DownloadPreset.allCases {
             XCTAssertFalse(preset.title(lang: lang).isEmpty)
             XCTAssertFalse(preset.description(lang: lang).isEmpty)

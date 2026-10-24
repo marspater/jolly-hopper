@@ -630,26 +630,6 @@ class DownloadManager: ObservableObject {
         historyStore.addToHistory(download, history: &history, skipSave: skipSave)
     }
 
-    func clearHistory() {
-        // Paused jobs are resumable and .fileExists jobs await the user's choice,
-        // matching history retention. Keep a sanitized record for them.
-        let kept: Set<DownloadStatus> = [.paused, .fileExists]
-        history = downloads
-            .filter { kept.contains($0.status) }
-            .map { HistoricDownload(download: $0) }
-        historyStore.saveHistory(history)
-
-        downloads.removeAll {
-            switch $0.status {
-            case .completed, .failed, .stopped:
-                return true
-            default:
-                return false
-            }
-        }
-        objectWillChange.send()
-    }
-
     func openFile(_ path: URL) {
         guard YtdlpService.isMediaFilePath(path.path) else {
             LoggerService.shared.log("Refusing to open non-media file via NSWorkspace: \(path.path)", level: .warning)

@@ -949,16 +949,6 @@ enum VideoCodec: String, Codable, CaseIterable, Identifiable {
         case .av1: return "AV1"
         }
     }
-
-    var ytdlpFilter: String? {
-        switch self {
-        case .auto: return nil
-        case .h264: return "[vcodec^=avc1]"
-        case .h265: return "[vcodec~='^(hev1|hvc1)']"
-        case .vp9: return "[vcodec^=vp9]"
-        case .av1: return "[vcodec^=av01]"
-        }
-    }
 }
 
 enum ConversionCodec: String, Codable, CaseIterable, Identifiable {
@@ -1008,16 +998,6 @@ enum AudioCodec: String, Codable, CaseIterable, Identifiable {
         case .opus: return "Opus"
         case .mp3: return "MP3"
         case .flac: return "FLAC"
-        }
-    }
-
-    var ytdlpFilter: String? {
-        switch self {
-        case .auto: return nil
-        case .aac: return "[acodec^=mp4a]"
-        case .opus: return "[acodec^=opus]"
-        case .mp3: return "[acodec^=mp3]"
-        case .flac: return "[acodec^=flac]"
         }
     }
 
@@ -2078,89 +2058,6 @@ struct MediaFormat: Codable, Identifiable, Hashable {
         }
         // 8. File size
         return ra.size > rb.size
-    }
-
-    func videoQualityScore(options _: DownloadOptions) -> Double {
-        var score: Double = 0
-        let h = parsedHeight ?? 0
-        score += Double(h) * 10000.0
-
-        if let bitrate = tbr ?? vbr ?? abr {
-            score += bitrate
-        }
-        if let size = filesize ?? filesizeApprox {
-            score += Double(size) / (1024.0 * 1024.0)
-        }
-        if let fps = fps {
-            score += fps
-        }
-        if needsTesting == true {
-            score -= 1_000_000.0
-        }
-        return score
-    }
-
-    var isOriginalOrPrimaryAudio: Bool {
-        // 1. Language preference explicitly set by extractor (>= 0 is original/default, < 0 is dubbed)
-        if let lp = languagePreference {
-            return lp >= 0
-        }
-        // 2. Format note explicitly indicates original/default/main
-        let lowerNote = (formatNote ?? "").lowercased()
-        if lowerNote.contains("original") || lowerNote.contains("default") || lowerNote.contains("main") {
-            return true
-        }
-        // 3. Format note contains "dubbed"
-        if lowerNote.contains("dubbed") {
-            return false
-        }
-        return true
-    }
-
-    func audioQualityScore(options: DownloadOptions) -> Double {
-        guard acodec != "none" else { return 0.0 }
-        var score: Double = 0.0
-
-        // Huge preference for original track over dubbed foreign language tracks
-        if isOriginalOrPrimaryAudio {
-            score += 10_000_000.0
-        } else {
-            score -= 5_000_000.0
-        }
-
-        if let lp = languagePreference {
-            score += Double(lp) * 100_000.0
-        }
-
-        if let pref = preference {
-            score += Double(pref) * 10_000.0
-        }
-
-        if let sp = sourcePreference {
-            score += Double(sp) * 1_000.0
-        }
-
-        // Codec match preference if requested
-        if let requestedCodec = options.audioCodec, requestedCodec != .auto,
-           let acodec, requestedCodec.matches(acodec: acodec) {
-            score += 500_000.0
-        }
-
-        // Bitrate
-        if let bitrate = abr ?? tbr {
-            score += bitrate * 10.0
-        }
-
-        // Channels
-        if let channels = audioChannels {
-            score += Double(channels) * 5.0
-        }
-
-        if needsTesting == true {
-            score -= 1_000_000.0
-        }
-
-        return score
     }
 
     var isVideoOnly: Bool {

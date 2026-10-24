@@ -92,11 +92,6 @@ final class DownloadHistoryStore {
         }
     }
 
-    func clearHistory(history: inout [HistoricDownload]) {
-        history.removeAll()
-        saveHistory(history)
-    }
-
     static func restoreDownloads(from history: [HistoricDownload], existingDownloads: [Download]) -> [Download] {
         // History is stored oldest-first and `downloads` is in queue (arrival)
         // order, so restore chronologically: new jobs append after it.

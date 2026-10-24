@@ -557,7 +557,6 @@ public enum SiphonTheme {
     public static let radiusControl: CGFloat = 8
     public static let radiusCard: CGFloat = 12
     public static let radiusStatusGroup: CGFloat = 14
-    public static let radiusSheet: CGFloat = 16
     public static let radiusHero: CGFloat = 24
 
     // Shared translucency steps. Pair each with Color.primary or a tint.
@@ -591,44 +590,6 @@ public enum SiphonTheme {
     }
 
     // MARK: - Semantic Adaptive Borders
-    @ViewBuilder
-    public static func borderSubtle(cornerRadius: CGFloat = radiusControl, isHovered: Bool = false, accentColor: Color? = nil) -> some View {
-        // Drawn on the GPU: as a plain layer, a gradient stroke is rasterized on
-        // the CPU at the card's full size, once per row a list scrolls into view.
-        Group {
-            if let accent = accentColor {
-                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    .strokeBorder(
-                        LinearGradient(
-                            colors: [
-                                accent.opacity(isHovered ? 0.72 : 0.44),
-                                accent.opacity(isHovered ? 0.30 : 0.14),
-                                Color.clear
-                            ],
-                            startPoint: .top,
-                            endPoint: .bottom
-                        ),
-                        lineWidth: 1
-                    )
-            } else {
-                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    .strokeBorder(
-                        LinearGradient(
-                            colors: [
-                                Color.primary.opacity(isHovered ? 0.26 : 0.14),
-                                Color.primary.opacity(isHovered ? 0.10 : 0.05),
-                                Color.clear
-                            ],
-                            startPoint: .top,
-                            endPoint: .bottom
-                        ),
-                        lineWidth: 1
-                    )
-            }
-        }
-        .drawingGroup()
-        .overlay(IncreasedContrastEdge(cornerRadius: cornerRadius))
-    }
 
     @ViewBuilder
     public static func cardBorder(cornerRadius: CGFloat = radiusCard, isHovered: Bool = false, accentColor: Color? = nil) -> some View {
