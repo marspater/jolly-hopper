@@ -32,7 +32,7 @@ Read before touching the matching area: `ARCHITECTURE.md` (runtime ownership, ca
 
 Where things live:
 
-- `Siphon/SiphonApp.swift`: app entry, commands, `siphon://`/`luma://` URL ingress.
+- `Siphon/SiphonApp.swift`: app entry, commands, `siphon://` URL ingress.
 - `Siphon/Models/`: `AppState` (app-level state, `ExternalDownloadTargetPolicy`), `Download.swift` (`Download`, `DownloadOptions`, `MediaInfo`, format ranking, history/validator types).
 - `Siphon/Services/Download/`: `DownloadManager` (queue admission, history, recovery) → `DownloadExecutor` (sole owner of active tasks/process controllers) → `YtdlpService` (large facade: binaries, extraction, site-specific handlers, argument building) → `YtdlpProcessRunner` (process launch, output parsing, process-tree termination). Plus `DownloadQueue`, `QueueRecoveryStore`, `DownloadHistoryStore`, `DependencyUpdateCoordinator`.
 - `Siphon/Services/{Update,Cookies,System,Windows}/`: app self-update, browser cookie handling, logging/localization/notifications/menu bar, auxiliary windows.

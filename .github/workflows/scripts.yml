@@ -47,8 +47,6 @@ jobs:
             server/test/server.test.js \
             scripts/capture_original_mp4.js \
             scripts/test_capture_original_mp4.js \
-            scripts/run_suite.js \
-            scripts/test_run_suite.js \
             scripts/verify_deployment.js \
             scripts/test_verify_deployment.js
           do
@@ -94,9 +92,6 @@ jobs:
 
       - name: Test original MP4 capture script
         run: node scripts/test_capture_original_mp4.js
-
-      - name: Test suite runner
-        run: node --test scripts/test_run_suite.js
 
       - name: Test deployment verification
         run: node --test scripts/test_verify_deployment.js

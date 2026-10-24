@@ -8133,17 +8133,9 @@ public struct DownloadResult: Sendable {
     nonisolated static func getAppSupportDirectory() -> URL {
         let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Library/Application Support")
         let siphonDir = appSupport.appendingPathComponent("Siphon")
-        let lumaDir = appSupport.appendingPathComponent("Luma")
-        let legacyDir = appSupport.appendingPathComponent("Macabolic")
 
         if !FileManager.default.fileExists(atPath: siphonDir.path) {
-            if FileManager.default.fileExists(atPath: lumaDir.path) {
-                try? FileManager.default.copyItem(at: lumaDir, to: siphonDir)
-            } else if FileManager.default.fileExists(atPath: legacyDir.path) {
-                try? FileManager.default.moveItem(at: legacyDir, to: siphonDir)
-            } else {
-                try? FileManager.default.createDirectory(at: siphonDir, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
-            }
+            try? FileManager.default.createDirectory(at: siphonDir, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
         }
         try? FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: siphonDir.path)
 

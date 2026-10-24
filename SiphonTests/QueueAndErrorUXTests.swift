@@ -1904,7 +1904,7 @@ final class QueueAndErrorUXTests: XCTestCase {
         XCTAssertEqual(DownloadURLValidator.normalizedWebURL("http://example.com"), "http://example.com")
         XCTAssertNil(DownloadURLValidator.normalizedWebURL("FTP://example.com/v"))
         XCTAssertNil(DownloadURLValidator.normalizedWebURL("example.com/https://x"))
-        for link in ["siphon://download", "SIPHON://download", "Luma://download"] {
+        for link in ["siphon://download", "SIPHON://download"] {
             XCTAssertTrue(SiphonApp.isAppDeepLink(try XCTUnwrap(URL(string: link))), link)
         }
         XCTAssertFalse(SiphonApp.isAppDeepLink(try XCTUnwrap(URL(string: "https://download"))))
