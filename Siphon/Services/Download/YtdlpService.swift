@@ -7562,14 +7562,14 @@ public struct DownloadResult: Sendable {
             args.append(contentsOf: ["--concurrent-fragments", "8"])
         }
 
-        if isBoyfriendTV {
-            if !isSafari && !isFirefox {
-                if let uaIdx = args.lastIndex(of: "--user-agent") {
-                    args[uaIdx + 1] = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
-                } else {
-                    args.append(contentsOf: ["--user-agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"])
-                }
+        if isBoyfriendTV && !isSafari && !isFirefox {
+            if let uaIdx = args.lastIndex(of: "--user-agent") {
+                args[uaIdx + 1] = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+            } else {
+                args.append(contentsOf: ["--user-agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"])
             }
+        }
+        if isBoyfriendTV {
             let baseDomain = (parsedHost.contains("boyfriendtv.com") || lowerUrl.contains("boyfriendtv.com")) ? "https://www.boyfriendtv.com" : "https://www.boyfriend.tv"
             args.append(contentsOf: ["--add-header", "Origin:\(baseDomain)"])
             args.append(contentsOf: ["--add-header", "Accept:*/*"])
