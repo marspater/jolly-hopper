@@ -24,6 +24,10 @@ public final class NetworkEnvironmentService: @unchecked Sendable {
     private var storedOverrideSupportsIPv6: Bool?
     private var storedOverrideIsNordVPN: Bool?
 
+    // Secondary Insights state
+    private var secondaryNordConfirmed: Bool = false
+    private var inFlightInsightsTask: Task<Void, Never>?
+
     public var overrideIsVPNActive: Bool? {
         get { lock.withLock { storedOverrideIsVPNActive } }
         set { lock.withLock { storedOverrideIsVPNActive = newValue } }
@@ -60,7 +64,7 @@ public final class NetworkEnvironmentService: @unchecked Sendable {
             if let override = storedOverrideIsNordVPN { return override }
             guard let path = currentPath else { return false }
             guard Self.isVPNPath(path) else { return false }
-            return Self.matchesNordGateway(path)
+            return Self.matchesNordGateway(path) || secondaryNordConfirmed
         }
     }
 
@@ -106,6 +110,90 @@ public final class NetworkEnvironmentService: @unchecked Sendable {
 
     deinit {
         monitor?.cancel()
+        inFlightInsightsTask?.cancel()
+    }
+
+    /// Optional, non-blocking secondary check against NordVPN Insights endpoint.
+    /// Local detection via NWPathMonitor remains the primary authoritative signal.
+    /// This request is purely best-effort, never blocks downloads or startup,
+    /// and gracefully degrades if the undocumented endpoint changes or fails.
+    nonisolated public static func performInsightsCheck(session: URLSession? = nil) async -> Bool {
+        guard let url = URL(string: "https://api.nordvpn.com/v1/helpers/ips/insights") else {
+            return false
+        }
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 2.5
+        request.cachePolicy = .reloadIgnoringLocalAndRemoteCacheData
+
+        let activeSession: URLSession
+        if let session {
+            activeSession = session
+        } else {
+            let config = URLSessionConfiguration.ephemeral
+            config.timeoutIntervalForRequest = 2.5
+            config.timeoutIntervalForResource = 3.0
+            activeSession = URLSession(configuration: config)
+        }
+
+        do {
+            let (data, response) = try await activeSession.data(for: request)
+            guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+                return false
+            }
+            guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                return false
+            }
+            if let protected = json["protected"] as? Bool, protected {
+                return true
+            }
+            if let isp = (json["isp"] as? String)?.lowercased(), isp.contains("nord") {
+                return true
+            }
+            return false
+        } catch {
+            return false
+        }
+    }
+
+    private func triggerOptionalSecondaryInsightsCheck(session: URLSession? = nil) {
+        if NotificationService.isRunningTests && session == nil {
+            return
+        }
+
+        lock.withLock {
+            inFlightInsightsTask?.cancel()
+            inFlightInsightsTask = Task.detached(priority: .utility) { [weak self] in
+                guard let self else { return }
+                let isConfirmed = await Self.performInsightsCheck(session: session)
+                if !Task.isCancelled && isConfirmed {
+                    self.lock.withLock {
+                        self.secondaryNordConfirmed = true
+                    }
+                    Task { @MainActor in
+                        LoggerService.shared.log("[Network] NordVPN confirmed via secondary Insights check.", level: .info)
+                    }
+                }
+            }
+        }
+    }
+
+    public func resetSecondaryInsightsForTesting() {
+        lock.withLock {
+            secondaryNordConfirmed = false
+            inFlightInsightsTask?.cancel()
+            inFlightInsightsTask = nil
+        }
+    }
+
+    @discardableResult
+    public func applySecondaryInsightsForTesting(session: URLSession) async -> Bool {
+        let confirmed = await Self.performInsightsCheck(session: session)
+        lock.withLock {
+            if confirmed {
+                self.secondaryNordConfirmed = true
+            }
+        }
+        return confirmed
     }
 
     private struct NetworkStateChange {
@@ -113,22 +201,38 @@ public final class NetworkEnvironmentService: @unchecked Sendable {
         let isVPNActive: Bool
         let isNordVPN: Bool
         let ipv6Supported: Bool
+        let shouldTriggerInsights: Bool
     }
 
     private func handlePathUpdate(_ path: NWPath) {
         let change = lock.withLock { () -> NetworkStateChange in
             currentPath = path
             let active = Self.isVPNPath(path)
-            let nord = active && Self.matchesNordGateway(path)
+            let localNord = active && Self.matchesNordGateway(path)
             let v6Supported = path.supportsIPv6
             let changed = (lastReportedVPNState != active)
             lastReportedVPNState = active
+
+            var triggerInsights = false
+            if !active {
+                secondaryNordConfirmed = false
+                inFlightInsightsTask?.cancel()
+                inFlightInsightsTask = nil
+            } else if changed || (!localNord && !secondaryNordConfirmed) {
+                triggerInsights = true
+            }
+
             return NetworkStateChange(
                 vpnChanged: changed,
                 isVPNActive: active,
-                isNordVPN: nord,
-                ipv6Supported: v6Supported
+                isNordVPN: localNord || secondaryNordConfirmed,
+                ipv6Supported: v6Supported,
+                shouldTriggerInsights: triggerInsights
             )
+        }
+
+        if change.shouldTriggerInsights {
+            triggerOptionalSecondaryInsightsCheck()
         }
 
         if change.vpnChanged {

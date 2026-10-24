@@ -5651,6 +5651,87 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertEqual(attemptsBox.value, 2, "Transient VPN error should trigger automatic retry")
     }
 
+    func testLocalVPNDetectionOperatesIndependentlyWithoutNetwork() async throws {
+        NetworkEnvironmentService.shared.overrideIsVPNActive = true
+        NetworkEnvironmentService.shared.overrideSupportsIPv6 = false
+        defer {
+            NetworkEnvironmentService.shared.overrideIsVPNActive = nil
+            NetworkEnvironmentService.shared.overrideSupportsIPv6 = nil
+        }
+
+        XCTAssertTrue(NetworkEnvironmentService.shared.isVPNActive)
+        XCTAssertFalse(NetworkEnvironmentService.shared.supportsIPv6)
+    }
+
+    func testNordInsightsAPISucceedsWithProtectedFlag() async throws {
+        MockURLProtocol.requestHandler = { request in
+            let response = try XCTUnwrap(HTTPURLResponse(url: try XCTUnwrap(request.url), statusCode: 200, httpVersion: nil, headerFields: nil))
+            return (response, Data("{\"protected\": true, \"isp\": \"GSL Networks\"}".utf8))
+        }
+        defer { MockURLProtocol.requestHandler = nil }
+
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [MockURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        defer { session.invalidateAndCancel() }
+
+        let confirmed = await NetworkEnvironmentService.performInsightsCheck(session: session)
+        XCTAssertTrue(confirmed, "Protected=true in Insights response should confirm NordVPN")
+    }
+
+    func testNordInsightsAPISucceedsWithNordISP() async throws {
+        MockURLProtocol.requestHandler = { request in
+            let response = try XCTUnwrap(HTTPURLResponse(url: try XCTUnwrap(request.url), statusCode: 200, httpVersion: nil, headerFields: nil))
+            return (response, Data("{\"protected\": false, \"isp\": \"NordVPN SA\"}".utf8))
+        }
+        defer { MockURLProtocol.requestHandler = nil }
+
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [MockURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        defer { session.invalidateAndCancel() }
+
+        let confirmed = await NetworkEnvironmentService.performInsightsCheck(session: session)
+        XCTAssertTrue(confirmed, "Nord in ISP name in Insights response should confirm NordVPN")
+    }
+
+    func testNordInsightsAPIFailsGracefullyOnHTTPErrorOrMalformedResponse() async throws {
+        MockURLProtocol.requestHandler = { request in
+            let response = try XCTUnwrap(HTTPURLResponse(url: try XCTUnwrap(request.url), statusCode: 503, httpVersion: nil, headerFields: nil))
+            return (response, Data("Service Unavailable".utf8))
+        }
+        defer { MockURLProtocol.requestHandler = nil }
+
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [MockURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        defer { session.invalidateAndCancel() }
+
+        let confirmed = await NetworkEnvironmentService.performInsightsCheck(session: session)
+        XCTAssertFalse(confirmed, "HTTP errors should gracefully fail to false without throwing")
+    }
+
+    func testNordInsightsAPIFailureDoesNotAffectLocalVPNDetection() async throws {
+        MockURLProtocol.requestHandler = { request in
+            let response = try XCTUnwrap(HTTPURLResponse(url: try XCTUnwrap(request.url), statusCode: 500, httpVersion: nil, headerFields: nil))
+            return (response, Data("Internal Server Error".utf8))
+        }
+        defer { MockURLProtocol.requestHandler = nil }
+
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [MockURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        defer { session.invalidateAndCancel() }
+
+        NetworkEnvironmentService.shared.overrideIsVPNActive = true
+        defer { NetworkEnvironmentService.shared.overrideIsVPNActive = nil }
+
+        let confirmed = await NetworkEnvironmentService.performInsightsCheck(session: session)
+        XCTAssertFalse(confirmed)
+        // Local detection MUST still report active VPN
+        XCTAssertTrue(NetworkEnvironmentService.shared.isVPNActive, "Local VPN detection must remain active regardless of Insights API result")
+    }
+
     func testBoyfriendTVFiltersPreviewTeaserClips() async throws {
         service.ytdlpPath = URL(fileURLWithPath: "/usr/local/bin/yt-dlp")
         
