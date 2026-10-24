@@ -113,12 +113,17 @@ public final class NetworkEnvironmentService: @unchecked Sendable {
         inFlightInsightsTask?.cancel()
     }
 
+    public static let defaultInsightsEndpoint = URL(string: "https://api.nordvpn.com/v1/helpers/ips/insights")
+
     /// Optional, non-blocking secondary check against NordVPN Insights endpoint.
     /// Local detection via NWPathMonitor remains the primary authoritative signal.
     /// This request is purely best-effort, never blocks downloads or startup,
     /// and gracefully degrades if the undocumented endpoint changes or fails.
-    nonisolated public static func performInsightsCheck(session: URLSession? = nil) async -> Bool {
-        guard let url = URL(string: "https://api.nordvpn.com/v1/helpers/ips/insights") else {
+    nonisolated public static func performInsightsCheck(
+        endpoint: URL? = defaultInsightsEndpoint,
+        session: URLSession? = nil
+    ) async -> Bool {
+        guard let url = endpoint else {
             return false
         }
         var request = URLRequest(url: url)
@@ -155,25 +160,31 @@ public final class NetworkEnvironmentService: @unchecked Sendable {
         }
     }
 
+    private func recordSecondaryNordConfirmation() {
+        lock.withLock {
+            secondaryNordConfirmed = true
+        }
+        Task { @MainActor in
+            LoggerService.shared.log("[Network] NordVPN confirmed via secondary Insights check.", level: .info)
+        }
+    }
+
     private func triggerOptionalSecondaryInsightsCheck(session: URLSession? = nil) {
         if NotificationService.isRunningTests && session == nil {
             return
         }
 
+        let task = Task.detached(priority: .utility) { [weak self] in
+            guard let self else { return }
+            let isConfirmed = await Self.performInsightsCheck(session: session)
+            if !Task.isCancelled && isConfirmed {
+                self.recordSecondaryNordConfirmation()
+            }
+        }
+
         lock.withLock {
             inFlightInsightsTask?.cancel()
-            inFlightInsightsTask = Task.detached(priority: .utility) { [weak self] in
-                guard let self else { return }
-                let isConfirmed = await Self.performInsightsCheck(session: session)
-                if !Task.isCancelled && isConfirmed {
-                    self.lock.withLock {
-                        self.secondaryNordConfirmed = true
-                    }
-                    Task { @MainActor in
-                        LoggerService.shared.log("[Network] NordVPN confirmed via secondary Insights check.", level: .info)
-                    }
-                }
-            }
+            inFlightInsightsTask = task
         }
     }
 
