@@ -76,7 +76,7 @@ public enum CookieManager {
         }
     }
 
-    private static let orphanedCookieFilePrefixes = ["siphon_consolidated_cookies_", "siphon_cookies_", "siphon_header_cookies_"]
+    private static let orphanedCookieFilePrefixes = ["siphon_consolidated_cookies_", "siphon_cookies_", "siphon_header_cookies_", "siphon_proxy_"]
 
     private static func purgeCookieFiles(in dir: URL) {
         let fileManager = FileManager.default

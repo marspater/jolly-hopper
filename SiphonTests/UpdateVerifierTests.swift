@@ -997,4 +997,17 @@ private actor UpdateManifestFetchGate {
         continuation?.resume()
         continuation = nil
     }
+
+    func testStaleUpdateMountPointsMatchOnlyStagedImages() throws {
+        let staged = "/var/folders/xx/T/Siphon_Update_"
+        let info: [String: Any] = ["images": [
+            ["image-path": "/private/var/folders/xx/T/Siphon_Update_\(UUID().uuidString).dmg",
+             "system-entities": [["dev-entry": "/dev/disk9"], ["dev-entry": "/dev/disk9s1", "mount-point": "/Volumes/Siphon"]]],
+            ["image-path": "/Users/me/Downloads/Other.dmg",
+             "system-entities": [["dev-entry": "/dev/disk8s1", "mount-point": "/Volumes/Other"]]],
+        ]]
+        let data = try PropertyListSerialization.data(fromPropertyList: info, format: .xml, options: 0)
+        XCTAssertEqual(UpdateInstaller.staleUpdateMountPoints(hdiutilInfo: data, stagedPrefix: staged), ["/Volumes/Siphon"])
+        XCTAssertEqual(UpdateInstaller.staleUpdateMountPoints(hdiutilInfo: Data("junk".utf8), stagedPrefix: staged), [])
+    }
 }

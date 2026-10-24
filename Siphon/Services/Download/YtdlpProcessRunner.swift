@@ -5,6 +5,7 @@
 
 import Foundation
 import Darwin
+import os
 
 public final class DownloadProcessController: @unchecked Sendable {
     private var internalLifecycle: ProcessLifecycleState = .created
@@ -15,8 +16,30 @@ public final class DownloadProcessController: @unchecked Sendable {
     private var drainingProcessGroup: pid_t = 0
     private let lock = NSLock()
 
+    private struct WeakController: @unchecked Sendable {
+        weak var controller: DownloadProcessController?
+    }
+    /// Every controller with a live process, including ones no download job owns
+    /// (metadata fetches, probes, conversions). Their tools run in their own
+    /// process group, so app exit alone would leave them running.
+    private static let running = OSAllocatedUnfairLock<[ObjectIdentifier: WeakController]>(initialState: [:])
+
     public init() {
         // Default initializer for ProcessController
+    }
+
+    /// Quit-time stop for every running process. Pair with
+    /// `waitForPendingTerminations()` before the app exits.
+    public static func cancelAllRunning() {
+        let controllers = running.withLock { $0.values.compactMap(\.controller) }
+        for controller in controllers {
+            controller.cancel()
+        }
+    }
+
+    private func setRunning(_ isRunning: Bool) {
+        let id = ObjectIdentifier(self)
+        Self.running.withLock { $0[id] = isRunning ? WeakController(controller: self) : nil }
     }
 
     public var lifecycleState: ProcessLifecycleState {
@@ -30,6 +53,7 @@ public final class DownloadProcessController: @unchecked Sendable {
         defer { lock.unlock() }
         activeProcess = nil
         internalLifecycle = .terminated(exitCode: exitCode, reason: reason)
+        setRunning(false)
     }
 
     private static func getDescendantPIDs(for parentPID: pid_t) -> [pid_t] {
@@ -39,23 +63,52 @@ public final class DownloadProcessController: @unchecked Sendable {
         var queue: [pid_t] = [parentPID]
 
         while !queue.isEmpty {
-            let currentParent = queue.removeFirst()
-            let byteCount = proc_listpids(UInt32(PROC_PPID_ONLY), UInt32(currentParent), nil, 0)
-            guard byteCount > 0 else { continue }
-            let pidCount = Int(byteCount) / MemoryLayout<pid_t>.size
-            var pids = [pid_t](repeating: 0, count: pidCount)
-            let actualBytes = proc_listpids(UInt32(PROC_PPID_ONLY), UInt32(currentParent), &pids, byteCount)
-            guard actualBytes > 0 else { continue }
-            let actualCount = Int(actualBytes) / MemoryLayout<pid_t>.size
-            for i in 0..<actualCount {
-                let child = pids[i]
-                if child > 0 && seenPIDs.insert(child).inserted {
-                    descendants.append(child)
-                    queue.append(child)
-                }
+            for child in childPIDs(of: queue.removeFirst()) where seenPIDs.insert(child).inserted {
+                descendants.append(child)
+                queue.append(child)
             }
         }
         return descendants
+    }
+
+    private static func childPIDs(of parentPID: pid_t) -> [pid_t] {
+        let byteCount = proc_listpids(UInt32(PROC_PPID_ONLY), UInt32(parentPID), nil, 0)
+        guard byteCount > 0 else { return [] }
+        var pids = [pid_t](repeating: 0, count: Int(byteCount) / MemoryLayout<pid_t>.size)
+        let actualBytes = proc_listpids(UInt32(PROC_PPID_ONLY), UInt32(parentPID), &pids, byteCount)
+        guard actualBytes > 0 else { return [] }
+        return pids.prefix(Int(actualBytes) / MemoryLayout<pid_t>.size).filter { $0 > 0 }
+    }
+
+    /// Stops tools left running by a Siphon process that died without teardown
+    /// (crash, force quit, SIGKILL). siphon-pgrp puts each tool in its own process
+    /// group, so the app's death does not stop it and launchd adopts it. A live
+    /// recording would then grow forever, and a recovered job would race it for the
+    /// same partial file. Tools of a running Siphon still have that Siphon as their
+    /// parent and are never matched.
+    @discardableResult
+    static func reapOrphanedProcesses(executablePaths: [URL]) -> [pid_t] {
+        let targets = Set(executablePaths.map { $0.resolvingSymlinksInPath().path })
+        guard !targets.isEmpty else { return [] }
+        let uid = getuid()
+        var reaped: [pid_t] = []
+        // ponytail: matches the managed and bundled tools only. A user-provided
+        // yt-dlp path is skipped, since the user may run that binary on their own.
+        for pid in childPIDs(of: 1) {
+            var info = proc_bsdinfo()
+            let size = Int32(MemoryLayout<proc_bsdinfo>.size)
+            guard proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, &info, size) == size,
+                  info.pbi_uid == uid, info.pbi_ppid == 1 else { continue }
+            var buffer = [CChar](repeating: 0, count: Int(MAXPATHLEN) * 4)
+            guard proc_pidpath(pid, &buffer, UInt32(buffer.count)) > 0 else { continue }
+            let path = URL(fileURLWithPath: String(cString: buffer)).resolvingSymlinksInPath().path
+            guard targets.contains(path) else { continue }
+            let message = "Stopping orphaned \(URL(fileURLWithPath: path).lastPathComponent) (pid \(pid)) left by an earlier Siphon run"
+            Task { @MainActor in LoggerService.shared.log(message, level: .warning) }
+            terminateProcessTree(nil, pid: pid)
+            reaped.append(pid)
+        }
+        return reaped
     }
 
     /// Kernel start time of `pid`, or nil once it has exited. A PID alone is not an
@@ -175,6 +228,7 @@ public final class DownloadProcessController: @unchecked Sendable {
             let pid = proc.processIdentifier
             internalLifecycle = .running(pid: pid)
             lock.unlock()
+            setRunning(true)
         } catch {
             internalLifecycle = .failed(error.localizedDescription)
             activeProcess = nil
@@ -187,6 +241,7 @@ public final class DownloadProcessController: @unchecked Sendable {
     /// A requested cancellation is sticky: detaching must not let a later
     /// recovery attempt start a new process for a stopped download.
     public func detach() {
+        setRunning(false)
         lock.lock()
         defer { lock.unlock() }
         activeProcess = nil

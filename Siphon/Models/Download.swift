@@ -12,11 +12,112 @@ enum ScratchDirectoryPolicy {
     static func isOwned(_ url: URL, fileManager: FileManager = .default) -> Bool {
         let root = fileManager.temporaryDirectory.standardizedFileURL.resolvingSymlinksInPath()
         let candidate = url.standardizedFileURL.resolvingSymlinksInPath()
-        let name = candidate.lastPathComponent
-        guard candidate.deletingLastPathComponent().path == root.path,
-              name.hasPrefix(directoryPrefix) else { return false }
-        let identifier = String(name.dropFirst(directoryPrefix.count))
-        return UUID(uuidString: identifier) != nil
+        guard candidate.deletingLastPathComponent().path == root.path else { return false }
+        return hasScratchName(candidate)
+    }
+
+    /// Hidden temp files written beside media (conversions, cover art, GIF
+    /// re-encodes, decryption). They share the media's volume for an atomic
+    /// replace, so they cannot live in the scratch directory.
+    static let siblingTempPrefix = ".siphon-tmp-"
+
+    static func siblingTempURL(beside file: URL, extension ext: String) -> URL {
+        let name = siblingTempPrefix + UUID().uuidString
+        return file.deletingLastPathComponent().appendingPathComponent(ext.isEmpty ? name : "\(name).\(ext)")
+    }
+
+    /// Sibling temp names, including those of builds before `siblingTempPrefix`.
+    static func isSiblingTempName(_ name: String) -> Bool {
+        for prefix in [siblingTempPrefix, ".converted-", "thumb_temp_", "decrypted_"] where name.hasPrefix(prefix) {
+            return UUID(uuidString: String(name.dropFirst(prefix.count).prefix(36))) != nil
+        }
+        // Older GIF re-encodes: ".<UUID>.mp4.partial"
+        return name.hasPrefix(".") && name.hasSuffix(".mp4.partial")
+            && UUID(uuidString: String(name.dropFirst().prefix(36))) != nil
+    }
+
+    private static let sweptSaveFolders = OSAllocatedUnfairLock<Set<String>>(initialState: [])
+
+    /// Removes sibling temp files a dead run left in `folder`. It runs when a job
+    /// starts there, at most once per folder per launch: the app already writes
+    /// to that folder, so the sweep adds no file-access prompt.
+    @discardableResult
+    static func purgeAbandonedSiblingTemps(
+        in folder: URL,
+        minimumAge: TimeInterval = 24 * 60 * 60,
+        now: Date = Date(),
+        fileManager: FileManager = .default
+    ) -> [URL] {
+        // ponytail: top level of the save folder only; playlist subfolders keep
+        // theirs until a job saves into them directly.
+        guard sweptSaveFolders.withLock({ $0.insert(folder.standardizedFileURL.path).inserted }) else { return [] }
+        let keys: Set<URLResourceKey> = [.contentModificationDateKey, .isRegularFileKey]
+        guard let entries = try? fileManager.contentsOfDirectory(at: folder, includingPropertiesForKeys: Array(keys)) else { return [] }
+        var removed: [URL] = []
+        for file in entries where isSiblingTempName(file.lastPathComponent) {
+            guard let values = try? file.resourceValues(forKeys: keys), values.isRegularFile == true,
+                  now.timeIntervalSince(values.contentModificationDate ?? .distantFuture) >= minimumAge else { continue }
+            do {
+                try fileManager.removeItem(at: file)
+                removed.append(file)
+            } catch {
+                let message = "Could not remove abandoned temporary file: \(error.localizedDescription)"
+                Task { @MainActor in LoggerService.shared.log(message, level: .warning) }
+            }
+        }
+        return removed
+    }
+
+    private static func hasScratchName(_ url: URL) -> Bool {
+        let name = url.lastPathComponent
+        guard name.hasPrefix(directoryPrefix) else { return false }
+        return UUID(uuidString: String(name.dropFirst(directoryPrefix.count))) != nil
+    }
+
+    /// Per-run artifacts in the temporary folder: download scratch and update staging.
+    private static let temporaryArtifactPrefixes = [directoryPrefix, "Siphon_Install_", "Siphon_Update_"]
+
+    static func hasTemporaryArtifactName(_ url: URL) -> Bool {
+        let name = url.lastPathComponent
+        return temporaryArtifactPrefixes.contains { prefix in
+            name.hasPrefix(prefix) && UUID(uuidString: String(name.dropFirst(prefix.count).prefix(36))) != nil
+        }
+    }
+
+    /// Removes scratch and update staging left by runs that died before teardown
+    /// (crash, force quit). `keeping` names the directories restored jobs still own. A directory touched
+    /// within `minimumAge` is kept too: it may belong to another running Siphon
+    /// (a QA copy or the test host) that shares this temporary directory.
+    @discardableResult
+    static func purgeAbandoned(
+        keeping kept: Set<String>,
+        in root: URL = FileManager.default.temporaryDirectory,
+        minimumAge: TimeInterval = 24 * 60 * 60,
+        now: Date = Date(),
+        fileManager: FileManager = .default
+    ) -> [URL] {
+        // ponytail: liveness is by age only; add a per-process owner marker if
+        // concurrent Siphon instances with long silent downloads become real.
+        let keys: [URLResourceKey] = [.contentModificationDateKey]
+        guard let entries = try? fileManager.contentsOfDirectory(at: root, includingPropertiesForKeys: keys) else { return [] }
+        var removed: [URL] = []
+        for directory in entries where hasTemporaryArtifactName(directory) && !kept.contains(directory.lastPathComponent) {
+            // A running download keeps writing its .part file, which the
+            // directory's own date does not reflect.
+            let children = (try? fileManager.contentsOfDirectory(at: directory, includingPropertiesForKeys: keys)) ?? []
+            let lastTouched = ([directory] + children)
+                .compactMap { try? $0.resourceValues(forKeys: Set(keys)).contentModificationDate }
+                .max() ?? .distantPast
+            guard now.timeIntervalSince(lastTouched) >= minimumAge else { continue }
+            do {
+                try fileManager.removeItem(at: directory)
+                removed.append(directory)
+            } catch {
+                let message = "Could not remove abandoned scratch directory: \(error.localizedDescription)"
+                Task { @MainActor in LoggerService.shared.log(message, level: .warning) }
+            }
+        }
+        return removed
     }
 }
 

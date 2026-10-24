@@ -596,4 +596,67 @@ final class ProcessLifecycleTests: XCTestCase {
         XCTAssertNoThrow(try controller.start(validProc))
         validProc.waitUntilExit()
     }
+
+    func testCancelAllRunningStopsCommandsNoJobOwns() throws {
+        let controller = DownloadProcessController()
+        let proc = Process()
+        proc.executableURL = URL(fileURLWithPath: "/bin/sleep")
+        proc.arguments = ["30"]
+        try controller.start(proc)
+
+        DownloadProcessController.cancelAllRunning()
+        DownloadProcessController.waitForPendingTerminations()
+        proc.waitUntilExit()
+        XCTAssertEqual(proc.terminationReason, .uncaughtSignal)
+        XCTAssertTrue(controller.isCancelled)
+    }
+
+    func testReaperStopsOnlyOrphanedCopiesOfTheGivenTools() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("reaper_\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let tool = dir.appendingPathComponent("yt-dlp")
+        try FileManager.default.copyItem(at: URL(fileURLWithPath: "/bin/sleep"), to: tool)
+        // A copied platform binary is killed at launch until it is re-signed.
+        let sign = Process()
+        sign.executableURL = URL(fileURLWithPath: "/usr/bin/codesign")
+        sign.arguments = ["-s", "-", "-f", tool.path]
+        sign.standardError = FileHandle.nullDevice
+        try sign.run()
+        sign.waitUntilExit()
+        guard sign.terminationStatus == 0 else { throw XCTSkip("Needs codesign to run a copied tool") }
+
+        // The shell exits at once and launchd adopts the tool, as after a crash.
+        let launcher = Process()
+        launcher.executableURL = URL(fileURLWithPath: "/bin/sh")
+        launcher.arguments = ["-c", "\"$0\" 30 >/dev/null 2>&1 & echo $!", tool.path]
+        let pipe = Pipe()
+        launcher.standardOutput = pipe
+        try launcher.run()
+        launcher.waitUntilExit()
+        let output = String(decoding: pipe.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+        let orphan = try XCTUnwrap(pid_t(output.trimmingCharacters(in: .whitespacesAndNewlines)))
+        let orphanStart = try XCTUnwrap(DownloadProcessController.processStartTime(orphan))
+        defer {
+            if DownloadProcessController.processStartTime(orphan) == orphanStart { kill(orphan, SIGKILL) }
+        }
+
+        // The same tool under a live parent belongs to a running Siphon.
+        let parented = Process()
+        parented.executableURL = tool
+        parented.arguments = ["30"]
+        try parented.run()
+        defer {
+            parented.terminate()
+            parented.waitUntilExit()
+        }
+
+        XCTAssertEqual(DownloadProcessController.reapOrphanedProcesses(executablePaths: [tool]), [orphan])
+        XCTAssertTrue(parented.isRunning)
+        let deadline = Date().addingTimeInterval(5)
+        while DownloadProcessController.processStartTime(orphan) == orphanStart, Date() < deadline {
+            usleep(20_000) // launchd reaps the stopped orphan
+        }
+        XCTAssertNotEqual(DownloadProcessController.processStartTime(orphan), orphanStart)
+    }
 }

@@ -92,6 +92,8 @@ class DownloadManager: ObservableObject {
     func handleAppTermination() {
         guard !isShuttingDown else { return }
         stopAllDownloads(preservePaused: true, suppressNotification: true)
+        // Metadata fetches and probes belong to no job but outlive the app too.
+        DownloadProcessController.cancelAllRunning()
         shutdown()
     }
 
@@ -186,6 +188,16 @@ class DownloadManager: ObservableObject {
         self.languageService = languageService
         loadHistory()
         checkQueueRecovery()
+        purgeAbandonedScratch()
+    }
+
+    private func purgeAbandonedScratch() {
+        // A snapshot this build cannot read may still own scratch directories.
+        guard !NotificationService.isRunningTests, !recoveryStore.hasUnsupportedSchemaSnapshot else { return }
+        let kept = Set((downloads + pendingRecoveryJobs).compactMap { $0.scratchDirectory?.lastPathComponent })
+        Task.detached(priority: .utility) {
+            ScratchDirectoryPolicy.purgeAbandoned(keeping: kept)
+        }
     }
 
     func checkQueueRecovery() {

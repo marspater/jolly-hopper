@@ -655,6 +655,7 @@ final class DownloadManagerTests: XCTestCase {
         manager.languageService = languageService
         let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try? FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
         let dummyYtdlp = tempDir.appendingPathComponent("yt-dlp")
         let dummyFfmpeg = tempDir.appendingPathComponent("ffmpeg")
         FileManager.default.createFile(atPath: dummyYtdlp.path, contents: Data("#!/bin/sh\n".utf8), attributes: [.posixPermissions: 0o755])

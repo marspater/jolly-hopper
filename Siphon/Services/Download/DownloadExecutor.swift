@@ -362,6 +362,10 @@ final class DownloadExecutor: ObservableObject {
             if download.scratchDirectory == nil {
                 download.scratchDirectory = ScratchDirectoryPolicy.makeURL()
             }
+            let saveFolder = download.options.saveFolder
+            Task.detached(priority: .utility) {
+                ScratchDirectoryPolicy.purgeAbandonedSiblingTemps(in: saveFolder)
+            }
 
             // The .downloading transition persists recovery state. Allocate the
             // scratch path first so a crash immediately after launch can still

@@ -9,6 +9,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         UNUserNotificationCenter.current().delegate = NotificationService.shared
         NotificationService.shared.setup()
         guard !NotificationService.isRunningTests else { return }
+        Task.detached(priority: .utility) { UpdateInstaller.detachStaleUpdateImages() }
         NSWorkspace.shared.notificationCenter.addObserver(self, selector: #selector(cleanupRecoveryBackups(_:)),
             name: NSWorkspace.didTerminateApplicationNotification, object: nil)
         cleanupRecoveryBackups(notification)
@@ -78,6 +79,14 @@ struct SiphonApp: App {
     init() {
         GeistFontRegistrar.registerFonts()
         CookieManager.purgeOrphanedTempCookieFiles()
+        // Before any recovered job can restart against the same partial file.
+        if !NotificationService.isRunningTests {
+            let support = YtdlpService.getAppSupportDirectory()
+            DownloadProcessController.reapOrphanedProcesses(
+                executablePaths: ["yt-dlp", "ffmpeg", "ffprobe"].map { support.appendingPathComponent($0) }
+                    + ["ffmpeg", "ffprobe"].compactMap { Bundle.main.url(forResource: $0, withExtension: nil) }
+            )
+        }
     }
 
     var body: some Scene {

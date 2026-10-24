@@ -104,7 +104,7 @@ public final class UpdateInstaller: Sendable {
         defer {
             if let mountPoint = mountedMountPoint {
                 do {
-                    try unmountDMG(mountPoint: mountPoint)
+                    try Self.unmountDMG(mountPoint: mountPoint)
                 } catch {
                     Self.log("Failed to unmount update disk image during cleanup: \(error.localizedDescription)", level: .warning)
                 }
@@ -129,7 +129,7 @@ public final class UpdateInstaller: Sendable {
             // Unmount DMG now that it's copied to staging. If it fails, keep the
             // mount point registered so the defer above retries cleanup.
             do {
-                try unmountDMG(mountPoint: mountPoint)
+                try Self.unmountDMG(mountPoint: mountPoint)
                 mountedMountPoint = nil
             } catch {
                 Self.log("Could not unmount update disk image after staging: \(error.localizedDescription)", level: .warning)
@@ -310,9 +310,11 @@ public final class UpdateInstaller: Sendable {
 
     // MARK: - Mount & Extraction Helpers
 
+    private static let hdiutilURL = URL(fileURLWithPath: NSString.path(withComponents: ["/", "usr", "bin", "hdiutil"]))
+
     private func mountDMG(dmgURL: URL) throws -> String {
         let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/hdiutil")
+        process.executableURL = Self.hdiutilURL
         process.arguments = ["attach", dmgURL.path, "-nobrowse", "-readonly", "-plist"]
         process.environment = YtdlpService.createSanitizedEnvironment()
 
@@ -351,9 +353,44 @@ public final class UpdateInstaller: Sendable {
         throw UpdateInstallError.mountFailed("Could not determine mount point from hdiutil output")
     }
 
-    private func unmountDMG(mountPoint: String) throws {
+    /// Detaches update images that a crashed install left mounted. Only images
+    /// staged by `UpdateDownloader` in this user's temporary folder match.
+    static func detachStaleUpdateImages() {
         let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/hdiutil")
+        process.executableURL = Self.hdiutilURL
+        process.arguments = ["info", "-plist"]
+        process.environment = YtdlpService.createSanitizedEnvironment()
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = FileHandle.nullDevice
+        do { try process.run() } catch { return }
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+        let staged = FileManager.default.temporaryDirectory.appendingPathComponent("Siphon_Update_").path
+        for mountPoint in staleUpdateMountPoints(hdiutilInfo: data, stagedPrefix: staged) {
+            do {
+                try unmountDMG(mountPoint: mountPoint)
+                log("Detached a stale update disk image left by an interrupted install.", level: .info)
+            } catch {
+                log("Could not detach stale update disk image: \(error.localizedDescription)", level: .warning)
+            }
+        }
+    }
+
+    static func staleUpdateMountPoints(hdiutilInfo: Data, stagedPrefix: String) -> [String] {
+        // hdiutil reports /private/var/...; the temporary directory URL may omit /private.
+        func normalized(_ path: String) -> String { path.hasPrefix("/private/") ? String(path.dropFirst(8)) : path }
+        guard let plist = try? PropertyListSerialization.propertyList(from: hdiutilInfo, format: nil) as? [String: Any],
+              let images = plist["images"] as? [[String: Any]] else { return [] }
+        let prefix = normalized(stagedPrefix)
+        return images
+            .filter { normalized($0["image-path"] as? String ?? "").hasPrefix(prefix) }
+            .flatMap { ($0["system-entities"] as? [[String: Any]] ?? []).compactMap { $0["mount-point"] as? String } }
+    }
+
+    private static func unmountDMG(mountPoint: String) throws {
+        let process = Process()
+        process.executableURL = Self.hdiutilURL
         process.arguments = ["detach", mountPoint, "-force"]
         process.environment = YtdlpService.createSanitizedEnvironment()
         process.standardOutput = FileHandle.nullDevice
