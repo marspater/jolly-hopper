@@ -5738,6 +5738,12 @@ public struct DownloadResult: Sendable {
 
     // MARK: - Beeg Extractor
 
+    nonisolated static let beegOrigin = "https://beeg.com"
+    nonisolated static let beegReferer = "https://beeg.com/"
+    nonisolated static let beegStoreBaseURL = "https://store.externulls.com"
+    nonisolated static let beegVideoBaseURL = "https://video.beeg.com"
+    nonisolated static let beegThumbsBaseURL = "https://thumbs.externulls.com"
+
     private func isBeegURL(_ urlOrHost: String) -> Bool {
         Self.isBeegURL(urlOrHost)
     }
@@ -5804,7 +5810,7 @@ public struct DownloadResult: Sendable {
         return formats.map(\.format)
     }
 
-    func resolveBeegMediaInfo(url: String, proxy: String? = nil) async throws -> BeegExtractedMedia? {
+    func resolveBeegMediaInfo(url: String, proxy _: String? = nil) async throws -> BeegExtractedMedia? {
         if let custom = beegMediaResolver {
             return try await custom(url)
         }
@@ -5814,12 +5820,12 @@ public struct DownloadResult: Sendable {
             return nil
         }
 
-        guard let playURL = URL(string: "https://store.externulls.com/video/play_url/\(videoID)") else { return nil }
+        guard let playURL = URL(string: "\(Self.beegStoreBaseURL)/video/play_url/\(videoID)") else { return nil }
         var playRequest = URLRequest(url: playURL)
         playRequest.timeoutInterval = 15.0
         playRequest.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36", forHTTPHeaderField: "User-Agent")
-        playRequest.setValue("https://beeg.com/", forHTTPHeaderField: "Referer")
-        playRequest.setValue("https://beeg.com", forHTTPHeaderField: "Origin")
+        playRequest.setValue(Self.beegReferer, forHTTPHeaderField: "Referer")
+        playRequest.setValue(Self.beegOrigin, forHTTPHeaderField: "Origin")
         playRequest.setValue("application/json, text/plain, */*", forHTTPHeaderField: "Accept")
 
         let (playData, playResponse) = try await EgressBoundary.session.boundedData(for: playRequest)
@@ -5830,23 +5836,29 @@ public struct DownloadResult: Sendable {
             return nil
         }
 
-        let rawStreamPath = playText.hasPrefix("/") ? playText : "/" + playText
-        let streamURL = (rawStreamPath.hasPrefix("http://") || rawStreamPath.hasPrefix("https://"))
-            ? playText
-            : "https://video.beeg.com\(rawStreamPath)"
+        let streamURL: String
+        if playText.hasPrefix("http://") || playText.hasPrefix("https://") {
+            streamURL = playText
+        } else if let base = URL(string: Self.beegVideoBaseURL),
+                  let combined = URL(string: playText, relativeTo: base) {
+            streamURL = combined.absoluteString
+        } else {
+            let path = playText.hasPrefix("/") ? String(playText.dropFirst()) : playText
+            streamURL = "\(Self.beegVideoBaseURL)/\(path)"
+        }
 
         var title = "Beeg Video \(videoID)"
         var duration: Int? = nil
         var width: Int? = nil
         var height: Int? = nil
-        let thumbnailURL = "https://thumbs.externulls.com/videos/\(videoID)/0.webp"
+        let thumbnailURL = "\(Self.beegThumbsBaseURL)/videos/\(videoID)/0.webp"
 
-        if let factsURL = URL(string: "https://store.externulls.com/facts/file/\(videoID)") {
+        if let factsURL = URL(string: "\(Self.beegStoreBaseURL)/facts/file/\(videoID)") {
             var factsRequest = URLRequest(url: factsURL)
             factsRequest.timeoutInterval = 15.0
             factsRequest.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36", forHTTPHeaderField: "User-Agent")
-            factsRequest.setValue("https://beeg.com/", forHTTPHeaderField: "Referer")
-            factsRequest.setValue("https://beeg.com", forHTTPHeaderField: "Origin")
+            factsRequest.setValue(Self.beegReferer, forHTTPHeaderField: "Referer")
+            factsRequest.setValue(Self.beegOrigin, forHTTPHeaderField: "Origin")
             factsRequest.setValue("application/json, text/plain, */*", forHTTPHeaderField: "Accept")
 
             if let (factsData, factsResponse) = try? await EgressBoundary.session.boundedData(for: factsRequest),
