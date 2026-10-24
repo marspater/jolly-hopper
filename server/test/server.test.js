@@ -215,6 +215,32 @@ describe('Siphon Companion Server', () => {
     assert.equal(health.status, 200, 'server must remain healthy after malformed input');
   });
 
+  test('protocol-relative or absolute request targets return 400', async () => {
+    const addr = server.address();
+    const invalidPaths = ['//evil.com/health', 'http://evil.com/health', 'ftp://evil.com/health'];
+
+    for (const targetPath of invalidPaths) {
+      const result = await new Promise((resolve, reject) => {
+        const req = http.request({
+          hostname: '127.0.0.1',
+          port: addr.port,
+          path: targetPath,
+          method: 'GET'
+        }, (res) => {
+          let body = '';
+          res.setEncoding('utf8');
+          res.on('data', (chunk) => { body += chunk; });
+          res.on('end', () => resolve({ statusCode: res.statusCode, body }));
+        });
+        req.on('error', reject);
+        req.end();
+      });
+
+      assert.equal(result.statusCode, 400, `Target path '${targetPath}' should return 400`);
+      assert.deepEqual(JSON.parse(result.body), { error: 'Bad Request' });
+    }
+  });
+
   test('GET /unknown returns 404', async () => {
     const res = await fetch(`${baseUrl}/unknown-endpoint`);
     assert.equal(res.status, 404);
