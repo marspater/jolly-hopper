@@ -15,7 +15,7 @@ Siphon 5.5.0 adds a public-network boundary for browser links, requires signed r
 - **Geist everywhere:** Every window defaults to Geist, and the controls macOS drew in its system font now render Geist too: pop-up menus, bordered buttons, menu buttons and Settings section headers. Menu items, alerts and tooltips keep the system font.
 - **Play from the list:** Double-clicking a finished download's card, or its row in Recent downloads, plays the video.
 - **Pause from Home:** An active download's button on Home pauses it instead of stopping it, so partial data is kept; a paused row offers Resume.
-- **More sites:** PussySpace and StarWank support.
+- **More sites:** Support for two more single-file sites.
 
 ### UI polish
 
@@ -53,7 +53,7 @@ Siphon 5.5.0 adds a public-network boundary for browser links, requires signed r
 - Safari cookies without Full Disk Access are skipped for the rest of the session after the first denial instead of costing a failed attempt per site.
 - Dropping a `.txt` list of URLs on the Home screen starts its downloads instead of reporting an invalid URL.
 - Stop All stays responsive, quitting no longer leaves orphaned scratch data, and the log keeps its final lines.
-- Protected-site recovery for BoyfriendTV (visible WebKit challenge), Recu, and Eporner.
+- Protected-site recovery for three sites, one of them through a visible WebKit challenge window.
 - Missing completed files show "File moved or deleted", HTTP errors from dependency and update downloads are reported as such, and a full disk no longer crashes the logger.
 - Many smaller fixes to format ranking, window reopening, menu bar presets, error messages, and missing translations.
 - Recent on Home stays newest-first when the queue is reordered.

@@ -60,6 +60,8 @@ Partially failed playlists retain their completed output paths but enter Failed 
 
 Filename collisions are action-required jobs: they appear in Recent (not Queue or its count) until the user chooses overwrite, a new name, or removal, and history trimming never evicts them. They are never admitted for execution until the user chooses.
 
+The queue, the executor and the Add Download sheet share one collision rule (`DownloadQueue.mediaFileCollides`). A video job collides with a file of the same name in any container from `YtdlpService.videoMediaExtensions`, which is also the video half of the media list the downloader recognises. Audio jobs collide only on their exact extension. Active jobs' output reservations block names by the same rule. Reservation keys (`DownloadQueue.reservationKey`) ignore case, canonicalise Unicode and resolve symlinks in the save folder, so a folder and an alias of it share one key.
+
 ### Dependency update exclusion
 
 yt-dlp replacement is serialized against download execution:
@@ -79,6 +81,8 @@ Executor task/controller ownership is still released by executor teardown rather
 ### External URL ingress
 
 Browser extensions enter through `SiphonApp.handleIncomingURL`. The custom URL is accepted only for supported Siphon schemes and download hosts, then the target URL is validated by `ExternalDownloadTargetPolicy` before it reaches download code. For external deep-link downloads, Siphon enforces `enforcePublicNetworkBoundary`: yt-dlp runs through a local loopback forward proxy (`EgressProxyServer` via `--proxy`) that intercepts connection attempts and HTTP redirects, resolving hostnames and blocking access to loopback, private, link-local, and multicast ranges with HTTP 403. Siphon's internal metadata fetches (e.g. Finder icon thumbnails) re-apply the public network policy on every redirect via `PublicRedirectPolicy`. Custom user arguments cannot override this proxy configuration for boundary-enforced downloads. Site-specific resolvers inherit the boundary through the `EgressBoundary.proxyURL` task-local that `YtdlpService.fetchInfo` and `download` bind: their yt-dlp runs, `URLSession` requests and WebKit sessions go through the same proxy. The proxy forwards one plain-HTTP request per upstream connection (`Connection: close`), because clients reuse a proxy connection across hosts.
+
+The proxy only sees HTTP(S), so a resolver that builds a stream URL from a site's API response must parse and validate it before yt-dlp runs. It accepts https only, on the site's own CDN host (an exact match, not a substring), with no embedded credentials. Stream URLs reused from cached metadata go through the same check.
 
 The proxy rejects bare carriage returns and Unicode header separators, resolves each target once, validates every returned numeric address, and connects to that validated snapshot. Custom yt-dlp executables inherit the boundary by their resolved path even when renamed. Thumbnail fetches also use the public-network proxy, including view tasks outside a download's task-local scope; Finder icons reuse the thumbnail already downloaded by the service. Proxy shutdown retires its cached URLSession, and the route cache has a fixed size limit.
 
