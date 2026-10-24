@@ -563,5 +563,35 @@ final class DownloadTests: XCTestCase {
         XCTAssertEqual(options.additionalArguments, "--geo-bypass")
         XCTAssertEqual(options.resolutionFallbackPolicy, .allowHigher)
     }
-}
 
+    func testAbandonedScratchSweepKeepsOwnedAndRecentDirectories() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("scratch_sweep_\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let old = Date().addingTimeInterval(-2 * 24 * 60 * 60)
+        func scratch(touched: Date, partTouched: Date? = nil) throws -> URL {
+            let dir = root.appendingPathComponent(ScratchDirectoryPolicy.directoryPrefix + UUID().uuidString)
+            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            if let partTouched {
+                let part = dir.appendingPathComponent("video.mp4.part")
+                try Data([0]).write(to: part)
+                try FileManager.default.setAttributes([.modificationDate: partTouched], ofItemAtPath: part.path)
+            }
+            try FileManager.default.setAttributes([.modificationDate: touched], ofItemAtPath: dir.path)
+            return dir
+        }
+        let abandoned = try scratch(touched: old, partTouched: old)
+        let paused = try scratch(touched: old)
+        let stillWriting = try scratch(touched: old, partTouched: Date())
+        let notScratch = root.appendingPathComponent("siphon_scratch_not-a-uuid")
+        try FileManager.default.createDirectory(at: notScratch, withIntermediateDirectories: true)
+        try FileManager.default.setAttributes([.modificationDate: old], ofItemAtPath: notScratch.path)
+
+        let removed = ScratchDirectoryPolicy.purgeAbandoned(keeping: [paused.lastPathComponent], in: root)
+
+        XCTAssertEqual(removed.map(\.lastPathComponent), [abandoned.lastPathComponent])
+        for kept in [paused, stillWriting, notScratch] {
+            XCTAssertTrue(FileManager.default.fileExists(atPath: kept.path), kept.lastPathComponent)
+        }
+    }
+}
