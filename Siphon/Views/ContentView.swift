@@ -122,7 +122,7 @@ struct ContentView: View {
                     updateChecker: updateChecker,
                     downloadManager: downloadManager,
                     appState: appState,
-                    initialTab: .about
+                    initialTab: .general
                 )
             }
             Button(languageService.s("later"), role: .cancel) {

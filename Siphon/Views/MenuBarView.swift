@@ -57,7 +57,6 @@ struct MenuBarView: View {
         }
         .padding(SiphonTheme.spacing12)
         .frame(minWidth: 350, idealWidth: 370, maxWidth: 420)
-        .siphonAdaptiveRendering()
         .siphonWindowBackground()
         .onAppear {
             customPresets = CustomPreset.loadAll()
@@ -111,9 +110,12 @@ struct MenuBarView: View {
             }
 
             Button {
-                if let clipboard = NSPasteboard.general.string(forType: .string) {
-                    url = clipboard.trimmingCharacters(in: .whitespacesAndNewlines)
+                if let clipboard = NSPasteboard.general.string(forType: .string),
+                   let found = DownloadURLValidator.extractURLs(from: clipboard).first {
+                    url = found
                     pasteFeedback.show(languageService.s("paste"), isSuccess: true, duration: 1.2)
+                } else {
+                    NSSound.beep()
                 }
             } label: {
                 Image(systemName: pasteFeedback.isShowing ? "checkmark" : "doc.on.clipboard")
@@ -220,31 +222,7 @@ struct MenuBarView: View {
             .accessibilityAddTraits(.isHeader)
 
             ForEach(downloadManager.downloadingDownloads.prefix(3)) { download in
-                HStack(spacing: 7) {
-                    SiphonSpinner(size: 9, color: SiphonTheme.statusDownloadingText, lineWidth: 1.6)
-                        .accessibilityHidden(true)
-
-                    Text(download.displayTitle)
-                        .font(.siphonMetadataMedium)
-                        .foregroundColor(.primary)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-
-                    Spacer(minLength: 4)
-
-                    Text(download.displayProgress)
-                        .font(.siphonMicroMonoMedium)
-                        .foregroundColor(.secondary)
-                        .lineLimit(1)
-                }
-                .padding(.horizontal, 8)
-                .padding(.vertical, 5)
-                .background(
-                    RoundedRectangle(cornerRadius: SiphonTheme.radiusSmall, style: .continuous)
-                        .fill(Color.primary.opacity(SiphonTheme.Opacity.fillPill))
-                )
-                .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusSmall, style: .continuous))
-                .accessibilityElement(children: .combine)
+                MenuBarActiveDownloadRow(download: download)
             }
         }
     }
@@ -255,14 +233,11 @@ struct MenuBarView: View {
         let cleanURL = url.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !cleanURL.isEmpty else { return }
 
+        // validate() already adds https:// to a bare host.
         if case .valid(_, let resolved) = DownloadURLValidator.validate(cleanURL) {
             submitToManager(resolvedURL: resolved)
-        } else if cleanURL.contains(".") && !cleanURL.contains(" ") {
-            // If user typed without scheme, try prefixing https://
-            let candidate = "https://" + cleanURL
-            if case .valid(_, let resolved) = DownloadURLValidator.validate(candidate) {
-                submitToManager(resolvedURL: resolved)
-            }
+        } else {
+            NSSound.beep()
         }
     }
 
@@ -374,5 +349,39 @@ struct MenuBarView: View {
             .help(languageService.s("quit"))
             .accessibilityLabel(languageService.s("quit"))
         }
+    }
+}
+
+/// Observes its download so percent, speed and ETA update live; the
+/// manager only republishes on status changes.
+private struct MenuBarActiveDownloadRow: View {
+    @ObservedObject var download: Download
+
+    var body: some View {
+        HStack(spacing: 7) {
+            SiphonSpinner(size: 9, color: SiphonTheme.statusDownloadingText, lineWidth: 1.6)
+                .accessibilityHidden(true)
+
+            Text(download.displayTitle)
+                .font(.siphonMetadataMedium)
+                .foregroundColor(.primary)
+                .lineLimit(1)
+                .truncationMode(.middle)
+
+            Spacer(minLength: 4)
+
+            Text(download.displayProgress)
+                .font(.siphonMicroMonoMedium)
+                .foregroundColor(.secondary)
+                .lineLimit(1)
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5)
+        .background(
+            RoundedRectangle(cornerRadius: SiphonTheme.radiusSmall, style: .continuous)
+                .fill(Color.primary.opacity(SiphonTheme.Opacity.fillPill))
+        )
+        .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusSmall, style: .continuous))
+        .accessibilityElement(children: .combine)
     }
 }

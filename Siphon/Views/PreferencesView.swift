@@ -55,6 +55,8 @@ struct PreferencesView: View {
     // Probed in onAppear: the probe logs, and publishing from a @State
     // initializer runs inside a view update.
     @State private var hasFullDiskAccess = false
+    // LoginItemHelper is not observable; mirror it so toggling redraws the dependent row.
+    @State private var isLaunchAtLoginEnabled = false
     @State private var isCheckingPermission: Bool = false
     @State private var permissionCheckMessage: String?
     @State private var isClearingAllSites: Bool = false
@@ -159,6 +161,7 @@ struct PreferencesView: View {
             previousLanguage = languageService.selectedLanguage
             customPresets = CustomPreset.loadAll()
             hasFullDiskAccess = YtdlpService.hasFullDiskAccess
+            isLaunchAtLoginEnabled = LoginItemHelper.shared.isEnabled
             Task {
                 await BrowserUtils.shared.clearCache()
                 installedBrowsers = await BrowserUtils.shared.getInstalledBrowsers()
@@ -229,15 +232,18 @@ struct PreferencesView: View {
                 }
                 Spacer()
                 Toggle("", isOn: Binding(
-                    get: { LoginItemHelper.shared.isEnabled },
-                    set: { LoginItemHelper.shared.setEnabled($0) }
+                    get: { isLaunchAtLoginEnabled },
+                    set: {
+                        LoginItemHelper.shared.setEnabled($0)
+                        isLaunchAtLoginEnabled = LoginItemHelper.shared.isEnabled
+                    }
                 ))
                 .labelsHidden()
                 .toggleStyle(.switch)
                 .accessibilityLabel(languageService.s("launch_at_login"))
             }
 
-            if LoginItemHelper.shared.isEnabled {
+            if isLaunchAtLoginEnabled {
                 HStack {
                     VStack(alignment: .leading, spacing: 3) {
                         Text(languageService.s("start_in_background"))
@@ -395,6 +401,11 @@ struct PreferencesView: View {
                         Text("\(languageService.s("latest")): v\(latestVersion)")
                             .font(.siphonMetadataMonoSemibold)
                             .foregroundColor(SiphonTheme.statusQueuedText)
+                    } else if let checkError = updateChecker.checkError {
+                        Text("\(languageService.s("update_check_failed_title")): \(checkError)")
+                            .font(.siphonMetadata)
+                            .foregroundColor(SiphonTheme.statusFailedText)
+                            .textSelection(.enabled)
                     }
                 }
                 Spacer()
@@ -917,6 +928,9 @@ struct PreferencesView: View {
     }
 
     private func resetFormatToDefaults() {
+        // Max Compatibility is this same format set; keep the preset radio in step.
+        selectedPreset = DownloadPreset.maxCompatibility.rawValue
+        selectedCustomPresetIdString = ""
         defaultFileType = "mp4"
         defaultVideoResolution = "r1080p"
         resolutionFallbackPolicy = ResolutionFallbackPolicy.strictCeiling.rawValue
@@ -1035,17 +1049,24 @@ struct PreferencesView: View {
                         .font(.siphonMetadata)
                         .foregroundColor(.secondary)
                         .lineLimit(2)
-                } else if let message = appState.ytdlpUpdateMessage?.message {
-                    Text(message)
-                        .font(.siphonMetadata)
-                        .foregroundColor(.secondary)
-                        .lineLimit(2)
                 } else {
-                    Button(languageService.s("update_now")) {
-                        updateYtdlp()
+                    // The result sits beside the button, not in its place: with the
+                    // main window closed nothing dismisses it, which would block retries.
+                    VStack(alignment: .trailing, spacing: 4) {
+                        if let message = appState.ytdlpUpdateMessage?.message {
+                            Text(message)
+                                .font(.siphonMetadata)
+                                .foregroundColor(.secondary)
+                                .lineLimit(2)
+                                .multilineTextAlignment(.trailing)
+                                .frame(maxWidth: 280, alignment: .trailing)
+                        }
+                        Button(languageService.s("update_now")) {
+                            updateYtdlp()
+                        }
+                        .buttonStyle(.siphonSecondary)
+                        .controlSize(.small)
                     }
-                    .buttonStyle(.siphonSecondary)
-                    .controlSize(.small)
                 }
             }
         }
@@ -1232,6 +1253,7 @@ struct PreferencesView: View {
                 HStack(spacing: 4) {
                     Image(systemName: "checkmark")
                         .foregroundColor(SiphonTheme.statusCompletedText)
+                        .accessibilityHidden(true)
                     Text(languageService.s("cleared"))
                         .font(.siphonMetadataSemibold)
                         .foregroundColor(SiphonTheme.statusCompletedText)

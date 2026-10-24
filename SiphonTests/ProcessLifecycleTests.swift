@@ -62,8 +62,8 @@ final class ProcessLifecycleTests: XCTestCase {
         XCTAssertNil(parser.parse("  Duration: 00:01:00.00, start: 0.000000, bitrate: 100 kb/s"))
         let progress = parser.parse("frame=10 fps=30 time=00:00:15.00 bitrate=100kbits/s speed=2x")
         XCTAssertEqual(progress?.fraction, 0.25)
-        XCTAssertEqual(progress?.speed, "2x")
-        XCTAssertEqual(progress?.eta, "22s")
+        XCTAssertNil(progress?.speed)
+        XCTAssertEqual(progress?.eta, "00:22")
         XCTAssertNil(parser.parse("frame=10 time=N/A speed=N/A"))
         XCTAssertEqual(parser.parse("size=1024kB time=00:01:30.00 speed=N/A")?.fraction, 1)
         XCTAssertNil(parser.parse("file time=00:00:15.00"))
@@ -92,6 +92,18 @@ final class ProcessLifecycleTests: XCTestCase {
         XCTAssertEqual(buffer.appendAndExtractLines(Data("frame=3\r\n".utf8)), ["frame=3"])
     }
 
+    func testProgressFieldsHidePlaceholdersAndShareOneEtaStyle() {
+        for placeholder in ["NA", " N/A", " Unknown", " Unknown B/s", "--:--:--", "  "] {
+            XCTAssertNil(DefaultYtdlpProcessRunner.progressField(placeholder), placeholder)
+        }
+        XCTAssertEqual(DefaultYtdlpProcessRunner.progressField(" 5.21MiB/s "), "5.21MiB/s")
+        XCTAssertEqual(DefaultYtdlpProcessRunner.formatETA(291), "04:51")
+        XCTAssertEqual(DefaultYtdlpProcessRunner.formatETA(3723), "01:02:03")
+        XCTAssertEqual(DefaultYtdlpProcessRunner.ariaSeconds("4m51s").flatMap(DefaultYtdlpProcessRunner.formatETA), "04:51")
+        XCTAssertEqual(DefaultYtdlpProcessRunner.ariaSeconds("1h2m3s"), 3723)
+        XCTAssertNil(DefaultYtdlpProcessRunner.ariaSeconds("n/a"))
+    }
+
     func testRunnerDeliversFfmpegStderrProgressBeforeProcessExits() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
@@ -106,8 +118,8 @@ final class ProcessLifecycleTests: XCTestCase {
             args: ["/bin/sh", "-c", script], saveFolder: root, processController: DownloadProcessController(),
             onProgress: { fraction, speed, eta in
                 XCTAssertEqual(fraction, 0.25)
-                XCTAssertEqual(speed, "2x")
-                XCTAssertEqual(eta, "22s")
+                XCTAssertNil(speed)
+                XCTAssertEqual(eta, "00:22")
                 _ = FileManager.default.createFile(atPath: gate.path, contents: Data())
             }, onOutput: { _ in }
         )

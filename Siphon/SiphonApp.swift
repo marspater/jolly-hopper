@@ -35,6 +35,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
         if !flag {
+            // Leave the accessory policy "Start in background" set, or the window has no Dock icon or menu bar.
+            sender.setActivationPolicy(.regular)
             for window in sender.windows where window.canBecomeMain {
                 if window.isMiniaturized {
                     window.deminiaturize(nil)

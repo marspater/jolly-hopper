@@ -79,6 +79,7 @@ struct DownloadDiagnosticsView: View {
                     .font(.system(size: 24))
                     .foregroundColor(SiphonTheme.accentText)
                     .frame(width: 54, height: 36)
+                    .accessibilityHidden(true)
             }
 
             VStack(alignment: .leading, spacing: 3) {
@@ -171,7 +172,7 @@ struct DownloadDiagnosticsView: View {
                 diagnosticRow(label: languageService.s("diag_dynamic_range"), value: download.diagnostics.dynamicRange ?? (download.mediaInfo?.formats?.first(where: { $0.isHDR }) != nil ? languageService.s("diag_hdr") : languageService.s("not_detected")))
                 diagnosticRow(label: languageService.s("diag_color_space"), value: download.diagnostics.colorSpace ?? languageService.s("not_detected"))
                 diagnosticRow(label: languageService.s("diag_bit_depth"), value: download.diagnostics.bitDepth.map { String(format: languageService.s("diag_bit_depth_value"), $0) } ?? languageService.s("not_detected"))
-                diagnosticRow(label: languageService.s("diag_hdr_policy"), value: download.options.hdrAction?.title(lang: languageService) ?? languageService.s("diag_preserve_hdr"))
+                diagnosticRow(label: languageService.s("diag_hdr_policy"), value: (download.options.hdrAction ?? .preserveHDR).title(lang: languageService))
             }
 
             if !download.filePaths.isEmpty {
@@ -203,6 +204,7 @@ struct DownloadDiagnosticsView: View {
                         } label: {
                             HStack(spacing: 4) {
                                 Image(systemName: "doc.on.doc")
+                                    .accessibilityHidden(true)
                                 Text(languageService.s("copy_command"))
                             }
                             .font(.siphonMetadata)
@@ -239,6 +241,7 @@ struct DownloadDiagnosticsView: View {
                     } label: {
                         HStack(spacing: 4) {
                             Image(systemName: "doc.on.doc")
+                                .accessibilityHidden(true)
                             Text(languageService.s("copy_log"))
                         }
                         .font(.siphonMetadata)
@@ -316,6 +319,7 @@ struct DownloadDiagnosticsView: View {
                 HStack(spacing: 4) {
                     Image(systemName: "doc.on.clipboard")
                         .font(.system(size: 12))
+                        .accessibilityHidden(true)
                     Text(languageService.s("copy_report"))
                         .font(.siphonSecondaryMedium)
                 }
@@ -330,6 +334,7 @@ struct DownloadDiagnosticsView: View {
                     HStack(spacing: 4) {
                         Image(systemName: "folder")
                             .font(.system(size: 12))
+                            .accessibilityHidden(true)
                         Text(languageService.s("show_in_finder"))
                             .font(.siphonSecondaryMedium)
                     }
