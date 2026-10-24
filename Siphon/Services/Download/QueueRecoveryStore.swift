@@ -252,13 +252,6 @@ final class QueueRecoveryStore {
         }
     }
 
-    func clearRecoveryState() {
-        hasUnsupportedSchemaSnapshot = false
-        if fileManager.fileExists(atPath: fileURL.path) {
-            try? fileManager.removeItem(at: fileURL)
-        }
-    }
-
     private func save(_ snapshot: QueueRecoverySnapshot) throws {
         let dir = fileURL.deletingLastPathComponent()
         if !fileManager.fileExists(atPath: dir.path) {

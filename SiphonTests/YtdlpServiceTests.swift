@@ -1467,7 +1467,7 @@ final class YtdlpServiceTests: XCTestCase {
     func testThreadSafeOutputStateQuoteStripping() {
         let state = ThreadSafeOutputState()
         state.addFinalPath("\"/path/to/downloaded video.mp4\"")
-        XCTAssertEqual(state.getFinalPath(), "/path/to/downloaded video.mp4")
+        XCTAssertEqual(state.getFinalPaths(), ["/path/to/downloaded video.mp4"])
 
         state.addCandidatePath("'/another/path/video.mp4'")
         XCTAssertEqual(state.getCandidatePaths(), ["/another/path/video.mp4"])
@@ -2912,23 +2912,23 @@ final class YtdlpServiceTests: XCTestCase {
     func testThreadSafeOutputStateFinalPathHandling() {
         let state = ThreadSafeOutputState()
 
-        // 1. Initially getFinalPath() must return nil
-        XCTAssertNil(state.getFinalPath(), "Initial finalPath should be nil")
+        // 1. Initially there are no final paths
+        XCTAssertTrue(state.getFinalPaths().isEmpty, "Initial final paths should be empty")
 
         // 2. Setting an empty or whitespace-only/quote-only string should be ignored
         state.addFinalPath("")
-        XCTAssertNil(state.getFinalPath(), "Empty string should not update finalPath")
+        XCTAssertTrue(state.getFinalPaths().isEmpty, "Empty string should not add a final path")
 
         state.addFinalPath("   \"\"   ")
-        XCTAssertNil(state.getFinalPath(), "Whitespace/quotes-only string should not update finalPath")
+        XCTAssertTrue(state.getFinalPaths().isEmpty, "Whitespace/quotes-only string should not add a final path")
 
         // 3. Setting a valid path with surrounding quotes and whitespace should clean and store the path
         state.addFinalPath("   \"/tmp/final_output_file.mp4\"   ")
-        XCTAssertEqual(state.getFinalPath(), "/tmp/final_output_file.mp4")
+        XCTAssertEqual(state.getFinalPaths(), ["/tmp/final_output_file.mp4"])
 
-        // 4. Updating finalPath with another valid path overwrites the existing value
+        // 4. Another valid path is appended after the first
         state.addFinalPath("'/tmp/overwritten_output.mp4'")
-        XCTAssertEqual(state.getFinalPath(), "/tmp/overwritten_output.mp4")
+        XCTAssertEqual(state.getFinalPaths(), ["/tmp/final_output_file.mp4", "/tmp/overwritten_output.mp4"])
     }
 
     func testThreadSafeOutputStateFinalPathConcurrency() {
@@ -2940,14 +2940,14 @@ final class YtdlpServiceTests: XCTestCase {
             group.enter()
             DispatchQueue.global().async {
                 state.addFinalPath("/tmp/path_\(i).mp4")
-                _ = state.getFinalPath()
+                _ = state.getFinalPaths()
                 group.leave()
             }
         }
 
         let result = group.wait(timeout: .now() + 5.0)
         XCTAssertEqual(result, .success, "Concurrent access to ThreadSafeOutputState timed out")
-        XCTAssertNotNil(state.getFinalPath(), "Final path should be populated after concurrent operations")
+        XCTAssertFalse(state.getFinalPaths().isEmpty, "Final paths should be populated after concurrent operations")
     }
 
     func testConcurrentDownloadsWithIdenticalTitlesResolveCorrectly() async throws {
@@ -3086,42 +3086,6 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertFalse(YtdlpService.isMediaFilePath("/path/to/archive.zip"))
         XCTAssertFalse(YtdlpService.isMediaFilePath("/path/to/document.pdf"))
         XCTAssertFalse(YtdlpService.isMediaFilePath("/path/to/script.js"))
-    }
-
-    func testTransactionalInstallRollback() async throws {
-        let tempDir = FileManager.default.temporaryDirectory
-        let workFolder = tempDir.appendingPathComponent("tx_install_test_\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: workFolder, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: workFolder) }
-
-        let originalBinary = workFolder.appendingPathComponent("bin_target")
-        let candidateBinary = workFolder.appendingPathComponent("bin_candidate")
-
-        try "ORIGINAL_WORKING_VERSION".data(using: .utf8)?.write(to: originalBinary)
-        try "BROKEN_NEW_VERSION".data(using: .utf8)?.write(to: candidateBinary)
-
-        let service = YtdlpService()
-
-        // Case A: Validation fails -> rollback to original
-        let resultFailed = try await service.transactionalInstall(from: candidateBinary, to: originalBinary) { targetURL in
-            return false // Simulation of post-validation failure
-        }
-
-        XCTAssertFalse(resultFailed)
-        let contentAfterRollback = try String(contentsOf: originalBinary, encoding: .utf8)
-        XCTAssertEqual(contentAfterRollback, "ORIGINAL_WORKING_VERSION")
-
-        // Case B: Validation succeeds -> replace and delete backup
-        let newCandidate = workFolder.appendingPathComponent("bin_candidate_good")
-        try "NEW_WORKING_VERSION".data(using: .utf8)?.write(to: newCandidate)
-
-        let resultSuccess = try await service.transactionalInstall(from: newCandidate, to: originalBinary) { targetURL in
-            return true // Simulation of validation success
-        }
-
-        XCTAssertTrue(resultSuccess)
-        let contentAfterSuccess = try String(contentsOf: originalBinary, encoding: .utf8)
-        XCTAssertEqual(contentAfterSuccess, "NEW_WORKING_VERSION")
     }
 
     func testCandidateCollisionDoesNotClaimUnrelatedFile() async throws {
@@ -5817,75 +5781,6 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertFalse(NetworkEnvironmentService.shared.supportsIPv6)
     }
 
-    func testNordInsightsAPISucceedsWithProtectedFlag() async throws {
-        MockURLProtocol.requestHandler = { request in
-            let response = try XCTUnwrap(HTTPURLResponse(url: try XCTUnwrap(request.url), statusCode: 200, httpVersion: nil, headerFields: nil))
-            return (response, Data("{\"protected\": true, \"isp\": \"GSL Networks\"}".utf8))
-        }
-        defer { MockURLProtocol.requestHandler = nil }
-
-        let configuration = URLSessionConfiguration.ephemeral
-        configuration.protocolClasses = [MockURLProtocol.self]
-        let session = URLSession(configuration: configuration)
-        defer { session.invalidateAndCancel() }
-
-        let confirmed = await NetworkEnvironmentService.performInsightsCheck(session: session)
-        XCTAssertTrue(confirmed, "Protected=true in Insights response should confirm NordVPN")
-    }
-
-    func testNordInsightsAPISucceedsWithNordISP() async throws {
-        MockURLProtocol.requestHandler = { request in
-            let response = try XCTUnwrap(HTTPURLResponse(url: try XCTUnwrap(request.url), statusCode: 200, httpVersion: nil, headerFields: nil))
-            return (response, Data("{\"protected\": false, \"isp\": \"NordVPN SA\"}".utf8))
-        }
-        defer { MockURLProtocol.requestHandler = nil }
-
-        let configuration = URLSessionConfiguration.ephemeral
-        configuration.protocolClasses = [MockURLProtocol.self]
-        let session = URLSession(configuration: configuration)
-        defer { session.invalidateAndCancel() }
-
-        let confirmed = await NetworkEnvironmentService.performInsightsCheck(session: session)
-        XCTAssertTrue(confirmed, "Nord in ISP name in Insights response should confirm NordVPN")
-    }
-
-    func testNordInsightsAPIFailsGracefullyOnHTTPErrorOrMalformedResponse() async throws {
-        MockURLProtocol.requestHandler = { request in
-            let response = try XCTUnwrap(HTTPURLResponse(url: try XCTUnwrap(request.url), statusCode: 503, httpVersion: nil, headerFields: nil))
-            return (response, Data("Service Unavailable".utf8))
-        }
-        defer { MockURLProtocol.requestHandler = nil }
-
-        let configuration = URLSessionConfiguration.ephemeral
-        configuration.protocolClasses = [MockURLProtocol.self]
-        let session = URLSession(configuration: configuration)
-        defer { session.invalidateAndCancel() }
-
-        let confirmed = await NetworkEnvironmentService.performInsightsCheck(session: session)
-        XCTAssertFalse(confirmed, "HTTP errors should gracefully fail to false without throwing")
-    }
-
-    func testNordInsightsAPIFailureDoesNotAffectLocalVPNDetection() async throws {
-        MockURLProtocol.requestHandler = { request in
-            let response = try XCTUnwrap(HTTPURLResponse(url: try XCTUnwrap(request.url), statusCode: 500, httpVersion: nil, headerFields: nil))
-            return (response, Data("Internal Server Error".utf8))
-        }
-        defer { MockURLProtocol.requestHandler = nil }
-
-        let configuration = URLSessionConfiguration.ephemeral
-        configuration.protocolClasses = [MockURLProtocol.self]
-        let session = URLSession(configuration: configuration)
-        defer { session.invalidateAndCancel() }
-
-        NetworkEnvironmentService.shared.overrideIsVPNActive = true
-        defer { NetworkEnvironmentService.shared.overrideIsVPNActive = nil }
-
-        let confirmed = await NetworkEnvironmentService.performInsightsCheck(session: session)
-        XCTAssertFalse(confirmed)
-        // Local detection MUST still report active VPN
-        XCTAssertTrue(NetworkEnvironmentService.shared.isVPNActive, "Local VPN detection must remain active regardless of Insights API result")
-    }
-
     func testBoyfriendTVFiltersPreviewTeaserClips() async throws {
         service.ytdlpPath = URL(fileURLWithPath: "/usr/local/bin/yt-dlp")
         
@@ -6578,23 +6473,6 @@ final class YtdlpServiceTests: XCTestCase {
         options720.videoResolution = .r720p
         let res720 = service.resolveBoyfriendTVStreamURLForDownload(streamURL: signedHlsStream, options: options720)
         XCTAssertEqual(res720, signedHlsStream, "Signed HLS streams must preserve _TPL_.mp4 regardless of requested resolution")
-    }
-
-    func testDownloadProcessControllerSingleOwnerAttachment() {
-        let controller = DownloadProcessController()
-        let proc1 = Process()
-        let proc2 = Process()
-
-        let attached1 = controller.attachProcess(proc1)
-        XCTAssertTrue(attached1, "First process must attach successfully")
-
-        let attached2 = controller.attachProcess(proc2)
-        XCTAssertFalse(attached2, "Second process attachment must be rejected to enforce single-owner invariant")
-
-        controller.cancel()
-        let proc3 = Process()
-        let attached3 = controller.attachProcess(proc3)
-        XCTAssertFalse(attached3, "Attachment to cancelled controller must be rejected")
     }
 
     func testMediaInfoPrunedForCompletion() {

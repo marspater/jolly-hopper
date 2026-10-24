@@ -183,43 +183,6 @@ public final class DownloadProcessController: @unchecked Sendable {
         }
     }
 
-    /// Registers the process with the controller (backwards-compatible).
-    /// Returns `true` if successfully attached and uncancelled, or `false` if already cancelled.
-    @discardableResult
-    public func attachProcess(_ proc: Process) -> Bool {
-        lock.lock()
-        if wasCancelled {
-            let shouldTerminate = proc.isRunning
-            lock.unlock()
-            if shouldTerminate {
-                Self.terminateProcessTree(proc, pid: proc.processIdentifier)
-            }
-            return false
-        }
-        let shouldTerminate: Bool
-        let success: Bool
-        switch internalLifecycle {
-        case .cancelling:
-            shouldTerminate = proc.isRunning
-            success = false
-        case .created, .failed, .terminated:
-            let pid = proc.processIdentifier
-            internalLifecycle = .running(pid: pid)
-            activeProcess = proc
-            shouldTerminate = false
-            success = true
-        case .running, .starting:
-            shouldTerminate = false
-            success = false
-        }
-        lock.unlock()
-
-        if shouldTerminate {
-            Self.terminateProcessTree(proc, pid: proc.processIdentifier)
-        }
-        return success
-    }
-
     /// Detaches the process upon completion or cleanup.
     /// A requested cancellation is sticky: detaching must not let a later
     /// recovery attempt start a new process for a stopped download.

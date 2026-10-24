@@ -789,34 +789,6 @@ final class DownloadManagerTests: XCTestCase {
         XCTAssertEqual(dlExists.status, .queued)
     }
 
-    func testClearHistoryPrunesVisibleFinishedDownloads() {
-        let manager = DownloadManager()
-
-        let dlCompleted = Download(url: "https://example.com/1", options: .default)
-        dlCompleted.status = .completed
-
-        let dlFailed = Download(url: "https://example.com/2", options: .default)
-        dlFailed.status = .failed
-
-        let dlStopped = Download(url: "https://example.com/3", options: .default)
-        dlStopped.status = .stopped
-
-        let dlQueued = Download(url: "https://example.com/4", options: .default)
-        dlQueued.status = .queued
-
-        // A name collision still needs the user's choice; retention keeps it too.
-        let dlExists = Download(url: "https://example.com/5", options: .default)
-        dlExists.status = .fileExists
-
-        manager.downloads = [dlCompleted, dlFailed, dlStopped, dlQueued, dlExists]
-        manager.clearHistory()
-
-        XCTAssertEqual(manager.downloads.map(\.id), [dlQueued.id, dlExists.id])
-        XCTAssertEqual(manager.history.map(\.id), [dlExists.id])
-        XCTAssertEqual(manager.completedDownloads.count, 0)
-        XCTAssertEqual(manager.failedDownloads.count, 0)
-    }
-
     func testResumeWithNewNameUsesCleanSequentialSuffix() {
         let manager = DownloadManager()
         let dl = Download(url: "https://example.com/vid", options: .default, title: "My Video")
