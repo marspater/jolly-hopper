@@ -2790,7 +2790,7 @@ public struct DownloadResult: Sendable {
             copy += 1
             destination = directory.appendingPathComponent("\(base) (\(copy)).mp4")
         }
-        let partial = directory.appendingPathComponent(".\(UUID().uuidString).mp4.partial")
+        let partial = ScratchDirectoryPolicy.siblingTempURL(beside: gif, extension: "mp4")
         defer { try? fileManager.removeItem(at: partial) }
         do {
             _ = try await processRunner.runCommand([
@@ -2821,7 +2821,7 @@ public struct DownloadResult: Sendable {
         try Task.checkCancellation()
         guard processController?.isCancelled != true else { throw CancellationError() }
         let destination = sameExtension ? source : source.deletingPathExtension().appendingPathExtension(targetExtension)
-        let partial = source.deletingLastPathComponent().appendingPathComponent(".converted-\(UUID().uuidString).\(targetExtension)")
+        let partial = ScratchDirectoryPolicy.siblingTempURL(beside: source, extension: targetExtension)
         defer { try? FileManager.default.removeItem(at: partial) }
         var args = [URL(fileURLWithPath: ffmpegDir).appendingPathComponent("ffmpeg").path,
                     "-nostdin", "-v", "error", "-y", "-i", source.path, "-map_metadata", "0"]
@@ -2969,7 +2969,7 @@ public struct DownloadResult: Sendable {
         let ffmpegBin = URL(fileURLWithPath: ffmpegDir).appendingPathComponent("ffmpeg")
         guard fileManager.isExecutableFile(atPath: ffmpegBin.path) else { return false }
 
-        let tempOutput = mediaFile.deletingLastPathComponent().appendingPathComponent("thumb_temp_\(UUID().uuidString).\(ext)")
+        let tempOutput = ScratchDirectoryPolicy.siblingTempURL(beside: mediaFile, extension: ext)
 
         let coverAttachment = ext == "mkv" ? tempOutput.deletingPathExtension().appendingPathExtension("jpg") : nil
         var procArgs = [
@@ -3029,16 +3029,8 @@ public struct DownloadResult: Sendable {
             try Task.checkCancellation()
             guard processController?.isCancelled != true else { throw CancellationError() }
             if fileManager.fileExists(atPath: tempOutput.path), ((try? tempOutput.resourceValues(forKeys: [.fileSizeKey]))?.fileSize ?? 0) > 0 {
-                let backupURL = mediaFile.deletingLastPathComponent().appendingPathComponent("thumb_orig_\(UUID().uuidString).\(ext)")
-                try fileManager.moveItem(at: mediaFile, to: backupURL)
-                do {
-                    try fileManager.moveItem(at: tempOutput, to: mediaFile)
-                } catch {
-                    try fileManager.moveItem(at: backupURL, to: mediaFile)
-                    throw error
-                }
-                do { try fileManager.removeItem(at: backupURL) }
-                catch { LoggerService.shared.log("Could not remove thumbnail backup: \(error.localizedDescription)", level: .warning) }
+                // One atomic swap: a crash never leaves the media under a temporary name.
+                _ = try fileManager.replaceItemAt(mediaFile, withItemAt: tempOutput, options: .usingNewMetadataOnly)
                 return true
             }
             return false
@@ -6368,7 +6360,7 @@ public struct DownloadResult: Sendable {
         }
         defer { CCCryptorRelease(ref) }
 
-        let tempOutputURL = fileURL.deletingLastPathComponent().appendingPathComponent("decrypted_\(UUID().uuidString)_\(fileURL.lastPathComponent)")
+        let tempOutputURL = ScratchDirectoryPolicy.siblingTempURL(beside: fileURL, extension: fileURL.pathExtension)
         guard FileManager.default.createFile(atPath: tempOutputURL.path, contents: nil, attributes: [.posixPermissions: 0o600]) else {
             throw YtdlpError.downloadFailed("Failed to create temporary file for stream decryption with restricted permissions")
         }

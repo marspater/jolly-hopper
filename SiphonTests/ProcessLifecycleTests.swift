@@ -597,6 +597,20 @@ final class ProcessLifecycleTests: XCTestCase {
         validProc.waitUntilExit()
     }
 
+    func testCancelAllRunningStopsCommandsNoJobOwns() throws {
+        let controller = DownloadProcessController()
+        let proc = Process()
+        proc.executableURL = URL(fileURLWithPath: "/bin/sleep")
+        proc.arguments = ["30"]
+        try controller.start(proc)
+
+        DownloadProcessController.cancelAllRunning()
+        DownloadProcessController.waitForPendingTerminations()
+        proc.waitUntilExit()
+        XCTAssertEqual(proc.terminationReason, .uncaughtSignal)
+        XCTAssertTrue(controller.isCancelled)
+    }
+
     func testReaperStopsOnlyOrphanedCopiesOfTheGivenTools() throws {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("reaper_\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)

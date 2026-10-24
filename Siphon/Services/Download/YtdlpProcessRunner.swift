@@ -5,6 +5,7 @@
 
 import Foundation
 import Darwin
+import os
 
 public final class DownloadProcessController: @unchecked Sendable {
     private var internalLifecycle: ProcessLifecycleState = .created
@@ -15,8 +16,30 @@ public final class DownloadProcessController: @unchecked Sendable {
     private var drainingProcessGroup: pid_t = 0
     private let lock = NSLock()
 
+    private struct WeakController: @unchecked Sendable {
+        weak var controller: DownloadProcessController?
+    }
+    /// Every controller with a live process, including ones no download job owns
+    /// (metadata fetches, probes, conversions). Their tools run in their own
+    /// process group, so app exit alone would leave them running.
+    private static let running = OSAllocatedUnfairLock<[ObjectIdentifier: WeakController]>(initialState: [:])
+
     public init() {
         // Default initializer for ProcessController
+    }
+
+    /// Quit-time stop for every running process. Pair with
+    /// `waitForPendingTerminations()` before the app exits.
+    public static func cancelAllRunning() {
+        let controllers = running.withLock { $0.values.compactMap(\.controller) }
+        for controller in controllers {
+            controller.cancel()
+        }
+    }
+
+    private func setRunning(_ isRunning: Bool) {
+        let id = ObjectIdentifier(self)
+        Self.running.withLock { $0[id] = isRunning ? WeakController(controller: self) : nil }
     }
 
     public var lifecycleState: ProcessLifecycleState {
@@ -30,6 +53,7 @@ public final class DownloadProcessController: @unchecked Sendable {
         defer { lock.unlock() }
         activeProcess = nil
         internalLifecycle = .terminated(exitCode: exitCode, reason: reason)
+        setRunning(false)
     }
 
     private static func getDescendantPIDs(for parentPID: pid_t) -> [pid_t] {
@@ -204,6 +228,7 @@ public final class DownloadProcessController: @unchecked Sendable {
             let pid = proc.processIdentifier
             internalLifecycle = .running(pid: pid)
             lock.unlock()
+            setRunning(true)
         } catch {
             internalLifecycle = .failed(error.localizedDescription)
             activeProcess = nil
@@ -216,6 +241,7 @@ public final class DownloadProcessController: @unchecked Sendable {
     /// A requested cancellation is sticky: detaching must not let a later
     /// recovery attempt start a new process for a stopped download.
     public func detach() {
+        setRunning(false)
         lock.lock()
         defer { lock.unlock() }
         activeProcess = nil

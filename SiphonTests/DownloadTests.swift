@@ -583,15 +583,57 @@ final class DownloadTests: XCTestCase {
         let abandoned = try scratch(touched: old, partTouched: old)
         let paused = try scratch(touched: old)
         let stillWriting = try scratch(touched: old, partTouched: Date())
+        let updatePackage = root.appendingPathComponent("Siphon_Update_\(UUID().uuidString).dmg")
+        try Data([0]).write(to: updatePackage)
+        try FileManager.default.setAttributes([.modificationDate: old], ofItemAtPath: updatePackage.path)
         let notScratch = root.appendingPathComponent("siphon_scratch_not-a-uuid")
         try FileManager.default.createDirectory(at: notScratch, withIntermediateDirectories: true)
         try FileManager.default.setAttributes([.modificationDate: old], ofItemAtPath: notScratch.path)
 
         let removed = ScratchDirectoryPolicy.purgeAbandoned(keeping: [paused.lastPathComponent], in: root)
 
-        XCTAssertEqual(removed.map(\.lastPathComponent), [abandoned.lastPathComponent])
+        XCTAssertEqual(Set(removed.map(\.lastPathComponent)), [abandoned.lastPathComponent, updatePackage.lastPathComponent])
         for kept in [paused, stillWriting, notScratch] {
             XCTAssertTrue(FileManager.default.fileExists(atPath: kept.path), kept.lastPathComponent)
         }
+    }
+
+    func testSiblingTempSweepRemovesOnlyOldSiphonTempsOncePerFolder() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("sibling_sweep_\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let old = Date().addingTimeInterval(-2 * 24 * 60 * 60)
+        func file(_ name: String, touched: Date) throws -> URL {
+            let url = folder.appendingPathComponent(name)
+            try Data([0]).write(to: url)
+            try FileManager.default.setAttributes([.modificationDate: touched], ofItemAtPath: url.path)
+            return url
+        }
+        let media = folder.appendingPathComponent("video.mp4")
+        let current = ScratchDirectoryPolicy.siblingTempURL(beside: media, extension: "mp4")
+        XCTAssertEqual(current.deletingLastPathComponent().path, folder.path)
+        let abandoned = [
+            try file(current.lastPathComponent, touched: old),
+            try file("thumb_temp_\(UUID().uuidString).mkv", touched: old),
+            try file(".converted-\(UUID().uuidString).m4a", touched: old),
+            try file("decrypted_\(UUID().uuidString)_video.mp4", touched: old),
+            try file(".\(UUID().uuidString).mp4.partial", touched: old),
+        ]
+        let kept = [
+            try file(ScratchDirectoryPolicy.siblingTempURL(beside: media, extension: "mkv").lastPathComponent, touched: Date()),
+            try file("thumb_temp_notes.mp4", touched: old),
+            // An older build moved the original media here; its real name is unknown.
+            try file("thumb_orig_\(UUID().uuidString).mp4", touched: old),
+            try file("video.mp4", touched: old),
+        ]
+
+        let removed = ScratchDirectoryPolicy.purgeAbandonedSiblingTemps(in: folder)
+
+        XCTAssertEqual(Set(removed.map(\.lastPathComponent)), Set(abandoned.map(\.lastPathComponent)))
+        for url in kept {
+            XCTAssertTrue(FileManager.default.fileExists(atPath: url.path), url.lastPathComponent)
+        }
+        _ = try file(".siphon-tmp-\(UUID().uuidString).mp4", touched: old)
+        XCTAssertEqual(ScratchDirectoryPolicy.purgeAbandonedSiblingTemps(in: folder), [], "One sweep per folder per launch")
     }
 }

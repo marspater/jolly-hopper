@@ -92,6 +92,8 @@ class DownloadManager: ObservableObject {
     func handleAppTermination() {
         guard !isShuttingDown else { return }
         stopAllDownloads(preservePaused: true, suppressNotification: true)
+        // Metadata fetches and probes belong to no job but outlive the app too.
+        DownloadProcessController.cancelAllRunning()
         shutdown()
     }
 

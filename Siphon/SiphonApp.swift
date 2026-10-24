@@ -9,6 +9,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         UNUserNotificationCenter.current().delegate = NotificationService.shared
         NotificationService.shared.setup()
         guard !NotificationService.isRunningTests else { return }
+        Task.detached(priority: .utility) { UpdateInstaller.detachStaleUpdateImages() }
         NSWorkspace.shared.notificationCenter.addObserver(self, selector: #selector(cleanupRecoveryBackups(_:)),
             name: NSWorkspace.didTerminateApplicationNotification, object: nil)
         cleanupRecoveryBackups(notification)
