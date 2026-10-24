@@ -169,8 +169,8 @@ class Download: ObservableObject, Identifiable {
         var parts: [String] = [sourceDomain]
 
         if options.fileType.isVideo {
-            if let h = diagnostics.resolvedHeight {
-                parts.append("\(h)p")
+            if let height = diagnostics.resolvedHeight {
+                parts.append("\(height)p")
             } else if let res = options.videoResolution, res != .best, res != .worst {
                 parts.append(res.rawValue.replacingOccurrences(of: "r", with: ""))
             } else if let diagRes = diagnostics.resolution, !diagRes.isEmpty {
@@ -1023,8 +1023,8 @@ enum AudioCodec: String, Codable, CaseIterable, Identifiable {
 
     /// Whether a yt-dlp `acodec` value is this codec. Most sources report AAC as "mp4a.40.2".
     func matches(acodec: String) -> Bool {
-        let ac = acodec.lowercased()
-        return self == .aac ? (ac.hasPrefix("mp4a") || ac.contains("aac")) : ac.contains(rawValue)
+        let lowered = acodec.lowercased()
+        return self == .aac ? (lowered.hasPrefix("mp4a") || lowered.contains("aac")) : lowered.contains(rawValue)
     }
 }
 
@@ -1928,8 +1928,8 @@ struct MediaFormat: Codable, Identifiable, Hashable {
     func audioRank(options: DownloadOptions) -> AudioRank {
         let matchesCodec: Bool = {
             guard let req = options.audioCodec, req != .auto else { return true }
-            guard let ac = acodec else { return false }
-            return req.matches(acodec: ac)
+            guard let acodec else { return false }
+            return req.matches(acodec: acodec)
         }()
         // yt-dlp treats a missing language_preference as -1 (neutral). YouTube reports -1 for every
         // track of a single-language video and a higher value only for the original track, so the
@@ -2142,7 +2142,7 @@ struct MediaFormat: Codable, Identifiable, Hashable {
 
         // Codec match preference if requested
         if let requestedCodec = options.audioCodec, requestedCodec != .auto,
-           let ac = acodec, requestedCodec.matches(acodec: ac) {
+           let acodec, requestedCodec.matches(acodec: acodec) {
             score += 500_000.0
         }
 

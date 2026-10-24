@@ -576,8 +576,8 @@ final class DownloadExecutor: ObservableObject {
     nonisolated static func bytesPerSecond(_ speed: String) -> Double? {
         let units: [String: Double] = ["B": 1, "KiB": 1024, "MiB": 1_048_576, "GiB": 1_073_741_824,
                                        "KB": 1000, "MB": 1_000_000, "GB": 1_000_000_000]
-        var text = speed.trimmingCharacters(in: .whitespaces)
-        if text.hasSuffix("/s") { text.removeLast(2) }
+        // Drop the per-second suffix.
+        let text = String(speed.trimmingCharacters(in: .whitespaces).prefix { $0 != "/" })
         guard let unitStart = text.firstIndex(where: \.isLetter),
               let multiplier = units[String(text[unitStart...])],
               let value = Double(text[..<unitStart]), value.isFinite, value >= 0 else { return nil }
