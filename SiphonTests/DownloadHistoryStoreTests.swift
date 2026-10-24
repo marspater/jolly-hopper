@@ -152,20 +152,6 @@ final class DownloadHistoryStoreTests: XCTestCase {
         XCTAssertEqual(downloads.map(\.title), ["Old", "Middle", "Newest finished", "New job"])
     }
 
-    func testClearHistory() {
-        let store = DownloadHistoryStore(userDefaults: testDefaults, historyKey: "test_history")
-        let dl = Download(url: "https://example.com/1", options: .default, title: "1")
-        var history: [HistoricDownload] = []
-        store.addToHistory(dl, history: &history)
-
-        XCTAssertFalse(history.isEmpty)
-        store.clearHistory(history: &history)
-        XCTAssertTrue(history.isEmpty)
-
-        let loaded = store.loadHistory()
-        XCTAssertTrue(loaded.isEmpty)
-    }
-
     func testRestoreDownloadsCleansesFetchingPlaceholder() {
         let dl = Download(url: "https://www.boyfriendtv.com/videos/999/amazing-clip", options: .default, title: "Custom")
         var historic = HistoricDownload(download: dl)

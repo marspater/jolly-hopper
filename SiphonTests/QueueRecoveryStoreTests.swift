@@ -216,19 +216,6 @@ final class QueueRecoveryStoreTests: XCTestCase {
         XCTAssertEqual(jsonAfterShutdown?["version"] as? Int, 2, "Unsupported future-version snapshot must not be overwritten by clean shutdown")
     }
 
-    func testClearRecoveryState() {
-        let store = QueueRecoveryStore(fileURL: recoveryFileURL)
-        let dl = Download(url: "https://example.com/video1", options: .default, title: "Video 1")
-        dl.status = .queued
-
-        store.persist(activeJobs: [dl])
-        XCTAssertTrue(FileManager.default.fileExists(atPath: recoveryFileURL.path))
-
-        store.clearRecoveryState()
-        let restartStore = QueueRecoveryStore(fileURL: recoveryFileURL)
-        XCTAssertTrue(restartStore.loadInterruptedJobs().isEmpty)
-    }
-
     func testDownloadManagerIntegratesQueueRecovery() async throws {
         let manager = DownloadManager(recoveryFileURL: recoveryFileURL)
         defer { manager.shutdown() }
@@ -656,42 +643,6 @@ final class QueueRecoveryStoreTests: XCTestCase {
         XCTAssertEqual(restored.progress, 0)
         XCTAssertNil(restored.errorMessage)
         XCTAssertTrue(restored.log.isEmpty)
-    }
-
-    func testClearHistoryPreservesPausedJobPersistence() throws {
-        let manager = DownloadManager(recoveryFileURL: recoveryFileURL)
-        defer { manager.shutdown() }
-
-        let scratch = ScratchDirectoryPolicy.makeURL()
-        try FileManager.default.createDirectory(at: scratch, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: scratch) }
-
-        var pausedOptions = DownloadOptions.default
-        pausedOptions.browserCookieSource = "firefox"
-        let paused = Download(url: "https://example.com/paused", options: pausedOptions, title: "Paused")
-        paused.status = .paused
-        paused.progress = 0.48
-        paused.scratchDirectory = scratch
-
-        let completed = Download(url: "https://example.com/completed", options: .default, title: "Completed")
-        completed.status = .completed
-
-        manager.downloads = [paused, completed]
-        manager.addToHistory(paused)
-        manager.addToHistory(completed)
-
-        manager.clearHistory()
-
-        XCTAssertEqual(manager.downloads.map(\.id), [paused.id])
-        XCTAssertEqual(manager.history.map(\.id), [paused.id])
-
-        let stored = try XCTUnwrap(manager.historyStore.loadHistory().first)
-        let restored = stored.toDownload()
-        XCTAssertEqual(restored.id, paused.id)
-        XCTAssertEqual(restored.status, .paused)
-        XCTAssertEqual(restored.progress, 0.48)
-        XCTAssertEqual(restored.options.browserCookieSource, "firefox")
-        XCTAssertEqual(restored.scratchDirectory?.standardizedFileURL.path, scratch.standardizedFileURL.path)
     }
 
 

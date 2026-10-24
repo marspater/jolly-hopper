@@ -640,69 +640,6 @@ class YtdlpService: ObservableObject {
         FileManager.default.fileExists(atPath: url.path) && FileManager.default.isExecutableFile(atPath: url.path)
     }
 
-    enum TransactionalInstallError: LocalizedError {
-        case validationFailed(String)
-        case rollbackFailed(destination: String, underlyingError: Error)
-        case installationFailed(destination: String, underlyingError: Error)
-
-        var errorDescription: String? {
-            switch self {
-            case .validationFailed(let msg):
-                return "Validation failed: \(msg)"
-            case .rollbackFailed(let dest, let err):
-                return "CRITICAL: Rollback failed for \(dest): \(err.localizedDescription)"
-            case .installationFailed(let dest, let err):
-                return "Installation failed for \(dest): \(err.localizedDescription)"
-            }
-        }
-    }
-
-    func transactionalInstall(from source: URL, to destination: URL, validate: (URL) async -> Bool) async throws -> Bool {
-        let fileManager = FileManager.default
-        let backupDestination = destination.deletingLastPathComponent().appendingPathComponent(destination.lastPathComponent + ".backup_\(UUID().uuidString)")
-        try? fileManager.removeItem(at: backupDestination)
-
-        let hadOldBinary = fileManager.fileExists(atPath: destination.path)
-        if hadOldBinary {
-            try fileManager.moveItem(at: destination, to: backupDestination)
-        }
-
-        do {
-            try fileManager.moveItem(at: source, to: destination)
-            let isValid = await validate(destination)
-            if isValid {
-                if hadOldBinary {
-                    try? fileManager.removeItem(at: backupDestination)
-                }
-                return true
-            } else {
-                // Post-validation failed: remove new binary and restore backup
-                try? fileManager.removeItem(at: destination)
-                if hadOldBinary {
-                    do {
-                        try fileManager.moveItem(at: backupDestination, to: destination)
-                    } catch {
-                        LoggerService.shared.log("CRITICAL: Failed to restore backup from \(backupDestination.path) to \(destination.path): \(error.localizedDescription)", level: .error)
-                        throw TransactionalInstallError.rollbackFailed(destination: destination.path, underlyingError: error)
-                    }
-                }
-                return false
-            }
-        } catch let error as TransactionalInstallError {
-            throw error
-        } catch {
-            if hadOldBinary && !fileManager.fileExists(atPath: destination.path) {
-                do {
-                    try fileManager.moveItem(at: backupDestination, to: destination)
-                } catch {
-                    LoggerService.shared.log("CRITICAL: Failed to restore backup from \(backupDestination.path) to \(destination.path): \(error.localizedDescription)", level: .error)
-                    throw TransactionalInstallError.rollbackFailed(destination: destination.path, underlyingError: error)
-                }
-            }
-            throw TransactionalInstallError.installationFailed(destination: destination.path, underlyingError: error)
-        }
-    }
-
     private func repairAppSupportFfmpegPair(ffmpeg: URL, ffprobe: URL) async {
         let ffmpegValid = await Self.verifySHA256Detached(fileURL: ffmpeg, expectedHash: DependencyChecksums.ffmpegExecutableSHA256)
         let ffprobeValid = await Self.verifySHA256Detached(fileURL: ffprobe, expectedHash: DependencyChecksums.ffprobeExecutableSHA256)
@@ -8635,7 +8572,6 @@ final class ThreadSafeOutputState: @unchecked Sendable {
     // Bolt Performance Optimization: Reuse static CharacterSet to avoid repeated allocations in high-frequency progress loops
     private static let quoteCharacterSet = CharacterSet(charactersIn: "\"\'")
 
-    private var finalPath: String?
     private var finalPaths: [String] = []
     private var candidatePaths: [String] = []
     private var errorText: String = ""
@@ -8649,14 +8585,7 @@ final class ThreadSafeOutputState: @unchecked Sendable {
         if !finalPaths.contains(cleaned) {
             finalPaths.append(cleaned)
         }
-        finalPath = cleaned
         lock.unlock()
-    }
-
-    func getFinalPath() -> String? {
-        lock.lock()
-        defer { lock.unlock() }
-        return finalPath
     }
 
     func getFinalPaths() -> [String] {

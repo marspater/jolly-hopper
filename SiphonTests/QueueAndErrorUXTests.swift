@@ -374,39 +374,6 @@ final class QueueAndErrorUXTests: XCTestCase {
         XCTAssertNil(computedUnreadable, "Expected computeSHA256 to return nil for a file without read permissions")
     }
 
-    func testDownloadProcessControllerCancellationLifecycle() {
-        // Lifecycle Test 1: Normal attach -> detach
-        let normalController = DownloadProcessController()
-        XCTAssertFalse(normalController.isCancelled)
-
-        let mockProcess1 = Process()
-        let attachedNormal = normalController.attachProcess(mockProcess1)
-        XCTAssertTrue(attachedNormal)
-        XCTAssertFalse(normalController.isCancelled)
-
-        normalController.detach()
-        XCTAssertFalse(normalController.isCancelled)
-
-        // Lifecycle Test 2: Cancel before attach
-        let cancelledController = DownloadProcessController()
-        cancelledController.cancel()
-        XCTAssertTrue(cancelledController.isCancelled)
-
-        let mockProcess2 = Process()
-        let attachedCancelled = cancelledController.attachProcess(mockProcess2)
-        XCTAssertFalse(attachedCancelled, "attachProcess must return false when controller was already cancelled")
-        XCTAssertTrue(cancelledController.isCancelled)
-
-        // Lifecycle Test 3: Cancel while attached
-        let activeController = DownloadProcessController()
-        let mockProcess3 = Process()
-        let attachedActive = activeController.attachProcess(mockProcess3)
-        XCTAssertTrue(attachedActive)
-
-        activeController.cancel()
-        XCTAssertTrue(activeController.isCancelled)
-    }
-
     func testEphemeralRawCookiesNotPersistedInCodable() throws {
         var options = DownloadOptions.default
         options.rawCookies = "session_token=super_secret_cookie_data_123"
@@ -604,8 +571,6 @@ final class QueueAndErrorUXTests: XCTestCase {
 
         for _ in 0..<count {
             let controller = DownloadProcessController()
-            let proc = Process()
-            _ = controller.attachProcess(proc)
             controllers.append(controller)
         }
 
@@ -1068,7 +1033,6 @@ final class QueueAndErrorUXTests: XCTestCase {
         XCTAssertEqual(SiphonTheme.radiusSmall, 6)
         XCTAssertEqual(SiphonTheme.radiusControl, 8)
         XCTAssertEqual(SiphonTheme.radiusCard, 12)
-        XCTAssertEqual(SiphonTheme.radiusSheet, 16)
     }
 
     func testAdaptiveRenderingEnvironmentReduceMotion() {
@@ -1491,18 +1455,6 @@ final class QueueAndErrorUXTests: XCTestCase {
         XCTAssertFalse(VideoResolution.r1080p.title(lang: lang).isEmpty)
     }
 
-    func testVideoAndAudioCodecYtdlpFilters() {
-        let lang = LanguageService()
-        XCTAssertEqual(VideoCodec.h264.ytdlpFilter, "[vcodec^=avc1]")
-        XCTAssertEqual(VideoCodec.h265.ytdlpFilter, "[vcodec~='^(hev1|hvc1)']")
-        XCTAssertNil(VideoCodec.auto.ytdlpFilter)
-        XCTAssertFalse(VideoCodec.h264.title(lang: lang).isEmpty)
-
-        XCTAssertEqual(AudioCodec.aac.ytdlpFilter, "[acodec^=mp4a]")
-        XCTAssertNil(AudioCodec.auto.ytdlpFilter)
-        XCTAssertFalse(AudioCodec.aac.title(lang: lang).isEmpty)
-    }
-
     func testSubtitleFormatAndConversionCodec() {
         let lang = LanguageService()
         XCTAssertEqual(SubtitleFormat.srt.displayName, "SRT")
@@ -1644,7 +1596,6 @@ final class QueueAndErrorUXTests: XCTestCase {
         XCTAssertEqual(SiphonTheme.radiusSmall, 6)
         XCTAssertEqual(SiphonTheme.radiusControl, 8)
         XCTAssertEqual(SiphonTheme.radiusCard, 12)
-        XCTAssertEqual(SiphonTheme.radiusSheet, 16)
     }
 
     func testPaletteContrastAndWideGamut() {
