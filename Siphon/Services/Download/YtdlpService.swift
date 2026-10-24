@@ -1184,6 +1184,15 @@ class YtdlpService: ObservableObject {
         return !mediaHosts.isEmpty && mediaHosts.allSatisfy { $0 == "assets.twinkaboo.com" }
     }
 
+    struct SingleVideoFetchOptions: Sendable {
+        var forceBrowserCookies: Bool = false
+        var rawCookies: String? = nil
+        var rawUserAgent: String? = nil
+        var browserCookieSource: String? = nil
+        var proxy: String? = nil
+        var allowPhantomJSRetry: Bool = true
+    }
+
     func fetchSingleVideoInfo(
         path: String,
         url: String,
@@ -1193,6 +1202,30 @@ class YtdlpService: ObservableObject {
         browserCookieSource: String? = nil,
         proxy: String? = nil
     ) async throws -> MediaInfo {
+        try await fetchSingleVideoInfo(
+            path: path,
+            url: url,
+            options: SingleVideoFetchOptions(
+                forceBrowserCookies: forceBrowserCookies,
+                rawCookies: rawCookies,
+                rawUserAgent: rawUserAgent,
+                browserCookieSource: browserCookieSource,
+                proxy: proxy
+            )
+        )
+    }
+
+    func fetchSingleVideoInfo(
+        path: String,
+        url: String,
+        options: SingleVideoFetchOptions
+    ) async throws -> MediaInfo {
+        let forceBrowserCookies = options.forceBrowserCookies
+        let rawCookies = options.rawCookies
+        let rawUserAgent = options.rawUserAgent
+        let browserCookieSource = options.browserCookieSource
+        let proxy = options.proxy
+        let allowPhantomJSRetry = options.allowPhantomJSRetry
         if isRecuURL(url) {
             let recuMedia = try await resolveRecuMediaInfo(url: url)
             var parsedInfo: MediaInfo?
@@ -1544,15 +1577,20 @@ class YtdlpService: ObservableObject {
                 browserCookieSource: browserCookieSource
             ) {
                 LoggerService.shared.log("Retrying metadata extraction with configured browser cookies", level: .info)
-                return try await fetchSingleVideoInfo(
-                    path: path,
-                    url: url,
-                    forceBrowserCookies: true,
-                    rawCookies: rawCookies,
-                    rawUserAgent: rawUserAgent,
-                    browserCookieSource: browserCookieSource,
-                    proxy: proxy
-                )
+                var retryOptions = options
+                retryOptions.forceBrowserCookies = true
+                return try await fetchSingleVideoInfo(path: path, url: url, options: retryOptions)
+            }
+            let isTransientNet = !usesBrowserTransport(url) && Self.isTransientNetworkError(String(describing: error))
+            if allowPhantomJSRetry && (Self.isPhantomJSError(error) || isTransientNet) {
+                let reason = Self.isPhantomJSError(error) ? "PornHub challenge / PhantomJS error" : "Transient network/VPN error"
+                LoggerService.shared.log("\(reason) encountered. Retrying metadata extraction...", level: .warning)
+                if processRunner is DefaultYtdlpProcessRunner {
+                    try await Task.sleep(nanoseconds: 1_500_000_000)
+                }
+                var retryOptions = options
+                retryOptions.allowPhantomJSRetry = false
+                return try await fetchSingleVideoInfo(path: path, url: url, options: retryOptions)
             }
             throw mapSiteSpecificError(
                 error,
@@ -2339,6 +2377,7 @@ public struct DownloadResult: Sendable {
             case injectBrowserCookies(browser: String)
             case retryTransientNetworkError
             case disableAria2c
+            case retryPhantomJSChallenge
         }
 
         var triedStrategies = Set<DownloadRecoveryStrategy>()
@@ -2551,6 +2590,17 @@ public struct DownloadResult: Sendable {
                         cleanArgs.remove(at: idx)
                     }
                     currentArgs = cleanArgs
+                    continue
+                }
+
+                // Strategy 7: PornHub challenge / PhantomJS fallback -> Retry with fresh connection
+                if !errText.isEmpty, Self.isPhantomJSError(errText), !triedStrategies.contains(.retryPhantomJSChallenge) {
+                    triedStrategies.insert(.retryPhantomJSChallenge)
+                    LoggerService.shared.log("PornHub challenge / PhantomJS error encountered (\(errText.trimmingCharacters(in: .whitespacesAndNewlines))). Retrying download after cookie sync...", level: .warning)
+                    onOutput("[Siphon Info] Site anti-bot challenge encountered. Retrying download stream...\n")
+                    if processRunner is DefaultYtdlpProcessRunner {
+                        try await Task.sleep(nanoseconds: 1_500_000_000)
+                    }
                     continue
                 }
 
@@ -7161,6 +7211,21 @@ public struct DownloadResult: Sendable {
         return host == "thisvid.com" || host.hasSuffix(".thisvid.com")
     }
 
+    private func isPornhubURL(_ urlOrHost: String) -> Bool {
+        Self.isPornhubURL(urlOrHost)
+    }
+
+    nonisolated static func isPornhubURL(_ urlOrHost: String) -> Bool {
+        let host = (URL(string: urlOrHost)?.host ?? urlOrHost).lowercased()
+        let domains = ["pornhub.com", "pornhubpremium.com", "phncdn.com"]
+        return domains.contains { host == $0 || host.hasSuffix("." + $0) }
+    }
+
+    nonisolated static func isPhantomJSError(_ errorTextOrError: Any) -> Bool {
+        let text = String(describing: errorTextOrError).lowercased()
+        return text.contains("phantomjs not found") || text.contains("phantomjs")
+    }
+
     nonisolated private static let cloudflareErrorKeywords = [
         "cloudflare", "anti-bot", "captcha", "challenge", "turnstile"
     ]
@@ -7202,6 +7267,10 @@ public struct DownloadResult: Sendable {
 
         if (configuredBrowser == "safari" || configuredBrowser == nil) && isSafariPermissionError(errString) {
             return YtdlpError.safariCookiesFullDiskAccessRequired
+        }
+
+        if Self.isPhantomJSError(errString) {
+            return YtdlpError.downloadFailed("The site presented an anti-bot challenge. Please ensure cookies are enabled in your browser or try again in a few moments.")
         }
 
         if isBoyfriendTVURL(url) {
@@ -7329,7 +7398,7 @@ public struct DownloadResult: Sendable {
         return false
     }
 
-    private func isTransientServerError(_ text: String) -> Bool {
+    nonisolated static func isTransientNetworkError(_ text: String) -> Bool {
         let lower = text.lowercased()
         return lower.contains("http error 500") ||
                lower.contains("http error 502") ||
@@ -7341,7 +7410,25 @@ public struct DownloadResult: Sendable {
                lower.contains("gateway timeout") ||
                lower.contains("connection refused") ||
                lower.contains("failed to establish a new connection") ||
-               lower.contains("connection reset")
+               lower.contains("connection reset") ||
+               lower.contains("no route to host") ||
+               lower.contains("network is unreachable") ||
+               lower.contains("operation timed out") ||
+               lower.contains("read timed out") ||
+               lower.contains("socket timed out") ||
+               lower.contains("timed out") ||
+               lower.contains("broken pipe") ||
+               lower.contains("nodename nor servname provided") ||
+               lower.contains("temporary failure in name resolution") ||
+               lower.contains("remote end closed connection without response") ||
+               lower.contains("connection aborted") ||
+               lower.contains("connection closed") ||
+               lower.contains("unexpected eof") ||
+               lower.contains("tls handshake failed")
+    }
+
+    private func isTransientServerError(_ text: String) -> Bool {
+        Self.isTransientNetworkError(text)
     }
 
     nonisolated static func removeImpersonation(from args: inout [String]) {
@@ -7366,6 +7453,7 @@ public struct DownloadResult: Sendable {
                             parsedHost == "cdn.boyfriendtv.com" || parsedHost.hasSuffix(".boyfriendtv.com")
         let isRecu = isRecuURL(parsedHost)
         let isEporner = isEpornerURL(parsedHost)
+        let isPornhub = Self.isPornhubURL(parsedHost) || Self.isPornhubURL(url)
 
         // Retries, socket timeouts & performance optimization flags
         args.append(contentsOf: ["--retries", "10"])
@@ -7376,7 +7464,12 @@ public struct DownloadResult: Sendable {
         if !args.contains("--retry-sleep") {
             args.append(contentsOf: ["--retry-sleep", "http:exp=1:20", "--retry-sleep", "fragment:exp=1:20"])
         }
-        args.append(contentsOf: ["--socket-timeout", "15"])
+        let isVPN = NetworkEnvironmentService.shared.isVPNActive
+        let socketTimeout = isVPN ? "30" : "15"
+        args.append(contentsOf: ["--socket-timeout", socketTimeout])
+        if (isVPN || !NetworkEnvironmentService.shared.supportsIPv6) && !args.contains("-4") && !args.contains("--force-ipv4") {
+            args.append("--force-ipv4")
+        }
         args.append("--no-mtime")
 
         let browserSource: String? = {
@@ -7393,20 +7486,26 @@ public struct DownloadResult: Sendable {
             if let exactUA = (rawUserAgent ?? options?.rawUserAgent)?.trimmingCharacters(in: .whitespacesAndNewlines), !exactUA.isEmpty {
                 args.append(contentsOf: ["--user-agent", exactUA])
                 args.append(contentsOf: ["--add-header", "Accept-Language:en-US,en;q=0.9"])
-                args.append(contentsOf: [
-                    "--extractor-args",
-                    "generic:impersonate=\(recuImpersonationTarget(rawUserAgent: exactUA, browserCookieSource: browserSource))"
-                ])
+                if !isPornhub {
+                    args.append(contentsOf: [
+                        "--extractor-args",
+                        "generic:impersonate=\(recuImpersonationTarget(rawUserAgent: exactUA, browserCookieSource: browserSource))"
+                    ])
+                }
             } else if isFirefox {
                 // When recovery intentionally drops the raw browser UA, keep the
                 // request fingerprint coherent with the explicit Firefox cookie source.
                 args.append(contentsOf: ["--add-header", "Accept-Language:en-US,en;q=0.9"])
-                args.append(contentsOf: ["--extractor-args", "generic:impersonate=firefox:macos"])
+                if !isPornhub {
+                    args.append(contentsOf: ["--extractor-args", "generic:impersonate=firefox:macos"])
+                }
             } else if isSafari {
                 let safariUA = Self.safariUserAgent
                 args.append(contentsOf: ["--user-agent", safariUA])
                 args.append(contentsOf: ["--add-header", "Accept-Language:en-US,en;q=0.9"])
-                args.append(contentsOf: ["--extractor-args", isBoyfriendTV ? "generic:impersonate=safari" : "generic:impersonate"])
+                if !isPornhub {
+                    args.append(contentsOf: ["--extractor-args", isBoyfriendTV ? "generic:impersonate=safari" : "generic:impersonate"])
+                }
             } else {
                 // Common modern browser headers & Cloudflare extraction options
                 let defaultUA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
@@ -7418,7 +7517,12 @@ public struct DownloadResult: Sendable {
                 args.append(contentsOf: ["--add-header", "Sec-Ch-Ua-Mobile:?0"])
                 args.append(contentsOf: ["--add-header", "Sec-Ch-Ua-Platform:\"macOS\""])
                 args.append(contentsOf: ["--add-header", "Accept-Language:en-US,en;q=0.9"])
-                args.append(contentsOf: ["--extractor-args", isBoyfriendTV ? "generic:impersonate=chrome" : "generic:impersonate"])
+                if !isPornhub {
+                    args.append(contentsOf: ["--extractor-args", isBoyfriendTV ? "generic:impersonate=chrome" : "generic:impersonate"])
+                }
+            }
+            if isPornhub {
+                Self.removeImpersonation(from: &args)
             }
         }
 
