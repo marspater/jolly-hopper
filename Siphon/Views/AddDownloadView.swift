@@ -82,6 +82,7 @@ struct AddDownloadView: View {
     @State private var showStreamInspector: Bool = false
     @State private var fetchTask: Task<Void, Never>?
     @State private var playlistTask: Task<Void, Never>?
+    @State private var importTask: Task<Void, Never>?
 
     enum InputMode: String, CaseIterable, Identifiable {
         case single
@@ -359,6 +360,8 @@ struct AddDownloadView: View {
         existingFileCheckTask = nil
         playlistTask?.cancel()
         playlistTask = nil
+        importTask?.cancel()
+        importTask = nil
         appState.clearBrowserSession()
         appState.clearExternalTarget()
     }
@@ -1834,10 +1837,13 @@ struct AddDownloadView: View {
         panel.allowedContentTypes = [.text]
 
         if panel.runModal() == .OK, let selectedURL = panel.url {
-            Task {
+            importTask?.cancel()
+            importTask = Task {
                 let content = await Task.detached(priority: .userInitiated) {
                     Self.readURLList(at: selectedURL)
                 }.value
+                // A closed form must not take the file's URLs or show feedback.
+                guard !Task.isCancelled else { return }
                 guard let content, !extractBatchUrls(from: content).isEmpty else {
                     importFeedback.show(languageService.s("no_valid_urls"), isSuccess: false, duration: 4)
                     return
