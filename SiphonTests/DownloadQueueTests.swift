@@ -189,6 +189,33 @@ final class DownloadQueueTests: XCTestCase {
         XCTAssertEqual(colliding("Clip", .mp4), "clip.WEBM")
         XCTAssertEqual(colliding("song", .mp3), "Song.mp3")
         XCTAssertNil(colliding("Song", .mp4))
+
+        var videoOptions = DownloadOptions.default
+        videoOptions.fileType = .mp4
+        for ext in YtdlpService.videoMediaExtensions {
+            XCTAssertTrue(
+                DownloadQueue.mediaFileCollides(baseName: "My Video", options: videoOptions, existingMediaFileKeys: ["my video.\(ext)"]),
+                "An existing .\(ext) must block a video job of the same name"
+            )
+        }
+    }
+
+    func testReservationsSeeThroughSymlinkedSaveFolders() throws {
+        let queue = DownloadQueue(userDefaults: testDefaults)
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let real = root.appendingPathComponent("real")
+        let alias = root.appendingPathComponent("alias")
+        try FileManager.default.createDirectory(at: real, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createSymbolicLink(at: alias, withDestinationURL: real)
+
+        queue.reserveOutputPath(real.appendingPathComponent("Movie.mp4").path)
+        XCTAssertTrue(queue.isPathReserved(alias.appendingPathComponent("Movie.mp4").path))
+
+        var options = DownloadOptions.default
+        options.saveFolder = alias
+        let planned = queue.planUniqueOutputPath(for: Download(url: "https://example.com/v", options: options, title: "Movie"))
+        XCTAssertEqual(planned.resolvedBaseName, "Movie (1)", "A job saving through the alias must see the other job's reservation")
     }
 
     func testOutputReservationsAreCaseInsensitiveAndUnicodeCanonicalized() {

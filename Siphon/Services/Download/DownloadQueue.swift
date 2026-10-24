@@ -65,11 +65,19 @@ final class DownloadQueue: ObservableObject {
     // MARK: - Output Path Planning & Reservation
 
     nonisolated static func reservationKey(for path: String) -> String {
-        URL(fileURLWithPath: path)
-            .standardizedFileURL
+        canonicalFileURL(URL(fileURLWithPath: path))
             .path
             .precomposedStringWithCanonicalMapping
             .lowercased()
+    }
+
+    /// Resolves symlinks in the parent folder, which exists, so a symlinked save
+    /// folder and its target name the same file. The file itself usually does
+    /// not exist yet, and resolving a missing path leaves it unchanged.
+    nonisolated static func canonicalFileURL(_ file: URL) -> URL {
+        let standardized = file.standardizedFileURL
+        return standardized.deletingLastPathComponent().resolvingSymlinksInPath()
+            .appendingPathComponent(standardized.lastPathComponent)
     }
 
     nonisolated static func filenameCollisionKey(_ value: String) -> String {
@@ -94,10 +102,10 @@ final class DownloadQueue: ObservableObject {
     /// A file counts only while it is still the one recorded: deleted or
     /// replaced (another job's output under the same name) it is a collision.
     nonisolated static func ownedOutputKeys(_ files: [URL: Int], in folder: URL) -> Set<String> {
-        let folderPath = folder.standardizedFileURL.path
+        let folderPath = folder.standardizedFileURL.resolvingSymlinksInPath().path
         return Set(files.lazy
             .filter { file, number in
-                file.deletingLastPathComponent().standardizedFileURL.path == folderPath && fileNumber(of: file) == number
+                canonicalFileURL(file).deletingLastPathComponent().path == folderPath && fileNumber(of: file) == number
             }
             .map { filenameCollisionKey($0.key.lastPathComponent) })
     }
@@ -108,8 +116,6 @@ final class DownloadQueue: ObservableObject {
               attributes[.type] as? FileAttributeType == .typeRegular else { return nil }
         return (attributes[.systemFileNumber] as? NSNumber)?.intValue
     }
-
-    private nonisolated static let videoContainerExtensions = ["mp4", "m4v", "mkv", "webm", "mov", "avi", "flv", "wmv", "ts"]
 
     /// The one "file exists" rule shared by the queue, the executor and the
     /// Add Download sheet. Audio jobs always convert to their exact
@@ -141,9 +147,9 @@ final class DownloadQueue: ObservableObject {
         }
     }
 
-    private nonisolated static func collisionExtensions(for options: DownloadOptions) -> [String] {
+    private nonisolated static func collisionExtensions(for options: DownloadOptions) -> Set<String> {
         options.fileType.isVideo
-            ? videoContainerExtensions
+            ? YtdlpService.videoMediaExtensions
             : [YtdlpService.resolvedOutputFileExtension(for: options)]
     }
 
