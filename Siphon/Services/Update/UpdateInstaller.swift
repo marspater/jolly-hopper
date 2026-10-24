@@ -310,9 +310,11 @@ public final class UpdateInstaller: Sendable {
 
     // MARK: - Mount & Extraction Helpers
 
+    private static let hdiutilURL = URL(fileURLWithPath: NSString.path(withComponents: ["/", "usr", "bin", "hdiutil"]))
+
     private func mountDMG(dmgURL: URL) throws -> String {
         let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/hdiutil")
+        process.executableURL = Self.hdiutilURL
         process.arguments = ["attach", dmgURL.path, "-nobrowse", "-readonly", "-plist"]
         process.environment = YtdlpService.createSanitizedEnvironment()
 
@@ -355,7 +357,7 @@ public final class UpdateInstaller: Sendable {
     /// staged by `UpdateDownloader` in this user's temporary folder match.
     static func detachStaleUpdateImages() {
         let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/hdiutil")
+        process.executableURL = Self.hdiutilURL
         process.arguments = ["info", "-plist"]
         process.environment = YtdlpService.createSanitizedEnvironment()
         let pipe = Pipe()
@@ -388,7 +390,7 @@ public final class UpdateInstaller: Sendable {
 
     private static func unmountDMG(mountPoint: String) throws {
         let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/hdiutil")
+        process.executableURL = Self.hdiutilURL
         process.arguments = ["detach", mountPoint, "-force"]
         process.environment = YtdlpService.createSanitizedEnvironment()
         process.standardOutput = FileHandle.nullDevice
