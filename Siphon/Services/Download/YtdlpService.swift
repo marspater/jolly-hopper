@@ -5738,11 +5738,21 @@ public struct DownloadResult: Sendable {
 
     // MARK: - Beeg Extractor
 
-    nonisolated static let beegOrigin = "https://beeg.com"
-    nonisolated static let beegReferer = "https://beeg.com/"
-    nonisolated static let beegStoreBaseURL = "https://store.externulls.com"
-    nonisolated static let beegVideoBaseURL = "https://video.beeg.com"
-    nonisolated static let beegThumbsBaseURL = "https://thumbs.externulls.com"
+    private static let beegHost = "beeg.com"
+    private static let beegStoreHost = "store.externulls.com"
+    private static let beegVideoHost = "video.beeg.com"
+    private static let beegThumbsHost = "thumbs.externulls.com"
+
+    nonisolated static func beegURL(host: String, pathComponents: [String] = []) -> URL? {
+        var comp = URLComponents()
+        comp.scheme = "https"
+        comp.host = host
+        var url = comp.url
+        for c in pathComponents {
+            url = url?.appendingPathComponent(c)
+        }
+        return url
+    }
 
     private func isBeegURL(_ urlOrHost: String) -> Bool {
         Self.isBeegURL(urlOrHost)
@@ -5820,12 +5830,16 @@ public struct DownloadResult: Sendable {
             return nil
         }
 
-        guard let playURL = URL(string: "\(Self.beegStoreBaseURL)/video/play_url/\(videoID)") else { return nil }
+        let originURL = Self.beegURL(host: Self.beegHost)
+        let originString = originURL?.absoluteString ?? ""
+        let refererString = originURL?.appendingPathComponent("").absoluteString ?? ""
+
+        guard let playURL = Self.beegURL(host: Self.beegStoreHost, pathComponents: ["video", "play_url", videoID]) else { return nil }
         var playRequest = URLRequest(url: playURL)
         playRequest.timeoutInterval = 15.0
         playRequest.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36", forHTTPHeaderField: "User-Agent")
-        playRequest.setValue(Self.beegReferer, forHTTPHeaderField: "Referer")
-        playRequest.setValue(Self.beegOrigin, forHTTPHeaderField: "Origin")
+        playRequest.setValue(refererString, forHTTPHeaderField: "Referer")
+        playRequest.setValue(originString, forHTTPHeaderField: "Origin")
         playRequest.setValue("application/json, text/plain, */*", forHTTPHeaderField: "Accept")
 
         let (playData, playResponse) = try await EgressBoundary.session.boundedData(for: playRequest)
@@ -5839,26 +5853,26 @@ public struct DownloadResult: Sendable {
         let streamURL: String
         if playText.hasPrefix("http://") || playText.hasPrefix("https://") {
             streamURL = playText
-        } else if let base = URL(string: Self.beegVideoBaseURL),
+        } else if let base = Self.beegURL(host: Self.beegVideoHost),
                   let combined = URL(string: playText, relativeTo: base) {
             streamURL = combined.absoluteString
         } else {
-            let path = playText.hasPrefix("/") ? String(playText.dropFirst()) : playText
-            streamURL = "\(Self.beegVideoBaseURL)/\(path)"
+            let cleanPath = playText.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+            streamURL = Self.beegURL(host: Self.beegVideoHost, pathComponents: [cleanPath])?.absoluteString ?? playText
         }
 
         var title = "Beeg Video \(videoID)"
         var duration: Int? = nil
         var width: Int? = nil
         var height: Int? = nil
-        let thumbnailURL = "\(Self.beegThumbsBaseURL)/videos/\(videoID)/0.webp"
+        let thumbnailURL = Self.beegURL(host: Self.beegThumbsHost, pathComponents: ["videos", videoID, "0.webp"])?.absoluteString
 
-        if let factsURL = URL(string: "\(Self.beegStoreBaseURL)/facts/file/\(videoID)") {
+        if let factsURL = Self.beegURL(host: Self.beegStoreHost, pathComponents: ["facts", "file", videoID]) {
             var factsRequest = URLRequest(url: factsURL)
             factsRequest.timeoutInterval = 15.0
             factsRequest.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36", forHTTPHeaderField: "User-Agent")
-            factsRequest.setValue(Self.beegReferer, forHTTPHeaderField: "Referer")
-            factsRequest.setValue(Self.beegOrigin, forHTTPHeaderField: "Origin")
+            factsRequest.setValue(refererString, forHTTPHeaderField: "Referer")
+            factsRequest.setValue(originString, forHTTPHeaderField: "Origin")
             factsRequest.setValue("application/json, text/plain, */*", forHTTPHeaderField: "Accept")
 
             if let (factsData, factsResponse) = try? await EgressBoundary.session.boundedData(for: factsRequest),
