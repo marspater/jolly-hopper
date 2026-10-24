@@ -1360,6 +1360,72 @@ class YtdlpService: ObservableObject {
                 )
         }
 
+        if isBeegURL(url),
+           let beegMedia = try await resolveBeegMediaInfo(url: url, proxy: proxy) {
+            var beegArgs = [
+                path,
+                "--ignore-config",
+                "--dump-json",
+                "--no-playlist",
+                "--no-warnings"
+            ]
+            appendSiteSpecificArgs(for: beegMedia.streamURL, to: &beegArgs)
+            if let proxy = proxy, !proxy.isEmpty {
+                beegArgs.append(contentsOf: ["--proxy", proxy])
+            }
+            beegArgs.append("--")
+            beegArgs.append(beegMedia.streamURL)
+
+            var parsedInfo: MediaInfo? = nil
+            do {
+                let output = try await runCommand(beegArgs)
+                if let data = output.data(using: .utf8) {
+                    parsedInfo = try? JSONDecoder().decode(MediaInfo.self, from: data)
+                }
+            } catch {
+                if error is CancellationError { throw error }
+                try Task.checkCancellation()
+                LoggerService.shared.log("Beeg stream metadata probe failed: \(error.localizedDescription); synthesizing MediaInfo directly", level: .debug)
+            }
+            try Task.checkCancellation()
+
+            let synthesizedFormats = Self.parseBeegFormats(from: beegMedia.streamURL)
+            let resolvedFormats = (parsedInfo?.formats?.isEmpty == false) ? parsedInfo?.formats : synthesizedFormats
+            let resolvedDuration: Double? = {
+                if let dur = beegMedia.duration, dur > 0 {
+                    return Double(dur)
+                }
+                return parsedInfo?.duration
+            }()
+            let resolvedThumbnail: String? = beegMedia.thumbnailURL ?? parsedInfo?.thumbnail
+            let resolvedUploader: String = parsedInfo?.uploader ?? "Beeg"
+
+            var media = MediaInfo(
+                id: url,
+                title: beegMedia.title,
+                description: parsedInfo?.description,
+                thumbnail: resolvedThumbnail,
+                duration: resolvedDuration,
+                uploader: resolvedUploader,
+                uploadDate: parsedInfo?.uploadDate,
+                viewCount: parsedInfo?.viewCount,
+                likeCount: parsedInfo?.likeCount,
+                formats: resolvedFormats,
+                subtitles: parsedInfo?.subtitles,
+                automaticCaptions: parsedInfo?.automaticCaptions,
+                chapters: parsedInfo?.chapters,
+                playlist: nil,
+                playlistIndex: nil,
+                playlistCount: nil,
+                webpageUrl: url,
+                originalUrl: beegMedia.streamURL,
+                formatProtocol: "m3u8_native",
+                manifestUrl: beegMedia.streamURL
+            )
+            media.fetchedAt = Date()
+            return media
+        }
+
         if isGuywhURL(url),
            let guywhMedia = await resolveGuywhMediaInfo(url: url, rawCookies: rawCookies) {
                 let quality = guywhMedia.quality ?? "720p"
@@ -1992,6 +2058,19 @@ public struct DownloadResult: Sendable {
                 customResolvedTitle = btvMedia.title
                 customEmbedURL = btvMedia.embedURL
                 customThumbnailURL = btvMedia.thumbnailURL
+            }
+        } else if isBeegURL(url) {
+            if let streamURL = mediaInfo?.manifestUrl ?? mediaInfo?.originalUrl, !streamURL.isEmpty, streamURL.contains("video.beeg.com"),
+               Self.resolvedStreamIsFresh(mediaInfo) {
+                targetURL = streamURL
+                customResolvedTitle = mediaInfo?.title
+                customEmbedURL = mediaInfo?.webpageUrl
+                customThumbnailURL = mediaInfo?.thumbnail
+            } else if let beegMedia = try await resolveBeegMediaInfo(url: url, proxy: EgressBoundary.proxyURL) {
+                targetURL = beegMedia.streamURL
+                customResolvedTitle = beegMedia.title
+                customEmbedURL = beegMedia.pageURL
+                customThumbnailURL = beegMedia.thumbnailURL
             }
         } else if isGayteamURL(url) {
             // The captured stream while its player token is surely valid; else (also
@@ -3084,22 +3163,27 @@ public struct DownloadResult: Sendable {
     private func buildFormatArgs(url: String? = nil, options: DownloadOptions, mediaInfo: MediaInfo? = nil, deferPostprocessing: Bool = false) -> [String] {
         var args: [String] = []
 
-        let isSynthesizedDirectStream = mediaInfo?.uploader == "Protected Site" ||
-                                        mediaInfo?.uploader == "StarWank" ||
-                                        mediaInfo?.uploader == "PussySpace" ||
-                                        isGuywhURL(mediaInfo?.id ?? "") ||
-                                        isGFFURL(mediaInfo?.id ?? "") ||
-                                        isBoyfriendTVURL(mediaInfo?.id ?? "") ||
-                                        isBestCamURL(mediaInfo?.id ?? "") ||
-                                        isStarwankURL(mediaInfo?.id ?? "") ||
-                                        isPussyspaceURL(mediaInfo?.id ?? "") ||
-                                        (url.map(isGuywhURL) ?? false) ||
-                                        (url.map(isGFFURL) ?? false) ||
-                                        (url.map(isBoyfriendTVURL) ?? false) ||
-                                        (url.map(isBestCamURL) ?? false) ||
-                                        (url.map(isStarwankURL) ?? false) ||
-                                        (url.map(isPussyspaceURL) ?? false) ||
-                                        Self.isSingleUnprobedFormat(mediaInfo)
+        let isSynthesizedDirectStream: Bool = {
+            if mediaInfo?.uploader == "Protected Site" || mediaInfo?.uploader == "StarWank" || mediaInfo?.uploader == "PussySpace" {
+                return true
+            }
+            let infoId = mediaInfo?.id ?? ""
+            if isGuywhURL(infoId) || isGFFURL(infoId) || isBoyfriendTVURL(infoId) || isBeegURL(infoId) {
+                return true
+            }
+            if isBestCamURL(infoId) || isStarwankURL(infoId) || isPussyspaceURL(infoId) {
+                return true
+            }
+            if let u = url {
+                if isGuywhURL(u) || isGFFURL(u) || isBoyfriendTVURL(u) || isBeegURL(u) {
+                    return true
+                }
+                if isBestCamURL(u) || isStarwankURL(u) || isPussyspaceURL(u) {
+                    return true
+                }
+            }
+            return Self.isSingleUnprobedFormat(mediaInfo)
+        }()
 
         if deferPostprocessing { return ["-f", "b/best"] }
 
@@ -5652,6 +5736,150 @@ public struct DownloadResult: Sendable {
         return resolved
     }
 
+    // MARK: - Beeg Extractor
+
+    private func isBeegURL(_ urlOrHost: String) -> Bool {
+        Self.isBeegURL(urlOrHost)
+    }
+
+    nonisolated static func isBeegURL(_ urlOrHost: String) -> Bool {
+        let host = (URL(string: urlOrHost)?.host ?? urlOrHost).lowercased()
+        return host == "beeg.com" || host.hasSuffix(".beeg.com")
+    }
+
+    struct BeegExtractedMedia: Sendable {
+        let videoID: String
+        let streamURL: String
+        let pageURL: String
+        let title: String
+        let thumbnailURL: String?
+        let duration: Int?
+        let width: Int?
+        let height: Int?
+    }
+
+    var beegMediaResolver: ((String) async throws -> BeegExtractedMedia?)?
+
+    nonisolated private static let beegVideoIDRegex: NSRegularExpression? = try? NSRegularExpression(
+        pattern: #"(?:^|/)(?:video/|embed/(?:0/)?)?-?0*([1-9]\d*)"#
+    )
+
+    nonisolated static func extractBeegVideoID(from urlString: String) -> String? {
+        guard let url = URL(string: urlString) else { return nil }
+        let path = url.path
+        guard let regex = beegVideoIDRegex,
+              let match = regex.firstMatch(in: path, options: [], range: NSRange(location: 0, length: (path as NSString).length)),
+              match.numberOfRanges > 1 else { return nil }
+        return (path as NSString).substring(with: match.range(at: 1))
+    }
+
+    nonisolated static func parseBeegFormats(from streamURL: String) -> [MediaFormat]? {
+        guard let range = streamURL.range(of: "multi=([^/]+)", options: .regularExpression) else {
+            return [MediaFormat(formatId: "best", ext: "mp4", resolution: "1920x1080", formatNote: "HD")]
+        }
+        let multiChunk = streamURL[range].dropFirst("multi=".count)
+        let entries = multiChunk.split(separator: ",")
+        var formats: [(format: MediaFormat, height: Int)] = []
+        for entry in entries {
+            let parts = entry.split(separator: ":")
+            guard let resSub = parts.first, resSub.contains("x") else { continue }
+            let dims = resSub.split(separator: "x")
+            if dims.count == 2, let _ = Int(dims[0]), let h = Int(dims[1]) {
+                let res = String(resSub)
+                let note = parts.count > 1 ? String(parts[1]) : "\(h)p"
+                let fmt = MediaFormat(
+                    formatId: "\(h)",
+                    ext: "mp4",
+                    resolution: res,
+                    fps: 30,
+                    vcodec: "h264",
+                    acodec: "aac",
+                    formatNote: note
+                )
+                formats.append((format: fmt, height: h))
+            }
+        }
+        if formats.isEmpty { return nil }
+        formats.sort(by: { $0.height > $1.height })
+        return formats.map(\.format)
+    }
+
+    func resolveBeegMediaInfo(url: String, proxy: String? = nil) async throws -> BeegExtractedMedia? {
+        if let custom = beegMediaResolver {
+            return try await custom(url)
+        }
+
+        guard let videoID = Self.extractBeegVideoID(from: url) else {
+            LoggerService.shared.log("Beeg: unable to extract numeric video ID from \(url)", level: .warning)
+            return nil
+        }
+
+        guard let playURL = URL(string: "https://store.externulls.com/video/play_url/\(videoID)") else { return nil }
+        var playRequest = URLRequest(url: playURL)
+        playRequest.timeoutInterval = 15.0
+        playRequest.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36", forHTTPHeaderField: "User-Agent")
+        playRequest.setValue("https://beeg.com/", forHTTPHeaderField: "Referer")
+        playRequest.setValue("https://beeg.com", forHTTPHeaderField: "Origin")
+        playRequest.setValue("application/json, text/plain, */*", forHTTPHeaderField: "Accept")
+
+        let (playData, playResponse) = try await EgressBoundary.session.boundedData(for: playRequest)
+        guard let httpPlayResp = playResponse as? HTTPURLResponse, (200...299).contains(httpPlayResp.statusCode),
+              let playText = String(data: playData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !playText.isEmpty else {
+            LoggerService.shared.log("Beeg: failed to fetch play_url for ID \(videoID)", level: .warning)
+            return nil
+        }
+
+        let rawStreamPath = playText.hasPrefix("/") ? playText : "/" + playText
+        let streamURL = (rawStreamPath.hasPrefix("http://") || rawStreamPath.hasPrefix("https://"))
+            ? playText
+            : "https://video.beeg.com\(rawStreamPath)"
+
+        var title = "Beeg Video \(videoID)"
+        var duration: Int? = nil
+        var width: Int? = nil
+        var height: Int? = nil
+        let thumbnailURL = "https://thumbs.externulls.com/videos/\(videoID)/0.webp"
+
+        if let factsURL = URL(string: "https://store.externulls.com/facts/file/\(videoID)") {
+            var factsRequest = URLRequest(url: factsURL)
+            factsRequest.timeoutInterval = 15.0
+            factsRequest.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36", forHTTPHeaderField: "User-Agent")
+            factsRequest.setValue("https://beeg.com/", forHTTPHeaderField: "Referer")
+            factsRequest.setValue("https://beeg.com", forHTTPHeaderField: "Origin")
+            factsRequest.setValue("application/json, text/plain, */*", forHTTPHeaderField: "Accept")
+
+            if let (factsData, factsResponse) = try? await EgressBoundary.session.boundedData(for: factsRequest),
+               let httpFactsResp = factsResponse as? HTTPURLResponse, (200...299).contains(httpFactsResp.statusCode),
+               let factsJSON = (try? JSONSerialization.jsonObject(with: factsData)) as? [String: Any],
+               let fileObj = factsJSON["file"] as? [String: Any] {
+                duration = fileObj["fl_duration"] as? Int
+                width = fileObj["fl_width"] as? Int
+                height = fileObj["fl_height"] as? Int
+                if let dataArray = fileObj["data"] as? [[String: Any]] {
+                    for item in dataArray {
+                        if let col = item["cd_column"] as? String, col == "sf_name",
+                           let val = item["cd_value"] as? String, !val.isEmpty {
+                            title = val.trimmingCharacters(in: .whitespacesAndNewlines).decodingHTMLEntities()
+                            break
+                        }
+                    }
+                }
+            }
+        }
+
+        return BeegExtractedMedia(
+            videoID: videoID,
+            streamURL: streamURL,
+            pageURL: url,
+            title: title,
+            thumbnailURL: thumbnailURL,
+            duration: duration,
+            width: width,
+            height: height
+        )
+    }
+
     // MARK: - Guywh / KVS Extractor
 
     private func isGuywhURL(_ urlOrHost: String) -> Bool {
@@ -7452,6 +7680,7 @@ public struct DownloadResult: Sendable {
                             parsedHost == "cdn.boyfriend.tv" || parsedHost.hasSuffix(".boyfriend.tv") ||
                             parsedHost == "cdn.boyfriendtv.com" || parsedHost.hasSuffix(".boyfriendtv.com")
         let isRecu = isRecuURL(parsedHost)
+        let isBeeg = isBeegURL(parsedHost) || parsedHost == "video.beeg.com" || parsedHost.hasSuffix(".beeg.com")
         let isEporner = isEpornerURL(parsedHost)
         let isPornhub = Self.isPornhubURL(parsedHost) || Self.isPornhubURL(url)
 
@@ -7600,6 +7829,10 @@ public struct DownloadResult: Sendable {
             args.append(contentsOf: ["--hls-use-mpegts"])
         } else if parsedHost == "justthegays.com" || parsedHost.hasSuffix(".justthegays.com") || parsedHost == "justthegays.tv" || parsedHost.hasSuffix(".justthegays.tv") {
             args.append(contentsOf: ["--add-header", "Referer:https://justthegays.com/"])
+            args.append(contentsOf: ["--hls-use-mpegts"])
+        } else if isBeeg {
+            args.append(contentsOf: ["--add-header", "Referer:https://beeg.com/"])
+            args.append(contentsOf: ["--add-header", "Origin:https://beeg.com"])
             args.append(contentsOf: ["--hls-use-mpegts"])
         } else if isThisVid {
             args.append(contentsOf: ["--add-header", "Referer:https://thisvid.com/"])

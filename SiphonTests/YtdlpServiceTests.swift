@@ -1857,6 +1857,107 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertEqual(info["title"], "Clip")
     }
 
+    func testBeegVideoIDExtractionAndFormatParsing() throws {
+        let cases = [
+            ("https://beeg.com/-0773966699255726", "773966699255726"),
+            ("https://beeg.com/773966699255726", "773966699255726"),
+            ("https://beeg.com/-773966699255726", "773966699255726"),
+            ("https://beeg.com/0773966699255726", "773966699255726"),
+            ("https://beeg.com/embed/0773966699255726", "773966699255726"),
+            ("https://beeg.com/embed/0/773966699255726", "773966699255726"),
+            ("https://beeg.com/-0773966699255726?t=10-20", "773966699255726")
+        ]
+        for (input, expected) in cases {
+            XCTAssertEqual(YtdlpService.extractBeegVideoID(from: input), expected, "ID extracted from \(input) must be \(expected)")
+        }
+
+        let sampleStream = "https://video.beeg.com/key=abc,end=123/data=xyz/media=hls4A/multi=426x240:240p:avc,640x360:360p:avc,854x480:480p:avc,1280x720:720p:avc,1920x1080:1080p:avc/_TPL_/773966699255726.mp4.m3u8"
+        let formats = try XCTUnwrap(YtdlpService.parseBeegFormats(from: sampleStream))
+        XCTAssertEqual(formats.count, 5)
+        XCTAssertEqual(formats.first?.formatId, "1080")
+        XCTAssertEqual(formats.first?.resolution, "1920x1080")
+        XCTAssertEqual(formats.last?.formatId, "240")
+    }
+
+    func testBeegFetchInfoResolvesDirectHLSAndMetadata() async throws {
+        let testURL = "https://beeg.com/-0773966699255726"
+        let mockStream = "https://video.beeg.com/key=testkey,end=9999/data=123/media=hls4A/multi=640x360:360p:avc,1920x1080:1080p:avc/_TPL_/773966699255726.mp4.m3u8"
+        service.ytdlpPath = URL(fileURLWithPath: "/usr/local/bin/yt-dlp")
+        service.beegMediaResolver = { url in
+            XCTAssertEqual(url, testURL)
+            return YtdlpService.BeegExtractedMedia(
+                videoID: "773966699255726",
+                streamURL: mockStream,
+                pageURL: testURL,
+                title: "Mock Beeg Title",
+                thumbnailURL: "https://thumbs.externulls.com/videos/773966699255726/0.webp",
+                duration: 711,
+                width: 1920,
+                height: 1080
+            )
+        }
+        service.processRunner = MockYtdlpProcessRunner(mockCommand: { _ in
+            throw NSError(domain: "test", code: -1, userInfo: [NSLocalizedDescriptionKey: "probe unavailable in mock"])
+        })
+
+        let info = try await service.fetchInfo(url: testURL)
+        XCTAssertEqual(info.id, testURL)
+        XCTAssertEqual(info.title, "Mock Beeg Title")
+        XCTAssertEqual(info.manifestUrl, mockStream)
+        XCTAssertEqual(info.thumbnail, "https://thumbs.externulls.com/videos/773966699255726/0.webp")
+        XCTAssertEqual(info.duration, 711)
+        XCTAssertEqual(info.formats?.count, 2)
+        XCTAssertEqual(info.formats?.first?.resolution, "1920x1080")
+    }
+
+    func testBeegDownloadDirectsToHLSStreamWithHeaders() async throws {
+        let testURL = "https://beeg.com/-0773966699255726"
+        let mockStream = "https://video.beeg.com/key=testkey,end=9999/data=123/media=hls4A/multi=1920x1080:1080p:avc/_TPL_/773966699255726.mp4.m3u8"
+        service.ytdlpPath = URL(fileURLWithPath: "/usr/local/bin/yt-dlp")
+        service.beegMediaResolver = { _ in
+            YtdlpService.BeegExtractedMedia(
+                videoID: "773966699255726",
+                streamURL: mockStream,
+                pageURL: testURL,
+                title: "Mock Beeg Title",
+                thumbnailURL: nil,
+                duration: 711,
+                width: 1920,
+                height: 1080
+            )
+        }
+        let capturedArgsBox = TestBox<[String]>([])
+        service.processRunner = MockYtdlpProcessRunner(mockDownload: { args in
+            capturedArgsBox.value = args
+            return "[download] Destination: /tmp/mock.mp4\n"
+        })
+
+        _ = try await service.download(
+            url: testURL,
+            options: .default,
+            onProgress: { _, _, _ in },
+            onOutput: { _ in }
+        )
+
+        XCTAssertTrue(capturedArgsBox.value.contains(mockStream), "Download command must target the resolved HLS stream rather than the web page")
+        XCTAssertTrue(capturedArgsBox.value.contains("Referer:https://beeg.com/"), "Referer header must be sent for Beeg CDN")
+        XCTAssertTrue(capturedArgsBox.value.contains("Origin:https://beeg.com"), "Origin header must be sent for Beeg CDN")
+        XCTAssertTrue(capturedArgsBox.value.contains("--hls-use-mpegts"), "--hls-use-mpegts must be specified for Beeg HLS")
+    }
+
+    func testBeegLiveExtractionAndPlayURLResolution() async throws {
+        // Live integration test ensuring store.externulls.com and video.beeg.com API contract holds
+        let url = "https://beeg.com/-0773966699255726"
+        let beegMedia = try await service.resolveBeegMediaInfo(url: url)
+        let media = try XCTUnwrap(beegMedia)
+        XCTAssertEqual(media.videoID, "773966699255726")
+        XCTAssertTrue(media.streamURL.contains("video.beeg.com"))
+        XCTAssertTrue(media.streamURL.contains("multi="))
+        XCTAssertTrue(media.title.contains("Julia"), "Expected title to contain Julia but got: \(media.title)")
+        XCTAssertEqual(media.duration, 711)
+        XCTAssertEqual(media.thumbnailURL, "https://thumbs.externulls.com/videos/773966699255726/0.webp")
+    }
+
     func testGFFURLNormalizationAndHeaders() async throws {
         let previousBrowser = UserDefaults.standard.object(forKey: UserDefaultsKeys.browserForCookies)
         UserDefaults.standard.set("chrome", forKey: UserDefaultsKeys.browserForCookies)
