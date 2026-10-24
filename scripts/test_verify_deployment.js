@@ -183,20 +183,18 @@ test('verifyDeployment retries and fails on version mismatch', async () => {
 });
 
 test('verifyDeployment accepts any commit from a comma-separated expected list', async () => {
-  const fakeFetch = async () => new Response(JSON.stringify({
-    status: 'ok',
-    version: '1.0.0',
-    commit: '138c181e3e4e1c19dec09f4815fe5fdaf96f7fd0'
-  }), { status: 200 });
-
-  const result = await verifyDeployment({
+  const verifyRunning = (commit) => verifyDeployment({
+    url: 'https://example.com/healthz',
     expectedCommit: '42a8a6c5b41bd27ff89e496ab53110b0a0de863c,138c181e3e4e1c19dec09f4815fe5fdaf96f7fd0',
     timeoutSeconds: 1,
     intervalSeconds: 1,
-    fetchImpl: fakeFetch,
+    fetchImpl: async () => new Response(JSON.stringify({ status: 'ok', version: '1.0.0', commit }), { status: 200 }),
     sleepImpl: async () => {},
     logger: { log: () => {}, error: () => {} }
   });
 
-  assert.equal(result.ok, true);
+  assert.equal((await verifyRunning('138c181e3e4e1c19dec09f4815fe5fdaf96f7fd0')).ok, true);
+  const miss = await verifyRunning('fca6fe3');
+  assert.equal(miss.ok, false);
+  assert.match(miss.error, /\(any of 2 accepted commits\)/);
 });

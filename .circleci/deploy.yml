@@ -61,16 +61,16 @@ jobs:
               echo "RENDER_DEPLOY_HOOK_URL not configured; relying on automated GitHub push deployment."
             fi
 
-            # Render deploys from rootDir server/, so pushes that leave it untouched
-            # keep serving the last commit that changed it.
+            # Render deploys from rootDir server/ and skips pushes that leave it
+            # untouched, but it can still redeploy a later commit (e.g. after a
+            # force-push). Accept the last server/ commit and every descendant up to
+            # HEAD; --ancestry-path drops merged-in mainline commits that predate it.
             SERVER_REVISION=$(git log -1 --format=%H -- server)
             if [ -z "$SERVER_REVISION" ]; then
               echo "Could not resolve the last server/ commit (shallow checkout?)" >&2
               exit 1
             fi
-            # Render may be running any later commit with the same server/ tree
-            # (e.g. after a force-push it redeploys HEAD), so accept them all.
-            ACCEPTED_COMMITS=$({ echo "$SERVER_REVISION"; git rev-list "${SERVER_REVISION}..HEAD"; } | paste -sd, -)
+            ACCEPTED_COMMITS=$({ echo "$SERVER_REVISION"; git rev-list --ancestry-path "${SERVER_REVISION}..HEAD"; } | paste -sd, -)
             node scripts/verify_deployment.js https://jolly-hopper.onrender.com/healthz \
               --commit "${ACCEPTED_COMMITS}" \
               --version "${TARGET_VERSION:-}" \
