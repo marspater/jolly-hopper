@@ -321,6 +321,7 @@ struct SidebarView: View {
                         Image(systemName: "gear")
                             .font(.system(size: 13, weight: .medium))
                             .foregroundColor(.secondary)
+                            .accessibilityHidden(true)
                         Text(languageService.s("settings"))
                             .font(.siphonStandardMedium)
                             .foregroundColor(.primary)
@@ -328,6 +329,7 @@ struct SidebarView: View {
                         Text("⌘,")
                             .font(.siphonMicroMonoMedium)
                             .foregroundColor(.secondary)
+                            .accessibilityHidden(true)
                     }
                     .padding(.horizontal, SiphonTheme.spacing12)
                     .padding(.vertical, SiphonTheme.spacing8)
@@ -335,6 +337,9 @@ struct SidebarView: View {
                 }
                 .buttonStyle(.plain)
                 .padding(.horizontal, SiphonTheme.spacing8)
+                .help(languageService.s("settings"))
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel(languageService.s("settings"))
             }
             .padding(.bottom, SiphonTheme.spacing10)
             .opacity(appearsActive ? 1.0 : 0.62)
@@ -919,11 +924,15 @@ struct WhatsNewSheetView: View {
                     HStack(spacing: 6) {
                         Image(systemName: "arrow.up.right.square")
                             .font(.system(size: 12))
+                            .accessibilityHidden(true)
                         Text(languageService.s("view_on_github"))
                             .font(.siphonSecondaryMedium)
                     }
                 }
                 .buttonStyle(.siphonSecondary)
+                .help(languageService.s("view_on_github"))
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel(languageService.s("view_on_github"))
 
                 Spacer()
 
