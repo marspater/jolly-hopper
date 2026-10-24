@@ -40,6 +40,39 @@ function parseCliArgs(args) {
   return options;
 }
 
+async function queryHealthEndpoint(url, fetchImpl) {
+  const controller = new AbortController();
+  const reqTimeout = setTimeout(() => controller.abort(), 10000);
+  try {
+    const res = await fetchImpl(url, { signal: controller.signal });
+    let payload = null;
+    if (res.ok) {
+      try {
+        payload = await res.json();
+      } catch {
+        payload = null;
+      }
+    }
+    return { ok: res.ok, status: res.status, payload };
+  } finally {
+    clearTimeout(reqTimeout);
+  }
+}
+
+function checkMatch({ payload, expectedCommit, expectedVersion }) {
+  const lastSeenCommit = payload?.commit ?? '';
+  const lastSeenVersion = payload?.version ?? '';
+  const commitMatches = !expectedCommit || commitsMatch(lastSeenCommit, expectedCommit);
+
+  let versionMatches = true;
+  if (expectedVersion && expectedVersion !== 'latest') {
+    const cleanExpected = expectedVersion.split('-')[0];
+    versionMatches = lastSeenVersion === expectedVersion || lastSeenVersion === cleanExpected;
+  }
+
+  return { commitMatches, versionMatches, lastSeenCommit, lastSeenVersion };
+}
+
 async function verifyDeployment({
   url = 'https://jolly-hopper.onrender.com/healthz',
   expectedCommit = '',
@@ -65,69 +98,45 @@ async function verifyDeployment({
   while (nowImpl() <= deadline) {
     attempt++;
     try {
-      const controller = new AbortController();
-      const reqTimeout = setTimeout(() => controller.abort(), 10000);
+      const probe = await queryHealthEndpoint(url, fetchImpl);
+      lastSeenStatus = probe.status;
 
-      let res;
-      try {
-        res = await fetchImpl(url, { signal: controller.signal });
-      } finally {
-        clearTimeout(reqTimeout);
-      }
-
-      lastSeenStatus = res.status;
-      if (!res.ok) {
-        logger.log(`[attempt ${attempt}] Health check returned HTTP ${res.status}`);
+      if (!probe.ok) {
+        logger.log(`[attempt ${attempt}] Health check returned HTTP ${probe.status}`);
+      } else if (probe.payload?.status !== 'ok') {
+        logger.log(`[attempt ${attempt}] Invalid health check response body`);
       } else {
-        let payload;
-        try {
-          payload = await res.json();
-        } catch {
-          payload = null;
+        const match = checkMatch({
+          payload: probe.payload,
+          expectedCommit,
+          expectedVersion
+        });
+        lastSeenCommit = match.lastSeenCommit;
+        lastSeenVersion = match.lastSeenVersion;
+
+        if (match.commitMatches && match.versionMatches) {
+          const elapsed = Math.round((nowImpl() - startTime) / 1000);
+          logger.log(`Successfully verified deployment after ${elapsed}s! Service is up and running revision '${lastSeenCommit || 'unversioned'}' (version: ${lastSeenVersion || 'unknown'}).`);
+          return {
+            ok: true,
+            deployedCommit: lastSeenCommit,
+            deployedVersion: lastSeenVersion,
+            elapsedSeconds: elapsed,
+            attempts: attempt
+          };
         }
 
-        if (!payload || payload.status !== 'ok') {
-          logger.log(`[attempt ${attempt}] Invalid health check response body`);
-        } else {
-          lastSeenCommit = payload.commit ?? '';
-          lastSeenVersion = payload.version ?? '';
-
-          let commitMatches = true;
-          if (expectedCommit) {
-            commitMatches = commitsMatch(lastSeenCommit, expectedCommit);
-          }
-
-          let versionMatches = true;
-          if (expectedVersion && expectedVersion !== 'latest') {
-            // Support versions like '1.0.0-d161bea' matching version '1.0.0'
-            const cleanExpected = expectedVersion.split('-')[0];
-            versionMatches = lastSeenVersion === expectedVersion || lastSeenVersion === cleanExpected;
-          }
-
-          if (commitMatches && versionMatches) {
-            const elapsed = Math.round((nowImpl() - startTime) / 1000);
-            logger.log(`Successfully verified deployment after ${elapsed}s! Service is up and running revision '${lastSeenCommit || 'unversioned'}' (version: ${lastSeenVersion || 'unknown'}).`);
-            return {
-              ok: true,
-              deployedCommit: lastSeenCommit,
-              deployedVersion: lastSeenVersion,
-              elapsedSeconds: elapsed,
-              attempts: attempt
-            };
-          }
-
-          const reasons = [];
-          if (!commitMatches) {
-            reasons.push(`commit '${lastSeenCommit || 'none'}' does not match expected '${expectedCommit}'`);
-          }
-          if (!versionMatches) {
-            reasons.push(`version '${lastSeenVersion || 'none'}' does not match expected '${expectedVersion}'`);
-          }
-          logger.log(`[attempt ${attempt}] Service is healthy, but running rollout ${reasons.join(' and ')}. Waiting for new deployment...`);
+        const reasons = [];
+        if (!match.commitMatches) {
+          reasons.push(`commit '${lastSeenCommit || 'none'}' does not match expected '${expectedCommit}'`);
         }
+        if (!match.versionMatches) {
+          reasons.push(`version '${lastSeenVersion || 'none'}' does not match expected '${expectedVersion}'`);
+        }
+        logger.log(`[attempt ${attempt}] Service is healthy, but running rollout ${reasons.join(' and ')}. Waiting for new deployment...`);
       }
     } catch (err) {
-      logger.log(`[attempt ${attempt}] Health check probe failed: ${err.message || String(err)}`);
+      logger.log(`[attempt ${attempt}] Health check probe failed: ${err?.message || String(err)}`);
     }
 
     if (nowImpl() + (intervalSeconds * 1000) > deadline) {
@@ -150,16 +159,19 @@ async function verifyDeployment({
   };
 }
 
-if (require.main === module) {
+async function main() {
   const options = parseCliArgs(process.argv.slice(2));
-  verifyDeployment(options)
-    .then((result) => {
-      process.exit(result.ok ? 0 : 1);
-    })
-    .catch((err) => {
-      console.error('Fatal deployment verification error:', err);
-      process.exit(1);
-    });
+  try {
+    const result = await verifyDeployment(options);
+    process.exit(result.ok ? 0 : 1);
+  } catch (err) {
+    console.error('Fatal deployment verification error:', err);
+    process.exit(1);
+  }
+}
+
+if (require.main === module) {
+  void main();
 }
 
 module.exports = { verifyDeployment, commitsMatch, parseCliArgs };
