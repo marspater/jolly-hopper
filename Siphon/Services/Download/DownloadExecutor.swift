@@ -154,6 +154,9 @@ final class DownloadExecutor: ObservableObject {
     /// attempt: a new attempt cannot start while `activeTasks` holds the old one,
     /// and the old one clears both in the same MainActor teardown.
     private var stoppedAttemptIDs: Set<UUID> = []
+    /// Each running attempt's finished files, so a pause's history snapshot
+    /// carries ownership before the attempt unwinds (Restart quits first).
+    private var attemptFinishedOutputs: [UUID: OSAllocatedUnfairLock<[URL]>] = [:]
 
     var activeExecutionCount: Int {
         activeTasks.count
@@ -282,6 +285,9 @@ final class DownloadExecutor: ObservableObject {
         guard !Task.isCancelled else { return }
         guard download.status == .queued || download.status == .fetching else { return }
 
+        // The previous attempt's rate means nothing until this one reports.
+        download.speed = nil
+        download.eta = nil
         delegate?.executorDidUpdateStatus(for: download, to: .fetching)
         delegate?.executorDidRequestBroadcast()
 
@@ -384,7 +390,8 @@ final class DownloadExecutor: ObservableObject {
                         if download.eta != eta {
                             download.eta = eta
                         }
-                        if let speed, !speed.isEmpty, download.diagnostics.peakSpeed != speed {
+                        if let speed, let rate = Self.bytesPerSecond(speed),
+                           rate > (download.diagnostics.peakSpeed.flatMap(Self.bytesPerSecond) ?? 0) {
                             download.diagnostics.peakSpeed = speed
                         }
                         self.persistRecoveryProgressIfNeeded(for: download)
@@ -414,7 +421,9 @@ final class DownloadExecutor: ObservableObject {
             // A stopped attempt's file may be broken, and a Retry issued while it
             // unwinds has already cleared ownership: it must not be claimed again.
             let finishedOutputs = OSAllocatedUnfairLock<[URL]>(initialState: [])
+            attemptFinishedOutputs[downloadId] = finishedOutputs
             defer {
+                attemptFinishedOutputs[downloadId] = nil
                 if !stoppedAttemptIDs.contains(downloadId) {
                     for file in finishedOutputs.withLock({ $0 }) { recordFinishedOutput(file, for: download) }
                 }
@@ -562,6 +571,19 @@ final class DownloadExecutor: ObservableObject {
             .contains { line.hasPrefix($0) }
     }
 
+    /// "20.00MiB/s", "900KiB/s" or aria2c's "27MiB/s" in bytes per second; nil
+    /// for anything else, such as FFmpeg's "1.5x" realtime factor.
+    nonisolated static func bytesPerSecond(_ speed: String) -> Double? {
+        let units: [String: Double] = ["B": 1, "KiB": 1024, "MiB": 1_048_576, "GiB": 1_073_741_824,
+                                       "KB": 1000, "MB": 1_000_000, "GB": 1_000_000_000]
+        var text = speed.trimmingCharacters(in: .whitespaces)
+        if text.hasSuffix("/s") { text.removeLast(2) }
+        guard let unitStart = text.firstIndex(where: \.isLetter),
+              let multiplier = units[String(text[unitStart...])],
+              let value = Double(text[..<unitStart]), value.isFinite, value >= 0 else { return nil }
+        return value * multiplier
+    }
+
     /// The file yt-dlp's `after_move` print reports in the save folder. Siphon's
     /// own post-processing runs after this point. A prefix match: the logged
     /// `[COMMAND]` line contains the print template too.
@@ -640,6 +662,9 @@ final class DownloadExecutor: ObservableObject {
         }
         activeTasks[download.id]?.cancel()
         activeControllers[download.id]?.cancel()
+        if let outputs = attemptFinishedOutputs[download.id] {
+            for file in outputs.withLock({ $0 }) { recordFinishedOutput(file, for: download) }
+        }
         delegate?.executorDidRequestAddToHistory(download, skipSave: false)
         delegate?.executorDidRequestBroadcast()
     }
@@ -698,8 +723,10 @@ final class DownloadExecutor: ObservableObject {
             appendToLog(for: download, text: warnMsg)
             LoggerService.shared.log("Requested \(req)p format unavailable for '\(download.title)'; downloading \(act)p instead.", level: .warning)
             download.diagnostics.resolution = "\(act)p (requested \(req)p unavailable)"
+            download.diagnostics.resolvedHeight = act
         } else {
             download.diagnostics.resolution = primaryFormat?.resolution
+            download.diagnostics.resolvedHeight = primaryFormat?.parsedHeight
         }
     }
 

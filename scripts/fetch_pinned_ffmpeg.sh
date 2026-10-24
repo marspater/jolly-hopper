@@ -29,7 +29,7 @@ trap 'rm -rf "$work"' EXIT
 
 for tool in ffmpeg ffprobe; do
   read -r arch build < <(printf '%s\n' "$pins" |
-    sed -nE "s/.*static let ${tool}URL = ffmpegBuildURL\(architecture: \"([^\"]+)\", build: \"([^\"]+)\", tool: \"$tool\"\).*/\1 \2/p")
+    sed -nE "s/.*static let ${tool}URL = ffmpegBuildURL\(architecture: \"([^\"]+)\", build: \"([^\"]+)\", tool: \"$tool\"\).*/\1 \2/p") || true
   [[ -n "${build:-}" ]] || { echo "No pinned URL for $tool" >&2; exit 1; }
   curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
     -o "$work/$tool.zip" "https://ffmpeg.martin-riedl.de/download/macos/$arch/$build/$tool.zip"

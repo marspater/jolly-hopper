@@ -17,6 +17,9 @@ public final class UpdateChecker: ObservableObject {
     @Published public var isInstalling: Bool = false
     @Published public var needsRestart: Bool = false
     @Published public var updateError: String?
+    /// Why the last manual check failed; shown in Settings because the
+    /// notification may be turned off.
+    @Published public var checkError: String?
     @Published public var releasePageURL: URL? = URL(string: "https://github.com/marspater/jolly-hopper/releases/latest")
 
     public var currentVersion: String {
@@ -121,13 +124,15 @@ public final class UpdateChecker: ObservableObject {
     public func checkForUpdates(manual: Bool = false) async {
         guard !isChecking, updateOperationID == nil, !needsRestart else { return }
         isChecking = true
+        checkError = nil
         defer { isChecking = false }
 
         guard let url = URL(string: "https://api.github.com/repos/\(repoOwner)/\(repoName)/releases/latest") else {
             let message = "Could not construct the GitHub releases URL."
             LoggerService.shared.log(message, level: .error)
             if manual {
-                NotificationService.shared.sendAppUpdateNotification(title: "Update Check Failed", body: message)
+                checkError = message
+                NotificationService.shared.sendAppUpdateNotification(title: LanguageService.s("update_check_failed_title"), body: message)
             }
             return
         }
@@ -216,8 +221,8 @@ public final class UpdateChecker: ObservableObject {
                     showUpToDateMessage = true
                     if manual {
                         NotificationService.shared.sendAppUpdateNotification(
-                            title: "Siphon is Up to Date",
-                            body: "Version \(currentVersion) is the latest version available."
+                            title: LanguageService.s("app_up_to_date_title"),
+                            body: String(format: LanguageService.s("app_up_to_date_message"), currentVersion)
                         )
                     }
                     Task { @MainActor [weak self] in
@@ -233,8 +238,8 @@ public final class UpdateChecker: ObservableObject {
                     }
             } else if manual {
                 NotificationService.shared.sendAppUpdateNotification(
-                    title: "Update Available",
-                    body: "Siphon v\(cleanTag) is now available."
+                    title: LanguageService.s("update_available_title"),
+                    body: String(format: LanguageService.s("update_available_body"), cleanTag)
                 )
             }
         } catch is CancellationError {
@@ -246,8 +251,9 @@ public final class UpdateChecker: ObservableObject {
             }
             hasUpdate = false
             if manual {
+                checkError = error.localizedDescription
                 NotificationService.shared.sendAppUpdateNotification(
-                    title: "Update Check Failed",
+                    title: LanguageService.s("update_check_failed_title"),
                     body: error.localizedDescription
                 )
             }

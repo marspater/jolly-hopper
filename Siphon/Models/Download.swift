@@ -169,7 +169,9 @@ class Download: ObservableObject, Identifiable {
         var parts: [String] = [sourceDomain]
 
         if options.fileType.isVideo {
-            if let res = options.videoResolution, res != .best, res != .worst {
+            if let h = diagnostics.resolvedHeight {
+                parts.append("\(h)p")
+            } else if let res = options.videoResolution, res != .best, res != .worst {
                 parts.append(res.rawValue.replacingOccurrences(of: "r", with: ""))
             } else if let diagRes = diagnostics.resolution, !diagRes.isEmpty {
                 parts.append(diagRes)
@@ -202,7 +204,7 @@ class Download: ObservableObject, Identifiable {
 
         if options.downloadSubtitles {
             let count = options.subtitleLanguages.count
-            let localizedCount = String(format: lang.s("subtitles_selected"), count)
+            let localizedCount = count == 1 ? lang.s("subtitles_selected_one") : String(format: lang.s("subtitles_selected"), count)
             if let format = options.subtitleFormat {
                 parts.append("\(localizedCount) (\(format.displayName))")
             } else {
@@ -430,12 +432,12 @@ enum HDRAction: String, Codable, CaseIterable, Identifiable {
 
     var id: String { rawValue }
 
-    func title(lang _: LanguageService) -> String {
+    func title(lang: LanguageService) -> String {
         switch self {
         case .preserveHDR:
-            return "Preserve HDR (Original)"
+            return lang.s("hdr_action_preserve")
         case .convertToSDR:
-            return "Convert HDR to SDR (Tone-mapped)"
+            return lang.s("hdr_action_convert_sdr")
         }
     }
 }
@@ -450,6 +452,8 @@ public struct DownloadDiagnostics: Codable, Hashable {
     public var audioCodec: String?
     public var container: String?
     public var resolution: String?
+    /// Height of the format actually selected, shown in the row instead of the requested ceiling.
+    public var resolvedHeight: Int?
     public var fps: Double?
     public var dynamicRange: String?
     public var colorSpace: String?
@@ -701,10 +705,10 @@ struct DownloadOptions: Codable {
         let resStr = userDefaults.string(forKey: UserDefaultsKeys.defaultVideoResolution) ?? "r1080p"
         let resolution = VideoResolution(rawValue: resStr) ?? .r1080p
 
-        let vcodecStr = userDefaults.string(forKey: UserDefaultsKeys.defaultVideoCodec) ?? "auto"
+        let vcodecStr = userDefaults.string(forKey: UserDefaultsKeys.defaultVideoCodec) ?? "h264"
         let videoCodec = VideoCodec(rawValue: vcodecStr)
 
-        let acodecStr = userDefaults.string(forKey: UserDefaultsKeys.defaultAudioCodec) ?? "auto"
+        let acodecStr = userDefaults.string(forKey: UserDefaultsKeys.defaultAudioCodec) ?? "aac"
         let audioCodec = AudioCodec(rawValue: acodecStr)
 
         let embedThumb = userDefaults.object(forKey: UserDefaultsKeys.embedThumbnail) != nil ? userDefaults.bool(forKey: UserDefaultsKeys.embedThumbnail) : true
@@ -936,18 +940,14 @@ enum VideoCodec: String, Codable, CaseIterable, Identifiable {
 
     var id: String { rawValue }
 
-    private var formattedTitleName: String {
+    func title(lang: LanguageService) -> String {
         switch self {
-        case .auto: return "Best Available"
+        case .auto: return lang.s("codec_auto")
         case .h264: return "H.264 (AVC)"
         case .h265: return "H.265 (HEVC)"
         case .vp9: return "VP9"
         case .av1: return "AV1"
         }
-    }
-
-    func title(lang _: LanguageService) -> String {
-        formattedTitleName
     }
 
     var ytdlpFilter: String? {
@@ -970,13 +970,13 @@ enum ConversionCodec: String, Codable, CaseIterable, Identifiable {
 
     var id: String { rawValue }
 
-    func title(lang _: LanguageService) -> String {
+    func title(lang: LanguageService) -> String {
         switch self {
-        case .none: return "None (Do not convert)"
-        case .h264: return "Convert to H.264"
-        case .h265: return "Convert to HEVC"
-        case .vp9: return "Convert to VP9"
-        case .av1: return "Convert to AV1"
+        case .none: return lang.s("conversion_codec_none")
+        case .h264: return lang.s("conversion_codec_h264")
+        case .h265: return lang.s("conversion_codec_h265")
+        case .vp9: return lang.s("conversion_codec_vp9")
+        case .av1: return lang.s("conversion_codec_av1")
         }
     }
 
@@ -1019,6 +1019,12 @@ enum AudioCodec: String, Codable, CaseIterable, Identifiable {
         case .mp3: return "[acodec^=mp3]"
         case .flac: return "[acodec^=flac]"
         }
+    }
+
+    /// Whether a yt-dlp `acodec` value is this codec. Most sources report AAC as "mp4a.40.2".
+    func matches(acodec: String) -> Bool {
+        let ac = acodec.lowercased()
+        return self == .aac ? (ac.hasPrefix("mp4a") || ac.contains("aac")) : ac.contains(rawValue)
     }
 }
 
@@ -1864,15 +1870,18 @@ struct MediaFormat: Codable, Identifiable, Hashable {
     }
 
     private static let resolutionHeightRegex = try? NSRegularExpression(
-        pattern: #"(?:[0-9]+\s*[x×]\s*([0-9]+)|([0-9]+)\s*p)"#, options: .caseInsensitive)
+        pattern: #"(?:([0-9]+)\s*[x×]\s*([0-9]+)|([0-9]+)\s*p)"#, options: .caseInsensitive)
 
+    /// For "WxH" this is the short side, as in YouTube's quality labels and yt-dlp's `-S res`,
+    /// so a portrait 1080x1920 format counts as 1080p against the resolution ceiling.
     var parsedHeight: Int? {
         if let res = resolution {
             if let match = Self.resolutionHeightRegex?.firstMatch(in: res, range: NSRange(res.startIndex..., in: res)) {
-                for group in 1...2 {
-                    if let range = Range(match.range(at: group), in: res), let height = Int(res[range]), height > 0 {
-                        return height
-                    }
+                let numbers = (1...3).compactMap { group in
+                    Range(match.range(at: group), in: res).flatMap { Int(res[$0]) }
+                }
+                if let height = numbers.min(), height > 0 {
+                    return height
                 }
             }
             if let height = Int(res.trimmingCharacters(in: .whitespacesAndNewlines)), height > 0 {
@@ -1919,8 +1928,8 @@ struct MediaFormat: Codable, Identifiable, Hashable {
     func audioRank(options: DownloadOptions) -> AudioRank {
         let matchesCodec: Bool = {
             guard let req = options.audioCodec, req != .auto else { return true }
-            guard let ac = acodec?.lowercased() else { return false }
-            return ac.contains(req.rawValue.lowercased())
+            guard let ac = acodec else { return false }
+            return req.matches(acodec: ac)
         }()
         // yt-dlp treats a missing language_preference as -1 (neutral). YouTube reports -1 for every
         // track of a single-language video and a higher value only for the original track, so the
@@ -2133,7 +2142,7 @@ struct MediaFormat: Codable, Identifiable, Hashable {
 
         // Codec match preference if requested
         if let requestedCodec = options.audioCodec, requestedCodec != .auto,
-           let ac = acodec?.lowercased(), ac.contains(requestedCodec.rawValue.lowercased()) {
+           let ac = acodec, requestedCodec.matches(acodec: ac) {
             score += 500_000.0
         }
 
@@ -2426,6 +2435,7 @@ public struct DownloadURLValidator: Sendable {
                 return .malformed
             }
         }
+        normalized = normalizedWebURL(normalized) ?? normalized
 
         guard let url = URL(string: normalized),
               let scheme = url.scheme?.lowercased(),

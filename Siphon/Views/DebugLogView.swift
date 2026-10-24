@@ -12,12 +12,12 @@ struct DebugLogView: View {
             // Header
             HStack(spacing: SiphonTheme.spacing12) {
                 Image(systemName: "terminal.fill")
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(.system(size: 18, weight: .semibold))
                     .foregroundColor(SiphonTheme.accentText)
                     .accessibilityHidden(true)
 
                 Text(languageService.s("debug_logs"))
-                    .font(.siphonHeadline)
+                    .font(.siphonWindowTitle)
 
                 SiphonTagBadge(
                     text: "\(logger.logs.count) \(languageService.s("entries"))",

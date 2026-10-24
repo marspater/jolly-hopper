@@ -1562,6 +1562,7 @@ struct SiphonSegmentedPicker<Value: Hashable>: View {
 
     @Namespace private var bubble
     @Environment(\.siphonRenderingCapabilities) private var renderingCapabilities
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         HStack(spacing: SiphonTheme.spacing2) {
@@ -1590,10 +1591,15 @@ struct SiphonSegmentedPicker<Value: Hashable>: View {
                     .frame(maxWidth: isLarge || fillsWidth ? .infinity : nil, maxHeight: isLarge ? .infinity : nil)
                     .background {
                         if isSelected {
-                            Capsule()
+                            let capsule = Capsule()
                                 .fill(SiphonTheme.primaryGradient)
                                 .shadow(color: SiphonTheme.accent.opacity(0.30), radius: 3, y: 1)
-                                .matchedGeometryEffect(id: "bubble", in: bubble)
+                            // Reduce Motion: the bubble fades between segments instead of sliding.
+                            if reduceMotion {
+                                capsule
+                            } else {
+                                capsule.matchedGeometryEffect(id: "bubble", in: bubble)
+                            }
                         }
                     }
                     .contentShape(Capsule())

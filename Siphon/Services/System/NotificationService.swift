@@ -236,11 +236,14 @@ final class NotificationService: NSObject, @unchecked Sendable, UNUserNotificati
     }
 
     func sendYtdlpUpdateSucceeded(version: String) {
-        sendYtdlpUpdateNotification(title: "yt-dlp Updated", body: "Installed yt-dlp version \(version).")
+        sendYtdlpUpdateNotification(
+            title: LanguageService.s("ytdlp_update_success_title"),
+            body: String(format: LanguageService.s("ytdlp_update_success_message"), version)
+        )
     }
 
     func sendYtdlpUpdateFailed(reason: String) {
-        sendYtdlpUpdateNotification(title: "yt-dlp Update Failed", body: reason)
+        sendYtdlpUpdateNotification(title: LanguageService.s("ytdlp_update_failed_title"), body: reason)
     }
 
     func sendAppUpdateNotification(title: String, body: String) {

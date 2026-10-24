@@ -547,8 +547,10 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
 
                     let output = outputBuffer.getString()
 
-                    if Task.isCancelled || controller.isCancelled || reason == .uncaughtSignal {
+                    if Task.isCancelled || controller.isCancelled {
                         safeContinuation.resume(throwing: YtdlpError.downloadFailed("Command was cancelled."))
+                    } else if reason == .uncaughtSignal {
+                        safeContinuation.resume(throwing: YtdlpError.commandFailed("Process terminated unexpectedly with signal \(exitCode).\n" + output))
                     } else if exitCode == 0 {
                         safeContinuation.resume(returning: output)
                     } else {
@@ -608,6 +610,36 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
             return String(token)
         }
         return nil
+    }
+
+    /// yt-dlp prints placeholders for a missing speed or ETA ("NA" from the
+    /// progress template, " Unknown B/s", "--:--:--"). The row shows nothing instead.
+    static func progressField(_ value: String?) -> String? {
+        guard let trimmed = value?.trimmingCharacters(in: .whitespaces), !trimmed.isEmpty,
+              !["NA", "N/A", "Unknown", "Unknown B/s", "--:--:--"].contains(trimmed) else { return nil }
+        return trimmed
+    }
+
+    /// yt-dlp's ETA style: "04:51", or "01:02:03" once an hour or more remains.
+    static func formatETA(_ seconds: Double) -> String? {
+        guard seconds.isFinite, seconds >= 0, seconds < 360_000 else { return nil }
+        let total = Int(seconds)
+        let (hours, minutes, secs) = (total / 3600, total / 60 % 60, total % 60)
+        return hours > 0 ? String(format: "%02d:%02d:%02d", hours, minutes, secs) : String(format: "%02d:%02d", minutes, secs)
+    }
+
+    /// aria2c's "7s", "4m51s" or "1h2m3s" ETA in seconds.
+    static func ariaSeconds(_ token: String) -> Double? {
+        let units: [Character: Double] = ["h": 3600, "m": 60, "s": 1]
+        var total = 0.0
+        var number = ""
+        for character in token {
+            if character.isASCII && character.isNumber { number.append(character); continue }
+            guard let value = Double(number), let unit = units[character] else { return nil }
+            total += value * unit
+            number = ""
+        }
+        return number.isEmpty && !token.isEmpty ? total : nil
     }
 
     private static func extractCleanError(from errorOutput: String) -> String {
@@ -694,8 +726,8 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
                     let percentSub = fields.first?.trimmingCharacters(in: .whitespaces) ?? ""
                     let stripped = percentSub.hasSuffix("%") ? String(percentSub.dropLast()) : percentSub
                     let normalized = stripped.trimmingCharacters(in: .whitespaces).replacingOccurrences(of: ",", with: ".")
-                    let speed = fields.count > 1 ? String(fields[1]).trimmingCharacters(in: .whitespaces) : nil
-                    let eta = fields.count > 2 ? String(fields[2]).trimmingCharacters(in: .whitespaces) : nil
+                    let speed = fields.count > 1 ? Self.progressField(String(fields[1])) : nil
+                    let eta = fields.count > 2 ? Self.progressField(String(fields[2])) : nil
                     if normalized != "NA" && !normalized.isEmpty, let percent = Double(normalized), !percent.isNaN && !percent.isInfinite {
                         let safePercent = max(0.0, min(1.0, percent / 100.0))
                         onProgress(safePercent, speed, eta)
@@ -724,7 +756,7 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
                         if let etaRange = line.range(of: "ETA:") {
                             let afterEta = line[etaRange.upperBound...]
                             if let token = Self.parseAriaToken(from: afterEta) {
-                                etaStr = token
+                                etaStr = Self.ariaSeconds(token).flatMap(Self.formatETA)
                             }
                         }
 
@@ -1012,14 +1044,14 @@ final class FfmpegDownloadProgress: @unchecked Sendable {
                 line.trimmingCharacters(in: .whitespaces).hasPrefix("size=") else { return nil }
         guard let duration = sectionDuration ?? duration, duration > 0,
               let elapsed = seconds(token(after: "time=")) else { return nil }
-        let speed = token(after: "speed=")
-        let multiplier = speed.flatMap { Double($0.replacingOccurrences(of: "x", with: "")) }
+        // The "2x" realtime factor is not a transfer rate, so no speed is reported.
+        let multiplier = token(after: "speed=").flatMap { Double($0.replacingOccurrences(of: "x", with: "")) }
         let eta: String?
         if let multiplier, multiplier.isFinite, multiplier > 0 {
-            eta = String(format: "%.0fs", max(0, duration - elapsed) / multiplier)
+            eta = DefaultYtdlpProcessRunner.formatETA(max(0, duration - elapsed) / multiplier)
         } else {
             eta = nil
         }
-        return (min(1, elapsed / duration), speed == "N/A" ? nil : speed, eta)
+        return (min(1, elapsed / duration), nil, eta)
     }
 }

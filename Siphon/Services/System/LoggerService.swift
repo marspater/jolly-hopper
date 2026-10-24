@@ -58,7 +58,7 @@ class LoggerService: ObservableObject {
         "--video-password": "\"<PASSWORD>\"",
         "--ap-username": "\"<USERNAME>\"",
         "--ap-password": "\"<PASSWORD>\"",
-        "--2factor": "\"<2FACTOR>\"",
+        "--twofactor": "\"<2FACTOR>\"",
         "-2": "\"<2FACTOR>\"",
         "--token": "\"<TOKEN>\"",
         "--login-with-token": "\"<TOKEN>\"",

@@ -349,6 +349,7 @@ class YtdlpService: ObservableObject {
     var ffprobePath: URL?
     private var deniedCookieSources: Set<String> = []
     private var activeSetupTask: Task<Void, Never>?
+    private var activeFfmpegSetupTask: Task<Void, Never>?
 
     var processRunner: YtdlpProcessRunning
     var updateYtdlpHandler: (() async throws -> String)?
@@ -608,7 +609,9 @@ class YtdlpService: ObservableObject {
 
     nonisolated static let supportedMediaExtensions: Set<String> = [
         "mp4", "m4v", "mkv", "webm", "mov", "avi", "flv", "wmv", "ts",
-        "mp3", "m4a", "aac", "flac", "wav", "opus", "ogg", "alac", "aiff"
+        "mpg", "mpeg", "3gp", "3g2", "ogv", "m2ts", "mts", "f4v",
+        "mp3", "m4a", "aac", "flac", "wav", "opus", "ogg", "alac", "aiff",
+        "aif", "oga", "mka", "m4b", "wma", "weba", "mp2"
     ]
 
     nonisolated static func isMediaFilePath(_ path: String) -> Bool {
@@ -886,9 +889,24 @@ class YtdlpService: ObservableObject {
     }
 
     func findFfmpeg() async {
-        if ffmpegPath != nil || !(processRunner is DefaultYtdlpProcessRunner) {
+        // A selected binary deleted while the app runs must be repaired, not trusted.
+        if !(processRunner is DefaultYtdlpProcessRunner) || ffmpegPath.map({ FileManager.default.fileExists(atPath: $0.path) }) == true {
             return
         }
+        // Concurrent jobs share one repair instead of each downloading the bundle.
+        if let existing = activeFfmpegSetupTask {
+            await existing.value
+            return
+        }
+        let task = Task { @MainActor in
+            await locateOrRepairFfmpeg()
+        }
+        activeFfmpegSetupTask = task
+        await task.value
+        activeFfmpegSetupTask = nil
+    }
+
+    private func locateOrRepairFfmpeg() async {
         let appSupport = Self.getAppSupportDirectory()
         let ffmpegInSupport = appSupport.appendingPathComponent("ffmpeg")
         let ffprobeInSupport = appSupport.appendingPathComponent("ffprobe")
@@ -1052,9 +1070,16 @@ class YtdlpService: ObservableObject {
         // A video opened from a playlist (`youtu.be/ID?list=…`, `/shorts/ID?list=…`)
         // downloads only that video (`--no-playlist`), so preview it as one.
         let host = components.host?.lowercased() ?? ""
-        let firstSegment = path.split(separator: "/").first.map(String.init) ?? ""
+        let segments = path.split(separator: "/").map(String.init)
+        let firstSegment = segments.first ?? ""
         if host == "youtu.be" || ["shorts", "embed", "live"].contains(firstSegment) {
             return false
+        }
+        // A channel and its tabs list many videos; its `/live` tab is one stream.
+        if host == "youtube.com" || host.hasSuffix(".youtube.com"),
+           firstSegment.hasPrefix("@") || ["channel", "c", "user"].contains(firstSegment),
+           segments.last != "live" {
+            return true
         }
         if path.contains("/playlist") || path.contains("/sets/") || path.contains("/album/") {
             return !path.contains("/videos/")
@@ -2112,8 +2137,10 @@ public struct DownloadResult: Sendable {
             args.append("--write-auto-subs")
 
             if options.embedSubtitles && options.fileType.isVideo && bestCamDecryptionKey == nil {
+                // WebM embeds only WebVTT; yt-dlp skips any other track with a warning.
+                let embedFormat = Self.resolvedOutputFileExtension(for: options) == "webm" ? "vtt" : subFormat
                 args.append("--embed-subs")
-                args.append(contentsOf: ["--convert-subs", subFormat])
+                args.append(contentsOf: ["--convert-subs", embedFormat])
             }
         }
 
@@ -2124,7 +2151,10 @@ public struct DownloadResult: Sendable {
         // yt-dlp exits, so FFmpeg postprocessors would fail on it. The cover is
         // embedded by the post-decryption fallback below instead.
         let isEncryptedStream = bestCamDecryptionKey != nil
-        if options.embedThumbnail && !isEncryptedStream {
+        // yt-dlp cannot embed a cover into WebM or WAV and fails the whole job
+        // after the download; the Finder icon still comes from embedThumbnail.
+        let ytdlpCanEmbedCover = !["webm", "wav"].contains(Self.resolvedOutputFileExtension(for: options))
+        if options.embedThumbnail && !isEncryptedStream && ytdlpCanEmbedCover {
             args.append("--embed-thumbnail")
             args.append(contentsOf: ["--convert-thumbnails", "jpg"])
         }
@@ -2739,7 +2769,10 @@ public struct DownloadResult: Sendable {
             // A single-file format can arrive in another container. Only
             // Matroska stores attachments; MP4/WebM need their own text codec.
             switch targetExtension {
-            case "mkv": args += ["-map", "0:t?"]
+            case "mkv":
+                args += ["-map", "0:t?"]
+                // Matroska has no codec id for MP4's mov_text subtitles.
+                if ["mp4", "m4v", "mov"].contains(source.pathExtension.lowercased()) { args += ["-c:s", "subrip"] }
             case "webm": args += ["-c:s", "webvtt"]
             default: args += ["-c:s", "mov_text"]
             }
@@ -3094,18 +3127,7 @@ public struct DownloadResult: Sendable {
         }
 
         // 3. Common video postprocessing: container selection, codec conversion, and tone mapping
-        var finalMergeFormat = Self.compatibleMergeOutputFormat(for: options)
-        let conversionCodec = options.conversionCodec ?? .none
-
-        var targetExt = options.fileType.fileExtension
-        if conversionCodec == .av1 || conversionCodec == .vp9 {
-            targetExt = "mkv"
-        }
-        if conversionCodec != .none {
-            finalMergeFormat = targetExt
-        }
-
-        if let mergeOutputFormat = finalMergeFormat {
+        if let mergeOutputFormat = Self.compatibleMergeOutputFormat(for: options) {
             args.append(contentsOf: ["--merge-output-format", mergeOutputFormat])
         }
 
@@ -3175,7 +3197,8 @@ public struct DownloadResult: Sendable {
         guard options.fileType.isVideo else { return nil }
 
         if let conversionCodec = options.conversionCodec, conversionCodec != .none {
-            if conversionCodec == .av1 || conversionCodec == .vp9 {
+            // WebM accepts only VP8/VP9/AV1 video, so an H.264/HEVC result needs Matroska too.
+            if conversionCodec == .av1 || conversionCodec == .vp9 || options.fileType == .webm {
                 return "mkv"
             }
             return options.fileType.fileExtension
@@ -7276,9 +7299,9 @@ public struct DownloadResult: Sendable {
         let parsedHost = (URL(string: url)?.host ?? url).lowercased()
         let isYouTube = parsedHost == "youtube.com" || parsedHost.hasSuffix(".youtube.com") || parsedHost == "youtu.be" || parsedHost.hasSuffix(".youtu.be")
         if isYouTube,
-           lowerErr.containsAny(["403", "sign in", "bot", "login_required"]),
+           lowerErr.containsAny(["403", "sign in", "login_required"]) || DefaultYtdlpProcessRunner.mentionsBot(errString),
            configuredBrowser == nil {
-            return YtdlpError.downloadFailed("YouTube requires authentication or browser cookies. Go to Settings > Advanced > Browser Cookies to select your browser.")
+            return YtdlpError.downloadFailed("YouTube requires authentication or browser cookies. Go to Settings > Advanced > Login Source (Cookies) to select your browser.")
         }
 
         return error
@@ -7974,6 +7997,13 @@ public struct DownloadResult: Sendable {
     /// the rest of the token after one of these is its value, not more flags.
     private static let valueTakingShortOptions: Set<Character> = ["a", "f", "o", "O", "P", "S", "r", "R", "N", "I", "u", "p", "2", "t"]
 
+    /// Long options whose separate value is often FFmpeg arguments starting with
+    /// a dash. optparse takes the next token as the value regardless, so it is
+    /// never a flag cluster. List only options that always take a value.
+    private static let dashValueLongOptions: Set<String> = [
+        "--postprocessor-args", "--ppa", "--downloader-args", "--external-downloader-args"
+    ]
+
     private static func removingRestrictedArguments(_ arguments: [String], options: Set<String>) -> [String] {
         let restrictedShortOptions = Set(options.filter { !$0.hasPrefix("--") }.compactMap(\.last))
         var kept: [String] = []
@@ -7981,9 +8011,11 @@ public struct DownloadResult: Sendable {
         while index < arguments.endIndex {
             let argument = arguments[index]
             let name = String(argument.prefix { $0 != "=" })
+            // `--netrc` is a real option of its own, not an abbreviation of `--netrc-cmd`.
             var restricted = options.contains(name) || options.contains { option in
-                option.hasPrefix("--") && name.count > 2 && option.hasPrefix(name)
+                option.hasPrefix("--") && name.count > 2 && name != "--netrc" && option.hasPrefix(name)
             }
+            let takesNextValue = dashValueLongOptions.contains(argument) && index + 1 < arguments.endIndex
             var hasAttachedValue = argument.contains("=")
             if !argument.hasPrefix("--"), argument.hasPrefix("-") {
                 // optparse accepts clustered short flags, so `-qo FILE` is `-q -o FILE`.
@@ -8002,10 +8034,11 @@ public struct DownloadResult: Sendable {
                 index += 1
             } else if restricted {
                 LoggerService.shared.log("Ignoring a restricted additional argument.", level: .warning)
-                index += !hasAttachedValue && index + 1 < arguments.endIndex && !arguments[index + 1].hasPrefix("-") ? 2 : 1
+                index += !hasAttachedValue && index + 1 < arguments.endIndex && (takesNextValue || !arguments[index + 1].hasPrefix("-")) ? 2 : 1
             } else {
-                kept.append(argument)
-                index += 1
+                let next = takesNextValue ? index + 2 : index + 1
+                kept.append(contentsOf: arguments[index..<next])
+                index = next
             }
         }
         return kept
@@ -8114,11 +8147,11 @@ enum YtdlpError: LocalizedError {
         case .ffmpegInstallationFailed(let path):
             return "FFmpeg installation failed. Please try updating dependencies again. Attempted path: \(path)"
         case .protectedSiteNeedsBrowserCookies:
-            return "This video site requires signed-in browser cookies. Open Settings > Advanced > Browser Cookies, choose your browser, then try again."
+            return "This video site requires signed-in browser cookies. Open Settings > Advanced > Login Source (Cookies), choose your browser, then try again."
         case .protectedSiteLoginRequired:
             // BoyfriendTV only. Browser sessions can't carry its sign-in: Safari never
             // saves the site's login cookie to disk.
-            return "BoyfriendTV shows this video only to signed-in members. Sign in at boyfriendtv.com in Safari with “Remember me” ticked, then retry: Siphon uses that sign-in (Settings > Advanced > Browser Cookies must be Safari)."
+            return "BoyfriendTV shows this video only to signed-in members. Sign in at boyfriendtv.com in Safari with “Remember me” ticked, then retry: Siphon uses that sign-in (Settings > Advanced > Login Source (Cookies) must be Safari)."
         case .safariCookiesFullDiskAccessRequired:
             return LanguageService.s("safari_fda_required")
         case .securityViolation(let message):

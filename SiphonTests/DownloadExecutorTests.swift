@@ -21,6 +21,18 @@ final class DownloadExecutorTests: XCTestCase {
         XCTAssertFalse(DownloadExecutor.isPostprocessingOutput("[SubtitlesConvertor] Converting subtitles"))
     }
 
+    func testPeakSpeedParserOrdersUnitsAndRejectsNonRates() {
+        let mib = DownloadExecutor.bytesPerSecond("20.00MiB/s")
+        let kib = DownloadExecutor.bytesPerSecond("900.00KiB/s")
+        XCTAssertNotNil(mib)
+        XCTAssertNotNil(kib)
+        XCTAssertGreaterThan(mib ?? 0, kib ?? 0)
+        XCTAssertEqual(DownloadExecutor.bytesPerSecond("27MiB/s"), 27 * 1_048_576)
+        XCTAssertNil(DownloadExecutor.bytesPerSecond("1.5x"))
+        XCTAssertNil(DownloadExecutor.bytesPerSecond("N/A"))
+        XCTAssertNil(DownloadExecutor.bytesPerSecond("Unknown B/s"))
+    }
+
     func testErrorMappingLocalization() {
         let lang = LanguageService()
 

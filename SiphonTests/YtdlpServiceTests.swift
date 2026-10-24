@@ -252,6 +252,10 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertEqual(YtdlpService.removingOutputLocationArguments([
             "-qo", "/tmp/x", "-vP/tmp/y", "--netrc-cmd", "cmd", "--alias=get", "-fbestvideo", "-q", "--no-mtime"
         ]), ["-fbestvideo", "-q", "--no-mtime"])
+        // `--netrc` is not `--netrc-cmd`; a dash-leading FFmpeg value is not a flag cluster.
+        XCTAssertEqual(YtdlpService.removingOutputLocationArguments(["--netrc", "--no-mtime"]), ["--netrc", "--no-mtime"])
+        XCTAssertEqual(YtdlpService.removingOutputLocationArguments(["--ppa", "-movflags +faststart", "--no-mtime"]), ["--ppa", "-movflags +faststart", "--no-mtime"])
+        XCTAssertEqual(YtdlpService.removingProxyArguments(["--ppa", "-movflags +faststart", "--no-mtime"]), ["--no-mtime"])
         XCTAssertEqual(YtdlpService.removingProxyArguments(["--proxy", "--proxy=http://evil", "--downloader-args", "ffmpeg:-http_proxy http://evil", "--external-downloader=aria2c", "--ppa=ffmpeg:-i http://evil", "--ffmpeg-location", "/tmp/unsafe", "--plugin-dirs=/tmp/plugins", "--geo-verification-proxy", "http://evil", "--no-mtime"]), ["--no-mtime"])
         XCTAssertEqual(YtdlpService.parseArgumentString(#"--header "" 'a\b' "say \"hi\"" path\ with\ spaces \\ "x\y""#), ["--header", "", #"a\b"#, #"say "hi""#, "path with spaces", #"\"#, #"x\y"#])
     }
@@ -1603,6 +1607,11 @@ final class YtdlpServiceTests: XCTestCase {
             XCTAssertFalse(YtdlpService.isPlaylistURL(single), single)
         }
         XCTAssertTrue(YtdlpService.isPlaylistURL("https://www.youtube.com/playlist?list=PL123"))
+        for channel in ["https://www.youtube.com/@Name/videos", "https://www.youtube.com/@Name", "https://www.youtube.com/channel/UC123",
+                        "https://m.youtube.com/c/name", "https://www.youtube.com/user/name/shorts"] {
+            XCTAssertTrue(YtdlpService.isPlaylistURL(channel), channel)
+        }
+        XCTAssertFalse(YtdlpService.isPlaylistURL("https://www.youtube.com/@Name/live"))
     }
 
     func testYouTubeBotCheckDoesNotRerunWhenNoCookiesCanBeAdded() async throws {
@@ -1749,6 +1758,35 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertTrue(capturedArgsBox.value.contains("mp3"))
         XCTAssertTrue(capturedArgsBox.value.contains("--embed-thumbnail"))
         XCTAssertTrue(capturedArgsBox.value.contains("--embed-metadata"))
+    }
+
+    func testWebMAndWAVArgsMatchWhatTheContainerCanHold() async throws {
+        let captured = TestBox<[String]>([])
+        service.processRunner = MockYtdlpProcessRunner(mockDownload: { args in
+            captured.value = args
+            throw CancellationError()
+        })
+        func args(_ configure: (inout DownloadOptions) -> Void) async -> [String] {
+            var options = DownloadOptions.default
+            options.embedThumbnail = true
+            configure(&options)
+            captured.value = []
+            _ = try? await service.download(url: "https://example.com/video", options: options,
+                                            onProgress: { _, _, _ in }, onOutput: { _ in })
+            return captured.value
+        }
+        // yt-dlp cannot embed a cover into WebM or WAV, and WebM embeds only WebVTT subtitles.
+        let webm = await args { $0.fileType = .webm; $0.downloadSubtitles = true; $0.embedSubtitles = true }
+        XCTAssertFalse(webm.contains("--embed-thumbnail"))
+        let subs = try XCTUnwrap(webm.firstIndex(of: "--convert-subs"))
+        XCTAssertEqual(webm[subs + 1], "vtt")
+        let wav = await args { $0.fileType = .wav }
+        XCTAssertTrue(wav.contains("-x"))
+        XCTAssertFalse(wav.contains("--embed-thumbnail"))
+        // WebM cannot hold H.264, so the conversion is written to Matroska.
+        let converted = await args { $0.fileType = .webm; $0.conversionCodec = .h264 }
+        let merge = try XCTUnwrap(converted.firstIndex(of: "--merge-output-format"))
+        XCTAssertEqual(converted[merge + 1], "mkv")
     }
 
     func testThisVidURLNormalizationAndHeaders() async throws {
@@ -2920,6 +2958,8 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertTrue(YtdlpService.isMediaFilePath("/path/to/audio.m4a"))
         XCTAssertTrue(YtdlpService.isMediaFilePath("/path/to/audio.opus"))
         XCTAssertTrue(YtdlpService.isMediaFilePath("/path/to/audio.flac"))
+        XCTAssertTrue(YtdlpService.isMediaFilePath("/x/clip.mpg"))
+        XCTAssertTrue(YtdlpService.isMediaFilePath("/x/clip.3gp"))
 
         // Unsafe or non-media extensions must fail
         XCTAssertFalse(YtdlpService.isMediaFilePath("/path/to/malicious.exe"))
@@ -3031,7 +3071,7 @@ final class YtdlpServiceTests: XCTestCase {
             "--token", "secret_token_abc",
             "--api-key", "secret_key_xyz",
             "-b", "chrome",
-            "--2factor", "123456",
+            "--twofactor", "123456",
             "-2", "654321",
             "--client-certificate-password", "cert_pass_999",
             "--proxy", "http://user:pass@127.0.0.1:8080",
@@ -3045,7 +3085,7 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertTrue(sanitized.contains("--token \"<TOKEN>\""))
         XCTAssertTrue(sanitized.contains("--api-key \"<API_KEY>\""))
         XCTAssertTrue(sanitized.contains("-b \"<BROWSER>\""))
-        XCTAssertTrue(sanitized.contains("--2factor \"<2FACTOR>\""))
+        XCTAssertTrue(sanitized.contains("--twofactor \"<2FACTOR>\""))
         XCTAssertTrue(sanitized.contains("-2 \"<2FACTOR>\""))
         XCTAssertTrue(sanitized.contains("--client-certificate-password \"<PASSWORD>\""))
         XCTAssertTrue(sanitized.contains("--proxy \"<PROXY_REDACTED>\""))

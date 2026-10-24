@@ -23,7 +23,10 @@ class MenuBarManager: NSObject {
         popover.contentSize = NSSize(width: 360, height: 420)
         popover.behavior = .transient
 
+        // Adaptive rendering sits above MenuBarView so the view itself reads live
+        // capabilities (Increase Contrast), not only its descendants.
         let contentView = MenuBarView()
+            .siphonAdaptiveRendering()
             .environmentObject(languageService)
             .environmentObject(downloadManager)
 
