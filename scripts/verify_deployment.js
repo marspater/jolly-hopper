@@ -11,6 +11,12 @@ function commitsMatch(deployed, expected) {
   return false;
 }
 
+// Keeps retry logs short when CI passes a long comma-separated commit list.
+function describeExpectedCommits(expectedCommit) {
+  const commits = String(expectedCommit).split(',');
+  return commits.length > 1 ? `(any of ${commits.length} accepted commits)` : `'${expectedCommit}'`;
+}
+
 function parseCliArgs(args) {
   const options = {
     url: 'https://jolly-hopper.onrender.com/healthz',
@@ -62,7 +68,9 @@ async function queryHealthEndpoint(url, fetchImpl) {
 function checkMatch({ payload, expectedCommit, expectedVersion }) {
   const lastSeenCommit = payload?.commit ?? '';
   const lastSeenVersion = payload?.version ?? '';
-  const commitMatches = !expectedCommit || commitsMatch(lastSeenCommit, expectedCommit);
+  // expectedCommit may list several commits (comma-separated) that all ship the same server/ tree.
+  const commitMatches = !expectedCommit
+    || String(expectedCommit).split(',').some((c) => commitsMatch(lastSeenCommit, c));
 
   let versionMatches = true;
   if (expectedVersion && expectedVersion !== 'latest') {
@@ -128,7 +136,7 @@ async function verifyDeployment({
 
         const reasons = [];
         if (!match.commitMatches) {
-          reasons.push(`commit '${lastSeenCommit || 'none'}' does not match expected '${expectedCommit}'`);
+          reasons.push(`commit '${lastSeenCommit || 'none'}' does not match expected ${describeExpectedCommits(expectedCommit)}`);
         }
         if (!match.versionMatches) {
           reasons.push(`version '${lastSeenVersion || 'none'}' does not match expected '${expectedVersion}'`);
@@ -146,7 +154,7 @@ async function verifyDeployment({
   }
 
   const elapsed = Math.round((nowImpl() - startTime) / 1000);
-  const errMsg = `Deployment verification timed out after ${elapsed}s: expected commit '${expectedCommit || 'any'}' (last observed commit: '${lastSeenCommit ?? 'none'}', status: ${lastSeenStatus ?? 'none'})`;
+  const errMsg = `Deployment verification timed out after ${elapsed}s: expected commit ${expectedCommit ? describeExpectedCommits(expectedCommit) : "'any'"} (last observed commit: '${lastSeenCommit ?? 'none'}', status: ${lastSeenStatus ?? 'none'})`;
   logger.error(errMsg);
   return {
     ok: false,
