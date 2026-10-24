@@ -401,37 +401,70 @@ struct PreferencesView: View {
                         Text("\(languageService.s("latest")): v\(latestVersion)")
                             .font(.siphonMetadataMonoSemibold)
                             .foregroundColor(SiphonTheme.statusQueuedText)
+                            .transition(.opacity.combined(with: .move(edge: .top)))
                     } else if let checkError = updateChecker.checkError {
                         Text("\(languageService.s("update_check_failed_title")): \(checkError)")
                             .font(.siphonMetadata)
                             .foregroundColor(SiphonTheme.statusFailedText)
                             .textSelection(.enabled)
+                            .transition(.opacity.combined(with: .move(edge: .top)))
                     }
                 }
+                .animation(SiphonAnimation.snappySpring, value: updateChecker.hasUpdate)
+                .animation(SiphonAnimation.snappySpring, value: updateChecker.checkError)
+
                 Spacer()
-                if updateChecker.isChecking {
-                    ProgressView()
-                        .scaleEffect(0.7)
-                } else if updateChecker.hasUpdate {
-                    updateAvailableView
-                } else if updateChecker.showUpToDateMessage {
-                    Text(languageService.s("app_up_to_date"))
-                        .font(.siphonMetadataMedium)
-                        .foregroundColor(SiphonTheme.statusCompletedText)
-                } else {
-                    Button {
-                        Task {
-                            await updateChecker.checkForUpdates(manual: true)
+
+                ZStack(alignment: .trailing) {
+                    if updateChecker.isChecking {
+                        ProgressView()
+                            .controlSize(.small)
+                            .frame(height: 28)
+                            .transition(.opacity.combined(with: .scale(scale: 0.92)))
+                    } else if updateChecker.hasUpdate {
+                        updateAvailableView
+                            .transition(.opacity.combined(with: .scale(scale: 0.95)))
+                    } else if updateChecker.showUpToDateMessage {
+                        HStack(spacing: 5) {
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundColor(SiphonTheme.statusCompletedText)
+                                .font(.siphonMetadata)
+                                .accessibilityHidden(true)
+                            Text(languageService.s("app_up_to_date"))
+                                .font(.siphonMetadataSemibold)
+                                .foregroundColor(SiphonTheme.statusCompletedText)
                         }
-                    } label: {
-                        Text(languageService.s("check_updates"))
-                            .font(.siphonSecondaryMedium)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 4)
-                            .siphonInteractiveGlass(cornerRadius: SiphonTheme.radiusControl)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(
+                            Capsule().fill(SiphonTheme.statusCompleted.opacity(SiphonTheme.Opacity.tintCallout))
+                        )
+                        .overlay(
+                            Capsule().strokeBorder(SiphonTheme.statusCompleted.opacity(SiphonTheme.Opacity.borderCallout), lineWidth: 0.5)
+                        )
+                        .frame(height: 28)
+                        .transition(.opacity.combined(with: .scale(scale: 0.92)))
+                    } else {
+                        Button {
+                            Task {
+                                await updateChecker.checkForUpdates(manual: true)
+                            }
+                        } label: {
+                            Text(languageService.s("check_updates"))
+                                .font(.siphonSecondaryMedium)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 4)
+                                .siphonInteractiveGlass(cornerRadius: SiphonTheme.radiusControl)
+                        }
+                        .buttonStyle(.bouncy(scale: 0.95, hover: 1.025))
+                        .frame(height: 28)
+                        .transition(.opacity.combined(with: .scale(scale: 0.92)))
                     }
-                    .buttonStyle(.bouncy(scale: 0.95, hover: 1.025))
                 }
+                .frame(minHeight: 28, alignment: .trailing)
+                .animation(SiphonAnimation.snappySpring, value: updateChecker.isChecking)
+                .animation(SiphonAnimation.snappySpring, value: updateChecker.hasUpdate)
+                .animation(SiphonAnimation.snappySpring, value: updateChecker.showUpToDateMessage)
             }
         }
     }
@@ -1126,10 +1159,12 @@ struct PreferencesView: View {
                     Text(languageService.s("safari_fda_granted_feedback"))
                         .font(.siphonMetadataSemibold)
                         .foregroundColor(SiphonTheme.statusCompletedText)
+                        .multilineTextAlignment(.center)
                 }
-                .padding(.horizontal, 10)
+                .padding(.horizontal, 12)
                 .padding(.vertical, 6)
                 .siphonCallout(tint: SiphonTheme.statusCompleted)
+                .frame(maxWidth: .infinity, alignment: .center)
             } else {
                 Text(languageService.s("safari_warning"))
                     .font(.siphonMetadata)

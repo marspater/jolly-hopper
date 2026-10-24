@@ -5517,6 +5517,140 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertEqual(info.title, "Sample Video")
     }
 
+    func testPhantomJSErrorDuringFetchInfoRetriesAndSucceeds() async throws {
+        service.ytdlpPath = URL(fileURLWithPath: "/usr/local/bin/yt-dlp")
+        let attemptsBox = TestBox<Int>(0)
+        let jsonManifestOutput = """
+        {
+            "id": "6a80daa9800d4",
+            "title": "Pornhub Sample Video",
+            "duration": 480,
+            "thumbnail": "https://ci.phncdn.com/thumb.jpg",
+            "formats": [
+                {"format_id": "1080p", "width": 1920, "height": 1080, "ext": "mp4", "protocol": "https"}
+            ]
+        }
+        """
+        service.processRunner = MockYtdlpProcessRunner(mockCommand: { _ in
+            attemptsBox.value += 1
+            if attemptsBox.value == 1 {
+                throw YtdlpError.commandFailed("ERROR: [PornHub] 6a80daa9800d4: PhantomJS not found, Please download it from https://phantomjs.org/download.html")
+            }
+            return jsonManifestOutput
+        })
+
+        let info = try await service.fetchInfo(url: "https://pl.pornhub.com/view_video.php?viewkey=6a80daa9800d4")
+        XCTAssertEqual(info.title, "Pornhub Sample Video")
+        XCTAssertEqual(attemptsBox.value, 2)
+    }
+
+    func testPornhubOmitsGenericImpersonateArgument() async throws {
+        service.ytdlpPath = URL(fileURLWithPath: "/usr/local/bin/yt-dlp")
+        let capturedArgsBox = TestBox<[String]>([])
+        service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
+            capturedArgsBox.value = args
+            return """
+            {
+                "id": "6a80daa9800d4",
+                "title": "Sample Video",
+                "duration": 480,
+                "thumbnail": "https://ci.phncdn.com/thumb.jpg",
+                "formats": [
+                    {"format_id": "1080p", "width": 1920, "height": 1080, "ext": "mp4", "protocol": "https"}
+                ]
+            }
+            """
+        })
+
+        _ = try await service.fetchInfo(
+            url: "https://pl.pornhub.com/view_video.php?viewkey=6a80daa9800d4",
+            rawUserAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15"
+        )
+        XCTAssertFalse(capturedArgsBox.value.contains { $0.hasPrefix("generic:impersonate") },
+                       "Pornhub should not use generic:impersonate because it triggers bot challenges")
+    }
+
+    func testPhantomJSErrorDuringDownloadRetriesAndSucceeds() async throws {
+        service.ytdlpPath = URL(fileURLWithPath: "/usr/local/bin/yt-dlp")
+        let attemptsBox = TestBox<Int>(0)
+        service.processRunner = MockYtdlpProcessRunner(mockDownload: { _ in
+            attemptsBox.value += 1
+            if attemptsBox.value == 1 {
+                throw YtdlpError.downloadFailed("ERROR: [PornHub] 6a80daa9800d4: PhantomJS not found, Please download it from https://phantomjs.org/download.html")
+            }
+            return "[download] Destination: /tmp/test.mp4\n"
+        })
+
+        _ = try await service.download(
+            url: "https://pl.pornhub.com/view_video.php?viewkey=6a80daa9800d4",
+            options: .default,
+            onProgress: { _, _, _ in },
+            onOutput: { _ in }
+        )
+        XCTAssertEqual(attemptsBox.value, 2)
+    }
+
+    func testHappyEyeballsPrefersIPv4WhenIPv6IsUnsupported() {
+        let addresses = ["2606:4700:4700::1111", "1.1.1.1", "2606:4700:4700::1001", "1.0.0.1"]
+        let ordered = EgressProxyServer.interleavedByFamily(addresses, preferIPv4: true)
+        XCTAssertEqual(ordered.first, "1.1.1.1", "IPv4 should be prioritized first when preferIPv4 is true")
+    }
+
+    func testVPNAbortErrorsTreatedAsTransient() {
+        XCTAssertTrue(YtdlpService.isTransientNetworkError("ERROR: [download] got error: [Errno 65] No route to host"))
+        XCTAssertTrue(YtdlpService.isTransientNetworkError("ERROR: [download] got error: operation timed out"))
+        XCTAssertTrue(YtdlpService.isTransientNetworkError("ERROR: [download] got error: network is unreachable"))
+        XCTAssertTrue(YtdlpService.isTransientNetworkError("ERROR: [download] got error: broken pipe"))
+        XCTAssertTrue(YtdlpService.isTransientNetworkError("ERROR: [download] got error: nodename nor servname provided, or not known"))
+    }
+
+    func testForceIPv4ArgumentAppendedWhenVPNActive() async throws {
+        NetworkEnvironmentService.shared.overrideIsVPNActive = true
+        defer { NetworkEnvironmentService.shared.overrideIsVPNActive = nil }
+
+        service.ytdlpPath = URL(fileURLWithPath: "/usr/local/bin/yt-dlp")
+        let capturedArgsBox = TestBox<[String]>([])
+        service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
+            capturedArgsBox.value = args
+            return """
+            {
+                "id": "vpn123",
+                "title": "VPN Test Video",
+                "duration": 60,
+                "formats": [{"format_id": "best", "ext": "mp4", "protocol": "https"}]
+            }
+            """
+        })
+
+        _ = try await service.fetchInfo(url: "https://example.com/video")
+        XCTAssertTrue(capturedArgsBox.value.contains("--force-ipv4"), "yt-dlp should be given --force-ipv4 when VPN is active")
+        if let idx = capturedArgsBox.value.firstIndex(of: "--socket-timeout"), idx + 1 < capturedArgsBox.value.count {
+            XCTAssertEqual(capturedArgsBox.value[idx + 1], "30", "Socket timeout should be 30s when VPN is active")
+        } else {
+            XCTFail("Missing --socket-timeout in command args")
+        }
+    }
+
+    func testTransientVPNErrorDuringDownloadRetriesAndSucceeds() async throws {
+        service.ytdlpPath = URL(fileURLWithPath: "/usr/local/bin/yt-dlp")
+        let attemptsBox = TestBox<Int>(0)
+        service.processRunner = MockYtdlpProcessRunner(mockDownload: { _ in
+            attemptsBox.value += 1
+            if attemptsBox.value == 1 {
+                throw YtdlpError.downloadFailed("ERROR: [download] got error: [Errno 65] No route to host")
+            }
+            return "[download] Destination: /tmp/test.mp4\n"
+        })
+
+        _ = try await service.download(
+            url: "https://example.com/video",
+            options: .default,
+            onProgress: { _, _, _ in },
+            onOutput: { _ in }
+        )
+        XCTAssertEqual(attemptsBox.value, 2, "Transient VPN error should trigger automatic retry")
+    }
+
     func testBoyfriendTVFiltersPreviewTeaserClips() async throws {
         service.ytdlpPath = URL(fileURLWithPath: "/usr/local/bin/yt-dlp")
         

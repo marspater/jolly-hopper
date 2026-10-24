@@ -14,6 +14,7 @@ struct AddDownloadView: View {
     @State private var headerHeight: CGFloat = 0
     @State private var footerHeight: CGFloat = 0
     @State private var scrollContentHeight: CGFloat = 0
+    @State private var advancedPaneContainerHeight: CGFloat = 0
     @FocusState private var focusedField: InputField?
 
     private enum InputField: Hashable {
@@ -241,6 +242,8 @@ struct AddDownloadView: View {
                 optionalSettingsContent
             }
             .padding(SiphonTheme.spacing16)
+            .frame(maxWidth: .infinity)
+            .frame(minHeight: max(advancedPaneContainerHeight, scrollContentHeight), alignment: .center)
             .opacity(advancedPaneOpacity)
             .offset(x: reduceMotion ? 0 : (1 - advancedPaneOpacity) * SiphonTheme.spacing16)
             .onAppear {
@@ -249,6 +252,7 @@ struct AddDownloadView: View {
                 }
             }
         }
+        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { advancedPaneContainerHeight = $0 }
         .frame(width: AddDownloadWindowManager.advancedPaneWidth)
     }
 
@@ -1327,6 +1331,7 @@ struct AddDownloadView: View {
             advancedOptionsContent(inputMode == .single ? mediaInfo : nil)
         }
         .padding(SiphonTheme.spacing16)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             SiphonTheme.cardBackground(cornerRadius: SiphonTheme.radiusCard)
         )
