@@ -20,28 +20,28 @@ public final class NetworkEnvironmentService: @unchecked Sendable {
     private var lastReportedVPNState: Bool?
 
     // Testing overrides
-    private var _overrideIsVPNActive: Bool?
-    private var _overrideSupportsIPv6: Bool?
-    private var _overrideIsNordVPN: Bool?
+    private var storedOverrideIsVPNActive: Bool?
+    private var storedOverrideSupportsIPv6: Bool?
+    private var storedOverrideIsNordVPN: Bool?
 
     public var overrideIsVPNActive: Bool? {
-        get { lock.withLock { _overrideIsVPNActive } }
-        set { lock.withLock { _overrideIsVPNActive = newValue } }
+        get { lock.withLock { storedOverrideIsVPNActive } }
+        set { lock.withLock { storedOverrideIsVPNActive = newValue } }
     }
 
     public var overrideSupportsIPv6: Bool? {
-        get { lock.withLock { _overrideSupportsIPv6 } }
-        set { lock.withLock { _overrideSupportsIPv6 = newValue } }
+        get { lock.withLock { storedOverrideSupportsIPv6 } }
+        set { lock.withLock { storedOverrideSupportsIPv6 = newValue } }
     }
 
     public var overrideIsNordVPN: Bool? {
-        get { lock.withLock { _overrideIsNordVPN } }
-        set { lock.withLock { _overrideIsNordVPN = newValue } }
+        get { lock.withLock { storedOverrideIsNordVPN } }
+        set { lock.withLock { storedOverrideIsNordVPN = newValue } }
     }
 
     public var isVPNActive: Bool {
         lock.withLock {
-            if let override = _overrideIsVPNActive { return override }
+            if let override = storedOverrideIsVPNActive { return override }
             guard let path = currentPath else { return false }
             return Self.isVPNPath(path)
         }
@@ -49,7 +49,7 @@ public final class NetworkEnvironmentService: @unchecked Sendable {
 
     public var supportsIPv6: Bool {
         lock.withLock {
-            if let override = _overrideSupportsIPv6 { return override }
+            if let override = storedOverrideSupportsIPv6 { return override }
             guard let path = currentPath else { return true }
             return path.supportsIPv6
         }
@@ -57,7 +57,7 @@ public final class NetworkEnvironmentService: @unchecked Sendable {
 
     public var isNordVPNDetected: Bool {
         lock.withLock {
-            if let override = _overrideIsNordVPN { return override }
+            if let override = storedOverrideIsNordVPN { return override }
             guard let path = currentPath else { return false }
             guard Self.isVPNPath(path) else { return false }
             return Self.matchesNordGateway(path)
@@ -108,22 +108,34 @@ public final class NetworkEnvironmentService: @unchecked Sendable {
         monitor?.cancel()
     }
 
+    private struct NetworkStateChange {
+        let vpnChanged: Bool
+        let isVPNActive: Bool
+        let isNordVPN: Bool
+        let ipv6Supported: Bool
+    }
+
     private func handlePathUpdate(_ path: NWPath) {
-        let (vpnChanged, isVPN, isNord, v6) = lock.withLock { () -> (Bool, Bool, Bool, Bool) in
+        let change = lock.withLock { () -> NetworkStateChange in
             currentPath = path
             let active = Self.isVPNPath(path)
             let nord = active && Self.matchesNordGateway(path)
             let v6Supported = path.supportsIPv6
             let changed = (lastReportedVPNState != active)
             lastReportedVPNState = active
-            return (changed, active, nord, v6Supported)
+            return NetworkStateChange(
+                vpnChanged: changed,
+                isVPNActive: active,
+                isNordVPN: nord,
+                ipv6Supported: v6Supported
+            )
         }
 
-        if vpnChanged {
-            let vpnType = isNord ? "NordVPN" : "VPN"
+        if change.vpnChanged {
+            let vpnType = change.isNordVPN ? "NordVPN" : "VPN"
             Task { @MainActor in
-                if isVPN {
-                    LoggerService.shared.log("[Network] Active \(vpnType) connection detected (IPv6 supported: \(v6)). Enabling VPN-optimized transport.", level: .info)
+                if change.isVPNActive {
+                    LoggerService.shared.log("[Network] Active \(vpnType) connection detected (IPv6 supported: \(change.ipv6Supported)). Enabling VPN-optimized transport.", level: .info)
                 } else {
                     LoggerService.shared.log("[Network] Standard network interface active (VPN disconnected). Restoring default transport.", level: .info)
                 }

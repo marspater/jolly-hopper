@@ -1184,6 +1184,15 @@ class YtdlpService: ObservableObject {
         return !mediaHosts.isEmpty && mediaHosts.allSatisfy { $0 == "assets.twinkaboo.com" }
     }
 
+    struct SingleVideoFetchOptions: Sendable {
+        var forceBrowserCookies: Bool = false
+        var rawCookies: String? = nil
+        var rawUserAgent: String? = nil
+        var browserCookieSource: String? = nil
+        var proxy: String? = nil
+        var allowPhantomJSRetry: Bool = true
+    }
+
     func fetchSingleVideoInfo(
         path: String,
         url: String,
@@ -1191,9 +1200,32 @@ class YtdlpService: ObservableObject {
         rawCookies: String? = nil,
         rawUserAgent: String? = nil,
         browserCookieSource: String? = nil,
-        proxy: String? = nil,
-        allowPhantomJSRetry: Bool = true
+        proxy: String? = nil
     ) async throws -> MediaInfo {
+        try await fetchSingleVideoInfo(
+            path: path,
+            url: url,
+            options: SingleVideoFetchOptions(
+                forceBrowserCookies: forceBrowserCookies,
+                rawCookies: rawCookies,
+                rawUserAgent: rawUserAgent,
+                browserCookieSource: browserCookieSource,
+                proxy: proxy
+            )
+        )
+    }
+
+    func fetchSingleVideoInfo(
+        path: String,
+        url: String,
+        options: SingleVideoFetchOptions
+    ) async throws -> MediaInfo {
+        let forceBrowserCookies = options.forceBrowserCookies
+        let rawCookies = options.rawCookies
+        let rawUserAgent = options.rawUserAgent
+        let browserCookieSource = options.browserCookieSource
+        let proxy = options.proxy
+        let allowPhantomJSRetry = options.allowPhantomJSRetry
         if isRecuURL(url) {
             let recuMedia = try await resolveRecuMediaInfo(url: url)
             var parsedInfo: MediaInfo?
@@ -1545,16 +1577,9 @@ class YtdlpService: ObservableObject {
                 browserCookieSource: browserCookieSource
             ) {
                 LoggerService.shared.log("Retrying metadata extraction with configured browser cookies", level: .info)
-                return try await fetchSingleVideoInfo(
-                    path: path,
-                    url: url,
-                    forceBrowserCookies: true,
-                    rawCookies: rawCookies,
-                    rawUserAgent: rawUserAgent,
-                    browserCookieSource: browserCookieSource,
-                    proxy: proxy,
-                    allowPhantomJSRetry: allowPhantomJSRetry
-                )
+                var retryOptions = options
+                retryOptions.forceBrowserCookies = true
+                return try await fetchSingleVideoInfo(path: path, url: url, options: retryOptions)
             }
             let isTransientNet = !usesBrowserTransport(url) && Self.isTransientNetworkError(String(describing: error))
             if allowPhantomJSRetry && (Self.isPhantomJSError(error) || isTransientNet) {
@@ -1563,16 +1588,9 @@ class YtdlpService: ObservableObject {
                 if processRunner is DefaultYtdlpProcessRunner {
                     try await Task.sleep(nanoseconds: 1_500_000_000)
                 }
-                return try await fetchSingleVideoInfo(
-                    path: path,
-                    url: url,
-                    forceBrowserCookies: forceBrowserCookies,
-                    rawCookies: rawCookies,
-                    rawUserAgent: rawUserAgent,
-                    browserCookieSource: browserCookieSource,
-                    proxy: proxy,
-                    allowPhantomJSRetry: false
-                )
+                var retryOptions = options
+                retryOptions.allowPhantomJSRetry = false
+                return try await fetchSingleVideoInfo(path: path, url: url, options: retryOptions)
             }
             throw mapSiteSpecificError(
                 error,
@@ -7449,10 +7467,8 @@ public struct DownloadResult: Sendable {
         let isVPN = NetworkEnvironmentService.shared.isVPNActive
         let socketTimeout = isVPN ? "30" : "15"
         args.append(contentsOf: ["--socket-timeout", socketTimeout])
-        if isVPN || !NetworkEnvironmentService.shared.supportsIPv6 {
-            if !args.contains("-4") && !args.contains("--force-ipv4") {
-                args.append("--force-ipv4")
-            }
+        if (isVPN || !NetworkEnvironmentService.shared.supportsIPv6) && !args.contains("-4") && !args.contains("--force-ipv4") {
+            args.append("--force-ipv4")
         }
         args.append("--no-mtime")
 
