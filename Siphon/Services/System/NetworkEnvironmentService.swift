@@ -204,46 +204,53 @@ public final class NetworkEnvironmentService: @unchecked Sendable {
         let shouldTriggerInsights: Bool
     }
 
-    private func handlePathUpdate(_ path: NWPath) {
-        let change = lock.withLock { () -> NetworkStateChange in
-            currentPath = path
-            let active = Self.isVPNPath(path)
-            let localNord = active && Self.matchesNordGateway(path)
-            let v6Supported = path.supportsIPv6
-            let changed = (lastReportedVPNState != active)
-            lastReportedVPNState = active
+    private func computePathUpdate(_ path: NWPath) -> NetworkStateChange {
+        currentPath = path
+        let active = Self.isVPNPath(path)
+        let localNord = active && Self.matchesNordGateway(path)
+        let changed = (lastReportedVPNState != active)
+        lastReportedVPNState = active
 
-            var triggerInsights = false
-            if !active {
-                secondaryNordConfirmed = false
-                inFlightInsightsTask?.cancel()
-                inFlightInsightsTask = nil
-            } else if changed || (!localNord && !secondaryNordConfirmed) {
-                triggerInsights = true
-            }
+        let shouldTrigger = updateInsightsLifecycle(active: active, changed: changed, localNord: localNord)
+        return NetworkStateChange(
+            vpnChanged: changed,
+            isVPNActive: active,
+            isNordVPN: localNord || secondaryNordConfirmed,
+            ipv6Supported: path.supportsIPv6,
+            shouldTriggerInsights: shouldTrigger
+        )
+    }
 
-            return NetworkStateChange(
-                vpnChanged: changed,
-                isVPNActive: active,
-                isNordVPN: localNord || secondaryNordConfirmed,
-                ipv6Supported: v6Supported,
-                shouldTriggerInsights: triggerInsights
-            )
+    private func updateInsightsLifecycle(active: Bool, changed: Bool, localNord: Bool) -> Bool {
+        guard active else {
+            secondaryNordConfirmed = false
+            inFlightInsightsTask?.cancel()
+            inFlightInsightsTask = nil
+            return false
         }
+        if changed { return true }
+        return !localNord && !secondaryNordConfirmed
+    }
+
+    private func logStateChange(_ change: NetworkStateChange) {
+        guard change.vpnChanged else { return }
+        let vpnType = change.isNordVPN ? "NordVPN" : "VPN"
+        Task { @MainActor in
+            if change.isVPNActive {
+                LoggerService.shared.log("[Network] Active \(vpnType) connection detected (IPv6 supported: \(change.ipv6Supported)). Enabling VPN-optimized transport.", level: .info)
+            } else {
+                LoggerService.shared.log("[Network] Standard network interface active (VPN disconnected). Restoring default transport.", level: .info)
+            }
+        }
+    }
+
+    private func handlePathUpdate(_ path: NWPath) {
+        let change = lock.withLock { computePathUpdate(path) }
 
         if change.shouldTriggerInsights {
             triggerOptionalSecondaryInsightsCheck()
         }
 
-        if change.vpnChanged {
-            let vpnType = change.isNordVPN ? "NordVPN" : "VPN"
-            Task { @MainActor in
-                if change.isVPNActive {
-                    LoggerService.shared.log("[Network] Active \(vpnType) connection detected (IPv6 supported: \(change.ipv6Supported)). Enabling VPN-optimized transport.", level: .info)
-                } else {
-                    LoggerService.shared.log("[Network] Standard network interface active (VPN disconnected). Restoring default transport.", level: .info)
-                }
-            }
-        }
+        logStateChange(change)
     }
 }
