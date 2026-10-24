@@ -28,7 +28,6 @@
 			<key>CFBundleURLSchemes</key>
 			<array>
 				<string>siphon</string>
-				<string>siphon</string>
 			</array>
 		</dict>
 	</array>

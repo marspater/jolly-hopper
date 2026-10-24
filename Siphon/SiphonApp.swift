@@ -198,7 +198,7 @@ struct SiphonApp: App {
 
     /// Schemes are case-insensitive (RFC 3986), and macOS opens `SIPHON://` here too.
     static func isAppDeepLink(_ url: URL) -> Bool {
-        ["siphon", "siphon"].contains(url.scheme?.lowercased())
+        url.scheme?.lowercased() == "siphon"
     }
 
     /// Syntax check only; the public-network boundary is checked by `admitExternalDownload`.
