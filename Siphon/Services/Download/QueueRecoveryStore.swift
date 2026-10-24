@@ -138,6 +138,7 @@ struct QueueRecoverySnapshot: Codable, Sendable {
 final class QueueRecoveryStore {
     let fileURL: URL
     private let fileManager: FileManager
+    private(set) var hasUnsupportedSchemaSnapshot: Bool = false
 
     static var defaultFileURL: URL {
         let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
@@ -153,6 +154,9 @@ final class QueueRecoveryStore {
 
     @discardableResult
     func persist(activeJobs: [Download]) -> Bool {
+        if hasUnsupportedSchemaSnapshot && !activeJobs.isEmpty {
+            hasUnsupportedSchemaSnapshot = false
+        }
         let records = activeJobs.map { QueueRecoveryRecord(download: $0) }
         let snapshot = QueueRecoverySnapshot(
             version: 1,
@@ -171,6 +175,10 @@ final class QueueRecoveryStore {
 
     @discardableResult
     func markCleanShutdown() -> Bool {
+        guard !hasUnsupportedSchemaSnapshot else {
+            LoggerService.shared.log("Preserving unsupported queue recovery snapshot; skipping clean shutdown overwrite", level: .info)
+            return true
+        }
         let snapshot = QueueRecoverySnapshot(
             version: 1,
             timestamp: Date(),
@@ -190,9 +198,18 @@ final class QueueRecoveryStore {
         guard fileManager.fileExists(atPath: fileURL.path) else { return [] }
         do {
             let data = try Data(contentsOf: fileURL)
+            if let rawJson = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let rawVersion = rawJson["version"] as? Int, rawVersion != 1 {
+                LoggerService.shared.log("Ignoring queue recovery snapshot with unknown version \(rawVersion)", level: .warning)
+                hasUnsupportedSchemaSnapshot = true
+                preserveUnsupportedSnapshot(version: rawVersion)
+                return []
+            }
             let snapshot = try JSONDecoder().decode(QueueRecoverySnapshot.self, from: data)
             guard snapshot.version == 1 else {
                 LoggerService.shared.log("Ignoring queue recovery snapshot with unknown version \(snapshot.version)", level: .warning)
+                hasUnsupportedSchemaSnapshot = true
+                preserveUnsupportedSnapshot(version: snapshot.version)
                 return []
             }
             if snapshot.skippedJobCount > 0 {
@@ -206,6 +223,18 @@ final class QueueRecoveryStore {
             LoggerService.shared.log("Failed to load queue recovery snapshot: \(error.localizedDescription)", level: .error)
             preserveUnreadableSnapshot()
             return []
+        }
+    }
+
+    private func preserveUnsupportedSnapshot(version: Int) {
+        let backup = fileURL.appendingPathExtension("unsupported-v\(version)")
+        do {
+            if fileManager.fileExists(atPath: backup.path) {
+                try fileManager.removeItem(at: backup)
+            }
+            try fileManager.copyItem(at: fileURL, to: backup)
+        } catch {
+            LoggerService.shared.log("Failed to preserve unsupported queue recovery snapshot: \(error.localizedDescription)", level: .error)
         }
     }
 
@@ -224,6 +253,7 @@ final class QueueRecoveryStore {
     }
 
     func clearRecoveryState() {
+        hasUnsupportedSchemaSnapshot = false
         if fileManager.fileExists(atPath: fileURL.path) {
             try? fileManager.removeItem(at: fileURL)
         }
