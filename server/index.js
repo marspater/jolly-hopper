@@ -92,7 +92,7 @@ function isTrustedReleaseUrl(targetUrl) {
   }
   try {
     const parsed = new URL(targetUrl);
-    if (parsed.protocol !== 'https:') {
+    if (parsed.protocol !== 'https:' || parsed.username || parsed.password) {
       return false;
     }
     const host = parsed.hostname.toLowerCase();
