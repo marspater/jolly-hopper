@@ -308,9 +308,13 @@ enum ChromiumCookieReader {
             throw failure("Unsupported cookie database schema.")
         }
         defer { sqlite3_finalize(statement) }
+        // Bolt Performance Optimization: Read SQLite text column directly using UnsafeBufferPointer
+        // to avoid allocating temporary Data heap objects for every cookie field read.
         func string(_ column: Int32) -> String? {
             guard let text = sqlite3_column_text(statement, column) else { return "" }
-            return String(data: Data(bytes: text, count: Int(sqlite3_column_bytes(statement, column))), encoding: .utf8)
+            let count = Int(sqlite3_column_bytes(statement, column))
+            let buffer = UnsafeBufferPointer(start: text, count: count)
+            return String(decoding: buffer, as: UTF8.self)
         }
         var key: Data?
         var undecryptableRows = 0
