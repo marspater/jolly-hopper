@@ -268,6 +268,7 @@ struct DownloadRowView: View {
                 .focused($isRecoveredArgumentsFocused)
                 .font(.siphonSecondaryMonoMedium)
                 .siphonField(isFocused: isRecoveredArgumentsFocused)
+                .accessibilityLabel(languageService.s("recovery_arguments_placeholder"))
             HStack(spacing: SiphonTheme.spacing8) {
                 Button(languageService.s("recovery_arguments_resume")) {
                     downloadManager.reviewRecoveredArguments(for: download, arguments: recoveredArguments)
@@ -382,6 +383,7 @@ struct DownloadRowView: View {
                             .foregroundColor(.secondary)
                         }
                         .buttonStyle(.plain)
+                        .accessibilityValue(languageService.s(showRawError ? "a11y_expanded" : "a11y_collapsed"))
                     }
 
                     if showRawError {
