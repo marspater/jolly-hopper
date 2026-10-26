@@ -130,7 +130,7 @@ struct MenuBarView: View {
         }
         .animation(SiphonAnimation.snappySpring, value: url.isEmpty)
         .padding(.horizontal, SiphonTheme.spacing10)
-        .padding(.vertical, 7)
+        .padding(.vertical, SiphonTheme.spacing6)
         .background(
             SiphonTheme.fieldBackground(cornerRadius: SiphonTheme.radiusControl, isFocused: isFieldFocused && appearsActive)
         )
@@ -295,7 +295,7 @@ struct MenuBarView: View {
                 MenuBarManager.shared.closePopover()
                 MenuBarManager.shared.showMainWindow()
             } label: {
-                HStack(spacing: 5) {
+                HStack(spacing: SiphonTheme.spacing6) {
                     Image(systemName: "macwindow")
                         .font(.system(size: 11, weight: .semibold))
                         .accessibilityHidden(true)
@@ -318,16 +318,15 @@ struct MenuBarView: View {
             }
             .buttonStyle(.bouncy)
             .help(languageService.s("show_main_window"))
-            .accessibilityLabel(languageService.s("show_main_window"))
 
             Spacer(minLength: 0)
 
             Button {
                 NSApp.terminate(nil)
             } label: {
-                HStack(spacing: 4) {
+                HStack(spacing: SiphonTheme.spacing6) {
                     Image(systemName: "power")
-                        .font(.system(size: 11, weight: .bold))
+                        .font(.system(size: 11, weight: .semibold))
                         .accessibilityHidden(true)
                     Text(languageService.s("quit"))
                         .font(.siphonMetadataSemibold)
@@ -342,12 +341,14 @@ struct MenuBarView: View {
                 .clipShape(Capsule())
                 .overlay(
                     Capsule()
-                        .stroke(SiphonTheme.statusFailed.opacity(SiphonTheme.Opacity.borderCallout), lineWidth: 1)
+                        .stroke(
+                            SiphonTheme.statusFailed.opacity(showBorders ? SiphonTheme.Opacity.borderIncreaseContrast : SiphonTheme.Opacity.borderCallout),
+                            lineWidth: showBorders ? 1.5 : 1
+                        )
                 )
             }
             .buttonStyle(.bouncy)
             .help(languageService.s("quit"))
-            .accessibilityLabel(languageService.s("quit"))
         }
     }
 }
