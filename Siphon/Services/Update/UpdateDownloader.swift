@@ -53,7 +53,7 @@ public final class UpdateDownloader: NSObject, URLSessionDownloadDelegate, @unch
     }
 
     public static func isTrustedGitHubURL(_ url: URL) -> Bool {
-        guard url.scheme == "https", let host = url.host?.lowercased() else { return false }
+        guard url.scheme == "https", url.user == nil, url.password == nil, let host = url.host?.lowercased() else { return false }
         let path = url.standardized.path.lowercased()
 
         if host == "github.com" {
@@ -73,7 +73,7 @@ public final class UpdateDownloader: NSObject, URLSessionDownloadDelegate, @unch
     /// every redirect hop is checked against this policy.
     public static func isTrustedRedirectURL(_ url: URL) -> Bool {
         if isTrustedGitHubURL(url) { return true }
-        guard url.scheme == "https", let host = url.host?.lowercased() else { return false }
+        guard url.scheme == "https", url.user == nil, url.password == nil, let host = url.host?.lowercased() else { return false }
         return host == "objects.githubusercontent.com" || host == "release-assets.githubusercontent.com"
     }
 
