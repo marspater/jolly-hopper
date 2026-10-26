@@ -14,7 +14,7 @@ struct DependencyChecksums {
     /// The fork repository is private, so its `yt-dlp_macos` is mirrored to a
     /// public `ytdlp-<version>` prerelease of this repository. To bump, mirror
     /// the new fork asset there and change version, URL and SHA-256 together.
-    static let ytdlpVersion = "2026.10.12.1"
+    static let ytdlpVersion = "2026.10.26"
 
     static func ytdlpBuildURL(version: String = ytdlpVersion) -> URL {
         var components = URLComponents()
@@ -24,7 +24,7 @@ struct DependencyChecksums {
         return site.appending(components: "marspater", "jolly-hopper", "releases", "download", "ytdlp-\(version)", "yt-dlp_macos")
     }
     static let ytdlpURL = ytdlpBuildURL()
-    static let ytdlpExecutableSHA256 = "770375c36f63c72da6d9ec04959886e99c3d316f22728dc9be1ae57515339efb"
+    static let ytdlpExecutableSHA256 = "d391cb954bfd3864ab66920b559fec85dba8be979029905e542f055998856159"
 
     /// FFmpeg/FFprobe 9.0.2 release builds by Martin Riedl (ffmpeg.martin-riedl.de),
     /// static, GPL, signed with Developer ID KU3N25YGLU. Versioned URLs never
