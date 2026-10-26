@@ -45,7 +45,7 @@ jobs:
 
       - name: Run Codacy analyzer
         id: codacy
-        uses: codacy/codacy-analysis-cli-action@d43360362776a6789b47b99ae8973510854e2d3d # master 2026-03-25 (newer than tag v4.4.7)
+        uses: codacy/codacy-analysis-cli-action@6f415a0d3790c227a9cff580098545188e0f4e5a # master 2026-03-25 (newer than tag v4.4.7)
         with:
           verbose: true
           output: codacy-results.sarif
@@ -173,7 +173,7 @@ jobs:
           PY
 
       - name: Upload SARIF results
-        uses: github/codeql-action/upload-sarif@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4.39.0
+        uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
         if: always() && hashFiles('codacy-results-normalized.sarif') != ''
         with:
           sarif_file: codacy-results-normalized.sarif
