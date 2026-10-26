@@ -369,7 +369,7 @@ public final class EgressProxyServer: @unchecked Sendable {
     private static func requestLine(_ line: Substring) -> (method: String, target: String)? {
         let parts = line.split(separator: " ")
         guard parts.count == 3, ["HTTP/1.0", "HTTP/1.1"].contains(String(parts[2])),
-              parts[0].allSatisfy({ httpTokenCharacters.contains($0) }),
+              parts[0].unicodeScalars.allSatisfy(isHTTPTokenScalar),
               parts[1].utf8.allSatisfy({ $0 > 32 && $0 != 127 }) else { return nil }
         return (parts[0].uppercased(), String(parts[1]))
     }
@@ -773,7 +773,16 @@ public final class EgressProxyServer: @unchecked Sendable {
         "connection", "proxy-connection", "keep-alive", "proxy-authenticate", "proxy-authorization", "te", "trailer", "trailers", "transfer-encoding", "upgrade"
     ]
 
-    private static let httpTokenCharacters = Set("!#$%&'*+-.^_`|~0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
+    // Bolt Performance Optimization: Direct Unicode.Scalar ASCII bit/range check for RFC 7230 HTTP token characters
+    // to eliminate Set<Character> lookup and Character hashing allocations on high-frequency proxy header parsing.
+    nonisolated private static func isHTTPTokenScalar(_ scalar: Unicode.Scalar) -> Bool {
+        let scalarValue = scalar.value
+        if (scalarValue >= 0x30 && scalarValue <= 0x39) || (scalarValue >= 0x61 && scalarValue <= 0x7A) || (scalarValue >= 0x41 && scalarValue <= 0x5A) { return true }
+        switch scalarValue {
+        case 0x21, 0x23, 0x24, 0x25, 0x26, 0x27, 0x2A, 0x2B, 0x2D, 0x2E, 0x5E, 0x5F, 0x60, 0x7C, 0x7E: return true
+        default: return false
+        }
+    }
 
     private struct ForwardHeaders {
         let forwardedLines: [Substring]
@@ -790,7 +799,7 @@ public final class EgressProxyServer: @unchecked Sendable {
         init?(_ line: Substring) {
             guard let colon = line.firstIndex(of: ":") else { return nil }
             let name = line[..<colon]
-            guard !name.isEmpty, name.allSatisfy({ httpTokenCharacters.contains($0) }) else { return nil }
+            guard !name.isEmpty, name.unicodeScalars.allSatisfy(isHTTPTokenScalar) else { return nil }
             let value = line[line.index(after: colon)...].trimmingWhitespace()
             guard value.unicodeScalars.allSatisfy({ $0.value == 9 || ($0.value >= 32 && $0.value != 127) }) else { return nil }
             self.name = name.lowercased()
@@ -804,7 +813,7 @@ public final class EgressProxyServer: @unchecked Sendable {
         for header in headers where header.name == "connection" {
             for part in header.value.split(separator: ",", omittingEmptySubsequences: false) {
                 let token = part.trimmingWhitespace().lowercased()
-                guard !token.isEmpty, token.allSatisfy({ httpTokenCharacters.contains($0) }) else { return nil }
+                guard !token.isEmpty, token.unicodeScalars.allSatisfy(isHTTPTokenScalar) else { return nil }
                 nominated.insert(token)
             }
         }

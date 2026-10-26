@@ -86,3 +86,7 @@
 ## 2026-10-17 - Pre-Computing Frozen Response Objects for High-Frequency Cache Hits
 **Learning:** Returning fresh object literals constructed via object spread (`{ ...releaseCache.data, cached: true }`) on every cache hit or stale fallback creates repetitive heap object allocations and garbage collection pressure under heavy HTTP traffic. Pre-computing and freezing response objects (`cachedResponse`, `staleResponse`) when cache data is updated allows returning existing immutable object references directly.
 **Action:** Pre-compute and freeze cached response payloads upon cache population rather than allocating object copies on every read.
+
+## 2026-10-18 - Scalar Byte/Range Check for RFC 7230 HTTP Token Character Validation
+**Learning:** Validating HTTP token characters in proxy request line and header parsing using `Set<Character>` requires hashing Swift `Character` Extended Grapheme Clusters for every single character across all header fields. Evaluating scalar integer ranges directly on `Unicode.Scalar` in registers eliminates `Character` struct instantiations and set hashing allocations on high-frequency network proxy streams.
+**Action:** Use scalar integer range checks on `Unicode.Scalar` instead of `Set<Character>` membership lookups when validating ASCII or RFC specification token characters.
