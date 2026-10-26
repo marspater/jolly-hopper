@@ -776,9 +776,9 @@ public final class EgressProxyServer: @unchecked Sendable {
     // Bolt Performance Optimization: Direct Unicode.Scalar ASCII bit/range check for RFC 7230 HTTP token characters
     // to eliminate Set<Character> lookup and Character hashing allocations on high-frequency proxy header parsing.
     nonisolated private static func isHTTPTokenScalar(_ scalar: Unicode.Scalar) -> Bool {
-        let v = scalar.value
-        if (v >= 0x30 && v <= 0x39) || (v >= 0x61 && v <= 0x7A) || (v >= 0x41 && v <= 0x5A) { return true }
-        switch v {
+        let scalarValue = scalar.value
+        if (scalarValue >= 0x30 && scalarValue <= 0x39) || (scalarValue >= 0x61 && scalarValue <= 0x7A) || (scalarValue >= 0x41 && scalarValue <= 0x5A) { return true }
+        switch scalarValue {
         case 0x21, 0x23, 0x24, 0x25, 0x26, 0x27, 0x2A, 0x2B, 0x2D, 0x2E, 0x5E, 0x5F, 0x60, 0x7C, 0x7E: return true
         default: return false
         }
