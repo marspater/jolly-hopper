@@ -479,6 +479,8 @@ final class UpdateVerifierTests: XCTestCase {
         XCTAssertNil(UpdateDownloader.redirectRequestIfTrusted(URLRequest(url: URL(string: "https://evil.example/Siphon.dmg")!)))
 
         // Untrusted / Attack URLs
+        XCTAssertFalse(UpdateDownloader.isTrustedGitHubURL(URL(string: "https://user:pass@github.com/marspater/jolly-hopper/releases/download/v1.0.0/Siphon.dmg")!), "Must reject URLs with userinfo credentials")
+        XCTAssertFalse(UpdateDownloader.isTrustedRedirectURL(URL(string: "https://user:pass@objects.githubusercontent.com/github-production-release-asset/1")!), "Must reject redirect URLs with userinfo credentials")
         XCTAssertFalse(UpdateDownloader.isTrustedGitHubURL(URL(string: "https://github.com/attacker/malware/releases/download/v1/bad.dmg")!), "Must reject untrusted GitHub repository")
         XCTAssertFalse(UpdateDownloader.isTrustedGitHubURL(URL(string: "https://evil.github.com/marspater/jolly-hopper/bad.dmg")!), "Must reject untrusted subdomain")
         XCTAssertFalse(UpdateDownloader.isTrustedGitHubURL(URL(string: "http://github.com/marspater/jolly-hopper/releases/download/v1.0/Siphon.dmg")!), "Must reject insecure http")
