@@ -34,3 +34,8 @@
 **Vulnerability:** Validating release asset URLs by checking only the domain name (`github.com`) allowed release assets from attacker-controlled GitHub repositories to pass validation and be served as update URLs.
 **Learning:** Checking hostname hostnames alone on shared platforms (such as `github.com` or `api.github.com`) fails to restrict trust boundaries to the specific repository scope.
 **Prevention:** Always validate both hostname and repository URL path prefixes (`/owner/repo/`) when validating asset download links on multi-tenant developer platforms.
+
+## 2026-04-25 - Reject Embedded Credentials in Release Asset URL Validation
+**Vulnerability:** Release asset URL validation checked hostname and path prefix but did not verify `url.user` / `url.password` (or `parsed.username` / `parsed.password`), allowing URLs with embedded user credentials to pass validation.
+**Learning:** Validating hostnames and paths without explicitly checking URL credentials permits URL userinfo credential injection (`https://user:pass@host/path`).
+**Prevention:** Always verify `parsed.username` and `parsed.password` are empty (or `url.user == nil` and `url.password == nil`) when validating trusted asset or update URLs.
