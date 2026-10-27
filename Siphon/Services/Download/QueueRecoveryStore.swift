@@ -233,6 +233,7 @@ final class QueueRecoveryStore {
                 try fileManager.removeItem(at: backup)
             }
             try fileManager.copyItem(at: fileURL, to: backup)
+            try fileManager.setAttributes([.posixPermissions: 0o600], ofItemAtPath: backup.path)
         } catch {
             LoggerService.shared.log("Failed to preserve unsupported queue recovery snapshot: \(error.localizedDescription)", level: .error)
         }
@@ -247,6 +248,7 @@ final class QueueRecoveryStore {
                 try fileManager.removeItem(at: backup)
             }
             try fileManager.moveItem(at: fileURL, to: backup)
+            try fileManager.setAttributes([.posixPermissions: 0o600], ofItemAtPath: backup.path)
         } catch {
             LoggerService.shared.log("Failed to preserve unreadable queue recovery snapshot: \(error.localizedDescription)", level: .error)
         }
@@ -259,5 +261,6 @@ final class QueueRecoveryStore {
         }
         let data = try JSONEncoder().encode(snapshot)
         try data.write(to: fileURL, options: .atomic)
+        try fileManager.setAttributes([.posixPermissions: 0o600], ofItemAtPath: fileURL.path)
     }
 }
