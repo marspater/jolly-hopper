@@ -194,8 +194,9 @@ function createReleaseFetcher(fetchImpl, cacheTtlMs, failureRetryMs, githubToken
       });
       const cleanData = await parseReleaseResponse(res, Boolean(githubToken));
 
-      // Bolt Performance Optimization: Pre-compute frozen cached and stale response objects
-      // to eliminate repeated object spread copies on every cache hit or stale fallback request.
+      // Bolt Performance Optimization: Pre-compute frozen response objects for uncached, cached,
+      // and stale release metadata to eliminate repeated object spread allocations on release lookups.
+      const uncachedResponse = Object.freeze({ ...cleanData, cached: false });
       const cachedResponse = Object.freeze({ ...cleanData, cached: true });
       const staleResponse = Object.freeze({ ...cleanData, cached: true, stale: true });
 
@@ -205,7 +206,7 @@ function createReleaseFetcher(fetchImpl, cacheTtlMs, failureRetryMs, githubToken
         expiresAt: now + cacheTtlMs
       };
 
-      return { ...cleanData, cached: false };
+      return uncachedResponse;
     } catch (error) {
       console.error('Failed to refresh release metadata:', error instanceof Error ? error.message : String(error));
       retryAfter = Date.now() + failureRetryMs;

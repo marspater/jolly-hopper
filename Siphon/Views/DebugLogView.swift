@@ -33,8 +33,8 @@ struct DebugLogView: View {
 
             // Log Console Container
             ZStack {
-                SiphonTheme.cardBackground(cornerRadius: SiphonTheme.radiusControl)
-                    .overlay(SiphonTheme.cardBorder(cornerRadius: SiphonTheme.radiusControl))
+                SiphonTheme.cardBackground(cornerRadius: SiphonTheme.radiusCard)
+                    .overlay(SiphonTheme.cardBorder(cornerRadius: SiphonTheme.radiusCard))
 
                 ReadOnlyLogView(
                     text: logger.logs.isEmpty ? languageService.s("no_log_output") : logger.logs.joined(separator: "\n"),
@@ -78,12 +78,10 @@ struct DebugLogView: View {
                         Text(languageService.s("clear"))
                             .font(.siphonSecondaryMedium)
                     }
-                    .foregroundColor(.secondary)
                 }
                 .buttonStyle(.siphonSecondary)
                 .disabled(logger.logs.isEmpty)
                 .help(languageService.s("clear"))
-                .accessibilityLabel(languageService.s("clear"))
 
                 Spacer()
 
@@ -105,11 +103,9 @@ struct DebugLogView: View {
                         Text(languageService.s("reveal_in_finder"))
                             .font(.siphonSecondaryMedium)
                     }
-                    .foregroundColor(.secondary)
                 }
                 .buttonStyle(.siphonSecondary)
                 .help(languageService.s("reveal_in_finder"))
-                .accessibilityLabel(languageService.s("reveal_in_finder"))
             }
             .padding(.horizontal, SiphonTheme.spacing16)
             .padding(.bottom, SiphonTheme.spacing16)
