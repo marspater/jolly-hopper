@@ -756,4 +756,14 @@ final class QueueRecoveryStoreTests: XCTestCase {
         try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: readOnlyDir.path)
     }
 
+    func testQueueRecoveryFileHasRestrictedPermissions() throws {
+        let store = QueueRecoveryStore(fileURL: recoveryFileURL)
+        let download = Download(url: "https://example.com/video", options: .default, title: "Permissions Test")
+        XCTAssertTrue(store.persist(activeJobs: [download]))
+
+        let attrs = try FileManager.default.attributesOfItem(atPath: recoveryFileURL.path)
+        let permissions = (attrs[.posixPermissions] as? NSNumber)?.intValue ?? 0
+        XCTAssertEqual(permissions & 0o777, 0o600, "Queue recovery snapshot file must have strict 0o600 permissions")
+    }
+
 }
