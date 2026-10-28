@@ -739,10 +739,14 @@ class YtdlpService: ObservableObject {
             && !isDirectory.boolValue && fileManager.isExecutableFile(atPath: path)
     }
 
+    // Bolt Performance Optimization: Pre-compile static yt-dlp version regex to eliminate dynamic pattern compilation.
+    nonisolated private static let ytdlpVersionRegex = try? NSRegularExpression(pattern: #"^\d{4}\.\d{2}\.\d{2}(\.\d+)?$"#)
+
     /// yt-dlp prints a date version such as `2026.09.30` or `2026.09.30.232921`.
     nonisolated static func isYtdlpVersion(_ output: String) -> Bool {
-        output.trimmingCharacters(in: .whitespacesAndNewlines)
-            .range(of: #"^\d{4}\.\d{2}\.\d{2}(\.\d+)?$"#, options: .regularExpression) != nil
+        let trimmed = output.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let regex = ytdlpVersionRegex else { return false }
+        return regex.firstMatch(in: trimmed, options: [], range: NSRange(location: 0, length: trimmed.utf16.count)) != nil
     }
 
     /// The yt-dlp every code path must run. With user-provided yt-dlp only the
