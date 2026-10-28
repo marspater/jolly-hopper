@@ -6,6 +6,7 @@ struct DebugLogView: View {
     @ObservedObject private var languageService = LanguageService.shared
     @AppStorage(UserDefaultsKeys.theme) private var theme: String = "system"
     @StateObject private var copyFeedback = TransientFeedbackState()
+    @State private var isExporting = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -86,7 +87,10 @@ struct DebugLogView: View {
                 Spacer()
 
                 Button {
+                    guard !isExporting else { return }
+                    isExporting = true
                     Task {
+                        defer { isExporting = false }
                         do {
                             let url = try await logger.exportLogs()
                             NSWorkspace.shared.activateFileViewerSelecting([url])
@@ -97,14 +101,20 @@ struct DebugLogView: View {
                     }
                 } label: {
                     HStack(spacing: 6) {
-                        Image(systemName: "folder")
-                            .font(.system(size: 11, weight: .semibold))
-                            .accessibilityHidden(true)
+                        if isExporting {
+                            SiphonSpinner(size: 11, color: .primary, lineWidth: 1.6)
+                                .accessibilityHidden(true)
+                        } else {
+                            Image(systemName: "folder")
+                                .font(.system(size: 11, weight: .semibold))
+                                .accessibilityHidden(true)
+                        }
                         Text(languageService.s("reveal_in_finder"))
                             .font(.siphonSecondaryMedium)
                     }
                 }
                 .buttonStyle(.siphonSecondary)
+                .disabled(logger.logs.isEmpty || isExporting)
                 .help(languageService.s("reveal_in_finder"))
             }
             .padding(.horizontal, SiphonTheme.spacing16)
