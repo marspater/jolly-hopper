@@ -315,7 +315,7 @@ public final class UpdateInstaller: Sendable {
     private func mountDMG(dmgURL: URL) throws -> String {
         let process = Process()
         process.executableURL = Self.hdiutilURL
-        process.arguments = ["attach", dmgURL.path, "-nobrowse", "-readonly", "-plist"]
+        process.arguments = ["attach", "-nobrowse", "-readonly", "-plist", "--", dmgURL.path]
         process.environment = YtdlpService.createSanitizedEnvironment()
 
         let pipe = Pipe()
@@ -391,7 +391,7 @@ public final class UpdateInstaller: Sendable {
     private static func unmountDMG(mountPoint: String) throws {
         let process = Process()
         process.executableURL = Self.hdiutilURL
-        process.arguments = ["detach", mountPoint, "-force"]
+        process.arguments = ["detach", "-force", "--", mountPoint]
         process.environment = YtdlpService.createSanitizedEnvironment()
         process.standardOutput = FileHandle.nullDevice
         let errorPipe = Pipe()
@@ -512,7 +512,7 @@ public final class UpdateInstaller: Sendable {
         let process = Process()
         process.executableURL = shell
         // Paths and the PID are passed as arguments, never interpolated into the script.
-        process.arguments = ["-c", "while /bin/kill -0 \"$1\" 2>/dev/null; do /bin/sleep 0.2; done; exec /usr/bin/open -n \"$0\"",
+        process.arguments = ["-c", "while /bin/kill -0 \"$1\" 2>/dev/null; do /bin/sleep 0.2; done; exec /usr/bin/open -n -- \"$0\"",
                              appURL.path, String(pid)]
         return process
     }

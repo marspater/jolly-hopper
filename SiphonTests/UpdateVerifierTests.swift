@@ -221,6 +221,15 @@ final class UpdateVerifierTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(Date().timeIntervalSince(started), 0.5, "open must not run before the old instance exits")
     }
 
+    func testRelaunchProcessIncludesOptionFlagDelimiter() {
+        let app = URL(fileURLWithPath: "/Applications/Siphon.app")
+        let relaunch = UpdateInstaller.relaunchProcess(appURL: app, waitingFor: 12345)
+        let args = relaunch.arguments ?? []
+        XCTAssertGreaterThanOrEqual(args.count, 2)
+        XCTAssertEqual(args[0], "-c")
+        XCTAssertTrue(args[1].contains("exec /usr/bin/open -n -- \"$0\""), "Relaunch script must delimit open arguments with --")
+    }
+
     func testAtomicSwapRollsBackWhenStagedAppCorrupt() throws {
         let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent("test_updater_\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
