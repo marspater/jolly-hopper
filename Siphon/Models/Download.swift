@@ -1710,8 +1710,6 @@ struct MediaInfo: Codable {
 
 // MARK: - HTML Entity Decoding Extension
 public extension String {
-    nonisolated private static let htmlEntityRegex = try? NSRegularExpression(pattern: "&(?:#[xX][0-9a-fA-F]{1,6}|#[0-9]{1,7}|[A-Za-z]+);")
-
     // Bolt Performance Optimization: Pre-compile static dictionary of named HTML entities to eliminate O(N) array search overhead with O(1) hash map lookups on every entity decoding call.
     nonisolated private static let namedHTMLEntities: [String: String] = [
         "&quot;": "\"",
@@ -1733,30 +1731,60 @@ public extension String {
         "&bull;": "•"
     ]
 
+    private static func decodeSingleHTMLEntity(_ entity: Substring) -> String? {
+        guard entity.hasPrefix("&") && entity.hasSuffix(";") else { return nil }
+
+        if entity.hasPrefix("&#") {
+            let inner = entity.dropFirst(2).dropLast()
+            guard !inner.isEmpty else { return nil }
+            let isHex = inner.hasPrefix("x") || inner.hasPrefix("X")
+            let digits = isHex ? inner.dropFirst() : inner
+            guard !digits.isEmpty, digits.count <= 7 else { return nil }
+            guard let codePoint = UInt32(digits, radix: isHex ? 16 : 10),
+                  let scalar = UnicodeScalar(codePoint) else {
+                return nil
+            }
+            return String(scalar)
+        } else {
+            return String.namedHTMLEntities[String(entity)]
+        }
+    }
+
     /// Decodes named, decimal (e.g. &#039; or &#39;), and hexadecimal (e.g. &#x27;) HTML entities into plain text.
+    /// Bolt Performance Optimization: Single-pass native Swift scanner using Substring slicing and capacity pre-allocation
+    /// to eliminate NSRegularExpression compilation, NSTextCheckingResult arrays, and NSMutableString heap allocations.
     func decodingHTMLEntities() -> String {
         guard self.contains("&") else { return self }
 
-        guard let regex = String.htmlEntityRegex else { return self }
-        let result = NSMutableString(string: self)
-        let matches = regex.matches(in: self, range: NSRange(location: 0, length: result.length))
-        for match in matches.reversed() {
-            let entity = result.substring(with: match.range)
-            let replacement: String?
-            if entity.hasPrefix("&#") {
-                let number = entity.dropFirst(2).dropLast()
-                let isHex = number.first == "x" || number.first == "X"
-                let digits = isHex ? number.dropFirst() : number
-                replacement = UInt32(digits, radix: isHex ? 16 : 10)
-                    .flatMap(UnicodeScalar.init).map(String.init)
-            } else {
-                replacement = String.namedHTMLEntities[entity]
+        var result = ""
+        result.reserveCapacity(self.utf8.count)
+
+        var searchIndex = self.startIndex
+        while searchIndex < self.endIndex {
+            guard let ampersandIndex = self[searchIndex...].firstIndex(of: "&") else {
+                result.append(contentsOf: self[searchIndex...])
+                break
             }
-            if let replacement {
-                result.replaceCharacters(in: match.range, with: replacement)
+
+            result.append(contentsOf: self[searchIndex..<ampersandIndex])
+
+            let maxSearchEnd = self.index(ampersandIndex, offsetBy: 35, limitedBy: self.endIndex) ?? self.endIndex
+            let entityRange = ampersandIndex..<maxSearchEnd
+
+            if let semicolonIndex = self[entityRange].firstIndex(of: ";") {
+                let entitySlice = self[ampersandIndex...semicolonIndex]
+                if let replacement = String.decodeSingleHTMLEntity(entitySlice) {
+                    result.append(replacement)
+                    searchIndex = self.index(after: semicolonIndex)
+                    continue
+                }
             }
+
+            result.append("&")
+            searchIndex = self.index(after: ampersandIndex)
         }
-        return result as String
+
+        return result
     }
 }
 
