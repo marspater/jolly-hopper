@@ -427,6 +427,11 @@ class YtdlpService: ObservableObject {
                 if let remover = websiteDataStoreRemover {
                     try await remover(uuid)
                 } else {
+                    // remove(forIdentifier:) alone does not start WebKit. With no
+                    // store or web view created since launch, its completion runs
+                    // on a missing main run loop and crashes. Any WebKit object
+                    // starts it; an ephemeral store touches nothing on disk.
+                    _ = WKWebsiteDataStore.nonPersistent()
                     try await WKWebsiteDataStore.remove(forIdentifier: uuid)
                     Self.removeWebsiteDataStoreDirectory(for: identifier)
                 }
