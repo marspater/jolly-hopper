@@ -247,7 +247,8 @@ struct DownloadDiagnosticsView: View {
                         .font(.siphonMetadata)
                     }
                     .buttonStyle(.plain)
-                    .foregroundColor(SiphonTheme.accentText)
+                    .foregroundColor(download.log.isEmpty ? .secondary : SiphonTheme.accentText)
+                    .disabled(download.log.isEmpty)
                 }
 
                 HStack(spacing: SiphonTheme.spacing6) {

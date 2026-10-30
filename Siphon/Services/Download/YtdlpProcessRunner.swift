@@ -420,6 +420,9 @@ extension YtdlpProcessRunning {
 }
 
 public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
+    // Bolt Performance Optimization: Pre-compile double-quote CharacterSet to eliminate repeated Foundation object allocations during high-frequency stdout line parsing.
+    nonisolated private static let doubleQuoteCharacterSet = CharacterSet(charactersIn: "\"")
+
     /// How long to wait for pipe EOF after the process itself has exited.
     let streamDrainTimeout: TimeInterval
 
@@ -694,9 +697,13 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
         return .downloadFailed(trimmed.isEmpty ? "Process exited with code \(exitCode)" : cleanError)
     }
 
+    // Bolt Performance Optimization: Pre-compile static bot detection regex to eliminate dynamic regex compilation on every process output check.
+    nonisolated private static let botMentionRegex = try? NSRegularExpression(pattern: #"\b(anti-)?bots?\b"#, options: .caseInsensitive)
+
     /// "bot" or "anti-bot" as a word, not inside "both" or "robot".
     static func mentionsBot(_ text: String) -> Bool {
-        text.range(of: #"(?i)\b(anti-)?bots?\b"#, options: .regularExpression) != nil
+        guard let regex = botMentionRegex else { return false }
+        return regex.firstMatch(in: text, options: [], range: NSRange(location: 0, length: text.utf16.count)) != nil
     }
 
     private func executeDownloadProcess(
@@ -791,14 +798,14 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
                 } else if line.contains("[Merger] Merging formats into") {
                     let path = line.replacingOccurrences(of: "[Merger] Merging formats into", with: "")
                         .trimmingCharacters(in: .whitespacesAndNewlines)
-                        .trimmingCharacters(in: CharacterSet(charactersIn: "\""))
+                        .trimmingCharacters(in: Self.doubleQuoteCharacterSet)
                     if !path.isEmpty {
                         outputState.addCandidatePath(path)
                     }
                 } else if line.contains("[VideoConvertor] Converting video to") {
                     let path = line.replacingOccurrences(of: "[VideoConvertor] Converting video to", with: "")
                         .trimmingCharacters(in: .whitespacesAndNewlines)
-                        .trimmingCharacters(in: CharacterSet(charactersIn: "\""))
+                        .trimmingCharacters(in: Self.doubleQuoteCharacterSet)
                     if !path.isEmpty {
                         outputState.addCandidatePath(path)
                     }
@@ -806,7 +813,7 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
                     if let intoRange = line.range(of: " into \"", options: .backwards) {
                         let path = line[intoRange.upperBound...]
                             .trimmingCharacters(in: .whitespacesAndNewlines)
-                            .trimmingCharacters(in: CharacterSet(charactersIn: "\""))
+                            .trimmingCharacters(in: Self.doubleQuoteCharacterSet)
                         if !path.isEmpty {
                             outputState.addCandidatePath(path)
                         }
