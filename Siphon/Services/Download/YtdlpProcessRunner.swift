@@ -420,6 +420,9 @@ extension YtdlpProcessRunning {
 }
 
 public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
+    // Bolt Performance Optimization: Pre-compile double-quote CharacterSet to eliminate repeated Foundation object allocations during high-frequency stdout line parsing.
+    nonisolated private static let doubleQuoteCharacterSet = CharacterSet(charactersIn: "\"")
+
     /// How long to wait for pipe EOF after the process itself has exited.
     let streamDrainTimeout: TimeInterval
 
@@ -791,14 +794,14 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
                 } else if line.contains("[Merger] Merging formats into") {
                     let path = line.replacingOccurrences(of: "[Merger] Merging formats into", with: "")
                         .trimmingCharacters(in: .whitespacesAndNewlines)
-                        .trimmingCharacters(in: CharacterSet(charactersIn: "\""))
+                        .trimmingCharacters(in: Self.doubleQuoteCharacterSet)
                     if !path.isEmpty {
                         outputState.addCandidatePath(path)
                     }
                 } else if line.contains("[VideoConvertor] Converting video to") {
                     let path = line.replacingOccurrences(of: "[VideoConvertor] Converting video to", with: "")
                         .trimmingCharacters(in: .whitespacesAndNewlines)
-                        .trimmingCharacters(in: CharacterSet(charactersIn: "\""))
+                        .trimmingCharacters(in: Self.doubleQuoteCharacterSet)
                     if !path.isEmpty {
                         outputState.addCandidatePath(path)
                     }
@@ -806,7 +809,7 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
                     if let intoRange = line.range(of: " into \"", options: .backwards) {
                         let path = line[intoRange.upperBound...]
                             .trimmingCharacters(in: .whitespacesAndNewlines)
-                            .trimmingCharacters(in: CharacterSet(charactersIn: "\""))
+                            .trimmingCharacters(in: Self.doubleQuoteCharacterSet)
                         if !path.isEmpty {
                             outputState.addCandidatePath(path)
                         }
