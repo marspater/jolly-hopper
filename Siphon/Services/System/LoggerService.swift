@@ -68,6 +68,7 @@ class LoggerService: ObservableObject {
         "--client-certificate-key": "\"<CLIENT_KEY_REDACTED>\"",
         "--client-certificate-key-password": "\"<PASSWORD>\"",
         "--proxy": "\"<PROXY_REDACTED>\"",
+        "--geo-verification-proxy": "\"<PROXY_REDACTED>\"",
         "--proxy-user": "\"<USERNAME>\"",
         "--proxy-password": "\"<PASSWORD>\"",
         "--user": "\"<USERNAME>\"",
@@ -77,6 +78,7 @@ class LoggerService: ObservableObject {
         "--config-location": "\"<LOCATION_REDACTED>\"",
         "--config-locations": "\"<LOCATION_REDACTED>\"",
         "--exec": "\"<EXEC_REDACTED>\"",
+        "--exec-before-download": "\"<EXEC_REDACTED>\"",
         "--extractor-args": "\"<ARGS_REDACTED>\"",
         "--postprocessor-args": "\"<ARGS_REDACTED>\"",
         "--downloader-args": "\"<ARGS_REDACTED>\"",
@@ -141,7 +143,9 @@ class LoggerService: ObservableObject {
             if handledInline { continue }
 
             // Check URLs (including quoted URLs or flag-prefixed URLs like --url=https://...)
-            if let schemeRange = arg.range(of: "http://") ?? arg.range(of: "https://") {
+            if let schemeRange = arg.range(of: "http://") ?? arg.range(of: "https://")
+                ?? arg.range(of: "socks4://") ?? arg.range(of: "socks4a://")
+                ?? arg.range(of: "socks5://") ?? arg.range(of: "socks5h://") {
                 let prefix = String(arg[..<schemeRange.lowerBound])
                 let rawURL = String(arg[schemeRange.lowerBound...]).trimmingCharacters(in: CharacterSet(charactersIn: "\"'"))
                 let sanitized = sanitizeURLForLog(rawURL)

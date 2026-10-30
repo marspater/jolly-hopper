@@ -162,6 +162,22 @@ final class LogSanitizationTests: XCTestCase {
         XCTAssertTrue(sanitized.contains("--url=https://example.com/stream"))
     }
 
+    func testSanitizeGeoProxyAndExecBeforeDownloadCommandFlags() {
+        let args = [
+            "yt-dlp",
+            "--geo-verification-proxy", "http://user:secretpass@1.2.3.4:8080",
+            "--exec-before-download", "echo secret_token_123",
+            "--proxy=socks5://proxyuser:proxypass@5.6.7.8:1080"
+        ]
+        let sanitized = LoggerService.sanitizeCommandForLog(args)
+        XCTAssertFalse(sanitized.contains("secretpass"))
+        XCTAssertFalse(sanitized.contains("secret_token_123"))
+        XCTAssertFalse(sanitized.contains("proxypass"))
+        XCTAssertTrue(sanitized.contains("--geo-verification-proxy \"<PROXY_REDACTED>\""))
+        XCTAssertTrue(sanitized.contains("--exec-before-download \"<EXEC_REDACTED>\""))
+        XCTAssertTrue(sanitized.contains("--proxy=\"<PROXY_REDACTED>\""))
+    }
+
     func testSanitizeLocalUserHomePaths() {
         let raw = "File saved to /Users/secret_developer_name/Library/Application Support/Siphon/download.mp4"
         let sanitized = LoggerService.sanitizeLogContentForExport(raw)
