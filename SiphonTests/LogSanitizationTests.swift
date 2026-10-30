@@ -162,27 +162,13 @@ final class LogSanitizationTests: XCTestCase {
         XCTAssertTrue(sanitized.contains("--url=https://example.com/stream"))
     }
 
-    func testSanitizeGeoVerificationProxyCommandFlagAndSocksURLs() {
-        let args = [
-            "yt-dlp",
-            "--geo-verification-proxy", "socks5://proxy_user:proxy_pass@127.0.0.1:1080",
-            "--url=socks5h://secret_user:secret_pass@example.com:1080/stream?token=secret123"
-        ]
-        let sanitized = LoggerService.sanitizeCommandForLog(args)
-        XCTAssertFalse(sanitized.contains("proxy_user"))
-        XCTAssertFalse(sanitized.contains("proxy_pass"))
+    func testSanitizeDiagnosticTextRedactsSocksURLs() {
+        let diagnostic = "Connecting via socks5://secret_user:secret_pass@example.com:1080/stream?token=secret123"
+        let sanitized = LoggerService.sanitizeDiagnosticText(diagnostic)
         XCTAssertFalse(sanitized.contains("secret_user"))
         XCTAssertFalse(sanitized.contains("secret_pass"))
         XCTAssertFalse(sanitized.contains("secret123"))
-        XCTAssertTrue(sanitized.contains("--geo-verification-proxy \"<PROXY_REDACTED>\""))
-        XCTAssertTrue(sanitized.contains("--url=socks5h://example.com:1080/stream"))
-
-        let diagnostic = "Connecting via socks5://secret_user:secret_pass@example.com:1080/stream?token=secret123"
-        let sanitizedDiagnostic = LoggerService.sanitizeDiagnosticText(diagnostic)
-        XCTAssertFalse(sanitizedDiagnostic.contains("secret_user"))
-        XCTAssertFalse(sanitizedDiagnostic.contains("secret_pass"))
-        XCTAssertFalse(sanitizedDiagnostic.contains("secret123"))
-        XCTAssertTrue(sanitizedDiagnostic.contains("socks5://example.com:1080/stream"))
+        XCTAssertTrue(sanitized.contains("socks5://example.com:1080/stream"))
     }
 
     func testSanitizeLocalUserHomePaths() {

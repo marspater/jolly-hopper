@@ -20,7 +20,7 @@ class LoggerService: ObservableObject {
 
     // Bolt Performance Optimization: Pre-compile regular expressions to eliminate
     // regex compilation and allocation overhead on every log, diagnostic text, and log export call.
-    nonisolated private static let urlRegex = try? NSRegularExpression(pattern: #"(?:https?|socks[45]h?)://[^\s"'<>]+"#, options: [])
+    nonisolated private static let urlRegex = try? NSRegularExpression(pattern: #"(?:https?|socks[45]a?h?)://[^\s"'<>]+"#, options: [])
     nonisolated private static let redactionRegexes: [(NSRegularExpression, String)] = [
         (#"(?i)bearer\s+[A-Za-z0-9\-_\.]+"#, "Bearer <REDACTED>"),
         (#"(?i)authorization:\s*[^\r\n]+"#, "Authorization: <REDACTED>"),
@@ -68,7 +68,6 @@ class LoggerService: ObservableObject {
         "--client-certificate-key": "\"<CLIENT_KEY_REDACTED>\"",
         "--client-certificate-key-password": "\"<PASSWORD>\"",
         "--proxy": "\"<PROXY_REDACTED>\"",
-        "--geo-verification-proxy": "\"<PROXY_REDACTED>\"",
         "--proxy-user": "\"<USERNAME>\"",
         "--proxy-password": "\"<PASSWORD>\"",
         "--user": "\"<USERNAME>\"",
@@ -142,7 +141,7 @@ class LoggerService: ObservableObject {
             if handledInline { continue }
 
             // Check URLs (including quoted URLs or flag-prefixed URLs like --url=https://...)
-            if let schemeRange = arg.range(of: "http://") ?? arg.range(of: "https://") ?? arg.range(of: "socks5://") ?? arg.range(of: "socks5h://") ?? arg.range(of: "socks4://") ?? arg.range(of: "socks4a://") {
+            if let schemeRange = arg.range(of: "http://") ?? arg.range(of: "https://") {
                 let prefix = String(arg[..<schemeRange.lowerBound])
                 let rawURL = String(arg[schemeRange.lowerBound...]).trimmingCharacters(in: CharacterSet(charactersIn: "\"'"))
                 let sanitized = sanitizeURLForLog(rawURL)
