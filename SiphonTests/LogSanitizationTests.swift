@@ -162,6 +162,15 @@ final class LogSanitizationTests: XCTestCase {
         XCTAssertTrue(sanitized.contains("--url=https://example.com/stream"))
     }
 
+    func testSanitizeDiagnosticTextRedactsSocksURLs() {
+        let diagnostic = "Connecting via socks5://secret_user:secret_pass@example.com:1080/stream?token=secret123"
+        let sanitized = LoggerService.sanitizeDiagnosticText(diagnostic)
+        XCTAssertFalse(sanitized.contains("secret_user"))
+        XCTAssertFalse(sanitized.contains("secret_pass"))
+        XCTAssertFalse(sanitized.contains("secret123"))
+        XCTAssertTrue(sanitized.contains("socks5://example.com:1080/stream"))
+    }
+
     func testSanitizeGeoProxyAndExecBeforeDownloadCommandFlags() {
         let args = [
             "yt-dlp",

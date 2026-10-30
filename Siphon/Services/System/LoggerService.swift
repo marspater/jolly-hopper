@@ -20,7 +20,7 @@ class LoggerService: ObservableObject {
 
     // Bolt Performance Optimization: Pre-compile regular expressions to eliminate
     // regex compilation and allocation overhead on every log, diagnostic text, and log export call.
-    nonisolated private static let urlRegex = try? NSRegularExpression(pattern: #"https?://[^\s"'<>]+"#, options: [])
+    nonisolated private static let urlRegex = try? NSRegularExpression(pattern: #"(?:https?|socks[45]a?h?)://[^\s"'<>]+"#, options: [])
     nonisolated private static let redactionRegexes: [(NSRegularExpression, String)] = [
         (#"(?i)bearer\s+[A-Za-z0-9\-_\.]+"#, "Bearer <REDACTED>"),
         (#"(?i)authorization:\s*[^\r\n]+"#, "Authorization: <REDACTED>"),
