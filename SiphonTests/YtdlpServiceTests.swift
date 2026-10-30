@@ -7244,13 +7244,8 @@ final class YtdlpServiceTests: XCTestCase {
     }
 
     func testFetchPlaylistInfoUsesSingleCookiesFlag() async throws {
-        let playlistJSON = """
-        {
-            \"id\": \"item1\",
-            \"title\": \"Playlist Item 1\",
-            \"duration\": 10.0
-        }
-        """
+        // yt-dlp prints one JSON object per line.
+        let playlistJSON = #"{"id": "item1", "title": "Playlist Item 1", "duration": 10.0}"#
 
         let recordedArgsBox = TestBox<[String]>([])
         service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
@@ -7258,10 +7253,27 @@ final class YtdlpServiceTests: XCTestCase {
             return playlistJSON
         })
 
-        _ = try await service.fetchPlaylistInfo(url: "https://example.com/playlist", rawCookies: "session=token123")
-        
+        let entries = try await service.fetchPlaylistInfo(url: "https://example.com/playlist", rawCookies: "session=token123")
+        XCTAssertEqual(entries.count, 1)
+
         let cookiesFlagCount = recordedArgsBox.value.filter { $0 == "--cookies" }.count
         XCTAssertEqual(cookiesFlagCount, 1, "fetchPlaylistInfo must pass exactly one --cookies flag")
+    }
+
+    func testFetchPlaylistInfoFailsWhenNoRecordIsReadable() async throws {
+        service.processRunner = MockYtdlpProcessRunner(mockCommand: { _ in
+            "WARNING: some notice\n{\"id\": \"broken\"\n"
+        })
+        do {
+            _ = try await service.fetchPlaylistInfo(url: "https://example.com/playlist")
+            XCTFail("Unreadable playlist data must not look like an empty playlist")
+        } catch YtdlpError.downloadFailed {}
+
+        service.processRunner = MockYtdlpProcessRunner(mockCommand: { _ in
+            "WARNING: some notice\n"
+        })
+        let empty = try await service.fetchPlaylistInfo(url: "https://example.com/playlist")
+        XCTAssertTrue(empty.isEmpty, "stderr lines are not records")
     }
 
     func testSanitizeCommandForLogRedactsExecutionAndLocationFlags() throws {

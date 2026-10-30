@@ -48,12 +48,23 @@ public final class DownloadProcessController: @unchecked Sendable {
         return internalLifecycle
     }
 
-    public func transitionToTerminated(exitCode: Int32, reason: Process.TerminationReason) {
+    /// `drainingProcessGroup` is the group whose descendants may still hold the
+    /// output pipes; a cancel until `endDrain()` stops it. Recording it in the same
+    /// step as the exit leaves no window where a cancel sees neither the process
+    /// nor the group, and a cancel that arrived just before the exit stops it now.
+    public func transitionToTerminated(
+        exitCode: Int32,
+        reason: Process.TerminationReason,
+        drainingProcessGroup group: pid_t = 0
+    ) {
         lock.lock()
         defer { lock.unlock() }
         activeProcess = nil
         internalLifecycle = .terminated(exitCode: exitCode, reason: reason)
-        setRunning(false)
+        drainingProcessGroup = group
+        // Still running for quit-time cancellation while the group drains.
+        setRunning(group > 0)
+        if wasCancelled && group > 0 { kill(-group, SIGKILL) }
     }
 
     private static func getDescendantPIDs(for parentPID: pid_t) -> [pid_t] {
@@ -253,14 +264,9 @@ public final class DownloadProcessController: @unchecked Sendable {
         }
     }
 
-    /// The process exited but output is still draining; a cancel until
-    /// `endDrain()` stops `processGroup`, the descendants holding the pipes.
-    func beginDrain(processGroup: pid_t) {
-        lock.withLock { drainingProcessGroup = processGroup }
-    }
-
     func endDrain() {
         lock.withLock { drainingProcessGroup = 0 }
+        setRunning(false)
     }
 
     /// Requests cancellation of the process and any active child process.
@@ -553,13 +559,14 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
                 let exitCode = proc.terminationStatus
                 let reason = proc.terminationReason
                 let processGroup = Self.ownedProcessGroup(of: proc)
+                // First: a controller left in .running would signal the stale PID on
+                // a later cancel, after the OS may reuse it, and miss the pipe holders.
+                controller.transitionToTerminated(exitCode: exitCode, reason: reason, drainingProcessGroup: processGroup)
                 outputDrained.whenDrained(within: drainTimeout, onTimeout: {
                     Self.stopOutputHolders(processGroup: processGroup)
                     pipe.fileHandleForReading.readabilityHandler = nil
                 }, {
-                    // Before any early return: a controller left in .running would
-                    // signal the stale PID on a later cancel, after the OS may reuse it.
-                    controller.transitionToTerminated(exitCode: exitCode, reason: reason)
+                    controller.endDrain()
 
                     if outputBuffer.isOverflow {
                         safeContinuation.resume(throwing: YtdlpError.downloadFailed("Subprocess output exceeded the 32 MB safety limit."))
@@ -909,12 +916,11 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
 
             let drainTimeout = streamDrainTimeout
             process.terminationHandler = { proc in
-                controller.transitionToTerminated(exitCode: proc.terminationStatus, reason: proc.terminationReason)
                 proc.terminationHandler = nil
                 let exitCode = proc.terminationStatus
                 let reason = proc.terminationReason
                 let processGroup = Self.ownedProcessGroup(of: proc)
-                controller.beginDrain(processGroup: processGroup)
+                controller.transitionToTerminated(exitCode: exitCode, reason: reason, drainingProcessGroup: processGroup)
                 streamsDrained.whenDrained(within: drainTimeout, onTimeout: {
                     Self.stopOutputHolders(processGroup: processGroup)
                     outputPipe.fileHandleForReading.readabilityHandler = nil
