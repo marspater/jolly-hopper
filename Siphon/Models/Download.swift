@@ -195,18 +195,30 @@ class Download: ObservableObject, Identifiable {
 
     static let fetchingPlaceholder = "___FETCHING___"
 
+    // Bolt Performance Optimization: Pre-compile static UUID regex and optimize fallback title derivation with single-pass character replacement without NSString bridging.
+    nonisolated private static let uuidFallbackRegex = try? NSRegularExpression(pattern: "^[a-f0-9\\-]{36}$", options: .caseInsensitive)
+
     static func deriveFallbackTitle(from urlString: String, sourceDomain: String) -> String {
         if let url = URL(string: urlString) {
             let pathComponents = url.pathComponents.filter { $0 != "/" && !$0.isEmpty }
             if let last = pathComponents.last, last.count > 1 {
                 let isOnlyDigits = last.allSatisfy { $0.isNumber }
-                let isUUID = last.range(of: "^[a-f0-9\\-]{36}$", options: [.regularExpression, .caseInsensitive]) != nil
+                let isUUID: Bool = {
+                    guard let regex = uuidFallbackRegex else { return false }
+                    return regex.firstMatch(in: last, options: [], range: NSRange(location: 0, length: last.utf16.count)) != nil
+                }()
                 if !isOnlyDigits && !isUUID {
-                    let stripped = (last as NSString).deletingPathExtension
-                        .replacingOccurrences(of: "-", with: " ")
-                        .replacingOccurrences(of: "_", with: " ")
-                        .replacingOccurrences(of: "+", with: " ")
-                        .trimmingCharacters(in: .whitespaces)
+                    let baseName = URL(fileURLWithPath: last).deletingPathExtension().lastPathComponent
+                    var spaceSeparated = ""
+                    spaceSeparated.reserveCapacity(baseName.utf8.count)
+                    for char in baseName {
+                        if char == "-" || char == "_" || char == "+" {
+                            spaceSeparated.append(" ")
+                        } else {
+                            spaceSeparated.append(char)
+                        }
+                    }
+                    let stripped = spaceSeparated.trimmingCharacters(in: .whitespaces)
                     if stripped.count >= 2 {
                         return stripped.capitalized
                     }
