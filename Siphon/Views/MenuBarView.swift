@@ -19,6 +19,8 @@ struct MenuBarView: View {
 
     @State private var customPresets: [CustomPreset] = []
     @StateObject private var pasteFeedback = TransientFeedbackState()
+    @State private var isShowMainWindowHovered = false
+    @State private var isQuitHovered = false
 
     var body: some View {
         VStack(spacing: SiphonTheme.spacing12) {
@@ -113,7 +115,7 @@ struct MenuBarView: View {
                 if let clipboard = NSPasteboard.general.string(forType: .string),
                    let found = DownloadURLValidator.extractURLs(from: clipboard).first {
                     url = found
-                    pasteFeedback.show(languageService.s("paste"), isSuccess: true, duration: 1.2)
+                    pasteFeedback.show(languageService.s("pasted"), isSuccess: true, duration: 1.2)
                 } else {
                     NSSound.beep()
                 }
@@ -126,7 +128,7 @@ struct MenuBarView: View {
             }
             .buttonStyle(.plain)
             .help(languageService.s("paste_from_clipboard"))
-            .accessibilityLabel(pasteFeedback.isShowing ? languageService.s("paste") : languageService.s("paste_from_clipboard"))
+            .accessibilityLabel(pasteFeedback.isShowing ? languageService.s("pasted") : languageService.s("paste_from_clipboard"))
         }
         .animation(SiphonAnimation.snappySpring, value: url.isEmpty)
         .padding(.horizontal, SiphonTheme.spacing10)
@@ -309,15 +311,20 @@ struct MenuBarView: View {
                 .padding(.horizontal, SiphonTheme.spacing10)
                 .frame(height: 28)
                 .background(
-                    SiphonTheme.pillBackground(isSelected: false)
+                    SiphonTheme.pillBackground(isSelected: false, isHovered: isShowMainWindowHovered)
                 )
                 .clipShape(Capsule())
                 .overlay(
-                    SiphonTheme.pillBorder(isSelected: false, showBorders: showBorders)
+                    SiphonTheme.pillBorder(isSelected: false, isHovered: isShowMainWindowHovered, showBorders: showBorders)
                 )
             }
             .buttonStyle(.bouncy)
             .help(languageService.s("show_main_window"))
+            .onHover { hovering in
+                withAnimation(SiphonAnimation.hoverSpring) {
+                    isShowMainWindowHovered = hovering
+                }
+            }
 
             Spacer(minLength: 0)
 
@@ -337,7 +344,7 @@ struct MenuBarView: View {
                 .foregroundColor(SiphonTheme.statusFailedText)
                 .padding(.horizontal, SiphonTheme.spacing10)
                 .frame(height: 28)
-                .background(SiphonTheme.statusFailed.opacity(SiphonTheme.Opacity.tintBadge))
+                .background(SiphonTheme.statusFailed.opacity(isQuitHovered ? SiphonTheme.Opacity.fillPillHover + SiphonTheme.Opacity.tintBadge : SiphonTheme.Opacity.tintBadge))
                 .clipShape(Capsule())
                 .overlay(
                     Capsule()
@@ -349,6 +356,11 @@ struct MenuBarView: View {
             }
             .buttonStyle(.bouncy)
             .help(languageService.s("quit"))
+            .onHover { hovering in
+                withAnimation(SiphonAnimation.hoverSpring) {
+                    isQuitHovered = hovering
+                }
+            }
         }
     }
 }
