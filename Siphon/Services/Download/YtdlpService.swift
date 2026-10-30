@@ -701,10 +701,13 @@ class YtdlpService: ObservableObject {
     }
 
     func setupBinaries() async {
-        if let existing = activeSetupTask {
-            await existing.value
-            return
-        }
+        await startSetup().value
+    }
+
+    /// Starts setup, or joins the run in progress, without waiting for it.
+    @discardableResult
+    private func startSetup() -> Task<Void, Never> {
+        if let activeSetupTask { return activeSetupTask }
         let ytdlpStep = Task { @MainActor in
             cleanStaleArtifacts()
             await findYtdlp()
@@ -714,11 +717,11 @@ class YtdlpService: ObservableObject {
         let task = Task { @MainActor in
             await ytdlpStep.value
             await findFfmpeg()
+            activeSetupTask = nil
+            hasCompletedInitialSetup = true
         }
         activeSetupTask = task
-        await task.value
-        activeSetupTask = nil
-        hasCompletedInitialSetup = true
+        return task
     }
 
     /// Locations checked for a user-installed yt-dlp when no explicit path is
@@ -1843,11 +1846,8 @@ class YtdlpService: ObservableObject {
     /// yt-dlp; wait for that instead of reporting it missing.
     private func validatedYtdlpPath() async throws -> URL {
         if ytdlpPath == nil, queueWaitsForInitialSetup {
-            if let ytdlpSetupTask {
-                await ytdlpSetupTask.value
-            } else {
-                await setupBinaries()
-            }
+            startSetup()
+            await ytdlpSetupTask?.value
         }
         guard let path = ytdlpPath else { throw YtdlpError.notFound }
         return path
