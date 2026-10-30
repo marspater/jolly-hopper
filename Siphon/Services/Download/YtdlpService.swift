@@ -1066,9 +1066,7 @@ class YtdlpService: ObservableObject {
         browserCookieSource: String?,
         proxy: String?
     ) async throws -> MediaInfo {
-        guard let path = ytdlpPath else {
-            throw YtdlpError.notFound
-        }
+        let path = try await validatedYtdlpPath()
 
         let normalizedURL = normalizeURLForYtdlp(url)
         // Try the flat summary first: --dump-json on a playlist URL fully extracts
@@ -1740,9 +1738,7 @@ class YtdlpService: ObservableObject {
         browserCookieSource: String?,
         proxy: String?
     ) async throws -> [MediaInfo] {
-        guard let path = ytdlpPath else {
-            throw YtdlpError.notFound
-        }
+        let path = try await validatedYtdlpPath()
 
         var args = [
             path.path,
@@ -1835,6 +1831,16 @@ class YtdlpService: ObservableObject {
         }
 
         return results
+    }
+
+    /// Add Download can ask for metadata while launch setup is still validating
+    /// yt-dlp; wait for that instead of reporting it missing.
+    private func validatedYtdlpPath() async throws -> URL {
+        if ytdlpPath == nil, queueWaitsForInitialSetup {
+            await setupBinaries()
+        }
+        guard let path = ytdlpPath else { throw YtdlpError.notFound }
+        return path
     }
 
     /// Supplied cookies are what makes the request authenticated; a file that
