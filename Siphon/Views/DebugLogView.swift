@@ -105,7 +105,6 @@ struct DebugLogView: View {
                     }
                 }
                 .buttonStyle(.siphonSecondary)
-                .disabled(logger.logs.isEmpty)
                 .help(languageService.s("reveal_in_finder"))
             }
             .padding(.horizontal, SiphonTheme.spacing16)
