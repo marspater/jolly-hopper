@@ -1,0 +1,27 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+language: en-US
+reviews:
+  profile: chill
+  high_level_summary: true
+  poem: false
+  auto_review:
+    enabled: true
+    drafts: false
+  path_instructions:
+    - path: "Siphon/**/*.swift"
+      instructions: >-
+        macOS app in Swift 6 with strict concurrency. Focus on correctness:
+        data races and actor isolation, continuations that can resume twice or
+        never, subprocess lifecycle (process groups, pipe draining, cancellation),
+        WebKit sessions that are never torn down, and paths or URLs that escape
+        their intended directory or network boundary.
+    - path: "SiphonTests/**/*.swift"
+      instructions: >-
+        XCTest suite run hosted in the app. Flag tests that depend on the network,
+        timing that can flake, or state leaked into UserDefaults or the file system.
+    - path: "SiphonExtension_*/**"
+      instructions: >-
+        Browser extensions that hand URLs and cookies to the app. Check that
+        nothing sensitive leaks into logs, URLs, or other origins.
+chat:
+  auto_reply: true

@@ -45,8 +45,7 @@ final class ProcessLifecycleTests: XCTestCase {
         XCTAssertEqual(getpgid(holder.processIdentifier), holder.processIdentifier)
 
         let controller = DownloadProcessController()
-        controller.transitionToTerminated(exitCode: 0, reason: .exit)
-        controller.beginDrain(processGroup: holder.processIdentifier)
+        controller.transitionToTerminated(exitCode: 0, reason: .exit, drainingProcessGroup: holder.processIdentifier)
         controller.cancel()
         holder.waitUntilExit()
         XCTAssertEqual(holder.terminationReason, .uncaughtSignal)
@@ -54,6 +53,52 @@ final class ProcessLifecycleTests: XCTestCase {
         // After the drain the group is forgotten and never signalled.
         controller.endDrain()
         controller.cancel()
+    }
+
+    /// A cancel that lands after the process exited but before its termination
+    /// handler ran finds no live process to signal; the exit must stop the group.
+    func testCancelJustBeforeExitStopsThePipeHolders() throws {
+        let holder = Process()
+        holder.executableURL = URL(fileURLWithPath: "/usr/bin/perl")
+        holder.arguments = ["-e", "setpgrp(0, 0); sleep 30"]
+        try holder.run()
+        defer { if holder.isRunning { holder.terminate() } }
+        for _ in 0..<100 where getpgid(holder.processIdentifier) != holder.processIdentifier {
+            usleep(10_000)
+        }
+
+        let controller = DownloadProcessController()
+        controller.cancel()
+        controller.transitionToTerminated(exitCode: 0, reason: .exit, drainingProcessGroup: holder.processIdentifier)
+        holder.waitUntilExit()
+        XCTAssertEqual(holder.terminationReason, .uncaughtSignal)
+    }
+
+    /// Runner level: a metadata command whose child keeps the pipe open is
+    /// stopped by Stop at once, not after the drain timeout.
+    func testCancelledCommandDoesNotWaitOutTheDrainTimeout() async throws {
+        guard DefaultYtdlpProcessRunner.helperExecutableURL() != nil else {
+            throw XCTSkip("Needs siphon-pgrp to own a process group")
+        }
+        let runner = DefaultYtdlpProcessRunner(streamDrainTimeout: 30)
+        let controller = DownloadProcessController()
+        let task = Task {
+            try await runner.runCommand(["/bin/sh", "-c", "sleep 30 & echo done"], processController: controller)
+        }
+        // Cancel only once the parent has exited and the child holds the pipe.
+        let deadline = Date().addingTimeInterval(10)
+        while Date() < deadline {
+            if case .terminated = controller.lifecycleState { break }
+            try await Task.sleep(nanoseconds: 10_000_000)
+        }
+        guard case .terminated = controller.lifecycleState else {
+            task.cancel()
+            return XCTFail("The parent never exited")
+        }
+        let cancelled = Date()
+        task.cancel()
+        _ = try? await task.value
+        XCTAssertLessThan(Date().timeIntervalSince(cancelled), 5)
     }
 
     func testFfmpegProgressHandlesDurationUnknownValuesAndCarriageReturns() {

@@ -130,7 +130,7 @@ actor DependencyInstaller {
 
     /// Unzips a verified archive with `ditto` and returns the regular file
     /// `name` at its top level. The executable digest is checked by the caller.
-    static func extractExecutable(named name: String, from archive: URL, into directory: URL) throws -> URL {
+    static func extractExecutable(named name: String, from archive: URL, into directory: URL) async throws -> URL {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false, attributes: [.posixPermissions: 0o700])
         let process = Process()
         process.executableURL = URL(fileURLWithPath: NSOpenStepRootDirectory()).appending(components: "usr", "bin", "ditto")
@@ -138,9 +138,7 @@ actor DependencyInstaller {
         process.environment = YtdlpService.createSanitizedEnvironment()
         process.standardOutput = FileHandle.nullDevice
         process.standardError = FileHandle.nullDevice
-        try process.run()
-        process.waitUntilExit()
-        guard process.terminationStatus == 0 else {
+        guard try await runToExit(process, name: "ditto", timeout: 120) == 0 else {
             throw InstallError.executionFailed(binary: "ditto", message: "Failed to extract \(archive.lastPathComponent)")
         }
         let executable = directory.appendingPathComponent(name)
@@ -250,10 +248,10 @@ actor DependencyInstaller {
         }
 
         // 3. Extract each into its own directory.
-        let extractedFfmpeg = try Self.extractExecutable(named: "ffmpeg", from: ffmpegZip,
-                                                         into: staging.appendingPathComponent("ffmpeg-x", isDirectory: true))
-        let extractedFfprobe = try Self.extractExecutable(named: "ffprobe", from: ffprobeZip,
-                                                          into: staging.appendingPathComponent("ffprobe-x", isDirectory: true))
+        let extractedFfmpeg = try await Self.extractExecutable(named: "ffmpeg", from: ffmpegZip,
+                                                               into: staging.appendingPathComponent("ffmpeg-x", isDirectory: true))
+        let extractedFfprobe = try await Self.extractExecutable(named: "ffprobe", from: ffprobeZip,
+                                                                into: staging.appendingPathComponent("ffprobe-x", isDirectory: true))
 
         try Self.prepareVerifiedExecutable(at: extractedFfmpeg, expectedSHA256: ffmpegExecutableSHA256, name: "FFmpeg executable")
         try Self.prepareVerifiedExecutable(at: extractedFfprobe, expectedSHA256: ffprobeExecutableSHA256, name: "FFprobe executable")
@@ -349,6 +347,8 @@ class YtdlpService: ObservableObject {
     var ffprobePath: URL?
     private var deniedCookieSources: Set<String> = []
     private var activeSetupTask: Task<Void, Never>?
+    /// The yt-dlp half of the first setup, so metadata never waits on an FFmpeg download.
+    private var ytdlpSetupTask: Task<Void, Never>?
     private var activeFfmpegSetupTask: Task<Void, Never>?
 
     var processRunner: YtdlpProcessRunning
@@ -701,20 +701,27 @@ class YtdlpService: ObservableObject {
     }
 
     func setupBinaries() async {
-        if let existing = activeSetupTask {
-            await existing.value
-            return
-        }
-        let task = Task { @MainActor in
+        await startSetup().value
+    }
+
+    /// Starts setup, or joins the run in progress, without waiting for it.
+    @discardableResult
+    private func startSetup() -> Task<Void, Never> {
+        if let activeSetupTask { return activeSetupTask }
+        let ytdlpStep = Task { @MainActor in
             cleanStaleArtifacts()
             await findYtdlp()
-            await findFfmpeg()
             await getVersion()
         }
+        ytdlpSetupTask = ytdlpStep
+        let task = Task { @MainActor in
+            await ytdlpStep.value
+            await findFfmpeg()
+            activeSetupTask = nil
+            hasCompletedInitialSetup = true
+        }
         activeSetupTask = task
-        await task.value
-        activeSetupTask = nil
-        hasCompletedInitialSetup = true
+        return task
     }
 
     /// Locations checked for a user-installed yt-dlp when no explicit path is
@@ -754,14 +761,10 @@ class YtdlpService: ObservableObject {
         return regex.firstMatch(in: trimmed, options: [], range: NSRange(location: 0, length: trimmed.utf16.count)) != nil
     }
 
-    /// The yt-dlp every code path must run. With user-provided yt-dlp only the
-    /// validated `ytdlpPath` counts; a stale bundled or App Support copy never does.
-    var resolvedYtdlpBinary: URL? {
-        if !DependencyChecksums.managedYtdlpEnabled { return ytdlpPath }
-        let installed = Self.getAppSupportDirectory().appendingPathComponent("yt-dlp")
-        return ytdlpPath ?? Bundle.main.url(forResource: "yt-dlp", withExtension: nil)
-            ?? (FileManager.default.fileExists(atPath: installed.path) ? installed : nil)
-    }
+    /// The yt-dlp every code path must run: only the validated `ytdlpPath`. A
+    /// bundled or App Support copy that failed (or has not had) its checksum or
+    /// version check never runs.
+    var resolvedYtdlpBinary: URL? { ytdlpPath }
 
     func findYtdlp() async {
         if ytdlpPath != nil && !(processRunner is DefaultYtdlpProcessRunner) {
@@ -971,7 +974,6 @@ class YtdlpService: ObservableObject {
 
         let downloadURL = DependencyChecksums.ytdlpURL
         let appSupport = Self.getAppSupportDirectory()
-        let destination = appSupport.appendingPathComponent("yt-dlp")
 
         LoggerService.shared.log("Safely downloading yt-dlp binary from \(downloadURL)", level: .info)
 
@@ -994,7 +996,11 @@ class YtdlpService: ObservableObject {
             LoggerService.shared.log("yt-dlp verified and updated successfully to version \(installedVersion)", level: .info)
             return installedVersion
         } catch {
-            isAvailable = FileManager.default.fileExists(atPath: destination.path)
+            // A verified current binary returned above, so what remains (the
+            // rolled-back copy included) failed verification and must not run.
+            ytdlpPath = nil
+            version = nil
+            isAvailable = false
             LoggerService.shared.log("Failed to update yt-dlp: \(error.localizedDescription)", level: .error)
             throw error
         }
@@ -1069,9 +1075,7 @@ class YtdlpService: ObservableObject {
         browserCookieSource: String?,
         proxy: String?
     ) async throws -> MediaInfo {
-        guard let path = ytdlpPath else {
-            throw YtdlpError.notFound
-        }
+        let path = try await validatedYtdlpPath()
 
         let normalizedURL = normalizeURLForYtdlp(url)
         // Try the flat summary first: --dump-json on a playlist URL fully extracts
@@ -1546,7 +1550,7 @@ class YtdlpService: ObservableObject {
         }
 
         if (rawCookies?.isEmpty == false) || !additionalCookies.isEmpty,
-           let cookieFile = try? SecureCookieFile.create(url: url, rawCookies: rawCookies, additionalCookies: additionalCookies) {
+           let cookieFile = try requiredCookieFile(url: url, rawCookies: rawCookies, additionalCookies: additionalCookies) {
             secureCookieFile = cookieFile
             args.append(contentsOf: ["--cookies", cookieFile.path])
             if sucuriCookie != nil {
@@ -1648,7 +1652,7 @@ class YtdlpService: ObservableObject {
         }
 
         if (rawCookies?.isEmpty == false) || !additionalCookies.isEmpty,
-           let cookieFile = try? SecureCookieFile.create(url: url, rawCookies: rawCookies, additionalCookies: additionalCookies) {
+           let cookieFile = try requiredCookieFile(url: url, rawCookies: rawCookies, additionalCookies: additionalCookies) {
             secureCookieFile = cookieFile
             args.append(contentsOf: ["--cookies", cookieFile.path])
             if sucuriCookie != nil {
@@ -1743,9 +1747,7 @@ class YtdlpService: ObservableObject {
         browserCookieSource: String?,
         proxy: String?
     ) async throws -> [MediaInfo] {
-        guard let path = ytdlpPath else {
-            throw YtdlpError.notFound
-        }
+        let path = try await validatedYtdlpPath()
 
         var args = [
             path.path,
@@ -1772,7 +1774,7 @@ class YtdlpService: ObservableObject {
         }
 
         if (rawCookies?.isEmpty == false) || !additionalCookies.isEmpty,
-           let cookieFile = try? SecureCookieFile.create(url: url, rawCookies: rawCookies, additionalCookies: additionalCookies) {
+           let cookieFile = try requiredCookieFile(url: url, rawCookies: rawCookies, additionalCookies: additionalCookies) {
             secureCookieFile = cookieFile
             args.append(contentsOf: ["--cookies", cookieFile.path])
             if sucuriCookie != nil {
@@ -1810,20 +1812,60 @@ class YtdlpService: ObservableObject {
         let output = try await runCommand(args)
 
         var results: [MediaInfo] = []
+        var malformed = 0
+        var firstError: Error?
         let decoder = JSONDecoder()
 
         // Bolt Performance Optimization: Avoid intermediate String allocations when splitting
         if let data = output.data(using: .utf8) {
             let newline = UInt8(ascii: "\n")
-            data.split(separator: newline).forEach { lineData in
-                if !lineData.isEmpty,
-                   let info = try? decoder.decode(MediaInfo.self, from: Data(lineData)) {
-                    results.append(info)
+            // stderr shares the pipe, so only lines that open a JSON object are records.
+            for lineData in data.split(separator: newline) where lineData.first == UInt8(ascii: "{") {
+                do {
+                    results.append(try decoder.decode(MediaInfo.self, from: Data(lineData)))
+                } catch {
+                    malformed += 1
+                    firstError = firstError ?? error
                 }
+            }
+        }
+        if malformed > 0 {
+            LoggerService.shared.log(
+                "[Playlist] stage=metadata skipped \(malformed) unreadable entries, kept \(results.count): \(firstError?.localizedDescription ?? "")",
+                level: .warning
+            )
+            if results.isEmpty {
+                throw YtdlpError.downloadFailed("yt-dlp returned playlist data Siphon couldn't read.")
             }
         }
 
         return results
+    }
+
+    /// Add Download can ask for metadata while launch setup is still validating
+    /// yt-dlp; wait for that instead of reporting it missing.
+    private func validatedYtdlpPath() async throws -> URL {
+        if ytdlpPath == nil, queueWaitsForInitialSetup {
+            startSetup()
+            await ytdlpSetupTask?.value
+        }
+        guard let path = ytdlpPath else { throw YtdlpError.notFound }
+        return path
+    }
+
+    /// Supplied cookies are what makes the request authenticated; a file that
+    /// can't be written must fail here, not turn into a misleading sign-in error.
+    private func requiredCookieFile(
+        url: String,
+        rawCookies: String?,
+        additionalCookies: [(name: String, value: String)]
+    ) throws -> SecureCookieFile? {
+        do {
+            return try SecureCookieFile.create(url: url, rawCookies: rawCookies, additionalCookies: additionalCookies)
+        } catch {
+            LoggerService.shared.log("Could not prepare session cookies for \(hostForLog(url)): \(error.localizedDescription)", level: .error)
+            throw YtdlpError.downloadFailed("Siphon couldn't prepare the cookies for this site: \(error.localizedDescription)")
+        }
     }
 
 public struct DownloadResult: Sendable {
@@ -2333,7 +2375,7 @@ public struct DownloadResult: Sendable {
         if skipsAccountCookies {
             LoggerService.shared.log("Protected-site stream download uses the resolved CDN URL without forwarding account cookies", level: .debug)
         } else if (options.rawCookies?.isEmpty == false) || !additionalCookies.isEmpty,
-                  let cookieFile = try? SecureCookieFile.create(
+                  let cookieFile = try requiredCookieFile(
                       url: targetURL,
                       rawCookies: options.rawCookies,
                       additionalCookies: additionalCookies
@@ -3742,15 +3784,17 @@ public struct DownloadResult: Sendable {
             clearTimeout(timer);
         }
         """
+        // The Swift-side deadline outlasts the page's own abort, in case WebKit
+        // never delivers the callback at all.
         let response: String? = await withTaskCancellationHandler {
-            await withCheckedContinuation { continuation in
+            await pageScriptResult(timeout: TimeInterval(Self.recuAPITimeoutMs) / 1000 + 5) { finish in
                 webView.callAsyncJavaScript(
                     script,
                     arguments: ["apiURL": url, "timeoutMs": Self.recuAPITimeoutMs],
                     in: nil,
                     in: .defaultClient
                 ) { result in
-                    continuation.resume(returning: (try? result.get()) as? String)
+                    finish((try? result.get()) as? String)
                 }
             }
         } onCancel: {
@@ -3895,13 +3939,22 @@ public struct DownloadResult: Sendable {
                 // Current players own the session API. Capture the HLS request
                 // they authorize instead of treating a play-session as a legacy token.
                 if navigationDelegate.consumeToken(token) {
-                    try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+                    let clicked: Bool? = await pageScriptResult { finish in
                         webView.callAsyncJavaScript(
-                            "document.querySelector('#play_button')?.click()",
+                            "const button = document.querySelector('#play_button'); if (!button) return false; button.click(); return true;",
                             arguments: [:], in: nil, in: .page
                         ) { result in
-                            continuation.resume(with: result.map { _ in () })
+                            finish((try? result.get()) as? Bool)
                         }
+                    }
+                    try Task.checkCancellation()
+                    guard let clicked else {
+                        throw YtdlpError.downloadFailed("Recu.me's player did not start. Retry in a moment.")
+                    }
+                    // A button gone since the state check may mean the player already
+                    // started; polling continues and the page deadline still applies.
+                    if !clicked {
+                        LoggerService.shared.log("[ProtectedSite] stage=browser-session result=play-button-missing", level: .debug)
                     }
                 }
                 continue
@@ -3958,7 +4011,11 @@ public struct DownloadResult: Sendable {
             return recent.media
         }
         let media = try await resolveRecuMediaUncached(identity: identity, pageURL: pageURL)
-        recentRecuMedia[identity.videoID] = (media, Date())
+        let now = Date()
+        // ponytail: expiry is the bound. Each entry costs a full WebKit page load,
+        // so five minutes holds only a handful; add a count cap if that changes.
+        recentRecuMedia = recentRecuMedia.filter { now.timeIntervalSince($0.value.resolvedAt) < Self.recuMediaReuseInterval }
+        recentRecuMedia[identity.videoID] = (media, now)
         return media
     }
 
