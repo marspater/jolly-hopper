@@ -81,12 +81,24 @@ final class ProcessLifecycleTests: XCTestCase {
             throw XCTSkip("Needs siphon-pgrp to own a process group")
         }
         let runner = DefaultYtdlpProcessRunner(streamDrainTimeout: 30)
-        let started = Date()
-        let task = Task { try await runner.runCommand(["/bin/sh", "-c", "sleep 30 & echo done"]) }
-        try await Task.sleep(nanoseconds: 500_000_000)
+        let controller = DownloadProcessController()
+        let task = Task {
+            try await runner.runCommand(["/bin/sh", "-c", "sleep 30 & echo done"], processController: controller)
+        }
+        // Cancel only once the parent has exited and the child holds the pipe.
+        let deadline = Date().addingTimeInterval(10)
+        while Date() < deadline {
+            if case .terminated = controller.lifecycleState { break }
+            try await Task.sleep(nanoseconds: 10_000_000)
+        }
+        guard case .terminated = controller.lifecycleState else {
+            task.cancel()
+            return XCTFail("The parent never exited")
+        }
+        let cancelled = Date()
         task.cancel()
         _ = try? await task.value
-        XCTAssertLessThan(Date().timeIntervalSince(started), 5)
+        XCTAssertLessThan(Date().timeIntervalSince(cancelled), 5)
     }
 
     func testFfmpegProgressHandlesDurationUnknownValuesAndCarriageReturns() {

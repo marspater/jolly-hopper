@@ -3925,15 +3925,20 @@ public struct DownloadResult: Sendable {
                 if navigationDelegate.consumeToken(token) {
                     let clicked: Bool? = await pageScriptResult { finish in
                         webView.callAsyncJavaScript(
-                            "document.querySelector('#play_button')?.click()",
+                            "const button = document.querySelector('#play_button'); if (!button) return false; button.click(); return true;",
                             arguments: [:], in: nil, in: .page
                         ) { result in
-                            if case .success = result { finish(true) } else { finish(nil) }
+                            finish((try? result.get()) as? Bool)
                         }
                     }
                     try Task.checkCancellation()
-                    guard clicked == true else {
+                    guard let clicked else {
                         throw YtdlpError.downloadFailed("Recu.me's player did not start. Retry in a moment.")
+                    }
+                    // A button gone since the state check may mean the player already
+                    // started; polling continues and the page deadline still applies.
+                    if !clicked {
+                        LoggerService.shared.log("[ProtectedSite] stage=browser-session result=play-button-missing", level: .debug)
                     }
                 }
                 continue
