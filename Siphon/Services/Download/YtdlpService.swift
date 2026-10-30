@@ -347,6 +347,8 @@ class YtdlpService: ObservableObject {
     var ffprobePath: URL?
     private var deniedCookieSources: Set<String> = []
     private var activeSetupTask: Task<Void, Never>?
+    /// The yt-dlp half of the first setup, so metadata never waits on an FFmpeg download.
+    private var ytdlpSetupTask: Task<Void, Never>?
     private var activeFfmpegSetupTask: Task<Void, Never>?
 
     var processRunner: YtdlpProcessRunning
@@ -703,11 +705,15 @@ class YtdlpService: ObservableObject {
             await existing.value
             return
         }
-        let task = Task { @MainActor in
+        let ytdlpStep = Task { @MainActor in
             cleanStaleArtifacts()
             await findYtdlp()
-            await findFfmpeg()
             await getVersion()
+        }
+        ytdlpSetupTask = ytdlpStep
+        let task = Task { @MainActor in
+            await ytdlpStep.value
+            await findFfmpeg()
         }
         activeSetupTask = task
         await task.value
@@ -1837,7 +1843,11 @@ class YtdlpService: ObservableObject {
     /// yt-dlp; wait for that instead of reporting it missing.
     private func validatedYtdlpPath() async throws -> URL {
         if ytdlpPath == nil, queueWaitsForInitialSetup {
-            await setupBinaries()
+            if let ytdlpSetupTask {
+                await ytdlpSetupTask.value
+            } else {
+                await setupBinaries()
+            }
         }
         guard let path = ytdlpPath else { throw YtdlpError.notFound }
         return path
