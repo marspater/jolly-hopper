@@ -615,14 +615,16 @@ struct PreferencesView: View {
 
             Spacer()
 
-            HStack(spacing: 12) {
+            HStack(spacing: SiphonTheme.spacing8) {
                 Button {
                     startEditingPreset(preset)
                 } label: {
                     Image(systemName: "pencil")
+                        .font(.system(size: 13))
                         .foregroundColor(SiphonTheme.accentText)
+                        .accessibilityHidden(true)
                 }
-                .buttonStyle(.borderless)
+                .buttonStyle(.siphonIcon(size: 24))
                 .help(languageService.s("edit_preset"))
                 .accessibilityLabel(languageService.s("edit_preset"))
 
@@ -630,9 +632,11 @@ struct PreferencesView: View {
                     deleteCustomPreset(preset)
                 } label: {
                     Image(systemName: "trash")
+                        .font(.system(size: 13))
                         .foregroundColor(SiphonTheme.statusFailedText)
+                        .accessibilityHidden(true)
                 }
-                .buttonStyle(.borderless)
+                .buttonStyle(.siphonIcon(size: 24))
                 .help(languageService.s("delete_preset"))
                 .accessibilityLabel(languageService.s("delete_preset"))
             }
