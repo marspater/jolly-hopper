@@ -1,6 +1,10 @@
 // Run as a bookmarklet on the signed-in page, then open the desired video.
 // Only URLs actually returned by the page are used; signatures are never changed.
 (() => {
+    // Bolt Performance Optimization: Pre-compile regex hint to filter candidate URLs
+    // before allocating WHATWG URL objects and entering try/catch parsing in originalURLs.
+    const SOURCE_MP4_HINT = /_source\.mp4($|[?#])/i;
+
     function originalURLs(value) {
         const urls = new Set();
         const pending = [value];
@@ -9,13 +13,16 @@
         for (let count = 0; pending.length && count < 50000; count++) {
             const item = pending.pop();
             if (typeof item === "string") {
-                try {
-                    const url = new URL(item);
-                    if (["https:", "http:"].includes(url.protocol) &&
-                        !url.username && !url.password && /_source\.mp4$/i.test(url.pathname)) {
-                        urls.add(item);
-                    }
-                } catch (_) { /* Response text is usually not a URL. */ }
+                // Bolt Performance Optimization: Pre-filter candidate strings using fast prefix and regex checks
+                // to eliminate unnecessary WHATWG `URL` object allocations and try/catch overhead on non-URL strings.
+                if ((item.startsWith("https://") || item.startsWith("http://")) && SOURCE_MP4_HINT.test(item)) {
+                    try {
+                        const url = new URL(item);
+                        if (!url.username && !url.password && /_source\.mp4$/i.test(url.pathname)) {
+                            urls.add(item);
+                        }
+                    } catch (_) { /* Response text is usually not a URL. */ }
+                }
             } else if (item && typeof item === "object" && !visited.has(item)) {
                 visited.add(item);
                 pending.push(...Object.values(item));
