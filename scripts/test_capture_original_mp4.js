@@ -15,11 +15,23 @@ const original = "https://cdn.example.com/video_source.mp4?Policy=sample&Signatu
 assert.deepEqual(originalURLs({ files: { source: { url: original } } }), [original]);
 assert.deepEqual(originalURLs([original, original]), [original]);
 assert.deepEqual(originalURLs([
+    "https://cdn.example.com/video_source.mp4",
+    "https://cdn.example.com/video_source.mp4#t=10",
+    "http://cdn.example.com/video_source.mp4"
+]).sort(), [
+    "http://cdn.example.com/video_source.mp4",
+    "https://cdn.example.com/video_source.mp4",
+    "https://cdn.example.com/video_source.mp4#t=10"
+]);
+assert.deepEqual(originalURLs([
     "https://cdn.example.com/master.m3u8?Signature=sample",
     "https://cdn.example.com/preview.mp4",
     "https://user:password@cdn.example.com/video_source.mp4",
     "javascript:video_source.mp4",
-    "https://cdn.example.com/page?url=video_source.mp4"
+    "https://cdn.example.com/page?url=video_source.mp4",
+    "not a url at all",
+    "video_source.mp4",
+    "https://cdn.example.com/video_source.mp4/extra/path"
 ]), []);
 const cycle = { url: original };
 cycle.self = cycle;
