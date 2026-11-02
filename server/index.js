@@ -96,14 +96,22 @@ function isTrustedReleaseUrl(targetUrl) {
       return false;
     }
     const host = parsed.hostname.toLowerCase();
-    const path = parsed.pathname.toLowerCase();
+    // Sentinel Security Hardening: Decode and normalize the path to prevent percent-encoded
+    // path traversal sequences (%2e%2e%2f) from escaping the repository trust boundary.
+    let decodedPath = parsed.pathname;
+    try {
+      decodedPath = decodeURIComponent(decodedPath);
+    } catch {
+      return false;
+    }
+    const normalizedPath = path.posix.normalize(decodedPath).toLowerCase();
     if (host === 'github.com') {
-      return path.startsWith('/marspater/jolly-hopper/releases/download/') ||
-             path.startsWith('/marspater/jolly-hopper/releases/tag/') ||
-             path === '/marspater/jolly-hopper/releases/latest';
+      return normalizedPath.startsWith('/marspater/jolly-hopper/releases/download/') ||
+             normalizedPath.startsWith('/marspater/jolly-hopper/releases/tag/') ||
+             normalizedPath === '/marspater/jolly-hopper/releases/latest';
     }
     if (host === 'api.github.com') {
-      return path.startsWith('/repos/marspater/jolly-hopper/');
+      return normalizedPath.startsWith('/repos/marspater/jolly-hopper/');
     }
     return false;
   } catch {
