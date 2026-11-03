@@ -129,7 +129,8 @@ class Download: ObservableObject, Identifiable {
     var options: DownloadOptions
     // Queue-selected name, separate from the user's explicit filename.
     var resolvedOutputBaseName: String?
-    var outputBaseName: String { resolvedOutputBaseName ?? options.customFilename ?? displayTitle }
+    var outputBaseName: String { resolvedOutputBaseName ?? requestedBaseName }
+    var requestedBaseName: String { Self.distinctBaseName(options.customFilename ?? displayTitle, url: url) }
     // Owned by this job; retained across pause/resume, never shared by filename.
     var scratchDirectory: URL?
 
@@ -229,6 +230,32 @@ class Download: ObservableObject, Identifiable {
             return "\(sourceDomain) Video"
         }
         return urlString
+    }
+
+    /// A name with nothing a filename can keep (BoyfriendTV allows a "."
+    /// title) sanitizes to the shared fallback, so unrelated videos collide
+    /// and report File Exists. Name those by the URL's video ID: the number after "video", else the first numeric
+    /// path component, else an `id`/`v`/`video_id` query value.
+    static func distinctBaseName(_ name: String, url: String) -> String {
+        guard YtdlpService.sanitizedFilenameOrNil(name) == nil else { return name }
+        let components = URLComponents(string: url)
+        // www and language subdomains (es.site.com) serve the same video.
+        var hostLabels = components?.host?.lowercased().split(separator: ".") ?? []
+        if hostLabels.count > 2, let first = hostLabels.first, first == "www" || first.count == 2 {
+            hostLabels.removeFirst()
+        }
+        let baseHost = hostLabels.joined(separator: ".")
+        let sourceDomain = extractSourceDomain(from: baseHost.isEmpty ? url : "https://\(baseHost)")
+        let pathParts = components?.url?.pathComponents ?? []
+        let isNumeric: (String) -> Bool = { !$0.isEmpty && $0.allSatisfy(\.isNumber) }
+        // /album/123/video/456: the number after "video" beats the first number.
+        let videoID = zip(pathParts, pathParts.dropFirst()).first(where: { $0.0.lowercased().hasPrefix("video") && isNumeric($0.1) })?.1
+            ?? pathParts.first(where: isNumeric)
+            ?? components?.queryItems?.first(where: { ["id", "v", "video_id"].contains($0.name.lowercased()) && $0.value?.isEmpty == false })?.value
+        if let videoID {
+            return "\(sourceDomain) \(videoID)"
+        }
+        return deriveFallbackTitle(from: url, sourceDomain: sourceDomain)
     }
 
     var displayTitle: String {

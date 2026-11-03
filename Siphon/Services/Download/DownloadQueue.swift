@@ -166,8 +166,7 @@ final class DownloadQueue: ObservableObject {
         forceIncrement: Bool = false,
         fileManager: FileManager = .default
     ) -> (resolvedBaseName: String, candidatePath: String) {
-        let rawBaseName = download.options.customFilename ?? download.displayTitle
-        let sanitizedBase = YtdlpService.sanitizeFilename(rawBaseName)
+        let sanitizedBase = YtdlpService.sanitizeFilename(download.requestedBaseName)
         let folder = download.options.saveFolder
         let ext = YtdlpService.resolvedOutputFileExtension(for: download.options)
 
