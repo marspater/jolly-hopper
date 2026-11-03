@@ -234,15 +234,23 @@ class Download: ObservableObject, Identifiable {
 
     /// A name with nothing a filename can keep (BoyfriendTV allows a "."
     /// title) sanitizes to the shared fallback, so unrelated videos collide
-    /// and report File Exists. Name those by the URL's video ID: the first numeric
+    /// and report File Exists. Name those by the URL's video ID: the number after "video", else the first numeric
     /// path component, else an `id`/`v`/`video_id` query value.
     static func distinctBaseName(_ name: String, url: String) -> String {
         guard YtdlpService.sanitizedFilenameOrNil(name) == nil else { return name }
         let components = URLComponents(string: url)
-        // Language subdomains (es.site.com) serve the same video as www.
-        let baseHost = components?.host?.split(separator: ".").suffix(2).joined(separator: ".") ?? ""
+        // www and language subdomains (es.site.com) serve the same video.
+        var hostLabels = components?.host?.lowercased().split(separator: ".") ?? []
+        if hostLabels.count > 2, let first = hostLabels.first, first == "www" || first.count == 2 {
+            hostLabels.removeFirst()
+        }
+        let baseHost = hostLabels.joined(separator: ".")
         let sourceDomain = extractSourceDomain(from: baseHost.isEmpty ? url : "https://\(baseHost)")
-        let videoID = components?.path.split(separator: "/").first(where: { $0.allSatisfy(\.isNumber) }).map(String.init)
+        let pathParts = components?.path.split(separator: "/") ?? []
+        let isNumeric: (Substring) -> Bool = { $0.allSatisfy(\.isNumber) }
+        // /album/123/video/456: the number after "video" beats the first number.
+        let videoID = zip(pathParts, pathParts.dropFirst()).first(where: { $0.0.lowercased().hasPrefix("video") && isNumeric($0.1) }).map { String($0.1) }
+            ?? pathParts.first(where: isNumeric).map(String.init)
             ?? components?.queryItems?.first(where: { ["id", "v", "video_id"].contains($0.name.lowercased()) && $0.value?.isEmpty == false })?.value
         if let videoID {
             return "\(sourceDomain) \(videoID)"
