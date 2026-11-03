@@ -22,6 +22,16 @@ final class DownloadQueueTests: XCTestCase {
         try await super.tearDown()
     }
 
+    func testDotTitlesFromDifferentVideosDoNotShareTheFallbackName() {
+        let first = Download(url: "https://www.boyfriendtv.com/videos/1634352/-/", options: .default, title: ".")
+        let second = Download(url: "https://www.boyfriendtv.com/videos/1734715/-/", options: .default, title: ".")
+        let sameVideo = Download(url: "https://www.boyfriendtv.com/es/videos/1634352/-/?tag=x", options: .default, title: ".")
+        XCTAssertNotEqual(YtdlpService.sanitizeFilename(first.outputBaseName), YtdlpService.fallbackFilename)
+        XCTAssertNotEqual(first.outputBaseName, second.outputBaseName)
+        XCTAssertEqual(first.outputBaseName, sameVideo.outputBaseName)
+        XCTAssertEqual(Download.distinctBaseName("Clip", url: first.url), "Clip")
+    }
+
     func testReservedNamesStaySeparateAcrossRetriesRecoveryAndHistory() throws {
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)

@@ -129,7 +129,8 @@ class Download: ObservableObject, Identifiable {
     var options: DownloadOptions
     // Queue-selected name, separate from the user's explicit filename.
     var resolvedOutputBaseName: String?
-    var outputBaseName: String { resolvedOutputBaseName ?? options.customFilename ?? displayTitle }
+    var outputBaseName: String { resolvedOutputBaseName ?? requestedBaseName }
+    var requestedBaseName: String { Self.distinctBaseName(options.customFilename ?? displayTitle, url: url) }
     // Owned by this job; retained across pause/resume, never shared by filename.
     var scratchDirectory: URL?
 
@@ -229,6 +230,18 @@ class Download: ObservableObject, Identifiable {
             return "\(sourceDomain) Video"
         }
         return urlString
+    }
+
+    /// A name with nothing a filename can keep (BoyfriendTV allows a "."
+    /// title) sanitizes to the shared fallback, so unrelated videos collide
+    /// and report File Exists. Name those by the URL's numeric video ID.
+    static func distinctBaseName(_ name: String, url: String) -> String {
+        guard YtdlpService.sanitizeFilename(name) == YtdlpService.fallbackFilename else { return name }
+        let sourceDomain = extractSourceDomain(from: url)
+        if let videoID = URL(string: url)?.pathComponents.last(where: { $0.allSatisfy(\.isNumber) }) {
+            return "\(sourceDomain) \(videoID)"
+        }
+        return deriveFallbackTitle(from: url, sourceDomain: sourceDomain)
     }
 
     var displayTitle: String {

@@ -1766,7 +1766,7 @@ struct AddDownloadView: View {
         if downloadMode == .single {
             let filename = customFilename.isEmpty ? (mediaInfo?.title ?? "") : customFilename
             if !filename.isEmpty {
-                let safeName = YtdlpService.sanitizeFilename(filename)
+                let safeName = YtdlpService.sanitizeFilename(Download.distinctBaseName(filename, url: urlInput.trimmingCharacters(in: .whitespacesAndNewlines)))
                 let potentialPath = saveFolder.appendingPathComponent("\(safeName).\(YtdlpService.resolvedOutputFileExtension(for: options))")
                 let pathString = potentialPath.path
 

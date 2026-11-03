@@ -8340,8 +8340,10 @@ public struct DownloadResult: Sendable {
             trimmed = String(trimmed.dropLast()).trimmingCharacters(in: .whitespacesAndNewlines)
         }
 
-        return trimmed.isEmpty ? "download" : trimmed
+        return trimmed.isEmpty ? fallbackFilename : trimmed
     }
+
+    nonisolated static let fallbackFilename = "download"
 
     /// Drops `-P/--paths` and `-o/--output` (with their values) from user
     /// arguments. Siphon sets both and only accepts output inside the save
