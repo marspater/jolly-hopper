@@ -8306,6 +8306,11 @@ public struct DownloadResult: Sendable {
     }
 
     nonisolated static func sanitizeFilename(_ filename: String) -> String {
+        sanitizedFilenameOrNil(filename) ?? "download"
+    }
+
+    /// Nil when nothing in `filename` survives sanitizing.
+    nonisolated static func sanitizedFilenameOrNil(_ filename: String) -> String? {
         var cleanedScalars: [UnicodeScalar] = []
         cleanedScalars.reserveCapacity(filename.unicodeScalars.count)
 
@@ -8340,10 +8345,8 @@ public struct DownloadResult: Sendable {
             trimmed = String(trimmed.dropLast()).trimmingCharacters(in: .whitespacesAndNewlines)
         }
 
-        return trimmed.isEmpty ? fallbackFilename : trimmed
+        return trimmed.isEmpty ? nil : trimmed
     }
-
-    nonisolated static let fallbackFilename = "download"
 
     /// Drops `-P/--paths` and `-o/--output` (with their values) from user
     /// arguments. Siphon sets both and only accepts output inside the save
