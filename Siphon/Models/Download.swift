@@ -238,8 +238,10 @@ class Download: ObservableObject, Identifiable {
     /// path component, else an `id`/`v`/`video_id` query value.
     static func distinctBaseName(_ name: String, url: String) -> String {
         guard YtdlpService.sanitizedFilenameOrNil(name) == nil else { return name }
-        let sourceDomain = extractSourceDomain(from: url)
         let components = URLComponents(string: url)
+        // Language subdomains (es.site.com) serve the same video as www.
+        let baseHost = components?.host?.split(separator: ".").suffix(2).joined(separator: ".") ?? ""
+        let sourceDomain = extractSourceDomain(from: baseHost.isEmpty ? url : "https://\(baseHost)")
         let videoID = components?.path.split(separator: "/").first(where: { $0.allSatisfy(\.isNumber) }).map(String.init)
             ?? components?.queryItems?.first(where: { ["id", "v", "video_id"].contains($0.name.lowercased()) && $0.value?.isEmpty == false })?.value
         if let videoID {

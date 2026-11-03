@@ -38,6 +38,7 @@ final class DownloadQueueTests: XCTestCase {
         XCTAssertEqual(first, planned("https://www.boyfriendtv.com/es/videos/1634352/-/?tag=x"))
         XCTAssertNotEqual(planned("https://www.boyfriendtv.com/?id=1634352"), planned("https://www.boyfriendtv.com/?id=1734715"))
         XCTAssertNotEqual(planned("https://www.boyfriendtv.com/videos/1634352/2024/"), planned("https://www.boyfriendtv.com/videos/1734715/2024/"))
+        XCTAssertEqual(first, planned("https://es.boyfriendtv.com/videos/1634352/-/"))
         XCTAssertEqual(planned("https://www.boyfriendtv.com/videos/1634352/-/", title: "Clip"), "Clip")
         XCTAssertEqual(planned("https://www.boyfriendtv.com/videos/1634352/-/", title: "download"), "download")
     }
