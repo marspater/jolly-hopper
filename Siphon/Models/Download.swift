@@ -246,11 +246,11 @@ class Download: ObservableObject, Identifiable {
         }
         let baseHost = hostLabels.joined(separator: ".")
         let sourceDomain = extractSourceDomain(from: baseHost.isEmpty ? url : "https://\(baseHost)")
-        let pathParts = components?.path.split(separator: "/") ?? []
-        let isNumeric: (Substring) -> Bool = { $0.allSatisfy(\.isNumber) }
+        let pathParts = components?.url?.pathComponents ?? []
+        let isNumeric: (String) -> Bool = { !$0.isEmpty && $0.allSatisfy(\.isNumber) }
         // /album/123/video/456: the number after "video" beats the first number.
-        let videoID = zip(pathParts, pathParts.dropFirst()).first(where: { $0.0.lowercased().hasPrefix("video") && isNumeric($0.1) }).map { String($0.1) }
-            ?? pathParts.first(where: isNumeric).map(String.init)
+        let videoID = zip(pathParts, pathParts.dropFirst()).first(where: { $0.0.lowercased().hasPrefix("video") && isNumeric($0.1) })?.1
+            ?? pathParts.first(where: isNumeric)
             ?? components?.queryItems?.first(where: { ["id", "v", "video_id"].contains($0.name.lowercased()) && $0.value?.isEmpty == false })?.value
         if let videoID {
             return "\(sourceDomain) \(videoID)"
