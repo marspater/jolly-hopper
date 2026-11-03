@@ -234,13 +234,13 @@ class Download: ObservableObject, Identifiable {
 
     /// A name with nothing a filename can keep (BoyfriendTV allows a "."
     /// title) sanitizes to the shared fallback, so unrelated videos collide
-    /// and report File Exists. Name those by the URL's video ID: a numeric
+    /// and report File Exists. Name those by the URL's video ID: the first numeric
     /// path component, else an `id`/`v`/`video_id` query value.
     static func distinctBaseName(_ name: String, url: String) -> String {
         guard YtdlpService.sanitizedFilenameOrNil(name) == nil else { return name }
         let sourceDomain = extractSourceDomain(from: url)
         let components = URLComponents(string: url)
-        let videoID = components?.path.split(separator: "/").last(where: { $0.allSatisfy(\.isNumber) }).map(String.init)
+        let videoID = components?.path.split(separator: "/").first(where: { $0.allSatisfy(\.isNumber) }).map(String.init)
             ?? components?.queryItems?.first(where: { ["id", "v", "video_id"].contains($0.name.lowercased()) && $0.value?.isEmpty == false })?.value
         if let videoID {
             return "\(sourceDomain) \(videoID)"
