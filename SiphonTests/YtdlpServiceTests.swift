@@ -1692,14 +1692,16 @@ final class YtdlpServiceTests: XCTestCase {
     }
 
     func testNonPlaylistURLWithSeveralVideosBecomesAPlaylist() async throws {
-        service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
-            if args.contains("--dump-single-json") {
-                return #"{"_type":"playlist","id":"p","title":"Post","entries":[{"id":"1","title":"a","url":"https://example.com/1"},{"id":"2","title":"b","url":"https://example.com/2"}]}"#
-            }
-            return #"{"id":"1","title":"a"}"# + "\n" + #"{"id":"2","title":"b"}"# + "\n"
-        })
-        let info = try await service.fetchInfo(url: "https://example.com/post/123")
-        XCTAssertNotNil(info.playlist)
+        for resultType in ["playlist", "multi_video"] {
+            service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
+                if args.contains("--dump-single-json") {
+                    return #"{"_type":"\#(resultType)","id":"p","title":"Post","entries":[{"id":"1","title":"a","url":"https://example.com/1"},{"id":"2","title":"b","url":"https://example.com/2"}]}"#
+                }
+                return #"{"id":"1","title":"a"}"# + "\n" + #"{"id":"2","title":"b"}"# + "\n"
+            })
+            let info = try await service.fetchInfo(url: "https://example.com/post/\(resultType)")
+            XCTAssertNotNil(info.playlist, resultType)
+        }
     }
 
     func testForbiddenDownloadOffersRetryAndShowsTheRealErrorFirst() throws {

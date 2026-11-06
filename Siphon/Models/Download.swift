@@ -386,7 +386,9 @@ class Download: ObservableObject, Identifiable {
 
         let lower = error.lowercased()
         // The details box shows only the first lines, so yt-dlp's own error goes on top.
-        let terminalError = log.split(whereSeparator: \.isNewline).last { $0.contains("ERROR:") }
+        let terminalError = log.range(of: "ERROR:", options: .backwards).map {
+            log[log.lineRange(for: $0)].trimmingCharacters(in: .newlines)
+        }
         let rawError = log.isEmpty ? error : terminalError.map { "\($0)\n\n\(log)" } ?? log
 
         // Partial jobs retain finished files and remain actionable for retry.

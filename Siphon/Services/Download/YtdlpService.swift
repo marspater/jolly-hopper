@@ -1700,14 +1700,15 @@ class YtdlpService: ObservableObject {
 
         let decoder = JSONDecoder()
         // A playlist-looking URL (for example a "?p=" post link) can resolve to a
-        // single video; only a real playlist may be summarized without formats.
+        // single video; only a real multi-entry result may be summarized without formats.
         struct ResultKind: Decodable {
             let type: String?
             enum CodingKeys: String, CodingKey {
                 case type = "_type"
             }
         }
-        guard (try? decoder.decode(ResultKind.self, from: data))?.type == "playlist" else {
+        let resultType = (try? decoder.decode(ResultKind.self, from: data))?.type
+        guard resultType == "playlist" || resultType == "multi_video" else {
             throw YtdlpError.parseError
         }
         let info = try decoder.decode(MediaInfo.self, from: data)
