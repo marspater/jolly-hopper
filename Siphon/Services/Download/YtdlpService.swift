@@ -4084,11 +4084,14 @@ public struct DownloadResult: Sendable {
 
     // MARK: - Player capture
 
+    /// A site whose video exists only in a third-party player, with the name
+    /// shown as the uploader and in error messages.
     struct PlayerCaptureSite: Sendable, Equatable {
         let host: String
         let name: String
     }
 
+    /// The capture site for a URL or bare host, matching the host or a subdomain.
     func playerCaptureSite(for urlOrHost: String) -> PlayerCaptureSite? {
         let host = (URL(string: urlOrHost)?.host ?? urlOrHost).lowercased()
         return [
