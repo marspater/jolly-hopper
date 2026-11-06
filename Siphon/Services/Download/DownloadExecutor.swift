@@ -458,6 +458,16 @@ final class DownloadExecutor: ObservableObject {
 
             coalescer.flushRemaining()
 
+            // Without a known height the row would show the requested resolution
+            // as if it were the file's. Probed before the finalize guard, which
+            // must be the last status check before completion.
+            if download.options.fileType.isVideo, download.diagnostics.resolvedHeight == nil,
+               downloadResult.files.count == 1, let file = downloadResult.primaryFile,
+               let height = await ytdlpService.probeVideoHeight(file) {
+                download.diagnostics.resolvedHeight = height
+                download.diagnostics.resolution = download.diagnostics.resolution ?? "\(height)p"
+            }
+
             guard Self.shouldFinalizeSuccessfulDownload(
                 taskIsCancelled: Task.isCancelled,
                 status: download.status
