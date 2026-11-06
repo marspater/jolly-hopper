@@ -4243,6 +4243,48 @@ final class YtdlpServiceTests: XCTestCase {
         }
     }
 
+    func testPublicPlayerCaptureSiteResolvesWithoutForwardingCookies() async throws {
+        XCTAssertNotNil(service.playerCaptureSite(for: "https://www.fxggxt.com/sample/"))
+        XCTAssertNil(service.playerCaptureSite(for: "https://fxggxt.com.evil.com/sample/"))
+        let stream = YtdlpService.CapturedStream(
+            url: "https://s1.cloudatacdn.com/u5kj/sample~0mvKM3p1GH?token=sample&expiry=1",
+            frameURL: "https://playmogo.com/e/sample"
+        )
+        service.browserCaptureLoader = { _ in
+            YtdlpService.BrowserCapture(
+                pageHTML: #"<meta property="og:title" content="Sample Title">"#,
+                streams: [stream]
+            )
+        }
+        service.processRunner = MockYtdlpProcessRunner(
+            mockCommand: { _ in
+                #"{"id":"s","title":"s","duration":480,"formats":[{"format_id":"mp4","ext":"mp4","protocol":"https"}]}"#
+            },
+            mockDownload: { args in
+                XCTAssertEqual(args.last, stream.url)
+                XCTAssertTrue(args.contains("Referer:https://playmogo.com/"))
+                XCTAssertFalse(args.contains("--cookies"))
+                XCTAssertFalse(args.contains("--cookies-from-browser"))
+                throw CancellationError()
+            }
+        )
+        let page = "https://fxggxt.com/sample/"
+        let info = try await service.fetchInfo(url: page)
+        XCTAssertEqual(info.title, "Sample Title")
+        XCTAssertEqual(info.uploader, "FXGGXT")
+        XCTAssertEqual(info.manifestUrl, stream.url)
+
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        var options = DownloadOptions.default
+        options.saveFolder = root
+        options.rawCookies = "sample=1"
+        do {
+            _ = try await service.download(url: page, options: options, mediaInfo: info, onProgress: { _, _, _ in }, onOutput: { _ in })
+            XCTFail("Expected cancellation")
+        } catch is CancellationError {}
+    }
+
     func testGayteamDownloadReusesAFreshCaptureAndRecapturesAStaleOne() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }
