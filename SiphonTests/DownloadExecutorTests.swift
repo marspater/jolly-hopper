@@ -519,6 +519,49 @@ final class DownloadExecutorTests: XCTestCase {
         XCTAssertTrue(download.log.contains("Cloudflare"), "Log should contain diagnostic output")
     }
 
+    func testFinishedFileHeightReplacesRequestedResolutionInRow() async throws {
+        final class MockDelegate: DownloadExecutorDelegate {
+            func executorDidUpdateStatus(for download: Download, to status: DownloadStatus) {
+                download.status = status
+            }
+            func executorDidRequestAddToHistory(_ download: Download, skipSave: Bool) {}
+            func executorDidRequestRecoveryPersist() {}
+            func executorDidFinishDownload() {}
+            func executorDidRequestBroadcast() {}
+        }
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let media = root.appendingPathComponent("Clip.mp4")
+
+        let runner = MockYtdlpProcessRunner(mockCommand: { args in
+            if args.first?.hasSuffix("/ffprobe") == true, args.contains("stream=width,height") {
+                return "852,480\n"
+            }
+            return #"{"id":"a","title":"Clip","formats":[{"format_id":"0","ext":"mp4","protocol":"https"}]}"#
+        }, mockDownload: { _ in
+            try Data("mp4".utf8).write(to: media)
+            return media.path
+        })
+        let service = YtdlpService(processRunner: runner)
+        service.ytdlpPath = URL(fileURLWithPath: "/usr/local/bin/yt-dlp")
+        let delegate = MockDelegate()
+        let executor = DownloadExecutor(ytdlpService: service, delegate: delegate)
+        var options = DownloadOptions.default
+        options.saveFolder = root
+        options.embedThumbnail = false
+        options.videoResolution = .r1080p
+        let download = Download(url: "https://example.com/clip", options: options)
+        let lang = LanguageService()
+
+        await executor.executeDownload(download, queue: DownloadQueue(), ytdlpVersion: "test", languageService: lang)
+
+        XCTAssertEqual(download.status, .completed, download.log)
+        XCTAssertEqual(download.diagnostics.resolvedHeight, 480)
+        XCTAssertTrue(download.formatSubtitle(lang: lang).contains("480p"))
+        XCTAssertFalse(download.formatSubtitle(lang: lang).contains("1080"))
+    }
+
     func testFinalOutputLinesReachJobLogOnSuccessAndFailure() async {
         final class MockDelegate: DownloadExecutorDelegate {
             func executorDidUpdateStatus(for download: Download, to status: DownloadStatus) {

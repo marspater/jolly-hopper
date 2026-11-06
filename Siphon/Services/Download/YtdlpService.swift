@@ -14,7 +14,7 @@ struct DependencyChecksums {
     /// The fork repository is private, so its `yt-dlp_macos` is mirrored to a
     /// public `ytdlp-<version>` prerelease of this repository. To bump, mirror
     /// the new fork asset there and change version, URL and SHA-256 together.
-    static let ytdlpVersion = "2026.10.26"
+    static let ytdlpVersion = "2026.10.26.2"
 
     static func ytdlpBuildURL(version: String = ytdlpVersion) -> URL {
         var components = URLComponents()
@@ -24,7 +24,7 @@ struct DependencyChecksums {
         return site.appending(components: "marspater", "jolly-hopper", "releases", "download", "ytdlp-\(version)", "yt-dlp_macos")
     }
     static let ytdlpURL = ytdlpBuildURL()
-    static let ytdlpExecutableSHA256 = "d391cb954bfd3864ab66920b559fec85dba8be979029905e542f055998856159"
+    static let ytdlpExecutableSHA256 = "bdc9fe53db367391e3d114c9bc7aab1565c81e2453034e88fa5c4149759525be"
 
     /// FFmpeg/FFprobe 9.0.2 release builds by Martin Riedl (ffmpeg.martin-riedl.de),
     /// static, GPL, signed with Developer ID KU3N25YGLU. Versioned URLs never
@@ -2955,6 +2955,26 @@ public struct DownloadResult: Sendable {
             try Task.checkCancellation()
             guard processController?.isCancelled != true else { throw CancellationError() }
             LoggerService.shared.log("Video stream probe failed: \(error.localizedDescription)", level: .warning)
+            return nil
+        }
+    }
+
+    /// A finished file's video height, for sources whose metadata has none, or
+    /// nil when ffprobe fails. The short side, matching `MediaFormat.parsedHeight`.
+    func probeVideoHeight(_ file: URL, processController: DownloadProcessController? = nil) async -> Int? {
+        let ffmpegDir = ffmpegPath?.deletingLastPathComponent() ?? Self.getAppSupportDirectory()
+        do {
+            let output = try await processRunner.runCommand([
+                ffmpegDir.appendingPathComponent("ffprobe").path, "-v", "error", "-select_streams", "V:0",
+                "-show_entries", "stream=width,height", "-of", "csv=p=0", file.path
+            ], processController: processController)
+            let sides = output.trimmingCharacters(in: .whitespacesAndNewlines).split(separator: ",").compactMap { Int($0) }
+            guard sides.count == 2, let height = sides.min(), height > 0 else { return nil }
+            return height
+        } catch {
+            if !(error is CancellationError) {
+                LoggerService.shared.log("Video height probe failed: \(error.localizedDescription)", level: .warning)
+            }
             return nil
         }
     }
