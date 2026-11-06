@@ -217,7 +217,13 @@ describe('Siphon Companion Server', () => {
 
   test('protocol-relative or absolute request targets return 400', async () => {
     const addr = server.address();
-    const invalidPaths = ['//evil.com/health', 'http://evil.com/health', 'ftp://evil.com/health'];
+    const invalidPaths = [
+      '//evil.com/health',
+      '/\\evil.com/health',
+      '/\\\\evil.com',
+      'http://evil.com/health',
+      'ftp://evil.com/health'
+    ];
 
     for (const targetPath of invalidPaths) {
       const result = await new Promise((resolve, reject) => {

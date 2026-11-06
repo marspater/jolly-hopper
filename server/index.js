@@ -291,7 +291,10 @@ async function handleReleaseApi(req, res, pathname, getLatestRelease) {
 const INVALID_HOST_PATTERN = /[/@?#\s]/;
 
 function parseRequestUrl(req) {
-  if (typeof req.url !== 'string' || !req.url.startsWith('/') || req.url.startsWith('//')) {
+  // Reject non-string, non-path, protocol-relative (//), or backslash-prefixed (/\) targets.
+  // WHATWG URL parsing treats backslashes in path prefixes as authority delimiters, which
+  // can allow host spoofing and URL parsing confusion.
+  if (typeof req.url !== 'string' || !req.url.startsWith('/') || req.url.startsWith('//') || req.url.startsWith('/\\')) {
     return null;
   }
   const host = req.headers.host;

@@ -39,3 +39,8 @@
 **Vulnerability:** Release asset URL validation checked hostname and path prefix but did not verify `url.user` / `url.password` (or `parsed.username` / `parsed.password`), allowing URLs with embedded user credentials to pass validation.
 **Learning:** Validating hostnames and paths without explicitly checking URL credentials permits URL userinfo credential injection (`https://user:pass@host/path`).
 **Prevention:** Always verify `parsed.username` and `parsed.password` are empty (or `url.user == nil` and `url.password == nil`) when validating trusted asset or update URLs.
+
+## 2026-11-03 - Reject Backslash-Prefixed Request Targets in Server URL Parser
+**Vulnerability:** Companion server `parseRequestUrl` checked `startsWith('//')` but did not reject paths starting with `/\`, allowing backslash-prefixed request targets (e.g., `/\evil.com/health`) to be normalized by WHATWG URL parser as an authority override (`http://evil.com/health`).
+**Learning:** WHATWG URL parser treats `\` as `/` in special schemes (`http://`), interpreting `/\` as a protocol-relative authority delimiter when resolved against a base URL, allowing host spoofing and URL parsing confusion.
+**Prevention:** Explicitly reject request targets starting with `/\` (e.g. `req.url.startsWith('/\\')`) in HTTP request target parsers.
