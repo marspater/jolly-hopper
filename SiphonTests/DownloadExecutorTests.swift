@@ -562,6 +562,16 @@ final class DownloadExecutorTests: XCTestCase {
         XCTAssertFalse(download.formatSubtitle(lang: lang).contains("1080"))
     }
 
+    func testHungHeightProbeStopsWithoutFailingTheDownload() async {
+        let service = YtdlpService(processRunner: MockYtdlpProcessRunner(mockCommand: { _ in
+            try await Task.sleep(nanoseconds: 60_000_000_000)
+            return "852,480"
+        }))
+        service.metadataCommandTimeout = 0.05
+        let height = await service.probeVideoHeight(URL(fileURLWithPath: "/tmp/Clip.mp4"))
+        XCTAssertNil(height)
+    }
+
     func testFinalOutputLinesReachJobLogOnSuccessAndFailure() async {
         final class MockDelegate: DownloadExecutorDelegate {
             func executorDidUpdateStatus(for download: Download, to status: DownloadStatus) {

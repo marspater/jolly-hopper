@@ -463,7 +463,7 @@ final class DownloadExecutor: ObservableObject {
             // must be the last status check before completion.
             if download.options.fileType.isVideo, download.diagnostics.resolvedHeight == nil,
                downloadResult.files.count == 1, let file = downloadResult.primaryFile,
-               let height = await ytdlpService.probeVideoHeight(file, processController: controller) {
+               let height = await ytdlpService.probeVideoHeight(file) {
                 download.diagnostics.resolvedHeight = height
                 download.diagnostics.resolution = download.diagnostics.resolution ?? "\(height)p"
             }

@@ -2961,13 +2961,14 @@ public struct DownloadResult: Sendable {
 
     /// A finished file's video height, for sources whose metadata has none, or
     /// nil when ffprobe fails. The short side, matching `MediaFormat.parsedHeight`.
-    func probeVideoHeight(_ file: URL, processController: DownloadProcessController? = nil) async -> Int? {
+    func probeVideoHeight(_ file: URL) async -> Int? {
         let ffmpegDir = ffmpegPath?.deletingLastPathComponent() ?? Self.getAppSupportDirectory()
         do {
-            let output = try await processRunner.runCommand([
+            // Bounded: a hung probe must not keep a finished download in its slot.
+            let output = try await runMetadataCommand([
                 ffmpegDir.appendingPathComponent("ffprobe").path, "-v", "error", "-select_streams", "V:0",
                 "-show_entries", "stream=width,height", "-of", "csv=p=0", file.path
-            ], processController: processController)
+            ])
             let sides = output.trimmingCharacters(in: .whitespacesAndNewlines).split(separator: ",").compactMap { Int($0) }
             guard sides.count == 2, let height = sides.min(), height > 0 else { return nil }
             return height
