@@ -394,7 +394,8 @@ class YtdlpService: ObservableObject {
     }
     // Test seam for the recu.me WebKit session. Production uses WKWebView.
     var recuBrowserSessionLoader: ((URL, String) async throws -> RecuBrowserSession)?
-    // Persistent, so Gayteam's Cloudflare clearance survives relaunches.
+    // Persistent, so Cloudflare clearance survives relaunches. Every player capture
+    // site shares it: the clearance belongs to the player hosts they have in common.
     private var gayteamWebDataStores: [String: WKWebsiteDataStore] = [:]
     private var gayteamWebDataStore: WKWebsiteDataStore {
         webDataStore(in: &gayteamWebDataStores) {
@@ -1248,8 +1249,8 @@ class YtdlpService: ObservableObject {
             )
         }
 
-        if isGayteamURL(url) {
-            return try await resolveGayteamMediaInfo(url: url, path: path, proxy: proxy)
+        if let captureSite = playerCaptureSite(for: url) {
+            return try await resolvePlayerCaptureMediaInfo(url: url, site: captureSite, path: path, proxy: proxy)
         }
 
         if isBoyfriendTVURL(url),
@@ -2064,15 +2065,17 @@ public struct DownloadResult: Sendable {
                 customEmbedURL = beegMedia.pageURL
                 customThumbnailURL = beegMedia.thumbnailURL
             }
-        } else if isGayteamURL(url) {
+        } else if let captureSite = playerCaptureSite(for: url) {
             // The captured stream while its player token is surely valid; else (also
             // for a recovered queue item, which has no capture time) capture again.
             let media: MediaInfo
-            if let mediaInfo, let stream = mediaInfo.manifestUrl, !stream.isEmpty, !isGayteamURL(stream),
+            if let mediaInfo, let stream = mediaInfo.manifestUrl, !stream.isEmpty, playerCaptureSite(for: stream) == nil,
                let fetchedAt = mediaInfo.fetchedAt, Date().timeIntervalSince(fetchedAt) < Self.resolvedStreamMaxAge {
                 media = mediaInfo
             } else {
-                media = try await resolveGayteamMediaInfo(url: normalizedURL, path: path.path, proxy: EgressBoundary.proxyURL)
+                media = try await resolvePlayerCaptureMediaInfo(
+                    url: normalizedURL, site: captureSite, path: path.path, proxy: EgressBoundary.proxyURL
+                )
             }
             targetURL = media.manifestUrl ?? targetURL
             customResolvedTitle = media.title
@@ -2370,8 +2373,10 @@ public struct DownloadResult: Sendable {
         // Recu session cookies are only for resolving the signed playlist URL.
         // GayForFans is public. Their CDN playlist/segments are intentionally
         // fetched without account cookies, so no browser Keychain prompt runs.
+        // A captured player stream lives on a CDN the page's cookies don't cover.
         let skipsAccountCookies = isRecuURL(normalizedURL) || isGFFURL(normalizedURL)
             || Self.isGFFMediaURL(normalizedURL) || Self.isGFFMediaURL(targetURL)
+            || playerCaptureSite(for: normalizedURL) != nil
         if skipsAccountCookies {
             LoggerService.shared.log("Protected-site stream download uses the resolved CDN URL without forwarding account cookies", level: .debug)
         } else if (options.rawCookies?.isEmpty == false) || !additionalCookies.isEmpty,
@@ -4098,11 +4103,22 @@ public struct DownloadResult: Sendable {
         )
     }
 
-    // MARK: - Gayteam (player capture)
+    // MARK: - Player capture
 
-    private func isGayteamURL(_ urlOrHost: String) -> Bool {
+    /// A site whose video exists only in a third-party player, with the name
+    /// shown as the uploader and in error messages.
+    struct PlayerCaptureSite: Sendable, Equatable {
+        let host: String
+        let name: String
+    }
+
+    /// The capture site for a URL or bare host, matching the host or a subdomain.
+    func playerCaptureSite(for urlOrHost: String) -> PlayerCaptureSite? {
         let host = (URL(string: urlOrHost)?.host ?? urlOrHost).lowercased()
-        return host == "gayteam.club" || host.hasSuffix(".gayteam.club")
+        return [
+            PlayerCaptureSite(host: "gayteam.club", name: "Gayteam"),
+            PlayerCaptureSite(host: "fxggxt.com", name: "FXGGXT")
+        ].first { host == $0.host || host.hasSuffix("." + $0.host) }
     }
 
     /// A stream a player loaded, and the player page that loaded it. That page's
@@ -4306,12 +4322,14 @@ public struct DownloadResult: Sendable {
         )
     }
 
-    /// Gayteam lazy-loads third-party players (DoodStream, StreamWish and similar
-    /// hosts that rotate domains) behind Cloudflare; yt-dlp supports neither. Siphon
-    /// takes the stream a player loads in its WebKit session and probes it.
-    private func resolveGayteamMediaInfo(url: String, path: String, proxy: String?) async throws -> MediaInfo {
+    /// These sites embed third-party players (DoodStream, StreamWish and similar
+    /// hosts that rotate domains), often behind Cloudflare; yt-dlp supports neither.
+    /// Siphon takes the stream a player loads in its WebKit session and probes it.
+    private func resolvePlayerCaptureMediaInfo(
+        url: String, site: PlayerCaptureSite, path: String, proxy: String?
+    ) async throws -> MediaInfo {
         guard let pageURL = URL(string: url) else {
-            throw YtdlpError.downloadFailed("Unsupported Gayteam URL.")
+            throw YtdlpError.downloadFailed("Unsupported \(site.name) URL.")
         }
         let capture: BrowserCapture
         if let loader = browserCaptureLoader {
@@ -4319,10 +4337,10 @@ public struct DownloadResult: Sendable {
         } else {
             guard processRunner is DefaultYtdlpProcessRunner else { throw YtdlpError.cloudflareBlocked }
             let requestedAt = Date()
-            capture = try await withExclusiveWebKitSession(site: "gayteam.club") {
+            capture = try await withExclusiveWebKitSession(site: site.host) {
                 try await captureBrowserStreams(
                     pageURL: pageURL,
-                    siteHost: "gayteam.club",
+                    siteHost: site.host,
                     store: gayteamWebDataStore,
                     requestedAt: requestedAt
                 )
@@ -4367,7 +4385,7 @@ public struct DownloadResult: Sendable {
                 title: title ?? parsed.title,
                 thumbnail: thumbnail ?? parsed.thumbnail,
                 duration: parsed.duration,
-                uploader: "Gayteam",
+                uploader: site.name,
                 formats: parsed.formats,
                 webpageUrl: stream.frameURL,
                 originalUrl: stream.url,
@@ -4378,8 +4396,8 @@ public struct DownloadResult: Sendable {
             return info
         }
         throw YtdlpError.downloadFailed(capture.streams.isEmpty
-            ? "Gayteam's players didn't load a video. It may have been removed from every player on the page."
-            : "None of the videos Gayteam's players loaded could be downloaded. Retry in a moment.")
+            ? "\(site.name)'s players didn't load a video. It may have been removed from every player on the page."
+            : "None of the videos \(site.name)'s players loaded could be downloaded. Retry in a moment.")
     }
 
     private func isGayPornTubeURL(_ urlOrHost: String) -> Bool {
@@ -8000,7 +8018,7 @@ public struct DownloadResult: Sendable {
         // installed it, splits the file over four connections. Scoped to https
         // so HLS (recu, GayForFans, BoyfriendTV pacing) stays native; a failure
         // falls back to the native downloader (see disableAria2c).
-        let singleFileSite = isGayteamURL(url) || isGuywhURL(url) || isBestCamURL(url) ||
+        let singleFileSite = playerCaptureSite(for: url) != nil || isGuywhURL(url) || isBestCamURL(url) ||
             parsedHost.contains("abyss") || parsedHost.contains("sssrr.org") ||
             isStarwankURL(url) || isPussyspaceURL(url)
         if singleFileSite, !args.contains("--downloader"), Self.findAria2cPath() != nil {
