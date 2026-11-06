@@ -184,13 +184,18 @@ struct SiphonApp: App {
 
         let queryItems = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems
         let videoUrl = queryItems?.first(where: { $0.name == "url" })?.value
+        let isFastDownload = url.host == "fast-download"
+        // Fast downloads each start their own job; interactive links share one sheet.
+        // Taken before validation: even an invalid new link supersedes a pending one.
+        let generation = isFastDownload ? nil : appState.beginInteractiveLink()
         guard let target = Self.externalDownloadTarget(from: videoUrl) else {
             rejectExternalTarget(videoUrl)
             return
         }
         admitExternalDownload(
             target,
-            isFastDownload: url.host == "fast-download",
+            generation: generation,
+            isFastDownload: isFastDownload,
             rawUserAgent: queryItems?.first(where: { $0.name == "ua" })?.value,
             rawBrowserSource: queryItems?.first(where: { $0.name == "browser" })?.value
         )
@@ -234,12 +239,11 @@ struct SiphonApp: App {
 
     private func admitExternalDownload(
         _ target: (raw: String, url: URL),
+        generation: Int?,
         isFastDownload: Bool,
         rawUserAgent: String?,
         rawBrowserSource: String?
     ) {
-        // Fast downloads each start their own job; interactive links share one sheet.
-        let generation = isFastDownload ? nil : appState.beginInteractiveLink()
         // The target policy resolves DNS, which can block for seconds on a slow
         // or unreachable resolver. Keep that off the main actor.
         Task { @MainActor in
