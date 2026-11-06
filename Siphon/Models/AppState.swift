@@ -324,6 +324,7 @@ public final class AppState: ObservableObject {
     @Published var showWhatsNew: Bool = false
     @Published var whatsNewFeatures: [ReleaseFeature] = []
     @Published var ytdlpUpdateMessage: YtdlpUpdateMessage?
+    @Published var externalLinkRejected = false
     @Published var isUpdatingYtdlp: Bool = false
     @Published var ytdlpUpdateProgress: Double = 0
 

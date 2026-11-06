@@ -1586,6 +1586,7 @@ class YtdlpService: ObservableObject {
             } catch {
                 // A post with several videos: --dump-json prints one object per video.
                 if output.split(whereSeparator: \.isNewline).filter({ $0.hasPrefix("{") }).count > 1 {
+                    LoggerService.shared.log("Metadata has several JSON objects (\(error)); trying the playlist summary", level: .info)
                     return try await fetchPlaylistSummaryInfo(
                         path: path,
                         url: url,

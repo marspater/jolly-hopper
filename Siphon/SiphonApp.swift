@@ -185,7 +185,7 @@ struct SiphonApp: App {
         let queryItems = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems
         let videoUrl = queryItems?.first(where: { $0.name == "url" })?.value
         guard let target = Self.externalDownloadTarget(from: videoUrl) else {
-            Self.rejectExternalTarget(videoUrl)
+            rejectExternalTarget(videoUrl)
             return
         }
         admitExternalDownload(
@@ -221,12 +221,15 @@ struct SiphonApp: App {
         return (normalized, url)
     }
 
-    private static func rejectExternalTarget(_ rawValue: String?) {
-        NotificationService.shared.sendExternalLinkRejected()
+    /// An in-app alert, so the user sees it with notifications off. It names no host,
+    /// because any web page can choose that text.
+    private func rejectExternalTarget(_ rawValue: String?) {
         LoggerService.shared.log(
             "Rejected external download target outside the public network boundary: \(LoggerService.sanitizeURLForLog(rawValue ?? "<missing>"))",
             level: .warning
         )
+        appState.externalLinkRejected = true
+        bringMainWindowsForward()
     }
 
     private func admitExternalDownload(
@@ -244,12 +247,13 @@ struct SiphonApp: App {
             let isAllowed = await Task.detached(priority: .userInitiated) {
                 ExternalDownloadTargetPolicy.isAllowed(targetURL)
             }.value
-            guard isAllowed else {
-                Self.rejectExternalTarget(target.raw)
-                return
-            }
+            // First, so an older link's failure never reads as the newer link failing.
             if let generation, !appState.isCurrentInteractiveLink(generation) {
                 LoggerService.shared.log("Ignored an external download link superseded by a newer one.", level: .info)
+                return
+            }
+            guard isAllowed else {
+                rejectExternalTarget(target.raw)
                 return
             }
             acceptExternalDownload(
