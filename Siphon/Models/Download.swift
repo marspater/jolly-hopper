@@ -385,7 +385,9 @@ class Download: ObservableObject, Identifiable {
         }
 
         let lower = error.lowercased()
-        let rawError = log.isEmpty ? error : log
+        // The details box shows only the first lines, so yt-dlp's own error goes on top.
+        let terminalError = log.split(whereSeparator: \.isNewline).last { $0.contains("ERROR:") }
+        let rawError = log.isEmpty ? error : terminalError.map { "\($0)\n\n\(log)" } ?? log
 
         // Partial jobs retain finished files and remain actionable for retry.
         if hasPartialFailure || status == .completed {
@@ -421,6 +423,14 @@ class Download: ObservableObject, Identifiable {
             return ErrorUXInfo(
                 headline: lang.s("couldnt_download"),
                 description: lang.s("site_sign_in_required_desc"),
+                actionType: .retry,
+                rawError: rawError
+            )
+        } else if error == lang.s("access_denied") {
+            // Checked before the cookie wording below: a 403 is often not a sign-in problem.
+            return ErrorUXInfo(
+                headline: lang.s("couldnt_download"),
+                description: lang.s("access_denied_desc"),
                 actionType: .retry,
                 rawError: rawError
             )

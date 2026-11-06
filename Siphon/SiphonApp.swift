@@ -185,7 +185,7 @@ struct SiphonApp: App {
         let queryItems = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems
         let videoUrl = queryItems?.first(where: { $0.name == "url" })?.value
         guard let target = Self.externalDownloadTarget(from: videoUrl) else {
-            Self.logRejectedExternalTarget(videoUrl)
+            Self.rejectExternalTarget(videoUrl)
             return
         }
         admitExternalDownload(
@@ -221,7 +221,8 @@ struct SiphonApp: App {
         return (normalized, url)
     }
 
-    private static func logRejectedExternalTarget(_ rawValue: String?) {
+    private static func rejectExternalTarget(_ rawValue: String?) {
+        NotificationService.shared.sendExternalLinkRejected()
         LoggerService.shared.log(
             "Rejected external download target outside the public network boundary: \(LoggerService.sanitizeURLForLog(rawValue ?? "<missing>"))",
             level: .warning
@@ -244,7 +245,7 @@ struct SiphonApp: App {
                 ExternalDownloadTargetPolicy.isAllowed(targetURL)
             }.value
             guard isAllowed else {
-                Self.logRejectedExternalTarget(target.raw)
+                Self.rejectExternalTarget(target.raw)
                 return
             }
             if let generation, !appState.isCurrentInteractiveLink(generation) {

@@ -224,6 +224,17 @@ final class NotificationService: NSObject, @unchecked Sendable, UNUserNotificati
         self.sendNotification(content: content, logName: "Failed: \(cleanFilename)")
     }
 
+    /// Generic on purpose: the link's host is text any web page can choose.
+    func sendExternalLinkRejected(languageService: LanguageService? = nil) {
+        let lang = languageService ?? LanguageService()
+        let content = UNMutableNotificationContent()
+        content.title = lang.s("external_link_rejected_title")
+        content.body = lang.s("external_link_rejected_body")
+        content.sound = .default
+        content.categoryIdentifier = "download"
+        self.sendNotification(content: content, logName: "External link rejected")
+    }
+
     func sendDownloadStopped(filename: String, languageService: LanguageService? = nil) {
         let cleanFilename = filename.decodingHTMLEntities()
         let lang = languageService ?? LanguageService()

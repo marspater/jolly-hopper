@@ -19,6 +19,15 @@ final class DownloadExecutorTests: XCTestCase {
         XCTAssertTrue(DownloadExecutor.isPostprocessingOutput("[ExtractAudio] Destination: song.mp3"))
         XCTAssertTrue(DownloadExecutor.isPostprocessingOutput("[FixupM3u8] Fixing MPEG-TS in MP4 container"))
         XCTAssertFalse(DownloadExecutor.isPostprocessingOutput("[SubtitlesConvertor] Converting subtitles"))
+
+        let merge = "[Merger] Merging formats"
+        let nextItem = "[download] Downloading item 2 of 20"
+        XCTAssertEqual(DownloadExecutor.statusAfterOutput([merge], current: .downloading), .processing)
+        XCTAssertEqual(DownloadExecutor.statusAfterOutput([nextItem], current: .processing), .downloading)
+        XCTAssertEqual(DownloadExecutor.statusAfterOutput([nextItem, merge], current: .downloading), .processing)
+        XCTAssertNil(DownloadExecutor.statusAfterOutput([merge, nextItem], current: .downloading))
+        XCTAssertNil(DownloadExecutor.statusAfterOutput(["[info] sample"], current: .processing))
+        XCTAssertNil(DownloadExecutor.statusAfterOutput([merge], current: .fetching))
     }
 
     func testPeakSpeedParserOrdersUnitsAndRejectsNonRates() {

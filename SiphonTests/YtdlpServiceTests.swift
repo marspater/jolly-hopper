@@ -1640,7 +1640,79 @@ final class YtdlpServiceTests: XCTestCase {
         let safari = YtdlpError.downloadFailed("ERROR: Safari cookies: Operation not permitted")
         XCTAssertEqual(DownloadExecutor.errorMessage(for: safari, languageService: lang), lang.s("safari_fda_required"))
         let forbidden = YtdlpError.downloadFailed("HTTP Error 403: Forbidden")
-        XCTAssertEqual(DownloadExecutor.errorMessage(for: forbidden, languageService: lang), lang.s("login_required"))
+        XCTAssertEqual(DownloadExecutor.errorMessage(for: forbidden, languageService: lang), lang.s("access_denied"))
+    }
+
+    func testPermissionErrorOutsideCookieStoreKeepsBrowserCookies() async throws {
+        let runs = TestBox<[[String]]>([])
+        service.resetCookieDenial()
+        defer { service.resetCookieDenial() }
+        service.processRunner = MockYtdlpProcessRunner(mockDownloadResult: { args in
+            runs.value.append(args)
+            throw YtdlpError.downloadFailed("unable to open for writing: [Errno 13] Permission denied: '/Volumes/x/a.mp4.part'")
+        })
+        var options = DownloadOptions.default
+        options.browserCookieSource = "chrome"
+        do {
+            _ = try await service.download(url: "https://example.com/video", options: options,
+                                           onProgress: { _, _, _ in }, onOutput: { _ in })
+            XCTFail("The folder error must fail the download")
+        } catch {}
+        XCTAssertFalse(runs.value.isEmpty)
+        XCTAssertTrue(runs.value.allSatisfy { $0.contains("--cookies-from-browser") })
+
+        let lang = LanguageService()
+        let notPermitted = YtdlpError.downloadFailed("[Errno 1] Operation not permitted: '/Volumes/x/a.mp4.part'")
+        XCTAssertEqual(DownloadExecutor.errorMessage(for: notPermitted, languageService: lang), lang.s("permission_denied"))
+    }
+
+    func testOutputTemplateKeepsDollarSignsLiteralAndSortPrefersChosenCodecs() async throws {
+        let captured = TestBox<[String]>([])
+        service.processRunner = MockYtdlpProcessRunner(mockDownloadResult: { args in
+            captured.value = args
+            throw CancellationError()
+        })
+        var options = DownloadOptions.default
+        options.customFilename = "Fix $PATH now"
+        options.videoCodec = .h264
+        options.audioCodec = .aac
+        options.videoResolution = .r720p
+        do {
+            _ = try await service.download(url: "https://example.com/video", options: options,
+                                           onProgress: { _, _, _ in }, onOutput: { _ in })
+            XCTFail("Expected cancellation")
+        } catch is CancellationError {}
+
+        let args = captured.value
+        let template = try XCTUnwrap(args.firstIndex(of: "-o").map { args[$0 + 1] })
+        XCTAssertEqual(template, "Fix %(siphon_unset|$)sPATH now.%(ext)s")
+        XCTAssertFalse(args.contains("--windows-filenames"))
+        let sort = try XCTUnwrap(args.firstIndex(of: "-S").map { args[$0 + 1] })
+        XCTAssertTrue(sort.hasPrefix("vcodec:h264,acodec:aac,res:720,"), sort)
+    }
+
+    func testNonPlaylistURLWithSeveralVideosBecomesAPlaylist() async throws {
+        service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
+            if args.contains("--dump-single-json") {
+                return #"{"_type":"playlist","id":"p","title":"Post","entries":[{"id":"1","title":"a","url":"https://example.com/1"},{"id":"2","title":"b","url":"https://example.com/2"}]}"#
+            }
+            return #"{"id":"1","title":"a"}"# + "\n" + #"{"id":"2","title":"b"}"# + "\n"
+        })
+        let info = try await service.fetchInfo(url: "https://example.com/post/123")
+        XCTAssertNotNil(info.playlist)
+    }
+
+    func testForbiddenDownloadOffersRetryAndShowsTheRealErrorFirst() throws {
+        let lang = LanguageService()
+        let download = Download(url: "https://example.com/video", options: .default)
+        download.status = .failed
+        download.errorMessage = lang.s("access_denied")
+        download.log = "[info] Downloading 1 format(s): 0\n[ERROR] ERROR: unable to download video data: HTTP Error 403: Forbidden\n"
+
+        let info = try XCTUnwrap(download.errorUXInfo(lang: lang))
+        XCTAssertEqual(info.description, lang.s("access_denied_desc"))
+        XCTAssertEqual(info.actionType, .retry)
+        XCTAssertTrue(info.rawError.hasPrefix("[ERROR] ERROR: unable to download video data: HTTP Error 403: Forbidden\n\n[info]"))
     }
 
     func testYtdlpInstallSwapsTheBinaryInPlace() async throws {
@@ -4283,6 +4355,34 @@ final class YtdlpServiceTests: XCTestCase {
             _ = try await service.download(url: page, options: options, mediaInfo: info, onProgress: { _, _, _ in }, onOutput: { _ in })
             XCTFail("Expected cancellation")
         } catch is CancellationError {}
+    }
+
+    func testPlayerCaptureFallsBackToPageTitleAndVideoPoster() async throws {
+        let stream = YtdlpService.CapturedStream(
+            url: "https://vcdn03.gayporno.fm/key%3Dsample%2Cend%3D1%2Fsample.mp4",
+            frameURL: "https://www.gayporno.fm/sample_1.html"
+        )
+        service.browserCaptureLoader = { _ in
+            YtdlpService.BrowserCapture(
+                pageHTML: """
+                <title>Sample Title</title>
+                <video
+                    id="video"
+                    poster="https://icdn05.gayporno.fm/1/sample.jpg"
+                >
+                """,
+                streams: [stream]
+            )
+        }
+        service.processRunner = MockYtdlpProcessRunner(
+            mockCommand: { _ in
+                #"{"id":"s","title":"hash","formats":[{"format_id":"mp4","ext":"mp4","protocol":"https"}]}"#
+            }
+        )
+        let info = try await service.fetchInfo(url: stream.frameURL)
+        XCTAssertEqual(info.title, "Sample Title")
+        XCTAssertEqual(info.thumbnail, "https://icdn05.gayporno.fm/1/sample.jpg")
+        XCTAssertEqual(info.manifestUrl, stream.url)
     }
 
     func testGayteamDownloadReusesAFreshCaptureAndRecapturesAStaleOne() async throws {
