@@ -184,13 +184,18 @@ struct SiphonApp: App {
 
         let queryItems = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems
         let videoUrl = queryItems?.first(where: { $0.name == "url" })?.value
+        let isFastDownload = url.host == "fast-download"
+        // Fast downloads each start their own job; interactive links share one sheet.
+        // Taken before validation: even an invalid new link supersedes a pending one.
+        let generation = isFastDownload ? nil : appState.beginInteractiveLink()
         guard let target = Self.externalDownloadTarget(from: videoUrl) else {
-            Self.logRejectedExternalTarget(videoUrl)
+            rejectExternalTarget(videoUrl)
             return
         }
         admitExternalDownload(
             target,
-            isFastDownload: url.host == "fast-download",
+            generation: generation,
+            isFastDownload: isFastDownload,
             rawUserAgent: queryItems?.first(where: { $0.name == "ua" })?.value,
             rawBrowserSource: queryItems?.first(where: { $0.name == "browser" })?.value
         )
@@ -221,21 +226,24 @@ struct SiphonApp: App {
         return (normalized, url)
     }
 
-    private static func logRejectedExternalTarget(_ rawValue: String?) {
+    /// An in-app alert, so the user sees it with notifications off. It names no host,
+    /// because any web page can choose that text.
+    private func rejectExternalTarget(_ rawValue: String?) {
         LoggerService.shared.log(
             "Rejected external download target outside the public network boundary: \(LoggerService.sanitizeURLForLog(rawValue ?? "<missing>"))",
             level: .warning
         )
+        appState.externalLinkRejected = true
+        bringMainWindowsForward()
     }
 
     private func admitExternalDownload(
         _ target: (raw: String, url: URL),
+        generation: Int?,
         isFastDownload: Bool,
         rawUserAgent: String?,
         rawBrowserSource: String?
     ) {
-        // Fast downloads each start their own job; interactive links share one sheet.
-        let generation = isFastDownload ? nil : appState.beginInteractiveLink()
         // The target policy resolves DNS, which can block for seconds on a slow
         // or unreachable resolver. Keep that off the main actor.
         Task { @MainActor in
@@ -243,12 +251,13 @@ struct SiphonApp: App {
             let isAllowed = await Task.detached(priority: .userInitiated) {
                 ExternalDownloadTargetPolicy.isAllowed(targetURL)
             }.value
-            guard isAllowed else {
-                Self.logRejectedExternalTarget(target.raw)
-                return
-            }
+            // First, so an older link's failure never reads as the newer link failing.
             if let generation, !appState.isCurrentInteractiveLink(generation) {
                 LoggerService.shared.log("Ignored an external download link superseded by a newer one.", level: .info)
+                return
+            }
+            guard isAllowed else {
+                rejectExternalTarget(target.raw)
                 return
             }
             acceptExternalDownload(

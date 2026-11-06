@@ -405,8 +405,8 @@ final class DownloadExecutor: ObservableObject {
                     if !lines.isEmpty {
                         let combined = lines.joined(separator: "\n") + "\n"
                         Self.appendToLog(for: download, text: combined)
-                        if download.status == .downloading && lines.contains(where: Self.isPostprocessingOutput) {
-                            self.delegate?.executorDidUpdateStatus(for: download, to: .processing)
+                        if let status = Self.statusAfterOutput(lines, current: download.status) {
+                            self.delegate?.executorDidUpdateStatus(for: download, to: status)
                             self.delegate?.executorDidRequestBroadcast()
                         }
                     }
@@ -585,6 +585,17 @@ final class DownloadExecutor: ObservableObject {
         ["[Merger]", "[Fixup", "[ExtractAudio]", "[VideoRemuxer]", "[VideoConvertor]", "[EmbedSubtitle]",
          "[ModifyChapters]", "[Metadata]", "[EmbedThumbnail]", "[SplitChapters]"]
             .contains { line.hasPrefix($0) }
+    }
+
+    /// The status a batch of output moves an active job to: a post-download step means
+    /// Processing, and a playlist's next item means it is downloading again.
+    static func statusAfterOutput(_ lines: [String], current: DownloadStatus) -> DownloadStatus? {
+        guard current == .downloading || current == .processing,
+              let last = lines.last(where: { isPostprocessingOutput($0) || $0.hasPrefix("[download] Downloading item ") }) else {
+            return nil
+        }
+        let status: DownloadStatus = isPostprocessingOutput(last) ? .processing : .downloading
+        return status == current ? nil : status
     }
 
     /// "20.00MiB/s", "900KiB/s" or aria2c's "27MiB/s" in bytes per second; nil
@@ -834,15 +845,17 @@ final class DownloadExecutor: ObservableObject {
                     return lang.s("safari_fda_required")
                 } else if lower.contains("cloudflare") || lower.contains("cf-chl-") || lower.contains("anti-bot") || lower.contains("captcha") || lower.contains("turnstile") || lower.contains("just a moment...") {
                     return lang.s("cloudflare_blocked")
-                } else if lower.contains("sign in") || lower.contains("private video") || lower.contains("login") || lower.contains("members-only") || lower.contains("403 forbidden") || lower.contains("http error 403") {
+                } else if lower.contains("sign in") || lower.contains("private video") || lower.contains("login") || lower.contains("members-only") {
                     return lang.s("login_required")
+                } else if lower.contains("403 forbidden") || lower.contains("http error 403") {
+                    return lang.s("access_denied")
                 } else if lower.contains("drm") || lower.contains("widevine") || lower.contains("playready") || lower.contains("fairplay") || lower.contains("encrypted media") || lower.contains("drm protected") || lower.contains("drm-protected") {
                     return lang.s("drm_protected")
                 } else if lower.contains("unavailable") || lower.contains("removed") || lower.contains("404 not found") || lower.contains("http error 404") {
                     return lang.s("video_unavailable")
                 } else if lower.contains("no space left") || lower.contains("disk full") {
                     return lang.s("disk_full")
-                } else if lower.contains("permission denied") {
+                } else if lower.contains("permission denied") || lower.contains("operation not permitted") {
                     return lang.s("permission_denied")
                 } else if lower.contains("unsupported url") {
                     return lang.s("unsupported_url")

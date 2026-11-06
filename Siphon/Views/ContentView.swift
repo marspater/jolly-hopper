@@ -115,6 +115,13 @@ struct ContentView: View {
                 }
         }
         .siphonAdaptiveRendering()
+        .alert(languageService.s("external_link_rejected_title"), isPresented: $appState.externalLinkRejected) {
+            Button(languageService.s("ok"), role: .cancel) {
+                // Nothing to do: SwiftUI dismisses the alert and clears the flag.
+            }
+        } message: {
+            Text(languageService.s("external_link_rejected_body"))
+        }
         .alert(languageService.s("update_available_title"), isPresented: $showUpdateAlert) {
             Button(languageService.s("update_now")) {
                 PreferencesWindowManager.shared.showPreferencesWindow(

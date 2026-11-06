@@ -1584,6 +1584,18 @@ class YtdlpService: ObservableObject {
                 info.fetchedAt = Date()
                 return info
             } catch {
+                // A post with several videos: --dump-json prints one object per video.
+                if output.split(whereSeparator: \.isNewline).filter({ $0.hasPrefix("{") }).count > 1 {
+                    LoggerService.shared.log("Metadata has several JSON objects (\(error)); trying the playlist summary", level: .info)
+                    return try await fetchPlaylistSummaryInfo(
+                        path: path,
+                        url: url,
+                        rawCookies: rawCookies,
+                        rawUserAgent: rawUserAgent,
+                        browserCookieSource: browserCookieSource,
+                        proxy: proxy
+                    )
+                }
                 LoggerService.shared.log("Failed to decode MediaInfo JSON: \(error)", level: .error)
                 throw YtdlpError.parseError
             }
@@ -1688,14 +1700,15 @@ class YtdlpService: ObservableObject {
 
         let decoder = JSONDecoder()
         // A playlist-looking URL (for example a "?p=" post link) can resolve to a
-        // single video; only a real playlist may be summarized without formats.
+        // single video; only a real multi-entry result may be summarized without formats.
         struct ResultKind: Decodable {
             let type: String?
             enum CodingKeys: String, CodingKey {
                 case type = "_type"
             }
         }
-        guard (try? decoder.decode(ResultKind.self, from: data))?.type == "playlist" else {
+        let resultType = (try? decoder.decode(ResultKind.self, from: data))?.type
+        guard resultType == "playlist" || resultType == "multi_video" else {
             throw YtdlpError.parseError
         }
         let info = try decoder.decode(MediaInfo.self, from: data)
@@ -2218,11 +2231,10 @@ public struct DownloadResult: Sendable {
             outputTemplate = "%(title)s [%(id)s].%(ext)s"
         } else if let customFilename = options.customFilename ?? customResolvedTitle, !customFilename.isEmpty {
             let safeName = Self.sanitizeFilename(customFilename)
-            outputTemplate = "\(safeName).%(ext)s"
+            outputTemplate = "\(Self.literalOutputTemplateText(safeName)).%(ext)s"
         } else {
             outputTemplate = "%(title)s.%(ext)s"
         }
-        args.append("--windows-filenames")
         args.append("--continue")
         args.append(contentsOf: ["-o", outputTemplate])
         args.append(contentsOf: ["--print", "after_move:SIPHON_FINAL_PATH:%(filepath)s"])
@@ -2727,6 +2739,8 @@ public struct DownloadResult: Sendable {
                 )
                 allFileURLs[index] = processed
                 if finalFileURL == source { finalFileURL = processed }
+                // Same line yt-dlp prints: a resume must see the new name as this job's file.
+                onOutput("SIPHON_FINAL_PATH:\(processed.path)\n")
             }
         }
 
@@ -2740,6 +2754,7 @@ public struct DownloadResult: Sendable {
                                                         processController: processController)
                 allFileURLs[index] = video
                 if gif == primary { finalFileURL = video }
+                onOutput("SIPHON_FINAL_PATH:\(video.path)\n")
             }
         }
 
@@ -3263,10 +3278,17 @@ public struct DownloadResult: Sendable {
             }
 
             args.append(contentsOf: ["-f", selector])
+            // Without formats to rank (a playlist), yt-dlp must apply the chosen codecs,
+            // ahead of resolution as `compareVideoFormats` does. These keys only prefer,
+            // so a video without that codec still downloads.
+            let codecSort = options.videoResolution == .worst ? "" : [
+                options.videoCodec.flatMap { $0 == .auto ? nil : "vcodec:\($0.rawValue)," },
+                options.audioCodec.flatMap { $0 == .auto ? nil : "acodec:\($0.rawValue)," }
+            ].compactMap { $0 }.joined()
             if let h = maxH {
-                args.append(contentsOf: ["-S", "res:\(h),lang,quality,fps,hdr:12,vbr,abr,filesize"])
+                args.append(contentsOf: ["-S", "\(codecSort)res:\(h),lang,quality,fps,hdr:12,vbr,abr,filesize"])
             } else {
-                args.append(contentsOf: ["-S", "lang,quality,res,height,fps,hdr:12,vbr,abr,filesize"])
+                args.append(contentsOf: ["-S", "\(codecSort)lang,quality,res,height,fps,hdr:12,vbr,abr,filesize"])
             }
         }
 
@@ -4117,7 +4139,10 @@ public struct DownloadResult: Sendable {
         let host = (URL(string: urlOrHost)?.host ?? urlOrHost).lowercased()
         return [
             PlayerCaptureSite(host: "gayteam.club", name: "Gayteam"),
-            PlayerCaptureSite(host: "fxggxt.com", name: "FXGGXT")
+            PlayerCaptureSite(host: "fxggxt.com", name: "FXGGXT"),
+            // yt-dlp's generic extractor always sends Accept-Encoding: identity. The site
+            // caches that variant for days, so its signed video URL has already expired.
+            PlayerCaptureSite(host: "gayporno.fm", name: "GayPorno.fm")
         ].first { host == $0.host || host.hasSuffix("." + $0.host) }
     }
 
@@ -5576,7 +5601,8 @@ public struct DownloadResult: Sendable {
 
     nonisolated private static let ogImageRegexes: [NSRegularExpression] = [
         #"<meta[^>]+property\s*=\s*["']og:image["'][^>]+content\s*=\s*["']([^"']+)["']"#,
-        #"<meta[^>]+content\s*=\s*["']([^"']+)["'][^>]+property\s*=\s*["']og:image["']"#
+        #"<meta[^>]+content\s*=\s*["']([^"']+)["'][^>]+property\s*=\s*["']og:image["']"#,
+        #"<video[^>]+poster\s*=\s*["']([^"']+)["']"#
     ].compactMap { try? NSRegularExpression(pattern: $0, options: .caseInsensitive) }
 
     nonisolated private static let htmlTagStripRegex = try? NSRegularExpression(pattern: #"<[^>]+>"#, options: [])
@@ -8097,9 +8123,10 @@ public struct DownloadResult: Sendable {
         if lower.contains("extracted") && lower.contains("cookies") {
             return false
         }
-        return lower.contains("operation not permitted") ||
+        // A permission error alone can be the save folder, not the browser's cookie store.
+        let namesCookieStore = lower.contains("cookie") || lower.contains("safari")
+        return (namesCookieStore && (lower.contains("operation not permitted") || lower.contains("errno 1"))) ||
                lower.contains("cookies.binarycookies") ||
-               lower.contains("errno 1") ||
                (lower.contains("could not find") && lower.contains("cookies database")) ||
                lower.contains("failed to decrypt") ||
                (lower.contains("unable to extract") && lower.contains("cookies"))
@@ -8346,6 +8373,12 @@ public struct DownloadResult: Sendable {
 
     nonisolated static func sanitizeFilename(_ filename: String) -> String {
         sanitizedFilenameOrNil(filename) ?? "download"
+    }
+
+    /// yt-dlp expands environment variables in `-o` before it substitutes fields and
+    /// has no escape for `$`, so a field default is what keeps a `$` in a name literal.
+    nonisolated static func literalOutputTemplateText(_ text: String) -> String {
+        text.replacingOccurrences(of: "$", with: "%(siphon_unset|$)s")
     }
 
     /// Nil when nothing in `filename` survives sanitizing.
