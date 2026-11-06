@@ -574,10 +574,14 @@ struct PreferencesView: View {
                 resetPresetForm()
                 showCreatePresetSheet = true
             } label: {
-                Label(languageService.s("create_preset"), systemImage: "plus.circle")
-                    .foregroundColor(SiphonTheme.accentText)
+                HStack(spacing: 6) {
+                    Image(systemName: "plus.circle")
+                        .accessibilityHidden(true)
+                    Text(languageService.s("create_preset"))
+                }
             }
-            .buttonStyle(.borderless)
+            .buttonStyle(.siphonSecondary)
+            .controlSize(.small)
         }
     }
 
@@ -645,7 +649,7 @@ struct PreferencesView: View {
     }
 
     private var formatSettingsSection: some View {
-        Section {
+        Section(siphonHeader: languageService.s("format_settings")) {
             SiphonMenuPicker(
                 languageService.s("file_type"), selection: $defaultFileType,
                 options: MediaFileType.allCases.map { type in (value: type.rawValue.lowercased(), title: type.rawValue) }
@@ -666,15 +670,15 @@ struct PreferencesView: View {
                 Button {
                     resetFormatToDefaults()
                 } label: {
-                    Label(languageService.s("reset_to_defaults"), systemImage: "arrow.counterclockwise")
+                    HStack(spacing: 6) {
+                        Image(systemName: "arrow.counterclockwise")
+                            .accessibilityHidden(true)
+                        Text(languageService.s("reset_to_defaults"))
+                    }
                 }
-                .buttonStyle(.borderless)
-                .foregroundColor(.secondary)
+                .buttonStyle(.siphonSecondary)
                 .controlSize(.small)
             }
-        } header: {
-            Text(languageService.s("format_settings"))
-                .font(.siphonStandardSemibold)
         }
     }
 
