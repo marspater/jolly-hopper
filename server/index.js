@@ -42,6 +42,7 @@ segment0.ts
 
 // Pre-define standard security headers to avoid recreating header object literals on every HTTP response
 const DEFAULT_SECURITY_HEADERS = Object.freeze({
+  'Strict-Transport-Security': 'max-age=31536000; includeSubDomains',
   'X-Content-Type-Options': 'nosniff',
   'X-Frame-Options': 'DENY',
   'Referrer-Policy': 'no-referrer',
