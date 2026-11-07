@@ -451,12 +451,11 @@ struct PreferencesView: View {
                             }
                         } label: {
                             Text(languageService.s("check_updates"))
-                                .font(.siphonSecondaryMedium)
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 4)
-                                .siphonInteractiveGlass(cornerRadius: SiphonTheme.radiusControl)
                         }
-                        .buttonStyle(.bouncy(scale: 0.95, hover: 1.025))
+                        .buttonStyle(.siphonSecondary)
+                        .controlSize(.small)
+                        .help(languageService.s("check_updates"))
+                        .accessibilityLabel(languageService.s("check_updates"))
                         .frame(height: 28)
                         .transition(.opacity.combined(with: .scale(scale: 0.92)))
                     }
