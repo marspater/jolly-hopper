@@ -113,6 +113,8 @@
 		E1001061 /* SiphonPerformanceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1000061 /* SiphonPerformanceTests.swift */; };
 		E1001062 /* SiphonHostedPerformanceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1000062 /* SiphonHostedPerformanceTests.swift */; };
 		E1001063 /* LaunchPerformanceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1000063 /* LaunchPerformanceTests.swift */; };
+		E1001070 /* siphon-pgrp.c in Sources */ = {isa = PBXBuildFile; fileRef = E0000070 /* siphon-pgrp.c */; };
+		E1001071 /* siphon-pgrp in Copy Helpers */ = {isa = PBXBuildFile; fileRef = E1000070 /* siphon-pgrp */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -227,7 +229,22 @@
 		E1000061 /* SiphonPerformanceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SiphonPerformanceTests.swift; sourceTree = "<group>"; };
 		E1000062 /* SiphonHostedPerformanceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SiphonHostedPerformanceTests.swift; sourceTree = "<group>"; };
 		E1000063 /* LaunchPerformanceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaunchPerformanceTests.swift; sourceTree = "<group>"; };
+		E1000070 /* siphon-pgrp */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = "siphon-pgrp"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		E1004041 /* Copy Helpers */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = Contents/Helpers;
+			dstSubfolderSpec = 1;
+			files = (
+				E1001071 /* siphon-pgrp in Copy Helpers */,
+			);
+			name = "Copy Helpers";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		E0002001 /* Frameworks */ = {
@@ -334,6 +351,7 @@
 				E1000001 /* SiphonCore.framework */,
 				E1000002 /* SiphonCoreTests.xctest */,
 				E1000050 /* SiphonUITests.xctest */,
+				E1000070 /* siphon-pgrp */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -543,13 +561,14 @@
 				E0004002 /* Sources */,
 				E0002001 /* Frameworks */,
 				E0004003 /* Resources */,
-				E0004030 /* Compile Native Helper */,
+				E1004041 /* Copy Helpers */,
 				E0004031 /* Stable Designated Requirement */,
 			);
 			buildRules = (
 			);
 			dependencies = (
 				E1008010 /* PBXTargetDependency */,
+				E1008030 /* PBXTargetDependency */,
 			);
 			name = "Siphon";
 			productName = "Siphon";
@@ -621,30 +640,25 @@
 			productReference = E1000050 /* SiphonUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
 		};
+		E1004040 /* siphon-pgrp */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = E1005004 /* Build configuration list for PBXNativeTarget "siphon-pgrp" */;
+			buildPhases = (
+				E1004042 /* Sources */,
+				E1004043 /* Sign Helper For Unsigned Builds */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = "siphon-pgrp";
+			productName = "siphon-pgrp";
+			productReference = E1000070 /* siphon-pgrp */;
+			productType = "com.apple.product-type.tool";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXShellScriptBuildPhase section */
-		E0004030 /* Compile Native Helper */ = {
-			isa = PBXShellScriptBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			inputFileListPaths = (
-			);
-			inputPaths = (
-				"$(SRCROOT)/Siphon/Helpers/siphon-pgrp.c",
-			);
-			name = "Compile Native Process Group Helper";
-			outputFileListPaths = (
-			);
-			outputPaths = (
-				"$(BUILT_PRODUCTS_DIR)/siphon-pgrp",
-				"$(TARGET_BUILD_DIR)/$(CONTENTS_FOLDER_PATH)/Helpers/siphon-pgrp",
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/sh;
-			shellScript = "ARCH_FLAGS=\"\"\nfor a in ${ARCHS:-arm64}; do ARCH_FLAGS=\"$ARCH_FLAGS -arch $a\"; done\n# Multi-arch clang leaves empty temp directories behind; keep them in the build folder.\nTMPDIR=\"${TEMP_DIR}\" clang -O2 $ARCH_FLAGS -isysroot \"${SDKROOT}\" -mmacosx-version-min=15.0 \"${SRCROOT}/Siphon/Helpers/siphon-pgrp.c\" -o \"${TEMP_DIR}/siphon-pgrp\"\ncp -f \"${TEMP_DIR}/siphon-pgrp\" \"${BUILT_PRODUCTS_DIR}/siphon-pgrp\"\nmkdir -p \"${TARGET_BUILD_DIR}/${CONTENTS_FOLDER_PATH}/Helpers\"\ncp -f \"${TEMP_DIR}/siphon-pgrp\" \"${TARGET_BUILD_DIR}/${CONTENTS_FOLDER_PATH}/Helpers/siphon-pgrp\"\nchmod +x \"${BUILT_PRODUCTS_DIR}/siphon-pgrp\" \"${TARGET_BUILD_DIR}/${CONTENTS_FOLDER_PATH}/Helpers/siphon-pgrp\"\ncodesign --force --sign \"${EXPANDED_CODE_SIGN_IDENTITY:--}\" -i \"com.marspater.siphon.pgrp\" -r=\"designated => identifier \\\"com.marspater.siphon.pgrp\\\"\" \"${TARGET_BUILD_DIR}/${CONTENTS_FOLDER_PATH}/Helpers/siphon-pgrp\" 2>/dev/null || codesign --force --sign - -i \"com.marspater.siphon.pgrp\" -r=\"designated => identifier \\\"com.marspater.siphon.pgrp\\\"\" \"${TARGET_BUILD_DIR}/${CONTENTS_FOLDER_PATH}/Helpers/siphon-pgrp\" 2>/dev/null || true\n";
-		};
 		E0004031 /* Stable Designated Requirement */ = {
 			isa = PBXShellScriptBuildPhase;
 			alwaysOutOfDate = 1;
@@ -664,6 +678,26 @@
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
 			shellScript = "# Unsigned builds (CODE_SIGNING_ALLOWED=NO, as in the test command) keep the linker's\n# cdhash requirement. TCC then replaces the installed app's Full Disk Access record with a\n# denial bound to that cdhash, so give them the same requirement as signed builds.\n# Sign a detached copy: inside the bundle codesign would seal resources that the test\n# bundle copied in later breaks.\nif [ \"${CODE_SIGNING_ALLOWED}\" != \"YES\" ]; then\n  set -e\n  mkdir -p \"${DERIVED_FILE_DIR}\"\n  cp -f \"${TARGET_BUILD_DIR}/${EXECUTABLE_PATH}\" \"${DERIVED_FILE_DIR}/stable-dr-executable\"\n  codesign --force --sign - -i \"${PRODUCT_BUNDLE_IDENTIFIER}\" -r=\"designated => identifier \\\"${PRODUCT_BUNDLE_IDENTIFIER}\\\"\" \"${DERIVED_FILE_DIR}/stable-dr-executable\"\n  mv -f \"${DERIVED_FILE_DIR}/stable-dr-executable\" \"${TARGET_BUILD_DIR}/${EXECUTABLE_PATH}\"\nfi\n";
+		};
+		E1004043 /* Sign Helper For Unsigned Builds */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"$(TARGET_BUILD_DIR)/$(EXECUTABLE_PATH)",
+			);
+			name = "Sign Helper For Unsigned Builds";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "# Unsigned builds still need a runnable helper with the usual requirement.\nif [ \"${CODE_SIGNING_ALLOWED}\" != \"YES\" ]; then\n  codesign --force --sign - -i \"${PRODUCT_BUNDLE_IDENTIFIER}\" -r=\"designated => identifier \\\"${PRODUCT_BUNDLE_IDENTIFIER}\\\"\" \"${TARGET_BUILD_DIR}/${EXECUTABLE_PATH}\"\nfi\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 
@@ -712,6 +746,7 @@
 				E1004001 /* SiphonCore */,
 				E1004010 /* SiphonCoreTests */,
 				E1004030 /* SiphonUITests */,
+				E1004040 /* siphon-pgrp */,
 			);
 		};
 /* End PBXProject section */
@@ -866,6 +901,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		E1004042 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E1001070 /* siphon-pgrp.c in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -888,6 +931,11 @@
 			isa = PBXTargetDependency;
 			target = E0004001 /* Siphon */;
 			targetProxy = E1008021 /* PBXContainerItemProxy */;
+		};
+		E1008030 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = E1004040 /* siphon-pgrp */;
+			targetProxy = E1008031 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -919,6 +967,13 @@
 			proxyType = 1;
 			remoteGlobalIDString = E0004001;
 			remoteInfo = Siphon;
+		};
+		E1008031 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = E0006001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = E1004040;
+			remoteInfo = "siphon-pgrp";
 		};
 /* End PBXContainerItemProxy section */
 
@@ -1270,6 +1325,38 @@
 			};
 			name = Release;
 		};
+		E1007007 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Manual;
+				CURRENT_PROJECT_VERSION = 57;
+				GCC_OPTIMIZATION_LEVEL = 2;
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				MARKETING_VERSION = 5.5.0;
+				OTHER_CODE_SIGN_FLAGS = "-i com.marspater.siphon.pgrp -r='designated => identifier \"com.marspater.siphon.pgrp\"'";
+				PRODUCT_BUNDLE_IDENTIFIER = com.marspater.siphon.pgrp;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+			};
+			name = Debug;
+		};
+		E1007008 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Manual;
+				CURRENT_PROJECT_VERSION = 57;
+				GCC_OPTIMIZATION_LEVEL = 2;
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				MARKETING_VERSION = 5.5.0;
+				OTHER_CODE_SIGN_FLAGS = "-i com.marspater.siphon.pgrp -r='designated => identifier \"com.marspater.siphon.pgrp\"'";
+				PRODUCT_BUNDLE_IDENTIFIER = com.marspater.siphon.pgrp;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -1323,6 +1410,15 @@
 			buildConfigurations = (
 				E1007005 /* Debug */,
 				E1007006 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		E1005004 /* Build configuration list for PBXNativeTarget "siphon-pgrp" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E1007007 /* Debug */,
+				E1007008 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
