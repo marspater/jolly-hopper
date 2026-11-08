@@ -1,5 +1,6 @@
 import XCTest
 @testable import Siphon
+@testable import SiphonCore
 import CryptoKit
 import SwiftUI
 import UniformTypeIdentifiers
@@ -1480,13 +1481,7 @@ final class QueueAndErrorUXTests: XCTestCase {
         let key = UserDefaultsKeys.customPresets
         UserDefaults.standard.removeObject(forKey: key)
 
-        let preset1 = CustomPreset(
-            name: "My 4K Preset",
-            videoCodec: .h265,
-            audioCodec: .aac,
-            videoResolution: .r2160p,
-            fileType: .mp4
-        )
+        let preset1 = CustomPreset(configuration: CustomPresetConfiguration(name: "My 4K Preset", videoCodec: .h265, audioCodec: .aac, videoResolution: .r2160p, fileType: .mp4))
 
         CustomPreset.saveAll([preset1])
 

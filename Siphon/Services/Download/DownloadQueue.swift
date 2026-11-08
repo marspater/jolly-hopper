@@ -4,6 +4,7 @@
 //
 
 import Foundation
+import SiphonCore
 
 @MainActor
 final class DownloadQueue: ObservableObject {

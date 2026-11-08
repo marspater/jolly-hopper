@@ -1,6 +1,7 @@
 import Foundation
 @preconcurrency import UserNotifications
 import AppKit
+import SiphonCore
 
 final class NotificationService: NSObject, @unchecked Sendable, UNUserNotificationCenterDelegate {
     static let shared = NotificationService()

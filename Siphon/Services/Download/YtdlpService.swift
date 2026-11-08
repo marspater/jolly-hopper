@@ -4,6 +4,7 @@ import CommonCrypto
 import AppKit
 import WebKit
 import VideoToolbox
+import SiphonCore
 
 struct DependencyChecksums {
     /// Siphon downloads and pins the Siphon build of yt-dlp (marspater/yt-dlp,

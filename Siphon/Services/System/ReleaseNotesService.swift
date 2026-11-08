@@ -5,6 +5,7 @@
 
 import Foundation
 import SwiftUI
+import SiphonCore
 
 struct ReleaseFeature: Identifiable, Sendable, Equatable {
     let id: UUID

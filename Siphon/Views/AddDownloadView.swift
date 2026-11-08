@@ -1,4 +1,5 @@
 import SwiftUI
+import SiphonCore
 
 struct AddDownloadView: View {
     @EnvironmentObject var downloadManager: DownloadManager
@@ -1726,35 +1727,33 @@ struct AddDownloadView: View {
             return AudioCodec(rawValue: selectedAudioCodec)
         }()
 
-        let options = DownloadOptions(
-            saveFolder: saveFolder,
-            fileType: fileType,
-            videoResolution: isVideoTab ? videoResolution : nil,
-            audioQuality: isVideoTab ? nil : audioQuality,
-            downloadSubtitles: isVideoTab ? downloadSubtitles : false,
-            subtitleLanguages: inputMode == .batch
+        var configured = DownloadOptions(saveFolder: saveFolder, fileType: fileType)
+        configured.videoResolution = isVideoTab ? videoResolution : nil
+        configured.audioQuality = isVideoTab ? nil : audioQuality
+        configured.downloadSubtitles = isVideoTab ? downloadSubtitles : false
+        configured.subtitleLanguages = inputMode == .batch
                 ? Self.batchSubtitleCodes(batchSubtitleLanguages)
-                : Self.resolvedSubtitleLanguages(selected: selectedSubtitleLangs, preferred: presetSubtitleLanguage, available: availableSubtitles),
-            subtitleFormat: subtitleFormat,
-            embedSubtitles: isVideoTab ? embedSubtitles : false,
-            downloadThumbnail: false,
-            embedThumbnail: embedThumbnail,
-            embedMetadata: embedMetadata,
-            splitChapters: splitChapters,
-            sponsorBlock: sponsorBlock,
-            customFilename: customFilename.isEmpty ? nil : customFilename,
-            videoCodec: videoCodecEnum,
-            audioCodec: audioCodecEnum,
-            conversionCodec: conversionCodecEnum,
-            forceOverwrite: false,
-            rawCookies: nil,
-            rawUserAgent: nil,
-            browserCookieSource: nil,
-            selectedFormatId: (inputMode == .single && downloadMode == .single) ? selectedFormatId : nil,
-            hdrAction: isVideoTab ? (HDRAction(rawValue: selectedHDRAction) ?? .preserveHDR) : nil,
-            resolutionFallbackPolicy: isVideoTab ? (ResolutionFallbackPolicy(rawValue: resolutionFallbackPolicyRaw) ?? .strictCeiling) : nil,
-            additionalArguments: additionalArguments.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : additionalArguments.trimmingCharacters(in: .whitespacesAndNewlines)
-        )
+                : Self.resolvedSubtitleLanguages(selected: selectedSubtitleLangs, preferred: presetSubtitleLanguage, available: availableSubtitles)
+        configured.subtitleFormat = subtitleFormat
+        configured.embedSubtitles = isVideoTab ? embedSubtitles : false
+        configured.downloadThumbnail = false
+        configured.embedThumbnail = embedThumbnail
+        configured.embedMetadata = embedMetadata
+        configured.splitChapters = splitChapters
+        configured.sponsorBlock = sponsorBlock
+        configured.customFilename = customFilename.isEmpty ? nil : customFilename
+        configured.videoCodec = videoCodecEnum
+        configured.audioCodec = audioCodecEnum
+        configured.conversionCodec = conversionCodecEnum
+        configured.forceOverwrite = false
+        configured.rawCookies = nil
+        configured.rawUserAgent = nil
+        configured.browserCookieSource = nil
+        configured.selectedFormatId = (inputMode == .single && downloadMode == .single) ? selectedFormatId : nil
+        configured.hdrAction = isVideoTab ? (HDRAction(rawValue: selectedHDRAction) ?? .preserveHDR) : nil
+        configured.resolutionFallbackPolicy = (isVideoTab ? (ResolutionFallbackPolicy(rawValue: resolutionFallbackPolicyRaw) ?? .strictCeiling) : nil) ?? .strictCeiling
+        configured.additionalArguments = additionalArguments.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : additionalArguments.trimmingCharacters(in: .whitespacesAndNewlines)
+        let options = configured
 
         if inputMode == .batch {
             let urls = extractBatchUrls(from: batchUrlsText)

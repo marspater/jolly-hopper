@@ -1,8 +1,14 @@
 import XCTest
 @testable import Siphon
+@testable import SiphonCore
 
 @MainActor
 final class DownloadTests: XCTestCase {
+    func testDRMOnlyFormatIsNotSingleUnprobedFormat() {
+        XCTAssertFalse(YtdlpService.isSingleUnprobedFormat(MediaInfo(
+            id: "x", title: "DRM only", formats: [MediaFormat(formatId: "drm", ext: "mp4", hasDRM: .protected)])))
+    }
+
     func testPrimaryFileExistsOnDiskReflectsTheFileSystem() throws {
         let download = Download(url: "https://example.com/v", options: .default, title: "V")
         XCTAssertNil(download.primaryFileExistsOnDisk)
@@ -475,9 +481,7 @@ final class DownloadTests: XCTestCase {
         let suiteName = "testDefaults_\(UUID().uuidString)"
         let testDefaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
         defer { testDefaults.removePersistentDomain(forName: suiteName) }
-        let preset = CustomPreset(name: "Lectures", videoCodec: .h264, audioCodec: .aac, videoResolution: .r720p, fileType: .mp4,
-                                  downloadSubtitles: true, subtitleLanguage: "embed:de", subtitleFormat: .vtt,
-                                  sponsorBlock: true, splitChapters: true)
+        let preset = CustomPreset(configuration: CustomPresetConfiguration(name: "Lectures", videoCodec: .h264, audioCodec: .aac, videoResolution: .r720p, fileType: .mp4, subtitles: CustomPresetSubtitles(downloadSubtitles: true, subtitleLanguage: "embed:de", subtitleFormat: .vtt), sponsorBlock: true, splitChapters: true))
         testDefaults.set(try JSONEncoder().encode([preset]), forKey: UserDefaultsKeys.customPresets)
         testDefaults.set(preset.id.uuidString, forKey: UserDefaultsKeys.selectedCustomPresetId)
 
@@ -502,10 +506,8 @@ final class DownloadTests: XCTestCase {
         let suiteName = "testDefaults_\(UUID().uuidString)"
         let testDefaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
         defer { testDefaults.removePersistentDomain(forName: suiteName) }
-        let preferences = CustomPreset(name: "Preferences", videoCodec: .h264, audioCodec: .aac, videoResolution: .r720p, fileType: .mp4,
-                                       downloadSubtitles: true, subtitleLanguage: "embed:de", sponsorBlock: true, splitChapters: true)
-        let menuBar = CustomPreset(name: "Menu bar", videoCodec: .h264, audioCodec: .aac, videoResolution: .r1080p, fileType: .mkv,
-                                   downloadSubtitles: true, subtitleLanguage: "fr", subtitleFormat: .ass)
+        let preferences = CustomPreset(configuration: CustomPresetConfiguration(name: "Preferences", videoCodec: .h264, audioCodec: .aac, videoResolution: .r720p, fileType: .mp4, subtitles: CustomPresetSubtitles(downloadSubtitles: true, subtitleLanguage: "embed:de"), sponsorBlock: true, splitChapters: true))
+        let menuBar = CustomPreset(configuration: CustomPresetConfiguration(name: "Menu bar", videoCodec: .h264, audioCodec: .aac, videoResolution: .r1080p, fileType: .mkv, subtitles: CustomPresetSubtitles(downloadSubtitles: true, subtitleLanguage: "fr", subtitleFormat: .ass)))
         testDefaults.set(preferences.id.uuidString, forKey: UserDefaultsKeys.selectedCustomPresetId)
         testDefaults.set(try JSONEncoder().encode([preferences, menuBar]), forKey: UserDefaultsKeys.customPresets)
 

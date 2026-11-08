@@ -5,6 +5,7 @@
 
 import XCTest
 @testable import Siphon
+@testable import SiphonCore
 
 @MainActor
 final class ReleaseNotesServiceTests: XCTestCase {
