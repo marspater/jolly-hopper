@@ -4,7 +4,7 @@ on:
   push:
     branches: [ "main" ]
   pull_request:
-    branches: [ "main", "mars/fix-audit-*" ]
+    branches: [ "main", "mars/fix-audit-*", "mars/xm-*" ]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -32,6 +32,8 @@ jobs:
             -scheme Siphon \
             -destination 'platform=macOS' \
             -configuration Debug \
+            -resultBundlePath "$RUNNER_TEMP/results/debug.xcresult" \
+            -enableCodeCoverage YES \
             MACOSX_DEPLOYMENT_TARGET=15.0 \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
@@ -46,11 +48,46 @@ jobs:
             -scheme Siphon \
             -destination 'platform=macOS' \
             -configuration Release \
+            -resultBundlePath "$RUNNER_TEMP/results/release.xcresult" \
+            -enableCodeCoverage YES \
             MACOSX_DEPLOYMENT_TARGET=15.0 \
             ENABLE_TESTABILITY=YES \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO
+
+      - name: Export coverage
+        # Publish a report only when the export succeeds, and fail the job when one is missing.
+        if: ${{ always() }}
+        run: |
+          status=0
+          for bundle in "$RUNNER_TEMP"/results/*.xcresult; do
+            report="${bundle%.xcresult}-coverage.json"
+            if xcrun xccov view --report --json "$bundle" > "$report.tmp"; then
+              mv "$report.tmp" "$report"
+            else
+              rm -f "$report.tmp"
+              echo "::error::No coverage report in $bundle"
+              status=1
+            fi
+          done
+          exit "$status"
+
+      - name: Upload test results
+        if: ${{ always() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: xcresult-tests
+          path: ${{ runner.temp }}/results/*.xcresult
+          retention-days: 7
+
+      - name: Upload coverage
+        if: ${{ always() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: coverage-tests
+          path: ${{ runner.temp }}/results/*-coverage.json
+          retention-days: 7
 
   conversion:
     # Real-FFmpeg conversion tests (HDR10/HLG tone mapping, HEVC, VP9, AV1)
@@ -76,6 +113,8 @@ jobs:
             -scheme Siphon \
             -destination 'platform=macOS' \
             -configuration Debug \
+            -resultBundlePath "$RUNNER_TEMP/results/conversion.xcresult" \
+            -enableCodeCoverage YES \
             -only-testing:SiphonTests/YtdlpServiceTests/testCodecConversionsProduceRequestedCodecWithRealFFmpeg \
             -only-testing:SiphonTests/YtdlpServiceTests/testHDRToSDRToneMappingKeepsBrightnessWithRealFFmpeg \
             -only-testing:SiphonTests/YtdlpServiceTests/testManagedFFmpegVerifiesHTTPSWithSanitizedEnvironment \
@@ -88,3 +127,36 @@ jobs:
             echo "::error::Real-FFmpeg conversion tests were skipped"
             exit 1
           fi
+
+      - name: Export coverage
+        # Publish a report only when the export succeeds, and fail the job when one is missing.
+        if: ${{ always() }}
+        run: |
+          status=0
+          for bundle in "$RUNNER_TEMP"/results/*.xcresult; do
+            report="${bundle%.xcresult}-coverage.json"
+            if xcrun xccov view --report --json "$bundle" > "$report.tmp"; then
+              mv "$report.tmp" "$report"
+            else
+              rm -f "$report.tmp"
+              echo "::error::No coverage report in $bundle"
+              status=1
+            fi
+          done
+          exit "$status"
+
+      - name: Upload test results
+        if: ${{ always() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: xcresult-conversion
+          path: ${{ runner.temp }}/results/*.xcresult
+          retention-days: 7
+
+      - name: Upload coverage
+        if: ${{ always() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: coverage-conversion
+          path: ${{ runner.temp }}/results/*-coverage.json
+          retention-days: 7

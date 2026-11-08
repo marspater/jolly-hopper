@@ -4,7 +4,7 @@ on:
   push:
     branches: [ "main" ]
   pull_request:
-    branches: [ "main", "mars/fix-audit-*" ]
+    branches: [ "main", "mars/fix-audit-*", "mars/xm-*" ]
   workflow_dispatch:
 
 concurrency:
