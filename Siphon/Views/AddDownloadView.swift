@@ -615,6 +615,7 @@ struct AddDownloadView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .layoutPriority(1)
                         .accessibilityLabel(languageService.s("video_url"))
+                        .accessibilityIdentifier(AccessibilityID.addDownloadURLField)
                         .onSubmit {
                             fetchInfo()
                         }
@@ -1572,6 +1573,7 @@ struct AddDownloadView: View {
                     }
                 }
                 .buttonStyle(.siphonPrimary)
+                .accessibilityIdentifier(AccessibilityID.addDownloadSubmit)
                 .disabled(isDisabled)
                 .keyboardShortcut(.return)
             }

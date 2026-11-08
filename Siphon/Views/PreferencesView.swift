@@ -464,6 +464,7 @@ struct PreferencesView: View {
                         .controlSize(.small)
                         .help(languageService.s("check_updates"))
                         .accessibilityLabel(languageService.s("check_updates"))
+                        .accessibilityIdentifier(AccessibilityID.checkForUpdates)
                         .frame(height: 28)
                         .transition(.opacity.combined(with: .scale(scale: 0.92)))
                     }

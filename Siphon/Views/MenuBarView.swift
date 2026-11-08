@@ -409,5 +409,6 @@ private struct MenuBarActiveDownloadRow: View {
         )
         .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusSmall, style: .continuous))
         .accessibilityElement(children: .combine)
+        .accessibilityIdentifier(AccessibilityID.menuBarRow)
     }
 }

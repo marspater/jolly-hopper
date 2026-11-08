@@ -69,12 +69,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
 @main
 struct SiphonApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
-    @StateObject private var downloadManager = DownloadManager()
-    @StateObject private var appState = AppState()
+    @StateObject private var downloadManager = UITestLaunchMode.makeDownloadManager()
+    @StateObject private var appState = UITestLaunchMode.makeAppState()
     @StateObject private var languageService = LanguageService()
     @StateObject private var updateChecker = UpdateChecker()
-    @AppStorage("startInBackground") private var startInBackground: Bool = false
-    @AppStorage(UserDefaultsKeys.theme) private var theme: String = "system"
+    @AppStorage("startInBackground", store: UITestLaunchMode.defaults) private var startInBackground: Bool = false
+    @AppStorage(UserDefaultsKeys.theme, store: UITestLaunchMode.defaults) private var theme: String = "system"
     @State private var hasAppliedBackgroundMode = false
 
     init() {
@@ -109,6 +109,7 @@ struct SiphonApp: App {
                     handleIncomingURL(url)
                 }
                 .handlesExternalEvents(preferring: ["*"], allowing: ["*"])
+                .defaultAppStorage(UITestLaunchMode.defaults ?? .standard)
         }
         .defaultSize(width: 980, height: 620)
         .handlesExternalEvents(matching: ["*"])
