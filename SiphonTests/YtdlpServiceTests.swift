@@ -475,6 +475,35 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertTrue(delegate.responds(to: selector), "WebKit must invoke the host restriction callback")
     }
 
+    func testBoyfriendTVSignInSeedKeepsNewerWindowSignIn() throws {
+        func cookie(_ name: String, _ value: String, domain: String = ".boyfriendtv.com") throws -> HTTPCookie {
+            try XCTUnwrap(HTTPCookie(properties: [.domain: domain, .name: name, .value: value, .path: "/"]))
+        }
+        let seeded = YtdlpService.boyfriendTVCookiesToSeed(
+            [try cookie("login", "stale-safari", domain: "www.boyfriendtv.com"), try cookie("configLang", "es")],
+            existing: [try cookie("login", "from-window")]
+        )
+        XCTAssertEqual(seeded.map(\.name), ["configLang"])
+
+        let otherDomain = YtdlpService.boyfriendTVCookiesToSeed(
+            [try cookie("login", "safari")],
+            existing: [try cookie("login", "from-window", domain: ".boyfriend.tv")]
+        )
+        XCTAssertEqual(otherDomain.map(\.value), ["safari"], "A sign-in on the other domain must not block this one")
+    }
+
+    func testBoyfriendTVSignInPathsAndVideoIdentity() {
+        for home in ["/", "/es/", "/es"] {
+            XCTAssertNil(YtdlpService.boyfriendTVSection(ofPath: home), home)
+        }
+        XCTAssertEqual(YtdlpService.boyfriendTVSection(ofPath: "/es/ingresar/"), "ingresar")
+        XCTAssertEqual(YtdlpService.boyfriendTVSection(ofPath: "/login/"), "login")
+
+        XCTAssertEqual(YtdlpService.boyfriendTVVideoID(inPath: "/es/videos/1409118/n0vae3/"), "1409118")
+        XCTAssertEqual(YtdlpService.boyfriendTVVideoID(inPath: "/videos/1409118/other-slug/"), "1409118")
+        XCTAssertNil(YtdlpService.boyfriendTVVideoID(inPath: "/es/ingresar/"))
+    }
+
     func testBrowserNavigationPolicyAllowsBothBoyfriendTVDomainsAndChallengeFrame() {
         typealias Policy = YtdlpService.BoyfriendTVNavigationDelegate
         func allows(_ url: String, mainFrame: Bool?) -> Bool {
@@ -486,6 +515,14 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertTrue(allows("about:blank", mainFrame: false))
         XCTAssertFalse(allows("about:blank", mainFrame: true))
         XCTAssertFalse(allows("https://accounts.google.com/gsi/button", mainFrame: false))
+
+        // The sign-in form's reCAPTCHA widget and its image challenge.
+        XCTAssertTrue(allows("https://www.google.com/recaptcha/api2/anchor?ar=1&k=key&size=normal", mainFrame: false))
+        XCTAssertTrue(allows("https://www.google.com/recaptcha/api2/bframe?hl=en&k=key", mainFrame: false))
+        XCTAssertTrue(allows("https://www.recaptcha.net/recaptcha/enterprise/anchor?k=key", mainFrame: false))
+        XCTAssertFalse(allows("https://www.google.com/recaptcha/api2/anchor?k=key", mainFrame: true))
+        XCTAssertFalse(allows("http://www.google.com/recaptcha/api2/anchor?k=key", mainFrame: false))
+        XCTAssertFalse(allows("https://accounts.google.com/recaptcha/x", mainFrame: false))
 
         XCTAssertFalse(allows("https://challenges.cloudflare.com/", mainFrame: true), "The challenge widget may not replace the page")
         XCTAssertFalse(allows("https://ads.example.com/frame", mainFrame: false))
@@ -4052,6 +4089,7 @@ final class YtdlpServiceTests: XCTestCase {
         } catch YtdlpError.protectedSiteLoginRequired {
             XCTAssertEqual(dumps.value, 1, "Safari's cookies already showed the login page; other sessions can't do better")
             XCTAssertEqual(renderedLoads.value, 1)
+            XCTAssertTrue(YtdlpError.protectedSiteLoginRequired.localizedDescription.contains("window that opens"))
             XCTAssertTrue(YtdlpError.protectedSiteLoginRequired.localizedDescription.contains("Remember me"))
         }
     }

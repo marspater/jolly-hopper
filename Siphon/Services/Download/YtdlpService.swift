@@ -2948,7 +2948,7 @@ public struct DownloadResult: Sendable {
             guard destination == source || options.forceOverwrite == true else {
                 throw CocoaError(.fileWriteFileExists)
             }
-            _ = try FileManager.default.replaceItemAt(destination, withItemAt: partial)
+            try await Self.replaceItemOffMainActor(destination, with: partial)
         } else {
             try FileManager.default.moveItem(at: partial, to: destination)
         }
@@ -2957,6 +2957,18 @@ public struct DownloadResult: Sendable {
             catch { LoggerService.shared.log("Could not remove the source after conversion: \(error.localizedDescription)", level: .warning) }
         }
         return destination
+    }
+
+    /// Atomically swaps in a finished file. The replace blocks on disk I/O, so it
+    /// must not run on the main actor.
+    nonisolated private static func replaceItemOffMainActor(
+        _ destination: URL,
+        with replacement: URL,
+        options: FileManager.ItemReplacementOptions = []
+    ) async throws {
+        _ = try await Task.detached {
+            try FileManager.default.replaceItemAt(destination, withItemAt: replacement, options: options)
+        }.value
     }
 
     /// The first video stream's codec and transfer function, or nil when ffprobe fails.
@@ -3122,7 +3134,7 @@ public struct DownloadResult: Sendable {
             guard processController?.isCancelled != true else { throw CancellationError() }
             if fileManager.fileExists(atPath: tempOutput.path), ((try? tempOutput.resourceValues(forKeys: [.fileSizeKey]))?.fileSize ?? 0) > 0 {
                 // One atomic swap: a crash never leaves the media under a temporary name.
-                _ = try fileManager.replaceItemAt(mediaFile, withItemAt: tempOutput, options: .usingNewMetadataOnly)
+                try await Self.replaceItemOffMainActor(mediaFile, with: tempOutput, options: .usingNewMetadataOnly)
                 return true
             }
             return false
@@ -4610,9 +4622,9 @@ public struct DownloadResult: Sendable {
     }
 
     /// The user's BoyfriendTV cookies from Safari. A sign-in made there with "Remember
-    /// me" ticked is a persistent cookie Siphon can carry over, for when the site's
-    /// sign-in doesn't complete in Siphon's own window. Cloudflare's cookies stay out:
-    /// they are bound to Safari's fingerprint, and WebKit gets its own.
+    /// me" ticked is a persistent cookie Siphon can carry over, so no window is needed.
+    /// Cloudflare's cookies stay out: they are bound to Safari's fingerprint, and
+    /// WebKit gets its own.
     nonisolated static func boyfriendTVSessionCookies(from cookies: [HTTPCookie]) -> [HTTPCookie] {
         cookies.filter { cookie in
             let name = cookie.name.lowercased()
@@ -4629,10 +4641,32 @@ public struct DownloadResult: Sendable {
         }.value
     }
 
+    /// Safari's cookies that WebKit doesn't already hold under the same name on the
+    /// same domain, so a stale Safari cookie can't replace a newer sign-in made in
+    /// Siphon's window. The site's two domains keep separate sign-ins.
+    nonisolated static func boyfriendTVCookiesToSeed(_ cookies: [HTTPCookie], existing: [HTTPCookie]) -> [HTTPCookie] {
+        func key(_ cookie: HTTPCookie) -> String {
+            "\(boyfriendTVCookieScope(for: cookie.domain) ?? cookie.domain)\n\(cookie.name)"
+        }
+        let existingKeys = Set(existing.map(key))
+        return cookies.filter { !existingKeys.contains(key($0)) }
+    }
+
+    /// First path segment after any two-letter language prefix; nil on the home page.
+    nonisolated static func boyfriendTVSection(ofPath path: String) -> String? {
+        let segments = path.split(separator: "/")
+        return (segments.first?.count == 2 ? segments.dropFirst() : segments[...]).first.map(String.init)
+    }
+
+    /// The numeric ID in a video page's path, which outlives language prefixes and slugs.
+    nonisolated static func boyfriendTVVideoID(inPath path: String) -> String? {
+        path.split(separator: "/").first { $0.allSatisfy(\.isNumber) }.map(String.init)
+    }
+
     private func seedBoyfriendTVSafariSession() async {
-        let cookies = await savedSafariSessionCookies()
-        guard !Task.isCancelled, !cookies.isEmpty else { return }
         let store = boyfriendTVWebDataStore.httpCookieStore
+        let cookies = Self.boyfriendTVCookiesToSeed(await savedSafariSessionCookies(), existing: await store.allCookies())
+        guard !Task.isCancelled, !cookies.isEmpty else { return }
         for cookie in cookies {
             guard !Task.isCancelled else { return }
             await withCheckedContinuation { continuation in
@@ -4748,7 +4782,8 @@ public struct DownloadResult: Sendable {
     final class BoyfriendTVNavigationDelegate: NSObject, WKNavigationDelegate {
         /// The page may only navigate within BoyfriendTV (both domains). Frames may
         /// also load Cloudflare's challenge widget, which the challenge cannot
-        /// complete without, and script-built `about:` frames, which fetch nothing.
+        /// complete without, the reCAPTCHA widget the sign-in form requires, and
+        /// script-built `about:` frames, which fetch nothing.
         /// Popups and every other target are refused.
         nonisolated static func allowsNavigation(to url: URL?, isMainFrame: Bool?) -> Bool {
             guard let isMainFrame, let scheme = url?.scheme?.lowercased() else { return false }
@@ -4757,7 +4792,11 @@ public struct DownloadResult: Sendable {
                 return false
             }
             let isBoyfriendTV = ["boyfriend.tv", "boyfriendtv.com"].contains { host == $0 || host.hasSuffix("." + $0) }
-            return isBoyfriendTV || (!isMainFrame && host == "challenges.cloudflare.com")
+            if isBoyfriendTV { return true }
+            guard !isMainFrame, scheme == "https" else { return false }
+            let isReCAPTCHA = ["www.google.com", "www.recaptcha.net"].contains(host) &&
+                url?.pathComponents.dropFirst().first == "recaptcha"
+            return isReCAPTCHA || host == "challenges.cloudflare.com"
         }
 
         func webView(
@@ -4863,17 +4902,20 @@ public struct DownloadResult: Sendable {
         // opens the page in a window: Cloudflare's managed challenge completes only in
         // a visible page, and any interactive step is the user's. Siphon never completes it.
         var deadline = Date().addingTimeInterval(20)
+        var awaitingSignIn = false
+        var reloadedFromHome = false
+        var lastSignInPage = ""
 
         // False when the user closed a BoyfriendTV window after this job asked.
-        func presentWindow() -> Bool {
-            guard window == nil else { return true }
+        func presentWindow(titleKey: String, result: String) -> Bool {
+            let title = String(format: LanguageService.s(titleKey), url.host ?? "")
+            if let window {
+                if window.title != title { window.title = title }
+                return true
+            }
             guard mayOpenSessionWindow(for: "boyfriendtv", requestedAt: requestedAt) else { return false }
-            LoggerService.shared.log("[ProtectedSite] stage=\(stage) result=challenge; waiting for the user", level: .info)
-            window = presentBrowserSessionWindow(
-                webView,
-                title: String(format: LanguageService.s("site_verification_title"), url.host ?? ""),
-                delegate: windowDelegate
-            )
+            LoggerService.shared.log("[ProtectedSite] stage=\(stage) result=\(result); waiting for the user", level: .info)
+            window = presentBrowserSessionWindow(webView, title: title, delegate: windowDelegate)
             deadline = Date().addingTimeInterval(300)
             return true
         }
@@ -4893,22 +4935,60 @@ public struct DownloadResult: Sendable {
             lastHTML = resolved
 
             if extractStreamURLFromHTML(resolved) != nil {
+                // The sign-in window stays navigable; only the requested video may finish the job.
+                // While a load is in flight, the URL and the document can belong to different pages.
+                if awaitingSignIn {
+                    guard !webView.isLoading else { continue }
+                    if let videoID = Self.boyfriendTVVideoID(inPath: url.path),
+                       Self.boyfriendTVVideoID(inPath: webView.url?.path ?? "") != videoID {
+                        webView.load(request)
+                        continue
+                    }
+                }
                 LoggerService.shared.log("[ProtectedSite] stage=\(stage) result=stream-found", level: .debug)
                 return resolved
             }
 
             if isBoyfriendTVChallengeHTML(resolved) {
                 settledPolls = 0
-                guard presentWindow() else { return resolved }
+                guard presentWindow(titleKey: "site_verification_title", result: "challenge") else { return resolved }
                 continue
             }
 
-            // Members-only, and this session isn't signed in. The site's sign-in does not
-            // complete in Siphon's window, so the caller asks for the Safari sign-in.
+            // Members-only, and this session isn't signed in. The sign-in is the user's, in
+            // this window; the stream appearing after it closes the window.
             if isBoyfriendTVLoginHTML(resolved) {
                 guard !webView.isLoading else { continue }
-                LoggerService.shared.log("[ProtectedSite] stage=\(stage) result=login-page", level: .debug)
-                return resolved
+                if !awaitingSignIn {
+                    LoggerService.shared.log("[ProtectedSite] stage=\(stage) result=login-page", level: .debug)
+                }
+                if resolved.lowercased().contains("user has been banned") { return resolved }
+                settledPolls = 0
+                guard presentWindow(titleKey: "site_sign_in_title", result: "login-page") else { return resolved }
+                if !awaitingSignIn {
+                    awaitingSignIn = true
+                    deadline = Date().addingTimeInterval(300)
+                }
+                reloadedFromHome = false
+                continue
+            }
+
+            // Sign-in form and account pages stay open for the user. Only a landing on the
+            // home page, where a finished sign-in may end up, returns to the video.
+            if awaitingSignIn {
+                settledPolls = 0
+                guard let path = webView.url?.path else { continue }
+                let section = Self.boyfriendTVSection(ofPath: path)
+                if lastSignInPage != section ?? "home" {
+                    // First segment only: deeper parts of account URLs can carry tokens.
+                    lastSignInPage = section ?? "home"
+                    LoggerService.shared.log("[ProtectedSite] stage=\(stage) sign-in page=\(lastSignInPage)", level: .debug)
+                }
+                if section == nil, !webView.isLoading, !reloadedFromHome {
+                    reloadedFromHome = true
+                    webView.load(request)
+                }
+                continue
             }
 
             if !webView.isLoading {
@@ -4931,6 +5011,8 @@ public struct DownloadResult: Sendable {
             finalResult = "no-html"
         }
         LoggerService.shared.log("[ProtectedSite] stage=\(stage) result=\(finalResult)", level: .debug)
+        // The last page may be the sign-in form, which the caller can't tell from a video page.
+        if awaitingSignIn { throw YtdlpError.protectedSiteLoginRequired }
         return lastHTML
     }
 
@@ -8588,9 +8670,9 @@ enum YtdlpError: LocalizedError {
         case .protectedSiteNeedsBrowserCookies:
             return "This video site requires signed-in browser cookies. Open Settings > Advanced > Login Source (Cookies), choose your browser, then try again."
         case .protectedSiteLoginRequired:
-            // BoyfriendTV only. Browser sessions can't carry its sign-in: Safari never
-            // saves the site's login cookie to disk.
-            return "BoyfriendTV shows this video only to signed-in members. Sign in at boyfriendtv.com in Safari with “Remember me” ticked, then retry: Siphon uses that sign-in (Settings > Advanced > Login Source (Cookies) must be Safari)."
+            // BoyfriendTV only. Without "Remember me", Safari never saves the site's
+            // login cookie to disk, so the sign-in happens in Siphon's window.
+            return "BoyfriendTV shows this video only to signed-in members. Retry and sign in in the BoyfriendTV window that opens, with “Remember me” ticked."
         case .safariCookiesFullDiskAccessRequired:
             return LanguageService.s("safari_fda_required")
         case .securityViolation(let message):

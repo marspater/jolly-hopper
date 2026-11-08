@@ -124,9 +124,11 @@ final class UpdateVerifierTests: XCTestCase {
         if FileManager.default.fileExists(atPath: currentBundle.path) {
             let bundleID = Bundle.main.bundleIdentifier ?? "com.marspater.siphon"
             // The default expectation must accept the shipped app itself.
-            XCTAssertNoThrow(
+            do {
                 try UpdateVerifier.verifyAppBundle(bundleURL: currentBundle, expectedTeamID: nil, allowAdHoc: true)
-            )
+            } catch UpdateVerificationError.codeSignatureInvalid(errSecCSBadNestedCode, _) {
+                throw XCTSkip("Signed test host: the injected test bundle invalidates its nested code")
+            }
             XCTAssertNoThrow(
                 try UpdateVerifier.verifyAppBundle(
                     bundleURL: currentBundle,
@@ -186,7 +188,13 @@ final class UpdateVerifierTests: XCTestCase {
         }
         let current = Bundle.main.bundleURL
         let currentVersion = try XCTUnwrap(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String)
-        XCTAssertNoThrow(try UpdateVerifier.verifyAppBundle(bundleURL: current, expectedVersion: "v" + currentVersion))
+        // The version check runs first, so reaching the signature check proves the version
+        // passed. A signed test host fails that check: the injected test bundle invalidates its nested code.
+        do {
+            try UpdateVerifier.verifyAppBundle(bundleURL: current, expectedVersion: "v" + currentVersion)
+        } catch UpdateVerificationError.codeSignatureInvalid(errSecCSBadNestedCode, _) {
+            return
+        }
     }
 
     func testVerifyAppBundleRejectsDamagedSignature() throws {
