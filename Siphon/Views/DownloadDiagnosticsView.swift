@@ -305,6 +305,7 @@ struct DownloadDiagnosticsView: View {
                 HStack(spacing: 4) {
                     Image(systemName: "checkmark.circle.fill")
                         .foregroundColor(SiphonTheme.statusCompletedText)
+                        .accessibilityHidden(true)
                     Text(notice)
                         .font(.siphonMetadata)
                         .foregroundColor(.secondary)
@@ -326,6 +327,8 @@ struct DownloadDiagnosticsView: View {
                 }
             }
             .buttonStyle(.siphonSecondary)
+            .help(languageService.s("copy_report"))
+            .accessibilityLabel(languageService.s("copy_report"))
 
             let validFiles = download.filePaths.filter { FileManager.default.fileExists(atPath: $0.path) }
             if !validFiles.isEmpty {
@@ -341,6 +344,8 @@ struct DownloadDiagnosticsView: View {
                     }
                 }
                 .buttonStyle(.siphonSecondary)
+                .help(languageService.s("show_in_finder"))
+                .accessibilityLabel(languageService.s("show_in_finder"))
             }
 
             Button {
@@ -351,6 +356,8 @@ struct DownloadDiagnosticsView: View {
             }
             .buttonStyle(.siphonPrimary)
             .keyboardShortcut(.cancelAction)
+            .help(languageService.s("done"))
+            .accessibilityLabel(languageService.s("done"))
         }
         .padding(.horizontal, SiphonTheme.spacing20)
         .padding(.vertical, SiphonTheme.spacing12)
