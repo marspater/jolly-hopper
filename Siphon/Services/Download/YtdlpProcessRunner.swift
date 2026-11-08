@@ -931,7 +931,6 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
             let drainTimeout = streamDrainTimeout
             process.terminationHandler = { proc in
                 proc.terminationHandler = nil
-                endLaunchSignpost()
                 let exitCode = proc.terminationStatus
                 let reason = proc.terminationReason
                 let processGroup = Self.ownedProcessGroup(of: proc)
@@ -941,6 +940,8 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
                     outputPipe.fileHandleForReading.readabilityHandler = nil
                     errorPipe.fileHandleForReading.readabilityHandler = nil
                 }) {
+                    // After the drain, so a fast exit cannot end this before its output is read.
+                    endLaunchSignpost()
                     controller.endDrain()
                     // Each reader closes its handle at EOF. After a timeout the
                     // handles close on release, never under an in-flight read.
