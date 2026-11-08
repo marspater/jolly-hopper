@@ -7,6 +7,12 @@ import SwiftUI
 import UniformTypeIdentifiers
 import SiphonCore
 
+#if DEBUG
+#Preview("Idle") { HeroDropURLView().previewEnvironment().padding() }
+
+#Preview("Idle, dark") { HeroDropURLView().previewEnvironment().padding().preferredColorScheme(.dark) }
+#endif
+
 struct HeroDropURLView: View {
     @EnvironmentObject var downloadManager: DownloadManager
     @EnvironmentObject var appState: AppState

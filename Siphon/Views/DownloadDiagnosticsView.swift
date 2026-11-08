@@ -1,6 +1,16 @@
 import SwiftUI
 import AppKit
 
+#if DEBUG
+#Preview("Failed") {
+    DownloadDiagnosticsView(download: PreviewFixtures.download(.failed, error: "ERROR: an unknown error occurred")).previewEnvironment()
+}
+
+#Preview("Completed") {
+    DownloadDiagnosticsView(download: PreviewFixtures.download(.completed)).previewEnvironment()
+}
+#endif
+
 struct DownloadDiagnosticsView: View {
     @ObservedObject var download: Download
     @Environment(\.dismiss) private var dismiss

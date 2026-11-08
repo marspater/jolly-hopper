@@ -3,11 +3,16 @@ import AppKit
 import SiphonCore
 
 struct DebugLogView: View {
-    @ObservedObject private var logger = LoggerService.shared
-    @ObservedObject private var languageService = LanguageService.shared
+    @ObservedObject private var logger: LoggerService
+    @ObservedObject private var languageService: LanguageService
     @AppStorage(UserDefaultsKeys.theme) private var theme: String = "system"
     @StateObject private var copyFeedback = TransientFeedbackState()
     @State private var isExporting = false
+
+    init(logger: LoggerService = .shared, languageService: LanguageService = .shared) {
+        self.logger = logger
+        self.languageService = languageService
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -137,3 +142,9 @@ struct DebugLogView: View {
         }
     }
 }
+
+#if DEBUG
+#Preview {
+    DebugLogView(logger: PreviewFixtures.logger(), languageService: PreviewFixtures.language())
+}
+#endif

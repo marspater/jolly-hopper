@@ -2,6 +2,13 @@ import SwiftUI
 import AppKit
 import SiphonCore
 
+#if DEBUG
+#Preview("General") { PreferencesView(initialTab: .general).previewEnvironment() }
+#Preview("Download") { PreferencesView(initialTab: .download).previewEnvironment() }
+#Preview("Advanced") { PreferencesView(initialTab: .advanced).previewEnvironment() }
+#Preview("About") { PreferencesView(initialTab: .about).previewEnvironment() }
+#endif
+
 struct PreferencesView: View {
     @AppStorage(UserDefaultsKeys.theme) private var theme: String = "system"
     @AppStorage(UserDefaultsKeys.defaultSaveFolder) private var defaultSaveFolder: String = ""
@@ -1503,8 +1510,4 @@ struct PreferencesView: View {
             )
         }
     }
-}
-
-#Preview {
-    PreferencesView()
 }
