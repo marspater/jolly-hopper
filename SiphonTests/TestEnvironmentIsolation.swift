@@ -6,6 +6,7 @@
 import Foundation
 import XCTest
 @testable import Siphon
+@testable import SiphonCore
 
 /// Principal class of the test bundle (see `INFOPLIST_KEY_NSPrincipalClass`).
 ///
@@ -77,27 +78,55 @@ final class TestEnvironmentIsolation: NSObject, XCTestObservation {
         atexit { TestEnvironmentIsolation.restoreSnapshot() }
     }
 
+    /// A teardown block runs while the test can still fail, so the leak fails the
+    /// test that made it. The key is cleared so the next test is judged on its own.
+    func testCaseWillStart(_ testCase: XCTestCase) {
+        nonisolated(unsafe) let test = testCase
+        test.addTeardownBlock {
+            let leaks = Self.leakedState()
+            guard !leaks.isEmpty else { return }
+            test.record(XCTIssue(type: .assertionFailure, compactDescription: "Leaked into real app state: " + leaks.joined(separator: ", ")))
+            if let domainName = Self.snapshot?.defaultsDomainName {
+                UserDefaults.standard.persistentDomain(forName: domainName)?.keys
+                    .filter { !Self.ignoredDefaultsKey($0) }
+                    .forEach(UserDefaults.standard.removeObject(forKey:))
+            }
+            if let snapshot = Self.snapshot {
+                if let data = snapshot.recoveryFile {
+                    try? data.write(to: snapshot.recoveryFileURL, options: .atomic)
+                } else {
+                    try? FileManager.default.removeItem(at: snapshot.recoveryFileURL)
+                }
+            }
+        }
+    }
+
     func testBundleDidFinish(_ testBundle: Bundle) {
-        Self.reportLeaks()
+        let leaks = Self.leakedState()
         Self.restoreSnapshot()
         UserDefaults.standard.removePersistentDomain(forName: TestState.suiteName)
+        if !leaks.isEmpty {
+            NSLog("SiphonTests: real app state leak: %@", leaks.joined(separator: ", "))
+        }
     }
 
     /// The domain is empty when the suite starts and the recovery file must not change,
     /// so anything different was written by a test or the host app instead of an injected store.
-    private static func reportLeaks() {
-        guard let snapshot, let domainName = snapshot.defaultsDomainName else { return }
-        // AppKit window state and the host app's own language default appear in every run.
+    /// AppKit window state and the host app's own language default appear in every run.
+    private static func ignoredDefaultsKey(_ key: String) -> Bool {
+        key.hasPrefix("NS") || key == "selectedLanguage"
+    }
+
+    private static func leakedState() -> [String] {
+        guard let snapshot, let domainName = snapshot.defaultsDomainName else { return [] }
         let leaked = (UserDefaults.standard.persistentDomain(forName: domainName) ?? [:]).keys
-            .filter { !$0.hasPrefix("NS") && $0 != "selectedLanguage" }
+            .filter { !ignoredDefaultsKey($0) }
             .sorted()
         var report = leaked.map { "defaults key \($0)" }
         if (try? Data(contentsOf: snapshot.recoveryFileURL)) != snapshot.recoveryFile {
             report.append("queue recovery file")
         }
-        if !report.isEmpty {
-            NSLog("SiphonTests: real app state leak: %@", report.joined(separator: ", "))
-        }
+        return report
     }
 
     private static func restoreSnapshot() {

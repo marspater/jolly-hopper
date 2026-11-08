@@ -614,19 +614,11 @@ class YtdlpService: ObservableObject {
         return candidate.path == root.path || candidate.path.hasPrefix(root.path + "/")
     }
 
-    nonisolated static let videoMediaExtensions: Set<String> = [
-        "mp4", "m4v", "mkv", "webm", "mov", "avi", "flv", "wmv", "ts",
-        "mpg", "mpeg", "3gp", "3g2", "ogv", "m2ts", "mts", "f4v"
-    ]
 
-    nonisolated static let supportedMediaExtensions: Set<String> = videoMediaExtensions.union([
-        "mp3", "m4a", "aac", "flac", "wav", "opus", "ogg", "alac", "aiff",
-        "aif", "oga", "mka", "m4b", "wma", "weba", "mp2"
-    ])
-
+    nonisolated static let videoMediaExtensions = MediaFileRules.videoMediaExtensions
+    nonisolated static let supportedMediaExtensions = MediaFileRules.supportedMediaExtensions
     nonisolated static func isMediaFilePath(_ path: String) -> Bool {
-        let ext = (path as NSString).pathExtension.lowercased()
-        return supportedMediaExtensions.contains(ext)
+        MediaFileRules.isMediaFilePath(path)
     }
 
     nonisolated static func findAria2cPath() -> String? {
@@ -3377,39 +3369,11 @@ public struct DownloadResult: Sendable {
     }
 
     nonisolated static func resolvedOutputFileExtension(for options: DownloadOptions) -> String {
-        Self.compatibleMergeOutputFormat(for: options) ?? options.fileType.fileExtension
+        MediaFileRules.resolvedOutputFileExtension(for: options)
     }
 
     nonisolated static func compatibleMergeOutputFormat(for options: DownloadOptions) -> String? {
-        guard options.fileType.isVideo else { return nil }
-
-        if let conversionCodec = options.conversionCodec, conversionCodec != .none {
-            // WebM accepts only VP8/VP9/AV1 video, so an H.264/HEVC result needs Matroska too.
-            if conversionCodec == .av1 || conversionCodec == .vp9 || options.fileType == .webm {
-                return "mkv"
-            }
-            return options.fileType.fileExtension
-        }
-
-        let requestedVideoCodec = options.videoCodec ?? .auto
-        let requestedAudioCodec = options.audioCodec ?? .auto
-
-        switch options.fileType {
-        case .mkv:
-            return "mkv"
-        case .webm:
-            if requestedVideoCodec == .h264 || requestedVideoCodec == .h265 || requestedAudioCodec == .aac || requestedAudioCodec == .mp3 || requestedAudioCodec == .flac {
-                return "mkv"
-            }
-            return "webm"
-        case .mp4:
-            if requestedVideoCodec == .vp9 || requestedVideoCodec == .av1 || requestedAudioCodec == .opus || requestedAudioCodec == .flac {
-                return "mkv"
-            }
-            return "mp4"
-        default:
-            return nil
-        }
+        MediaFileRules.compatibleMergeOutputFormat(for: options)
     }
 
     private func codecFallbackOutputWarnings(options: DownloadOptions) -> [String] {
@@ -8449,15 +8413,6 @@ public struct DownloadResult: Sendable {
     nonisolated private static let safeSubtitleLanguageCharacters =
         CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-_"))
 
-    nonisolated private static let invalidFilenameCharacters =
-        CharacterSet(charactersIn: "/\\?%*|\"<>:").union(.controlCharacters)
-
-    nonisolated private static let reservedFilenameNames: Set<String> = [
-        "CON", "PRN", "AUX", "NUL",
-        "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
-        "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
-        ".DS_STORE", "DS_STORE"
-    ]
 
     nonisolated static func isSafeFormatId(_ formatId: String) -> Bool {
         guard !formatId.isEmpty, !formatId.hasPrefix("-"), formatId.count <= 128 else { return false }
@@ -8470,7 +8425,7 @@ public struct DownloadResult: Sendable {
     }
 
     nonisolated static func sanitizeFilename(_ filename: String) -> String {
-        sanitizedFilenameOrNil(filename) ?? "download"
+        MediaFileRules.sanitizeFilename(filename)
     }
 
     /// yt-dlp expands environment variables in `-o` before it substitutes fields and
@@ -8481,41 +8436,7 @@ public struct DownloadResult: Sendable {
 
     /// Nil when nothing in `filename` survives sanitizing.
     nonisolated static func sanitizedFilenameOrNil(_ filename: String) -> String? {
-        var cleanedScalars: [UnicodeScalar] = []
-        cleanedScalars.reserveCapacity(filename.unicodeScalars.count)
-
-        for scalar in filename.unicodeScalars {
-            cleanedScalars.append(
-                invalidFilenameCharacters.contains(scalar) ? "_" : scalar
-            )
-        }
-
-        let cleaned = String(String.UnicodeScalarView(cleanedScalars))
-        var trimmed = cleaned.replacingOccurrences(of: "..", with: "").trimmingCharacters(in: .whitespacesAndNewlines)
-
-        while trimmed.hasPrefix(".") || trimmed.hasPrefix("-") {
-            trimmed = String(trimmed.dropFirst()).trimmingCharacters(in: .whitespacesAndNewlines)
-        }
-
-        if reservedFilenameNames.contains(trimmed.uppercased()) {
-            trimmed = "download_\(trimmed)"
-        }
-
-        // File systems cap a name at 255 bytes (APFS) or UTF-16 units (HFS+);
-        // UTF-8 bytes bound both. The rest is left for a collision suffix, the
-        // extension and yt-dlp's `.fNNN`/`.part` intermediates. Whole
-        // characters only, so truncation never splits an emoji or accent.
-        var byteCount = 0
-        trimmed = String(trimmed.prefix { character in
-            byteCount += character.utf8.count
-            return byteCount <= 200
-        }).trimmingCharacters(in: .whitespacesAndNewlines)
-
-        while trimmed.hasSuffix(".") {
-            trimmed = String(trimmed.dropLast()).trimmingCharacters(in: .whitespacesAndNewlines)
-        }
-
-        return trimmed.isEmpty ? nil : trimmed
+        MediaFileRules.sanitizedFilenameOrNil(filename)
     }
 
     /// Drops `-P/--paths` and `-o/--output` (with their values) from user

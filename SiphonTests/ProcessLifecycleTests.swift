@@ -5,6 +5,7 @@
 
 import XCTest
 @testable import Siphon
+@testable import SiphonCore
 
 final class ProcessLifecycleTests: XCTestCase {
     func testFixupParserUsesTheQuotedDestinationInsteadOfIntoInTheSourceTitle() async throws {

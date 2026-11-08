@@ -4,6 +4,7 @@
 //
 
 import Foundation
+import SiphonCore
 
 public enum UpdateDownloadError: LocalizedError, Sendable {
     case invalidURL

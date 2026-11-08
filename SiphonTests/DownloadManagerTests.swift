@@ -937,19 +937,19 @@ final class DownloadManagerTests: XCTestCase {
 
     func testInitializeVersionFetchingAndAssignment() async {
         let manager = DownloadManager.forTesting()
-        let appState = AppState()
+        let appState = AppState.forTesting()
         let languageService = LanguageService()
         let lastSeenKey = UserDefaultsKeys.lastSeenVersion
-        let previousLastSeen = UserDefaults.standard.string(forKey: lastSeenKey)
+        let previousLastSeen = TestState.defaults.string(forKey: lastSeenKey)
         defer {
             if let previousLastSeen {
-                UserDefaults.standard.set(previousLastSeen, forKey: lastSeenKey)
+                TestState.defaults.set(previousLastSeen, forKey: lastSeenKey)
             } else {
-                UserDefaults.standard.removeObject(forKey: lastSeenKey)
+                TestState.defaults.removeObject(forKey: lastSeenKey)
             }
         }
 
-        UserDefaults.standard.set(appState.appVersion, forKey: lastSeenKey)
+        TestState.defaults.set(appState.appVersion, forKey: lastSeenKey)
         manager.ytdlpService.ytdlpPath = URL(fileURLWithPath: "/usr/local/bin/yt-dlp")
         let expectedVersion = "2025.02.20"
         manager.ytdlpService.processRunner = MockYtdlpProcessRunner(mockCommand: { _ in
@@ -990,13 +990,13 @@ final class DownloadManagerTests: XCTestCase {
 
     func testInitializeWhatsNewDisplayWhenVersionChanges() async {
         let manager = DownloadManager.forTesting()
-        let appState = AppState()
+        let appState = AppState.forTesting()
         let languageService = LanguageService()
         appState.urlSession = makeMockURLSession()
 
         let lastSeenKey = UserDefaultsKeys.lastSeenVersion
         defer {
-            UserDefaults.standard.removeObject(forKey: lastSeenKey)
+            TestState.defaults.removeObject(forKey: lastSeenKey)
             MockURLProtocol.requestHandler = nil
         }
 
@@ -1005,7 +1005,7 @@ final class DownloadManagerTests: XCTestCase {
             return (response, Data())
         }
 
-        UserDefaults.standard.set("0.0.1", forKey: lastSeenKey)
+        TestState.defaults.set("0.0.1", forKey: lastSeenKey)
 
         await appState.initializeApplicationServices(
             ytdlpService: manager.ytdlpService,
@@ -1014,9 +1014,9 @@ final class DownloadManagerTests: XCTestCase {
         )
 
         XCTAssertTrue(appState.showWhatsNew)
-        XCTAssertEqual(UserDefaults.standard.string(forKey: lastSeenKey), appState.appVersion)
+        XCTAssertEqual(TestState.defaults.string(forKey: lastSeenKey), appState.appVersion)
 
-        let appState2 = AppState()
+        let appState2 = AppState.forTesting()
         appState2.urlSession = makeMockURLSession()
         await appState2.initializeApplicationServices(
             ytdlpService: manager.ytdlpService,

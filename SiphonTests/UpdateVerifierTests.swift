@@ -9,6 +9,7 @@ import CryptoKit
 import os
 import Darwin
 @testable import Siphon
+@testable import SiphonCore
 
 final class UpdateVerifierTests: XCTestCase {
 

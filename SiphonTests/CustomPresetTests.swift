@@ -119,6 +119,7 @@ final class CustomPresetTests: XCTestCase {
         // Test loadAll when invalid/corrupted data exists
         let corruptedData = "invalid json data".data(using: .utf8)!
         UserDefaults.standard.set(corruptedData, forKey: UserDefaultsKeys.customPresets)
+        defer { UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.customPresets) }
         XCTAssertTrue(CustomPreset.loadAll().isEmpty)
     }
 
