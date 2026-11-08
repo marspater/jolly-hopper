@@ -90,7 +90,7 @@ CI (`.github/workflows/swift.yml`) also runs the same suite with `-configuration
 
 Xcode/macOS SDKs are required for native validation. On Linux/headless runners without them, run available scripting checks and report native builds/tests as not run. `swiftc -parse` proves syntax only. Documentation-only changes need link and diff checks, not an app build.
 
-Reuse `NotificationService.isRunningTests` and `SiphonTests/TestEnvironmentIsolation.swift` for test-host behavior. Hosted XCTest temporarily changes real app defaults and recovery state before restoring them: run native suites sequentially, preserve the interrupted-run state backup, and use temporary paths/injected stores for new persistence tests. See the local rules for coordination with a running app. Report focused tests, full suites, skipped tests, live downloads, and visual/accessibility checks separately.
+New unit tests use Swift Testing (`import Testing`); convert an existing XCTest file only when already substantially editing it. Reuse `NotificationService.isRunningTests` and `SiphonTests/TestEnvironmentIsolation.swift` for test-host behavior. Hosted XCTest temporarily changes real app defaults and recovery state before restoring them: run native suites sequentially, preserve the interrupted-run state backup, and use temporary paths/injected stores for new persistence tests. See the local rules for coordination with a running app. Report focused tests, full suites, skipped tests, live downloads, and visual/accessibility checks separately.
 
 Run relevant build/tests for the change and report validation honestly. Add regression coverage when practical, especially for lifecycle, concurrency, persistence, cancellation, and security fixes. Never weaken tests to make CI green.
 
