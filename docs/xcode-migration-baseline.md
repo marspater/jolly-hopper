@@ -142,3 +142,9 @@ Trigger to revisit: after the Phase B and Phase G project changes have merged. C
 - The required proof is not available from an agent shell. Reading `/Library/Application Support/com.apple.TCC/TCC.db` fails with `authorization denied`, so I could not check `csreq` after a hosted run.
 
 Trigger to revisit: someone runs the hosted suite on a build using native ad hoc signing, launches the installed app, and then runs the query from #619 in a terminal with Full Disk Access, and the record stays identifier-bound.
+
+## SwiftLint (#623)
+
+**Retired.** I removed `.swiftlint.yml` because nothing reads it. No workflow runs SwiftLint directly, and Codacy runs it on every PR with its own rule set: with the file present, Codacy still flagged rules the file disables. For the same reason the `.codacy.yml` engine switch does not stop SwiftLint.
+
+Trigger to revisit: moving lint out of Codacy into a pinned CI step.
