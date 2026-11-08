@@ -293,7 +293,7 @@ final class QueueAndErrorUXTests: XCTestCase {
     }
 
     func testQueuePauseAndResume() {
-        let manager = DownloadManager()
+        let manager = DownloadManager.forTesting()
         let options = DownloadOptions.default
         let download = Download(url: "https://example.com/test", options: options)
         download.status = .downloading
@@ -311,7 +311,7 @@ final class QueueAndErrorUXTests: XCTestCase {
     }
     
     func testQueueReordering() {
-        let manager = DownloadManager()
+        let manager = DownloadManager.forTesting()
         let options = DownloadOptions.default
         
         let d1 = Download(url: "https://example.com/1", options: options, title: "Video 1")
@@ -410,11 +410,11 @@ final class QueueAndErrorUXTests: XCTestCase {
 
         let historic = HistoricDownload(download: download)
         if let encoded = try? JSONEncoder().encode([historic]) {
-            UserDefaults.standard.set(encoded, forKey: userDefaultsKey)
+            TestState.defaults.set(encoded, forKey: userDefaultsKey)
         }
-        defer { UserDefaults.standard.removeObject(forKey: userDefaultsKey) }
+        defer { TestState.defaults.removeObject(forKey: userDefaultsKey) }
 
-        let manager = DownloadManager()
+        let manager = DownloadManager.forTesting()
         manager.loadHistory()
         XCTAssertEqual(manager.downloads.count, 1)
 
@@ -589,7 +589,7 @@ final class QueueAndErrorUXTests: XCTestCase {
     }
 
     func testPauseAndResumeDuringFetching() {
-        let manager = DownloadManager()
+        let manager = DownloadManager.forTesting()
         let options = DownloadOptions.default
         let download = Download(url: "https://example.com/fetching-test", options: options)
         download.status = .fetching
@@ -605,7 +605,7 @@ final class QueueAndErrorUXTests: XCTestCase {
     }
 
     func testCancellationDuringFfmpegPostprocessing() {
-        let manager = DownloadManager()
+        let manager = DownloadManager.forTesting()
         let options = DownloadOptions.default
         let download = Download(url: "https://example.com/postprocessing-test", options: options)
         download.status = .processing
@@ -647,7 +647,7 @@ final class QueueAndErrorUXTests: XCTestCase {
     }
 
     func testDuplicateFilenamesAcrossSimultaneousTasks() {
-        let manager = DownloadManager()
+        let manager = DownloadManager.forTesting()
         var options = DownloadOptions.default
         options.customFilename = "simultaneous_video"
         options.fileType = .mp4
@@ -730,7 +730,7 @@ final class QueueAndErrorUXTests: XCTestCase {
     }
 
     func testAppTerminationDuringActiveDownloads() async {
-        let manager = DownloadManager()
+        let manager = DownloadManager.forTesting()
         let options = DownloadOptions.default
 
         let d1 = Download(url: "https://example.com/term1", options: options)
@@ -803,7 +803,7 @@ final class QueueAndErrorUXTests: XCTestCase {
     }
 
     func testSimultaneousDependencyInstallationCalls() async {
-        let manager = DownloadManager()
+        let manager = DownloadManager.forTesting()
         let appState = AppState()
         manager.ytdlpService.updateYtdlpHandler = {
             try? await Task.sleep(nanoseconds: 10_000_000)
@@ -824,7 +824,7 @@ final class QueueAndErrorUXTests: XCTestCase {
     }
 
     func testDependencyUpdateBlockedWhileExecutionIsActive() async {
-        let manager = DownloadManager()
+        let manager = DownloadManager.forTesting()
         let appState = AppState()
         let updateWasInvoked = TestBox(false)
         manager.ytdlpService.updateYtdlpHandler = {
@@ -843,7 +843,7 @@ final class QueueAndErrorUXTests: XCTestCase {
     }
 
     func testDownloadQueueWaitsWhileDependencyUpdateIsActive() async {
-        let manager = DownloadManager()
+        let manager = DownloadManager.forTesting()
         manager.ytdlpService.ytdlpPath = URL(fileURLWithPath: "/usr/bin/true")
         manager.ytdlpService.processRunner = MockYtdlpProcessRunner(mockCommand: { _ in
             try await Task.sleep(nanoseconds: 5_000_000_000)
@@ -964,7 +964,7 @@ final class QueueAndErrorUXTests: XCTestCase {
     }
 
     func testFileExistsSeparationFromFailedDownloads() {
-        let manager = DownloadManager()
+        let manager = DownloadManager.forTesting()
         let d1 = Download(url: "https://example.com/1", options: .default)
         d1.status = .fileExists
         let d2 = Download(url: "https://example.com/2", options: .default)
@@ -1001,7 +1001,7 @@ final class QueueAndErrorUXTests: XCTestCase {
     // MARK: - Design System & UI Architecture Tests
 
     func testDownloadCardsKeepCompactHeightWithHDRThumbnails() {
-        let manager = DownloadManager()
+        let manager = DownloadManager.forTesting()
         defer { manager.shutdown() }
         let job = Download(url: "https://example.com/video", options: .default, title: "Fixture")
         job.status = .fileExists
@@ -1247,7 +1247,7 @@ final class QueueAndErrorUXTests: XCTestCase {
     }
 
     func testClearQueuedDownloadsPreservesExistingStoppedDownloads() {
-        let manager = DownloadManager()
+        let manager = DownloadManager.forTesting()
         let stoppedDownload = Download(url: "https://example.com/stopped", options: .default)
         stoppedDownload.status = .stopped
 
@@ -1266,7 +1266,7 @@ final class QueueAndErrorUXTests: XCTestCase {
     }
 
     func testResumeWithNewNameAvoidsAnyMediaExtensionCollision() {
-        let manager = DownloadManager()
+        let manager = DownloadManager.forTesting()
         let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent("RenameTest_\(UUID().uuidString)")
         try? FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: tempDir) }
@@ -1479,18 +1479,17 @@ final class QueueAndErrorUXTests: XCTestCase {
 
     func testCustomPresetPersistence() {
         let key = UserDefaultsKeys.customPresets
-        UserDefaults.standard.removeObject(forKey: key)
+        TestState.defaults.removeObject(forKey: key)
+        defer { TestState.defaults.removeObject(forKey: key) }
 
         let preset1 = CustomPreset(configuration: CustomPresetConfiguration(name: "My 4K Preset", videoCodec: .h265, audioCodec: .aac, videoResolution: .r2160p, fileType: .mp4))
 
-        CustomPreset.saveAll([preset1])
+        CustomPreset.saveAll([preset1], to: TestState.defaults)
 
-        let loaded = CustomPreset.loadAll()
+        let loaded = CustomPreset.loadAll(from: TestState.defaults)
         XCTAssertEqual(loaded.count, 1)
         XCTAssertEqual(loaded.first?.name, "My 4K Preset")
         XCTAssertEqual(loaded.first?.videoResolution, .r2160p)
-
-        UserDefaults.standard.removeObject(forKey: key)
     }
 
     func testHistoricDownloadToDownloadRoundtrip() {
@@ -1716,7 +1715,7 @@ final class QueueAndErrorUXTests: XCTestCase {
     }
 
     func testStopDownloadAllowsStoppingPausedDownload() {
-        let manager = DownloadManager()
+        let manager = DownloadManager.forTesting()
         let dl = Download(url: "https://example.com/test", options: .default)
         dl.status = .paused
         manager.downloads = [dl]
@@ -1726,7 +1725,7 @@ final class QueueAndErrorUXTests: XCTestCase {
     }
 
     func testClearDownloadsStopsAndCleansUpPausedDownloads() {
-        let manager = DownloadManager()
+        let manager = DownloadManager.forTesting()
         let dl = Download(url: "https://example.com/test2", options: .default)
         dl.status = .paused
         manager.downloads = [dl]
@@ -1737,7 +1736,7 @@ final class QueueAndErrorUXTests: XCTestCase {
     }
 
     func testPauseDownloadPersistsHistory() {
-        let manager = DownloadManager()
+        let manager = DownloadManager.forTesting()
         let dl = Download(url: "https://example.com/test-pause", options: .default)
         dl.status = .downloading
         manager.downloads = [dl]
@@ -1829,7 +1828,7 @@ final class QueueAndErrorUXTests: XCTestCase {
     }
 
     func testShutdownClearsQueueReservations() {
-        let manager = DownloadManager()
+        let manager = DownloadManager.forTesting()
         let id = UUID()
         manager.queue.reserveSlot(for: id)
         manager.queue.reserveOutputPath("/tmp/fake_output.mp4")
@@ -2155,7 +2154,7 @@ final class AddDownloadWindowSizingTests: XCTestCase {
 
     @MainActor
     func testAdvancedPaneWindowRestoresItsOriginalWidth() async throws {
-        let manager = DownloadManager()
+        let manager = DownloadManager.forTesting()
         defer { manager.shutdown() }
         let windows = AddDownloadWindowManager()
         let previous = Set(NSApp.windows.map(ObjectIdentifier.init))
@@ -2179,7 +2178,7 @@ final class AddDownloadWindowSizingTests: XCTestCase {
 
     @MainActor
     func testModeResizeSettlesBeforeTheNextResize() throws {
-        let manager = DownloadManager()
+        let manager = DownloadManager.forTesting()
         defer { manager.shutdown() }
         let windows = AddDownloadWindowManager()
         let previous = Set(NSApp.windows.map(ObjectIdentifier.init))
@@ -2206,7 +2205,7 @@ final class AddDownloadWindowSizingTests: XCTestCase {
         guard !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else {
             throw XCTSkip("Window motion follows Reduce Motion")
         }
-        let manager = DownloadManager()
+        let manager = DownloadManager.forTesting()
         defer { manager.shutdown() }
         let windows = AddDownloadWindowManager()
         let previous = Set(NSApp.windows.map(ObjectIdentifier.init))
@@ -2238,7 +2237,7 @@ final class AddDownloadWindowSizingTests: XCTestCase {
     /// stay set for the Window menu and Mission Control.
     @MainActor
     func testSettingsWindowKeepsItsHiddenTitle() throws {
-        let manager = DownloadManager()
+        let manager = DownloadManager.forTesting()
         defer { manager.shutdown() }
         let languageService = LanguageService()
         let windows = PreferencesWindowManager()
@@ -2274,7 +2273,7 @@ final class AddDownloadWindowSizingTests: XCTestCase {
 
     @MainActor
     func testBatchSingleBatchRestoresHeightWithAdvancedRemembered() throws {
-        let manager = DownloadManager()
+        let manager = DownloadManager.forTesting()
         defer { manager.shutdown() }
         let windows = AddDownloadWindowManager()
         let previous = Set(NSApp.windows.map(ObjectIdentifier.init))

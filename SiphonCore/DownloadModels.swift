@@ -150,10 +150,10 @@ public struct CustomPreset: Codable, Identifiable, Equatable, Sendable {
         return loadAll(from: userDefaults).first { $0.id == id }
     }
 
-    public static func saveAll(_ presets: [CustomPreset]) {
+    public static func saveAll(_ presets: [CustomPreset], to userDefaults: UserDefaults = .standard) {
         do {
             let data = try JSONEncoder().encode(presets)
-            UserDefaults.standard.set(data, forKey: UserDefaultsKeys.customPresets)
+            userDefaults.set(data, forKey: UserDefaultsKeys.customPresets)
         } catch {
             logger.error("Failed to encode custom presets: \(error.localizedDescription)")
         }

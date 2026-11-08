@@ -6,7 +6,7 @@ import XCTest
 final class DownloadManagerTests: XCTestCase {
     @MainActor
     func testFileCollisionsBelongOnlyToRecentDownloads() {
-        let manager = DownloadManager()
+        let manager = DownloadManager.forTesting()
         defer { manager.shutdown() }
         let job = Download(url: "https://example.com/video", options: .default, title: "Collision")
         job.status = .fileExists
@@ -23,7 +23,7 @@ final class DownloadManagerTests: XCTestCase {
 
 
     func testStopAllIsAvailableOnlyForLiveWork() {
-        let manager = DownloadManager()
+        let manager = DownloadManager.forTesting()
         defer { manager.shutdown() }
         let job = Download(url: "https://example.com/video", options: .default)
         manager.downloads = [job]
@@ -58,7 +58,7 @@ final class DownloadManagerTests: XCTestCase {
     }
 
     func testRecentDownloadsListsNewestJobsFirst() {
-        let manager = DownloadManager()
+        let manager = DownloadManager.forTesting()
         defer { manager.shutdown() }
         manager.downloads = ["Old", "Middle", "Newer", "Newest"].map {
             Download(url: "https://example.com/\($0)", options: .default, title: $0)
@@ -102,14 +102,14 @@ final class DownloadManagerTests: XCTestCase {
     }
 
     func testPauseResumeReusesPartialDataAndCompletionRemovesScratch() async throws {
-        let originalHistory = UserDefaults.standard.object(forKey: UserDefaultsKeys.downloadHistory)
+        let originalHistory = TestState.defaults.object(forKey: UserDefaultsKeys.downloadHistory)
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         defer {
-            UserDefaults.standard.set(originalHistory, forKey: UserDefaultsKeys.downloadHistory)
+            TestState.defaults.set(originalHistory, forKey: UserDefaultsKeys.downloadHistory)
             try? FileManager.default.removeItem(at: root)
         }
-        let manager = DownloadManager()
+        let manager = DownloadManager.forTesting()
         defer { manager.shutdown() }
         manager.ytdlpService.ytdlpPath = URL(fileURLWithPath: "/mock/yt-dlp")
         let started = expectation(description: "Partial file written")
@@ -164,9 +164,9 @@ final class DownloadManagerTests: XCTestCase {
     }
 
     func testRemovingActiveDownloadDoesNotRestoreHistoryAfterCancellation() async throws {
-        let originalHistory = UserDefaults.standard.object(forKey: UserDefaultsKeys.downloadHistory)
-        defer { UserDefaults.standard.set(originalHistory, forKey: UserDefaultsKeys.downloadHistory) }
-        let manager = DownloadManager()
+        let originalHistory = TestState.defaults.object(forKey: UserDefaultsKeys.downloadHistory)
+        defer { TestState.defaults.set(originalHistory, forKey: UserDefaultsKeys.downloadHistory) }
+        let manager = DownloadManager.forTesting()
         defer { manager.shutdown() }
         manager.ytdlpService.ytdlpPath = URL(fileURLWithPath: "/mock/yt-dlp")
         let started = expectation(description: "Metadata fetch started")
@@ -191,7 +191,7 @@ final class DownloadManagerTests: XCTestCase {
 
     func testAddDownload() {
         // Arrange
-        let manager = DownloadManager()
+        let manager = DownloadManager.forTesting()
         let testUrl = "https://example.com/video"
         let options = DownloadOptions.default
 
@@ -213,7 +213,7 @@ final class DownloadManagerTests: XCTestCase {
     }
 
     func testAddDownloadsBatch() {
-        let manager = DownloadManager()
+        let manager = DownloadManager.forTesting()
         let urls = [
             "https://example.com/video1",
             "https://example.com/video2",
@@ -231,7 +231,7 @@ final class DownloadManagerTests: XCTestCase {
     }
 
     func testMostRelevantNavigationItemPrioritizesActionableDownloadStates() {
-        let manager = DownloadManager()
+        let manager = DownloadManager.forTesting()
         let options = DownloadOptions.default
 
         XCTAssertEqual(manager.mostRelevantNavigationItem, .completed)
@@ -258,7 +258,7 @@ final class DownloadManagerTests: XCTestCase {
     }
 
     func testRetryFailedDownloadsIncludesStoppedDownloads() {
-        let manager = DownloadManager()
+        let manager = DownloadManager.forTesting()
         let options = DownloadOptions.default
 
         let downloadStopped = Download(url: "https://example.com/stopped", options: options)
@@ -349,7 +349,7 @@ final class DownloadManagerTests: XCTestCase {
         try? FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: tempDir) }
 
-        let manager = DownloadManager()
+        let manager = DownloadManager.forTesting()
         var opts1 = DownloadOptions.default
         opts1.saveFolder = tempDir
         opts1.customFilename = "custom_video"
@@ -385,7 +385,7 @@ final class DownloadManagerTests: XCTestCase {
         try? FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: tempDir) }
 
-        let manager = DownloadManager()
+        let manager = DownloadManager.forTesting()
         var opts = DownloadOptions.default
         opts.saveFolder = tempDir
         opts.customFilename = "unreserved_test"
@@ -412,7 +412,7 @@ final class DownloadManagerTests: XCTestCase {
     }
 
     func testProcessDownloadReturnsAfterShutdown() async {
-        let manager = DownloadManager()
+        let manager = DownloadManager.forTesting()
         manager.shutdown()
         let download = Download(url: "https://example.com/after-shutdown", options: .default)
 
@@ -422,7 +422,7 @@ final class DownloadManagerTests: XCTestCase {
     }
 
     func testProcessDownloadExitsIfCancelledWhileQueued() async {
-        let manager = DownloadManager()
+        let manager = DownloadManager.forTesting()
         let options = DownloadOptions.default
         let download = Download(url: "https://example.com/cancelled", options: options)
         download.status = .stopped // User cancelled while in queue
@@ -446,7 +446,7 @@ final class DownloadManagerTests: XCTestCase {
     }
 
     func testRetryDownloadEligibleStatuses() {
-        let manager = DownloadManager()
+        let manager = DownloadManager.forTesting()
         let options = DownloadOptions.default
 
         let eligibleStatuses: [DownloadStatus] = [.failed, .stopped, .fileExists]
@@ -468,7 +468,7 @@ final class DownloadManagerTests: XCTestCase {
     }
 
     func testRetryDownloadIneligibleStatuses() {
-        let manager = DownloadManager()
+        let manager = DownloadManager.forTesting()
         let options = DownloadOptions.default
 
         let ineligibleStatuses: [DownloadStatus] = [.downloading, .queued, .completed, .fetching, .processing]
@@ -497,10 +497,10 @@ final class DownloadManagerTests: XCTestCase {
 
         let historic = HistoricDownload(download: activeDownload)
         if let encoded = try? JSONEncoder().encode([historic]) {
-            UserDefaults.standard.set(encoded, forKey: userDefaultsKey)
+            TestState.defaults.set(encoded, forKey: userDefaultsKey)
         }
 
-        let manager = DownloadManager()
+        let manager = DownloadManager.forTesting()
         manager.loadHistory()
 
         XCTAssertEqual(manager.downloads.count, 1)
@@ -513,7 +513,7 @@ final class DownloadManagerTests: XCTestCase {
         XCTAssertEqual(manager.failedDownloads.count, 1, "Stopped downloads should be tracked in failedDownloads")
 
         // Clean up
-        UserDefaults.standard.removeObject(forKey: userDefaultsKey)
+        TestState.defaults.removeObject(forKey: userDefaultsKey)
     }
 
     func testLoadHistoryRecoversValidEntriesWhenCorruptedItemPresent() throws {
@@ -539,10 +539,10 @@ final class DownloadManagerTests: XCTestCase {
 
         let mixedArray = [json1, corruptedJson, json2]
         let rawData = try JSONSerialization.data(withJSONObject: mixedArray)
-        UserDefaults.standard.set(rawData, forKey: userDefaultsKey)
-        defer { UserDefaults.standard.removeObject(forKey: userDefaultsKey) }
+        TestState.defaults.set(rawData, forKey: userDefaultsKey)
+        defer { TestState.defaults.removeObject(forKey: userDefaultsKey) }
 
-        let manager = DownloadManager()
+        let manager = DownloadManager.forTesting()
         manager.loadHistory()
 
         XCTAssertEqual(manager.history.count, 2, "Valid entries should be recovered even when a corrupted item is present")
@@ -603,7 +603,7 @@ final class DownloadManagerTests: XCTestCase {
     }
 
     func testProcessDownloadAbortsIfCancelledDuringFetchInfo() async {
-        let manager = DownloadManager()
+        let manager = DownloadManager.forTesting()
         manager.ytdlpService.ytdlpPath = URL(fileURLWithPath: "/usr/local/bin/yt-dlp")
 
         let fetchStartedExpectation = expectation(description: "Fetch info started")
@@ -651,7 +651,7 @@ final class DownloadManagerTests: XCTestCase {
     }
 
     func testProcessDownloadHandlesYtdlpErrorCases() async {
-        let manager = DownloadManager()
+        let manager = DownloadManager.forTesting()
         let languageService = LanguageService()
         manager.languageService = languageService
         let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
@@ -740,15 +740,15 @@ final class DownloadManagerTests: XCTestCase {
 
     func testLoadHistoryCorruptedDataGracefullyHandled() {
         let userDefaultsKey = UserDefaultsKeys.downloadHistory
-        UserDefaults.standard.set("corrupted_non_json_data".data(using: .utf8)!, forKey: userDefaultsKey)
+        TestState.defaults.set("corrupted_non_json_data".data(using: .utf8)!, forKey: userDefaultsKey)
 
-        let manager = DownloadManager()
+        let manager = DownloadManager.forTesting()
         manager.loadHistory()
 
         // Should not crash and should leave downloads empty
         XCTAssertEqual(manager.downloads.count, 0)
 
-        UserDefaults.standard.removeObject(forKey: userDefaultsKey)
+        TestState.defaults.removeObject(forKey: userDefaultsKey)
     }
 
     func testCustomPresetLoadCorruptedDataGracefullyHandled() {
@@ -762,7 +762,7 @@ final class DownloadManagerTests: XCTestCase {
     }
 
     func testRetryDownloadResetsForceOverwriteFlag() {
-        let manager = DownloadManager()
+        let manager = DownloadManager.forTesting()
         var options = DownloadOptions.default
         options.forceOverwrite = true
 
@@ -792,7 +792,7 @@ final class DownloadManagerTests: XCTestCase {
     }
 
     func testResumeWithNewNameUsesCleanSequentialSuffix() {
-        let manager = DownloadManager()
+        let manager = DownloadManager.forTesting()
         let dl = Download(url: "https://example.com/vid", options: .default, title: "My Video")
         dl.status = .fileExists
 
@@ -805,7 +805,7 @@ final class DownloadManagerTests: XCTestCase {
     }
 
     func testFileExistsResumeRefetchesMetadata() {
-        let manager = DownloadManager()
+        let manager = DownloadManager.forTesting()
         manager.ytdlpService.isUpdating = true // hold jobs in the queue
         // .fileExists stores pruned info (no formats). Reusing it would send a
         // video-only selectedFormatId without "+ba", producing a silent file.
@@ -936,7 +936,7 @@ final class DownloadManagerTests: XCTestCase {
     }
 
     func testInitializeVersionFetchingAndAssignment() async {
-        let manager = DownloadManager()
+        let manager = DownloadManager.forTesting()
         let appState = AppState()
         let languageService = LanguageService()
         let lastSeenKey = UserDefaultsKeys.lastSeenVersion
@@ -965,12 +965,12 @@ final class DownloadManagerTests: XCTestCase {
     }
 
     func testInitializeLoadsHistoryAndResetsActiveStatuses() async {
-        let manager = DownloadManager()
+        let manager = DownloadManager.forTesting()
         let languageService = LanguageService()
 
         let historyKey = UserDefaultsKeys.downloadHistory
         defer {
-            UserDefaults.standard.removeObject(forKey: historyKey)
+            TestState.defaults.removeObject(forKey: historyKey)
         }
 
         let download = Download(url: "https://example.com/init_history", options: .default)
@@ -978,7 +978,7 @@ final class DownloadManagerTests: XCTestCase {
         let historic = HistoricDownload(download: download)
 
         if let data = try? JSONEncoder().encode([historic]) {
-            UserDefaults.standard.set(data, forKey: historyKey)
+            TestState.defaults.set(data, forKey: historyKey)
         }
 
         manager.initialize(languageService: languageService)
@@ -989,7 +989,7 @@ final class DownloadManagerTests: XCTestCase {
     }
 
     func testInitializeWhatsNewDisplayWhenVersionChanges() async {
-        let manager = DownloadManager()
+        let manager = DownloadManager.forTesting()
         let appState = AppState()
         let languageService = LanguageService()
         appState.urlSession = makeMockURLSession()
@@ -1027,8 +1027,8 @@ final class DownloadManagerTests: XCTestCase {
     }
 
     func testQueueSlotAccountingDoesNotExceedMaxConcurrentDownloads() async {
-        let manager = DownloadManager()
-        let maxSlots = UserDefaults.standard.integer(forKey: UserDefaultsKeys.maxConcurrentDownloads)
+        let manager = DownloadManager.forTesting()
+        let maxSlots = TestState.defaults.integer(forKey: UserDefaultsKeys.maxConcurrentDownloads)
         let limit = maxSlots > 0 ? maxSlots : 3
 
         let d1 = Download(url: "https://example.com/1", options: .default)
@@ -1052,7 +1052,7 @@ final class DownloadManagerTests: XCTestCase {
     }
 
     func testShutdownPreventsFutureQueueAdmission() {
-        let manager = DownloadManager()
+        let manager = DownloadManager.forTesting()
         manager.shutdown()
 
         let download = Download(url: "https://example.com/after-shutdown", options: .default)
@@ -1067,7 +1067,7 @@ final class DownloadManagerTests: XCTestCase {
     // MARK: - Single-Pass Status Counts Tests
 
     func testStatusCountsAccurateCalculation() {
-        let manager = DownloadManager()
+        let manager = DownloadManager.forTesting()
         let options = DownloadOptions.default
 
         let d1 = Download(url: "https://example.com/1", options: options)
@@ -1108,7 +1108,7 @@ final class DownloadManagerTests: XCTestCase {
     }
 
     func testPausedDownloadsReflectedInQueuedAndDisappearOnResume() {
-        let manager = DownloadManager()
+        let manager = DownloadManager.forTesting()
         let download = Download(url: "https://example.com/test_paused_queued", options: .default)
         download.status = .paused
         manager.downloads = [download]
@@ -1129,7 +1129,7 @@ final class DownloadManagerTests: XCTestCase {
     // MARK: - Pause Download Tests
 
     func testPauseDownloadEligibleAndIneligibleStatuses() {
-        let manager = DownloadManager()
+        let manager = DownloadManager.forTesting()
 
         let eligibleStatuses: [DownloadStatus] = [.downloading, .fetching, .processing, .queued]
         for status in eligibleStatuses {
@@ -1157,7 +1157,7 @@ final class DownloadManagerTests: XCTestCase {
     }
 
     func testPauseDownloadQueueAndTaskCancellation() {
-        let manager = DownloadManager()
+        let manager = DownloadManager.forTesting()
 
         let download = Download(url: "https://example.com/test_pause_task", options: .default)
         download.status = .queued
@@ -1181,7 +1181,7 @@ final class DownloadManagerTests: XCTestCase {
     // MARK: - Resume Download Tests
 
     func testResumeDownloadFromPausedState() {
-        let manager = DownloadManager()
+        let manager = DownloadManager.forTesting()
         let download = Download(url: "https://example.com/resume-test", options: .default)
         download.status = .paused
         manager.downloads.append(download)
@@ -1200,7 +1200,7 @@ final class DownloadManagerTests: XCTestCase {
     }
 
     func testResumeDownloadNonPausedStatusesIgnored() {
-        let manager = DownloadManager()
+        let manager = DownloadManager.forTesting()
         let nonPausedStatuses: [DownloadStatus] = [
             .downloading, .fetching, .processing,
             .completed, .failed, .stopped,
@@ -1354,7 +1354,7 @@ final class DownloadManagerTests: XCTestCase {
     }
 
     func testRemoveIndividualHistoryEntryPreservesFileAndOtherDownloads() throws {
-        let manager = DownloadManager()
+        let manager = DownloadManager.forTesting()
         defer { manager.shutdown() }
         let file = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".mp4")
         let contents = Data("downloaded media".utf8)
@@ -1377,7 +1377,7 @@ final class DownloadManagerTests: XCTestCase {
     }
 
     func testClearCompletedDownloadsPreservesFailedDownloads() {
-        let manager = DownloadManager()
+        let manager = DownloadManager.forTesting()
         let options = DownloadOptions.default
 
         let completedDownload = Download(url: "https://example.com/done", options: options)
@@ -1404,7 +1404,7 @@ final class DownloadManagerTests: XCTestCase {
     }
 
     func testClearFailedDownloadsPreservesCompletedDownloads() {
-        let manager = DownloadManager()
+        let manager = DownloadManager.forTesting()
         let options = DownloadOptions.default
 
         let completedDownload = Download(url: "https://example.com/done", options: options)
@@ -1431,7 +1431,7 @@ final class DownloadManagerTests: XCTestCase {
     }
 
     func testQuickDownloadDefaultsLanguageAndHonorsPreferences() {
-        let manager = DownloadManager()
+        let manager = DownloadManager.forTesting()
         manager.quickDownload(
             url: "https://example.com/quick",
             rawCookies: nil,
@@ -1448,7 +1448,7 @@ final class DownloadManagerTests: XCTestCase {
         XCTAssertEqual(quickItem.options.browserCookieSource, "chrome")
         // Fast download must honor Preferences instead of downloading unbounded
         // "best" (for example 4K VP9 muxed into an .mp4).
-        let preferred = DownloadOptions.defaultFromPreferences()
+        let preferred = DownloadOptions.defaultFromPreferences(userDefaults: TestState.defaults)
         XCTAssertEqual(quickItem.options.fileType, preferred.fileType)
         XCTAssertEqual(quickItem.options.videoResolution, preferred.videoResolution)
         XCTAssertEqual(quickItem.options.videoCodec, preferred.videoCodec)
@@ -1527,7 +1527,7 @@ final class NotificationServiceTests: XCTestCase {
     }
 
     func testNotificationServiceUserPreferenceGating() {
-        let defaults = UserDefaults.standard
+        let defaults = TestState.defaults
         let previousSetting = defaults.object(forKey: UserDefaultsKeys.showNotifications)
         defer {
             if let prev = previousSetting {
@@ -1549,7 +1549,7 @@ final class NotificationServiceTests: XCTestCase {
 
     @MainActor
     func testRetryDownloadClearsMediaInfo() {
-        let manager = DownloadManager()
+        let manager = DownloadManager.forTesting()
         defer { manager.shutdown() }
 
         let sampleFormat = MediaFormat(
@@ -1634,9 +1634,9 @@ final class NotificationServiceTests: XCTestCase {
     }
 
     @MainActor
-    func testAppDelegateWillTerminateShutsDownDownloadManager() {
+    func testAppDelegateWillTerminateShutsDownManager() {
         let appDelegate = AppDelegate()
-        let manager = DownloadManager()
+        let manager = DownloadManager.forTesting()
         appDelegate.downloadManager = manager
         defer { manager.shutdown() }
 
@@ -1650,7 +1650,7 @@ final class NotificationServiceTests: XCTestCase {
 
     @MainActor
     func testAppTerminationRunsOnceAcrossObservers() {
-        let manager = DownloadManager()
+        let manager = DownloadManager.forTesting()
         defer { manager.shutdown() }
 
         manager.handleAppTermination()

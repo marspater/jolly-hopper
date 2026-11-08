@@ -16,8 +16,8 @@ class DownloadManager: ObservableObject {
     private(set) var downloadIDs: Set<UUID> = []
     @Published var history: [HistoricDownload] = []
     let ytdlpService = YtdlpService()
-    let historyStore = DownloadHistoryStore()
-    let queue = DownloadQueue()
+    let historyStore: DownloadHistoryStore
+    let queue: DownloadQueue
     let recoveryStore: QueueRecoveryStore
     @Published var showQueueRecoveryAlert: Bool = false
     @Published var recoverableJobsCount: Int = 0
@@ -27,7 +27,7 @@ class DownloadManager: ObservableObject {
     private var cancellables = Set<AnyCancellable>()
     private var isShuttingDown = false
     private var isInitialized = false
-    private let userDefaults = UserDefaults.standard
+    private let userDefaults: UserDefaults
 
     var activeExecutionCount: Int {
         executor.activeExecutionCount
@@ -40,7 +40,22 @@ class DownloadManager: ObservableObject {
     private var isProcessingQueue = false
     var languageService: LanguageService?
 
-    init(recoveryFileURL: URL = QueueRecoveryStore.defaultFileURL) {
+    /// The test host launches the real app, so it keeps recovery state in the redirected folder.
+    static var defaultRecoveryFileURL: URL {
+        NotificationService.isRunningTests
+            ? YtdlpService.getAppSupportDirectory().appendingPathComponent("queue_recovery.json")
+            : QueueRecoveryStore.defaultFileURL
+    }
+
+    init(
+        historyStore: DownloadHistoryStore = DownloadHistoryStore(),
+        queue: DownloadQueue = DownloadQueue(),
+        userDefaults: UserDefaults = .standard,
+        recoveryFileURL: URL = DownloadManager.defaultRecoveryFileURL
+    ) {
+        self.historyStore = historyStore
+        self.queue = queue
+        self.userDefaults = userDefaults
         self.recoveryStore = QueueRecoveryStore(fileURL: recoveryFileURL)
         self.executor = DownloadExecutor(ytdlpService: ytdlpService)
         self.executor.delegate = self
