@@ -1056,8 +1056,10 @@ class YtdlpService: ObservableObject {
         browserCookieSource: String? = nil,
         proxy: String? = nil
     ) async throws -> MediaInfo {
+        let signpost = Signposts.begin("Metadata extraction")
+        defer { Signposts.end("Metadata extraction", signpost) }
         // Site resolvers make their own requests; the binding routes those too.
-        try await EgressBoundary.$ytdlpExecutablePath.withValue(resolvedYtdlpBinary?.path) {
+        return try await EgressBoundary.$ytdlpExecutablePath.withValue(resolvedYtdlpBinary?.path) {
             try await EgressBoundary.$proxyURL.withValue(proxy ?? EgressBoundary.proxyURL) {
                 try await fetchInfoWithinBoundary(
                     url: url,
@@ -1741,8 +1743,10 @@ class YtdlpService: ObservableObject {
         browserCookieSource: String? = nil,
         proxy: String? = nil
     ) async throws -> [MediaInfo] {
+        let signpost = Signposts.begin("Metadata extraction")
+        defer { Signposts.end("Metadata extraction", signpost) }
         // The Sucuri probe makes its own request; the binding routes it too.
-        try await EgressBoundary.$ytdlpExecutablePath.withValue(resolvedYtdlpBinary?.path) {
+        return try await EgressBoundary.$ytdlpExecutablePath.withValue(resolvedYtdlpBinary?.path) {
             try await EgressBoundary.$proxyURL.withValue(proxy ?? EgressBoundary.proxyURL) {
                 try await fetchPlaylistInfoWithinBoundary(
                     url: url,
@@ -2734,6 +2738,8 @@ public struct DownloadResult: Sendable {
             onOutput("[VideoConvertor] Converting downloaded media...\n")
             for index in allFileURLs.indices {
                 let source = allFileURLs[index]
+                let conversion = Signposts.begin("FFmpeg conversion")
+                defer { Signposts.end("FFmpeg conversion", conversion) }
                 let processed = try await postprocessDownloadedMedia(
                     at: source, options: options, ffmpegDir: ffmpegDir,
                     processController: processController
@@ -2850,6 +2856,8 @@ public struct DownloadResult: Sendable {
     /// The GIF is kept if conversion fails. Even dimensions and yuv420p keep the MP4 playable everywhere.
     func convertGIFToVideo(gif: URL, ffmpegDir: String,
                            processController: DownloadProcessController? = nil) async throws -> URL {
+        let signpost = Signposts.begin("FFmpeg conversion")
+        defer { Signposts.end("FFmpeg conversion", signpost) }
         try Task.checkCancellation()
         guard processController?.isCancelled != true else { throw CancellationError() }
         let ffmpeg = URL(fileURLWithPath: ffmpegDir).appendingPathComponent("ffmpeg")
@@ -8328,7 +8336,9 @@ public struct DownloadResult: Sendable {
         onProgress: @escaping @Sendable (Double, String?, String?) -> Void,
         onOutput: @escaping @Sendable (String) -> Void
     ) async throws -> DownloadProcessResult {
-        try await processRunner.runDownloadProcess(
+        let signpost = Signposts.begin("Transfer")
+        defer { Signposts.end("Transfer", signpost) }
+        return try await processRunner.runDownloadProcess(
             args: args,
             saveFolder: saveFolder,
             processController: processController,

@@ -1,3 +1,4 @@
+import os
 import SwiftUI
 import CryptoKit
 @preconcurrency import UserNotifications
@@ -76,6 +77,7 @@ struct SiphonApp: App {
     @AppStorage("startInBackground", store: UITestLaunchMode.defaults) private var startInBackground: Bool = false
     @AppStorage(UserDefaultsKeys.theme, store: UITestLaunchMode.defaults) private var theme: String = "system"
     @State private var hasAppliedBackgroundMode = false
+    @State private var firstRenderSignpost: OSSignpostIntervalState? = Signposts.begin("Main window first render")
 
     init() {
         GeistFontRegistrar.registerFonts()
@@ -98,6 +100,10 @@ struct SiphonApp: App {
                 .environmentObject(languageService)
                 .environmentObject(updateChecker)
                 .onAppear {
+                    if let firstRenderSignpost {
+                        Signposts.end("Main window first render", firstRenderSignpost)
+                        self.firstRenderSignpost = nil
+                    }
                     appDelegate.downloadManager = downloadManager
                     SiphonTheme.applyTheme(theme)
                     applyBackgroundModeIfNeeded()

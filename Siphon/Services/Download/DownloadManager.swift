@@ -217,6 +217,8 @@ class DownloadManager: ObservableObject {
     }
 
     func checkQueueRecovery() {
+        let signpost = Signposts.begin("Recovery load")
+        defer { Signposts.end("Recovery load", signpost) }
         let interrupted = recoveryStore.loadInterruptedJobs()
         guard !interrupted.isEmpty else { return }
         pendingRecoveryJobs = interrupted

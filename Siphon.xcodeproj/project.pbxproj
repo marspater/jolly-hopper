@@ -109,6 +109,10 @@
 		E1001040 /* AccessibilityID.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1000040 /* AccessibilityID.swift */; };
 		E1001041 /* UITestLaunchMode.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1000041 /* UITestLaunchMode.swift */; };
 		E1001051 /* SmokeUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1000051 /* SmokeUITests.swift */; };
+		E1001060 /* Signposts.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1000060 /* Signposts.swift */; };
+		E1001061 /* SiphonPerformanceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1000061 /* SiphonPerformanceTests.swift */; };
+		E1001062 /* SiphonHostedPerformanceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1000062 /* SiphonHostedPerformanceTests.swift */; };
+		E1001063 /* LaunchPerformanceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1000063 /* LaunchPerformanceTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -219,6 +223,10 @@
 		E1000041 /* UITestLaunchMode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UITestLaunchMode.swift; sourceTree = "<group>"; };
 		E1000050 /* SiphonUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SiphonUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		E1000051 /* SmokeUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SmokeUITests.swift; sourceTree = "<group>"; };
+		E1000060 /* Signposts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Signposts.swift; sourceTree = "<group>"; };
+		E1000061 /* SiphonPerformanceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SiphonPerformanceTests.swift; sourceTree = "<group>"; };
+		E1000062 /* SiphonHostedPerformanceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SiphonHostedPerformanceTests.swift; sourceTree = "<group>"; };
+		E1000063 /* LaunchPerformanceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaunchPerformanceTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -289,6 +297,7 @@
 		E0003020 /* SiphonTests */ = {
 			isa = PBXGroup;
 			children = (
+				E1000062 /* SiphonHostedPerformanceTests.swift */,
 				E1000031 /* PreviewFixturesTests.swift */,
 				E1000020 /* TestSupport.swift */,
 				E0000091 /* ImageUtilitiesTests.swift */,
@@ -483,6 +492,7 @@
 		E1003001 /* SiphonCore */ = {
 			isa = PBXGroup;
 			children = (
+				E1000060 /* Signposts.swift */,
 				E1000013 /* DownloadModels.swift */,
 				E1F00006 /* MediaOptions.swift */,
 				E1F00005 /* HTMLEntityDecoding.swift */,
@@ -499,6 +509,7 @@
 		E1003002 /* SiphonCoreTests */ = {
 			isa = PBXGroup;
 			children = (
+				E1000061 /* SiphonPerformanceTests.swift */,
 				E1000015 /* LogSanitizerTests.swift */,
 				E0000041 /* MediaInfoTests.swift */,
 			);
@@ -516,6 +527,7 @@
 		E1003050 /* SiphonUITests */ = {
 			isa = PBXGroup;
 			children = (
+				E1000063 /* LaunchPerformanceTests.swift */,
 				E1000051 /* SmokeUITests.swift */,
 			);
 			path = SiphonUITests;
@@ -790,6 +802,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				E1001062 /* SiphonHostedPerformanceTests.swift in Sources */,
 				E1001031 /* PreviewFixturesTests.swift in Sources */,
 				E1001020 /* TestSupport.swift in Sources */,
 				E0001091 /* ImageUtilitiesTests.swift in Sources */,
@@ -821,6 +834,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				E1001060 /* Signposts.swift in Sources */,
 				E1001013 /* DownloadModels.swift in Sources */,
 				E1F01006 /* MediaOptions.swift in Sources */,
 				E1F01005 /* HTMLEntityDecoding.swift in Sources */,
@@ -837,6 +851,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				E1001061 /* SiphonPerformanceTests.swift in Sources */,
 				E1001015 /* LogSanitizerTests.swift in Sources */,
 				E0001041 /* MediaInfoTests.swift in Sources */,
 			);
@@ -846,6 +861,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				E1001063 /* LaunchPerformanceTests.swift in Sources */,
 				E1001051 /* SmokeUITests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
