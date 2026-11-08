@@ -15,6 +15,8 @@ class LoginItemHelper {
     }
 
     func setEnabled(_ enabled: Bool) {
+        // A login item lives outside the redirected root.
+        guard !UITestLaunchMode.isActive else { return }
         do {
             if enabled {
                 try SMAppService.mainApp.register()

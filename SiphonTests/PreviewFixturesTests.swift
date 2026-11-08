@@ -14,6 +14,7 @@ struct PreviewFixturesTests {
         _ = PreviewFixtures.manager(downloads: PreviewFixtures.lifecycle.map(\.1))
         _ = PreviewFixtures.history
         _ = PreviewFixtures.mixedQueue
+        #expect(PreviewFixtures.playlistInfo.playlist != nil)
         _ = PreviewFixtures.updateChecker()
         _ = PreviewFixtures.logger()
         _ = PreviewFixtures.language()

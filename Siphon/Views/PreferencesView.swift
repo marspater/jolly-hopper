@@ -114,7 +114,8 @@ struct PreferencesView: View {
                 ],
                 horizontalPadding: SiphonTheme.spacing8,
                 icon: \.icon,
-                isLarge: true
+                isLarge: true,
+                identifier: { AccessibilityID.settingsTab($0) }
             )
             .padding(.top, SiphonTheme.spacing10)
             .padding(.bottom, SiphonTheme.spacing10)
@@ -167,7 +168,7 @@ struct PreferencesView: View {
             showUpdateRestartAlert = updateChecker.needsRestart
             SiphonTheme.applyTheme(theme)
             previousLanguage = languageService.selectedLanguage
-            customPresets = CustomPreset.loadAll()
+            customPresets = CustomPreset.loadAll(from: UITestLaunchMode.storage)
             hasFullDiskAccess = YtdlpService.hasFullDiskAccess
             isLaunchAtLoginEnabled = LoginItemHelper.shared.isEnabled
             Task {
@@ -952,7 +953,7 @@ struct PreferencesView: View {
             customPresets.append(preset)
         }
 
-        CustomPreset.saveAll(customPresets)
+        CustomPreset.saveAll(customPresets, to: UITestLaunchMode.storage)
         resetPresetForm()
         showCreatePresetSheet = false
     }
@@ -962,7 +963,7 @@ struct PreferencesView: View {
             selectedCustomPresetIdString = ""
         }
         customPresets.removeAll { $0.id == preset.id }
-        CustomPreset.saveAll(customPresets)
+        CustomPreset.saveAll(customPresets, to: UITestLaunchMode.storage)
     }
 
     private func resetFormatToDefaults() {
@@ -1013,6 +1014,7 @@ struct PreferencesView: View {
                 // A native push button would draw its title in SF Pro.
                 .buttonStyle(.siphonSecondary)
                 .controlSize(.small)
+                .accessibilityIdentifier(AccessibilityID.viewDebugLogs)
             }
         }
     }

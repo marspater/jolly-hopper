@@ -2,6 +2,12 @@ import SwiftUI
 import SiphonCore
 
 struct AddDownloadView: View {
+    private let userDefaults: UserDefaults
+
+    init(userDefaults: UserDefaults = UITestLaunchMode.storage) {
+        self.userDefaults = userDefaults
+    }
+
     @EnvironmentObject var downloadManager: DownloadManager
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var languageService: LanguageService
@@ -161,8 +167,11 @@ struct AddDownloadView: View {
                         proceedWithDownload(options: options, forceOverwrite: true)
                     }
                 }
+                .accessibilityIdentifier(AccessibilityID.existingFileOverwrite)
                 Button(languageService.s("add_number"), action: downloadWithUniqueFilename)
+                    .accessibilityIdentifier(AccessibilityID.existingFileNewName)
                 Button(languageService.s("cancel"), role: .cancel) { pendingDownloadOptions = nil }
+                    .accessibilityIdentifier(AccessibilityID.existingFileCancel)
             } message: {
                 Text(languageService.s("file_exists_message"))
             }
@@ -281,7 +290,7 @@ struct AddDownloadView: View {
         focusedField = .url
         loadPreferencesDefaults()
         batchSubtitleLanguages = presetSubtitleLanguage.isEmpty ? "en" : presetSubtitleLanguage
-        let loadedPresets = CustomPreset.loadAll()
+        let loadedPresets = CustomPreset.loadAll(from: userDefaults)
         customPresets = loadedPresets
         if !selectedCustomPresetIdString.isEmpty,
            let customPresetID = UUID(uuidString: selectedCustomPresetIdString),
@@ -342,7 +351,7 @@ struct AddDownloadView: View {
     }
 
     private func refreshCustomPresets() {
-        let newPresets = CustomPreset.loadAll()
+        let newPresets = CustomPreset.loadAll(from: userDefaults)
         guard newPresets != customPresets else { return }
         customPresets = newPresets
         if let customPresetID = UUID(uuidString: selectedCustomPresetIdString),
@@ -1043,7 +1052,7 @@ struct AddDownloadView: View {
     /// The preset choice is saved for Settings and later downloads, so its
     /// format values are too, as Settings does when a preset is picked there.
     private func saveFormatDefaults(_ videoCodec: VideoCodec, _ audioCodec: AudioCodec, _ resolution: VideoResolution, _ fileType: MediaFileType) {
-        let defaults = UserDefaults.standard
+        let defaults = userDefaults
         defaults.set(videoCodec.rawValue, forKey: UserDefaultsKeys.defaultVideoCodec)
         defaults.set(audioCodec.rawValue, forKey: UserDefaultsKeys.defaultAudioCodec)
         defaults.set(resolution.rawValue, forKey: UserDefaultsKeys.defaultVideoResolution)
@@ -1063,7 +1072,7 @@ struct AddDownloadView: View {
         presetSubtitleLanguage = ""
         // A custom preset applied earlier may have changed these.
         splitChapters = false
-        sponsorBlock = UserDefaults.standard.bool(forKey: UserDefaultsKeys.sponsorBlock)
+        sponsorBlock = userDefaults.bool(forKey: UserDefaultsKeys.sponsorBlock)
     }
 
     private func applyCustomPreset(_ preset: CustomPreset) {
@@ -1981,7 +1990,7 @@ struct AddDownloadView: View {
     }
 
     private func loadPreferencesDefaults() {
-        let defaults = UserDefaults.standard
+        let defaults = userDefaults
         let defaultPath = defaults.string(forKey: UserDefaultsKeys.defaultSaveFolder) ?? ""
         if !defaultPath.isEmpty && FileManager.default.fileExists(atPath: defaultPath) {
             saveFolder = URL(fileURLWithPath: defaultPath)
@@ -2022,14 +2031,32 @@ struct AddDownloadView: View {
 }
 
 #if DEBUG
+extension AddDownloadView {
+    /// Starts in a state that only a live extraction can otherwise reach.
+    init(previewURL: String, mediaInfo: MediaInfo? = nil, error: String? = nil) {
+        self.init(userDefaults: PreviewFixtures.defaults)
+        _urlInput = State(initialValue: previewURL)
+        _mediaInfo = State(initialValue: mediaInfo)
+        _errorMessage = State(initialValue: error)
+    }
+}
+
 #Preview("Empty") {
-    AddDownloadView().previewEnvironment()
+    AddDownloadView(userDefaults: PreviewFixtures.defaults).previewEnvironment()
+}
+
+#Preview("Playlist detected") {
+    AddDownloadView(previewURL: PreviewFixtures.sampleMediaURL, mediaInfo: PreviewFixtures.playlistInfo).previewEnvironment()
+}
+
+#Preview("Error") {
+    AddDownloadView(previewURL: PreviewFixtures.sampleMediaURL, error: "Unable to download webpage: HTTP Error 503").previewEnvironment()
 }
 
 #Preview("Valid URL") {
     let state = PreviewFixtures.appState()
     state.urlToDownload = PreviewFixtures.sampleMediaURL
-    return AddDownloadView().previewEnvironment(appState: state)
+    return AddDownloadView(userDefaults: PreviewFixtures.defaults).previewEnvironment(appState: state)
 }
 #endif
 

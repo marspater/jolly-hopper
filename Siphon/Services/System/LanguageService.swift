@@ -13,7 +13,7 @@ enum Language: String, CaseIterable, Identifiable {
 @MainActor
 class LanguageService: ObservableObject {
     public static let shared = LanguageService()
-    @AppStorage("selectedLanguage") var selectedLanguage: Language = .english
+    @AppStorage("selectedLanguage", store: UITestLaunchMode.defaults) var selectedLanguage: Language = .english
 
     // Bolt Performance Optimization: Single-pass character replacement avoiding
     // preliminary scans, intermediate array allocations, and NSString bridging.

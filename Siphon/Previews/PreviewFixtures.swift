@@ -39,8 +39,7 @@ enum PreviewFixtures {
     static func appState() -> AppState {
         let state = AppState(
             releaseNotesService: ReleaseNotesService(userDefaults: defaults),
-            // Its only service is the notification singleton, which fixtures never post through.
-            dependencyCoordinator: DependencyUpdateCoordinator()
+            dependencyCoordinator: DependencyUpdateCoordinator(notificationService: nil)
         )
         state.urlSession = previewSession
         state.didStartLaunchTasks = true
@@ -95,6 +94,8 @@ enum PreviewFixtures {
             ("File exists", download(.fileExists))
         ] + errorFamilies.map { ("Failed: \($0.0)", download(.failed, error: $0.1)) }
     }
+
+    static let playlistInfo = MediaInfo(id: "playlist-1", title: "Sample video", playlist: "Sample playlist", playlistIndex: 1, playlistCount: 12)
 
     static let errorFamilies = [
         ("Missing binary", "yt-dlp executable not found"),

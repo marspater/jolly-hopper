@@ -62,13 +62,13 @@ struct MenuBarView: View {
         .frame(minWidth: 350, idealWidth: 370, maxWidth: 420)
         .siphonWindowBackground()
         .onAppear {
-            customPresets = CustomPreset.loadAll()
+            customPresets = CustomPreset.loadAll(from: UITestLaunchMode.storage)
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                 isFieldFocused = true
             }
         }
         .onChange(of: customPresetsData) { _, _ in
-            customPresets = CustomPreset.loadAll()
+            customPresets = CustomPreset.loadAll(from: UITestLaunchMode.storage)
         }
         .onChange(of: selectedType) { _, newValue in
             if newValue == "audio" {
@@ -247,7 +247,7 @@ struct MenuBarView: View {
     private func submitToManager(resolvedURL: String) {
         downloadManager.addDownload(
             url: resolvedURL,
-            options: Self.downloadOptions(selectedPreset: selectedPreset, selectedType: selectedType, customPresets: customPresets)
+            options: Self.downloadOptions(selectedPreset: selectedPreset, selectedType: selectedType, customPresets: customPresets, userDefaults: UITestLaunchMode.storage)
         )
         url = ""
         MenuBarManager.shared.closePopover()

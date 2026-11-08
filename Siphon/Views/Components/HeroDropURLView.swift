@@ -11,6 +11,36 @@ import SiphonCore
 #Preview("Idle") { HeroDropURLView().previewEnvironment().padding() }
 
 #Preview("Idle, dark") { HeroDropURLView().previewEnvironment().padding().preferredColorScheme(.dark) }
+
+extension HeroDropURLView {
+    /// Starts in a state that only a live drag or a rejected URL can otherwise reach.
+    init(previewURL: String = "", isTargeted: Bool = false, invalidMessage: String? = nil) {
+        self.init()
+        _inputURL = State(initialValue: previewURL)
+        _isTargeted = State(initialValue: isTargeted)
+        if let invalidMessage {
+            let state = TransientFeedbackState()
+            state.show(invalidMessage, isSuccess: false, icon: "exclamationmark.circle.fill", duration: 3600)
+            _feedback = StateObject(wrappedValue: state)
+        }
+    }
+}
+
+#Preview("Drag hover") { HeroDropURLView(isTargeted: true).previewEnvironment().padding() }
+
+#Preview("Drag hover, dark") { HeroDropURLView(isTargeted: true).previewEnvironment().padding().preferredColorScheme(.dark) }
+
+#Preview("Invalid URL") {
+    HeroDropURLView(previewURL: "not a url", invalidMessage: PreviewFixtures.language().s("hero_invalid_url")).previewEnvironment().padding()
+}
+
+#Preview("Drag hover, reduced motion") {
+    HeroDropURLView(isTargeted: true)
+        .previewEnvironment()
+        .environment(\.siphonRenderingCapabilities, RenderingCapabilities(supportsEDR: false, supportsP3: true, reduceTransparency: false, reduceMotion: true))
+        .environment(\._accessibilityReduceMotion, true)
+        .padding()
+}
 #endif
 
 struct HeroDropURLView: View {

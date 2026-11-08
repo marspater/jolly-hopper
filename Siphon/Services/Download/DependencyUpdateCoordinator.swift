@@ -20,9 +20,9 @@ final class DependencyUpdateCoordinator: ObservableObject {
     @Published var updateMessage: YtdlpUpdateMessage?
 
     private var cancellables = Set<AnyCancellable>()
-    private let notificationService: NotificationService
+    private let notificationService: NotificationService?
 
-    init(notificationService: NotificationService = .shared) {
+    init(notificationService: NotificationService? = .shared) {
         self.notificationService = notificationService
     }
 
@@ -73,14 +73,14 @@ final class DependencyUpdateCoordinator: ObservableObject {
                 title: lang.s("ytdlp_update_success_title"),
                 message: String(format: lang.s("ytdlp_update_success_message"), installedVersion)
             )
-            notificationService.sendYtdlpUpdateSucceeded(version: installedVersion)
+            notificationService?.sendYtdlpUpdateSucceeded(version: installedVersion)
         } catch {
             let reason = error.localizedDescription
             updateMessage = YtdlpUpdateMessage(
                 title: lang.s("ytdlp_update_failed_title"),
                 message: reason
             )
-            notificationService.sendYtdlpUpdateFailed(reason: reason)
+            notificationService?.sendYtdlpUpdateFailed(reason: reason)
         }
     }
 }

@@ -115,7 +115,7 @@ struct SiphonApp: App {
                     handleIncomingURL(url)
                 }
                 .handlesExternalEvents(preferring: ["*"], allowing: ["*"])
-                .defaultAppStorage(UITestLaunchMode.defaults ?? .standard)
+                .defaultAppStorage(UITestLaunchMode.storage)
         }
         .defaultSize(width: 980, height: 620)
         .handlesExternalEvents(matching: ["*"])
