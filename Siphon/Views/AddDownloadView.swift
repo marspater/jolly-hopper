@@ -2054,9 +2054,7 @@ extension AddDownloadView {
 }
 
 #Preview("Valid URL") {
-    let state = PreviewFixtures.appState()
-    state.urlToDownload = PreviewFixtures.sampleMediaURL
-    return AddDownloadView(userDefaults: PreviewFixtures.defaults).previewEnvironment(appState: state)
+    AddDownloadView(previewURL: PreviewFixtures.sampleMediaURL).previewEnvironment()
 }
 #endif
 
