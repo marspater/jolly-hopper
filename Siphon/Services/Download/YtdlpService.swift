@@ -2948,7 +2948,7 @@ public struct DownloadResult: Sendable {
             guard destination == source || options.forceOverwrite == true else {
                 throw CocoaError(.fileWriteFileExists)
             }
-            _ = try FileManager.default.replaceItemAt(destination, withItemAt: partial)
+            try await Self.replaceItemOffMainActor(destination, with: partial)
         } else {
             try FileManager.default.moveItem(at: partial, to: destination)
         }
@@ -2957,6 +2957,18 @@ public struct DownloadResult: Sendable {
             catch { LoggerService.shared.log("Could not remove the source after conversion: \(error.localizedDescription)", level: .warning) }
         }
         return destination
+    }
+
+    /// Atomically swaps in a finished file. The replace blocks on disk I/O, so it
+    /// must not run on the main actor.
+    nonisolated private static func replaceItemOffMainActor(
+        _ destination: URL,
+        with replacement: URL,
+        options: FileManager.ItemReplacementOptions = []
+    ) async throws {
+        _ = try await Task.detached {
+            try FileManager.default.replaceItemAt(destination, withItemAt: replacement, options: options)
+        }.value
     }
 
     /// The first video stream's codec and transfer function, or nil when ffprobe fails.
@@ -3122,7 +3134,7 @@ public struct DownloadResult: Sendable {
             guard processController?.isCancelled != true else { throw CancellationError() }
             if fileManager.fileExists(atPath: tempOutput.path), ((try? tempOutput.resourceValues(forKeys: [.fileSizeKey]))?.fileSize ?? 0) > 0 {
                 // One atomic swap: a crash never leaves the media under a temporary name.
-                _ = try fileManager.replaceItemAt(mediaFile, withItemAt: tempOutput, options: .usingNewMetadataOnly)
+                try await Self.replaceItemOffMainActor(mediaFile, with: tempOutput, options: .usingNewMetadataOnly)
                 return true
             }
             return false
