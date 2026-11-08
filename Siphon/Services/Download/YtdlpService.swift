@@ -4779,7 +4779,7 @@ public struct DownloadResult: Sendable {
             if isBoyfriendTV { return true }
             guard !isMainFrame, scheme == "https" else { return false }
             let isReCAPTCHA = ["www.google.com", "www.recaptcha.net"].contains(host) &&
-                url?.path.hasPrefix("/recaptcha/") == true
+                url?.pathComponents.dropFirst().first == "recaptcha"
             return isReCAPTCHA || host == "challenges.cloudflare.com"
         }
 

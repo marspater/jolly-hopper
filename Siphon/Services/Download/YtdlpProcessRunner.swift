@@ -112,8 +112,8 @@ public final class DownloadProcessController: @unchecked Sendable {
                   info.pbi_uid == uid, info.pbi_ppid == 1 else { continue }
             var buffer = [UInt8](repeating: 0, count: Int(MAXPATHLEN) * 4)
             let length = proc_pidpath(pid, &buffer, UInt32(buffer.count))
-            guard length > 0 else { continue }
-            let path = URL(fileURLWithPath: String(decoding: buffer.prefix(Int(length)), as: UTF8.self)).resolvingSymlinksInPath().path
+            guard length > 0, let rawPath = String(bytes: buffer.prefix(Int(length)), encoding: .utf8) else { continue }
+            let path = URL(fileURLWithPath: rawPath).resolvingSymlinksInPath().path
             guard targets.contains(path) else { continue }
             let message = "Stopping orphaned \(URL(fileURLWithPath: path).lastPathComponent) (pid \(pid)) left by an earlier Siphon run"
             Task { @MainActor in LoggerService.shared.log(message, level: .warning) }
