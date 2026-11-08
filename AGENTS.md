@@ -42,7 +42,7 @@ Where things live:
 
 Repository-specific guardrails:
 
-- User-facing strings go through `LanguageService.s("key")`; add keys to its translation table.
+- User-facing strings go through `LanguageService.s("key")`; add keys to its translation table. Do not migrate to String Catalogs until a second language is planned (see `docs/xcode-migration-baseline.md`).
 - Managed dependency binaries are pinned in `DependencyChecksums` (`YtdlpService.swift`). The pinned yt-dlp is the Siphon fork, mirrored to a `ytdlp-<version>` pre-release on this repository; bumping it means publishing that pre-release and updating version, URL, and SHA-256 together. FFmpeg/FFprobe updates require both archive and executable digests for each supported architecture. Never bypass managed-binary verification. The user-provided yt-dlp mode is switched off (`DependencyChecksums.managedYtdlpEnabled`); use `resolvedYtdlpBinary` instead of reconstructing binary paths in individual callers.
 - Browser extensions must never put cookies or other credentials in deep links, and the Chrome manifest must not request `cookies`/`host_permissions`. External targets must pass `ExternalDownloadTargetPolicy`. CI enforces both.
 - External-target validation is only admission control. Preserve the connection-time public-network boundary through subprocesses, site-specific resolvers, WebKit, and redirects; user arguments must not override it. For updater changes, preserve signed-manifest verification and atomic replacement/rollback as described in `ARCHITECTURE.md`.
