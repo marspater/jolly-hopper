@@ -10,6 +10,7 @@ enum AccessibilityID {
     static let rowRetry = "row-retry"
     static let rowOverwrite = "row-overwrite"
     static let checkForUpdates = "check-for-updates"
+    static let queueRecoveryRestore = "queue-recovery-restore"
     static let menuBarRow = "menu-bar-row"
 
     static func statusSegment(_ item: NavigationItem) -> String { "status-segment-\(item)" }

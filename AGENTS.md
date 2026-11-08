@@ -78,6 +78,7 @@ The canonical test command is:
 xcodebuild test \
   -project Siphon.xcodeproj \
   -scheme Siphon \
+  -testPlan All \
   -destination 'platform=macOS' \
   -configuration Debug \
   MACOSX_DEPLOYMENT_TARGET=15.0 \
@@ -86,7 +87,7 @@ xcodebuild test \
   CODE_SIGNING_ALLOWED=NO
 ```
 
-CI (`.github/workflows/swift.yml`) also runs the same suite with `-configuration Release ENABLE_TESTABILITY=YES`; run it for changes that may behave differently under optimization. For extension, server, or script changes, mirror the relevant checks in `.github/workflows/scripts.yml`: `node --check` on the affected JS, `npm test --prefix server`, `node --test scripts/test_chrome_handoff.js`, `node --test scripts/test_build_and_run.js`, `node scripts/test_capture_original_mp4.js`, and `bash -n` on each shell script. For version changes, run `bash scripts/verify_bundle.sh`.
+Plans in `Siphon.xcodeproj/xcshareddata/xctestplans/`: `All` (default), `Unit`, `Integration`, `Smoke`, `UI` (opt-in, pops windows), `Conversion`. CI (`.github/workflows/swift.yml`) also runs the same suite with `-configuration Release ENABLE_TESTABILITY=YES`; run it for changes that may behave differently under optimization. For extension, server, or script changes, mirror the relevant checks in `.github/workflows/scripts.yml`: `node --check` on the affected JS, `npm test --prefix server`, `node --test scripts/test_chrome_handoff.js`, `node --test scripts/test_build_and_run.js`, `node scripts/test_capture_original_mp4.js`, and `bash -n` on each shell script. For version changes, run `bash scripts/verify_bundle.sh`.
 
 Xcode/macOS SDKs are required for native validation. On Linux/headless runners without them, run available scripting checks and report native builds/tests as not run. `swiftc -parse` proves syntax only. Documentation-only changes need link and diff checks, not an app build.
 

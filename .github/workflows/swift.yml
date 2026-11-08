@@ -5,6 +5,7 @@ on:
     branches: [ "main" ]
   pull_request:
     branches: [ "main", "mars/fix-audit-*", "mars/xm-*" ]
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -30,6 +31,7 @@ jobs:
           xcodebuild test \
             -project Siphon.xcodeproj \
             -scheme Siphon \
+            -testPlan All \
             -destination 'platform=macOS' \
             -configuration Debug \
             -resultBundlePath "$RUNNER_TEMP/results/debug.xcresult" \
@@ -46,6 +48,7 @@ jobs:
           xcodebuild test \
             -project Siphon.xcodeproj \
             -scheme Siphon \
+            -testPlan All \
             -destination 'platform=macOS' \
             -configuration Release \
             -resultBundlePath "$RUNNER_TEMP/results/release.xcresult" \
@@ -113,12 +116,10 @@ jobs:
             -project Siphon.xcodeproj \
             -scheme Siphon \
             -destination 'platform=macOS' \
+            -testPlan Conversion \
             -configuration Debug \
             -resultBundlePath "$RUNNER_TEMP/results/conversion.xcresult" \
             -enableCodeCoverage YES \
-            -only-testing:SiphonTests/YtdlpServiceTests/testCodecConversionsProduceRequestedCodecWithRealFFmpeg \
-            -only-testing:SiphonTests/YtdlpServiceTests/testHDRToSDRToneMappingKeepsBrightnessWithRealFFmpeg \
-            -only-testing:SiphonTests/YtdlpServiceTests/testManagedFFmpegVerifiesHTTPSWithSanitizedEnvironment \
             MACOSX_DEPLOYMENT_TARGET=15.0 \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
@@ -161,4 +162,36 @@ jobs:
         with:
           name: coverage-conversion
           path: ${{ runner.temp }}/results/*-coverage.json
+          retention-days: 7
+
+  ui-tests:
+    # Opt-in: UI tests launch the app and take over the window server.
+    if: ${{ github.event_name == 'workflow_dispatch' }}
+    runs-on: macos-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: UI tests (Debug)
+        run: |
+          xcodebuild test \
+            -project Siphon.xcodeproj \
+            -scheme Siphon \
+            -testPlan UI \
+            -destination 'platform=macOS' \
+            -configuration Debug \
+            -resultBundlePath "$RUNNER_TEMP/results/ui.xcresult" \
+            MACOSX_DEPLOYMENT_TARGET=15.0 \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Upload test results
+        if: ${{ always() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: xcresult-ui
+          path: ${{ runner.temp }}/results/*.xcresult
           retention-days: 7
