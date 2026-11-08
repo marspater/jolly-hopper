@@ -4641,11 +4641,15 @@ public struct DownloadResult: Sendable {
         }.value
     }
 
-    /// Safari's cookies that WebKit doesn't already hold under the same name, so a
-    /// stale Safari cookie can't replace a newer sign-in made in Siphon's window.
+    /// Safari's cookies that WebKit doesn't already hold under the same name on the
+    /// same domain, so a stale Safari cookie can't replace a newer sign-in made in
+    /// Siphon's window. The site's two domains keep separate sign-ins.
     nonisolated static func boyfriendTVCookiesToSeed(_ cookies: [HTTPCookie], existing: [HTTPCookie]) -> [HTTPCookie] {
-        let existingNames = Set(existing.map(\.name))
-        return cookies.filter { !existingNames.contains($0.name) }
+        func key(_ cookie: HTTPCookie) -> String {
+            "\(boyfriendTVCookieScope(for: cookie.domain) ?? cookie.domain)\n\(cookie.name)"
+        }
+        let existingKeys = Set(existing.map(key))
+        return cookies.filter { !existingKeys.contains(key($0)) }
     }
 
     /// First path segment after any two-letter language prefix; nil on the home page.

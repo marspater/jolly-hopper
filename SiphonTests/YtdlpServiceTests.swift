@@ -476,14 +476,20 @@ final class YtdlpServiceTests: XCTestCase {
     }
 
     func testBoyfriendTVSignInSeedKeepsNewerWindowSignIn() throws {
-        func cookie(_ name: String, _ value: String) throws -> HTTPCookie {
-            try XCTUnwrap(HTTPCookie(properties: [.domain: ".boyfriendtv.com", .name: name, .value: value, .path: "/"]))
+        func cookie(_ name: String, _ value: String, domain: String = ".boyfriendtv.com") throws -> HTTPCookie {
+            try XCTUnwrap(HTTPCookie(properties: [.domain: domain, .name: name, .value: value, .path: "/"]))
         }
         let seeded = YtdlpService.boyfriendTVCookiesToSeed(
-            [try cookie("login", "stale-safari"), try cookie("configLang", "es")],
+            [try cookie("login", "stale-safari", domain: "www.boyfriendtv.com"), try cookie("configLang", "es")],
             existing: [try cookie("login", "from-window")]
         )
         XCTAssertEqual(seeded.map(\.name), ["configLang"])
+
+        let otherDomain = YtdlpService.boyfriendTVCookiesToSeed(
+            [try cookie("login", "safari")],
+            existing: [try cookie("login", "from-window", domain: ".boyfriend.tv")]
+        )
+        XCTAssertEqual(otherDomain.map(\.value), ["safari"], "A sign-in on the other domain must not block this one")
     }
 
     func testBoyfriendTVSignInPathsAndVideoIdentity() {
@@ -4084,6 +4090,7 @@ final class YtdlpServiceTests: XCTestCase {
             XCTAssertEqual(dumps.value, 1, "Safari's cookies already showed the login page; other sessions can't do better")
             XCTAssertEqual(renderedLoads.value, 1)
             XCTAssertTrue(YtdlpError.protectedSiteLoginRequired.localizedDescription.contains("window that opens"))
+            XCTAssertTrue(YtdlpError.protectedSiteLoginRequired.localizedDescription.contains("Remember me"))
         }
     }
 
