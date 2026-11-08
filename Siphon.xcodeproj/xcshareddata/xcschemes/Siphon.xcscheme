@@ -26,10 +26,23 @@
       buildConfiguration = "Debug"
       selectedDebuggerIdentifier = "Xcode.DebuggerFoundation.Debugger.LLDB"
       selectedLauncherIdentifier = "Xcode.DebuggerFoundation.Launcher.LLDB"
-      shouldUseLaunchSchemeArgsEnv = "YES">
+      shouldUseLaunchSchemeArgsEnv = "YES"
+      codeCoverageEnabled = "YES"
+      onlyGenerateCoverageForSpecifiedTargets = "YES">
+      <CodeCoverageTargets>
+         <BuildableReference
+            BuildableIdentifier = "primary"
+            BlueprintIdentifier = "E0004001"
+            BuildableName = "Siphon.app"
+            BlueprintName = "Siphon"
+            ReferencedContainer = "container:Siphon.xcodeproj">
+         </BuildableReference>
+      </CodeCoverageTargets>
        <Testables>
           <TestableReference
-             skipped = "NO">
+             skipped = "NO"
+             parallelizable = "NO"
+             testExecutionOrdering = "random">
              <BuildableReference
                 BuildableIdentifier = "primary"
                 BlueprintIdentifier = "E0004010"
