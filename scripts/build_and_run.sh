@@ -10,7 +10,7 @@ case "$MODE" in
     *) echo "Usage: $0 [--run|--verify|--build]" >&2; exit 2 ;;
 esac
 
-xcodebuild build -project "$ROOT_DIR/Siphon.xcodeproj" -scheme Siphon \
+xcodebuild build -skipPackagePluginValidation -project "$ROOT_DIR/Siphon.xcodeproj" -scheme Siphon \
     -configuration Debug -destination 'platform=macOS' -derivedDataPath "$BUILD_DIR" \
     MACOSX_DEPLOYMENT_TARGET=15.0 ENABLE_DEBUG_DYLIB=NO CODE_SIGN_IDENTITY=- \
     CODE_SIGNING_REQUIRED=YES CODE_SIGNING_ALLOWED=YES

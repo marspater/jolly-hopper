@@ -48,6 +48,7 @@ jobs:
       run: |
         xcodebuild build \
           -project Siphon.xcodeproj \
+          -skipPackagePluginValidation \
           -scheme Siphon \
           -destination 'generic/platform=macOS' \
           -configuration Debug \

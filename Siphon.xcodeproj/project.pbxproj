@@ -587,6 +587,7 @@
 			dependencies = (
 				E1008010 /* PBXTargetDependency */,
 				E1008030 /* PBXTargetDependency */,
+				E1009003 /* PBXTargetDependency */,
 			);
 			name = "Siphon";
 			productName = "Siphon";
@@ -619,6 +620,7 @@
 			buildRules = (
 			);
 			dependencies = (
+				E1009005 /* PBXTargetDependency */,
 			);
 			name = SiphonCore;
 			productName = SiphonCore;
@@ -755,6 +757,9 @@
 				Base,
 			);
 			mainGroup = E0003001;
+			packageReferences = (
+				E1009001 /* XCRemoteSwiftPackageReference "SwiftLintPlugins" */,
+			);
 			productRefGroup = E0003003 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
@@ -940,6 +945,14 @@
 			isa = PBXTargetDependency;
 			target = E0004001 /* Siphon */;
 			targetProxy = E0008002 /* PBXContainerItemProxy */;
+		};
+		E1009003 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			productRef = E1009002 /* SwiftLintBuildToolPlugin */;
+		};
+		E1009005 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			productRef = E1009004 /* SwiftLintBuildToolPlugin */;
 		};
 		E1008010 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
@@ -1448,6 +1461,30 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		E1009001 /* XCRemoteSwiftPackageReference "SwiftLintPlugins" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/SimplyDanny/SwiftLintPlugins";
+			requirement = {
+				kind = exactVersion;
+				version = 0.65.1;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		E1009002 /* SwiftLintBuildToolPlugin */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = E1009001 /* XCRemoteSwiftPackageReference "SwiftLintPlugins" */;
+			productName = "plugin:SwiftLintBuildToolPlugin";
+		};
+		E1009004 /* SwiftLintBuildToolPlugin */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = E1009001 /* XCRemoteSwiftPackageReference "SwiftLintPlugins" */;
+			productName = "plugin:SwiftLintBuildToolPlugin";
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = E0006001 /* Project object */;
 }

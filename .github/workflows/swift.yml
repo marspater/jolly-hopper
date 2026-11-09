@@ -30,6 +30,7 @@ jobs:
         run: |
           xcodebuild test \
             -project Siphon.xcodeproj \
+            -skipPackagePluginValidation \
             -scheme Siphon \
             -testPlan All \
             -destination 'platform=macOS' \
@@ -47,6 +48,7 @@ jobs:
         run: |
           xcodebuild test \
             -project Siphon.xcodeproj \
+            -skipPackagePluginValidation \
             -scheme Siphon \
             -testPlan All \
             -destination 'platform=macOS' \
@@ -114,6 +116,7 @@ jobs:
           set -o pipefail
           xcodebuild test \
             -project Siphon.xcodeproj \
+            -skipPackagePluginValidation \
             -scheme Siphon \
             -destination 'platform=macOS' \
             -testPlan Conversion \
@@ -178,6 +181,7 @@ jobs:
         run: |
           xcodebuild test \
             -project Siphon.xcodeproj \
+            -skipPackagePluginValidation \
             -scheme Siphon \
             -testPlan UI \
             -destination 'platform=macOS' \

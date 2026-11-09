@@ -83,7 +83,7 @@ Skips in this run:
 | Codacy CI scan (opengrep, cppcheck, flawfinder) | Source security in Swift, JS and the C helper, published as SARIF | None | Keep. |
 | Codacy GitHub app | Lint findings on PRs, including SwiftLint with Codacy's own rule set and Lizard complexity checks; it ignores `.swiftlint.yml` and the `.codacy.yml` engine switches, and honours `exclude_paths` | Partly overlaps compiler warnings | Keep. |
 | SonarCloud automatic analysis | Maintainability and security hotspots | Partly overlaps | Keep, and **no coverage path**: automatic analysis does not import coverage reports. Coverage in SonarCloud would need a move to CI-based analysis plus a conversion from `xccov` JSON to Sonar's generic format, which I do not think is worth it now. The planned replacement is #616, which adds coverage as a CI artifact; until it lands, no coverage artifact exists. |
-| SwiftLint | Runs on every PR through Codacy with Codacy's rule set; nothing reads `.swiftlint.yml` | Style only | Retire `.swiftlint.yml` (#623). |
+| SwiftLint | Build tool plug-in on Siphon and SiphonCore reads `.swiftlint.yml`; Codacy also runs it on PRs with its own rule set | Style only | Keep the pinned plug-in (#623). |
 | `node --check`, `npm test`, script tests | Extensions, server and scripts | None. This must stay outside Xcode. | Keep. |
 
 ## Second SiphonCore slice (#592)
@@ -145,6 +145,4 @@ Trigger to revisit: someone runs the hosted suite on a build using native ad hoc
 
 ## SwiftLint (#623)
 
-**Retired.** I removed `.swiftlint.yml` because nothing reads it. No workflow runs SwiftLint directly, and Codacy runs it on every PR with its own rule set: with the file present, Codacy still flagged rules the file disables. For the same reason the `.codacy.yml` engine switch does not stop SwiftLint.
-
-Trigger to revisit: moving lint out of Codacy into a pinned CI step.
+**Build tool plug-in.** SwiftLint runs while building the Siphon and SiphonCore targets through `SwiftLintPlugins`, pinned to an exact version, and reads `.swiftlint.yml`. Xcode asks once to trust the plug-in. Command-line builds pass `-skipPackagePluginValidation` because CI cannot answer that prompt; the flag trusts every package plug-in and macro, so review any new package dependency with that in mind. Codacy still runs SwiftLint on PRs with its own rule set and ignores `.swiftlint.yml`.
