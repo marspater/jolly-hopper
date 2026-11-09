@@ -90,8 +90,8 @@ class LoggerService: ObservableObject {
         let sanitizedMessage = Self.sanitizeDiagnosticText(message)
         let entry = "[\(timestamp)] [\(level.rawValue)] \(sanitizedMessage)"
 
-        // Private: sanitized text can still carry a host and path that identify user activity.
-        // Never pass the raw message to this sink.
+        // Public so Console and `log stream` show the text. Sanitized text can still carry a
+        // host and path, so never pass the raw message to this sink.
         Logger(subsystem: "com.marspater.siphon", category: category.rawValue)
             .log(level: level.osLogType, "\(sanitizedMessage, privacy: .public)")
 
@@ -198,7 +198,7 @@ class LoggerService: ObservableObject {
             // One fixed name: each export replaces the last instead of
             // leaving another copy of the log in the temporary folder.
             let exportFilename = "Siphon_Exported_Logs.log"
-            let exportURL = fileManager.temporaryDirectory.appendingPathComponent(exportFilename)
+            let exportURL = (UITestLaunchMode.root ?? fileManager.temporaryDirectory).appendingPathComponent(exportFilename)
 
             let rawData: Data
             if let handle = try? FileHandle(forReadingFrom: fileURL) {

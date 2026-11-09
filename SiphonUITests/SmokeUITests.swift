@@ -17,7 +17,7 @@ final class SmokeUITests: XCTestCase {
 
     private func launch() -> XCUIApplication {
         let app = XCUIApplication()
-        app.launchArguments += ["--siphon-ui-test-root", root.path]
+        app.launchArguments += ["--siphon-ui-test-root", root.path, "-ApplePersistenceIgnoreState", "YES"]
         app.launch()
         return app
     }

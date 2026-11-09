@@ -474,7 +474,7 @@ struct HeroDropURLView: View {
     }
 
     private func startDownloads(urls: [String]) {
-        let options = DownloadOptions.defaultFromPreferences()
+        let options = DownloadOptions.defaultFromPreferences(userDefaults: UITestLaunchMode.storage)
         if urls.count == 1 {
             downloadManager.addDownload(url: urls[0], options: options)
         } else {
