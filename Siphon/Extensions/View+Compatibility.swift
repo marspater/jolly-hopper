@@ -523,10 +523,6 @@ public enum SiphonTheme {
     public static let spacing32: CGFloat = 32
 
     // MARK: - Semantic Adaptive Surfaces & Tokens
-    public static var surface: Color {
-        Color(nsColor: .controlBackgroundColor)
-    }
-
     public static var surfaceElevated: Color {
         Color(nsColor: .windowBackgroundColor)
     }
@@ -552,7 +548,6 @@ public enum SiphonTheme {
     // 8 = buttons, inputs, controls, selected sidebar rows
     // 12 = cards, list rows, glass surfaces
     // 14 = home status bar group
-    // 16 = modal/sheet containers
     // 24 = URL hero card (its URL field is concentric inside it)
     // Capsule = status badges, pills, compact selection
     public static let radiusSmall: CGFloat = 6

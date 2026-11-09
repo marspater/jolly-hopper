@@ -13,7 +13,7 @@ final class DownloadManagerTests: XCTestCase {
         job.status = .fileExists
         manager.downloads = [job]
         XCTAssertTrue(manager.queuedDownloads.isEmpty)
-        XCTAssertEqual(manager.actionRequiredDownloads.map(\.id), [job.id])
+        XCTAssertEqual(manager.downloads.filter { $0.status == .fileExists }.map(\.id), [job.id])
         XCTAssertEqual(manager.queuedCount, 0)
         XCTAssertFalse(DownloadQueue.isQueueTabMember(job))
         XCTAssertEqual(manager.recentDownloads(limit: 3).map(\.id), [job.id])

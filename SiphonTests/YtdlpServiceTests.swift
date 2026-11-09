@@ -928,7 +928,7 @@ final class YtdlpServiceTests: XCTestCase {
 
     override func tearDown() async throws {
         service = nil
-        for key in [UserDefaultsKeys.browserForCookies, UserDefaultsKeys.downloadSpeedLimit, UserDefaultsKeys.customYtdlpPath] {
+        for key in [UserDefaultsKeys.browserForCookies, UserDefaultsKeys.downloadSpeedLimit] {
             TestState.defaults.removeObject(forKey: key)
         }
         try await super.tearDown()
@@ -1216,7 +1216,7 @@ final class YtdlpServiceTests: XCTestCase {
         INSERT INTO cookies VALUES('.example.com','expired','excluded',X'','/',11644473601000000,1,1,1);
         """
         XCTAssertEqual(sqlite3_exec(db, sql, nil, nil, nil), SQLITE_OK)
-        let file = try XCTUnwrap(HeliumCookieReader.export(for: URL(string: "https://example.com/account/video")!, root: root, password: {
+        let file = try XCTUnwrap(ChromiumCookieReader.export(for: URL(string: "https://example.com/account/video")!, root: root, password: {
             XCTFail("Plaintext cookies must not access Keychain")
             return Data()
         }))
@@ -1228,18 +1228,18 @@ final class YtdlpServiceTests: XCTestCase {
         try file.validate()
         file.cleanup()
         XCTAssertFalse(FileManager.default.fileExists(atPath: file.path))
-        XCTAssertFalse(HeliumCookieReader.matches(host: "evil-example.com", domain: ".example.com"))
-        XCTAssertFalse(HeliumCookieReader.matches(host: "sub.example.com", domain: "example.com"))
-        XCTAssertTrue(HeliumCookieReader.matches(host: "sub.example.com", domain: ".example.com"))
+        XCTAssertFalse(ChromiumCookieReader.matches(host: "evil-example.com", domain: ".example.com"))
+        XCTAssertFalse(ChromiumCookieReader.matches(host: "sub.example.com", domain: "example.com"))
+        XCTAssertTrue(ChromiumCookieReader.matches(host: "sub.example.com", domain: ".example.com"))
     }
 
     func testHeliumDecryptKnownChromiumCookieAndRejectWrongDomain() throws {
         // Independent AES-CBC/PBKDF2 fixture: password=fixture, domain=.example.com, value=session-value.
         let encrypted = Data(base64Encoded: "djEwl0EKULQ4rr5F8E9Nz4uDN1OehYLX5wjFTdUkTSwHkt/wtYh0HJF26qMCeN9zWSql")!
-        let key = try HeliumCookieReader.deriveKey(password: Data("fixture".utf8))
-        XCTAssertEqual(try HeliumCookieReader.decrypt(encrypted, key: key, domain: ".example.com", version: 24), "session-value")
-        XCTAssertThrowsError(try HeliumCookieReader.decrypt(encrypted, key: key, domain: "other.test", version: 24))
-        XCTAssertThrowsError(try HeliumCookieReader.decrypt(Data("v20unsupported".utf8), key: key, domain: ".example.com", version: 24))
+        let key = try ChromiumCookieReader.deriveKey(password: Data("fixture".utf8))
+        XCTAssertEqual(try ChromiumCookieReader.decrypt(encrypted, key: key, domain: ".example.com", version: 24), "session-value")
+        XCTAssertThrowsError(try ChromiumCookieReader.decrypt(encrypted, key: key, domain: "other.test", version: 24))
+        XCTAssertThrowsError(try ChromiumCookieReader.decrypt(Data("v20unsupported".utf8), key: key, domain: ".example.com", version: 24))
     }
 
     func testGenericMetadataPreservesHeliumExtensionIdentityWithSafariConfigured() async throws {
@@ -1272,7 +1272,7 @@ final class YtdlpServiceTests: XCTestCase {
         """
         XCTAssertEqual(sqlite3_exec(db, sql, nil, nil, nil), SQLITE_OK)
 
-        XCTAssertNil(try HeliumCookieReader.export(
+        XCTAssertNil(try ChromiumCookieReader.export(
             for: URL(string: "https://example.com/video")!,
             root: root,
             password: {
@@ -2602,33 +2602,11 @@ final class YtdlpServiceTests: XCTestCase {
 
     func testYtdlpPinTargetsMirroredForkRelease() {
         // Version, URL and digest must change together on every bump.
-        XCTAssertTrue(DependencyChecksums.managedYtdlpEnabled)
         XCTAssertEqual(
             DependencyChecksums.ytdlpURL.absoluteString,
             "https://github.com/marspater/jolly-hopper/releases/download/ytdlp-\(DependencyChecksums.ytdlpVersion)/yt-dlp_macos"
         )
         XCTAssertNotNil(DependencyChecksums.ytdlpExecutableSHA256.wholeMatch(of: /[0-9a-f]{64}/))
-    }
-
-    func testUserYtdlpPathPrefersCustomPathAndSkipsNonExecutables() throws {
-        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
-        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: dir) }
-        let plain = dir.appendingPathComponent("plain")
-        let found = dir.appendingPathComponent("found")
-        let custom = dir.appendingPathComponent("custom")
-        for file in [plain, found, custom] {
-            FileManager.default.createFile(atPath: file.path, contents: Data("#!/bin/sh\n".utf8))
-        }
-        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: found.path)
-        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: custom.path)
-        let search = [dir.appendingPathComponent("missing").path, plain.path, found.path]
-
-        XCTAssertEqual(YtdlpService.userYtdlpPath(customPath: nil, searchPaths: search)?.path, found.path)
-        XCTAssertEqual(YtdlpService.userYtdlpPath(customPath: "  ", searchPaths: search)?.path, found.path)
-        XCTAssertEqual(YtdlpService.userYtdlpPath(customPath: custom.path, searchPaths: search)?.path, custom.path)
-        // A broken explicit choice must not silently fall back to another build.
-        XCTAssertNil(YtdlpService.userYtdlpPath(customPath: plain.path, searchPaths: search))
     }
 
     func testTwinkabooSponsoredPromoIsNotTreatedAsTheVideo() throws {
@@ -6210,51 +6188,6 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertEqual(format.formatId, "h264-720p")
         XCTAssertEqual(format.tbr, 1250.5)
         XCTAssertEqual(format.needsTesting, true)
-    }
-
-    func testUserYtdlpMustIdentifyAsYtdlpBeforeItIsCommitted() async throws {
-        XCTAssertTrue(YtdlpService.isYtdlpVersion("2026.09.30\n"))
-        XCTAssertTrue(YtdlpService.isYtdlpVersion("2026.09.30.232921"))
-        XCTAssertFalse(YtdlpService.isYtdlpVersion("GNU bash, version 5.2"))
-        XCTAssertFalse(YtdlpService.isYtdlpVersion(""))
-
-        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
-        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: root) }
-        XCTAssertFalse(YtdlpService.isRegularExecutable(root.path), "A directory is executable but not yt-dlp")
-        let fake = root.appendingPathComponent("yt-dlp")
-        try Data("#!/bin/sh\n".utf8).write(to: fake)
-        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: fake.path)
-        XCTAssertTrue(YtdlpService.isRegularExecutable(fake.path))
-
-        // With the managed pin, findYtdlp() never reads the user path.
-        try XCTSkipIf(DependencyChecksums.managedYtdlpEnabled, "User-provided yt-dlp is off")
-        let key = UserDefaultsKeys.customYtdlpPath
-        TestState.defaults.set(fake.path, forKey: key)
-
-        service.ytdlpPath = nil // findYtdlp() keeps a preset path when the runner is a mock
-        service.processRunner = MockYtdlpProcessRunner(mockCommand: { _ in "GNU bash, version 5.2" })
-        await service.findYtdlp()
-        XCTAssertNil(service.ytdlpPath)
-        XCTAssertFalse(service.isAvailable, "A non-yt-dlp executable must not make yt-dlp available")
-        XCTAssertNil(service.resolvedYtdlpBinary, "No legacy binary may be used as a fallback")
-
-        service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
-            XCTAssertEqual(Array(args.dropFirst()), ["--ignore-config", "--version"])
-            return "2026.09.30\n"
-        })
-        service.ytdlpPath = nil
-        await service.findYtdlp()
-        XCTAssertEqual(service.ytdlpPath?.path, fake.path)
-        XCTAssertTrue(service.isAvailable)
-        XCTAssertEqual(service.version, "2026.09.30")
-        XCTAssertEqual(service.resolvedYtdlpBinary?.path, fake.path)
-    }
-
-    func testReloadYtdlpIsRefusedWhileDownloadsRun() async {
-        let state = AppState()
-        let reloaded = await state.reloadYtdlp(using: service, activeExecutionCount: 1)
-        XCTAssertFalse(reloaded)
     }
 
     func testGifDownloadIsConvertedToMp4AndGifRemoved() async throws {

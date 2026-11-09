@@ -28,7 +28,6 @@ struct PreferencesView: View {
     @AppStorage(UserDefaultsKeys.showMenuBarIcon) private var showMenuBarIcon: Bool = true
     @AppStorage(UserDefaultsKeys.startInBackground) private var startInBackground: Bool = false
     @AppStorage(UserDefaultsKeys.downloadSpeedLimit) private var downloadSpeedLimit: Int = 0
-    @AppStorage(UserDefaultsKeys.customYtdlpPath) private var customYtdlpPath: String = ""
 
     @EnvironmentObject var languageService: LanguageService
     @EnvironmentObject var updateChecker: UpdateChecker
@@ -987,11 +986,7 @@ struct PreferencesView: View {
                 Toggle(languageService.s("sponsorblock_desc"), isOn: $sponsorBlock)
             }
 
-            if DependencyChecksums.managedYtdlpEnabled {
-                ytdlpUpdateSection
-            } else {
-                ytdlpSourceSection
-            }
+            ytdlpUpdateSection
             browserCookiesSection
             siteCookiesSection
             debugLogsSection
@@ -1018,50 +1013,6 @@ struct PreferencesView: View {
                 .buttonStyle(.siphonSecondary)
                 .controlSize(.small)
                 .accessibilityIdentifier(AccessibilityID.viewDebugLogs)
-            }
-        }
-    }
-
-    private var ytdlpSourceSection: some View {
-        Section(siphonHeader: languageService.s("ytdlp_source")) {
-            HStack {
-                VStack(alignment: .leading, spacing: 4) {
-                    if let path = downloadManager.ytdlpService.ytdlpPath {
-                        Text(path.path)
-                            .font(.siphonMetadataMonoMedium)
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                            .textSelection(.enabled)
-                        if let version = appState.ytdlpVersion {
-                            Text("\(languageService.s("version")): \(version)")
-                                .font(.siphonMetadataMonoMedium)
-                                .foregroundColor(.secondary)
-                        }
-                    } else {
-                        Text(languageService.s("ytdlp_missing"))
-                            .font(.siphonStandardMedium)
-                    }
-                    Text(languageService.s("ytdlp_source_hint"))
-                        .font(.siphonMetadata)
-                        .foregroundColor(.secondary)
-                }
-                Spacer()
-                if !customYtdlpPath.isEmpty {
-                    Button(languageService.s("ytdlp_auto_detect")) {
-                        guard downloadManager.activeExecutionCount == 0 else { return }
-                        customYtdlpPath = ""
-                        reloadYtdlp()
-                    }
-                    .buttonStyle(.siphonSecondary)
-                    .controlSize(.small)
-                    .disabled(downloadManager.activeExecutionCount > 0)
-                }
-                Button(languageService.s("ytdlp_choose")) {
-                    selectYtdlp()
-                }
-                .buttonStyle(.siphonSecondary)
-                .controlSize(.small)
-                .disabled(downloadManager.activeExecutionCount > 0)
             }
         }
     }
@@ -1478,33 +1429,10 @@ struct PreferencesView: View {
         }
     }
 
-    private func selectYtdlp() {
-        guard downloadManager.activeExecutionCount == 0 else { return }
-        let panel = NSOpenPanel()
-        panel.canChooseDirectories = false
-        panel.canChooseFiles = true
-        panel.allowsMultipleSelection = false
-        panel.treatsFilePackagesAsDirectories = true
-        // Unix executables have no extension filter; dot-dirs hold pipx/venv builds.
-        panel.showsHiddenFiles = true
-
-        if panel.runModal() == .OK, let url = panel.url {
-            customYtdlpPath = url.path
-            reloadYtdlp()
-        }
-    }
-
     /// A restart keeps running and queued work as paused jobs, which survive
     /// the relaunch with their partial data, instead of stopping it like Quit.
     private func restartSiphon() {
         updateChecker.restartApp(prepare: downloadManager.pauseActiveAndQueuedDownloads)
-    }
-
-    private func reloadYtdlp() {
-        Task {
-            await appState.reloadYtdlp(using: downloadManager.ytdlpService,
-                                       activeExecutionCount: downloadManager.activeExecutionCount)
-        }
     }
 
     private func updateYtdlp() {

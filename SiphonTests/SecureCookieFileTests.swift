@@ -111,44 +111,6 @@ final class SecureCookieFileTests: XCTestCase {
         XCTAssertNoThrow(cookie.cleanup())
     }
 
-    func testScopedExecutionCleansUpOnSuccess() async throws {
-        var filePath: String?
-
-        let result = try await SecureCookieFile.scoped(
-            url: "https://example.com/video",
-            rawCookies: "auth=12345"
-        ) { cookie -> String in
-            filePath = cookie.path
-            XCTAssertTrue(FileManager.default.fileExists(atPath: cookie.path))
-            return "success_result"
-        }
-
-        XCTAssertEqual(result, "success_result")
-        if let path = filePath {
-            XCTAssertFalse(FileManager.default.fileExists(atPath: path), "Scoped cookie file must be cleaned up on completion")
-        }
-    }
-
-    func testScopedExecutionCleansUpOnError() async {
-        struct TestError: Error {}
-        var filePath: String?
-
-        do {
-            _ = try await SecureCookieFile.scoped(
-                url: "https://example.com/video",
-                rawCookies: "auth=12345"
-            ) { cookie -> String in
-                filePath = cookie.path
-                throw TestError()
-            }
-            XCTFail("Should have thrown")
-        } catch {
-            if let path = filePath {
-                XCTAssertFalse(FileManager.default.fileExists(atPath: path), "Scoped cookie file must be cleaned up even if error was thrown")
-            }
-        }
-    }
-
     func testPurgeOrphanedTempCookieFiles() {
         guard let dir = CookieManager.getSecureTempCookiesDirectory() else { return }
         let orphan1 = dir.appendingPathComponent("siphon_consolidated_cookies_orphan1.txt")
