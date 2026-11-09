@@ -40,8 +40,19 @@ class MenuBarManager: NSObject {
 
         if let button = statusItem?.button {
             updateStatusItemIcon(button: button)
-            button.action = #selector(togglePopover)
-            button.target = self
+            var usesExpandedInterface = false
+            // The macOS 27 SDK declares these; older Xcode versions, including CI's, do not.
+            #if canImport(AppKit, _version: 2700)
+            if #available(macOS 27.0, *) {
+                statusItem?.expandedInterfaceDelegate = self
+                popover.delegate = self
+                usesExpandedInterface = true
+            }
+            #endif
+            if !usesExpandedInterface {
+                button.action = #selector(togglePopover)
+                button.target = self
+            }
         }
 
         // Show by default (if key not set, show the icon)
@@ -82,19 +93,23 @@ class MenuBarManager: NSObject {
             if popover?.isShown == true {
                 popover?.performClose(nil)
             } else {
-                applyTheme()
-                popover?.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
-                // Focus the app
-                NSApp.activate(ignoringOtherApps: true)
+                showPopover(from: button)
             }
         }
+    }
+
+    fileprivate func showPopover(from button: NSStatusBarButton) {
+        applyTheme()
+        popover?.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+        // Focus the app
+        NSApp.bringToFront()
     }
 
     /// Brings the main window forward, or opens one when it was closed (for
     /// example after starting in the background).
     func showMainWindow() {
         NSApp.setActivationPolicy(.regular)
-        NSApp.activate(ignoringOtherApps: true)
+        NSApp.bringToFront()
         if let window = NSApp.windows.first(where: { $0.identifier == NSUserInterfaceItemIdentifier("SiphonMainWindow") }) {
             if window.isMiniaturized { window.deminiaturize(nil) }
             window.makeKeyAndOrderFront(nil)
@@ -111,6 +126,37 @@ class MenuBarManager: NSObject {
         applyTheme()
         if let button = statusItem?.button {
             updateStatusItemIcon(button: button)
+        }
+    }
+}
+
+#if canImport(AppKit, _version: 2700)
+@available(macOS 27.0, *)
+extension MenuBarManager: @MainActor NSStatusItemExpandedInterfaceDelegate, NSPopoverDelegate {
+    func statusItem(_ statusItem: NSStatusItem, didBegin _: NSStatusItemExpandedInterfaceSession) {
+        if let button = statusItem.button { showPopover(from: button) }
+    }
+
+    func statusItemDidEndExpandedInterfaceSession(_: NSStatusItem, animated _: Bool) {
+        closePopover()
+    }
+
+    /// The popover also closes by itself (a click elsewhere, `closePopover()`);
+    /// the menu bar must be told, or the item stays in its expanded state.
+    func popoverDidClose(_: Notification) {
+        statusItem?.expandedInterfaceSession?.cancel()
+    }
+}
+#endif
+
+extension NSApplication {
+    /// Cooperative activation on macOS 27. Older systems keep the forced call,
+    /// so their window-raising behavior does not change.
+    func bringToFront() {
+        if #available(macOS 27.0, *) {
+            activate()
+        } else {
+            activate(ignoringOtherApps: true)
         }
     }
 }

@@ -5,9 +5,11 @@
 
 import Foundation
 import os
+import Synchronization
 import AppKit
 import ImageIO
 import SiphonCore
+import Combine
 
 @MainActor
 protocol DownloadExecutorDelegate: AnyObject {
@@ -31,80 +33,83 @@ enum DownloadExecutionState: Equatable {
 /// the main queue. The executor's final `flushRemaining()` also runs on the main
 /// actor, so no delivery can still be in flight after it returns and land after
 /// the download has left its active status.
-final class DownloadEventCoalescer: @unchecked Sendable {
-    private let lock = NSLock()
+final class DownloadEventCoalescer: Sendable {
     private struct PendingProgress {
         let progress: Double
         let speed: String?
         let eta: String?
     }
-    private var pendingProgress: PendingProgress?
-    private var pendingLogLines: [String] = []
-    private var pendingLogBytes: Int = 0
+
+    private struct State {
+        var pendingProgress: PendingProgress?
+        var pendingLogLines: [String] = []
+        var pendingLogBytes: Int = 0
+        var drainScheduled = false
+    }
+
+    private let state = Mutex(State())
     private let maxPendingLines = 500
     private let maxPendingBytes = 1_048_576 // 1MB
 
-    private var drainScheduled = false
     private let onFlush: @Sendable (Double?, String?, String?, [String]) -> Void
 
     init(onFlush: @escaping @Sendable (Double?, String?, String?, [String]) -> Void) {
         self.onFlush = onFlush
     }
 
-    /// Caller must hold `lock`.
-    private func scheduleDrainIfNeeded() {
-        if drainScheduled { return }
-        drainScheduled = true
+    private func scheduleDrainIfNeeded(_ state: inout State) {
+        if state.drainScheduled { return }
+        state.drainScheduled = true
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.100) { [weak self] in
             self?.flushRemaining()
         }
     }
 
     func recordProgress(progress: Double, speed: String?, eta: String?) {
-        lock.lock()
-        pendingProgress = PendingProgress(progress: progress, speed: speed, eta: eta)
-        scheduleDrainIfNeeded()
-        lock.unlock()
+        state.withLock { state in
+            state.pendingProgress = PendingProgress(progress: progress, speed: speed, eta: eta)
+            scheduleDrainIfNeeded(&state)
+        }
     }
 
     func recordLogLine(_ line: String) {
-        lock.lock()
-        pendingLogLines.append(line)
-        pendingLogBytes += line.utf8.count
+        state.withLock { state in
+            state.pendingLogLines.append(line)
+            state.pendingLogBytes += line.utf8.count
 
-        // Bolt Performance Optimization: Calculate total lines to drop upfront and perform a single `removeFirst(dropCount)`
-        // memory move instead of executing repeated O(N) array shifts in a loop for each dropped line.
-        if pendingLogLines.count > maxPendingLines || pendingLogBytes > maxPendingBytes {
-            var dropCount = 0
-            while (pendingLogLines.count - dropCount > maxPendingLines || pendingLogBytes > maxPendingBytes) && dropCount < pendingLogLines.count {
-                pendingLogBytes -= pendingLogLines[dropCount].utf8.count
-                dropCount += 1
+            // Bolt Performance Optimization: Calculate total lines to drop upfront and perform a single `removeFirst(dropCount)`
+            // memory move instead of executing repeated O(N) array shifts in a loop for each dropped line.
+            if state.pendingLogLines.count > maxPendingLines || state.pendingLogBytes > maxPendingBytes {
+                var dropCount = 0
+                while (state.pendingLogLines.count - dropCount > maxPendingLines || state.pendingLogBytes > maxPendingBytes) && dropCount < state.pendingLogLines.count {
+                    state.pendingLogBytes -= state.pendingLogLines[dropCount].utf8.count
+                    dropCount += 1
+                }
+                if dropCount > 0 {
+                    state.pendingLogLines.removeFirst(dropCount)
+                }
             }
-            if dropCount > 0 {
-                pendingLogLines.removeFirst(dropCount)
-            }
+
+            scheduleDrainIfNeeded(&state)
         }
-
-        scheduleDrainIfNeeded()
-        lock.unlock()
     }
 
     /// Delivers everything pending. Call on the main thread in production so
     /// delivery stays ordered with the executor's status transitions.
     func flushRemaining() {
-        lock.lock()
-        drainScheduled = false
-        let p = pendingProgress
-        let lines = pendingLogLines
-        pendingProgress = nil
-        // Bolt Performance Optimization: Preserve array buffer capacity across flush cycles
-        // to avoid repetitive heap allocation and GC churn during high-frequency log updates.
-        pendingLogLines.removeAll(keepingCapacity: true)
-        pendingLogBytes = 0
-        lock.unlock()
+        let (progress, lines) = state.withLock { state -> (PendingProgress?, [String]) in
+            state.drainScheduled = false
+            let pending = (state.pendingProgress, state.pendingLogLines)
+            state.pendingProgress = nil
+            // Bolt Performance Optimization: Preserve array buffer capacity across flush cycles
+            // to avoid repetitive heap allocation and GC churn during high-frequency log updates.
+            state.pendingLogLines.removeAll(keepingCapacity: true)
+            state.pendingLogBytes = 0
+            return pending
+        }
 
-        if p != nil || !lines.isEmpty {
-            onFlush(p?.progress, p?.speed, p?.eta, lines)
+        if progress != nil || !lines.isEmpty {
+            onFlush(progress?.progress, progress?.speed, progress?.eta, lines)
         }
     }
 }

@@ -5,6 +5,7 @@
 
 import Foundation
 import AppKit
+import Combine
 
 @MainActor
 public final class UpdateChecker: ObservableObject {

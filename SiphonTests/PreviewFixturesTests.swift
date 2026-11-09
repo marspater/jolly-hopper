@@ -1,6 +1,7 @@
 #if DEBUG
 import Foundation
 import Testing
+import SiphonCore
 @testable import Siphon
 
 @MainActor

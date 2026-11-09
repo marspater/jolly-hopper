@@ -1,5 +1,6 @@
 import Foundation
 import os
+import Combine
 
 public enum ScratchDirectoryPolicy: Sendable {
     public static let directoryPrefix = "siphon_scratch_"

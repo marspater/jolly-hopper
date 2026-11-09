@@ -2,6 +2,7 @@ import Foundation
 import os
 import SiphonCore
 import SwiftUI
+import Combine
 
 @MainActor
 class LoggerService: ObservableObject {

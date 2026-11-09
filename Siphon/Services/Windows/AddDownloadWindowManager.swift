@@ -21,7 +21,7 @@ final class AddDownloadWindowManager: NSObject, NSWindowDelegate {
     func showAddDownloadWindow(downloadManager: DownloadManager, appState: AppState, languageService: LanguageService, updateChecker: UpdateChecker) {
         if let existingController = windowController, let existingWindow = existingController.window {
             existingWindow.makeKeyAndOrderFront(nil)
-            NSApp.activate(ignoringOtherApps: true)
+            NSApp.bringToFront()
             return
         }
 
@@ -58,7 +58,7 @@ final class AddDownloadWindowManager: NSObject, NSWindowDelegate {
 
         controller.showWindow(nil)
         window.makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
+        NSApp.bringToFront()
     }
 
     /// Header, URL card and footer, below the title bar.

@@ -146,7 +146,7 @@ final class NotificationService: NSObject, @unchecked Sendable, UNUserNotificati
                 if process.terminationStatus == 0 {
                     self?.logMessage("Fallback notification displayed: \(title)", level: .info)
                 } else {
-                    let data = errorPipe.fileHandleForReading.readDataToEndOfFile()
+                    let data = try errorPipe.fileHandleForReading.readToEnd() ?? Data()
                     let details = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines)
                     if let details, !details.isEmpty {
                         self?.logMessage("Fallback notification failed: \(details)", level: .warning)

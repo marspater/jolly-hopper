@@ -10,7 +10,7 @@ final class DebugLogWindowManager: NSObject, NSWindowDelegate {
     func showDebugLogWindow() {
         if let existingController = windowController, let existingWindow = existingController.window {
             existingWindow.makeKeyAndOrderFront(nil)
-            NSApp.activate(ignoringOtherApps: true)
+            NSApp.bringToFront()
             return
         }
 
@@ -43,7 +43,7 @@ final class DebugLogWindowManager: NSObject, NSWindowDelegate {
 
         controller.showWindow(nil)
         window.makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
+        NSApp.bringToFront()
     }
 
     func closeWindow() {

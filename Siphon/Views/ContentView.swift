@@ -39,6 +39,13 @@ struct ContentView: View {
     @State private var confirmClearHistory = false
     @Environment(\.openWindow) private var openWindow
     @State private var columnVisibility: NavigationSplitViewVisibility = .detailOnly
+
+    private var ytdlpUpdateAlertIsPresented: Binding<Bool> {
+        Binding(
+            get: { appState.ytdlpUpdateMessage != nil },
+            set: { if !$0 { appState.ytdlpUpdateMessage = nil } }
+        )
+    }
     @AppStorage("showMenuBarIcon") private var showMenuBarIcon: Bool = true
     @AppStorage(UserDefaultsKeys.theme) private var theme: String = "system"
 
@@ -117,12 +124,12 @@ struct ContentView: View {
                 .sheet(isPresented: $appState.showWhatsNew, onDismiss: presentPendingUpdateAlert) {
                     WhatsNewSheetView()
                 }
-                .alert(item: $appState.ytdlpUpdateMessage) { status in
-                    Alert(
-                        title: Text(status.title),
-                        message: Text(status.message),
-                        dismissButton: .default(Text(languageService.s("ok")))
-                    )
+                .alert(appState.ytdlpUpdateMessage?.title ?? "", isPresented: ytdlpUpdateAlertIsPresented, presenting: appState.ytdlpUpdateMessage) { _ in
+                    Button(languageService.s("ok"), role: .cancel) {
+                        // Nothing to do: SwiftUI dismisses the alert and clears the item.
+                    }
+                } message: { status in
+                    Text(status.message)
                 }
         }
         .siphonAdaptiveRendering()
@@ -922,7 +929,7 @@ struct WhatsNewSheetView: View {
                 .padding(.horizontal, SiphonTheme.spacing20)
 
             // Feature Showcase - Beautiful structured cards instead of raw unstyled markdown
-            ScrollView(showsIndicators: true) {
+            ScrollView {
                 VStack(spacing: 10) {
                     ForEach(appState.whatsNewFeatures) { feature in
                         FeatureCardRow(feature: feature)

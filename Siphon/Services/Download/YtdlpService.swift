@@ -4,7 +4,9 @@ import CommonCrypto
 import AppKit
 import WebKit
 import VideoToolbox
+import Synchronization
 import SiphonCore
+import Combine
 
 struct DependencyChecksums {
     /// Siphon downloads and pins the Siphon build of yt-dlp (marspater/yt-dlp,
@@ -97,14 +99,11 @@ actor DependencyInstaller {
     /// Runs a trial invocation off the actor's thread. A binary that never
     /// exits is killed after `timeout` instead of blocking installation forever.
     static func runToExit(_ process: Process, name: String, timeout: TimeInterval = 60) async throws -> Int32 {
-        let exited = DispatchSemaphore(value: 0)
-        process.terminationHandler = { _ in exited.signal() }
+        let exited = ResumeOnce<Bool>()
+        process.terminationHandler = { _ in exited.resume(true) }
         try process.run()
-        let finished = await withCheckedContinuation { continuation in
-            DispatchQueue.global(qos: .utility).async {
-                continuation.resume(returning: exited.wait(timeout: .now() + timeout) == .success)
-            }
-        }
+        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + timeout) { exited.resume(false) }
+        let finished = await withCheckedContinuation { exited.attach($0) }
         guard finished else {
             kill(process.processIdentifier, SIGKILL)
             throw InstallError.executionFailed(binary: name, message: "Timed out after \(Int(timeout)) seconds")
@@ -3765,11 +3764,7 @@ public struct DownloadResult: Sendable {
         window.center()
         window.makeKeyAndOrderFront(nil)
         window.orderFrontRegardless()
-        if #available(macOS 14.0, *) {
-            NSApp.activate()
-        } else {
-            NSApp.activate(ignoringOtherApps: true)
-        }
+        NSApp.activate()
         NSApp.requestUserAttention(.criticalRequest)
         NotificationService.shared.sendAppUpdateNotification(
             title: title,
@@ -8624,11 +8619,16 @@ enum YtdlpError: LocalizedError {
     }
 }
 
-final class ThreadSafeDataBuffer: @unchecked Sendable {
-    private var data = Data()
-    private let lock = NSLock()
+final class ThreadSafeDataBuffer: Sendable {
+    private struct State {
+        var data = Data()
+        var isOverflow = false
+    }
+
+    private let state = Mutex(State())
     private let maxSize: Int
-    private(set) var isOverflow = false
+
+    var isOverflow: Bool { state.withLock { $0.isOverflow } }
 
     init(maxSize: Int = 32 * 1024 * 1024) {
         self.maxSize = maxSize
@@ -8637,145 +8637,137 @@ final class ThreadSafeDataBuffer: @unchecked Sendable {
     /// Returns `true` if the data was accepted, `false` if the buffer is full.
     @discardableResult
     func append(_ newBytes: Data) -> Bool {
-        lock.lock()
-        defer { lock.unlock() }
-        guard !isOverflow else { return false }
-        if data.count + newBytes.count > maxSize {
-            isOverflow = true
-            return false
+        state.withLock { state in
+            guard !state.isOverflow else { return false }
+            if state.data.count + newBytes.count > maxSize {
+                state.isOverflow = true
+                return false
+            }
+            state.data.append(newBytes)
+            return true
         }
-        data.append(newBytes)
-        return true
     }
 
     func getString() -> String {
-        lock.lock()
-        defer { lock.unlock() }
         // Lossy: one invalid byte in a description must not discard the whole JSON.
-        return String(decoding: data, as: UTF8.self)
+        state.withLock { String(decoding: $0.data, as: UTF8.self) }
     }
 }
 
-final class StreamBuffer: @unchecked Sendable {
-    private var buffer = Data()
-    private let lock = NSLock()
+final class StreamBuffer: Sendable {
+    private let buffer = Mutex(Data())
 
     // Bolt Performance Optimization: Process output lines using direct zero-copy Data byte slicing
     // and byte-level \r trimming without allocating intermediate Data objects.
     // Preserves Data capacity using removeAll(keepingCapacity: true) when all lines are consumed.
     func appendAndExtractLines(_ chunk: Data) -> [String] {
-        lock.lock()
-        defer { lock.unlock() }
-        buffer.append(chunk)
-        var lines: [String] = []
+        buffer.withLock { buffer in
+            buffer.append(chunk)
+            var lines: [String] = []
 
-        var searchStartIndex = buffer.startIndex
-        // FFmpeg statistics end in carriage returns, without a newline.
-        while let newlineIndex = buffer[searchStartIndex...].firstIndex(where: { $0 == 0x0A || $0 == 0x0D }) {
-            var lineSlice = buffer[searchStartIndex..<newlineIndex]
-            searchStartIndex = newlineIndex + 1
+            var searchStartIndex = buffer.startIndex
+            // FFmpeg statistics end in carriage returns, without a newline.
+            while let newlineIndex = buffer[searchStartIndex...].firstIndex(where: { $0 == 0x0A || $0 == 0x0D }) {
+                var lineSlice = buffer[searchStartIndex..<newlineIndex]
+                searchStartIndex = newlineIndex + 1
 
-            while lineSlice.last == 0x0D { lineSlice = lineSlice.dropLast() }
-            while lineSlice.first == 0x0D { lineSlice = lineSlice.dropFirst() }
+                while lineSlice.last == 0x0D { lineSlice = lineSlice.dropLast() }
+                while lineSlice.first == 0x0D { lineSlice = lineSlice.dropFirst() }
 
-            if !lineSlice.isEmpty {
-                lines.append(String(decoding: lineSlice, as: UTF8.self))
+                if !lineSlice.isEmpty {
+                    lines.append(String(decoding: lineSlice, as: UTF8.self))
+                }
             }
-        }
 
-        if searchStartIndex == buffer.endIndex {
-            buffer.removeAll(keepingCapacity: true)
-        } else if searchStartIndex > buffer.startIndex {
-            buffer.removeSubrange(buffer.startIndex..<searchStartIndex)
-        }
-
-        // Safety bound: If continuous stream chunk exceeds 512KB without newline, extract and clear to prevent memory growth
-        if buffer.count > 512 * 1024 {
-            var lineSlice = buffer[...]
-            while lineSlice.last == 0x0D || lineSlice.last == 0x0A { lineSlice = lineSlice.dropLast() }
-            while lineSlice.first == 0x0D || lineSlice.first == 0x0A { lineSlice = lineSlice.dropFirst() }
-            if !lineSlice.isEmpty {
-                lines.append(String(decoding: lineSlice, as: UTF8.self))
+            if searchStartIndex == buffer.endIndex {
+                buffer.removeAll(keepingCapacity: true)
+            } else if searchStartIndex > buffer.startIndex {
+                buffer.removeSubrange(buffer.startIndex..<searchStartIndex)
             }
-            buffer.removeAll(keepingCapacity: true)
-        }
 
-        return lines
+            // Safety bound: If continuous stream chunk exceeds 512KB without newline, extract and clear to prevent memory growth
+            if buffer.count > 512 * 1024 {
+                var lineSlice = buffer[...]
+                while lineSlice.last == 0x0D || lineSlice.last == 0x0A { lineSlice = lineSlice.dropLast() }
+                while lineSlice.first == 0x0D || lineSlice.first == 0x0A { lineSlice = lineSlice.dropFirst() }
+                if !lineSlice.isEmpty {
+                    lines.append(String(decoding: lineSlice, as: UTF8.self))
+                }
+                buffer.removeAll(keepingCapacity: true)
+            }
+
+            return lines
+        }
     }
 
     func flush() -> [String] {
-        lock.lock()
-        defer { lock.unlock() }
-        var lines: [String] = []
-        if !buffer.isEmpty {
-            var lineSlice = buffer[...]
-            while lineSlice.last == 0x0D || lineSlice.last == 0x0A { lineSlice = lineSlice.dropLast() }
-            while lineSlice.first == 0x0D || lineSlice.first == 0x0A { lineSlice = lineSlice.dropFirst() }
-            if !lineSlice.isEmpty {
-                lines.append(String(decoding: lineSlice, as: UTF8.self))
+        buffer.withLock { buffer in
+            var lines: [String] = []
+            if !buffer.isEmpty {
+                var lineSlice = buffer[...]
+                while lineSlice.last == 0x0D || lineSlice.last == 0x0A { lineSlice = lineSlice.dropLast() }
+                while lineSlice.first == 0x0D || lineSlice.first == 0x0A { lineSlice = lineSlice.dropFirst() }
+                if !lineSlice.isEmpty {
+                    lines.append(String(decoding: lineSlice, as: UTF8.self))
+                }
+                buffer.removeAll(keepingCapacity: true)
             }
-            buffer.removeAll(keepingCapacity: true)
+            return lines
         }
-        return lines
     }
 }
 
-final class ThreadSafeOutputState: @unchecked Sendable {
+final class ThreadSafeOutputState: Sendable {
     // Bolt Performance Optimization: Reuse static CharacterSet to avoid repeated allocations in high-frequency progress loops
     private static let quoteCharacterSet = CharacterSet(charactersIn: "\"\'")
 
-    private var finalPaths: [String] = []
-    private var candidatePaths: [String] = []
-    private var errorText: String = ""
-    private let lock = NSLock()
+    private struct State {
+        var finalPaths: [String] = []
+        var candidatePaths: [String] = []
+        var errorText: String = ""
+    }
+
+    private let state = Mutex(State())
 
     func addFinalPath(_ path: String) {
         let cleaned = path.trimmingCharacters(in: .whitespacesAndNewlines)
             .trimmingCharacters(in: Self.quoteCharacterSet)
         guard !cleaned.isEmpty else { return }
-        lock.lock()
-        if !finalPaths.contains(cleaned) {
-            finalPaths.append(cleaned)
+        state.withLock { state in
+            if !state.finalPaths.contains(cleaned) {
+                state.finalPaths.append(cleaned)
+            }
         }
-        lock.unlock()
     }
 
     func getFinalPaths() -> [String] {
-        lock.lock()
-        defer { lock.unlock() }
-        return finalPaths
+        state.withLock { $0.finalPaths }
     }
 
     func addCandidatePath(_ newPath: String) {
         let cleaned = newPath.trimmingCharacters(in: .whitespacesAndNewlines)
             .trimmingCharacters(in: Self.quoteCharacterSet)
         guard !cleaned.isEmpty else { return }
-        lock.lock()
-        candidatePaths.append(cleaned)
-        lock.unlock()
+        state.withLock { $0.candidatePaths.append(cleaned) }
     }
 
     func getCandidatePaths() -> [String] {
-        lock.lock()
-        defer { lock.unlock() }
-        return candidatePaths
+        state.withLock { $0.candidatePaths }
     }
 
     func appendError(_ text: String) {
-        lock.lock()
-        errorText += text
-        // Bound error buffer to prevent unbounded memory growth during long-running error outputs.
-        // utf8.count is O(1); count walks every character on each appended line.
-        if errorText.utf8.count > 100_000 {
-            errorText = String(decoding: errorText.utf8.suffix(50_000), as: UTF8.self)
+        state.withLock { state in
+            state.errorText += text
+            // Bound error buffer to prevent unbounded memory growth during long-running error outputs.
+            // utf8.count is O(1); count walks every character on each appended line.
+            if state.errorText.utf8.count > 100_000 {
+                state.errorText = String(decoding: state.errorText.utf8.suffix(50_000), as: UTF8.self)
+            }
         }
-        lock.unlock()
     }
 
     func getErrorText() -> String {
-        lock.lock()
-        defer { lock.unlock() }
-        return errorText
+        state.withLock { $0.errorText }
     }
 }
 
@@ -8784,57 +8776,48 @@ final class ThreadSafeOutputState: @unchecked Sendable {
 /// resume call will go through; subsequent calls are safely ignored.
 /// Resumes a non-throwing continuation once, whichever of several sources
 /// (result, deadline, cancellation) comes first, even before it is attached.
-final class ResumeOnce<T: Sendable>: @unchecked Sendable {
-    private let lock = NSLock()
-    private var continuation: CheckedContinuation<T, Never>?
-    private var result: T?
-    private var finished = false
+final class ResumeOnce<T: Sendable>: Sendable {
+    private struct State {
+        var continuation: CheckedContinuation<T, Never>?
+        var result: T?
+        var finished = false
+    }
+
+    private let state = Mutex(State())
 
     func attach(_ continuation: CheckedContinuation<T, Never>) {
-        lock.lock()
-        if finished, let result {
-            lock.unlock()
-            continuation.resume(returning: result)
-            return
+        let finishedResult: T? = state.withLock { state in
+            if state.finished, let result = state.result { return result }
+            state.continuation = continuation
+            return nil
         }
-        self.continuation = continuation
-        lock.unlock()
+        if let finishedResult { continuation.resume(returning: finishedResult) }
     }
 
     func resume(_ value: T) {
-        lock.lock()
-        guard !finished else { lock.unlock(); return }
-        finished = true
-        let continuation = self.continuation
-        self.continuation = nil
-        if continuation == nil { result = value }
-        lock.unlock()
-        continuation?.resume(returning: value)
+        let waiting: CheckedContinuation<T, Never>? = state.withLock { state in
+            guard !state.finished else { return nil }
+            state.finished = true
+            if state.continuation == nil { state.result = value }
+            return state.continuation.take()
+        }
+        waiting?.resume(returning: value)
     }
 }
 
-final class SafeContinuation<T: Sendable>: @unchecked Sendable {
-    private var continuation: CheckedContinuation<T, Error>?
-    private let lock = NSLock()
+final class SafeContinuation<T: Sendable>: Sendable {
+    private let continuation: Mutex<CheckedContinuation<T, Error>?>
 
     init(_ continuation: CheckedContinuation<T, Error>) {
-        self.continuation = continuation
+        self.continuation = Mutex(continuation)
     }
 
     func resume(returning value: T) {
-        lock.lock()
-        let cont = continuation
-        continuation = nil
-        lock.unlock()
-        cont?.resume(returning: value)
+        continuation.withLock { $0.take() }?.resume(returning: value)
     }
 
     func resume(throwing error: Error) {
-        lock.lock()
-        let cont = continuation
-        continuation = nil
-        lock.unlock()
-        cont?.resume(throwing: error)
+        continuation.withLock { $0.take() }?.resume(throwing: error)
     }
 }
 
