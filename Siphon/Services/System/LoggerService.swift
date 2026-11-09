@@ -199,16 +199,15 @@ class LoggerService: ObservableObject {
             // One fixed name: each export replaces the last instead of
             // leaving another copy of the log in the temporary folder.
             let exportFilename = "Siphon_Exported_Logs.log"
-            let exportURL = (UITestLaunchMode.root ?? fileManager.temporaryDirectory).appendingPathComponent(exportFilename)
+            let exportURL = (UITestLaunchMode.isolatedRoot ?? fileManager.temporaryDirectory).appendingPathComponent(exportFilename)
 
             let rawData: Data
-            if fileManager.fileExists(atPath: fileURL.path) {
-                let handle = try FileHandle(forReadingFrom: fileURL)
-                defer { try? handle.close() }
-                rawData = try handle.readToEnd() ?? Data()
-            } else {
-                // A new logger has no history yet. An existing but unreadable
-                // log is an error, not an apparently successful empty export.
+            do {
+                rawData = try Data(contentsOf: fileURL)
+            } catch let error as CocoaError where error.code == .fileReadNoSuchFile {
+                // A new logger has no history yet. Only a confirmed missing file
+                // is empty history: an unreadable log or an inaccessible parent
+                // directory is an error, not an apparently successful empty export.
                 rawData = Data()
             }
 

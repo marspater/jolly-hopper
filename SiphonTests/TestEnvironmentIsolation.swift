@@ -45,5 +45,6 @@ final class TestEnvironmentIsolation: NSObject, XCTestObservation {
         UserDefaults.standard.removePersistentDomain(forName: UITestLaunchMode.testBundleIdentifier)
         TestState.defaults.removePersistentDomain(forName: TestState.suiteName)
         try? FileManager.default.removeItem(at: TestState.recoveryFileURL)
+        UITestLaunchMode.removeHostedRoot()
     }
 }

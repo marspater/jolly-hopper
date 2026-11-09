@@ -45,7 +45,20 @@ enum UITestLaunchMode {
         }
     }()
 
+    /// The directory that holds all test-run state: the UI-test root if one was
+    /// passed, else the per-process hosted-test root. Nil in a normal app launch.
     static var isolatedRoot: URL? { root ?? hostedRoot }
+
+    /// Deletes the per-process hosted-test root. The UI-test root belongs to the
+    /// launcher, so it is never touched.
+    static func removeHostedRoot() {
+        guard let hostedRoot else { return }
+        do {
+            try FileManager.default.removeItem(at: hostedRoot)
+        } catch {
+            NSLog("SiphonTests: could not remove hosted test root: \(error.localizedDescription)")
+        }
+    }
 
     /// Fail before constructing app services if somebody forces a hosted test
     /// through the production Debug/Release configuration. SwiftUI previews
