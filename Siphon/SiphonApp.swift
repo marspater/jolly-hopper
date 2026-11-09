@@ -183,7 +183,7 @@ struct SiphonApp: App {
         guard Self.isAppDeepLink(url) else { return }
 
         NSApp.setActivationPolicy(.regular)
-        NSApp.activate(ignoringOtherApps: true)
+        NSApp.bringToFront()
 
         guard url.host == "download" || url.host == "fast-download" else {
             bringMainWindowsForward()

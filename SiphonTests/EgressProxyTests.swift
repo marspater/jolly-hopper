@@ -5,6 +5,7 @@
 
 import XCTest
 import Network
+import WebKit
 @testable import Siphon
 
 final class EgressProxyTests: XCTestCase {

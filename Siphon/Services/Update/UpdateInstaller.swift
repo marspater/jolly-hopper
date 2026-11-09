@@ -53,6 +53,19 @@ public final class UpdateInstaller: Sendable {
         }
     }
 
+    /// Reads a child's piped output to end of file. A failed read closes the
+    /// pipe, so a child blocked on it still exits and can be waited for.
+    private static func readOutput(of pipe: Pipe) -> Data {
+        let handle = pipe.fileHandleForReading
+        do {
+            return try handle.readToEnd() ?? Data()
+        } catch {
+            log("Could not read update tool output: \(error.localizedDescription)", level: .warning)
+            try? handle.close()
+            return Data()
+        }
+    }
+
     /// Installs a downloaded package file (.dmg, .zip, or .app) into the running application bundle location.
     /// Swift owns staging, verification, atomic exchange, rollback, and relaunch.
     public func install(
@@ -324,7 +337,7 @@ public final class UpdateInstaller: Sendable {
 
         try process.run()
         // Read before waiting: a child blocked on a full pipe never exits.
-        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        let data = Self.readOutput(of: pipe)
         process.waitUntilExit()
 
         guard process.terminationStatus == 0 else {
@@ -364,7 +377,7 @@ public final class UpdateInstaller: Sendable {
         process.standardOutput = pipe
         process.standardError = FileHandle.nullDevice
         do { try process.run() } catch { return }
-        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        let data = Self.readOutput(of: pipe)
         process.waitUntilExit()
         let staged = FileManager.default.temporaryDirectory.appendingPathComponent("Siphon_Update_").path
         for mountPoint in staleUpdateMountPoints(hdiutilInfo: data, stagedPrefix: staged) {
@@ -398,7 +411,7 @@ public final class UpdateInstaller: Sendable {
         process.standardError = errorPipe
 
         try process.run()
-        let data = errorPipe.fileHandleForReading.readDataToEndOfFile()
+        let data = Self.readOutput(of: errorPipe)
         process.waitUntilExit()
 
         guard process.terminationStatus == 0 else {
@@ -434,8 +447,13 @@ public final class UpdateInstaller: Sendable {
     }
 
     private static func isApp(_ app: URL, withBundleID bundleID: String) -> Bool {
-        let plist = NSDictionary(contentsOf: app.appendingPathComponent("Contents/Info.plist"))
-        return UpdateVerifier.bundleIDsMatch(plist?["CFBundleIdentifier"] as? String, bundleID)
+        do {
+            let plist = try NSDictionary(contentsOf: app.appendingPathComponent("Contents/Info.plist"), error: ())
+            return UpdateVerifier.bundleIDsMatch(plist["CFBundleIdentifier"] as? String, bundleID)
+        } catch {
+            log("Could not read a bundle's Info.plist: \(error.localizedDescription)", level: .warning)
+            return false
+        }
     }
 
     private func locateAppBundle(in directory: URL, bundleID: String, depth: Int, visited: inout Set<String>) -> URL? {

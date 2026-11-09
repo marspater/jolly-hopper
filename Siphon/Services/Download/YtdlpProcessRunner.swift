@@ -6,6 +6,7 @@
 import Foundation
 import Darwin
 import os
+import Synchronization
 import SiphonCore
 
 public final class DownloadProcessController: @unchecked Sendable {
@@ -331,30 +332,32 @@ public final class DownloadProcessController: @unchecked Sendable {
 /// Runs a completion once every output stream of a process has reached EOF,
 /// without blocking a thread and without DispatchGroup's crash when a group is
 /// released with outstanding entries (a process that never launched).
-final class StreamDrainBarrier: @unchecked Sendable {
-    private let lock = NSLock()
-    private var pendingStreams: Int
-    private var onDrained: (@Sendable () -> Void)?
+final class StreamDrainBarrier: Sendable {
+    private struct State {
+        var pendingStreams: Int
+        var onDrained: (@Sendable () -> Void)?
+    }
+
+    private let state: Mutex<State>
 
     init(streams: Int) {
-        pendingStreams = streams
+        state = Mutex(State(pendingStreams: streams))
     }
 
     func streamFinished() {
-        let action: (@Sendable () -> Void)? = lock.withLock {
-            pendingStreams -= 1
-            guard pendingStreams == 0 else { return nil }
-            defer { onDrained = nil }
-            return onDrained
+        let action: (@Sendable () -> Void)? = state.withLock { state in
+            state.pendingStreams -= 1
+            guard state.pendingStreams == 0 else { return nil }
+            return state.onDrained.take()
         }
         action?()
     }
 
     /// Runs `action` after the last stream finishes, or now if all already have.
     func whenDrained(_ action: @escaping @Sendable () -> Void) {
-        let runNow: Bool = lock.withLock {
-            guard pendingStreams > 0 else { return true }
-            onDrained = action
+        let runNow: Bool = state.withLock { state in
+            guard state.pendingStreams > 0 else { return true }
+            state.onDrained = action
             return false
         }
         if runNow { action() }
@@ -370,11 +373,10 @@ final class StreamDrainBarrier: @unchecked Sendable {
     ) {
         whenDrained(action)
         DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + timeout) { [self] in
-            let pending: (@Sendable () -> Void)? = lock.withLock {
-                guard pendingStreams > 0 else { return nil }
-                pendingStreams = 0
-                defer { onDrained = nil }
-                return onDrained
+            let pending: (@Sendable () -> Void)? = state.withLock { state in
+                guard state.pendingStreams > 0 else { return nil }
+                state.pendingStreams = 0
+                return state.onDrained.take()
             }
             guard let pending else { return }
             onTimeout()
@@ -1041,9 +1043,8 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
 }
 
 /// FFmpeg writes elapsed media time to stderr rather than yt-dlp progress hooks.
-final class FfmpegDownloadProgress: @unchecked Sendable {
-    private let lock = NSLock()
-    private var duration: Double?
+final class FfmpegDownloadProgress: Sendable {
+    private let duration = Mutex<Double?>(nil)
     /// A `--download-sections` range: FFmpeg reports the whole source's
     /// Duration but only writes the section, so that length is the total.
     private let sectionDuration: Double?
@@ -1068,8 +1069,6 @@ final class FfmpegDownloadProgress: @unchecked Sendable {
     }
 
     func parse(_ line: String) -> (fraction: Double, speed: String?, eta: String?)? {
-        lock.lock()
-        defer { lock.unlock() }
         func token(after marker: String) -> String? {
             guard let range = line.range(of: marker) else { return nil }
             return line[range.upperBound...].split(whereSeparator: { $0.isWhitespace || $0 == "," }).first.map(String.init)
@@ -1083,18 +1082,18 @@ final class FfmpegDownloadProgress: @unchecked Sendable {
         // Each FFmpeg run (one per playlist entry) describes its own input;
         // a longer earlier entry must not shrink this one's progress.
         if line.hasPrefix("Input #0") {
-            duration = nil
+            duration.withLock { $0 = nil }
             return nil
         }
         if line.contains("Duration:") {
-            if let parsed = seconds(token(after: "Duration:")), parsed > (duration ?? 0) {
-                duration = parsed
+            if let parsed = seconds(token(after: "Duration:")) {
+                duration.withLock { if parsed > ($0 ?? 0) { $0 = parsed } }
             }
             return nil
         }
         guard line.trimmingCharacters(in: .whitespaces).hasPrefix("frame=") ||
                 line.trimmingCharacters(in: .whitespaces).hasPrefix("size=") else { return nil }
-        guard let duration = sectionDuration ?? duration, duration > 0,
+        guard let duration = sectionDuration ?? self.duration.withLock({ $0 }), duration > 0,
               let elapsed = seconds(token(after: "time=")) else { return nil }
         // The "2x" realtime factor is not a transfer rate, so no speed is reported.
         let multiplier = token(after: "speed=").flatMap { Double($0.replacingOccurrences(of: "x", with: "")) }

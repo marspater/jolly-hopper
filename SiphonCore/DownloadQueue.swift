@@ -4,6 +4,7 @@
 //
 
 import Foundation
+import Combine
 
 @preconcurrency @MainActor
 public final class DownloadQueue: ObservableObject {

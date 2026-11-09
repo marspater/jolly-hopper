@@ -1,5 +1,6 @@
 import SwiftUI
 import SiphonCore
+import Combine
 
 enum Language: String, CaseIterable, Identifiable {
     case english = "en"

@@ -26,7 +26,7 @@ final class PreferencesWindowManager: NSObject, NSWindowDelegate {
                 existingWindow.setFrame(f, display: true, animate: true)
             }
             existingWindow.makeKeyAndOrderFront(nil)
-            NSApp.activate(ignoringOtherApps: true)
+            NSApp.bringToFront()
             return
         }
 
@@ -63,7 +63,7 @@ final class PreferencesWindowManager: NSObject, NSWindowDelegate {
 
         controller.showWindow(nil)
         window.makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
+        NSApp.bringToFront()
     }
 
     func closeWindow() {

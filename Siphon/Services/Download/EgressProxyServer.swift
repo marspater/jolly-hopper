@@ -5,6 +5,7 @@
 
 import Foundation
 import Network
+import Synchronization
 
 /// The egress proxy of the boundary-enforced job the current task works for.
 /// Site resolvers deep in YtdlpService launch their own yt-dlp runs, URLSession
@@ -28,7 +29,7 @@ enum EgressBoundary {
     /// The session for resolver requests: through the bound proxy, else shared.
     static var session: URLSession {
         guard let endpoint = proxyEndpoint else { return .shared }
-        return sessionLock.withLock {
+        return sessions.withLock { sessions in
             if let cached = sessions[endpoint.port] { return cached }
             let configuration = URLSessionConfiguration.ephemeral
             configuration.connectionProxyDictionary = [
@@ -62,7 +63,7 @@ enum EgressBoundary {
     }
 
     static func retireSession(for port: UInt16) {
-        let retired = sessionLock.withLock { sessions.removeValue(forKey: Int(port)) }
+        let retired = sessions.withLock { $0.removeValue(forKey: Int(port)) }
         retired?.finishTasksAndInvalidate()
     }
 
@@ -111,8 +112,7 @@ enum EgressBoundary {
         return (routed, file)
     }
 
-    private static let sessionLock = NSLock()
-    nonisolated(unsafe) private static var sessions: [Int: URLSession] = [:]
+    private static let sessions = Mutex<[Int: URLSession]>([:])
 }
 
 /// Answers the egress proxy's 407 on CONNECT with its per-launch credential. A
@@ -897,24 +897,27 @@ private extension Substring {
 
 /// One upstream connect race: the first connection wins; the race fails only
 /// after every attempt has failed.
-private final class UpstreamRace: @unchecked Sendable {
-    private let lock = NSLock()
-    private var finished = false
-    private var remaining: Int
+private final class UpstreamRace: Sendable {
+    private struct State {
+        var finished = false
+        var remaining: Int
+    }
+
+    private let state: Mutex<State>
     private let completion: @Sendable (Result<NWConnection, Error>) -> Void
 
     init(attempts: Int, completion: @escaping @Sendable (Result<NWConnection, Error>) -> Void) {
-        self.remaining = attempts
+        self.state = Mutex(State(remaining: attempts))
         self.completion = completion
     }
 
-    var isFinished: Bool { lock.withLock { finished } }
+    var isFinished: Bool { state.withLock { $0.finished } }
 
     /// Returns false when another attempt already won; the caller cancels its connection.
     func win(_ connection: NWConnection) -> Bool {
-        let won = lock.withLock { () -> Bool in
-            guard !finished else { return false }
-            finished = true
+        let won = state.withLock { state -> Bool in
+            guard !state.finished else { return false }
+            state.finished = true
             return true
         }
         if won { completion(.success(connection)) }
@@ -922,43 +925,36 @@ private final class UpstreamRace: @unchecked Sendable {
     }
 
     func fail(_ error: Error) {
-        let lost = lock.withLock { () -> Bool in
-            remaining -= 1
-            guard !finished, remaining == 0 else { return false }
-            finished = true
+        let lost = state.withLock { state -> Bool in
+            state.remaining -= 1
+            guard !state.finished, state.remaining == 0 else { return false }
+            state.finished = true
             return true
         }
         if lost { completion(.failure(error)) }
     }
 }
 
-private final class AtomicBox<T>: @unchecked Sendable {
-    private let lock = NSLock()
-    private var value: T
+private final class AtomicBox<T: Sendable>: Sendable {
+    private let value: Mutex<T>
 
     init(_ value: T) {
-        self.value = value
+        self.value = Mutex(value)
     }
 
     func get() -> T {
-        lock.lock()
-        defer { lock.unlock() }
-        return value
+        value.withLock { $0 }
     }
 
     func set(_ newValue: T) {
-        lock.lock()
-        defer { lock.unlock() }
-        value = newValue
+        value.withLock { $0 = newValue }
     }
 
     func compareAndSet(expected: T, newValue: T) -> Bool where T: Equatable {
-        lock.lock()
-        defer { lock.unlock() }
-        if value == expected {
+        value.withLock { value in
+            guard value == expected else { return false }
             value = newValue
             return true
         }
-        return false
     }
 }

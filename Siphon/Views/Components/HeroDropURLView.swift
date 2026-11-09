@@ -394,14 +394,10 @@ struct HeroDropURLView: View {
     }
 
     private func handleFileDrop(_ provider: NSItemProvider) {
-        provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, _ in
-            let fileURL: URL? = {
-                if let url = item as? URL { return url }
-                if let data = item as? Data, let path = String(data: data, encoding: .utf8) {
-                    return URL(string: path)
-                }
-                return nil
-            }()
+        // Read the file URL type itself: a provider can also carry a web URL under another type.
+        _ = provider.loadDataRepresentation(forTypeIdentifier: UTType.fileURL.identifier) { data, error in
+            Self.logDropFailure(error)
+            let fileURL = data.flatMap { URL(dataRepresentation: $0, relativeTo: nil, isAbsolute: true) }
 
             // Only .txt lists are read; any other file gets the same feedback as an empty list.
             let urls: [String] = {
@@ -432,16 +428,20 @@ struct HeroDropURLView: View {
         return DownloadURLValidator.extractURLs(from: text.replacingOccurrences(of: "\0", with: "\n")).first
     }
 
-    private func handleDirectURLDrop(_ provider: NSItemProvider) {
-        provider.loadItem(forTypeIdentifier: UTType.url.identifier, options: nil) { item, _ in
-            let urlString: String? = {
-                if let url = item as? URL { return url.absoluteString }
-                if let data = item as? Data { return Self.droppedURL(from: data) }
-                if let str = item as? String { return str }
-                return nil
-            }()
+    nonisolated private static func logDropFailure(_ error: (any Error)?) {
+        guard let error else { return }
+        Task { @MainActor in
+            LoggerService.shared.log("Could not read the dropped item: \(error.localizedDescription)", level: .warning)
+        }
+    }
 
-            if let raw = urlString {
+    private func handleDirectURLDrop(_ provider: NSItemProvider) {
+        // Raw bytes rather than loadObject: browsers append a NUL and the page
+        // title, which NSURL would percent-encode into the link.
+        _ = provider.loadDataRepresentation(forTypeIdentifier: UTType.url.identifier) { data, error in
+            Self.logDropFailure(error)
+
+            if let raw = data.flatMap(Self.droppedURL(from:)) {
                 Task { @MainActor in
                     if let original = DownloadURLValidator.extractURLs(from: raw.replacingOccurrences(of: "\0", with: "\n")).first {
                         inputURL = original
@@ -455,9 +455,9 @@ struct HeroDropURLView: View {
     }
 
     private func handlePlainTextDrop(_ provider: NSItemProvider) {
-        provider.loadItem(forTypeIdentifier: UTType.utf8PlainText.identifier, options: nil) { item, _ in
-            // Cross-app text drags arrive as pasteboard Data, not String.
-            let text = (item as? String) ?? (item as? Data).flatMap { String(data: $0, encoding: .utf8) } ?? ""
+        _ = provider.loadDataRepresentation(forTypeIdentifier: UTType.utf8PlainText.identifier) { data, error in
+            Self.logDropFailure(error)
+            let text = data.flatMap { String(data: $0, encoding: .utf8) } ?? ""
             let urls = DownloadURLValidator.extractURLs(from: text)
             Task { @MainActor in
                 if urls.count > 1 {

@@ -118,12 +118,12 @@ struct ContentView: View {
                 .sheet(isPresented: $appState.showWhatsNew, onDismiss: presentPendingUpdateAlert) {
                     WhatsNewSheetView()
                 }
-                .alert(item: $appState.ytdlpUpdateMessage) { status in
-                    Alert(
-                        title: Text(status.title),
-                        message: Text(status.message),
-                        dismissButton: .default(Text(languageService.s("ok")))
-                    )
+                .alert(appState.ytdlpUpdateMessage?.title ?? "", item: $appState.ytdlpUpdateMessage) { _ in
+                    Button(languageService.s("ok"), role: .cancel) {
+                        // Nothing to do: SwiftUI dismisses the alert and clears the item.
+                    }
+                } message: { status in
+                    Text(status.message)
                 }
         }
         .siphonAdaptiveRendering()
@@ -921,7 +921,7 @@ struct WhatsNewSheetView: View {
                 .padding(.horizontal, SiphonTheme.spacing20)
 
             // Feature Showcase - Beautiful structured cards instead of raw unstyled markdown
-            ScrollView(showsIndicators: true) {
+            ScrollView {
                 VStack(spacing: 10) {
                     ForEach(appState.whatsNewFeatures) { feature in
                         FeatureCardRow(feature: feature)

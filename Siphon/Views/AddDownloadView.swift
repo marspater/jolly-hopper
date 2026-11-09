@@ -1,5 +1,6 @@
 import SwiftUI
 import SiphonCore
+import UniformTypeIdentifiers
 
 struct AddDownloadView: View {
     private let userDefaults: UserDefaults
