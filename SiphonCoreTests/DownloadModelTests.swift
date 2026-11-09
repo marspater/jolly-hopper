@@ -62,6 +62,21 @@ final class DownloadModelTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: dir.path), "Exited owner's scratch must be purged")
     }
 
+    func testPurgeKeepsOldScratchWithRecentNestedFile() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("purge_\(UUID().uuidString)")
+        let dir = root.appendingPathComponent(ScratchDirectoryPolicy.directoryPrefix + UUID().uuidString)
+        let nested = dir.appendingPathComponent("a/b")
+        try FileManager.default.createDirectory(at: nested, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try Data([0]).write(to: nested.appendingPathComponent("video.part"))
+        let old = Date(timeIntervalSinceNow: -3 * 24 * 3600)
+        for url in [dir, dir.appendingPathComponent("a"), nested] {
+            try FileManager.default.setAttributes([.modificationDate: old], ofItemAtPath: url.path)
+        }
+        ScratchDirectoryPolicy.purgeAbandoned(keeping: [], in: root)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: dir.path), "A recently written nested file keeps the directory alive")
+    }
+
     func testHistoryDropsSignedThumbnailURLs() {
         XCTAssertNil(HistoricDownload.persistableThumbnailURL(URL(string: "https://cdn.example.com/t.jpg?token=abc")!))
         XCTAssertNil(HistoricDownload.persistableThumbnailURL(URL(string: "https://u:p@cdn.example.com/t.jpg")!))
