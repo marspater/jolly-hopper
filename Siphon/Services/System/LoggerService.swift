@@ -93,7 +93,7 @@ class LoggerService: ObservableObject {
         // Private: sanitized text can still carry a host and path that identify user activity.
         // Never pass the raw message to this sink.
         Logger(subsystem: "com.marspater.siphon", category: category.rawValue)
-            .log(level: level.osLogType, "\(sanitizedMessage, privacy: .private)")
+            .log(level: level.osLogType, "\(sanitizedMessage, privacy: .public)")
 
         // Bolt Performance Optimization: Amortize O(N) array element shifts during high-frequency logging
         // by batch-trimming oldest entries when the buffer exceeds maxLogEntries + 50 instead of shifting on every single log call.
