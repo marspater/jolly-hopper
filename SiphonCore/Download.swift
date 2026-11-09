@@ -17,7 +17,7 @@ public enum ScratchDirectoryPolicy: Sendable {
         try? String(pid).write(to: directory.appendingPathComponent(ownerMarkerName), atomically: true, encoding: .utf8)
     }
 
-    static func hasLiveOwner(_ directory: URL, fileManager: FileManager = .default) -> Bool {
+    static func hasLiveOwner(_ directory: URL) -> Bool {
         guard let text = try? String(contentsOf: directory.appendingPathComponent(ownerMarkerName), encoding: .utf8),
               let pid = Int32(text.trimmingCharacters(in: .whitespacesAndNewlines)), pid > 0 else { return false }
         // EPERM means the process exists but belongs to another user.
@@ -118,7 +118,7 @@ public enum ScratchDirectoryPolicy: Sendable {
         guard let entries = try? fileManager.contentsOfDirectory(at: root, includingPropertiesForKeys: keys) else { return [] }
         var removed: [URL] = []
         for directory in entries where hasTemporaryArtifactName(directory) && !kept.contains(directory.lastPathComponent) {
-            if hasLiveOwner(directory, fileManager: fileManager) { continue }
+            if hasLiveOwner(directory) { continue }
             // A running download keeps writing its .part file, which the
             // directory's own date does not reflect.
             let children = fileManager.enumerator(at: directory, includingPropertiesForKeys: keys)?.compactMap { $0 as? URL } ?? []
