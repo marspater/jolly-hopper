@@ -5,6 +5,12 @@ import Testing
 
 @MainActor
 struct PreviewFixturesTests {
+    @Test func canvasEnvironmentsCountAsPreviewHosts() {
+        #expect(NotificationService.isPreviewHost(["XCODE_RUNNING_FOR_PREVIEWS": "1"]))
+        #expect(NotificationService.isPreviewHost(["XCODE_RUNNING_FOR_PLAYGROUNDS": "1"]))
+        #expect(!NotificationService.isPreviewHost([:]))
+    }
+
     @Test func fixturesStayOffSharedSessionAndRealDefaults() {
         let domain = Bundle.main.bundleIdentifier ?? ""
         let before = UserDefaults.standard.persistentDomain(forName: domain) as NSDictionary?

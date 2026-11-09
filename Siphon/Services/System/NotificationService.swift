@@ -12,8 +12,18 @@ final class NotificationService: NSObject, @unchecked Sendable, UNUserNotificati
         }
     }
 
+    /// Xcode's canvas runs the real app entry point under the real bundle ID, so previews
+    /// need the same state, process and Safari cookie isolation as the test host.
+    static func isPreviewHost(_ environment: [String: String]) -> Bool {
+        #if DEBUG
+        environment["XCODE_RUNNING_FOR_PREVIEWS"] == "1" || environment["XCODE_RUNNING_FOR_PLAYGROUNDS"] == "1"
+        #else
+        false
+        #endif
+    }
+
     static var isRunningTests: Bool {
-        if UITestLaunchMode.isActive {
+        if UITestLaunchMode.isActive || isPreviewHost(ProcessInfo.processInfo.environment) {
             return true
         }
         if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil {
