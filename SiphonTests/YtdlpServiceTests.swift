@@ -128,7 +128,7 @@ final class YtdlpServiceTests: XCTestCase {
             _ = try await service.fetchSingleVideoInfo(path: "/usr/local/bin/yt-dlp", url: "https://example.com/video", browserCookieSource: browser, proxy: "http://127.0.0.1:4321")
             XCTAssertEqual(calls.value, 2)
             // A fresh service has no prior denial, so the download must exercise the same fallback.
-            let downloader = YtdlpService()
+            let downloader = YtdlpService(userDefaults: TestState.defaults)
             downloader.ytdlpPath = service.ytdlpPath
             downloader.ffmpegPath = service.ffmpegPath
             let attempts = TestBox(0)
@@ -196,9 +196,7 @@ final class YtdlpServiceTests: XCTestCase {
     }
 
     func testClearanceIdentityAndBrowserCookiesSurviveEveryCaller() async throws {
-        let original = UserDefaults.standard.object(forKey: UserDefaultsKeys.browserForCookies)
-        defer { UserDefaults.standard.set(original, forKey: UserDefaultsKeys.browserForCookies) }
-        UserDefaults.standard.set("safari", forKey: UserDefaultsKeys.browserForCookies)
+        TestState.defaults.set("safari", forKey: UserDefaultsKeys.browserForCookies)
         service.sucuriCookieResolver = { _ in ("clearance", "fixture") }
         let commands = TestBox(0)
         let assertIdentity: @Sendable ([String]) throws -> Void = { args in
@@ -919,7 +917,7 @@ final class YtdlpServiceTests: XCTestCase {
 
     override func setUp() async throws {
         try await super.setUp()
-        service = YtdlpService()
+        service = YtdlpService(userDefaults: TestState.defaults)
         // Setup mock paths so we don't throw notFound initially, except when testing for it.
         service.ytdlpPath = URL(fileURLWithPath: "/usr/local/bin/yt-dlp")
         service.ffmpegPath = URL(fileURLWithPath: "/usr/local/bin/ffmpeg")
@@ -930,6 +928,9 @@ final class YtdlpServiceTests: XCTestCase {
 
     override func tearDown() async throws {
         service = nil
+        for key in [UserDefaultsKeys.browserForCookies, UserDefaultsKeys.downloadSpeedLimit, UserDefaultsKeys.customYtdlpPath] {
+            TestState.defaults.removeObject(forKey: key)
+        }
         try await super.tearDown()
     }
 
@@ -1242,9 +1243,7 @@ final class YtdlpServiceTests: XCTestCase {
     }
 
     func testGenericMetadataPreservesHeliumExtensionIdentityWithSafariConfigured() async throws {
-        let originalBrowser = UserDefaults.standard.string(forKey: UserDefaultsKeys.browserForCookies)
-        defer { UserDefaults.standard.set(originalBrowser, forKey: UserDefaultsKeys.browserForCookies) }
-        UserDefaults.standard.set("safari", forKey: UserDefaultsKeys.browserForCookies)
+        TestState.defaults.set("safari", forKey: UserDefaultsKeys.browserForCookies)
         let exactUA = "Mozilla/5.0 Chrome/140.0.0.0 Safari/537.36"
         service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
             XCTAssertTrue(args.contains("--cookies"))
@@ -1373,8 +1372,7 @@ final class YtdlpServiceTests: XCTestCase {
 
     func testMetadataAndPlaylistUseExplicitBrowserSourceWithoutCookiePayload() async throws {
         service.ytdlpPath = URL(fileURLWithPath: "/usr/local/bin/yt-dlp")
-        UserDefaults.standard.set("none", forKey: UserDefaultsKeys.browserForCookies)
-        defer { UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.browserForCookies) }
+        TestState.defaults.set("none", forKey: UserDefaultsKeys.browserForCookies)
 
         let exactUA = "Mozilla/5.0 Firefox/145.0"
         service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
@@ -1406,8 +1404,7 @@ final class YtdlpServiceTests: XCTestCase {
     }
 
     func testExplicitFirefoxSourceWinsWithoutRawUserAgent() async throws {
-        UserDefaults.standard.set("safari", forKey: UserDefaultsKeys.browserForCookies)
-        defer { UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.browserForCookies) }
+        TestState.defaults.set("safari", forKey: UserDefaultsKeys.browserForCookies)
 
         service.processRunner = MockYtdlpProcessRunner(
             mockCommand: { args in
@@ -1512,8 +1509,7 @@ final class YtdlpServiceTests: XCTestCase {
     }
 
     func testSpeedLimiterFlagAppendedWhenConfigured() async throws {
-        UserDefaults.standard.set(5120, forKey: UserDefaultsKeys.downloadSpeedLimit)
-        defer { UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.downloadSpeedLimit) }
+        TestState.defaults.set(5120, forKey: UserDefaultsKeys.downloadSpeedLimit)
 
         let capturedArgsBox = TestBox<[String]>([])
         service.processRunner = MockYtdlpProcessRunner(mockDownload: { args in
@@ -1925,9 +1921,7 @@ final class YtdlpServiceTests: XCTestCase {
     }
 
     func testGuywhURLNormalizationAndHeaders() async throws {
-        let previousBrowser = UserDefaults.standard.object(forKey: UserDefaultsKeys.browserForCookies)
-        UserDefaults.standard.set("chrome", forKey: UserDefaultsKeys.browserForCookies)
-        defer { UserDefaults.standard.set(previousBrowser, forKey: UserDefaultsKeys.browserForCookies) }
+        TestState.defaults.set("chrome", forKey: UserDefaultsKeys.browserForCookies)
         let capturedArgsBox = TestBox<[String]>([])
         service.processRunner = MockYtdlpProcessRunner(mockDownload: { args in
             capturedArgsBox.value = args
@@ -2089,9 +2083,7 @@ final class YtdlpServiceTests: XCTestCase {
     }
 
     func testGFFURLNormalizationAndHeaders() async throws {
-        let previousBrowser = UserDefaults.standard.object(forKey: UserDefaultsKeys.browserForCookies)
-        UserDefaults.standard.set("chrome", forKey: UserDefaultsKeys.browserForCookies)
-        defer { UserDefaults.standard.set(previousBrowser, forKey: UserDefaultsKeys.browserForCookies) }
+        TestState.defaults.set("chrome", forKey: UserDefaultsKeys.browserForCookies)
         let capturedArgsBox = TestBox<[String]>([])
         service.processRunner = MockYtdlpProcessRunner(mockDownload: { args in
             capturedArgsBox.value = args
@@ -2760,9 +2752,7 @@ final class YtdlpServiceTests: XCTestCase {
     }
 
     func testGFFCDNPlaylistDownloadSkipsBrowserCookies() async throws {
-        let previousBrowser = UserDefaults.standard.object(forKey: UserDefaultsKeys.browserForCookies)
-        UserDefaults.standard.set("chrome", forKey: UserDefaultsKeys.browserForCookies)
-        defer { UserDefaults.standard.set(previousBrowser, forKey: UserDefaultsKeys.browserForCookies) }
+        TestState.defaults.set("chrome", forKey: UserDefaultsKeys.browserForCookies)
         let capturedArgsBox = TestBox<[String]>([])
         service.processRunner = MockYtdlpProcessRunner(mockDownload: { args in
             capturedArgsBox.value = args
@@ -2787,8 +2777,7 @@ final class YtdlpServiceTests: XCTestCase {
 
     func testGFFErrorMappingAndCloudflare() async throws {
         service.ytdlpPath = URL(fileURLWithPath: "/usr/local/bin/yt-dlp")
-        UserDefaults.standard.set("none", forKey: UserDefaultsKeys.browserForCookies)
-        defer { UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.browserForCookies) }
+        TestState.defaults.set("none", forKey: UserDefaultsKeys.browserForCookies)
 
         // Cloudflare error
         service.processRunner = MockYtdlpProcessRunner(mockCommand: { _ in
@@ -2818,8 +2807,7 @@ final class YtdlpServiceTests: XCTestCase {
 
         // 2. GFF and BoyfriendTV error mapping assertion
         service.ytdlpPath = URL(fileURLWithPath: "/usr/local/bin/yt-dlp")
-        UserDefaults.standard.set("none", forKey: UserDefaultsKeys.browserForCookies)
-        defer { UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.browserForCookies) }
+        TestState.defaults.set("none", forKey: UserDefaultsKeys.browserForCookies)
 
         service.processRunner = MockYtdlpProcessRunner(mockCommand: { _ in
             throw YtdlpError.commandFailed("ERROR: Video unavailable: video has been removed by the user")
@@ -2861,12 +2849,9 @@ final class YtdlpServiceTests: XCTestCase {
     }
 
     func testEpornerNeverUsesBrowserCookies() async throws {
-        UserDefaults.standard.set("safari", forKey: UserDefaultsKeys.browserForCookies)
+        TestState.defaults.set("safari", forKey: UserDefaultsKeys.browserForCookies)
         YtdlpService.hasFullDiskAccessOverride = true
-        defer {
-            UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.browserForCookies)
-            YtdlpService.hasFullDiskAccessOverride = nil
-        }
+        defer { YtdlpService.hasFullDiskAccessOverride = nil }
 
         let capturedArgsBox = TestBox<[[String]]>([])
         service.processRunner = MockYtdlpProcessRunner(
@@ -3073,14 +3058,14 @@ final class YtdlpServiceTests: XCTestCase {
         try "Media Content A".data(using: .utf8)?.write(to: fileA)
         try "Media Content B".data(using: .utf8)?.write(to: fileB)
 
-        let serviceA = YtdlpService()
+        let serviceA = YtdlpService(userDefaults: TestState.defaults)
         serviceA.ytdlpPath = URL(fileURLWithPath: "/usr/local/bin/yt-dlp")
         serviceA.processRunner = MockYtdlpProcessRunner(mockDownload: { args in
             try? await Task.sleep(nanoseconds: 50_000_000)
             return fileA.path
         })
 
-        let serviceB = YtdlpService()
+        let serviceB = YtdlpService(userDefaults: TestState.defaults)
         serviceB.ytdlpPath = URL(fileURLWithPath: "/usr/local/bin/yt-dlp")
         serviceB.processRunner = MockYtdlpProcessRunner(mockDownload: { args in
             try? await Task.sleep(nanoseconds: 50_000_000)
@@ -3542,7 +3527,7 @@ final class YtdlpServiceTests: XCTestCase {
     func testProcessExitNonZeroThrowsErrorEvenIfFileExists() async {
         let service = YtdlpService(processRunner: MockYtdlpProcessRunner(mockDownload: { _ in
             throw YtdlpError.downloadFailed("ffmpeg conversion crashed")
-        }))
+        }), userDefaults: TestState.defaults)
 
         do {
             _ = try await service.download(
@@ -3676,8 +3661,7 @@ final class YtdlpServiceTests: XCTestCase {
 
     func testBoyfriendTVResolverRecoversThroughAlternateMainHost() async throws {
         service.ytdlpPath = URL(fileURLWithPath: "/usr/local/bin/yt-dlp")
-        UserDefaults.standard.set("none", forKey: UserDefaultsKeys.browserForCookies)
-        defer { UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.browserForCookies) }
+        TestState.defaults.set("none", forKey: UserDefaultsKeys.browserForCookies)
 
         let calls = TestBox<[String]>([])
         service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
@@ -3717,8 +3701,7 @@ final class YtdlpServiceTests: XCTestCase {
 
     func testBoyfriendTVAlternateHostGetsItsOwnTransientRetryBudget() async throws {
         service.ytdlpPath = URL(fileURLWithPath: "/usr/local/bin/yt-dlp")
-        UserDefaults.standard.set("none", forKey: UserDefaultsKeys.browserForCookies)
-        defer { UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.browserForCookies) }
+        TestState.defaults.set("none", forKey: UserDefaultsKeys.browserForCookies)
 
         let tvCalls = TestBox<Int>(0)
         service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
@@ -3759,12 +3742,9 @@ final class YtdlpServiceTests: XCTestCase {
 
     func testBoyfriendTVWithSafariCookiesUsesCoherentSafariTransport() async throws {
         service.ytdlpPath = URL(fileURLWithPath: "/usr/local/bin/yt-dlp")
-        UserDefaults.standard.set("safari", forKey: UserDefaultsKeys.browserForCookies)
+        TestState.defaults.set("safari", forKey: UserDefaultsKeys.browserForCookies)
         YtdlpService.hasFullDiskAccessOverride = true
-        defer {
-            UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.browserForCookies)
-            YtdlpService.hasFullDiskAccessOverride = nil
-        }
+        defer { YtdlpService.hasFullDiskAccessOverride = nil }
 
         let capturedArgsBox = TestBox<[String]>([])
         service.processRunner = MockYtdlpProcessRunner(
@@ -3806,8 +3786,7 @@ final class YtdlpServiceTests: XCTestCase {
 
     func testBoyfriendTVResolverMatchesFirefoxCookiesToFirefoxFingerprint() async throws {
         service.ytdlpPath = URL(fileURLWithPath: "/usr/local/bin/yt-dlp")
-        UserDefaults.standard.set("firefox", forKey: UserDefaultsKeys.browserForCookies)
-        defer { UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.browserForCookies) }
+        TestState.defaults.set("firefox", forKey: UserDefaultsKeys.browserForCookies)
 
         let dumpArgs = TestBox<[[String]]>([])
         let mainHTML = """
@@ -3849,8 +3828,7 @@ final class YtdlpServiceTests: XCTestCase {
 
     func testBoyfriendTVResolverNoCookieFallbackUsesCoherentChromeImpersonation() async throws {
         service.ytdlpPath = URL(fileURLWithPath: "/usr/local/bin/yt-dlp")
-        UserDefaults.standard.set("none", forKey: UserDefaultsKeys.browserForCookies)
-        defer { UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.browserForCookies) }
+        TestState.defaults.set("none", forKey: UserDefaultsKeys.browserForCookies)
 
         let captured = TestBox<[String]>([])
         let stream = "https://cdn.boyfriendtv.com/key=test/media=hls4A/multi=854x480:v480/2026-09/_TPL_.mp4"
@@ -3882,7 +3860,6 @@ final class YtdlpServiceTests: XCTestCase {
         // Each extra Chromium browser read raises its own Keychain prompt, and the
         // embed pages repeat the loop, so no other browser may be tried.
         service.ytdlpPath = URL(fileURLWithPath: "/usr/local/bin/yt-dlp")
-        defer { UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.browserForCookies) }
         service.boyfriendTVRenderedPageLoader = { _ in nil }
         service.boyfriendTVRenderedStreamLoader = { _ in nil }
 
@@ -3904,7 +3881,7 @@ final class YtdlpServiceTests: XCTestCase {
         })
 
         for (configured, expected) in [("edge", YtdlpService.cookiesFromBrowserArgument(for: "edge")), ("none", nil)] {
-            UserDefaults.standard.set(configured, forKey: UserDefaultsKeys.browserForCookies)
+            TestState.defaults.set(configured, forKey: UserDefaultsKeys.browserForCookies)
             cookieSources.value = []
             embedDumps.value = 0
 
@@ -3921,8 +3898,7 @@ final class YtdlpServiceTests: XCTestCase {
     }
 
     func testBoyfriendTVWebKitFallbackResolvesMainPageChallenge() async throws {
-        UserDefaults.standard.set("none", forKey: UserDefaultsKeys.browserForCookies)
-        defer { UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.browserForCookies) }
+        TestState.defaults.set("none", forKey: UserDefaultsKeys.browserForCookies)
 
         let stream = "https://cdn.boyfriendtv.com/key=clearance/media=hls4A/multi=854x480:v480/2026-09/_TPL_.mp4"
         let challenge = "<html><head><title>Just a moment...</title></head><body><script src='/cdn-cgi/challenge-platform/test'></script></body></html>"
@@ -3958,8 +3934,7 @@ final class YtdlpServiceTests: XCTestCase {
     }
 
     func testBoyfriendTVLoginPageFallsBackToSignedInWebKitSession() async throws {
-        UserDefaults.standard.set("none", forKey: UserDefaultsKeys.browserForCookies)
-        defer { UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.browserForCookies) }
+        TestState.defaults.set("none", forKey: UserDefaultsKeys.browserForCookies)
 
         // Safari keeps the login in a session cookie that cookie import never sees,
         // so every non-WebKit stage gets the login page without any 403.
@@ -3995,8 +3970,7 @@ final class YtdlpServiceTests: XCTestCase {
     }
 
     func testBoyfriendTVSignedOutWebKitPageStopsBeforeEmbeds() async throws {
-        UserDefaults.standard.set("none", forKey: UserDefaultsKeys.browserForCookies)
-        defer { UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.browserForCookies) }
+        TestState.defaults.set("none", forKey: UserDefaultsKeys.browserForCookies)
 
         let login = "<html><body><p>To watch this video please <a href='/login'>login</a></p><iframe src='/embed/1684628/'></iframe></body></html>"
         let renderedLoads = TestBox<[URL]>([])
@@ -4022,8 +3996,7 @@ final class YtdlpServiceTests: XCTestCase {
     }
 
     func testBoyfriendTVUsesTheSafariSignInWithoutSafarisCloudflareCookies() async throws {
-        UserDefaults.standard.set("safari", forKey: UserDefaultsKeys.browserForCookies)
-        defer { UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.browserForCookies) }
+        TestState.defaults.set("safari", forKey: UserDefaultsKeys.browserForCookies)
         @Sendable func cookie(_ domain: String, _ name: String, _ value: String) -> HTTPCookie {
             HTTPCookie(properties: [.domain: domain, .name: name, .value: value, .path: "/"])!
         }
@@ -4063,8 +4036,7 @@ final class YtdlpServiceTests: XCTestCase {
     }
 
     func testBoyfriendTVSignedOutSafariFailsFastWithTheSafariSignInError() async throws {
-        UserDefaults.standard.set("safari", forKey: UserDefaultsKeys.browserForCookies)
-        defer { UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.browserForCookies) }
+        TestState.defaults.set("safari", forKey: UserDefaultsKeys.browserForCookies)
         service.safariCookiesProvider = {
             [HTTPCookie(properties: [.domain: ".boyfriendtv.com", .name: "configLang", .value: "es", .path: "/"])!]
         }
@@ -4481,8 +4453,7 @@ final class YtdlpServiceTests: XCTestCase {
     }
 
     func testBoyfriendTVWebKitFallbackResolvesEmbedChallenge() async throws {
-        UserDefaults.standard.set("none", forKey: UserDefaultsKeys.browserForCookies)
-        defer { UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.browserForCookies) }
+        TestState.defaults.set("none", forKey: UserDefaultsKeys.browserForCookies)
 
         let stream = "https://cdn.boyfriendtv.com/key=clearance/media=hls4A/multi=1280x720:v720/2026-09/_TPL_.mp4"
         let challenge = "<html><head><title>Just a moment...</title></head><body><script src='/cdn-cgi/challenge-platform/test'></script></body></html>"
@@ -4519,8 +4490,7 @@ final class YtdlpServiceTests: XCTestCase {
     }
 
     func testBoyfriendTVWebKitRuntimeRejectsPreviewMedia() async throws {
-        UserDefaults.standard.set("none", forKey: UserDefaultsKeys.browserForCookies)
-        defer { UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.browserForCookies) }
+        TestState.defaults.set("none", forKey: UserDefaultsKeys.browserForCookies)
 
         let challenge = "<html><head><title>Just a moment...</title></head><body><script src='/cdn-cgi/challenge-platform/test'></script></body></html>"
         let challengeOutput = Data(challenge.utf8).base64EncodedString() + "\nERROR: HTTP Error 403: Forbidden"
@@ -4549,8 +4519,7 @@ final class YtdlpServiceTests: XCTestCase {
     }
 
     func testBoyfriendTVWebKitChallengeTimeoutIsNotRepeatedAcrossMirrorsAndEmbeds() async throws {
-        UserDefaults.standard.set("none", forKey: UserDefaultsKeys.browserForCookies)
-        defer { UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.browserForCookies) }
+        TestState.defaults.set("none", forKey: UserDefaultsKeys.browserForCookies)
 
         let challenge = "<html><head><title>Just a moment...</title></head><body><script src='/cdn-cgi/challenge-platform/test'></script></body></html>"
         let challengeOutput = Data(challenge.utf8).base64EncodedString() + "\nERROR: HTTP Error 403: Forbidden"
@@ -4583,8 +4552,7 @@ final class YtdlpServiceTests: XCTestCase {
     }
 
     func testBoyfriendTVWebKitClearanceThenLoginReportsLoginNotCloudflare() async throws {
-        UserDefaults.standard.set("none", forKey: UserDefaultsKeys.browserForCookies)
-        defer { UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.browserForCookies) }
+        TestState.defaults.set("none", forKey: UserDefaultsKeys.browserForCookies)
 
         let challenge = "<html><head><title>Just a moment...</title></head><body><script src='/cdn-cgi/challenge-platform/test'></script></body></html>"
         let challengeOutput = Data(challenge.utf8).base64EncodedString() + "\nERROR: HTTP Error 403: Forbidden"
@@ -4757,14 +4725,10 @@ final class YtdlpServiceTests: XCTestCase {
     func testRecuMetadataResolvesThroughBrowserSessionWithoutBrowserCookies() async throws {
         let pageURL = "https://recu.me/polarny05/video/112873588/play"
         let stream = "https://cdn.example.test/master.m3u8?token=signed&expires=123"
-        let originalBrowser = UserDefaults.standard.string(forKey: UserDefaultsKeys.browserForCookies)
         let originalAccess = YtdlpService.hasFullDiskAccessOverride
-        defer {
-            UserDefaults.standard.set(originalBrowser, forKey: UserDefaultsKeys.browserForCookies)
-            YtdlpService.hasFullDiskAccessOverride = originalAccess
-        }
+        defer { YtdlpService.hasFullDiskAccessOverride = originalAccess }
         // Safari cookies without Full Disk Access must not matter: recu uses its own session.
-        UserDefaults.standard.set("safari", forKey: UserDefaultsKeys.browserForCookies)
+        TestState.defaults.set("safari", forKey: UserDefaultsKeys.browserForCookies)
         YtdlpService.hasFullDiskAccessOverride = false
 
         let sessionRequests = TestBox<[String]>([])
@@ -5087,8 +5051,7 @@ final class YtdlpServiceTests: XCTestCase {
 
     func testGayPornTubeMetadataUsesNativeHTML5AndSiteHeaders() async throws {
         let url = "https://www.gayporntube.com/video/1507912/test-video"
-        UserDefaults.standard.set("none", forKey: UserDefaultsKeys.browserForCookies)
-        defer { UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.browserForCookies) }
+        TestState.defaults.set("none", forKey: UserDefaultsKeys.browserForCookies)
         service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
             XCTAssertEqual(args.last, url, "Preserve the site's singular /video/ path")
             XCTAssertTrue(args.contains("Referer:\(url)"))
@@ -5107,8 +5070,7 @@ final class YtdlpServiceTests: XCTestCase {
 
     func testGayPornTubeDownloadPreservesBrowserProfileAndReferer() async throws {
         let url = "https://www.gayporntube.com/video/1507912/test-video"
-        UserDefaults.standard.set("firefox", forKey: UserDefaultsKeys.browserForCookies)
-        defer { UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.browserForCookies) }
+        TestState.defaults.set("firefox", forKey: UserDefaultsKeys.browserForCookies)
         service.processRunner = MockYtdlpProcessRunner(mockDownload: { args in
             XCTAssertEqual(args.last, url)
             XCTAssertTrue(args.contains("Referer:\(url)"))
@@ -5122,8 +5084,7 @@ final class YtdlpServiceTests: XCTestCase {
 
     func testGayPornTubeTransientMetadataRetryIsBoundedAndKeepsIdentity() async throws {
         let calls = TestBox<[[String]]>([])
-        UserDefaults.standard.set("none", forKey: UserDefaultsKeys.browserForCookies)
-        defer { UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.browserForCookies) }
+        TestState.defaults.set("none", forKey: UserDefaultsKeys.browserForCookies)
         service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
             calls.value.append(args)
             throw YtdlpError.commandFailed("ERROR: HTTP Error 503: Service Unavailable")
@@ -5139,12 +5100,9 @@ final class YtdlpServiceTests: XCTestCase {
 
     func testGayPornTubeUnsupportedURLDoesNotRetryCookies() async throws {
         let count = TestBox(0)
-        UserDefaults.standard.set("safari", forKey: UserDefaultsKeys.browserForCookies)
+        TestState.defaults.set("safari", forKey: UserDefaultsKeys.browserForCookies)
         YtdlpService.hasFullDiskAccessOverride = false
-        defer {
-            UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.browserForCookies)
-            YtdlpService.hasFullDiskAccessOverride = nil
-        }
+        defer { YtdlpService.hasFullDiskAccessOverride = nil }
         service.processRunner = MockYtdlpProcessRunner(mockCommand: { _ in
             count.value += 1
             throw YtdlpError.commandFailed("ERROR: Unsupported URL")
@@ -5158,8 +5116,7 @@ final class YtdlpServiceTests: XCTestCase {
     }
 
     func testGayPornTubeLookalikeHostDoesNotReceiveSitePolicy() async throws {
-        UserDefaults.standard.set("none", forKey: UserDefaultsKeys.browserForCookies)
-        defer { UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.browserForCookies) }
+        TestState.defaults.set("none", forKey: UserDefaultsKeys.browserForCookies)
         service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
             XCTAssertFalse(args.contains("Origin:https://www.gayporntube.com"))
             XCTAssertFalse(args.contains("http:exp=1:8"))
@@ -5169,12 +5126,9 @@ final class YtdlpServiceTests: XCTestCase {
     }
 
     func testGayPornTubeCookieFallbackRefreshesTransportIdentity() async throws {
-        UserDefaults.standard.set("safari", forKey: UserDefaultsKeys.browserForCookies)
+        TestState.defaults.set("safari", forKey: UserDefaultsKeys.browserForCookies)
         YtdlpService.hasFullDiskAccessOverride = true
-        defer {
-            UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.browserForCookies)
-            YtdlpService.hasFullDiskAccessOverride = nil
-        }
+        defer { YtdlpService.hasFullDiskAccessOverride = nil }
         service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
             if let index = args.firstIndex(of: "--cookies-from-browser") {
                 let browser = args[index + 1]
@@ -5217,14 +5171,10 @@ final class YtdlpServiceTests: XCTestCase {
     }
 
     func testBoyfriendTVPreservesActualSafariPermissionFailureAfterFallbacks() async throws {
-        let previousBrowser = UserDefaults.standard.object(forKey: UserDefaultsKeys.browserForCookies)
-        UserDefaults.standard.set("safari", forKey: UserDefaultsKeys.browserForCookies)
+        TestState.defaults.set("safari", forKey: UserDefaultsKeys.browserForCookies)
         // Preflight can succeed while the child process is denied cookie access.
         YtdlpService.hasFullDiskAccessOverride = true
-        defer {
-            UserDefaults.standard.set(previousBrowser, forKey: UserDefaultsKeys.browserForCookies)
-            YtdlpService.hasFullDiskAccessOverride = nil
-        }
+        defer { YtdlpService.hasFullDiskAccessOverride = nil }
         service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
             if args.contains("safari") {
                 throw YtdlpError.commandFailed("ERROR: [Errno 1] Operation not permitted: Safari/Cookies.binarycookies")
@@ -5402,8 +5352,7 @@ final class YtdlpServiceTests: XCTestCase {
     }
 
     func testBoyfriendTVUnsupportedVideoDoesNotBlameCookiesOrURLSlug() async throws {
-        UserDefaults.standard.set("safari", forKey: UserDefaultsKeys.browserForCookies)
-        defer { UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.browserForCookies) }
+        TestState.defaults.set("safari", forKey: UserDefaultsKeys.browserForCookies)
         service.processRunner = MockYtdlpProcessRunner(mockCommand: { _ in
             throw YtdlpError.commandFailed("ERROR: Unsupported URL: https://www.boyfriend.tv/videos/123/login-challenge/")
         })
@@ -5525,8 +5474,7 @@ final class YtdlpServiceTests: XCTestCase {
 
     func testBoyfriendTVErrorMappingDistinguishesCloudflareAndUnsupportedURL() async throws {
         service.ytdlpPath = URL(fileURLWithPath: "/usr/local/bin/yt-dlp")
-        UserDefaults.standard.set("safari", forKey: UserDefaultsKeys.browserForCookies)
-        defer { UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.browserForCookies) }
+        TestState.defaults.set("safari", forKey: UserDefaultsKeys.browserForCookies)
 
         // 1. Cloudflare error
         service.processRunner = MockYtdlpProcessRunner(mockCommand: { _ in
@@ -5572,7 +5520,7 @@ final class YtdlpServiceTests: XCTestCase {
         }
 
         // 4. No cookies configured and sign in required maps to protectedSiteNeedsBrowserCookies
-        UserDefaults.standard.set("none", forKey: UserDefaultsKeys.browserForCookies)
+        TestState.defaults.set("none", forKey: UserDefaultsKeys.browserForCookies)
         service.processRunner = MockYtdlpProcessRunner(mockCommand: { _ in
             throw YtdlpError.commandFailed("ERROR: Private video. Sign in to view this video")
         })
@@ -5588,7 +5536,7 @@ final class YtdlpServiceTests: XCTestCase {
         }
 
         // 5. Chrome cookies configured and sign in required maps to protectedSiteLoginRequired
-        UserDefaults.standard.set("chrome", forKey: UserDefaultsKeys.browserForCookies)
+        TestState.defaults.set("chrome", forKey: UserDefaultsKeys.browserForCookies)
         service.processRunner = MockYtdlpProcessRunner(mockCommand: { _ in
             throw YtdlpError.commandFailed("ERROR: Private video. Sign in to view this video")
         })
@@ -5606,12 +5554,9 @@ final class YtdlpServiceTests: XCTestCase {
 
     func testSafariCookieFailureFallsBackToUnauthenticatedFetchForPublicVideos() async throws {
         service.ytdlpPath = URL(fileURLWithPath: "/usr/local/bin/yt-dlp")
-        UserDefaults.standard.set("safari", forKey: UserDefaultsKeys.browserForCookies)
+        TestState.defaults.set("safari", forKey: UserDefaultsKeys.browserForCookies)
         YtdlpService.hasFullDiskAccessOverride = false
-        defer {
-            UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.browserForCookies)
-            YtdlpService.hasFullDiskAccessOverride = nil
-        }
+        defer { YtdlpService.hasFullDiskAccessOverride = nil }
 
         let jsonManifestOutput = """
         {
@@ -5640,12 +5585,9 @@ final class YtdlpServiceTests: XCTestCase {
     }
 
     func testSafariPermissionDenialSkipsSafariCookiesForEveryHost() async throws {
-        UserDefaults.standard.set("safari", forKey: UserDefaultsKeys.browserForCookies)
+        TestState.defaults.set("safari", forKey: UserDefaultsKeys.browserForCookies)
         YtdlpService.hasFullDiskAccessOverride = false
-        defer {
-            UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.browserForCookies)
-            YtdlpService.hasFullDiskAccessOverride = nil
-        }
+        defer { YtdlpService.hasFullDiskAccessOverride = nil }
         let cookieRuns = TestBox(0)
         service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
             if args.contains("--cookies-from-browser") {
@@ -5664,12 +5606,9 @@ final class YtdlpServiceTests: XCTestCase {
     }
 
     func testResetCookieDenialAllowsRetryingSafariCookies() async throws {
-        UserDefaults.standard.set("safari", forKey: UserDefaultsKeys.browserForCookies)
+        TestState.defaults.set("safari", forKey: UserDefaultsKeys.browserForCookies)
         YtdlpService.hasFullDiskAccessOverride = false
-        defer {
-            UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.browserForCookies)
-            YtdlpService.hasFullDiskAccessOverride = nil
-        }
+        defer { YtdlpService.hasFullDiskAccessOverride = nil }
         let cookieRuns = TestBox(0)
         service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
             if args.contains("--cookies-from-browser") {
@@ -5690,12 +5629,9 @@ final class YtdlpServiceTests: XCTestCase {
 
     func testSafariCookieFailureFallsBackToUnauthenticatedDownloadForPublicVideos() async throws {
         service.ytdlpPath = URL(fileURLWithPath: "/usr/local/bin/yt-dlp")
-        UserDefaults.standard.set("safari", forKey: UserDefaultsKeys.browserForCookies)
+        TestState.defaults.set("safari", forKey: UserDefaultsKeys.browserForCookies)
         YtdlpService.hasFullDiskAccessOverride = false
-        defer {
-            UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.browserForCookies)
-            YtdlpService.hasFullDiskAccessOverride = nil
-        }
+        defer { YtdlpService.hasFullDiskAccessOverride = nil }
 
         let attemptedCookieRunBox = TestBox<Bool>(false)
         let succeededWithoutCookiesBox = TestBox<Bool>(false)
@@ -5725,12 +5661,9 @@ final class YtdlpServiceTests: XCTestCase {
 
     func testSafariInconclusiveProbeDoesNotMislabelWebsiteLoginFailure() async throws {
         service.ytdlpPath = URL(fileURLWithPath: "/usr/local/bin/yt-dlp")
-        UserDefaults.standard.set("safari", forKey: UserDefaultsKeys.browserForCookies)
+        TestState.defaults.set("safari", forKey: UserDefaultsKeys.browserForCookies)
         YtdlpService.hasFullDiskAccessOverride = false
-        defer {
-            UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.browserForCookies)
-            YtdlpService.hasFullDiskAccessOverride = nil
-        }
+        defer { YtdlpService.hasFullDiskAccessOverride = nil }
 
         service.processRunner = MockYtdlpProcessRunner(mockCommand: { _ in
             throw YtdlpError.commandFailed("ERROR: Private video. Sign in to view this video")
@@ -5750,12 +5683,9 @@ final class YtdlpServiceTests: XCTestCase {
 
     func testSafariCookieFailureFallsBackToUnauthenticatedFetchForPornhub() async throws {
         service.ytdlpPath = URL(fileURLWithPath: "/usr/local/bin/yt-dlp")
-        UserDefaults.standard.set("safari", forKey: UserDefaultsKeys.browserForCookies)
+        TestState.defaults.set("safari", forKey: UserDefaultsKeys.browserForCookies)
         YtdlpService.hasFullDiskAccessOverride = false
-        defer {
-            UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.browserForCookies)
-            YtdlpService.hasFullDiskAccessOverride = nil
-        }
+        defer { YtdlpService.hasFullDiskAccessOverride = nil }
 
         let jsonManifestOutput = """
         {
@@ -6020,8 +5950,7 @@ final class YtdlpServiceTests: XCTestCase {
         """
         let loginB64 = loginProtectedHTML.data(using: .utf8)!.base64EncodedString()
 
-        UserDefaults.standard.set("safari", forKey: UserDefaultsKeys.browserForCookies)
-        defer { UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.browserForCookies) }
+        TestState.defaults.set("safari", forKey: UserDefaultsKeys.browserForCookies)
 
         service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
             if args.contains("--dump-pages") {
@@ -6202,15 +6131,7 @@ final class YtdlpServiceTests: XCTestCase {
     }
 
     func testBoyfriendTVRawCookiesAreNotRescopedToCrossDomainEmbedFallback() async throws {
-        let previousBrowser = UserDefaults.standard.object(forKey: UserDefaultsKeys.browserForCookies)
-        UserDefaults.standard.set("chrome", forKey: UserDefaultsKeys.browserForCookies)
-        defer {
-            if let previousBrowser {
-                UserDefaults.standard.set(previousBrowser, forKey: UserDefaultsKeys.browserForCookies)
-            } else {
-                UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.browserForCookies)
-            }
-        }
+        TestState.defaults.set("chrome", forKey: UserDefaultsKeys.browserForCookies)
 
         let mainHTML = """
         <html><head><title>Cross-domain embed test | BoyFriendTV</title></head><body>
@@ -6309,9 +6230,7 @@ final class YtdlpServiceTests: XCTestCase {
         // With the managed pin, findYtdlp() never reads the user path.
         try XCTSkipIf(DependencyChecksums.managedYtdlpEnabled, "User-provided yt-dlp is off")
         let key = UserDefaultsKeys.customYtdlpPath
-        let previous = UserDefaults.standard.string(forKey: key)
-        defer { UserDefaults.standard.set(previous, forKey: key) }
-        UserDefaults.standard.set(fake.path, forKey: key)
+        TestState.defaults.set(fake.path, forKey: key)
 
         service.ytdlpPath = nil // findYtdlp() keeps a preset path when the runner is a mock
         service.processRunner = MockYtdlpProcessRunner(mockCommand: { _ in "GNU bash, version 5.2" })
@@ -7385,17 +7304,9 @@ final class YtdlpServiceTests: XCTestCase {
     }
 
     func testFetchSingleVideoInfoAttemptsSelectedSafariDespiteInconclusiveProbe() async throws {
-        let savedBrowser = UserDefaults.standard.string(forKey: UserDefaultsKeys.browserForCookies)
-        UserDefaults.standard.set("safari", forKey: UserDefaultsKeys.browserForCookies)
+        TestState.defaults.set("safari", forKey: UserDefaultsKeys.browserForCookies)
         YtdlpService.hasFullDiskAccessOverride = false
-        defer {
-            if let saved = savedBrowser {
-                UserDefaults.standard.set(saved, forKey: UserDefaultsKeys.browserForCookies)
-            } else {
-                UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.browserForCookies)
-            }
-            YtdlpService.hasFullDiskAccessOverride = nil
-        }
+        defer { YtdlpService.hasFullDiskAccessOverride = nil }
 
         let validJSON = """
         {
