@@ -41,7 +41,7 @@ final class DownloadModelTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: root) }
         let child = Process()
         child.executableURL = URL(fileURLWithPath: "/bin/sleep")
-        child.arguments = ["30"]
+        child.arguments = ["600"]
         try child.run()
         defer { if child.isRunning { child.terminate() } }
 
@@ -65,7 +65,7 @@ final class DownloadModelTests: XCTestCase {
     func testHistoryDropsSignedThumbnailURLs() {
         XCTAssertNil(HistoricDownload.persistableThumbnailURL(URL(string: "https://cdn.example.com/t.jpg?token=abc")!))
         XCTAssertNil(HistoricDownload.persistableThumbnailURL(URL(string: "https://u:p@cdn.example.com/t.jpg")!))
-        for query in ["access_token=1", "X-Amz-Credential=a", "Key-Pair-Id=K", "apiKey=1", "Signature=x"] {
+        for query in ["access_token=1", "X-Amz-Credential=a", "Key-Pair-Id=K", "apiKey=1", "Signature=x", "apikey=1", "authtoken=1"] {
             XCTAssertNil(HistoricDownload.persistableThumbnailURL(URL(string: "https://cdn.example.com/t.jpg?\(query)")!), query)
         }
         XCTAssertNotNil(HistoricDownload.persistableThumbnailURL(URL(string: "https://cdn.example.com/t.jpg?design=1&monkey=2")!))

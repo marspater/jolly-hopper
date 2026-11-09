@@ -406,7 +406,10 @@ public struct HistoricDownload: Codable, Identifiable, Sendable {
     private static func isSensitiveQueryName(_ name: String) -> Bool {
         let sensitive: Set<String> = [
             "token", "sig", "signature", "key", "auth", "authorization", "policy", "credential", "credentials",
-            "expires", "hdnts", "secret", "session", "sid", "jwt", "hmac", "password", "passwd"
+            "expires", "hdnts", "secret", "session", "sid", "jwt", "hmac", "password", "passwd",
+            // Unsplit lowercase compounds.
+            "apikey", "authtoken", "accesstoken", "refreshtoken", "idtoken", "sessionid", "sessiontoken",
+            "secretkey", "privatekey", "clientsecret", "xamzsignature", "xamzcredential", "xamzsecuritytoken"
         ]
         var spaced = ""
         var previousIsLower = false

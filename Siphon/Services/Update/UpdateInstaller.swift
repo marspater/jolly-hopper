@@ -81,6 +81,18 @@ public final class UpdateInstaller: Sendable {
             throw UpdateInstallError.packageNotFound(packageURL)
         }
 
+        // Delete the package on every exit (including failed verification) only when the
+        // caller handed over a Siphon-owned staged download.
+        defer {
+            if consumesPackage, fileManager.fileExists(atPath: packageURL.path) {
+                do {
+                    try fileManager.removeItem(at: packageURL)
+                } catch {
+                    Self.log("Updater cleanup failed for \(packageURL.lastPathComponent): \(error.localizedDescription)", level: .warning)
+                }
+            }
+        }
+
         // Ad-hoc/open-source releases have no Developer ID identity to pin.
         // In that mode the package digest is the mandatory trust anchor.
         if allowAdHoc && expectedTeamID == nil {
@@ -104,9 +116,7 @@ public final class UpdateInstaller: Sendable {
         let stagingDir = fileManager.temporaryDirectory.appendingPathComponent("Siphon_Install_\(UUID().uuidString)")
         try fileManager.createDirectory(at: stagingDir, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
         defer {
-            // Delete the package only when the caller handed over a Siphon-owned staged download.
-            let ownsPackage = consumesPackage
-            for cleanupURL in (ownsPackage ? [stagingDir, packageURL] : [stagingDir]) where fileManager.fileExists(atPath: cleanupURL.path) {
+            for cleanupURL in [stagingDir] where fileManager.fileExists(atPath: cleanupURL.path) {
                 do {
                     try fileManager.removeItem(at: cleanupURL)
                 } catch {
