@@ -46,8 +46,6 @@ final class PreferencesWindowManager: NSObject, NSWindowDelegate {
         )
 
         window.isOpaque = false
-        // A clear window otherwise passes clicks on fully transparent pixels to the window behind.
-        window.ignoresMouseEvents = false
         window.backgroundColor = .clear
         window.titlebarAppearsTransparent = true
         // The tab bar is the in-content header; the hidden title still names

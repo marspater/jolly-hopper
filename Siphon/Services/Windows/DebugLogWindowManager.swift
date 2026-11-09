@@ -26,8 +26,6 @@ final class DebugLogWindowManager: NSObject, NSWindowDelegate {
         )
 
         window.isOpaque = false
-        // A clear window otherwise passes clicks on fully transparent pixels to the window behind.
-        window.ignoresMouseEvents = false
         window.backgroundColor = .clear
         window.titlebarAppearsTransparent = true
         // The view draws its own header; the hidden title still names the
