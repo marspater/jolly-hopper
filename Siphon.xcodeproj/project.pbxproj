@@ -121,6 +121,7 @@
 		E1001084 /* QueueRecoveryStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1000084 /* QueueRecoveryStoreTests.swift */; };
 		E1001085 /* DownloadHistoryStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1000085 /* DownloadHistoryStoreTests.swift */; };
 		E1001086 /* SupportedBrowserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1000086 /* SupportedBrowserTests.swift */; };
+		E1001088 /* MergeSignpostTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1000088 /* MergeSignpostTests.swift */; };
 		E1001087 /* DownloadModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1000087 /* DownloadModelTests.swift */; };
 /* End PBXBuildFile section */
 
@@ -243,6 +244,7 @@
 		E1000084 /* QueueRecoveryStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QueueRecoveryStoreTests.swift; sourceTree = "<group>"; };
 		E1000085 /* DownloadHistoryStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DownloadHistoryStoreTests.swift; sourceTree = "<group>"; };
 		E1000086 /* SupportedBrowserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SupportedBrowserTests.swift; sourceTree = "<group>"; };
+		E1000088 /* MergeSignpostTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MergeSignpostTests.swift; sourceTree = "<group>"; };
 		E1000087 /* DownloadModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DownloadModelTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -544,6 +546,7 @@
 			isa = PBXGroup;
 			children = (
 				E1000086 /* SupportedBrowserTests.swift */,
+				E1000088 /* MergeSignpostTests.swift */,
 				E1000087 /* DownloadModelTests.swift */,
 				E1000085 /* DownloadHistoryStoreTests.swift */,
 				E1000084 /* QueueRecoveryStoreTests.swift */,
@@ -910,6 +913,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				E1001086 /* SupportedBrowserTests.swift in Sources */,
+				E1001088 /* MergeSignpostTests.swift in Sources */,
 				E1001087 /* DownloadModelTests.swift in Sources */,
 				E1001085 /* DownloadHistoryStoreTests.swift in Sources */,
 				E1001084 /* QueueRecoveryStoreTests.swift in Sources */,
