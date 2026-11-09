@@ -2937,7 +2937,8 @@ public struct DownloadResult: Sendable {
                     args += ["-c:v", "copy"]
                     if codec == .h265 && targetExtension == "mp4" { args += ["-tag:v", "hvc1"] }
                 } else {
-                    args += Self.videoConversionArguments(options: options, toneMap: toneMap)
+                    // Probing the hardware encoders opens a VideoToolbox session, which blocks.
+                    args += await Task.detached { Self.videoConversionArguments(options: options, toneMap: toneMap) }.value
                 }
             }
         }
