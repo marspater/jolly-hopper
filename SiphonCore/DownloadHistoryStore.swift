@@ -4,7 +4,6 @@
 //
 
 import Foundation
-import SiphonCore
 
 @preconcurrency @MainActor
 public final class DownloadHistoryStore {
