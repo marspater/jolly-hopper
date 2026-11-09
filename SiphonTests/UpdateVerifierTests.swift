@@ -592,8 +592,8 @@ final class UpdateVerifierTests: XCTestCase {
         }
         // Can be enumerated before Siphon.app, so a first-.app search may pick it.
         _ = try makeApp("Aaa Uninstaller.app", bundleID: "com.example.Uninstaller")
-        // The identifier Siphon actually ships with (PRODUCT_BUNDLE_IDENTIFIER).
-        let siphon = try makeApp("Siphon.app", bundleID: "com.marspater.siphon")
+        // The identifier of the running app (PRODUCT_BUNDLE_IDENTIFIER of this configuration).
+        let siphon = try makeApp("Siphon.app", bundleID: UpdateVerifier.siphonBundleID)
 
         let installer = UpdateInstaller()
         XCTAssertEqual(installer.locateAppBundle(in: root)?.lastPathComponent, siphon.lastPathComponent)

@@ -79,11 +79,16 @@ final class NotificationService: NSObject, @unchecked Sendable, UNUserNotificati
         completionHandler()
     }
 
+    private let setupLock = NSLock()
     private var isSetup = false
 
     func setup() {
-        guard !isSetup else { return }
-        isSetup = true
+        let shouldSetup = setupLock.withLock { () -> Bool in
+            guard !isSetup else { return false }
+            isSetup = true
+            return true
+        }
+        guard shouldSetup else { return }
         guard let center = notificationCenter else { return }
         center.delegate = self
         center.getNotificationSettings { [weak self] settings in
@@ -118,6 +123,30 @@ final class NotificationService: NSObject, @unchecked Sendable, UNUserNotificati
         }
     }
 
+    /// A full stderr pipe blocks the subprocess. Drain it before waiting for exit.
+    /// This helper is internal so the lifecycle behavior can be regression-tested.
+    static func runCapturingStandardError(_ process: Process, pipe: Pipe) throws -> Data {
+        try process.run()
+        do {
+            // Drain the entire pipe to avoid blocking the child, but retain only a
+            // bounded diagnostic prefix so a failing helper cannot exhaust memory.
+            let captureLimit = 16 * 1024
+            var captured = Data()
+            while let chunk = try pipe.fileHandleForReading.read(upToCount: 4 * 1024), !chunk.isEmpty {
+                if captured.count < captureLimit {
+                    captured.append(chunk.prefix(captureLimit - captured.count))
+                }
+            }
+            process.waitUntilExit()
+            return captured
+        } catch {
+            // Close the reader so a writer cannot remain blocked on a full pipe.
+            try? pipe.fileHandleForReading.close()
+            process.waitUntilExit()
+            throw error
+        }
+    }
+
     private func fallbackDisplayNotification(title: String, body: String) {
         guard !Self.isRunningTests else { return }
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
@@ -141,13 +170,11 @@ final class NotificationService: NSObject, @unchecked Sendable, UNUserNotificati
             process.standardOutput = FileHandle.nullDevice
             process.standardError = errorPipe
             do {
-                try process.run()
-                process.waitUntilExit()
+                let stderr = try Self.runCapturingStandardError(process, pipe: errorPipe)
                 if process.terminationStatus == 0 {
                     self?.logMessage("Fallback notification displayed: \(title)", level: .info)
                 } else {
-                    let data = try errorPipe.fileHandleForReading.readToEnd() ?? Data()
-                    let details = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines)
+                    let details = String(data: stderr, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines)
                     if let details, !details.isEmpty {
                         self?.logMessage("Fallback notification failed: \(details)", level: .warning)
                     } else {

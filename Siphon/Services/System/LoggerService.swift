@@ -33,7 +33,7 @@ class LoggerService: ObservableObject {
         // The unit tests run inside Siphon.app, so keep their fixture output
         // out of the user's real debug log.
         let logDirectory = NotificationService.isRunningTests
-            ? UITestLaunchMode.root ?? FileManager.default.temporaryDirectory.appendingPathComponent("SiphonTestLogs", isDirectory: true)
+            ? UITestLaunchMode.isolatedRoot ?? FileManager.default.temporaryDirectory.appendingPathComponent("SiphonTestLogs", isDirectory: true)
             : URL.applicationSupportDirectory.appendingPathComponent("Siphon")
 
         try? FileManager.default.createDirectory(at: logDirectory, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
@@ -49,7 +49,7 @@ class LoggerService: ObservableObject {
         let fileURL = logFileURL
         let maxEntries = maxLogEntries
         let generation = logGeneration
-        initialLogLoadTask = Task.detached {
+        initialLogLoadTask = Task.detached { [weak self] in
             let initialLogs: [String]
             if let reader {
                 initialLogs = await reader()
@@ -67,8 +67,8 @@ class LoggerService: ObservableObject {
 
                 initialLogs = Self.extractTailLines(from: data, maxEntries: maxEntries, discardFirstLine: seekPos > 0)
             }
-            await MainActor.run {
-                guard self.logGeneration == generation else { return }
+            await MainActor.run { [weak self] in
+                guard let self, self.logGeneration == generation else { return }
                 // Entries logged during launch are already in the file tail;
                 // replacing them would only keep what was on disk at read time.
                 let persisted = Set(initialLogs)
@@ -199,14 +199,16 @@ class LoggerService: ObservableObject {
             // One fixed name: each export replaces the last instead of
             // leaving another copy of the log in the temporary folder.
             let exportFilename = "Siphon_Exported_Logs.log"
-            let exportURL = (UITestLaunchMode.root ?? fileManager.temporaryDirectory).appendingPathComponent(exportFilename)
+            let exportURL = (UITestLaunchMode.isolatedRoot ?? fileManager.temporaryDirectory).appendingPathComponent(exportFilename)
 
             let rawData: Data
-            if let handle = try? FileHandle(forReadingFrom: fileURL) {
-                defer { try? handle.close() }
-                rawData = (try? handle.readToEnd()) ?? Data()
-            } else {
-                rawData = (try? Data(contentsOf: fileURL)) ?? Data()
+            do {
+                rawData = try Data(contentsOf: fileURL)
+            } catch let error as CocoaError where error.code == .fileReadNoSuchFile {
+                // A new logger has no history yet. Only a confirmed missing file
+                // is empty history: an unreadable log or an inaccessible parent
+                // directory is an error, not an apparently successful empty export.
+                rawData = Data()
             }
 
             let rawContent = String(decoding: rawData, as: UTF8.self)

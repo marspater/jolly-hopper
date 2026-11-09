@@ -4,6 +4,7 @@
 //
 
 import XCTest
+import Testing
 @testable import Siphon
 
 final class LogSanitizationTests: XCTestCase {
@@ -67,6 +68,66 @@ final class LogSanitizationTests: XCTestCase {
         XCTAssertFalse(content.contains("/Users/developer_test/"))
         XCTAssertFalse(content.contains("abc12345secret"))
         XCTAssertTrue(content.contains("/Users/<USER>/"))
+    }
+}
+
+@MainActor
+struct LoggerLifecycleTests {
+    @Test func startupReaderDoesNotKeepLoggerAlive() async {
+        let gate = InitialLogReadGate()
+        weak var weakLogger: LoggerService?
+        var logger: LoggerService? = LoggerService(
+            logFileURL: FileManager.default.temporaryDirectory.appendingPathComponent("SiphonLoggerLifetime-\(UUID().uuidString)"),
+            initialLogReader: {
+                await gate.wait()
+                return ["fixture"]
+            }
+        )
+        let loadTask = logger?.initialLogLoadTask
+        weakLogger = logger
+        logger = nil
+        #expect(weakLogger === nil, "A suspended startup reader must not retain its logger")
+        await gate.release()
+        await loadTask?.value
+    }
+
+    @Test func exportReportsUnreadableExistingLog() async throws {
+        let path = FileManager.default.temporaryDirectory.appendingPathComponent("SiphonUnreadableLog-\(UUID().uuidString)")
+        let logger = LoggerService(logFileURL: path)
+        try FileManager.default.createDirectory(at: path, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: path) }
+
+        let didThrow: Bool
+        do {
+            _ = try await logger.exportLogs()
+            didThrow = false
+        } catch {
+            didThrow = true
+        }
+        #expect(didThrow, "An existing directory is not a readable log file")
+    }
+
+    @Test func exportOfMissingLogIsEmptyHistory() async throws {
+        let path = FileManager.default.temporaryDirectory.appendingPathComponent("SiphonMissingLog-\(UUID().uuidString)")
+        let logger = LoggerService(logFileURL: path)
+
+        let exported = try await logger.exportLogs()
+        defer { try? FileManager.default.removeItem(at: exported) }
+        #expect(FileManager.default.fileExists(atPath: exported.path))
+    }
+
+    @Test func exportReportsLogInInaccessibleDirectory() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("SiphonLockedLogs-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let logger = LoggerService(logFileURL: directory.appendingPathComponent("siphon_debug.log"))
+        try "existing history".write(to: logger.logFileURL, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: directory.path)
+        defer {
+            try? FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: directory.path)
+            try? FileManager.default.removeItem(at: directory)
+        }
+
+        await #expect(throws: (any Error).self) { try await logger.exportLogs() }
     }
 }
 

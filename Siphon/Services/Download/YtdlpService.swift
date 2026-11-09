@@ -8241,7 +8241,7 @@ public struct DownloadResult: Sendable {
 
     /// Tests resolve every Application Support path under a temporary folder.
     nonisolated private static let appSupportBaseOverride: URL? = NotificationService.isRunningTests
-        ? UITestLaunchMode.root ?? FileManager.default.temporaryDirectory.appendingPathComponent("SiphonTestAppSupport", isDirectory: true)
+        ? UITestLaunchMode.isolatedRoot ?? FileManager.default.temporaryDirectory.appendingPathComponent("SiphonTestAppSupport", isDirectory: true)
         : nil
 
     nonisolated static func getAppSupportDirectory() -> URL {

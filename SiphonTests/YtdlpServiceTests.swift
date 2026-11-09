@@ -2857,16 +2857,17 @@ final class YtdlpServiceTests: XCTestCase {
         }
     }
 
-    /// The hosted test build shares Siphon's bundle ID; reading the real Safari store
-    /// from it overwrites the installed app's Full Disk Access grant with a denial.
+    /// The hosted test build must never read the real Safari store: a denial would be
+    /// recorded against the test app's identity and would not match the installed app.
     func testTestsNeverTouchTheRealSafariCookieStore() {
         XCTAssertTrue(SafariCookieReader.cookieFiles.isEmpty)
         XCTAssertFalse(YtdlpService.hasFullDiskAccess)
     }
 
-    /// TCC replaces the com.marspater.siphon Full Disk Access record with a denial bound to
-    /// the requirement of any build that fails to match it. A build that keeps the linker's
-    /// cdhash requirement therefore revokes the installed app's grant.
+    /// TCC replaces a Full Disk Access record with a denial bound to the requirement of
+    /// any build that fails to match it. A build that keeps the linker's cdhash
+    /// requirement therefore revokes the grant, so unsigned builds carry an
+    /// identifier requirement. The hosted test app has its own identity.
     func testUnsignedBuildsCarryTheStableDesignatedRequirement() throws {
         // The hosted test bundle runs inside the built Siphon.app; the canonical test command
         // and CI build it with CODE_SIGNING_ALLOWED=NO, so this checks the unsigned-build phase.
@@ -2878,7 +2879,7 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertEqual(SecCodeCopyDesignatedRequirement(try XCTUnwrap(staticCode), [], &requirement), errSecSuccess)
         var text: CFString?
         XCTAssertEqual(SecRequirementCopyString(try XCTUnwrap(requirement), [], &text), errSecSuccess)
-        XCTAssertEqual(text as String?, #"identifier "com.marspater.siphon""#)
+        XCTAssertEqual(text as String?, "identifier \"\(UITestLaunchMode.testBundleIdentifier)\"")
     }
 
     func testHttp500ServerRangeErrorRetryFallback() async throws {

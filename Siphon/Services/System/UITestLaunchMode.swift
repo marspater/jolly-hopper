@@ -23,6 +23,61 @@ enum UITestLaunchMode {
 
     static var isActive: Bool { root != nil }
 
+    /// Hosted XCTest and UI tests must use a different app identity from the
+    /// installed Siphon bundle. This also protects the user's Full Disk Access
+    /// record from unsigned test executables.
+    static let testBundleIdentifier = "com.marspater.siphon.testing"
+
+    /// Each hosted test process owns its own recovery and log directory.
+    /// UI tests already supply a unique root through the launch argument.
+    private static let hostedRoot: URL? = {
+        guard Bundle.main.bundleIdentifier == testBundleIdentifier, root == nil else { return nil }
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("SiphonHostedTests-\(UUID().uuidString)", isDirectory: true)
+        do {
+            try FileManager.default.createDirectory(
+                at: directory, withIntermediateDirectories: true,
+                attributes: [.posixPermissions: 0o700]
+            )
+            return directory
+        } catch {
+            fatalError("Cannot create isolated hosted-test directory: \(error)")
+        }
+    }()
+
+    /// The directory that holds all test-run state: the UI-test root if one was
+    /// passed, else the per-process hosted-test root. Nil in a normal app launch.
+    static var isolatedRoot: URL? { root ?? hostedRoot }
+
+    /// Deletes the per-process hosted-test root. The UI-test root belongs to the
+    /// launcher, so it is never touched.
+    static func removeHostedRoot() {
+        guard let hostedRoot else { return }
+        do {
+            try FileManager.default.removeItem(at: hostedRoot)
+        } catch {
+            NSLog("SiphonTests: could not remove hosted test root: \(error.localizedDescription)")
+        }
+    }
+
+    /// Fail before constructing app services if somebody forces a hosted test
+    /// through the production Debug/Release configuration. SwiftUI previews
+    /// are deliberately excluded: Xcode previews use the production bundle ID.
+    static func requireSafeTestHostIdentity() {
+        let environment = ProcessInfo.processInfo.environment
+        guard !NotificationService.isPreviewHost(environment) else { return }
+        let hosted = environment["XCTestConfigurationFilePath"] != nil ||
+            NSClassFromString("XCTestCase") != nil
+        guard hosted || isActive else { return }
+        precondition(
+            Bundle.main.bundleIdentifier == testBundleIdentifier,
+            "Hosted tests require the TestDebug/TestRelease Xcode configuration; refusing the production app identity."
+        )
+        // Remove leftovers from a previously interrupted TEST run before any
+        // app services read defaults. This domain is distinct from production.
+        UserDefaults.standard.removePersistentDomain(forName: testBundleIdentifier)
+    }
+
     /// A suite file under the root; nil outside this mode.
     nonisolated(unsafe) static let defaults: UserDefaults? = root.flatMap {
         UserDefaults(suiteName: $0.appendingPathComponent("defaults").path)
@@ -80,6 +135,7 @@ enum UITestLaunchMode {
 
     @MainActor
     static func makeDownloadManager() -> DownloadManager {
+        requireSafeTestHostIdentity()
         guard let root, let defaults else { return DownloadManager() }
         // Without a saved folder, options fall back to the real ~/Downloads.
         defaults.register(defaults: [UserDefaultsKeys.defaultSaveFolder: root.path])

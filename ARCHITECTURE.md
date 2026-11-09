@@ -150,7 +150,7 @@ xcodebuild test \
   -scheme Siphon \
   -testPlan All \
   -destination 'platform=macOS' \
-  -configuration Debug \
+  -configuration TestDebug \
   MACOSX_DEPLOYMENT_TARGET=15.0 \
   CODE_SIGN_IDENTITY="" \
   CODE_SIGNING_REQUIRED=NO \

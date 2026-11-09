@@ -8,7 +8,7 @@ PROJECT="$SCRIPT_DIR/../Siphon.xcodeproj"
 PBX_FILE="$PROJECT/project.pbxproj"
 
 # The app itself must resolve both settings in every configuration it ships from.
-for configuration in Debug Release; do
+for configuration in Debug Release TestDebug TestRelease; do
     settings=$(xcodebuild -showBuildSettings -project "$PROJECT" -target Siphon -configuration "$configuration")
     for key in MARKETING_VERSION CURRENT_PROJECT_VERSION; do
         if ! grep -Eq "^[[:space:]]*$key = [^[:space:]]+" <<<"$settings"; then

@@ -90,7 +90,7 @@ Requires Xcode 26 or later (the macOS 26 SDK for Liquid Glass and the Icon Compo
 
 ```bash
 xcodebuild test -project Siphon.xcodeproj -scheme Siphon -testPlan All -destination 'platform=macOS' \
-  -configuration Debug MACOSX_DEPLOYMENT_TARGET=15.0 \
+  -configuration TestDebug MACOSX_DEPLOYMENT_TARGET=15.0 \
   CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO
 ```
 

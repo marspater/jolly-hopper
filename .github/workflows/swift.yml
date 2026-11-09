@@ -33,7 +33,7 @@ jobs:
             -scheme Siphon \
             -testPlan All \
             -destination 'platform=macOS' \
-            -configuration Debug \
+            -configuration TestDebug \
             -resultBundlePath "$RUNNER_TEMP/results/debug.xcresult" \
             -enableCodeCoverage YES \
             MACOSX_DEPLOYMENT_TARGET=15.0 \
@@ -50,7 +50,7 @@ jobs:
             -scheme Siphon \
             -testPlan All \
             -destination 'platform=macOS' \
-            -configuration Release \
+            -configuration TestRelease \
             -resultBundlePath "$RUNNER_TEMP/results/release.xcresult" \
             -enableCodeCoverage YES \
             MACOSX_DEPLOYMENT_TARGET=15.0 \
@@ -117,7 +117,7 @@ jobs:
             -scheme Siphon \
             -destination 'platform=macOS' \
             -testPlan Conversion \
-            -configuration Debug \
+            -configuration TestDebug \
             -resultBundlePath "$RUNNER_TEMP/results/conversion.xcresult" \
             -enableCodeCoverage YES \
             MACOSX_DEPLOYMENT_TARGET=15.0 \
@@ -188,7 +188,7 @@ jobs:
             -scheme Siphon \
             -testPlan UI \
             -destination 'platform=macOS' \
-            -configuration Debug \
+            -configuration TestDebug \
             -resultBundlePath "$RUNNER_TEMP/results/ui.xcresult" \
             MACOSX_DEPLOYMENT_TARGET=15.0 \
             CODE_SIGN_IDENTITY="" \
@@ -233,7 +233,7 @@ jobs:
             -scheme Siphon \
             -testPlan Performance \
             -destination 'platform=macOS' \
-            -configuration Debug \
+            -configuration TestDebug \
             -resultBundlePath "$RUNNER_TEMP/results/performance.xcresult" \
             MACOSX_DEPLOYMENT_TARGET=15.0 \
             CODE_SIGN_IDENTITY="" \

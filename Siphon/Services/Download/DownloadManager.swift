@@ -40,9 +40,13 @@ class DownloadManager: ObservableObject {
     private var isProcessingQueue = false
     var languageService: LanguageService?
 
-    /// The test host launches the real app, so it keeps recovery state in the redirected folder.
+    /// The native TestDebug/TestRelease app has its own per-run recovery root.
+    /// Never use the installed application's queue recovery path in a test host.
     static var defaultRecoveryFileURL: URL {
-        NotificationService.isRunningTests
+        if let isolatedRoot = UITestLaunchMode.isolatedRoot {
+            return isolatedRoot.appendingPathComponent("queue_recovery.json")
+        }
+        return NotificationService.isRunningTests
             ? YtdlpService.getAppSupportDirectory().appendingPathComponent("queue_recovery.json")
             : QueueRecoveryStore.defaultFileURL
     }
