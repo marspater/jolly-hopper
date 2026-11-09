@@ -456,6 +456,49 @@ final class DownloadExecutorTests: XCTestCase {
         XCTAssertFalse(queue.isSlotReserved(for: download.id))
     }
 
+    /// Cancels at varying points of start-up: every interleaving must end idle with capacity released.
+    func testCancellationAtVaryingStartupPointsAlwaysReleasesOwnership() async {
+        final class MockDelegate: DownloadExecutorDelegate {
+            func executorDidUpdateStatus(for download: Download, to status: DownloadStatus) { download.status = status }
+            func executorDidRequestAddToHistory(_ download: Download, skipSave: Bool) {}
+            func executorDidRequestRecoveryPersist() {}
+            func executorDidFinishDownload() {}
+            func executorDidRequestBroadcast() {}
+        }
+        let metadataJSON = #"{"id":"s","title":"S","duration":10.0,"uploader":"T"}"#
+        let runner = MockYtdlpProcessRunner(
+            mockCommand: { _ in metadataJSON },
+            mockDownloadResult: { _ in
+                try await Task.sleep(nanoseconds: 10_000_000_000)
+                return DownloadProcessResult(primaryPath: "/tmp/s.mp4")
+            }
+        )
+        let service = YtdlpService(processRunner: runner)
+        service.ytdlpPath = URL(fileURLWithPath: "/usr/bin/true")
+        service.ffmpegPath = URL(fileURLWithPath: "/usr/bin/true")
+        service.ffprobePath = URL(fileURLWithPath: "/usr/bin/true")
+        let delegate = MockDelegate()
+        let executor = DownloadExecutor(ytdlpService: service, delegate: delegate)
+        let queue = DownloadQueue()
+
+        for round in 0..<30 {
+            let download = Download(url: "https://example.com/stress-\(round)", options: .default)
+            download.mediaInfo = MediaInfo(id: "s\(round)", title: "S")
+            XCTAssertTrue(queue.reserveSlot(for: download.id))
+            executor.startDownloadTask(download, queue: queue, ytdlpVersion: "test", languageService: nil)
+            try? await Task.sleep(nanoseconds: UInt64(round % 6) * 3_000_000)
+            executor.shutdown()
+            for _ in 0..<300 {
+                if executor.executionState(for: download.id) == .idle { break }
+                try? await Task.sleep(nanoseconds: 10_000_000)
+            }
+            XCTAssertEqual(executor.executionState(for: download.id), .idle, "round \(round)")
+            XCTAssertNil(executor.activeTasks[download.id], "round \(round)")
+            XCTAssertNil(executor.activeControllers[download.id], "round \(round)")
+            XCTAssertFalse(queue.isSlotReserved(for: download.id), "round \(round)")
+        }
+    }
+
     func testSuccessfulCompletionRespectsCancellationAndUserStatus() {
         XCTAssertTrue(DownloadExecutor.shouldFinalizeSuccessfulDownload(
             taskIsCancelled: false,

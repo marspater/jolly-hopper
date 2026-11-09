@@ -3,6 +3,102 @@ import XCTest
 
 @MainActor
 final class DownloadModelTests: XCTestCase {
+    func testPurgeKeepsOldScratchWithLiveOwner() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("purge_\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let old = Date(timeIntervalSinceNow: -3 * 24 * 3600)
+        func scratch(pid: Int32?) throws -> URL {
+            let dir = root.appendingPathComponent(ScratchDirectoryPolicy.directoryPrefix + UUID().uuidString)
+            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            if let pid { ScratchDirectoryPolicy.markOwner(dir, pid: pid) }
+            try FileManager.default.setAttributes([.modificationDate: old], ofItemAtPath: dir.path)
+            return dir
+        }
+        let live = try scratch(pid: getpid())
+        let dead = try scratch(pid: 2_000_000_000)
+        let unmarked = try scratch(pid: nil)
+        let malformed = try scratch(pid: nil)
+        try "not-a-pid".write(to: malformed.appendingPathComponent(".siphon-owner-pid"), atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.modificationDate: old], ofItemAtPath: malformed.appendingPathComponent(".siphon-owner-pid").path)
+        try FileManager.default.setAttributes([.modificationDate: old], ofItemAtPath: malformed.path)
+        // Age the marker files too so only the owner check can save `live`.
+        for dir in [live, dead] {
+            try? FileManager.default.setAttributes([.modificationDate: old], ofItemAtPath: dir.appendingPathComponent(".siphon-owner-pid").path)
+            try FileManager.default.setAttributes([.modificationDate: old], ofItemAtPath: dir.path)
+        }
+        ScratchDirectoryPolicy.purgeAbandoned(keeping: [], in: root)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: live.path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: dead.path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: unmarked.path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: malformed.path), "A malformed marker grants no ownership")
+    }
+
+    /// Real second process: its scratch survives the sweep while it runs and is purged after it exits.
+    func testPurgeFollowsRealOwnerProcessLifetime() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("purge_\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let child = Process()
+        child.executableURL = URL(fileURLWithPath: "/bin/sleep")
+        child.arguments = ["600"]
+        try child.run()
+        defer { if child.isRunning { child.terminate() } }
+
+        let dir = root.appendingPathComponent(ScratchDirectoryPolicy.directoryPrefix + UUID().uuidString)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        ScratchDirectoryPolicy.markOwner(dir, pid: child.processIdentifier)
+        let old = Date(timeIntervalSinceNow: -3 * 24 * 3600)
+        for url in [dir, dir.appendingPathComponent(".siphon-owner-pid")] {
+            try FileManager.default.setAttributes([.modificationDate: old], ofItemAtPath: url.path)
+        }
+
+        ScratchDirectoryPolicy.purgeAbandoned(keeping: [], in: root)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: dir.path), "Live owner process must protect its scratch")
+
+        child.terminate()
+        child.waitUntilExit()
+        ScratchDirectoryPolicy.purgeAbandoned(keeping: [], in: root)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: dir.path), "Exited owner's scratch must be purged")
+    }
+
+    func testPurgeKeepsOldScratchWithRecentNestedFile() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("purge_\(UUID().uuidString)")
+        let dir = root.appendingPathComponent(ScratchDirectoryPolicy.directoryPrefix + UUID().uuidString)
+        let nested = dir.appendingPathComponent("a/b")
+        try FileManager.default.createDirectory(at: nested, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try Data([0]).write(to: nested.appendingPathComponent("video.part"))
+        let old = Date(timeIntervalSinceNow: -3 * 24 * 3600)
+        for url in [dir, dir.appendingPathComponent("a"), nested] {
+            try FileManager.default.setAttributes([.modificationDate: old], ofItemAtPath: url.path)
+        }
+        ScratchDirectoryPolicy.purgeAbandoned(keeping: [], in: root)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: dir.path), "A recently written nested file keeps the directory alive")
+    }
+
+    func testHistoryDropsSignedThumbnailURLs() {
+        XCTAssertNil(HistoricDownload.persistableThumbnailURL(URL(string: "https://cdn.example.com/t.jpg?token=abc")!))
+        XCTAssertNil(HistoricDownload.persistableThumbnailURL(URL(string: "https://u:p@cdn.example.com/t.jpg")!))
+        for query in ["access_token=1", "X-Amz-Credential=a", "Key-Pair-Id=K", "apiKey=1", "Signature=x", "apikey=1", "authtoken=1"] {
+            XCTAssertNil(HistoricDownload.persistableThumbnailURL(URL(string: "https://cdn.example.com/t.jpg?\(query)")!), query)
+        }
+        XCTAssertNotNil(HistoricDownload.persistableThumbnailURL(URL(string: "https://cdn.example.com/t.jpg?design=1&monkey=2")!))
+        let plain = URL(string: "https://cdn.example.com/t.jpg?w=320")!
+        XCTAssertEqual(HistoricDownload.persistableThumbnailURL(plain), plain)
+    }
+
+    func testEncodedHistoryOmitsSignedThumbnailButKeepsPlainOne() throws {
+        func encoded(thumbnail: String) throws -> String {
+            let download = Download(url: "https://example.com/v", options: .default, title: "V")
+            download.thumbnailURL = URL(string: thumbnail)
+            let data = try JSONEncoder().encode(HistoricDownload(download: download))
+            return String(decoding: data, as: UTF8.self)
+        }
+        XCTAssertFalse(try encoded(thumbnail: "https://cdn.example.com/t.jpg?token=secret").contains("secret"))
+        XCTAssertTrue(try encoded(thumbnail: "https://cdn.example.com/t.jpg?w=320").contains("t.jpg?w=320"))
+    }
+
     func testPrimaryFileExistsOnDiskReflectsTheFileSystem() throws {
         let download = Download(url: "https://example.com/v", options: .default, title: "V")
         XCTAssertNil(download.primaryFileExistsOnDisk)

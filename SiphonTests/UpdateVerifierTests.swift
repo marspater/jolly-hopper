@@ -600,6 +600,28 @@ final class UpdateVerifierTests: XCTestCase {
         XCTAssertNil(installer.locateAppBundle(in: root, bundleID: "com.example.Missing"))
     }
 
+    func testInstallFailureKeepsCallerOwnedPackageButRemovesStagedDownload() async throws {
+        let temp = FileManager.default.temporaryDirectory
+        let callerFile = temp.appendingPathComponent("caller_\(UUID().uuidString).txt")
+        let stagedFile = temp.appendingPathComponent("Siphon_Update_\(UUID().uuidString).txt")
+        for url in [callerFile, stagedFile] { try Data("x".utf8).write(to: url) }
+        defer { try? FileManager.default.removeItem(at: callerFile); try? FileManager.default.removeItem(at: stagedFile) }
+
+        let lookalike = temp.appendingPathComponent("Siphon_Update_\(UUID().uuidString).txt")
+        try Data("x".utf8).write(to: lookalike)
+        defer { try? FileManager.default.removeItem(at: lookalike) }
+
+        for url in [callerFile, stagedFile, lookalike] {
+            do {
+                try await UpdateInstaller().install(packageURL: url, allowAdHoc: false, consumesPackage: url == stagedFile)
+                XCTFail("Unsupported package type must throw")
+            } catch {}
+        }
+        XCTAssertTrue(FileManager.default.fileExists(atPath: callerFile.path), "Caller-owned package must survive a failed install")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: lookalike.path), "A Siphon_Update_ name alone must not grant ownership")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: stagedFile.path), "Staged update download is consumed on failure")
+    }
+
     func testUpdateDownloaderReportsHTTPErrorInsteadOfStagingTheBody() async throws {
         MockURLProtocol.requestHandler = { request in
             let response = try XCTUnwrap(HTTPURLResponse(url: try XCTUnwrap(request.url), statusCode: 404, httpVersion: nil, headerFields: nil))

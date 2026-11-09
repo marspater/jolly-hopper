@@ -857,6 +857,7 @@ public final class EgressProxyServer: @unchecked Sendable {
                 guard let port = Int(portStr), (1...65535).contains(port) else { return nil }
                 return (host, port)
             }
+            guard after.isEmpty else { return nil }
             return (host, defaultPort)
         }
 
