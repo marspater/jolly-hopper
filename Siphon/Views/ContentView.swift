@@ -239,6 +239,7 @@ struct ContentView: View {
             }
             .help(languageService.s("toggle_sidebar"))
             .accessibilityLabel(languageService.s("toggle_sidebar"))
+            .accessibilityIdentifier(AccessibilityID.sidebarToggle)
         }
 
         // The sidebar starts hidden, so list pages need their own way home.
@@ -411,6 +412,7 @@ struct SidebarView: View {
         .buttonStyle(.bouncySubtle)
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : [.isButton])
+        .accessibilityIdentifier(AccessibilityID.sidebarItem(item))
         .listRowInsets(EdgeInsets(top: 2, leading: 6, bottom: 2, trailing: 6))
         .listRowBackground(
             RoundedRectangle(cornerRadius: SiphonTheme.radiusControl, style: .continuous)
