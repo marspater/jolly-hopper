@@ -49,7 +49,7 @@ class LoggerService: ObservableObject {
         let fileURL = logFileURL
         let maxEntries = maxLogEntries
         let generation = logGeneration
-        initialLogLoadTask = Task.detached {
+        initialLogLoadTask = Task.detached { [weak self] in
             let initialLogs: [String]
             if let reader {
                 initialLogs = await reader()
@@ -67,8 +67,8 @@ class LoggerService: ObservableObject {
 
                 initialLogs = Self.extractTailLines(from: data, maxEntries: maxEntries, discardFirstLine: seekPos > 0)
             }
-            await MainActor.run {
-                guard self.logGeneration == generation else { return }
+            await MainActor.run { [weak self] in
+                guard let self, self.logGeneration == generation else { return }
                 // Entries logged during launch are already in the file tail;
                 // replacing them would only keep what was on disk at read time.
                 let persisted = Set(initialLogs)
@@ -202,11 +202,14 @@ class LoggerService: ObservableObject {
             let exportURL = (UITestLaunchMode.root ?? fileManager.temporaryDirectory).appendingPathComponent(exportFilename)
 
             let rawData: Data
-            if let handle = try? FileHandle(forReadingFrom: fileURL) {
+            if fileManager.fileExists(atPath: fileURL.path) {
+                let handle = try FileHandle(forReadingFrom: fileURL)
                 defer { try? handle.close() }
-                rawData = (try? handle.readToEnd()) ?? Data()
+                rawData = try handle.readToEnd() ?? Data()
             } else {
-                rawData = (try? Data(contentsOf: fileURL)) ?? Data()
+                // A new logger has no history yet. An existing but unreadable
+                // log is an error, not an apparently successful empty export.
+                rawData = Data()
             }
 
             let rawContent = String(decoding: rawData, as: UTF8.self)
