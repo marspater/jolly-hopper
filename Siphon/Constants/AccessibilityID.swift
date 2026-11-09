@@ -21,7 +21,9 @@ enum AccessibilityID {
     static let viewDebugLogs = "view-debug-logs"
     static let queueRecoveryRestore = "queue-recovery-restore"
     static let menuBarRow = "menu-bar-row"
+    static let sidebarToggle = "sidebar-toggle"
 
     static func settingsTab(_ tab: PreferencesView.PreferenceTab) -> String { "settings-tab-\(tab)" }
     static func statusSegment(_ item: NavigationItem) -> String { "status-segment-\(item)" }
+    static func sidebarItem(_ item: NavigationItem) -> String { "sidebar-\(item)" }
 }

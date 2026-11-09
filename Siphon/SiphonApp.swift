@@ -80,6 +80,7 @@ struct SiphonApp: App {
     @State private var firstRenderSignpost: OSSignpostIntervalState? = Signposts.begin("Main window first render")
 
     init() {
+        UITestLaunchMode.disableAppKitAutosave()
         GeistFontRegistrar.registerFonts()
         if !NotificationService.isRunningTests {
             CookieManager.purgeOrphanedTempCookieFiles()

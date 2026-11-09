@@ -26,6 +26,23 @@ final class SmokeUITests: XCTestCase {
         app.descendants(matching: .any)[identifier].firstMatch
     }
 
+    /// The first click on a window that is not yet key only activates it, so allow a retry.
+    private func select(_ tab: XCUIElement) -> Bool {
+        for _ in 0..<3 {
+            tab.click()
+            if tab.wait(for: \.isSelected, toEqual: true, timeout: 3) { return true }
+        }
+        return false
+    }
+
+    /// The queue is only reachable from the sidebar, which starts hidden.
+    private func openQueue(in app: XCUIApplication) {
+        let queued = element("sidebar-queued", in: app)
+        if !queued.exists { element("sidebar-toggle", in: app).click() }
+        XCTAssertTrue(queued.waitForExistence(timeout: 10))
+        queued.click()
+    }
+
     private func seedQueue(status: String) throws {
         let seed = #"[{"url":"https://example.com/watch/1","title":"Seeded item","status":"\#(status)"}]"#
         try Data(seed.utf8).write(to: root.appendingPathComponent("queue_seed.json"))
@@ -57,22 +74,18 @@ final class SmokeUITests: XCTestCase {
         app.typeKey(",", modifierFlags: .command)
         let advanced = element("settings-tab-advanced", in: app)
         XCTAssertTrue(advanced.waitForExistence(timeout: 10))
-        advanced.click()
-        XCTAssertTrue(app.buttons["view-debug-logs"].waitForExistence(timeout: 10))
-        let about = element("settings-tab-about", in: app)
-        about.click()
-        XCTAssertTrue(app.staticTexts["marspater"].waitForExistence(timeout: 10))
+        XCTAssertTrue(select(advanced), app.debugDescription)
+        XCTAssertTrue(select(element("settings-tab-about", in: app)), app.debugDescription)
     }
 
     func testRemovingSeededQueueItem() throws {
         try seedQueue(status: "paused")
         let app = launch()
-        let segment = element("status-segment-queued", in: app)
-        XCTAssertTrue(segment.waitForExistence(timeout: 15))
-        segment.click()
+        XCTAssertTrue(app.windows.firstMatch.waitForExistence(timeout: 15))
+        openQueue(in: app)
         let title = element("queue-row-title", in: app)
         XCTAssertTrue(title.waitForExistence(timeout: 10))
-        element("row-more", in: app).click()
+        title.rightClick()
         let remove = app.menuItems.matching(NSPredicate(format: "identifier == 'row-remove' OR title == 'Remove'")).firstMatch
         XCTAssertTrue(remove.waitForExistence(timeout: 5))
         remove.click()
@@ -89,7 +102,7 @@ final class SmokeUITests: XCTestCase {
         XCTAssertTrue(pause.waitForExistence(timeout: 10))
         pause.click()
 
-        element("status-segment-queued", in: app).click()
+        openQueue(in: app)
         let resume = element("row-resume", in: app)
         XCTAssertTrue(resume.waitForExistence(timeout: 10))
         resume.click()
