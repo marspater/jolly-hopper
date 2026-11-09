@@ -120,6 +120,8 @@ public final class SecureCookieFile: @unchecked Sendable {
 
     // MARK: - Factory & Scoped API
 
+    private static let rootPath = "/"
+
     private struct CookieKey: Hashable {
         let domain: String
         let path: String
@@ -154,11 +156,11 @@ public final class SecureCookieFile: @unchecked Sendable {
     private static func hostOnlyCookie(
         host: String, name: String, value: String, isSecure: Bool, expiry: Int
     ) -> (key: CookieKey, entry: CookieEntry) {
-        let key = CookieKey(domain: host.lowercased(), path: "/", name: name)
+        let key = CookieKey(domain: host.lowercased(), path: Self.rootPath, name: name)
         let entry = CookieEntry(
             domain: host,
             includeSubdomains: false,
-            path: "/",
+            path: Self.rootPath,
             isSecure: isSecure,
             expiry: expiry,
             name: name,
@@ -231,11 +233,11 @@ public final class SecureCookieFile: @unchecked Sendable {
                 let name = sanitizeCookieToken(String(columns[5]))
                 let val = sanitizeCookieToken(String(columns[6]))
                 if !name.isEmpty && !val.isEmpty {
-                    let mapKey = CookieKey(domain: domain.lowercased(), path: path.isEmpty ? "/" : path, name: name)
+                    let mapKey = CookieKey(domain: domain.lowercased(), path: path.isEmpty ? Self.rootPath : path, name: name)
                     cookieMap[mapKey] = CookieEntry(
                         domain: domain,
                         includeSubdomains: includeSub,
-                        path: path.isEmpty ? "/" : path,
+                        path: path.isEmpty ? Self.rootPath : path,
                         isSecure: isSec,
                         expiry: exp,
                         name: name,
