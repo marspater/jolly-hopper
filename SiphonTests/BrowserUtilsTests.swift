@@ -1,47 +1,47 @@
-import XCTest
+import Testing
 @testable import Siphon
 
-final class BrowserUtilsTests: XCTestCase {
-    override func setUp() async throws {
-        try await super.setUp()
+extension Tag {
+    @Tag static var smoke: Self
+}
+
+// Serialized: every test clears the shared browser cache.
+@Suite(.serialized, .tags(.smoke))
+struct BrowserUtilsTests {
+    init() async {
         await BrowserUtils.shared.clearCache()
     }
 
-    override func tearDown() async throws {
-        await BrowserUtils.shared.clearCache()
-        try await super.tearDown()
-    }
-
-    func testGetInstalledBrowsersReturnsNonNil() async {
+    @Test func getInstalledBrowsersReturnsNonNil() async {
         let installed = await BrowserUtils.shared.getInstalledBrowsers()
-        XCTAssertFalse(installed.isEmpty, "At least Safari should be installed on macOS environment")
-        XCTAssertTrue(installed.contains(.safari))
+        #expect(!installed.isEmpty, "At least Safari should be installed on macOS environment")
+        #expect(installed.contains(.safari))
     }
 
-    func testGetInstalledBrowsersUsesCacheOnSecondCall() async {
+    @Test func getInstalledBrowsersUsesCacheOnSecondCall() async {
         let firstResult = await BrowserUtils.shared.getInstalledBrowsers()
         let secondResult = await BrowserUtils.shared.getInstalledBrowsers()
 
-        XCTAssertEqual(firstResult, secondResult)
+        #expect(firstResult == secondResult)
     }
 
-    func testClearCacheResetsCache() async {
+    @Test func clearCacheResetsCache() async {
         let firstResult = await BrowserUtils.shared.getInstalledBrowsers()
         await BrowserUtils.shared.clearCache()
         let secondResult = await BrowserUtils.shared.getInstalledBrowsers()
 
-        XCTAssertEqual(firstResult, secondResult)
+        #expect(firstResult == secondResult)
     }
 
-    func testSupportedBrowserChromiumBasedProperties() {
+    @Test func supportedBrowserChromiumBasedProperties() {
         let chromiumBased = SupportedBrowser.chromiumBased
-        XCTAssertEqual(chromiumBased.rawValue, "chromium-based")
-        XCTAssertEqual(chromiumBased.displayName, "Chromium-based")
-        XCTAssertEqual(chromiumBased.bundleIdentifier, "net.imput.helium")
-        XCTAssertTrue(SupportedBrowser.allCases.contains(.chromiumBased))
+        #expect(chromiumBased.rawValue == "chromium-based")
+        #expect(chromiumBased.displayName == "Chromium-based")
+        #expect(chromiumBased.bundleIdentifier == "net.imput.helium")
+        #expect(SupportedBrowser.allCases.contains(.chromiumBased))
 
         // Backward compatibility alias
         let helium = SupportedBrowser.helium
-        XCTAssertEqual(helium, .chromiumBased)
+        #expect(helium == .chromiumBased)
     }
 }
