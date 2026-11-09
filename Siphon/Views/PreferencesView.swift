@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import SiphonCore
 
 struct PreferencesView: View {
     @AppStorage(UserDefaultsKeys.theme) private var theme: String = "system"
@@ -938,18 +939,7 @@ struct PreferencesView: View {
             }
             editingPreset = nil
         } else {
-            let config = CustomPresetConfiguration(
-                name: newPresetName,
-                videoCodec: presetVideoCodec,
-                audioCodec: presetAudioCodec,
-                videoResolution: presetVideoResolution,
-                fileType: presetFileType,
-                downloadSubtitles: presetEmbedSubtitles,
-                subtitleLanguage: presetSubtitleLang,
-                subtitleFormat: presetSubtitleFormat,
-                sponsorBlock: presetSponsorBlock,
-                splitChapters: presetSplitChapters
-            )
+            let config = CustomPresetConfiguration(name: newPresetName, videoCodec: presetVideoCodec, audioCodec: presetAudioCodec, videoResolution: presetVideoResolution, fileType: presetFileType, subtitles: CustomPresetSubtitles(downloadSubtitles: presetEmbedSubtitles, subtitleLanguage: presetSubtitleLang, subtitleFormat: presetSubtitleFormat), sponsorBlock: presetSponsorBlock, splitChapters: presetSplitChapters)
             let preset = CustomPreset(configuration: config)
             customPresets.append(preset)
         }

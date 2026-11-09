@@ -1,6 +1,7 @@
 import SwiftUI
 #if os(macOS)
 import AppKit
+import SiphonCore
 #endif
 
 // Makes the main window transparent so .ultraThinMaterial shows desktop blur

@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import SiphonCore
 
 struct DebugLogView: View {
     @ObservedObject private var logger = LoggerService.shared

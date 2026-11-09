@@ -4,6 +4,7 @@
 //
 
 import Foundation
+import SiphonCore
 
 struct QueueRecoveryRecord: Codable, Identifiable, Sendable {
     static let maxLogCharacters = 8_000

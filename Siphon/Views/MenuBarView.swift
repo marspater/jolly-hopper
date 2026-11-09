@@ -1,4 +1,5 @@
 import SwiftUI
+import SiphonCore
 
 struct MenuBarView: View {
     @EnvironmentObject var downloadManager: DownloadManager

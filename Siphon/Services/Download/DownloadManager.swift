@@ -2,6 +2,7 @@ import Foundation
 import AppKit
 import Combine
 import SwiftUI
+import SiphonCore
 
 @MainActor
 class DownloadManager: ObservableObject {

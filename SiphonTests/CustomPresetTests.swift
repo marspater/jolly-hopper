@@ -1,21 +1,11 @@
 import XCTest
 @testable import Siphon
+@testable import SiphonCore
 
 final class CustomPresetTests: XCTestCase {
 
     func testCustomPresetFullSerialization() throws {
-        let originalPreset = CustomPreset(
-            name: "Full Preset",
-            videoCodec: .h264,
-            audioCodec: .aac,
-            videoResolution: .r1080p,
-            fileType: .mp4,
-            downloadSubtitles: true,
-            subtitleLanguage: "en,es",
-            subtitleFormat: .vtt,
-            sponsorBlock: true,
-            splitChapters: true
-        )
+        let originalPreset = CustomPreset(configuration: CustomPresetConfiguration(name: "Full Preset", videoCodec: .h264, audioCodec: .aac, videoResolution: .r1080p, fileType: .mp4, subtitles: CustomPresetSubtitles(downloadSubtitles: true, subtitleLanguage: "en,es", subtitleFormat: .vtt), sponsorBlock: true, splitChapters: true))
 
         let encoder = JSONEncoder()
         let data = try encoder.encode(originalPreset)
@@ -50,13 +40,7 @@ final class CustomPresetTests: XCTestCase {
 
     func testCustomPresetMinimalSerialization() throws {
         // Init with only required arguments, others should use defaults
-        let originalPreset = CustomPreset(
-            name: "Minimal Preset",
-            videoCodec: .vp9,
-            audioCodec: .opus,
-            videoResolution: .r480p,
-            fileType: .webm
-        )
+        let originalPreset = CustomPreset(configuration: CustomPresetConfiguration(name: "Minimal Preset", videoCodec: .vp9, audioCodec: .opus, videoResolution: .r480p, fileType: .webm))
 
         let data = try JSONEncoder().encode(originalPreset)
         let decodedPreset = try JSONDecoder().decode(CustomPreset.self, from: data)
@@ -124,8 +108,8 @@ final class CustomPresetTests: XCTestCase {
         XCTAssertTrue(CustomPreset.loadAll().isEmpty)
 
         // Test saveAll and loadAll round-trip
-        let preset1 = CustomPreset(name: "Preset 1", videoCodec: .h264, audioCodec: .aac, videoResolution: .r1080p, fileType: .mp4)
-        let preset2 = CustomPreset(name: "Preset 2", videoCodec: .h265, audioCodec: .opus, videoResolution: .r2160p, fileType: .mkv)
+        let preset1 = CustomPreset(configuration: CustomPresetConfiguration(name: "Preset 1", videoCodec: .h264, audioCodec: .aac, videoResolution: .r1080p, fileType: .mp4))
+        let preset2 = CustomPreset(configuration: CustomPresetConfiguration(name: "Preset 2", videoCodec: .h265, audioCodec: .opus, videoResolution: .r2160p, fileType: .mkv))
         let presets = [preset1, preset2]
 
         CustomPreset.saveAll(presets)
@@ -139,18 +123,7 @@ final class CustomPresetTests: XCTestCase {
     }
 
     func testCustomPresetConfigurationInitialization() throws {
-        let config = CustomPresetConfiguration(
-            name: "Configured Preset",
-            videoCodec: .av1,
-            audioCodec: .flac,
-            videoResolution: .r1440p,
-            fileType: .mkv,
-            downloadSubtitles: true,
-            subtitleLanguage: "fr",
-            subtitleFormat: .vtt,
-            sponsorBlock: true,
-            splitChapters: true
-        )
+        let config = CustomPresetConfiguration(name: "Configured Preset", videoCodec: .av1, audioCodec: .flac, videoResolution: .r1440p, fileType: .mkv, subtitles: CustomPresetSubtitles(downloadSubtitles: true, subtitleLanguage: "fr", subtitleFormat: .vtt), sponsorBlock: true, splitChapters: true)
         let preset = CustomPreset(configuration: config)
 
         XCTAssertEqual(preset.name, "Configured Preset")
@@ -173,8 +146,8 @@ final class CustomPresetTests: XCTestCase {
         defaults.set(false, forKey: UserDefaultsKeys.embedThumbnail)
         defaults.set(false, forKey: UserDefaultsKeys.embedMetadata)
 
-        let separate = CustomPreset(name: "Separate", videoCodec: .h264, audioCodec: .aac, videoResolution: .r720p, fileType: .mp4, downloadSubtitles: true, subtitleLanguage: "de")
-        let embedded = CustomPreset(name: "Embedded", videoCodec: .h264, audioCodec: .aac, videoResolution: .r720p, fileType: .mp4, downloadSubtitles: true, subtitleLanguage: "embed:fr")
+        let separate = CustomPreset(configuration: CustomPresetConfiguration(name: "Separate", videoCodec: .h264, audioCodec: .aac, videoResolution: .r720p, fileType: .mp4, subtitles: CustomPresetSubtitles(downloadSubtitles: true, subtitleLanguage: "de")))
+        let embedded = CustomPreset(configuration: CustomPresetConfiguration(name: "Embedded", videoCodec: .h264, audioCodec: .aac, videoResolution: .r720p, fileType: .mp4, subtitles: CustomPresetSubtitles(downloadSubtitles: true, subtitleLanguage: "embed:fr")))
 
         let separateOptions = MenuBarView.downloadOptions(selectedPreset: "custom_\(separate.id.uuidString)", selectedType: "video", customPresets: [separate, embedded], userDefaults: defaults)
         XCTAssertFalse(separateOptions.embedThumbnail, "Menu bar downloads must honor the embed-thumbnail preference")

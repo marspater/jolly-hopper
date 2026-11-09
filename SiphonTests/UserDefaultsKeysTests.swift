@@ -1,6 +1,7 @@
 import XCTest
 import Combine
 @testable import Siphon
+@testable import SiphonCore
 
 final class UserDefaultsKeysTests: XCTestCase {
     func testConcurrencyLimitIsObservableUnderItsKey() throws {

@@ -7,6 +7,7 @@ import Foundation
 import os
 import AppKit
 import ImageIO
+import SiphonCore
 
 @MainActor
 protocol DownloadExecutorDelegate: AnyObject {

@@ -5,6 +5,7 @@
 
 import SwiftUI
 import UniformTypeIdentifiers
+import SiphonCore
 
 struct HeroDropURLView: View {
     @EnvironmentObject var downloadManager: DownloadManager

@@ -1,5 +1,6 @@
 import Foundation
 import ServiceManagement
+import SiphonCore
 
 @MainActor
 class LoginItemHelper {

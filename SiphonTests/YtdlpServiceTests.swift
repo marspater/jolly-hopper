@@ -6,6 +6,7 @@ import AppKit
 import Security
 import VideoToolbox
 @testable import Siphon
+@testable import SiphonCore
 
 final class TestBox<T>: @unchecked Sendable {
     var value: T

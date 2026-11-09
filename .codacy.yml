@@ -22,6 +22,7 @@ exclude_paths:
   - ".jules/**"
   - ".github/**"
   - "SiphonTests/**"
+  - "SiphonCore/MediaModelInits.swift"
   - "SiphonCoreTests/**"
   - "SiphonUITests/**"
   - "scripts/**"

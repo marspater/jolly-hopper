@@ -93,8 +93,16 @@
 		E00010AF /* RadiantSiphonLogoView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E00000AF /* RadiantSiphonLogoView.swift */; };
 		E1001001 /* SiphonCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = E1000001 /* SiphonCore.framework */; };
 		E1001003 /* SiphonCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = E1000001 /* SiphonCore.framework */; };
-		E1001010 /* SiphonCoreMarker.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1000010 /* SiphonCoreMarker.swift */; };
-		E1001011 /* SiphonCoreMarkerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1000011 /* SiphonCoreMarkerTests.swift */; };
+		E1001012 /* LogSanitizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1000012 /* LogSanitizer.swift */; };
+		E1001013 /* DownloadModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1000013 /* DownloadModels.swift */; };
+		E1F01006 /* MediaOptions.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1F00006 /* MediaOptions.swift */; };
+		E1F01005 /* HTMLEntityDecoding.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1F00005 /* HTMLEntityDecoding.swift */; };
+		E1F01004 /* MediaModelInits.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1F00004 /* MediaModelInits.swift */; };
+		E1F01003 /* MediaFormat.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1F00003 /* MediaFormat.swift */; };
+		E1F01002 /* MediaInfo.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1F00002 /* MediaInfo.swift */; };
+		E1F01001 /* DownloadOptions.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1F00001 /* DownloadOptions.swift */; };
+		E1001014 /* DownloadOptionsLocalization.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1000014 /* DownloadOptionsLocalization.swift */; };
+		E1001015 /* LogSanitizerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1000015 /* LogSanitizerTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -188,8 +196,16 @@
 		E0000043 /* SiphonTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SiphonTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		E1000001 /* SiphonCore.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = SiphonCore.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		E1000002 /* SiphonCoreTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SiphonCoreTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		E1000010 /* SiphonCoreMarker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SiphonCoreMarker.swift; sourceTree = "<group>"; };
-		E1000011 /* SiphonCoreMarkerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SiphonCoreMarkerTests.swift; sourceTree = "<group>"; };
+		E1000012 /* LogSanitizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogSanitizer.swift; sourceTree = "<group>"; };
+		E1000013 /* DownloadModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DownloadModels.swift; sourceTree = "<group>"; };
+		E1F00006 /* MediaOptions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaOptions.swift; sourceTree = "<group>"; };
+		E1F00005 /* HTMLEntityDecoding.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HTMLEntityDecoding.swift; sourceTree = "<group>"; };
+		E1F00004 /* MediaModelInits.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaModelInits.swift; sourceTree = "<group>"; };
+		E1F00003 /* MediaFormat.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaFormat.swift; sourceTree = "<group>"; };
+		E1F00002 /* MediaInfo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaInfo.swift; sourceTree = "<group>"; };
+		E1F00001 /* DownloadOptions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DownloadOptions.swift; sourceTree = "<group>"; };
+		E1000014 /* DownloadOptionsLocalization.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DownloadOptionsLocalization.swift; sourceTree = "<group>"; };
+		E1000015 /* LogSanitizerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogSanitizerTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -260,7 +276,6 @@
 			children = (
 				E0000091 /* ImageUtilitiesTests.swift */,
 				E0000040 /* DownloadManagerTests.swift */,
-				E0000041 /* MediaInfoTests.swift */,
 				E0000042 /* YtdlpServiceTests.swift */,
 				E0000044 /* BrowserUtilsTests.swift */,
 				E0000045 /* QueueAndErrorUXTests.swift */,
@@ -299,6 +314,7 @@
 		E0003004 /* Models */ = {
 			isa = PBXGroup;
 			children = (
+				E1000014 /* DownloadOptionsLocalization.swift */,
 				E0000003 /* Download.swift */,
 				E0000093 /* ProcessLifecycleState.swift */,
 				E00000A0 /* NavigationItem.swift */,
@@ -440,7 +456,6 @@
 		E0003010 /* Constants */ = {
 			isa = PBXGroup;
 			children = (
-				E0000031 /* UserDefaultsKeys.swift */,
 			);
 			path = Constants;
 			sourceTree = "<group>";
@@ -448,7 +463,15 @@
 		E1003001 /* SiphonCore */ = {
 			isa = PBXGroup;
 			children = (
-				E1000010 /* SiphonCoreMarker.swift */,
+				E1000013 /* DownloadModels.swift */,
+				E1F00006 /* MediaOptions.swift */,
+				E1F00005 /* HTMLEntityDecoding.swift */,
+				E1F00004 /* MediaModelInits.swift */,
+				E1F00003 /* MediaFormat.swift */,
+				E1F00002 /* MediaInfo.swift */,
+				E1F00001 /* DownloadOptions.swift */,
+				E1000012 /* LogSanitizer.swift */,
+				E0000031 /* UserDefaultsKeys.swift */,
 			);
 			path = SiphonCore;
 			sourceTree = "<group>";
@@ -456,7 +479,8 @@
 		E1003002 /* SiphonCoreTests */ = {
 			isa = PBXGroup;
 			children = (
-				E1000011 /* SiphonCoreMarkerTests.swift */,
+				E1000015 /* LogSanitizerTests.swift */,
+				E0000041 /* MediaInfoTests.swift */,
 			);
 			path = SiphonCoreTests;
 			sourceTree = "<group>";
@@ -649,6 +673,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				E1001014 /* DownloadOptionsLocalization.swift in Sources */,
 				E0001092 /* ImageUtilities.swift in Sources */,
 				E0001050 /* Font+Geist.swift in Sources */,
 				E0001003 /* Download.swift in Sources */,
@@ -671,7 +696,6 @@
 				E0001090 /* BrowserUtils.swift in Sources */,
 				F0011004 /* NetworkEnvironmentService.swift in Sources */,
 				E0001029 /* PreferencesWindowManager.swift in Sources */,
-				E0001031 /* UserDefaultsKeys.swift in Sources */,
 				E0001032 /* ReadOnlyLogView.swift in Sources */,
 				E0001033 /* DebugLogWindowManager.swift in Sources */,
 				E0001034 /* DebugLogView.swift in Sources */,
@@ -708,7 +732,6 @@
 			files = (
 				E0001091 /* ImageUtilitiesTests.swift in Sources */,
 				E0001040 /* DownloadManagerTests.swift in Sources */,
-				E0001041 /* MediaInfoTests.swift in Sources */,
 				E0001042 /* YtdlpServiceTests.swift in Sources */,
 				E0001044 /* BrowserUtilsTests.swift in Sources */,
 				E0001045 /* QueueAndErrorUXTests.swift in Sources */,
@@ -736,7 +759,15 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				E1001010 /* SiphonCoreMarker.swift in Sources */,
+				E1001013 /* DownloadModels.swift in Sources */,
+				E1F01006 /* MediaOptions.swift in Sources */,
+				E1F01005 /* HTMLEntityDecoding.swift in Sources */,
+				E1F01004 /* MediaModelInits.swift in Sources */,
+				E1F01003 /* MediaFormat.swift in Sources */,
+				E1F01002 /* MediaInfo.swift in Sources */,
+				E1F01001 /* DownloadOptions.swift in Sources */,
+				E1001012 /* LogSanitizer.swift in Sources */,
+				E0001031 /* UserDefaultsKeys.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -744,7 +775,8 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				E1001011 /* SiphonCoreMarkerTests.swift in Sources */,
+				E1001015 /* LogSanitizerTests.swift in Sources */,
+				E0001041 /* MediaInfoTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

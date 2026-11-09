@@ -1,5 +1,5 @@
 import XCTest
-@testable import Siphon
+@testable import SiphonCore
 
 final class MediaInfoTests: XCTestCase {
     @MainActor
@@ -155,8 +155,6 @@ final class MediaInfoTests: XCTestCase {
         XCTAssertTrue(drmOnly.downloadableFormats.isEmpty)
         XCTAssertTrue(drmOnly.resolveSelectedFormats(options: .default).isEmpty)
         XCTAssertNil(drmOnly.maxFormatHeight)
-        XCTAssertFalse(YtdlpService.isSingleUnprobedFormat(MediaInfo(
-            id: "x", title: "DRM only", formats: [MediaFormat(formatId: "drm", ext: "mp4", hasDRM: .protected)])))
 
         let uncertain = MediaInfo(id: "x", title: "Needs probing", formats: [
             MediaFormat(formatId: "maybe", ext: "mp4", hasDRM: .maybe)

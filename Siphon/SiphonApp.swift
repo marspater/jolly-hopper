@@ -1,6 +1,7 @@
 import SwiftUI
 import CryptoKit
 @preconcurrency import UserNotifications
+import SiphonCore
 
 final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
     weak var downloadManager: DownloadManager?

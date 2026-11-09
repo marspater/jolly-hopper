@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import SiphonCore
 
 @MainActor
 class MenuBarManager: NSObject {
