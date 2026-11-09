@@ -6059,7 +6059,7 @@ final class YtdlpServiceTests: XCTestCase {
         defer { if let file = headerFile { try? FileManager.default.removeItem(at: file) } }
         
         let headerContent = try String(contentsOf: headerFile!, encoding: .utf8)
-        XCTAssertTrue(headerContent.contains(".boyfriendtv.com\tTRUE\t/\tTRUE\t"), "HTTPS header cookies must remain scoped to .boyfriendtv.com and require secure transport")
+        XCTAssertTrue(headerContent.contains("www.boyfriendtv.com\tFALSE\t/\tTRUE\t"), "HTTPS header cookies must remain host-only on www.boyfriendtv.com and require secure transport")
         XCTAssertFalse(headerContent.contains(".boyfriend.tv\t"), "Must NOT contain cross-domain .boyfriend.tv entry")
         XCTAssertTrue(headerContent.contains("session\txyz123"), "Must contain session cookie")
 
@@ -6072,7 +6072,7 @@ final class YtdlpServiceTests: XCTestCase {
         defer { if let file = consolidatedFile { try? FileManager.default.removeItem(at: file) } }
         
         let consolidatedContent = try String(contentsOf: consolidatedFile!, encoding: .utf8)
-        XCTAssertTrue(consolidatedContent.contains(".boyfriendtv.com\tTRUE\t/\tTRUE\t"), "HTTPS consolidated cookies must remain scoped to .boyfriendtv.com and require secure transport")
+        XCTAssertTrue(consolidatedContent.contains("www.boyfriendtv.com\tFALSE\t/\tTRUE\t"), "HTTPS consolidated cookies must remain host-only on www.boyfriendtv.com and require secure transport")
         XCTAssertFalse(consolidatedContent.contains(".boyfriend.tv\t"), "Consolidated file must NOT contain cross-domain .boyfriend.tv entry")
     }
 
@@ -7329,6 +7329,8 @@ final class YtdlpServiceTests: XCTestCase {
 
     func testParseArgumentString() {
         // Plain flags
+        XCTAssertTrue(YtdlpService.parseArgumentStringChecked(#"--referer "https://x"#).isUnterminated)
+        XCTAssertFalse(YtdlpService.parseArgumentStringChecked(#"--referer "https://x""#).isUnterminated)
         let args1 = YtdlpService.parseArgumentString("--limit-rate 5M --restrict-filenames")
         XCTAssertEqual(args1, ["--limit-rate", "5M", "--restrict-filenames"])
 

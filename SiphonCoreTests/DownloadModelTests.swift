@@ -3,6 +3,67 @@ import XCTest
 
 @MainActor
 final class DownloadModelTests: XCTestCase {
+    func testPurgeKeepsOldScratchWithLiveOwner() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("purge_\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let old = Date(timeIntervalSinceNow: -3 * 24 * 3600)
+        func scratch(pid: Int32?) throws -> URL {
+            let dir = root.appendingPathComponent(ScratchDirectoryPolicy.directoryPrefix + UUID().uuidString)
+            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            if let pid { ScratchDirectoryPolicy.markOwner(dir, pid: pid) }
+            try FileManager.default.setAttributes([.modificationDate: old], ofItemAtPath: dir.path)
+            return dir
+        }
+        let live = try scratch(pid: getpid())
+        let dead = try scratch(pid: 2_000_000_000)
+        let unmarked = try scratch(pid: nil)
+        // Age the marker files too so only the owner check can save `live`.
+        for dir in [live, dead] {
+            try? FileManager.default.setAttributes([.modificationDate: old], ofItemAtPath: dir.appendingPathComponent(".siphon-owner-pid").path)
+            try FileManager.default.setAttributes([.modificationDate: old], ofItemAtPath: dir.path)
+        }
+        ScratchDirectoryPolicy.purgeAbandoned(keeping: [], in: root)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: live.path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: dead.path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: unmarked.path))
+    }
+
+    /// Real second process: its scratch survives the sweep while it runs and is purged after it exits.
+    func testPurgeFollowsRealOwnerProcessLifetime() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("purge_\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let child = Process()
+        child.executableURL = URL(fileURLWithPath: "/bin/sleep")
+        child.arguments = ["30"]
+        try child.run()
+        defer { if child.isRunning { child.terminate() } }
+
+        let dir = root.appendingPathComponent(ScratchDirectoryPolicy.directoryPrefix + UUID().uuidString)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        ScratchDirectoryPolicy.markOwner(dir, pid: child.processIdentifier)
+        let old = Date(timeIntervalSinceNow: -3 * 24 * 3600)
+        for url in [dir, dir.appendingPathComponent(".siphon-owner-pid")] {
+            try FileManager.default.setAttributes([.modificationDate: old], ofItemAtPath: url.path)
+        }
+
+        ScratchDirectoryPolicy.purgeAbandoned(keeping: [], in: root)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: dir.path), "Live owner process must protect its scratch")
+
+        child.terminate()
+        child.waitUntilExit()
+        ScratchDirectoryPolicy.purgeAbandoned(keeping: [], in: root)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: dir.path), "Exited owner's scratch must be purged")
+    }
+
+    func testHistoryDropsSignedThumbnailURLs() {
+        XCTAssertNil(HistoricDownload.persistableThumbnailURL(URL(string: "https://cdn.example.com/t.jpg?token=abc")!))
+        XCTAssertNil(HistoricDownload.persistableThumbnailURL(URL(string: "https://u:p@cdn.example.com/t.jpg")!))
+        let plain = URL(string: "https://cdn.example.com/t.jpg?w=320")!
+        XCTAssertEqual(HistoricDownload.persistableThumbnailURL(plain), plain)
+    }
+
     func testPrimaryFileExistsOnDiskReflectsTheFileSystem() throws {
         let download = Download(url: "https://example.com/v", options: .default, title: "V")
         XCTAssertNil(download.primaryFileExistsOnDisk)

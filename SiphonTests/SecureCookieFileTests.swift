@@ -43,6 +43,15 @@ final class SecureCookieFileTests: XCTestCase {
         XCTAssertTrue(content.contains("LOGIN_INFO\ttoken789"))
     }
 
+    func testRawCookiesAreHostOnly() throws {
+        let cookie = try SecureCookieFile.create(url: "https://www.example.com/v", rawCookies: "SID=abc")
+        defer { cookie.cleanup() }
+        let content = try String(contentsOf: cookie.fileURL, encoding: .utf8)
+        XCTAssertTrue(content.contains("www.example.com\tFALSE\t/\tTRUE"))
+        XCTAssertFalse(content.contains(".example.com\tTRUE"))
+        XCTAssertFalse(content.contains("\n.example.com"))
+    }
+
     func testSanitizesHostWithControlCharacters() throws {
         // 1. Invalid URL string with unencoded control characters throws creationFailed
         let invalidURL = "https://example.com\t\r\ninjected.org/video"

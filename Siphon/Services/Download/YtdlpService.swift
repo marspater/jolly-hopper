@@ -2136,6 +2136,7 @@ public struct DownloadResult: Sendable {
         let scratchDirectory = temporaryDirectory ?? FileManager.default.temporaryDirectory.appendingPathComponent("siphon_scratch_\(UUID().uuidString)")
         do {
             try FileManager.default.createDirectory(at: scratchDirectory, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+            ScratchDirectoryPolicy.markOwner(scratchDirectory)
         } catch {
             LoggerService.shared.log("Failed to create temporary scratch directory at \(scratchDirectory.path): \(error.localizedDescription)", level: .error)
             throw YtdlpError.downloadFailed("Failed to initialize temporary scratch directory: \(error.localizedDescription)")
@@ -2252,7 +2253,11 @@ public struct DownloadResult: Sendable {
         }
 
         if let extra = options.additionalArguments?.trimmingCharacters(in: .whitespacesAndNewlines), !extra.isEmpty {
-            var extraArgs = Self.removingOutputLocationArguments(Self.parseArgumentString(extra))
+            let parsed = Self.parseArgumentStringChecked(extra)
+            if parsed.isUnterminated {
+                throw YtdlpError.downloadFailed("Advanced arguments contain an unterminated quote. Close the quote and try again.")
+            }
+            var extraArgs = Self.removingOutputLocationArguments(parsed.args)
             if options.enforcePublicNetworkBoundary {
                 extraArgs = Self.removingProxyArguments(extraArgs)
             }
@@ -3264,14 +3269,14 @@ public struct DownloadResult: Sendable {
         // VideoToolbox constant quality (-q:v) is supported on Apple Silicon
         // hardware encoders only; Intel Macs and VMs without a media engine use x264/x265.
         #if arch(arm64)
-        let hardwareH264 = Self.hasHardwareEncoder(kCMVideoCodecType_H264)
-        let hardwareHEVC = Self.hasHardwareEncoder(kCMVideoCodecType_HEVC)
+        let h264Encoder = Self.hasHardwareEncoder(kCMVideoCodecType_H264)
+            ? ["-c:v", "h264_videotoolbox", "-q:v", "80"] : ["-c:v", "libx264", "-crf", "18"]
+        let h265Encoder = Self.hasHardwareEncoder(kCMVideoCodecType_HEVC)
+            ? ["-c:v", "hevc_videotoolbox", "-q:v", "80"] : ["-c:v", "libx265", "-crf", "20"]
         #else
-        let hardwareH264 = false
-        let hardwareHEVC = false
+        let h264Encoder = ["-c:v", "libx264", "-crf", "18"]
+        let h265Encoder = ["-c:v", "libx265", "-crf", "20"]
         #endif
-        let h264Encoder = hardwareH264 ? ["-c:v", "h264_videotoolbox", "-q:v", "80"] : ["-c:v", "libx264", "-crf", "18"]
-        let h265Encoder = hardwareHEVC ? ["-c:v", "hevc_videotoolbox", "-q:v", "80"] : ["-c:v", "libx265", "-crf", "20"]
         let vp9Encoder = ["-c:v", "libvpx-vp9", "-crf", "24", "-b:v", "0", "-row-mt", "1"]
 
         switch conversionCodec {
@@ -8454,6 +8459,11 @@ public struct DownloadResult: Sendable {
     }
 
     nonisolated static func parseArgumentString(_ argString: String) -> [String] {
+        parseArgumentStringChecked(argString).args
+    }
+
+    /// Splits like a shell; `isUnterminated` is true when a quote is still open at the end.
+    nonisolated static func parseArgumentStringChecked(_ argString: String) -> (args: [String], isUnterminated: Bool) {
         var args: [String] = []
         var current = ""
         var quote: Character?
@@ -8482,7 +8492,7 @@ public struct DownloadResult: Sendable {
         }
         if escaping { current.append("\\") }
         if started { args.append(current) }
-        return args
+        return (args, quote != nil)
     }
 
     private func sanitizeCookieToken(_ token: String) -> String {

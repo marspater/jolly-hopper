@@ -103,7 +103,11 @@ public final class UpdateInstaller: Sendable {
         let stagingDir = fileManager.temporaryDirectory.appendingPathComponent("Siphon_Install_\(UUID().uuidString)")
         try fileManager.createDirectory(at: stagingDir, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
         defer {
-            for cleanupURL in [stagingDir, packageURL] where fileManager.fileExists(atPath: cleanupURL.path) {
+            // Only delete the package when it is a Siphon-owned staged download, never a caller's file.
+            let ownsPackage = packageURL.lastPathComponent.hasPrefix("Siphon_Update_")
+                && packageURL.deletingLastPathComponent().standardizedFileURL.resolvingSymlinksInPath()
+                    == fileManager.temporaryDirectory.standardizedFileURL.resolvingSymlinksInPath()
+            for cleanupURL in (ownsPackage ? [stagingDir, packageURL] : [stagingDir]) where fileManager.fileExists(atPath: cleanupURL.path) {
                 do {
                     try fileManager.removeItem(at: cleanupURL)
                 } catch {

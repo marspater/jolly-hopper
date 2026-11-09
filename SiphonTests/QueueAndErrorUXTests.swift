@@ -1849,7 +1849,7 @@ final class QueueAndErrorUXTests: XCTestCase {
 
         let content = try String(contentsOfFile: cookieFile.path, encoding: .utf8)
         XCTAssertFalse(content.contains(".boyfriend.tv\t"), "Cookie file must not synthesize cookies for different sibling domain .boyfriend.tv")
-        XCTAssertTrue(content.contains(".boyfriendtv.com\t"), "Cookie file must contain cookies for the requested domain")
+        XCTAssertTrue(content.contains("boyfriendtv.com\tFALSE\t"), "Cookie file must contain host-only cookies for the requested host")
     }
 
     func testRawCookiesFromHTTPSAreWrittenAsSecure() throws {

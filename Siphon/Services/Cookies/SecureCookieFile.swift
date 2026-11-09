@@ -166,18 +166,10 @@ public final class SecureCookieFile: @unchecked Sendable {
             throw SecureCookieError.creationFailed("Could not access secure cookies directory")
         }
 
-        let defaultDomain = cleanHost.hasPrefix(".") ? cleanHost : ".\(cleanHost)"
+        let hostOnlyDomain = cleanHost.hasPrefix(".") ? String(cleanHost.dropFirst()) : cleanHost
         let requireSecureTransport = urlObj.scheme?.lowercased() == "https"
         let tempCookiesURL = cookiesDir.appendingPathComponent("siphon_consolidated_cookies_\(UUID().uuidString).txt")
         let defaultExpiry = Int(Date().addingTimeInterval(86400 * 30).timeIntervalSince1970)
-
-        var domains: [String] = [defaultDomain]
-        let lowerHost = cleanHost.lowercased()
-        if lowerHost.hasPrefix("www.") {
-            domains.append(".\(lowerHost.dropFirst(4))")
-        }
-        var seenDomains = Set<String>()
-        let uniqueDomains = domains.filter { seenDomains.insert($0).inserted }
 
         var cookieMap: [CookieKey: CookieEntry] = [:]
 
@@ -192,18 +184,18 @@ public final class SecureCookieFile: @unchecked Sendable {
                     let key = sanitizeCookieToken(parts[0].trimmingCharacters(in: .whitespacesAndNewlines))
                     let value = sanitizeCookieToken(parts[1].trimmingCharacters(in: .whitespacesAndNewlines))
                     if !key.isEmpty && !value.isEmpty {
-                        for domain in uniqueDomains {
-                            let mapKey = CookieKey(domain: domain.lowercased(), path: "/", name: key)
-                            cookieMap[mapKey] = CookieEntry(
-                                domain: domain,
-                                includeSubdomains: true,
-                                path: "/",
-                                isSecure: requireSecureTransport,
-                                expiry: defaultExpiry,
-                                name: key,
-                                value: value
-                            )
-                        }
+                        // A raw Cookie header carries no scope: keep it host-only so it never
+                        // reaches the parent domain or sibling subdomains.
+                        let mapKey = CookieKey(domain: hostOnlyDomain.lowercased(), path: "/", name: key)
+                        cookieMap[mapKey] = CookieEntry(
+                            domain: hostOnlyDomain,
+                            includeSubdomains: false,
+                            path: "/",
+                            isSecure: requireSecureTransport,
+                            expiry: defaultExpiry,
+                            name: key,
+                            value: value
+                        )
                     }
                 }
             }
@@ -213,7 +205,9 @@ public final class SecureCookieFile: @unchecked Sendable {
         // Bolt Performance Optimization: Use `split(separator: "\t", omittingEmptySubsequences: false)` over Substrings
         // to avoid allocating [String] column arrays for every Netscape line.
         for line in additionalNetscapeLines {
-            let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+            var trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+            // Netscape HttpOnly cookies are prefixed `#HttpOnly_`; other `#` lines are comments.
+            if trimmed.hasPrefix("#HttpOnly_") { trimmed.removeFirst("#HttpOnly_".count) }
             guard !trimmed.isEmpty && !trimmed.hasPrefix("#") else { continue }
             let columns = trimmed.split(separator: "\t", omittingEmptySubsequences: false)
             if columns.count >= 7 {
@@ -244,10 +238,10 @@ public final class SecureCookieFile: @unchecked Sendable {
             let key = sanitizeCookieToken(cookie.name.trimmingCharacters(in: .whitespacesAndNewlines))
             let value = sanitizeCookieToken(cookie.value.trimmingCharacters(in: .whitespacesAndNewlines))
             if !key.isEmpty && !value.isEmpty {
-                let mapKey = CookieKey(domain: defaultDomain.lowercased(), path: "/", name: key)
+                let mapKey = CookieKey(domain: hostOnlyDomain.lowercased(), path: "/", name: key)
                 cookieMap[mapKey] = CookieEntry(
-                    domain: defaultDomain,
-                    includeSubdomains: true,
+                    domain: hostOnlyDomain,
+                    includeSubdomains: false,
                     path: "/",
                     isSecure: requireSecureTransport,
                     expiry: defaultExpiry,

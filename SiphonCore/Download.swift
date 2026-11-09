@@ -10,6 +10,20 @@ public enum ScratchDirectoryPolicy: Sendable {
             .appendingPathComponent(directoryPrefix + UUID().uuidString, isDirectory: true)
     }
 
+    private static let ownerMarkerName = ".siphon-owner-pid"
+
+    /// Records the owning process so another Siphon's launch sweep leaves a live run alone.
+    public static func markOwner(_ directory: URL, pid: Int32 = getpid()) {
+        try? String(pid).write(to: directory.appendingPathComponent(ownerMarkerName), atomically: true, encoding: .utf8)
+    }
+
+    static func hasLiveOwner(_ directory: URL, fileManager: FileManager = .default) -> Bool {
+        guard let text = try? String(contentsOf: directory.appendingPathComponent(ownerMarkerName), encoding: .utf8),
+              let pid = Int32(text.trimmingCharacters(in: .whitespacesAndNewlines)), pid > 0 else { return false }
+        // EPERM means the process exists but belongs to another user.
+        return kill(pid, 0) == 0 || errno == EPERM
+    }
+
     public static func isOwned(_ url: URL, fileManager: FileManager = .default) -> Bool {
         let root = fileManager.temporaryDirectory.standardizedFileURL.resolvingSymlinksInPath()
         let candidate = url.standardizedFileURL.resolvingSymlinksInPath()
@@ -99,15 +113,15 @@ public enum ScratchDirectoryPolicy: Sendable {
         fileManager: FileManager = .default,
         log: CoreLogSink = CoreLog.unified
     ) -> [URL] {
-        // ponytail: liveness is by age only; add a per-process owner marker if
-        // concurrent Siphon instances with long silent downloads become real.
+        // Liveness: a running owner (pid marker) wins; otherwise recursive mtime age.
         let keys: [URLResourceKey] = [.contentModificationDateKey]
         guard let entries = try? fileManager.contentsOfDirectory(at: root, includingPropertiesForKeys: keys) else { return [] }
         var removed: [URL] = []
         for directory in entries where hasTemporaryArtifactName(directory) && !kept.contains(directory.lastPathComponent) {
+            if hasLiveOwner(directory, fileManager: fileManager) { continue }
             // A running download keeps writing its .part file, which the
             // directory's own date does not reflect.
-            let children = (try? fileManager.contentsOfDirectory(at: directory, includingPropertiesForKeys: keys)) ?? []
+            let children = fileManager.enumerator(at: directory, includingPropertiesForKeys: keys)?.compactMap { $0 as? URL } ?? []
             let lastTouched = ([directory] + children)
                 .compactMap { try? $0.resourceValues(forKeys: Set(keys)).contentModificationDate }
                 .max() ?? .distantPast
@@ -379,6 +393,14 @@ public struct HistoricDownload: Codable, Identifiable, Sendable {
     public let fileType: MediaFileType
     public let status: DownloadStatus
     public let thumbnailURL: URL?
+
+    /// Signed or tokenized thumbnail URLs are short-lived credentials; keep them out of history.
+    static func persistableThumbnailURL(_ url: URL) -> URL? {
+        let sensitive = ["token", "sig", "signature", "key", "auth", "policy", "credential", "expires", "hdnts", "secret", "x-amz-signature", "x-goog-signature"]
+        let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
+        if url.user != nil || url.password != nil { return nil }
+        return items.contains { sensitive.contains($0.name.lowercased()) } ? nil : url
+    }
     public let duration: String?
     public let errorMessage: String?
     public let log: String
@@ -499,7 +521,7 @@ public struct HistoricDownload: Codable, Identifiable, Sendable {
         try container.encodeIfPresent(requiresAdvancedArgumentsReview, forKey: .requiresAdvancedArgumentsReview)
         try container.encodeIfPresent(hasPartialFailure, forKey: .hasPartialFailure)
         try container.encodeIfPresent(ownedOutputFiles, forKey: .ownedOutputFiles)
-        try container.encodeIfPresent(thumbnailURL, forKey: .thumbnailURL)
+        try container.encodeIfPresent(thumbnailURL.flatMap(Self.persistableThumbnailURL), forKey: .thumbnailURL)
         try container.encodeIfPresent(duration, forKey: .duration)
     }
 
