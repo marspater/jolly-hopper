@@ -33,7 +33,7 @@ class LoggerService: ObservableObject {
         // The unit tests run inside Siphon.app, so keep their fixture output
         // out of the user's real debug log.
         let logDirectory = NotificationService.isRunningTests
-            ? UITestLaunchMode.root ?? FileManager.default.temporaryDirectory.appendingPathComponent("SiphonTestLogs", isDirectory: true)
+            ? UITestLaunchMode.isolatedRoot ?? FileManager.default.temporaryDirectory.appendingPathComponent("SiphonTestLogs", isDirectory: true)
             : URL.applicationSupportDirectory.appendingPathComponent("Siphon")
 
         try? FileManager.default.createDirectory(at: logDirectory, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
