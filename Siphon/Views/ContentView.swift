@@ -964,6 +964,34 @@ struct WhatsNewSheetView: View {
     }
 }
 
+#if DEBUG
+#Preview("Empty home") { ContentView().previewEnvironment() }
+
+#Preview("Active queue, dark") {
+    ContentView().previewEnvironment(downloads: PreviewFixtures.mixedQueue).preferredColorScheme(.dark)
+}
+
+#Preview("Recovery prompt") {
+    let manager = PreviewFixtures.manager()
+    manager.showQueueRecoveryAlert = true
+    manager.recoverableJobsCount = 2
+    return ContentView().previewEnvironment(manager: manager)
+}
+
+#Preview("Update available") {
+    let checker = PreviewFixtures.updateChecker()
+    checker.hasUpdate = true
+    checker.latestVersion = "9.9.9"
+    return ContentView().previewEnvironment(updateChecker: checker)
+}
+
+#Preview("Whats New") {
+    let state = PreviewFixtures.appState()
+    state.whatsNewFeatures = PreviewFixtures.features
+    return WhatsNewSheetView().previewEnvironment(appState: state)
+}
+#endif
+
 /// Static release-note card. It is not interactive, so it has no hover state.
 private struct FeatureCardRow: View {
     let feature: ReleaseFeature

@@ -104,6 +104,8 @@
 		E1001014 /* DownloadOptionsLocalization.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1000014 /* DownloadOptionsLocalization.swift */; };
 		E1001015 /* LogSanitizerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1000015 /* LogSanitizerTests.swift */; };
 		E1001020 /* TestSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1000020 /* TestSupport.swift */; };
+		E1001030 /* PreviewFixtures.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1000030 /* PreviewFixtures.swift */; };
+		E1001031 /* PreviewFixturesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1000031 /* PreviewFixturesTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -208,6 +210,8 @@
 		E1000014 /* DownloadOptionsLocalization.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DownloadOptionsLocalization.swift; sourceTree = "<group>"; };
 		E1000015 /* LogSanitizerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogSanitizerTests.swift; sourceTree = "<group>"; };
 		E1000020 /* TestSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TestSupport.swift; sourceTree = "<group>"; };
+		E1000030 /* PreviewFixtures.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreviewFixtures.swift; sourceTree = "<group>"; };
+		E1000031 /* PreviewFixturesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreviewFixturesTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -259,6 +263,7 @@
 		E0003002 /* Siphon */ = {
 			isa = PBXGroup;
 			children = (
+				E1003010 /* Previews */,
 				E0003011 /* Utilities */,
 				E0000001 /* SiphonApp.swift */,
 				E0003004 /* Models */,
@@ -276,6 +281,7 @@
 		E0003020 /* SiphonTests */ = {
 			isa = PBXGroup;
 			children = (
+				E1000031 /* PreviewFixturesTests.swift */,
 				E1000020 /* TestSupport.swift */,
 				E0000091 /* ImageUtilitiesTests.swift */,
 				E0000040 /* DownloadManagerTests.swift */,
@@ -488,6 +494,14 @@
 			path = SiphonCoreTests;
 			sourceTree = "<group>";
 		};
+		E1003010 /* Previews */ = {
+			isa = PBXGroup;
+			children = (
+				E1000030 /* PreviewFixtures.swift */,
+			);
+			path = Previews;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -676,6 +690,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				E1001030 /* PreviewFixtures.swift in Sources */,
 				E1001014 /* DownloadOptionsLocalization.swift in Sources */,
 				E0001092 /* ImageUtilities.swift in Sources */,
 				E0001050 /* Font+Geist.swift in Sources */,
@@ -733,6 +748,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				E1001031 /* PreviewFixturesTests.swift in Sources */,
 				E1001020 /* TestSupport.swift in Sources */,
 				E0001091 /* ImageUtilitiesTests.swift in Sources */,
 				E0001040 /* DownloadManagerTests.swift in Sources */,

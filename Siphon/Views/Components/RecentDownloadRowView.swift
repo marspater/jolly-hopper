@@ -349,3 +349,15 @@ struct RecentDownloadRowView: View {
         }
     }
 }
+
+#if DEBUG
+#Preview("No thumbnail") {
+    RecentDownloadRowView(download: PreviewFixtures.download(.completed)).previewEnvironment().padding()
+}
+
+#Preview("With thumbnail") {
+    // A file URL, so the preview makes no network request.
+    let thumbnail = Bundle.main.url(forResource: "AppIcon", withExtension: "icns")
+    return RecentDownloadRowView(download: PreviewFixtures.download(.completed, thumbnail: thumbnail)).previewEnvironment().padding()
+}
+#endif

@@ -366,6 +366,18 @@ struct MenuBarView: View {
     }
 }
 
+#if DEBUG
+#Preview("Idle") { MenuBarView().previewEnvironment().frame(width: 360, height: 420) }
+
+#Preview("One active") {
+    MenuBarView().previewEnvironment(downloads: [PreviewFixtures.download(.downloading, progress: 0.42)]).frame(width: 360, height: 420)
+}
+
+#Preview("Several active") {
+    MenuBarView().previewEnvironment(downloads: PreviewFixtures.mixedQueue).frame(width: 360, height: 420)
+}
+#endif
+
 /// Observes its download so percent, speed and ETA update live; the
 /// manager only republishes on status changes.
 private struct MenuBarActiveDownloadRow: View {

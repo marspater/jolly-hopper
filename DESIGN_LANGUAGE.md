@@ -259,3 +259,7 @@ Before merging a UI change, verify:
 - [ ] Text uses `accentText` / `status*Text`, never the saturated fills.
 - [ ] Native macOS structure was preferred before custom glass or AppKit code.
 - [ ] The affected flow was visually checked at compact and normal window sizes.
+
+## Previews
+
+Build every `#Preview` from `Siphon/Previews/PreviewFixtures.swift`, inside `#if DEBUG`. Use fresh `LanguageService()` instances, never `.shared`, a live `URLSession`, or the real defaults domain. Pair light and dark variants for primary screens.

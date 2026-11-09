@@ -329,10 +329,16 @@ public final class AppState: ObservableObject {
     @Published var ytdlpUpdateProgress: Double = 0
 
     var urlSession: URLSession = .shared
-    private let releaseNotesService = ReleaseNotesService()
-    private let dependencyCoordinator = DependencyUpdateCoordinator()
+    private let releaseNotesService: ReleaseNotesService
+    private let dependencyCoordinator: DependencyUpdateCoordinator
 
-    public init() {
+    public convenience init() {
+        self.init(releaseNotesService: ReleaseNotesService(), dependencyCoordinator: DependencyUpdateCoordinator())
+    }
+
+    init(releaseNotesService: ReleaseNotesService, dependencyCoordinator: DependencyUpdateCoordinator) {
+        self.releaseNotesService = releaseNotesService
+        self.dependencyCoordinator = dependencyCoordinator
         dependencyCoordinator.$isUpdating
             .receive(on: RunLoop.main)
             .assign(to: &$isUpdatingYtdlp)

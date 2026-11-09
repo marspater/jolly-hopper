@@ -2019,6 +2019,18 @@ struct AddDownloadView: View {
     }
 }
 
+#if DEBUG
+#Preview("Empty") {
+    AddDownloadView().previewEnvironment()
+}
+
+#Preview("Valid URL") {
+    let state = PreviewFixtures.appState()
+    state.urlToDownload = PreviewFixtures.sampleMediaURL
+    return AddDownloadView().previewEnvironment(appState: state)
+}
+#endif
+
 /// A plain native URL editor with an autohiding overlay scroller. SwiftUI's
 /// TextEditor leaves a disabled, full-height scroller after window resizing.
 struct BatchURLTextEditor: NSViewRepresentable {
@@ -2100,12 +2112,4 @@ struct BatchURLTextEditor: NSViewRepresentable {
         (scroll.documentView as? TextView)?.onFocusChange = nil
         (scroll.documentView as? NSTextView)?.delegate = nil
     }
-}
-
-#Preview {
-    AddDownloadView()
-        .environmentObject(DownloadManager())
-        .environmentObject(AppState())
-        .environmentObject(LanguageService())
-        .environmentObject(UpdateChecker())
 }

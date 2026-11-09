@@ -1389,6 +1389,33 @@ enum ThumbnailCache {
     }
 }
 
+#if DEBUG
+#Preview("Every state") {
+    ScrollView {
+        VStack(alignment: .leading, spacing: 8) {
+            ForEach(PreviewFixtures.lifecycle, id: \.0) { label, download in
+                Text(label).font(.siphonMetadataMedium)
+                DownloadRowView(download: download, showStop: true)
+            }
+        }
+        .padding()
+    }
+    .frame(width: 720, height: 800)
+    .previewEnvironment()
+}
+
+#Preview("List, empty") {
+    DownloadListView(downloads: [], emptyMessage: "Nothing here", emptyDetail: "Add a link to begin", showStop: true)
+        .previewEnvironment()
+}
+
+#Preview("List, populated, dark") {
+    DownloadListView(downloads: PreviewFixtures.mixedQueue, emptyMessage: "", emptyDetail: "", showStop: true)
+        .previewEnvironment()
+        .preferredColorScheme(.dark)
+}
+#endif
+
 /// `AsyncImage` for thumbnail URLs from site metadata. Loads through
 /// `DownloadExecutor.fetchThumbnailData`, so target, body size and pixel
 /// dimensions are checked before anything is decoded.
