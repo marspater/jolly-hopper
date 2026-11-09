@@ -40,51 +40,28 @@
       buildConfiguration = "Debug"
       selectedDebuggerIdentifier = "Xcode.DebuggerFoundation.Debugger.LLDB"
       selectedLauncherIdentifier = "Xcode.DebuggerFoundation.Launcher.LLDB"
-      shouldUseLaunchSchemeArgsEnv = "YES"
-      codeCoverageEnabled = "YES"
-      onlyGenerateCoverageForSpecifiedTargets = "YES">
-      <CodeCoverageTargets>
-         <BuildableReference
-            BuildableIdentifier = "primary"
-            BlueprintIdentifier = "E0004001"
-            BuildableName = "Siphon.app"
-            BlueprintName = "Siphon"
-            ReferencedContainer = "container:Siphon.xcodeproj">
-         </BuildableReference>
-         <BuildableReference
-            BuildableIdentifier = "primary"
-            BlueprintIdentifier = "E1004001"
-            BuildableName = "SiphonCore.framework"
-            BlueprintName = "SiphonCore"
-            ReferencedContainer = "container:Siphon.xcodeproj">
-         </BuildableReference>
-      </CodeCoverageTargets>
-       <Testables>
-          <TestableReference
-             skipped = "NO"
-             parallelizable = "NO"
-             testExecutionOrdering = "random">
-             <BuildableReference
-                BuildableIdentifier = "primary"
-                BlueprintIdentifier = "E0004010"
-                BuildableName = "SiphonTests.xctest"
-                BlueprintName = "SiphonTests"
-                ReferencedContainer = "container:Siphon.xcodeproj">
-             </BuildableReference>
-          </TestableReference>
-          <TestableReference
-             skipped = "NO"
-             parallelizable = "YES"
-             testExecutionOrdering = "random">
-             <BuildableReference
-                BuildableIdentifier = "primary"
-                BlueprintIdentifier = "E1004010"
-                BuildableName = "SiphonCoreTests.xctest"
-                BlueprintName = "SiphonCoreTests"
-                ReferencedContainer = "container:Siphon.xcodeproj">
-             </BuildableReference>
-          </TestableReference>
-       </Testables>
+      shouldUseLaunchSchemeArgsEnv = "YES">
+      <TestPlans>
+         <TestPlanReference
+            reference = "container:Siphon.xcodeproj/xcshareddata/xctestplans/All.xctestplan"
+            default = "YES">
+         </TestPlanReference>
+         <TestPlanReference
+            reference = "container:Siphon.xcodeproj/xcshareddata/xctestplans/Unit.xctestplan">
+         </TestPlanReference>
+         <TestPlanReference
+            reference = "container:Siphon.xcodeproj/xcshareddata/xctestplans/Integration.xctestplan">
+         </TestPlanReference>
+         <TestPlanReference
+            reference = "container:Siphon.xcodeproj/xcshareddata/xctestplans/Smoke.xctestplan">
+         </TestPlanReference>
+         <TestPlanReference
+            reference = "container:Siphon.xcodeproj/xcshareddata/xctestplans/UI.xctestplan">
+         </TestPlanReference>
+         <TestPlanReference
+            reference = "container:Siphon.xcodeproj/xcshareddata/xctestplans/Conversion.xctestplan">
+         </TestPlanReference>
+      </TestPlans>
    </TestAction>
    <LaunchAction
       buildConfiguration = "Debug"

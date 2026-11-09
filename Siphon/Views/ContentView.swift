@@ -149,6 +149,7 @@ struct ContentView: View {
             Button(languageService.s("queue_recovery_restore")) {
                 downloadManager.recoverInterruptedJobs()
             }
+            .accessibilityIdentifier(AccessibilityID.queueRecoveryRestore)
             // Discard deletes resumable partial data, so Escape must not reach it.
             // Later keeps the interrupted jobs; they are offered again next launch.
             Button(languageService.s("queue_recovery_discard"), role: .destructive) {

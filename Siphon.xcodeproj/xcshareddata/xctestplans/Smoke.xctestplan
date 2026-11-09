@@ -1,0 +1,50 @@
+{
+  "configurations": [
+    {
+      "id": "A0000000-0000-4000-8000-000000000001",
+      "name": "Default",
+      "options": {}
+    }
+  ],
+  "defaultOptions": {
+    "codeCoverageTargets": [
+      {
+        "containerPath": "container:Siphon.xcodeproj",
+        "identifier": "E0004001",
+        "name": "Siphon"
+      },
+      {
+        "containerPath": "container:Siphon.xcodeproj",
+        "identifier": "E1004001",
+        "name": "SiphonCore"
+      }
+    ],
+    "testExecutionOrdering": "random"
+  },
+  "testTargets": [
+    {
+      "parallelizable": false,
+      "selectedTests": [
+        "BrowserUtilsTests",
+        "DownloadQueueTests"
+      ],
+      "target": {
+        "containerPath": "container:Siphon.xcodeproj",
+        "identifier": "E0004010",
+        "name": "SiphonTests"
+      }
+    },
+    {
+      "parallelizable": true,
+      "selectedTests": [
+        "LogSanitizerTests"
+      ],
+      "target": {
+        "containerPath": "container:Siphon.xcodeproj",
+        "identifier": "E1004010",
+        "name": "SiphonCoreTests"
+      }
+    }
+  ],
+  "version": 1
+}

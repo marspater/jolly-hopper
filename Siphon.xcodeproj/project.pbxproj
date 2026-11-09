@@ -108,6 +108,7 @@
 		E1001031 /* PreviewFixturesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1000031 /* PreviewFixturesTests.swift */; };
 		E1001040 /* AccessibilityID.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1000040 /* AccessibilityID.swift */; };
 		E1001041 /* UITestLaunchMode.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1000041 /* UITestLaunchMode.swift */; };
+		E1001051 /* SmokeUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1000051 /* SmokeUITests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -216,6 +217,8 @@
 		E1000031 /* PreviewFixturesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreviewFixturesTests.swift; sourceTree = "<group>"; };
 		E1000040 /* AccessibilityID.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccessibilityID.swift; sourceTree = "<group>"; };
 		E1000041 /* UITestLaunchMode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UITestLaunchMode.swift; sourceTree = "<group>"; };
+		E1000050 /* SiphonUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SiphonUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		E1000051 /* SmokeUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SmokeUITests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -260,6 +263,7 @@
 				E0003020 /* SiphonTests */,
 				E1003001 /* SiphonCore */,
 				E1003002 /* SiphonCoreTests */,
+				E1003050 /* SiphonUITests */,
 				E0003003 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -320,6 +324,7 @@
 				E0000043 /* SiphonTests.xctest */,
 				E1000001 /* SiphonCore.framework */,
 				E1000002 /* SiphonCoreTests.xctest */,
+				E1000050 /* SiphonUITests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -508,6 +513,14 @@
 			path = Previews;
 			sourceTree = "<group>";
 		};
+		E1003050 /* SiphonUITests */ = {
+			isa = PBXGroup;
+			children = (
+				E1000051 /* SmokeUITests.swift */,
+			);
+			path = SiphonUITests;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -580,6 +593,22 @@
 			productReference = E1000002 /* SiphonCoreTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
+		E1004030 /* SiphonUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = E1005003 /* Build configuration list for PBXNativeTarget "SiphonUITests" */;
+			buildPhases = (
+				E1004031 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				E1008020 /* PBXTargetDependency */,
+			);
+			name = SiphonUITests;
+			productName = SiphonUITests;
+			productReference = E1000050 /* SiphonUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXShellScriptBuildPhase section */
@@ -647,6 +676,10 @@
 					E1004010 = {
 						CreatedOnToolsVersion = 26.0;
 					};
+					E1004030 = {
+						CreatedOnToolsVersion = 26.0;
+						TestTargetID = E0004001;
+					};
 				};
 			};
 			buildConfigurationList = E0005001 /* Build configuration list for PBXProject "Siphon" */;
@@ -666,6 +699,7 @@
 				E0004010 /* SiphonTests */,
 				E1004001 /* SiphonCore */,
 				E1004010 /* SiphonCoreTests */,
+				E1004030 /* SiphonUITests */,
 			);
 		};
 /* End PBXProject section */
@@ -808,6 +842,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		E1004031 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E1001051 /* SmokeUITests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -825,6 +867,11 @@
 			isa = PBXTargetDependency;
 			target = E1004001 /* SiphonCore */;
 			targetProxy = E1008013 /* PBXContainerItemProxy */;
+		};
+		E1008020 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = E0004001 /* Siphon */;
+			targetProxy = E1008021 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -849,6 +896,13 @@
 			proxyType = 1;
 			remoteGlobalIDString = E1004001;
 			remoteInfo = SiphonCore;
+		};
+		E1008021 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = E0006001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = E0004001;
+			remoteInfo = Siphon;
 		};
 /* End PBXContainerItemProxy section */
 
@@ -1166,6 +1220,40 @@
 			};
 			name = Release;
 		};
+		E1007005 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 57;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				MARKETING_VERSION = 5.5.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.marspater.siphon.SiphonUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 6.0;
+				TEST_TARGET_NAME = Siphon;
+			};
+			name = Debug;
+		};
+		E1007006 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 57;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				MARKETING_VERSION = 5.5.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.marspater.siphon.SiphonUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 6.0;
+				TEST_TARGET_NAME = Siphon;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -1210,6 +1298,15 @@
 			buildConfigurations = (
 				E1007003 /* Debug */,
 				E1007004 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		E1005003 /* Build configuration list for PBXNativeTarget "SiphonUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E1007005 /* Debug */,
+				E1007006 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
