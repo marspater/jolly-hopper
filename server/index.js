@@ -289,7 +289,10 @@ async function handleReleaseApi(req, res, pathname, getLatestRelease) {
   return true;
 }
 
-const INVALID_HOST_PATTERN = /[/@?#\s]/;
+// Sentinel Security Hardening: Reject delimiters and backslashes in Host headers.
+// The WHATWG URL parser treats backslashes as path delimiters in special schemes (http://),
+// so a Host header containing a backslash (e.g. evil.com\localhost) causes URL authority confusion.
+const INVALID_HOST_PATTERN = /[/@?#\s\\]/;
 
 function parseRequestUrl(req) {
   // Reject non-string, non-path, protocol-relative (//), or backslash-prefixed (/\) targets.
