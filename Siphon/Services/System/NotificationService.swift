@@ -128,9 +128,17 @@ final class NotificationService: NSObject, @unchecked Sendable, UNUserNotificati
     static func runCapturingStandardError(_ process: Process, pipe: Pipe) throws -> Data {
         try process.run()
         do {
-            let data = try pipe.fileHandleForReading.readToEnd() ?? Data()
+            // Drain the entire pipe to avoid blocking the child, but retain only a
+            // bounded diagnostic tail so a failing helper cannot exhaust memory.
+            let captureLimit = 16 * 1024
+            var captured = Data()
+            while let chunk = try pipe.fileHandleForReading.read(upToCount: 4 * 1024), !chunk.isEmpty {
+                if captured.count < captureLimit {
+                    captured.append(chunk.prefix(captureLimit - captured.count))
+                }
+            }
             process.waitUntilExit()
-            return data
+            return captured
         } catch {
             // Close the reader so a writer cannot remain blocked on a full pipe.
             try? pipe.fileHandleForReading.close()
