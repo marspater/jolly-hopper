@@ -60,6 +60,9 @@ enum UITestLaunchMode {
             Bundle.main.bundleIdentifier == testBundleIdentifier,
             "Hosted tests require the TestDebug/TestRelease Xcode configuration; refusing the production app identity."
         )
+        // Remove leftovers from a previously interrupted TEST run before any
+        // app services read defaults. This domain is distinct from production.
+        UserDefaults.standard.removePersistentDomain(forName: testBundleIdentifier)
     }
 
     /// A suite file under the root; nil outside this mode.
