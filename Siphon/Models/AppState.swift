@@ -419,7 +419,7 @@ public final class AppState: ObservableObject {
     }
 
     public static func normalizedBrowserCookieSource(_ raw: String?) -> String? {
-        guard let raw else { return nil }
+        guard let raw, !UITestLaunchMode.isActive else { return nil }
         let browser = raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         // A Helium handoff reads Helium only; "chromium-based" searches every Chromium browser.
         if browser == "helium" { return browser }

@@ -106,6 +106,8 @@
 		E1001020 /* TestSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1000020 /* TestSupport.swift */; };
 		E1001030 /* PreviewFixtures.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1000030 /* PreviewFixtures.swift */; };
 		E1001031 /* PreviewFixturesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1000031 /* PreviewFixturesTests.swift */; };
+		E1001040 /* AccessibilityID.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1000040 /* AccessibilityID.swift */; };
+		E1001041 /* UITestLaunchMode.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1000041 /* UITestLaunchMode.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -212,6 +214,8 @@
 		E1000020 /* TestSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TestSupport.swift; sourceTree = "<group>"; };
 		E1000030 /* PreviewFixtures.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreviewFixtures.swift; sourceTree = "<group>"; };
 		E1000031 /* PreviewFixturesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreviewFixturesTests.swift; sourceTree = "<group>"; };
+		E1000040 /* AccessibilityID.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccessibilityID.swift; sourceTree = "<group>"; };
+		E1000041 /* UITestLaunchMode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UITestLaunchMode.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -384,6 +388,7 @@
 		E000300E /* System */ = {
 			isa = PBXGroup;
 			children = (
+				E1000041 /* UITestLaunchMode.swift */,
 				E0000090 /* BrowserUtils.swift */,
 				F0010004 /* NetworkEnvironmentService.swift */,
 				E0000026 /* LanguageService.swift */,
@@ -465,6 +470,7 @@
 		E0003010 /* Constants */ = {
 			isa = PBXGroup;
 			children = (
+				E1000040 /* AccessibilityID.swift */,
 			);
 			path = Constants;
 			sourceTree = "<group>";
@@ -690,6 +696,8 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				E1001041 /* UITestLaunchMode.swift in Sources */,
+				E1001040 /* AccessibilityID.swift in Sources */,
 				E1001030 /* PreviewFixtures.swift in Sources */,
 				E1001014 /* DownloadOptionsLocalization.swift in Sources */,
 				E0001092 /* ImageUtilities.swift in Sources */,

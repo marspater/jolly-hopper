@@ -161,6 +161,7 @@ struct HeroDropURLView: View {
                         .layoutPriority(1)
                         .padding(.leading, SiphonTheme.spacing2)
                         .accessibilityLabel(languageService.s("video_url"))
+                        .accessibilityIdentifier(AccessibilityID.heroURLField)
                         .onSubmit {
                             submitURL()
                         }
@@ -216,6 +217,7 @@ struct HeroDropURLView: View {
                     .fixedSize(horizontal: true, vertical: false)
                     .disabled(inputURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     .accessibilityLabel(languageService.s("download_btn"))
+                    .accessibilityIdentifier(AccessibilityID.heroSubmit)
                 }
                 .animation(SiphonAnimation.snappySpring, value: inputURL.isEmpty)
                 .padding(.horizontal, SiphonTheme.spacing12)

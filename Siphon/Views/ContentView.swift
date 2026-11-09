@@ -72,6 +72,12 @@ struct ContentView: View {
                 .onAppear {
                     // When Siphon only hosts the unit tests, do not load or persist
                     // the user's history, install binaries, or query GitHub.
+                    if UITestLaunchMode.isActive, !appState.didStartLaunchTasks {
+                        // State is seeded and redirected: no binaries, update checks or network.
+                        appState.didStartLaunchTasks = true
+                        downloadManager.initialize(languageService: languageService)
+                        return
+                    }
                     guard !NotificationService.isRunningTests, !appState.didStartLaunchTasks else { return }
                     appState.didStartLaunchTasks = true
                     downloadManager.initialize(languageService: languageService)
@@ -806,6 +812,7 @@ struct StatusSegmentButton: View {
             Button("\(title): \(count)") {
                 appState.selectedNavItem = item
             }
+            .accessibilityIdentifier(AccessibilityID.statusSegment(item))
             .accessibilityValue(isActive ? languageService.s("status_active") : "")
             .accessibilityHint(String(format: languageService.s("show_downloads_hint"), title.lowercased()))
         }

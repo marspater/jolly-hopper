@@ -125,6 +125,7 @@ struct DownloadRowView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     // Line 1: Title
                     Text(download.status == .fetching ? languageService.s("fetching") : download.displayTitle)
+                        .accessibilityIdentifier(AccessibilityID.queueRowTitle)
                         .font(.siphonPrimarySemibold)
                         .lineLimit(2)
                         .truncationMode(.tail)
@@ -796,6 +797,7 @@ struct FileThumbnailView: View {
                 .foregroundColor(SiphonTheme.statusForeground(for: .queued, colorScheme: colorScheme))
                 .help(languageService.s("pause"))
                 .accessibilityLabel(languageService.s("pause"))
+                .accessibilityIdentifier(AccessibilityID.rowPause)
 
                 moreActionsMenu {
                     Button {
@@ -838,6 +840,7 @@ struct FileThumbnailView: View {
                 .foregroundColor(SiphonTheme.statusForeground(for: .queued, colorScheme: colorScheme))
                 .help(languageService.s("pause"))
                 .accessibilityLabel(languageService.s("pause"))
+                .accessibilityIdentifier(AccessibilityID.rowPause)
 
                 let canMoveUp = downloadManager.canMoveDownloadUp(download)
                 let canMoveDown = downloadManager.canMoveDownloadDown(download)
@@ -894,6 +897,7 @@ struct FileThumbnailView: View {
                 .foregroundColor(SiphonTheme.accentText)
                 .help(languageService.s("resume"))
                 .accessibilityLabel(languageService.s("resume"))
+                .accessibilityIdentifier(AccessibilityID.rowResume)
 
                 moreActionsMenu {
                     Button {
@@ -933,6 +937,7 @@ struct FileThumbnailView: View {
                 .foregroundColor(SiphonTheme.statusForeground(for: .queued, colorScheme: colorScheme))
                 .help(languageService.s("retry"))
                 .accessibilityLabel(languageService.s("retry"))
+                .accessibilityIdentifier(AccessibilityID.rowRetry)
 
                 moreActionsMenu {
                     Button {
@@ -989,6 +994,7 @@ struct FileThumbnailView: View {
                 .buttonStyle(.siphonGhost)
                 .help(languageService.s("overwrite"))
                 .accessibilityLabel(languageService.s("overwrite"))
+                .accessibilityIdentifier(AccessibilityID.rowOverwrite)
 
                 Button {
                     downloadManager.resumeWithNewName(download)

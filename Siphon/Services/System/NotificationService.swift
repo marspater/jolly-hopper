@@ -13,6 +13,9 @@ final class NotificationService: NSObject, @unchecked Sendable, UNUserNotificati
     }
 
     static var isRunningTests: Bool {
+        if UITestLaunchMode.isActive {
+            return true
+        }
         if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil {
             return true
         }
