@@ -80,18 +80,18 @@ xcodebuild test \
   -scheme Siphon \
   -testPlan All \
   -destination 'platform=macOS' \
-  -configuration Debug \
+  -configuration TestDebug \
   MACOSX_DEPLOYMENT_TARGET=15.0 \
   CODE_SIGN_IDENTITY="" \
   CODE_SIGNING_REQUIRED=NO \
   CODE_SIGNING_ALLOWED=NO
 ```
 
-Plans in `Siphon.xcodeproj/xcshareddata/xctestplans/`: `All` (default), `Unit`, `Integration`, `Smoke`, `UI` (opt-in, pops windows), `Conversion`, `Performance` (opt-in). CI (`.github/workflows/swift.yml`) also runs the same suite with `-configuration Release ENABLE_TESTABILITY=YES`; run it for changes that may behave differently under optimization. For extension, server, or script changes, mirror the relevant checks in `.github/workflows/scripts.yml`: `node --check` on the affected JS, `npm test --prefix server`, `node --test scripts/test_chrome_handoff.js`, `node --test scripts/test_build_and_run.js`, `node scripts/test_capture_original_mp4.js`, and `bash -n` on each shell script. For version changes, run `bash scripts/verify_bundle.sh`.
+Plans in `Siphon.xcodeproj/xcshareddata/xctestplans/`: `All` (default), `Unit`, `Integration`, `Smoke`, `UI` (opt-in, pops windows), `Conversion`, `Performance` (opt-in). CI (`.github/workflows/swift.yml`) also runs the same suite with `-configuration TestRelease ENABLE_TESTABILITY=YES`; run it for changes that may behave differently under optimization. For extension, server, or script changes, mirror the relevant checks in `.github/workflows/scripts.yml`: `node --check` on the affected JS, `npm test --prefix server`, `node --test scripts/test_chrome_handoff.js`, `node --test scripts/test_build_and_run.js`, `node scripts/test_capture_original_mp4.js`, and `bash -n` on each shell script. For version changes, run `bash scripts/verify_bundle.sh`.
 
 Xcode/macOS SDKs are required for native validation. On Linux/headless runners without them, run available scripting checks and report native builds/tests as not run. `swiftc -parse` proves syntax only. Documentation-only changes need link and diff checks, not an app build.
 
-New unit tests use Swift Testing (`import Testing`); convert an existing XCTest file only when already substantially editing it. Reuse `NotificationService.isRunningTests` and `SiphonTests/TestEnvironmentIsolation.swift` for test-host behavior. Hosted XCTest temporarily changes real app defaults and recovery state before restoring them: run native suites sequentially, preserve the interrupted-run state backup, and use temporary paths/injected stores for new persistence tests. See the local rules for coordination with a running app. Report focused tests, full suites, skipped tests, live downloads, and visual/accessibility checks separately.
+New unit tests use Swift Testing (`import Testing`); convert an existing XCTest file only when already substantially editing it. Reuse `NotificationService.isRunningTests` and `SiphonTests/TestEnvironmentIsolation.swift` for test-host behavior. Hosted XCTest uses the distinct `com.marspater.siphon.testing` bundle identity in `TestDebug`/`TestRelease`, so `UserDefaults.standard` does not share the installed app's domain. The test observer fails closed if a hosted suite runs under the production identity. Keep temporary paths and injected stores for new persistence tests. Do not delete an old interrupted-run backup (`$TMPDIR/SiphonTestsStateBackup.plist`) before determining whether it holds recoverable user data. See the local rules for coordination with a running app. Report focused tests, full suites, skipped tests, live downloads, and visual/accessibility checks separately.
 
 Run relevant build/tests for the change and report validation honestly. Add regression coverage when practical, especially for lifecycle, concurrency, persistence, cancellation, and security fixes. Never weaken tests to make CI green.
 
