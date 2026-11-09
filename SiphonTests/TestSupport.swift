@@ -5,6 +5,9 @@ import Testing
 
 /// Defaults and recovery file that hosted tests use instead of the user's real ones.
 enum TestState {
+    /// Fixed on purpose: hosted suites run serially (the testing app's own defaults domain is
+    /// reset at launch, so overlapping runs are unsupported), and a per-process name would
+    /// leave one preferences file behind per run.
     static let suiteName = "com.marspater.siphon.SiphonTests.state"
     nonisolated(unsafe) static let defaults: UserDefaults = {
         let defaults = UserDefaults(suiteName: suiteName)!
