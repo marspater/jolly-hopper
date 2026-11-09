@@ -88,6 +88,17 @@ final class DownloadModelTests: XCTestCase {
         XCTAssertEqual(HistoricDownload.persistableThumbnailURL(plain), plain)
     }
 
+    func testEncodedHistoryOmitsSignedThumbnailButKeepsPlainOne() throws {
+        func encoded(thumbnail: String) throws -> String {
+            let download = Download(url: "https://example.com/v", options: .default, title: "V")
+            download.thumbnailURL = URL(string: thumbnail)
+            let data = try JSONEncoder().encode(HistoricDownload(download: download))
+            return String(decoding: data, as: UTF8.self)
+        }
+        XCTAssertFalse(try encoded(thumbnail: "https://cdn.example.com/t.jpg?token=secret").contains("secret"))
+        XCTAssertTrue(try encoded(thumbnail: "https://cdn.example.com/t.jpg?w=320").contains("t.jpg?w=320"))
+    }
+
     func testPrimaryFileExistsOnDiskReflectsTheFileSystem() throws {
         let download = Download(url: "https://example.com/v", options: .default, title: "V")
         XCTAssertNil(download.primaryFileExistsOnDisk)
