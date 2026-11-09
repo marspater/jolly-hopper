@@ -4,7 +4,7 @@ import Foundation
 
 /// Defaults and recovery file that hosted tests use instead of the user's real ones.
 enum TestState {
-    static let suiteName = "com.marspater.siphon.SiphonTests.state"
+    static let suiteName = "com.marspater.siphon.SiphonTests.state.\(UUID().uuidString)"
     nonisolated(unsafe) static let defaults: UserDefaults = {
         let defaults = UserDefaults(suiteName: suiteName)!
         defaults.removePersistentDomain(forName: suiteName)
