@@ -150,10 +150,6 @@ class DownloadManager: ObservableObject {
             .map { $0.element }
     }
 
-    var actionRequiredDownloads: [Download] {
-        downloads.filter { $0.status == .fileExists }
-    }
-
     // Bolt Performance Optimization: Single-pass status counting to avoid 4 separate array reductions over downloads
     private var statusCounts: (downloading: Int, queued: Int, completed: Int, failed: Int) {
         var downloading = 0

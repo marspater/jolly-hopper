@@ -377,6 +377,3 @@ enum ChromiumCookieReader {
         return file
     }
 }
-
-/// Backward compatibility alias for HeliumCookieReader
-typealias HeliumCookieReader = ChromiumCookieReader

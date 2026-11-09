@@ -974,8 +974,7 @@ final class QueueAndErrorUXTests: XCTestCase {
 
         manager.downloads = [d1, d2, d3]
 
-        XCTAssertEqual(manager.actionRequiredDownloads.count, 1)
-        XCTAssertEqual(manager.actionRequiredDownloads.first?.id, d1.id)
+        XCTAssertEqual(manager.downloads.filter { $0.status == .fileExists }.map(\.id), [d1.id])
         XCTAssertEqual(manager.failedDownloads.count, 2)
         XCTAssertEqual(manager.failedCount, 2)
     }
@@ -1583,7 +1582,6 @@ final class QueueAndErrorUXTests: XCTestCase {
     }
 
     func testSemanticThemeTokens() {
-        XCTAssertNotNil(SiphonTheme.surface)
         XCTAssertNotNil(SiphonTheme.surfaceElevated)
         XCTAssertNotNil(SiphonTheme.separator)
         XCTAssertNotNil(SiphonTheme.selection)

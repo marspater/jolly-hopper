@@ -119,8 +119,7 @@ truth only when the value is genuinely reused or has semantic meaning.
 - Use the 4/8pt rhythm represented by `SiphonTheme.spacing*`.
 - Use `radiusSmall` for tags and code, `radiusControl` for controls and inputs,
   `radiusCard` for content cards and list rows, `radiusStatusGroup` for the
-  status bar, `radiusSheet` for modal/sheet containers and `radiusHero` for the
-  URL hero card.
+  status bar and `radiusHero` for the URL hero card.
 - Use the `SiphonTheme.Opacity` steps for primary-color fills, tints and
   borders instead of literal opacities.
 - Prefer adaptive proposed-size layout and `maxWidth: .infinity` over screen

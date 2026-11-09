@@ -10,10 +10,8 @@ import Combine
 
 struct DependencyChecksums {
     /// Siphon downloads and pins the Siphon build of yt-dlp (marspater/yt-dlp,
-    /// VARIANT "siphon"). Turn off to use a user-provided yt-dlp instead (see
-    /// `findYtdlp`), which Siphon does not checksum-verify.
-    static let managedYtdlpEnabled = true
-
+    /// VARIANT "siphon").
+    ///
     /// The fork repository is private, so its `yt-dlp_macos` is mirrored to a
     /// public `ytdlp-<version>` prerelease of this repository. To bump, mirror
     /// the new fork asset there and change version, URL and SHA-256 together.
@@ -720,43 +718,6 @@ class YtdlpService: ObservableObject {
         return task
     }
 
-    /// Locations checked for a user-installed yt-dlp when no explicit path is
-    /// set: Homebrew, pipx/`pip install --user`, and the system prefix.
-    nonisolated static let ytdlpSearchPaths: [String] = [
-        URL(fileURLWithPath: NSOpenStepRootDirectory()).appending(components: "opt", "homebrew", "bin", "yt-dlp").path,
-        URL(fileURLWithPath: NSOpenStepRootDirectory()).appending(components: "usr", "local", "bin", "yt-dlp").path,
-        URL(fileURLWithPath: NSHomeDirectory()).appending(components: ".local", "bin", "yt-dlp").path,
-        URL(fileURLWithPath: NSOpenStepRootDirectory()).appending(components: "usr", "bin", "yt-dlp").path,
-    ]
-
-    /// The user's yt-dlp: the path chosen in Settings, else the first
-    /// executable in `ytdlpSearchPaths`. Not checksum-verified by design.
-    nonisolated static func userYtdlpPath(
-        customPath: String?,
-        searchPaths: [String] = ytdlpSearchPaths,
-        fileManager: FileManager = .default
-    ) -> URL? {
-        let custom = (customPath ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        let candidates = custom.isEmpty ? searchPaths : [(custom as NSString).expandingTildeInPath]
-        return candidates.first { isRegularExecutable($0, fileManager: fileManager) }.map { URL(fileURLWithPath: $0) }
-    }
-
-    nonisolated static func isRegularExecutable(_ path: String, fileManager: FileManager = .default) -> Bool {
-        var isDirectory: ObjCBool = false
-        return fileManager.fileExists(atPath: path, isDirectory: &isDirectory)
-            && !isDirectory.boolValue && fileManager.isExecutableFile(atPath: path)
-    }
-
-    // Bolt Performance Optimization: Pre-compile static yt-dlp version regex to eliminate dynamic pattern compilation.
-    nonisolated private static let ytdlpVersionRegex = try? NSRegularExpression(pattern: #"^\d{4}\.\d{2}\.\d{2}(\.\d+)?$"#)
-
-    /// yt-dlp prints a date version such as `2026.09.30` or `2026.09.30.232921`.
-    nonisolated static func isYtdlpVersion(_ output: String) -> Bool {
-        let trimmed = output.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let regex = ytdlpVersionRegex else { return false }
-        return regex.firstMatch(in: trimmed, options: [], range: NSRange(location: 0, length: trimmed.utf16.count)) != nil
-    }
-
     /// The yt-dlp every code path must run: only the validated `ytdlpPath`. A
     /// bundled or App Support copy that failed (or has not had) its checksum or
     /// version check never runs.
@@ -764,40 +725,6 @@ class YtdlpService: ObservableObject {
 
     func findYtdlp() async {
         if ytdlpPath != nil && !(processRunner is DefaultYtdlpProcessRunner) {
-            return
-        }
-        if !DependencyChecksums.managedYtdlpEnabled {
-            // Validate before touching the current path, then switch in one step:
-            // clearing it first left a window where a starting job found no yt-dlp.
-            let clear = {
-                self.ytdlpPath = nil
-                self.isAvailable = false
-                self.version = nil
-            }
-            guard let candidate = Self.userYtdlpPath(customPath: userDefaults.string(forKey: UserDefaultsKeys.customYtdlpPath)) else {
-                clear()
-                LoggerService.shared.log("No yt-dlp found. Set its path in Settings > Advanced.", level: .warning)
-                return
-            }
-            // Commit only a binary that identifies itself as yt-dlp.
-            let candidateVersion: String
-            do {
-                let output = try await processRunner.runCommand([candidate.path, "--ignore-config", "--version"])
-                guard Self.isYtdlpVersion(output) else {
-                    clear()
-                    LoggerService.shared.log("\(candidate.path) is not yt-dlp (unexpected --version output).", level: .warning)
-                    return
-                }
-                candidateVersion = output.trimmingCharacters(in: .whitespacesAndNewlines)
-            } catch {
-                clear()
-                LoggerService.shared.log("\(candidate.path) failed its yt-dlp version check: \(error.localizedDescription)", level: .warning)
-                return
-            }
-            version = candidateVersion
-            ytdlpPath = candidate
-            isAvailable = true
-            LoggerService.shared.log("Using user-provided yt-dlp at \(candidate.path)", level: .info)
             return
         }
         let appSupport = Self.getAppSupportDirectory()

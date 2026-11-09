@@ -285,24 +285,4 @@ public final class SecureCookieFile: @unchecked Sendable {
         try file.validate()
         return file
     }
-
-    /// Scoped block execution guaranteeing file cleanup on completion, error, or cancellation.
-    public static func scoped<T: Sendable>(
-        url: String,
-        rawCookies: String? = nil,
-        additionalCookies: [(name: String, value: String)] = [],
-        additionalNetscapeLines: [String] = [],
-        _ body: (SecureCookieFile) async throws -> T
-    ) async throws -> T {
-        let cookieFile = try create(
-            url: url,
-            rawCookies: rawCookies,
-            additionalCookies: additionalCookies,
-            additionalNetscapeLines: additionalNetscapeLines
-        )
-        defer {
-            cookieFile.cleanup()
-        }
-        return try await body(cookieFile)
-    }
 }

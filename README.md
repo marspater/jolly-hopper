@@ -89,7 +89,7 @@ Extensions hand Siphon only the page URL and which browser to read cookies from,
 Requires Xcode 26 or later (the macOS 26 SDK for Liquid Glass and the Icon Composer app icon); the app still runs on macOS 15. Open `Siphon.xcodeproj` and run the **Siphon** scheme, or run the test suite from the command line:
 
 ```bash
-xcodebuild test -project Siphon.xcodeproj -scheme Siphon -destination 'platform=macOS' \
+xcodebuild test -project Siphon.xcodeproj -scheme Siphon -testPlan All -destination 'platform=macOS' \
   -configuration TestDebug MACOSX_DEPLOYMENT_TARGET=15.0 \
   CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO
 ```
