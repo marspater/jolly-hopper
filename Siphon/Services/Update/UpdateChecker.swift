@@ -122,6 +122,7 @@ public final class UpdateChecker: ObservableObject {
     }
 
     public func checkForUpdates(manual: Bool = false) async {
+        guard !UITestLaunchMode.isActive else { return }
         guard !isChecking, updateOperationID == nil, !needsRestart else { return }
         isChecking = true
         checkError = nil

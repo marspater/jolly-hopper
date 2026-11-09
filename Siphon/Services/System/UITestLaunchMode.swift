@@ -42,7 +42,7 @@ enum UITestLaunchMode {
         guard let root, let data = try? Data(contentsOf: root.appendingPathComponent("queue_seed.json")) else { return }
         do {
             for job in try JSONDecoder().decode([SeedJob].self, from: data) {
-                let download = Download(url: job.url, options: .default, title: job.title, titleIsDecoded: true)
+                let download = Download(url: job.url, options: DownloadOptions.defaultFromPreferences(userDefaults: storage), title: job.title, titleIsDecoded: true)
                 download.status = job.status
                 manager.downloads.append(download)
             }
@@ -54,12 +54,16 @@ enum UITestLaunchMode {
     @MainActor
     static func makeDownloadManager() -> DownloadManager {
         guard let root, let defaults else { return DownloadManager() }
-        return DownloadManager(
+        // Without a saved folder, options fall back to the real ~/Downloads.
+        defaults.register(defaults: [UserDefaultsKeys.defaultSaveFolder: root.path])
+        let manager = DownloadManager(
             historyStore: DownloadHistoryStore(userDefaults: defaults),
             queue: DownloadQueue(userDefaults: defaults),
             userDefaults: defaults,
             recoveryFileURL: root.appendingPathComponent("queue_recovery.json")
         )
+        manager.ytdlpService.updateYtdlpHandler = { DependencyChecksums.ytdlpVersion }
+        return manager
     }
 
     @MainActor

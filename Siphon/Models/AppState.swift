@@ -404,6 +404,7 @@ public final class AppState: ObservableObject {
         activeExecutionCount: Int,
         languageService: LanguageService? = nil
     ) async {
+        guard !UITestLaunchMode.isActive else { return }
         let lang = languageService ?? .shared
         guard activeExecutionCount == 0 else {
             ytdlpUpdateMessage = YtdlpUpdateMessage(

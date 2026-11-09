@@ -477,6 +477,7 @@ class YtdlpService: ObservableObject {
     /// in use, and clearing under a live sign-in would break that job.
     @discardableResult
     func clearAllProtectedSitesWebData() async -> Bool {
+        guard !UITestLaunchMode.isActive else { return true }
         guard !webKitSessionBusy else {
             LoggerService.shared.log("[ProtectedSite] Not clearing site data while a site window is in use.", level: .warning)
             return false
@@ -2317,7 +2318,7 @@ public struct DownloadResult: Sendable {
             args.append("--no-overwrites")
         }
 
-        let speedLimit = UserDefaults.standard.integer(forKey: UserDefaultsKeys.downloadSpeedLimit)
+        let speedLimit = UITestLaunchMode.storage.integer(forKey: UserDefaultsKeys.downloadSpeedLimit)
         if speedLimit > 0 {
             args.append(contentsOf: ["--limit-rate", "\(speedLimit)K"])
         }
@@ -3449,6 +3450,7 @@ public struct DownloadResult: Sendable {
     }
 
     nonisolated static func validatedBrowserCookieSource(_ raw: String?) -> String? {
+        guard !UITestLaunchMode.isActive else { return nil }
         guard let raw else { return nil }
         let browser = raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         if browser == "none" || browser.isEmpty { return nil }
@@ -3458,6 +3460,7 @@ public struct DownloadResult: Sendable {
     }
 
     private func configuredBrowserCookieSource() -> String? {
+        guard !UITestLaunchMode.isActive else { return nil }
         let raw = UserDefaults.standard.string(forKey: UserDefaultsKeys.browserForCookies) ?? "safari"
         guard let browser = Self.validatedBrowserCookieSource(raw) else {
             if raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() != "none" {

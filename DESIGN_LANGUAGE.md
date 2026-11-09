@@ -262,4 +262,4 @@ Before merging a UI change, verify:
 
 ## Previews
 
-Build every `#Preview` from `Siphon/Previews/PreviewFixtures.swift`, inside `#if DEBUG`. Use fresh `LanguageService()` instances, never `.shared`, a live `URLSession`, or the real defaults domain. Pair light and dark variants for primary screens.
+Build every `#Preview` from `Siphon/Previews/PreviewFixtures.swift`, inside `#if DEBUG`. Use fresh `LanguageService()` instances, never `.shared`, a live `URLSession`, or the real defaults domain. Pair light and dark variants for primary screens. Give animated views a reduced-motion variant by setting both `reduceMotion: true` on `\.siphonRenderingCapabilities` and `\._accessibilityReduceMotion` to `true`, as `HeroDropURLView` does. Motion modifiers read the second value, so setting only the first still animates.

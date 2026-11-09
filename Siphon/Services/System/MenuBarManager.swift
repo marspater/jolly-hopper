@@ -13,7 +13,7 @@ class MenuBarManager: NSObject {
     private var openMainWindow: (() -> Void)?
 
     func setup(languageService: LanguageService, downloadManager: DownloadManager, openMainWindow: @escaping () -> Void) {
-        if statusItem != nil { return }
+        if statusItem != nil || UITestLaunchMode.isActive { return }
 
         self.languageService = languageService
         self.downloadManager = downloadManager

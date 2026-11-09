@@ -11,6 +11,10 @@ struct MainWindowConfigurator: NSViewRepresentable {
         DispatchQueue.main.async {
             guard let window = view.window else { return }
             window.identifier = NSUserInterfaceItemIdentifier("SiphonMainWindow")
+            if UITestLaunchMode.isActive {
+                window.setFrameAutosaveName("")
+                window.isRestorable = false
+            }
             window.titleVisibility = .hidden
             window.isOpaque = false
             window.backgroundColor = .clear

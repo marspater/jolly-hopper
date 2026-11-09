@@ -22,6 +22,7 @@ struct PreviewFixturesTests {
         _ = PreviewFixtures.history
         _ = PreviewFixtures.mixedQueue
         #expect(PreviewFixtures.playlistInfo.playlist != nil)
+        #expect(!PreviewFixtures.features.isEmpty)
         _ = PreviewFixtures.updateChecker()
         _ = PreviewFixtures.logger()
         _ = PreviewFixtures.language()

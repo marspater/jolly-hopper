@@ -81,9 +81,9 @@ struct SiphonApp: App {
 
     init() {
         GeistFontRegistrar.registerFonts()
-        CookieManager.purgeOrphanedTempCookieFiles()
-        // Before any recovered job can restart against the same partial file.
         if !NotificationService.isRunningTests {
+            CookieManager.purgeOrphanedTempCookieFiles()
+            // Before any recovered job can restart against the same partial file.
             let support = YtdlpService.getAppSupportDirectory()
             DownloadProcessController.reapOrphanedProcesses(
                 executablePaths: ["yt-dlp", "ffmpeg", "ffprobe"].map { support.appendingPathComponent($0) }
