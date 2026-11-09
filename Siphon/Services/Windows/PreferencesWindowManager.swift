@@ -36,7 +36,7 @@ final class PreferencesWindowManager: NSObject, NSWindowDelegate {
             .environmentObject(downloadManager)
             .environmentObject(appState)
 
-        let hostingController = NSHostingController(rootView: prefsView)
+        let hostingController = NSHostingController(rootView: prefsView.defaultAppStorage(UITestLaunchMode.storage))
 
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 520, height: 686),

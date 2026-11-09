@@ -31,7 +31,7 @@ final class AddDownloadWindowManager: NSObject, NSWindowDelegate {
             .environmentObject(languageService)
             .environmentObject(updateChecker)
 
-        let hostingController = NSHostingController(rootView: addDownloadView)
+        let hostingController = NSHostingController(rootView: addDownloadView.defaultAppStorage(UITestLaunchMode.storage))
 
         let window = AddDownloadWindow(
             // Starts at the URL card's height; updateLayout adds room

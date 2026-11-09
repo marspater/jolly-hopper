@@ -76,6 +76,7 @@ struct ContentView: View {
                         // State is seeded and redirected: no binaries, update checks or network.
                         appState.didStartLaunchTasks = true
                         downloadManager.initialize(languageService: languageService)
+                        UITestLaunchMode.seedQueue(in: downloadManager)
                         return
                     }
                     guard !NotificationService.isRunningTests, !appState.didStartLaunchTasks else { return }

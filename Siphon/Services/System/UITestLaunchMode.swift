@@ -28,6 +28,29 @@ enum UITestLaunchMode {
         UserDefaults(suiteName: $0.appendingPathComponent("defaults").path)
     }
 
+    /// The store for preferences: the suite in this mode, otherwise `.standard`.
+    static var storage: UserDefaults { defaults ?? .standard }
+
+    /// Adds the jobs in `<root>/queue_seed.json`, an array of `{"url", "title", "status"}`.
+    @MainActor
+    static func seedQueue(in manager: DownloadManager) {
+        struct SeedJob: Decodable {
+            let url: String
+            let title: String
+            let status: DownloadStatus
+        }
+        guard let root, let data = try? Data(contentsOf: root.appendingPathComponent("queue_seed.json")) else { return }
+        do {
+            for job in try JSONDecoder().decode([SeedJob].self, from: data) {
+                let download = Download(url: job.url, options: .default, title: job.title, titleIsDecoded: true)
+                download.status = job.status
+                manager.downloads.append(download)
+            }
+        } catch {
+            LoggerService.shared.log("Invalid UI test queue seed: \(error.localizedDescription)", level: .error)
+        }
+    }
+
     @MainActor
     static func makeDownloadManager() -> DownloadManager {
         guard let root, let defaults else { return DownloadManager() }
@@ -44,7 +67,7 @@ enum UITestLaunchMode {
         guard let defaults else { return AppState() }
         return AppState(
             releaseNotesService: ReleaseNotesService(userDefaults: defaults),
-            dependencyCoordinator: DependencyUpdateCoordinator()
+            dependencyCoordinator: DependencyUpdateCoordinator(notificationService: nil)
         )
     }
 }

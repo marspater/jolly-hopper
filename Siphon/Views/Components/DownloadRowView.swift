@@ -664,6 +664,7 @@ struct FileThumbnailView: View {
         .menuIndicator(.hidden)
         .help(languageService.s("more_actions"))
         .accessibilityLabel(languageService.s("more_actions"))
+        .accessibilityIdentifier(AccessibilityID.rowMore)
     }
 
     private var actionButtons: some View {
@@ -781,6 +782,7 @@ struct FileThumbnailView: View {
                     } label: {
                         Label(languageService.s("remove"), systemImage: "trash")
                     }
+                    .accessibilityIdentifier(AccessibilityID.rowRemove)
                 }
             }
 
@@ -811,6 +813,7 @@ struct FileThumbnailView: View {
                     } label: {
                         Label(languageService.s("stop"), systemImage: "stop.fill")
                     }
+                    .accessibilityIdentifier(AccessibilityID.rowCancel)
 
                     Button {
                         NSPasteboard.general.clearContents()
@@ -880,6 +883,7 @@ struct FileThumbnailView: View {
                     } label: {
                         Label(languageService.s("stop"), systemImage: "stop.fill")
                     }
+                    .accessibilityIdentifier(AccessibilityID.rowCancel)
                 }
             }
 
@@ -912,6 +916,7 @@ struct FileThumbnailView: View {
                     } label: {
                         Label(languageService.s("stop"), systemImage: "stop.fill")
                     }
+                    .accessibilityIdentifier(AccessibilityID.rowCancel)
 
                     Divider()
 
@@ -920,6 +925,7 @@ struct FileThumbnailView: View {
                     } label: {
                         Label(languageService.s("remove"), systemImage: "trash")
                     }
+                    .accessibilityIdentifier(AccessibilityID.rowRemove)
                 }
             }
 
@@ -973,6 +979,7 @@ struct FileThumbnailView: View {
                     } label: {
                         Label(languageService.s("remove"), systemImage: "trash")
                     }
+                    .accessibilityIdentifier(AccessibilityID.rowRemove)
                 }
             }
 
@@ -1012,6 +1019,7 @@ struct FileThumbnailView: View {
                 .buttonStyle(.siphonGhost)
                 .help(languageService.s("download_new_name"))
                 .accessibilityLabel(languageService.s("download_new_name"))
+                .accessibilityIdentifier(AccessibilityID.rowNewName)
 
                 Button {
                     downloadManager.revealExistingFile(for: download)
@@ -1024,6 +1032,7 @@ struct FileThumbnailView: View {
                 .buttonStyle(.siphonIcon(size: 28))
                 .help(languageService.s("reveal_in_finder"))
                 .accessibilityLabel(languageService.s("reveal_in_finder"))
+                .accessibilityIdentifier(AccessibilityID.rowRevealExisting)
             }
         }
     }
@@ -1102,6 +1111,7 @@ struct FileThumbnailView: View {
             } label: {
                 Label(languageService.s("stop"), systemImage: "stop.fill")
             }
+            .accessibilityIdentifier(AccessibilityID.rowCancel)
 
             Divider()
         } else if download.status == .paused {
@@ -1117,6 +1127,7 @@ struct FileThumbnailView: View {
             } label: {
                 Label(languageService.s("stop"), systemImage: "stop.fill")
             }
+            .accessibilityIdentifier(AccessibilityID.rowCancel)
 
             Divider()
         } else if download.status == .queued {
@@ -1183,6 +1194,7 @@ struct FileThumbnailView: View {
             } label: {
                 Label(languageService.s("stop"), systemImage: "stop.fill")
             }
+            .accessibilityIdentifier(AccessibilityID.rowCancel)
 
             Divider()
         } else if download.status == .failed || download.status == .stopped {
@@ -1216,6 +1228,7 @@ struct FileThumbnailView: View {
         } label: {
             Label(languageService.s("remove"), systemImage: "trash")
         }
+        .accessibilityIdentifier(AccessibilityID.rowRemove)
     }
 
     private var logSheet: some View {

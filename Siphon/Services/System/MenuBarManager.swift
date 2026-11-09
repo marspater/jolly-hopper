@@ -31,7 +31,7 @@ class MenuBarManager: NSObject {
             .environmentObject(languageService)
             .environmentObject(downloadManager)
 
-        popover.contentViewController = NSHostingController(rootView: contentView)
+        popover.contentViewController = NSHostingController(rootView: contentView.defaultAppStorage(UITestLaunchMode.storage))
         self.popover = popover
         applyTheme()
 

@@ -16,7 +16,7 @@ final class DebugLogWindowManager: NSObject, NSWindowDelegate {
 
         let debugView = DebugLogView()
 
-        let hostingController = NSHostingController(rootView: debugView)
+        let hostingController = NSHostingController(rootView: debugView.defaultAppStorage(UITestLaunchMode.storage))
 
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 700, height: 480),

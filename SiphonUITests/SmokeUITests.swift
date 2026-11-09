@@ -22,6 +22,15 @@ final class SmokeUITests: XCTestCase {
         return app
     }
 
+    private func element(_ identifier: String, in app: XCUIApplication) -> XCUIElement {
+        app.descendants(matching: .any)[identifier].firstMatch
+    }
+
+    private func seedQueue(status: String) throws {
+        let seed = #"[{"url":"https://example.com/watch/1","title":"Seeded item","status":"\#(status)"}]"#
+        try Data(seed.utf8).write(to: root.appendingPathComponent("queue_seed.json"))
+    }
+
     func testLaunchShowsMainWindow() {
         XCTAssertTrue(launch().windows.firstMatch.waitForExistence(timeout: 15))
     }
@@ -40,6 +49,52 @@ final class SmokeUITests: XCTestCase {
         XCTAssertTrue(app.windows.firstMatch.waitForExistence(timeout: 15))
         app.typeKey(",", modifierFlags: .command)
         XCTAssertTrue(app.buttons["check-for-updates"].waitForExistence(timeout: 10))
+    }
+
+    func testSwitchingSettingsTabs() {
+        let app = launch()
+        XCTAssertTrue(app.windows.firstMatch.waitForExistence(timeout: 15))
+        app.typeKey(",", modifierFlags: .command)
+        let advanced = element("settings-tab-advanced", in: app)
+        XCTAssertTrue(advanced.waitForExistence(timeout: 10))
+        advanced.click()
+        XCTAssertTrue(app.buttons["view-debug-logs"].waitForExistence(timeout: 10))
+        let about = element("settings-tab-about", in: app)
+        about.click()
+        XCTAssertTrue(app.staticTexts["marspater"].waitForExistence(timeout: 10))
+    }
+
+    func testRemovingSeededQueueItem() throws {
+        try seedQueue(status: "paused")
+        let app = launch()
+        let segment = element("status-segment-queued", in: app)
+        XCTAssertTrue(segment.waitForExistence(timeout: 15))
+        segment.click()
+        let title = element("queue-row-title", in: app)
+        XCTAssertTrue(title.waitForExistence(timeout: 10))
+        element("row-more", in: app).click()
+        let remove = app.menuItems.matching(NSPredicate(format: "identifier == 'row-remove' OR title == 'Remove'")).firstMatch
+        XCTAssertTrue(remove.waitForExistence(timeout: 5))
+        remove.click()
+        XCTAssertTrue(title.waitForNonExistence(timeout: 10))
+    }
+
+    func testPausingAndResumingSeededItem() throws {
+        try seedQueue(status: "downloading")
+        let app = launch()
+        let downloading = element("status-segment-downloading", in: app)
+        XCTAssertTrue(downloading.waitForExistence(timeout: 15))
+        downloading.click()
+        let pause = element("row-pause", in: app)
+        XCTAssertTrue(pause.waitForExistence(timeout: 10))
+        pause.click()
+
+        element("status-segment-queued", in: app).click()
+        let resume = element("row-resume", in: app)
+        XCTAssertTrue(resume.waitForExistence(timeout: 10))
+        resume.click()
+        // With no binaries in this mode the job then fails, leaving the queue tab.
+        XCTAssertTrue(resume.waitForNonExistence(timeout: 10))
     }
 
     func testAddDownloadShortcutOpensWindow() {

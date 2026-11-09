@@ -1520,6 +1520,8 @@ struct SiphonSegmentedPicker<Value: Hashable>: View {
     /// Full-width bar of equal segments, 38 pt tall (Settings tabs).
     var isLarge = false
     var fillsWidth = false
+    /// Accessibility identifier for an option's segment.
+    var identifier: (Value) -> String = { _ in "" }
 
     @Namespace private var bubble
     @Environment(\.siphonRenderingCapabilities) private var renderingCapabilities
@@ -1565,6 +1567,7 @@ struct SiphonSegmentedPicker<Value: Hashable>: View {
                     }
                     .contentShape(Capsule())
                 }
+                .accessibilityIdentifier(identifier(option.value))
                 .buttonStyle(.bouncy)
                 .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : [.isButton])
             }
