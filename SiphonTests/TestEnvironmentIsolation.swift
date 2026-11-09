@@ -105,6 +105,7 @@ final class TestEnvironmentIsolation: NSObject, XCTestObservation {
         let leaks = Self.leakedState()
         Self.restoreSnapshot()
         UserDefaults.standard.removePersistentDomain(forName: TestState.suiteName)
+        try? FileManager.default.removeItem(at: TestState.recoveryFileURL)
         if !leaks.isEmpty {
             NSLog("SiphonTests: real app state leak: %@", leaks.joined(separator: ", "))
         }
