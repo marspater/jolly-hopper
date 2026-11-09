@@ -40,10 +40,16 @@ class MenuBarManager: NSObject {
 
         if let button = statusItem?.button {
             updateStatusItemIcon(button: button)
+            var usesExpandedInterface = false
+            // The macOS 27 SDK declares these; older Xcode versions, including CI's, do not.
+            #if canImport(AppKit, _version: 2700)
             if #available(macOS 27.0, *) {
                 statusItem?.expandedInterfaceDelegate = self
                 popover.delegate = self
-            } else {
+                usesExpandedInterface = true
+            }
+            #endif
+            if !usesExpandedInterface {
                 button.action = #selector(togglePopover)
                 button.target = self
             }
@@ -124,6 +130,7 @@ class MenuBarManager: NSObject {
     }
 }
 
+#if canImport(AppKit, _version: 2700)
 @available(macOS 27.0, *)
 extension MenuBarManager: @MainActor NSStatusItemExpandedInterfaceDelegate, NSPopoverDelegate {
     func statusItem(_ statusItem: NSStatusItem, didBegin _: NSStatusItemExpandedInterfaceSession) {
@@ -140,6 +147,7 @@ extension MenuBarManager: @MainActor NSStatusItemExpandedInterfaceDelegate, NSPo
         statusItem?.expandedInterfaceSession?.cancel()
     }
 }
+#endif
 
 extension NSApplication {
     /// Cooperative activation on macOS 27. Older systems keep the forced call,
