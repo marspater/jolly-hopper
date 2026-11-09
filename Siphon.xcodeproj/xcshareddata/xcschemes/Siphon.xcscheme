@@ -20,6 +20,20 @@
                ReferencedContainer = "container:Siphon.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
+         <BuildActionEntry
+            buildForTesting = "YES"
+            buildForRunning = "YES"
+            buildForProfiling = "YES"
+            buildForArchiving = "YES"
+            buildForAnalyzing = "YES">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "E1004001"
+               BuildableName = "SiphonCore.framework"
+               BlueprintName = "SiphonCore"
+               ReferencedContainer = "container:Siphon.xcodeproj">
+            </BuildableReference>
+         </BuildActionEntry>
       </BuildActionEntries>
    </BuildAction>
    <TestAction
@@ -37,6 +51,13 @@
             BlueprintName = "Siphon"
             ReferencedContainer = "container:Siphon.xcodeproj">
          </BuildableReference>
+         <BuildableReference
+            BuildableIdentifier = "primary"
+            BlueprintIdentifier = "E1004001"
+            BuildableName = "SiphonCore.framework"
+            BlueprintName = "SiphonCore"
+            ReferencedContainer = "container:Siphon.xcodeproj">
+         </BuildableReference>
       </CodeCoverageTargets>
        <Testables>
           <TestableReference
@@ -48,6 +69,18 @@
                 BlueprintIdentifier = "E0004010"
                 BuildableName = "SiphonTests.xctest"
                 BlueprintName = "SiphonTests"
+                ReferencedContainer = "container:Siphon.xcodeproj">
+             </BuildableReference>
+          </TestableReference>
+          <TestableReference
+             skipped = "NO"
+             parallelizable = "NO"
+             testExecutionOrdering = "random">
+             <BuildableReference
+                BuildableIdentifier = "primary"
+                BlueprintIdentifier = "E1004010"
+                BuildableName = "SiphonCoreTests.xctest"
+                BlueprintName = "SiphonCoreTests"
                 ReferencedContainer = "container:Siphon.xcodeproj">
              </BuildableReference>
           </TestableReference>

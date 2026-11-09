@@ -22,6 +22,8 @@ exclude_paths:
   - ".jules/**"
   - ".github/**"
   - "SiphonTests/**"
+  - "SiphonCoreTests/**"
+  - "SiphonUITests/**"
   - "scripts/**"
   - "Casks/**"
   - "server/test/**"

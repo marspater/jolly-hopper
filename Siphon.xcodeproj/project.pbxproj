@@ -91,6 +91,10 @@
 		E00010AD /* HeroDropURLView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E00000AD /* HeroDropURLView.swift */; };
 		E00010AE /* RecentDownloadRowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E00000AE /* RecentDownloadRowView.swift */; };
 		E00010AF /* RadiantSiphonLogoView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E00000AF /* RadiantSiphonLogoView.swift */; };
+		E1001001 /* SiphonCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = E1000001 /* SiphonCore.framework */; };
+		E1001003 /* SiphonCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = E1000001 /* SiphonCore.framework */; };
+		E1001010 /* SiphonCoreMarker.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1000010 /* SiphonCoreMarker.swift */; };
+		E1001011 /* SiphonCoreMarkerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1000011 /* SiphonCoreMarkerTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -182,6 +186,10 @@
 		E00000B3 /* EgressProxyServer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EgressProxyServer.swift; sourceTree = "<group>"; };
 		E00000B4 /* EgressProxyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EgressProxyTests.swift; sourceTree = "<group>"; };
 		E0000043 /* SiphonTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SiphonTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		E1000001 /* SiphonCore.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = SiphonCore.framework; sourceTree = BUILT_PRODUCTS_DIR; };
+		E1000002 /* SiphonCoreTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SiphonCoreTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		E1000010 /* SiphonCoreMarker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SiphonCoreMarker.swift; sourceTree = "<group>"; };
+		E1000011 /* SiphonCoreMarkerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SiphonCoreMarkerTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -189,6 +197,22 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				E1001001 /* SiphonCore.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E1004003 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E1004012 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E1001003 /* SiphonCore.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -208,6 +232,8 @@
 			children = (
 				E0003002 /* Siphon */,
 				E0003020 /* SiphonTests */,
+				E1003001 /* SiphonCore */,
+				E1003002 /* SiphonCoreTests */,
 				E0003003 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -264,6 +290,8 @@
 			children = (
 				E0000012 /* Siphon.app */,
 				E0000043 /* SiphonTests.xctest */,
+				E1000001 /* SiphonCore.framework */,
+				E1000002 /* SiphonCoreTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -417,6 +445,22 @@
 			path = Constants;
 			sourceTree = "<group>";
 		};
+		E1003001 /* SiphonCore */ = {
+			isa = PBXGroup;
+			children = (
+				E1000010 /* SiphonCoreMarker.swift */,
+			);
+			path = SiphonCore;
+			sourceTree = "<group>";
+		};
+		E1003002 /* SiphonCoreTests */ = {
+			isa = PBXGroup;
+			children = (
+				E1000011 /* SiphonCoreMarkerTests.swift */,
+			);
+			path = SiphonCoreTests;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -433,6 +477,7 @@
 			buildRules = (
 			);
 			dependencies = (
+				E1008010 /* PBXTargetDependency */,
 			);
 			name = "Siphon";
 			productName = "Siphon";
@@ -453,6 +498,39 @@
 			name = SiphonTests;
 			productName = SiphonTests;
 			productReference = E0000043 /* SiphonTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		E1004001 /* SiphonCore */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = E1005001 /* Build configuration list for PBXNativeTarget "SiphonCore" */;
+			buildPhases = (
+				E1004002 /* Sources */,
+				E1004003 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = SiphonCore;
+			productName = SiphonCore;
+			productReference = E1000001 /* SiphonCore.framework */;
+			productType = "com.apple.product-type.framework";
+		};
+		E1004010 /* SiphonCoreTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = E1005002 /* Build configuration list for PBXNativeTarget "SiphonCoreTests" */;
+			buildPhases = (
+				E1004011 /* Sources */,
+				E1004012 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				E1008012 /* PBXTargetDependency */,
+			);
+			name = SiphonCoreTests;
+			productName = SiphonCoreTests;
+			productReference = E1000002 /* SiphonCoreTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
 /* End PBXNativeTarget section */
@@ -516,6 +594,12 @@
 						CreatedOnToolsVersion = 15.0;
 						TestTargetID = E0004001;
 					};
+					E1004001 = {
+						CreatedOnToolsVersion = 26.0;
+					};
+					E1004010 = {
+						CreatedOnToolsVersion = 26.0;
+					};
 				};
 			};
 			buildConfigurationList = E0005001 /* Build configuration list for PBXProject "Siphon" */;
@@ -533,6 +617,8 @@
 			targets = (
 				E0004001 /* Siphon */,
 				E0004010 /* SiphonTests */,
+				E1004001 /* SiphonCore */,
+				E1004010 /* SiphonCoreTests */,
 			);
 		};
 /* End PBXProject section */
@@ -646,6 +732,22 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		E1004002 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E1001010 /* SiphonCoreMarker.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E1004011 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E1001011 /* SiphonCoreMarkerTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -653,6 +755,16 @@
 			isa = PBXTargetDependency;
 			target = E0004001 /* Siphon */;
 			targetProxy = E0008002 /* PBXContainerItemProxy */;
+		};
+		E1008010 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = E1004001 /* SiphonCore */;
+			targetProxy = E1008011 /* PBXContainerItemProxy */;
+		};
+		E1008012 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = E1004001 /* SiphonCore */;
+			targetProxy = E1008013 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -663,6 +775,20 @@
 			proxyType = 1;
 			remoteGlobalIDString = E0004001;
 			remoteInfo = "Siphon";
+		};
+		E1008011 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = E0006001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = E1004001;
+			remoteInfo = SiphonCore;
+		};
+		E1008013 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = E0006001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = E1004001;
+			remoteInfo = SiphonCore;
 		};
 /* End PBXContainerItemProxy section */
 
@@ -912,6 +1038,74 @@
 			};
 			name = Release;
 		};
+		E1007001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 57;
+				DEFINES_MODULE = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACH_O_TYPE = staticlib;
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				MARKETING_VERSION = 5.5.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.marspater.siphon.SiphonCore;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		E1007002 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 57;
+				DEFINES_MODULE = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACH_O_TYPE = staticlib;
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				MARKETING_VERSION = 5.5.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.marspater.siphon.SiphonCore;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Release;
+		};
+		E1007003 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 57;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				MARKETING_VERSION = 5.5.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.marspater.siphon.SiphonCoreTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		E1007004 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 57;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				MARKETING_VERSION = 5.5.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.marspater.siphon.SiphonCoreTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -938,6 +1132,24 @@
 			buildConfigurations = (
 				E0007005 /* Debug */,
 				E0007006 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		E1005001 /* Build configuration list for PBXNativeTarget "SiphonCore" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E1007001 /* Debug */,
+				E1007002 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		E1005002 /* Build configuration list for PBXNativeTarget "SiphonCoreTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E1007003 /* Debug */,
+				E1007004 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
