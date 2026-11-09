@@ -93,34 +93,25 @@ final class CustomPresetTests: XCTestCase {
     }
 
     func testCustomPresetLoadAllAndSaveAll() throws {
-        // Save current user defaults state to restore after test
-        let originalData = UserDefaults.standard.data(forKey: UserDefaultsKeys.customPresets)
-        defer {
-            if let originalData = originalData {
-                UserDefaults.standard.set(originalData, forKey: UserDefaultsKeys.customPresets)
-            } else {
-                UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.customPresets)
-            }
-        }
+        defer { TestState.defaults.removeObject(forKey: UserDefaultsKeys.customPresets) }
 
         // Test loadAll when no presets exist
-        UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.customPresets)
-        XCTAssertTrue(CustomPreset.loadAll().isEmpty)
+        TestState.defaults.removeObject(forKey: UserDefaultsKeys.customPresets)
+        XCTAssertTrue(CustomPreset.loadAll(from: TestState.defaults).isEmpty)
 
         // Test saveAll and loadAll round-trip
         let preset1 = CustomPreset(configuration: CustomPresetConfiguration(name: "Preset 1", videoCodec: .h264, audioCodec: .aac, videoResolution: .r1080p, fileType: .mp4))
         let preset2 = CustomPreset(configuration: CustomPresetConfiguration(name: "Preset 2", videoCodec: .h265, audioCodec: .opus, videoResolution: .r2160p, fileType: .mkv))
         let presets = [preset1, preset2]
 
-        CustomPreset.saveAll(presets)
-        let loaded = CustomPreset.loadAll()
+        CustomPreset.saveAll(presets, to: TestState.defaults)
+        let loaded = CustomPreset.loadAll(from: TestState.defaults)
         XCTAssertEqual(loaded, presets)
 
         // Test loadAll when invalid/corrupted data exists
         let corruptedData = "invalid json data".data(using: .utf8)!
-        UserDefaults.standard.set(corruptedData, forKey: UserDefaultsKeys.customPresets)
-        defer { UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.customPresets) }
-        XCTAssertTrue(CustomPreset.loadAll().isEmpty)
+        TestState.defaults.set(corruptedData, forKey: UserDefaultsKeys.customPresets)
+        XCTAssertTrue(CustomPreset.loadAll(from: TestState.defaults).isEmpty)
     }
 
     func testCustomPresetConfigurationInitialization() throws {
