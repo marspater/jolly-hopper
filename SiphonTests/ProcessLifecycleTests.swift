@@ -8,6 +8,23 @@ import XCTest
 @testable import SiphonCore
 
 final class ProcessLifecycleTests: XCTestCase {
+    func testNotificationFallbackDrainsLargeStderrWithoutDeadlock() throws {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/sh")
+        process.arguments = ["-c", "/bin/dd if=/dev/zero bs=1024 count=256 1>&2 2>/dev/null"]
+        process.standardOutput = FileHandle.nullDevice
+        let pipe = Pipe()
+        process.standardError = pipe
+        defer {
+            try? pipe.fileHandleForReading.close()
+            try? pipe.fileHandleForWriting.close()
+        }
+
+        let stderr = try NotificationService.runCapturingStandardError(process, pipe: pipe)
+        XCTAssertEqual(process.terminationStatus, 0)
+        XCTAssertEqual(stderr.count, 256 * 1024)
+    }
+
     func testFixupParserUsesTheQuotedDestinationInsteadOfIntoInTheSourceTitle() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
