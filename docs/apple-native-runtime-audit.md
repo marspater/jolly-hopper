@@ -14,12 +14,18 @@
 
 ## Confirmed findings addressed in this first PR
 
+<!-- coderabbit-ai-generated:v1 -->
+
+<!-- coderabbit-ai-generated-section:v1:078a88769e02f98a8de805b2a1735f9449a8ce54bd41e62c01ce62c02023c7d2 -->
+
 | ID | Severity | Location | Evidence and fix | Validation |
 | --- | --- | --- | --- | --- |
 | L-01 | P1 | `Siphon/Services/System/LoggerService.swift` | `LoggerService` stored `initialLogLoadTask`; the task's main-actor merge closure strongly captured `self`. A suspended reader could keep its owner alive. Captures the owner weakly and skips a merge after deallocation. | `LoggerLifecycleTests.startupReaderDoesNotKeepLoggerAlive` |
 | E-01 | P1 | `Siphon/Services/System/NotificationService.swift` | The osascript fallback called `waitUntilExit()` before reading an unbounded stderr `Pipe`. A child emitting more than the pipe buffer can block forever. It now drains while the process is running, retains at most 16 KiB of diagnostics, and reaps the process on read failure. | `NotificationFallbackPipeTests.drainsLargeStderrWithoutDeadlock` |
 | C-01 | P1 | `Siphon/Services/System/NotificationService.swift` | The `@unchecked Sendable` singleton used an ordinary unsynchronized `isSetup` bool. Concurrent setup calls could race and register multiple authorization callbacks. A lock now makes setup admission atomic. | Swift 6 build and focused notification path review; add a concurrently invoked setup test if an injected notification center becomes available |
-| E-02 | P1 | `Siphon/Services/System/LoggerService.swift` | Log export treated failed file open/read as an empty log and reported success. Existing but unreadable log sources now throw; only a genuinely absent log is treated as empty history. | `LoggerLifecycleTests.exportReportsUnreadableExistingLog` |
+| E-02 | P1 | `Siphon/Services/System/LoggerService.swift` | **Partially addressed; exception remains open.** Log export now propagates file open/read errors when `fileExists(atPath:)` returns true. Inaccessible parent directories can still make `LoggerService.exportLogs()` treat an existing log as absent and report a successful empty export. Keep this exception open until export distinguishes a confirmed missing-file error from other lookup failures. | `LoggerLifecycleTests.exportReportsUnreadableExistingLog`; inaccessible-parent lookup remains uncovered |
+
+<!-- /coderabbit-ai-generated:v1 -->
 
 These changes are scoped to diagnostics and notification fallback; they do **not** change download admission, package verification, process-tree termination, or browser credential handling.
 
