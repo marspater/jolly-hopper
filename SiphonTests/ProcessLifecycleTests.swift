@@ -22,7 +22,7 @@ final class ProcessLifecycleTests: XCTestCase {
 
         let stderr = try NotificationService.runCapturingStandardError(process, pipe: pipe)
         XCTAssertEqual(process.terminationStatus, 0)
-        XCTAssertEqual(stderr.count, 256 * 1024)
+        XCTAssertEqual(stderr.count, 16 * 1024, "Only a bounded diagnostic prefix should be retained")
     }
 
     func testFixupParserUsesTheQuotedDestinationInsteadOfIntoInTheSourceTitle() async throws {
