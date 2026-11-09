@@ -134,9 +134,10 @@ public final class SecureCookieFile: @unchecked Sendable {
         var expiry: Int
         let name: String
         var value: String
+        var isHttpOnly = false
 
         var netscapeLine: String {
-            "\(domain)\t\(includeSubdomains ? "TRUE" : "FALSE")\t\(path)\t\(isSecure ? "TRUE" : "FALSE")\t\(expiry)\t\(name)\t\(value)"
+            (isHttpOnly ? "#HttpOnly_" : "") + "\(domain)\t\(includeSubdomains ? "TRUE" : "FALSE")\t\(path)\t\(isSecure ? "TRUE" : "FALSE")\t\(expiry)\t\(name)\t\(value)"
         }
     }
 
@@ -217,7 +218,8 @@ public final class SecureCookieFile: @unchecked Sendable {
         for line in additionalNetscapeLines {
             var trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
             // Netscape HttpOnly cookies are prefixed `#HttpOnly_`; other `#` lines are comments.
-            if trimmed.hasPrefix("#HttpOnly_") { trimmed.removeFirst("#HttpOnly_".count) }
+            let isHttpOnly = trimmed.hasPrefix("#HttpOnly_")
+            if isHttpOnly { trimmed.removeFirst("#HttpOnly_".count) }
             guard !trimmed.isEmpty && !trimmed.hasPrefix("#") else { continue }
             let columns = trimmed.split(separator: "\t", omittingEmptySubsequences: false)
             if columns.count >= 7 {
@@ -237,7 +239,8 @@ public final class SecureCookieFile: @unchecked Sendable {
                         isSecure: isSec,
                         expiry: exp,
                         name: name,
-                        value: val
+                        value: val,
+                        isHttpOnly: isHttpOnly
                     )
                 }
             }

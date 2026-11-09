@@ -18,6 +18,10 @@ final class DownloadModelTests: XCTestCase {
         let live = try scratch(pid: getpid())
         let dead = try scratch(pid: 2_000_000_000)
         let unmarked = try scratch(pid: nil)
+        let malformed = try scratch(pid: nil)
+        try "not-a-pid".write(to: malformed.appendingPathComponent(".siphon-owner-pid"), atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.modificationDate: old], ofItemAtPath: malformed.appendingPathComponent(".siphon-owner-pid").path)
+        try FileManager.default.setAttributes([.modificationDate: old], ofItemAtPath: malformed.path)
         // Age the marker files too so only the owner check can save `live`.
         for dir in [live, dead] {
             try? FileManager.default.setAttributes([.modificationDate: old], ofItemAtPath: dir.appendingPathComponent(".siphon-owner-pid").path)
@@ -27,6 +31,7 @@ final class DownloadModelTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: live.path))
         XCTAssertFalse(FileManager.default.fileExists(atPath: dead.path))
         XCTAssertFalse(FileManager.default.fileExists(atPath: unmarked.path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: malformed.path), "A malformed marker grants no ownership")
     }
 
     /// Real second process: its scratch survives the sweep while it runs and is purged after it exits.
@@ -60,6 +65,10 @@ final class DownloadModelTests: XCTestCase {
     func testHistoryDropsSignedThumbnailURLs() {
         XCTAssertNil(HistoricDownload.persistableThumbnailURL(URL(string: "https://cdn.example.com/t.jpg?token=abc")!))
         XCTAssertNil(HistoricDownload.persistableThumbnailURL(URL(string: "https://u:p@cdn.example.com/t.jpg")!))
+        for query in ["access_token=1", "X-Amz-Credential=a", "Key-Pair-Id=K", "apiKey=1", "Signature=x"] {
+            XCTAssertNil(HistoricDownload.persistableThumbnailURL(URL(string: "https://cdn.example.com/t.jpg?\(query)")!), query)
+        }
+        XCTAssertNotNil(HistoricDownload.persistableThumbnailURL(URL(string: "https://cdn.example.com/t.jpg?design=1&monkey=2")!))
         let plain = URL(string: "https://cdn.example.com/t.jpg?w=320")!
         XCTAssertEqual(HistoricDownload.persistableThumbnailURL(plain), plain)
     }

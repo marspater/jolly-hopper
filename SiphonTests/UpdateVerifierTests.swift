@@ -607,13 +607,18 @@ final class UpdateVerifierTests: XCTestCase {
         for url in [callerFile, stagedFile] { try Data("x".utf8).write(to: url) }
         defer { try? FileManager.default.removeItem(at: callerFile); try? FileManager.default.removeItem(at: stagedFile) }
 
-        for url in [callerFile, stagedFile] {
+        let lookalike = temp.appendingPathComponent("Siphon_Update_\(UUID().uuidString).txt")
+        try Data("x".utf8).write(to: lookalike)
+        defer { try? FileManager.default.removeItem(at: lookalike) }
+
+        for url in [callerFile, stagedFile, lookalike] {
             do {
-                try await UpdateInstaller().install(packageURL: url, allowAdHoc: false)
+                try await UpdateInstaller().install(packageURL: url, allowAdHoc: false, consumesPackage: url == stagedFile)
                 XCTFail("Unsupported package type must throw")
             } catch {}
         }
         XCTAssertTrue(FileManager.default.fileExists(atPath: callerFile.path), "Caller-owned package must survive a failed install")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: lookalike.path), "A Siphon_Update_ name alone must not grant ownership")
         XCTAssertFalse(FileManager.default.fileExists(atPath: stagedFile.path), "Staged update download is consumed on failure")
     }
 

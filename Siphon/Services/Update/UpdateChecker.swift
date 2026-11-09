@@ -418,7 +418,8 @@ public final class UpdateChecker: ObservableObject {
                 expectedChecksum: verifiedChecksum,
                 expectedTeamID: nil,
                 allowAdHoc: true,
-                expectedVersion: expectedVersion
+                expectedVersion: expectedVersion,
+                consumesPackage: true
             )
 
             isInstalling = false

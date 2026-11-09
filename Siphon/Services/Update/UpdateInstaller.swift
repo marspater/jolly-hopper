@@ -73,7 +73,8 @@ public final class UpdateInstaller: Sendable {
         expectedChecksum: String? = nil,
         expectedTeamID: String? = nil,
         allowAdHoc: Bool = true,
-        expectedVersion: String? = nil
+        expectedVersion: String? = nil,
+        consumesPackage: Bool = false
     ) async throws {
         let fileManager = FileManager.default
         guard fileManager.fileExists(atPath: packageURL.path) else {
@@ -103,10 +104,8 @@ public final class UpdateInstaller: Sendable {
         let stagingDir = fileManager.temporaryDirectory.appendingPathComponent("Siphon_Install_\(UUID().uuidString)")
         try fileManager.createDirectory(at: stagingDir, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
         defer {
-            // Only delete the package when it is a Siphon-owned staged download, never a caller's file.
-            let ownsPackage = packageURL.lastPathComponent.hasPrefix("Siphon_Update_")
-                && packageURL.deletingLastPathComponent().standardizedFileURL.resolvingSymlinksInPath()
-                    == fileManager.temporaryDirectory.standardizedFileURL.resolvingSymlinksInPath()
+            // Delete the package only when the caller handed over a Siphon-owned staged download.
+            let ownsPackage = consumesPackage
             for cleanupURL in (ownsPackage ? [stagingDir, packageURL] : [stagingDir]) where fileManager.fileExists(atPath: cleanupURL.path) {
                 do {
                     try fileManager.removeItem(at: cleanupURL)

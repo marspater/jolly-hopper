@@ -52,6 +52,16 @@ final class SecureCookieFileTests: XCTestCase {
         XCTAssertFalse(content.contains("\n.example.com"))
     }
 
+    func testHttpOnlyNetscapeLinesKeepTheirPrefix() throws {
+        let cookie = try SecureCookieFile.create(
+            url: "https://www.example.com/v",
+            additionalNetscapeLines: ["#HttpOnly_.example.com\tTRUE\t/\tTRUE\t2000000000\tsid\tv"]
+        )
+        defer { cookie.cleanup() }
+        let content = try String(contentsOf: cookie.fileURL, encoding: .utf8)
+        XCTAssertTrue(content.contains("#HttpOnly_.example.com\tTRUE\t/\tTRUE\t2000000000\tsid\tv"))
+    }
+
     func testSanitizesHostWithControlCharacters() throws {
         // 1. Invalid URL string with unencoded control characters throws creationFailed
         let invalidURL = "https://example.com\t\r\ninjected.org/video"

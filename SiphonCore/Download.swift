@@ -396,10 +396,26 @@ public struct HistoricDownload: Codable, Identifiable, Sendable {
 
     /// Signed or tokenized thumbnail URLs are short-lived credentials; keep them out of history.
     static func persistableThumbnailURL(_ url: URL) -> URL? {
-        let sensitive = ["token", "sig", "signature", "key", "auth", "policy", "credential", "expires", "hdnts", "secret", "x-amz-signature", "x-goog-signature"]
-        let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
         if url.user != nil || url.password != nil { return nil }
-        return items.contains { sensitive.contains($0.name.lowercased()) } ? nil : url
+        let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
+        return items.contains { isSensitiveQueryName($0.name) } ? nil : url
+    }
+
+    /// Matches whole words (`access_token`, `X-Amz-Credential`, `Key-Pair-Id`, `apiKey`) so that
+    /// names such as `design` or `monkey` are not mistaken for `sig` or `key`.
+    private static func isSensitiveQueryName(_ name: String) -> Bool {
+        let sensitive: Set<String> = [
+            "token", "sig", "signature", "key", "auth", "authorization", "policy", "credential", "credentials",
+            "expires", "hdnts", "secret", "session", "sid", "jwt", "hmac", "password", "passwd"
+        ]
+        var spaced = ""
+        var previousIsLower = false
+        for character in name {
+            if character.isUppercase && previousIsLower { spaced.append(" ") }
+            previousIsLower = character.isLowercase
+            spaced.append(character.isLetter || character.isNumber ? character : " ")
+        }
+        return spaced.lowercased().split(separator: " ").contains { sensitive.contains(String($0)) }
     }
     public let duration: String?
     public let errorMessage: String?
