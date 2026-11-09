@@ -40,6 +40,13 @@ struct ContentView: View {
     @State private var confirmClearHistory = false
     @Environment(\.openWindow) private var openWindow
     @State private var columnVisibility: NavigationSplitViewVisibility = .detailOnly
+
+    private var ytdlpUpdateAlertIsPresented: Binding<Bool> {
+        Binding(
+            get: { appState.ytdlpUpdateMessage != nil },
+            set: { if !$0 { appState.ytdlpUpdateMessage = nil } }
+        )
+    }
     @AppStorage("showMenuBarIcon") private var showMenuBarIcon: Bool = true
     @AppStorage(UserDefaultsKeys.theme) private var theme: String = "system"
 
@@ -118,7 +125,7 @@ struct ContentView: View {
                 .sheet(isPresented: $appState.showWhatsNew, onDismiss: presentPendingUpdateAlert) {
                     WhatsNewSheetView()
                 }
-                .alert(appState.ytdlpUpdateMessage?.title ?? "", item: $appState.ytdlpUpdateMessage) { _ in
+                .alert(appState.ytdlpUpdateMessage?.title ?? "", isPresented: ytdlpUpdateAlertIsPresented, presenting: appState.ytdlpUpdateMessage) { _ in
                     Button(languageService.s("ok"), role: .cancel) {
                         // Nothing to do: SwiftUI dismisses the alert and clears the item.
                     }
