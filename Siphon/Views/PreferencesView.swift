@@ -354,11 +354,11 @@ struct PreferencesView: View {
                             defaultSaveFolder = ""
                         } label: {
                             Image(systemName: "xmark.circle.fill")
-                                .font(.siphonPrimary)
+                                .font(.system(size: 13, weight: .semibold))
                                 .foregroundColor(.secondary)
                                 .accessibilityHidden(true)
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.siphonIcon(size: 20))
                         .help(languageService.s("reset_save_folder"))
                         .accessibilityLabel(languageService.s("reset_save_folder"))
                     }
