@@ -4,41 +4,10 @@
 //
 
 import XCTest
+import Testing
 @testable import Siphon
 
 final class LogSanitizationTests: XCTestCase {
-    @MainActor
-    func testStartupReadTaskDoesNotRetainLoggerWhileSuspended() async {
-        let gate = InitialLogReadGate()
-        weak var weakLogger: LoggerService?
-        var logger: LoggerService? = LoggerService(
-            logFileURL: FileManager.default.temporaryDirectory.appendingPathComponent("SiphonLoggerLifetime-\(UUID().uuidString)"),
-            initialLogReader: {
-                await gate.wait()
-                return ["fixture"]
-            }
-        )
-        weakLogger = logger
-        logger = nil
-        XCTAssertNil(weakLogger, "A suspended startup reader must not retain its logger")
-        await gate.release()
-    }
-
-    @MainActor
-    func testExportReportsAnUnreadableExistingLog() async throws {
-        let path = FileManager.default.temporaryDirectory.appendingPathComponent("SiphonUnreadableLog-\(UUID().uuidString)")
-        let logger = LoggerService(logFileURL: path)
-        try FileManager.default.createDirectory(at: path, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: path) }
-
-        do {
-            _ = try await logger.exportLogs()
-            XCTFail("An existing directory is not a readable log file")
-        } catch {
-            XCTAssertTrue(FileManager.default.fileExists(atPath: path.path))
-        }
-    }
-
     @MainActor
     func testClearingLogsDoesNotResurrectTheStartupSnapshot() async throws {
         let file = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
@@ -99,6 +68,43 @@ final class LogSanitizationTests: XCTestCase {
         XCTAssertFalse(content.contains("/Users/developer_test/"))
         XCTAssertFalse(content.contains("abc12345secret"))
         XCTAssertTrue(content.contains("/Users/<USER>/"))
+    }
+}
+
+@MainActor
+struct LoggerLifecycleTests {
+    @Test func startupReaderDoesNotKeepLoggerAlive() async {
+        let gate = InitialLogReadGate()
+        weak var weakLogger: LoggerService?
+        var logger: LoggerService? = LoggerService(
+            logFileURL: FileManager.default.temporaryDirectory.appendingPathComponent("SiphonLoggerLifetime-\(UUID().uuidString)"),
+            initialLogReader: {
+                await gate.wait()
+                return ["fixture"]
+            }
+        )
+        let loadTask = logger?.initialLogLoadTask
+        weakLogger = logger
+        logger = nil
+        #expect(weakLogger === nil, "A suspended startup reader must not retain its logger")
+        await gate.release()
+        await loadTask?.value
+    }
+
+    @Test func exportReportsUnreadableExistingLog() async throws {
+        let path = FileManager.default.temporaryDirectory.appendingPathComponent("SiphonUnreadableLog-\(UUID().uuidString)")
+        let logger = LoggerService(logFileURL: path)
+        try FileManager.default.createDirectory(at: path, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: path) }
+
+        let didThrow: Bool
+        do {
+            _ = try await logger.exportLogs()
+            didThrow = false
+        } catch {
+            didThrow = true
+        }
+        #expect(didThrow, "An existing directory is not a readable log file")
     }
 }
 
