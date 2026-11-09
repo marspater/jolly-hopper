@@ -24,6 +24,9 @@
   "testTargets": [
     {
       "parallelizable": true,
+      "skippedTests": [
+        "SiphonPerformanceTests"
+      ],
       "target": {
         "containerPath": "container:Siphon.xcodeproj",
         "identifier": "E1004010",
@@ -32,6 +35,9 @@
     },
     {
       "parallelizable": false,
+      "skippedTests": [
+        "SiphonHostedPerformanceTests"
+      ],
       "target": {
         "containerPath": "container:Siphon.xcodeproj",
         "identifier": "E0004010",

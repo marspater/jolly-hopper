@@ -6,6 +6,7 @@
 import Foundation
 import Darwin
 import os
+import SiphonCore
 
 public final class DownloadProcessController: @unchecked Sendable {
     private var internalLifecycle: ProcessLifecycleState = .created
@@ -882,6 +883,14 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
             // instead would race an invocation that already took the last bytes
             // (the final path or the real ERROR: line) from the pipe.
             let streamsDrained = StreamDrainBarrier(streams: 2)
+            let launchSignpost = OSAllocatedUnfairLock<OSSignpostIntervalState?>(
+                initialState: Signposts.begin("Process launch to first output")
+            )
+            let endLaunchSignpost: @Sendable () -> Void = {
+                if let state = launchSignpost.withLock({ current in defer { current = nil }; return current }) {
+                    Signposts.end("Process launch to first output", state)
+                }
+            }
 
             outputPipe.fileHandleForReading.readabilityHandler = { handle in
                 let data = handle.availableData
@@ -894,7 +903,9 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
                     streamsDrained.streamFinished()
                     return
                 }
-                for line in outputBuffer.appendAndExtractLines(data) {
+                let lines = outputBuffer.appendAndExtractLines(data)
+                if !lines.isEmpty { endLaunchSignpost() }
+                for line in lines {
                     processOutputLine(line)
                 }
             }
@@ -910,7 +921,9 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
                     streamsDrained.streamFinished()
                     return
                 }
-                for line in errorBuffer.appendAndExtractLines(data) {
+                let lines = errorBuffer.appendAndExtractLines(data)
+                if !lines.isEmpty { endLaunchSignpost() }
+                for line in lines {
                     postErrorLine(line)
                 }
             }
@@ -918,6 +931,7 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
             let drainTimeout = streamDrainTimeout
             process.terminationHandler = { proc in
                 proc.terminationHandler = nil
+                endLaunchSignpost()
                 let exitCode = proc.terminationStatus
                 let reason = proc.terminationReason
                 let processGroup = Self.ownedProcessGroup(of: proc)
@@ -1008,6 +1022,7 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
             do {
                 try controller.start(process)
             } catch {
+                endLaunchSignpost()
                 controller.detach()
                 outputPipe.fileHandleForReading.readabilityHandler = nil
                 errorPipe.fileHandleForReading.readabilityHandler = nil

@@ -222,7 +222,9 @@ final class DownloadExecutor: ObservableObject {
         }
         guard activeTasks[downloadId] == nil else { return }
 
+        let admission = Signposts.begin("Queue admission to start")
         let task = Task { [weak self, weak download] in
+            Signposts.end("Queue admission to start", admission)
             guard let self, let download else {
                 await MainActor.run {
                     queue.releaseSlot(for: downloadId)
@@ -269,6 +271,8 @@ final class DownloadExecutor: ObservableObject {
         ytdlpVersion: String?,
         languageService: LanguageService?
     ) async {
+        let signpost = Signposts.begin("Download attempt")
+        defer { Signposts.end("Download attempt", signpost) }
         let downloadId = download.id
         let downloadCopy = download
         defer {
