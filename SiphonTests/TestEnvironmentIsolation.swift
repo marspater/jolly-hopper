@@ -71,7 +71,6 @@ final class TestEnvironmentIsolation: NSObject, XCTestObservation {
         if let domainName {
             defaults.removePersistentDomain(forName: domainName)
         }
-        try? FileManager.default.removeItem(at: recoveryURL)
 
         // Work started by tests (executor teardown, history saves) can still
         // finish after the bundle completes, so restore once more at exit.
@@ -79,7 +78,26 @@ final class TestEnvironmentIsolation: NSObject, XCTestObservation {
     }
 
     func testBundleDidFinish(_ testBundle: Bundle) {
+        Self.reportLeaks()
         Self.restoreSnapshot()
+        UserDefaults.standard.removePersistentDomain(forName: TestState.suiteName)
+    }
+
+    /// The domain is empty when the suite starts and the recovery file must not change,
+    /// so anything different was written by a test or the host app instead of an injected store.
+    private static func reportLeaks() {
+        guard let snapshot, let domainName = snapshot.defaultsDomainName else { return }
+        // AppKit window state and the host app's own language default appear in every run.
+        let leaked = (UserDefaults.standard.persistentDomain(forName: domainName) ?? [:]).keys
+            .filter { !$0.hasPrefix("NS") && $0 != "selectedLanguage" }
+            .sorted()
+        var report = leaked.map { "defaults key \($0)" }
+        if (try? Data(contentsOf: snapshot.recoveryFileURL)) != snapshot.recoveryFile {
+            report.append("queue recovery file")
+        }
+        if !report.isEmpty {
+            NSLog("SiphonTests: real app state leak: %@", report.joined(separator: ", "))
+        }
     }
 
     private static func restoreSnapshot() {
@@ -103,9 +121,15 @@ final class TestEnvironmentIsolation: NSObject, XCTestObservation {
             defaults.synchronize()
         }
 
+        // An unchanged file is left alone, so a normal run never touches the real folder.
+        if (try? Data(contentsOf: snapshot.recoveryFileURL)) == snapshot.recoveryFile {
+            try? FileManager.default.removeItem(at: backupURL)
+            return
+        }
         if let data = snapshot.recoveryFile {
             do {
                 try data.write(to: snapshot.recoveryFileURL, options: .atomic)
+                try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: snapshot.recoveryFileURL.path)
             } catch {
                 // Keep the on-disk backup so the next run can retry the restore.
                 NSLog("SiphonTests: failed to restore queue recovery file: \(error.localizedDescription)")

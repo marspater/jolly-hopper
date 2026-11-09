@@ -103,6 +103,7 @@
 		E1F01001 /* DownloadOptions.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1F00001 /* DownloadOptions.swift */; };
 		E1001014 /* DownloadOptionsLocalization.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1000014 /* DownloadOptionsLocalization.swift */; };
 		E1001015 /* LogSanitizerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1000015 /* LogSanitizerTests.swift */; };
+		E1001020 /* TestSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1000020 /* TestSupport.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -206,6 +207,7 @@
 		E1F00001 /* DownloadOptions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DownloadOptions.swift; sourceTree = "<group>"; };
 		E1000014 /* DownloadOptionsLocalization.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DownloadOptionsLocalization.swift; sourceTree = "<group>"; };
 		E1000015 /* LogSanitizerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogSanitizerTests.swift; sourceTree = "<group>"; };
+		E1000020 /* TestSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TestSupport.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -274,6 +276,7 @@
 		E0003020 /* SiphonTests */ = {
 			isa = PBXGroup;
 			children = (
+				E1000020 /* TestSupport.swift */,
 				E0000091 /* ImageUtilitiesTests.swift */,
 				E0000040 /* DownloadManagerTests.swift */,
 				E0000042 /* YtdlpServiceTests.swift */,
@@ -730,6 +733,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				E1001020 /* TestSupport.swift in Sources */,
 				E0001091 /* ImageUtilitiesTests.swift in Sources */,
 				E0001040 /* DownloadManagerTests.swift in Sources */,
 				E0001042 /* YtdlpServiceTests.swift in Sources */,

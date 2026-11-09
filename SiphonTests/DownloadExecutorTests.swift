@@ -667,7 +667,7 @@ final class DownloadExecutorTests: XCTestCase {
         XCTAssertEqual(download.diagnostics.exitStatus, "Completed with failed items")
         XCTAssertEqual(download.errorUXInfo(lang: lang)?.headline, lang.s("some_items_failed"))
         XCTAssertEqual(download.errorUXInfo(lang: lang)?.actionType, .retry)
-        let manager = DownloadManager()
+        let manager = DownloadManager.forTesting()
         manager.ytdlpService.isUpdating = true
         defer { manager.shutdown() }
         manager.downloads = [download]
@@ -777,7 +777,7 @@ final class DownloadExecutorTests: XCTestCase {
         XCTAssertEqual(queue.planUniqueOutputPath(for: download).resolvedBaseName, "Post Fixture (1)")
 
         // A retry must not reuse a file a failed attempt left behind.
-        let manager = DownloadManager()
+        let manager = DownloadManager.forTesting()
         manager.ytdlpService.isUpdating = true
         defer { manager.shutdown() }
         manager.downloads = [download]

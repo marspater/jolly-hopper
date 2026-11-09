@@ -8337,8 +8337,13 @@ public struct DownloadResult: Sendable {
         )
     }
 
+    /// Tests resolve every Application Support path under a temporary folder.
+    nonisolated private static let appSupportBaseOverride: URL? = NotificationService.isRunningTests
+        ? FileManager.default.temporaryDirectory.appendingPathComponent("SiphonTestAppSupport", isDirectory: true)
+        : nil
+
     nonisolated static func getAppSupportDirectory() -> URL {
-        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Library/Application Support")
+        let appSupport = appSupportBaseOverride ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Library/Application Support")
         let siphonDir = appSupport.appendingPathComponent("Siphon")
 
         if !FileManager.default.fileExists(atPath: siphonDir.path) {
