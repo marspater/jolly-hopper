@@ -27,7 +27,7 @@ These changes are scoped to diagnostics and notification fallback; they do **not
 
 | ID | Priority | Area | Current evidence / next action | Status |
 | --- | --- | --- | --- | --- |
-| T-01 | **P0 before parallel hosted tests** | `SiphonTests/TestEnvironmentIsolation.swift` | Hosted XCTest still snapshots, clears, and restores the real app's defaults/recovery state. Its crash-recovery backup is protective, but not a true isolated domain. Inventory all direct `.standard` consumers, inject store dependencies incrementally, and prove uninterrupted-run and SIGKILL recovery behavior before changing the backup mechanism. | Open; do not delete the backup system prematurely |
+| T-01 | **P0 addressed in this PR** | `Siphon.xcodeproj`, `SiphonTests/TestEnvironmentIsolation.swift` | Native `TestDebug`/`TestRelease` build the hosted app as `com.marspater.siphon.testing`, with a separate `Info-Testing.plist` (no production deep-link scheme); `UserDefaults.standard` is therefore not the installed app's domain. The test observer only verifies isolation and never snapshots or restores real state. Per-run test defaults and temporary recovery/log/dependency directories are injected. | Implemented, awaiting macOS CI and local TCC proof |
 | T-02 | P1 | `Siphon/Services/System/UITestLaunchMode.swift` | UI tests replace AppKit autosave method implementations globally in Debug mode to avoid modifying real window geometry. Verify effects with two windows, repeated UI launches, and app-state before/after snapshots. Replace global method interception only if a safer native window-configuration alternative proves equivalent. | Open; behavior is intentional but invasive |
 | C-02 | P1 | `Siphon/Services/Download/EgressProxyServer.swift` | Listener startup has a stored `Task`, a `withCheckedThrowingContinuation`, and a 5-second readiness timeout. `stop()` cancels the task before `listener` may be published. Add stress coverage for start/stop at each startup phase, restart after failure, and simultaneous callers; confirm cancellation settles and old listeners cannot publish. No actual leak is established by inspection. | Validation needed |
 | C-03 | P1 | `Siphon/Services/Update/UpdateDownloader.swift` | Delegate callbacks and task cancellation exchange continuation ownership under `NSLock`. Existing code intentionally clears continuation exactly once; stress races between cancellation, URL redirects, progress callbacks and staging. Preserve URL trust and checksum verification. | Validation needed |
@@ -45,6 +45,16 @@ These changes are scoped to diagnostics and notification fallback; they do **not
 - **Update integrity:** `UpdateDownloader` checks trusted GitHub URLs and redirect targets; app-update install/verification is a security boundary. Do not simplify this into generic URLSession download calls.
 - **Logging:** Log lines are sanitized before entering public unified logging. Retained diagnostic logs are bounded in memory and written to a separate on-disk file for user export; preserve those guarantees.
 - **Swift 6:** Strict concurrency compilation is already configured. `@unchecked Sendable` sites remain a **manual review inventory**, not automatic proof of data races.
+
+## Xcode-native hosted-test isolation (this PR)
+
+- **Production Run / Archive / Profile remain unchanged:** Debug and Release still produce `com.marspater.siphon` with its normal `Info.plist`, security identity and deep-link registration.
+- **Test action uses an independent identity:** Xcode's shared `Siphon` scheme defaults to `TestDebug`; `TestRelease` supplies release-optimized hosted tests. Only these configurations use `com.marspater.siphon.testing` and `Siphon/Info-Testing.plist`, which omits `CFBundleURLTypes` so tests do not register as a handler for `siphon://`.
+- **No restore transaction around real state:** `SiphonTests/TestEnvironmentIsolation.swift` checks the host bundle identity and recovery path and refuses to run when production state could be involved. It clears only the test app defaults after the suite. `UITestLaunchMode.requireSafeTestHostIdentity()` also checks before app managers initialize. Neither path backs up nor changes the real defaults domain.
+- **Unique storage from startup:** Hosted tests get their own temporary recovery, diagnostic and managed-binary root; explicit `TestState` suites have a per-process randomized name. UI tests continue to use their explicit temporary root.
+- **Historical safety:** An old `$TMPDIR/SiphonTestsStateBackup.plist` is never deleted automatically by the new code. It could hold the only recoverable copy from a failed **older** suite; assess it manually before removal. The new suite does not create such backups.
+- **Regression coverage:** `HostedTestStorageIsolationTests` checks the runtime app identity, preference domain separation, queue-recovery destination, and log-file destination. The hosted suite is serial; isolated bundle identity does not itself authorize parallel use of test-specific singletons.
+- **Not proven here:** CI must build both test configurations, verify these tests execute, and confirm no real `~/Library/Application Support/Siphon` files or Full Disk Access/TCC record are changed on a developer machine. Running Xcode UI previews or a standalone launch continues to use the normal preview/test-mode guards.
 
 ## Native verification matrix
 
@@ -64,11 +74,11 @@ These changes are scoped to diagnostics and notification fallback; they do **not
 
 ```bash
 xcodebuild test -project Siphon.xcodeproj -scheme Siphon -testPlan All \
-  -destination 'platform=macOS' -configuration Debug \
+  -destination 'platform=macOS' -configuration TestDebug \
   CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO
 
 xcodebuild test -project Siphon.xcodeproj -scheme Siphon -testPlan All \
-  -destination 'platform=macOS' -configuration Release ENABLE_TESTABILITY=YES \
+  -destination 'platform=macOS' -configuration TestRelease ENABLE_TESTABILITY=YES \
   CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO
 
 xcodebuild analyze -project Siphon.xcodeproj -scheme Siphon \
@@ -87,4 +97,4 @@ Run TSan, ASan, and Instruments in separate diagnostic configurations, not all s
 6. Real app defaults, log files, queue snapshots, cookie material, and TCC state survive tests untouched.
 7. UI/Performance/Conversion/All test plans are actually executed on the relevant revision; CI artifacts are retained.
 
-The present PR satisfies only its four **code-level** fixes, subject to actual macOS CI results. The rest is a concrete next-pass checklist, not an undocumented promise of no leaks.
+This PR delivers four targeted runtime fixes **and** native hosted-test identity isolation, subject to actual macOS CI and local TCC verification. The remaining risk register is a concrete next-pass checklist, not an undocumented promise of no leaks.
