@@ -743,9 +743,11 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
 
             let outputState = ThreadSafeOutputState()
             let ffmpegProgress = FfmpegDownloadProgress(sectionDuration: FfmpegDownloadProgress.sectionDuration(in: args))
+            let mergeSignpost = MergeSignpost()
 
             // Bolt Performance Optimization: Process output lines using Substring slices and range searches to eliminate intermediate String array allocations during real-time output stream handling
             let processOutputLine: @Sendable (String) -> Void = { line in
+                mergeSignpost.observe(line)
                 if let range = line.range(of: "SIPHON_FINAL_PATH:") {
                     let extracted = line[range.upperBound...].trimmingCharacters(in: .whitespacesAndNewlines)
                     if !extracted.isEmpty {
@@ -942,6 +944,7 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
                 }) {
                     // After the drain, so a fast exit cannot end this before its output is read.
                     endLaunchSignpost()
+                    mergeSignpost.finish()
                     controller.endDrain()
                     // Each reader closes its handle at EOF. After a timeout the
                     // handles close on release, never under an in-flight read.
@@ -1024,6 +1027,7 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
                 try controller.start(process)
             } catch {
                 endLaunchSignpost()
+                mergeSignpost.finish()
                 controller.detach()
                 outputPipe.fileHandleForReading.readabilityHandler = nil
                 errorPipe.fileHandleForReading.readabilityHandler = nil

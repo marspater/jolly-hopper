@@ -502,9 +502,11 @@ class YtdlpService: ObservableObject {
     // without opening one each. A later retry opens it again.
     private var sessionWindowClosedAt: [String: Date] = [:]
     var waitingWebKitSessionCount: Int { webKitSessionWaiters.count }
+    private let userDefaults: UserDefaults
 
-    init(processRunner: YtdlpProcessRunning = DefaultYtdlpProcessRunner()) {
+    init(processRunner: YtdlpProcessRunning = DefaultYtdlpProcessRunner(), userDefaults: UserDefaults = UITestLaunchMode.storage) {
         self.processRunner = processRunner
+        self.userDefaults = userDefaults
     }
 
     /// The store for the current job's egress route. A store's proxy is store-wide,
@@ -731,7 +733,7 @@ class YtdlpService: ObservableObject {
     /// The user's yt-dlp: the path chosen in Settings, else the first
     /// executable in `ytdlpSearchPaths`. Not checksum-verified by design.
     nonisolated static func userYtdlpPath(
-        customPath: String? = UserDefaults.standard.string(forKey: UserDefaultsKeys.customYtdlpPath),
+        customPath: String?,
         searchPaths: [String] = ytdlpSearchPaths,
         fileManager: FileManager = .default
     ) -> URL? {
@@ -773,7 +775,7 @@ class YtdlpService: ObservableObject {
                 self.isAvailable = false
                 self.version = nil
             }
-            guard let candidate = Self.userYtdlpPath() else {
+            guard let candidate = Self.userYtdlpPath(customPath: userDefaults.string(forKey: UserDefaultsKeys.customYtdlpPath)) else {
                 clear()
                 LoggerService.shared.log("No yt-dlp found. Set its path in Settings > Advanced.", level: .warning)
                 return
@@ -2318,7 +2320,7 @@ public struct DownloadResult: Sendable {
             args.append("--no-overwrites")
         }
 
-        let speedLimit = UITestLaunchMode.storage.integer(forKey: UserDefaultsKeys.downloadSpeedLimit)
+        let speedLimit = userDefaults.integer(forKey: UserDefaultsKeys.downloadSpeedLimit)
         if speedLimit > 0 {
             args.append(contentsOf: ["--limit-rate", "\(speedLimit)K"])
         }
@@ -2935,7 +2937,8 @@ public struct DownloadResult: Sendable {
                     args += ["-c:v", "copy"]
                     if codec == .h265 && targetExtension == "mp4" { args += ["-tag:v", "hvc1"] }
                 } else {
-                    args += Self.videoConversionArguments(options: options, toneMap: toneMap)
+                    // Probing the hardware encoders opens a VideoToolbox session, which blocks.
+                    args += await Task.detached { Self.videoConversionArguments(options: options, toneMap: toneMap) }.value
                 }
             }
         }
@@ -3461,7 +3464,7 @@ public struct DownloadResult: Sendable {
 
     private func configuredBrowserCookieSource() -> String? {
         guard !UITestLaunchMode.isActive else { return nil }
-        let raw = UserDefaults.standard.string(forKey: UserDefaultsKeys.browserForCookies) ?? "safari"
+        let raw = userDefaults.string(forKey: UserDefaultsKeys.browserForCookies) ?? "safari"
         guard let browser = Self.validatedBrowserCookieSource(raw) else {
             if raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() != "none" {
                 LoggerService.shared.log("Invalid or unrecognized browserForCookies setting '\(raw)', falling back to none", level: .warning)

@@ -753,12 +753,12 @@ final class DownloadManagerTests: XCTestCase {
 
     func testCustomPresetLoadCorruptedDataGracefullyHandled() {
         let userDefaultsKey = UserDefaultsKeys.customPresets
-        UserDefaults.standard.set("corrupted_data".data(using: .utf8)!, forKey: userDefaultsKey)
+        TestState.defaults.set("corrupted_data".data(using: .utf8)!, forKey: userDefaultsKey)
 
-        let presets = CustomPreset.loadAll()
+        let presets = CustomPreset.loadAll(from: TestState.defaults)
         XCTAssertEqual(presets.count, 0, "Corrupted presets should return empty list without crash")
 
-        UserDefaults.standard.removeObject(forKey: userDefaultsKey)
+        TestState.defaults.removeObject(forKey: userDefaultsKey)
     }
 
     func testRetryDownloadResetsForceOverwriteFlag() {

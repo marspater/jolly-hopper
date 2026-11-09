@@ -15,7 +15,7 @@ class DownloadManager: ObservableObject {
     }
     private(set) var downloadIDs: Set<UUID> = []
     @Published var history: [HistoricDownload] = []
-    let ytdlpService = YtdlpService()
+    let ytdlpService: YtdlpService
     let historyStore: DownloadHistoryStore
     let queue: DownloadQueue
     let recoveryStore: QueueRecoveryStore
@@ -56,6 +56,7 @@ class DownloadManager: ObservableObject {
         self.historyStore = historyStore ?? DownloadHistoryStore(userDefaults: userDefaults, log: LoggerService.coreSink)
         self.queue = queue ?? DownloadQueue(userDefaults: userDefaults)
         self.userDefaults = userDefaults
+        self.ytdlpService = YtdlpService(userDefaults: userDefaults)
         self.recoveryStore = QueueRecoveryStore(fileURL: recoveryFileURL, log: LoggerService.coreSink)
         self.executor = DownloadExecutor(ytdlpService: ytdlpService)
         self.executor.delegate = self
