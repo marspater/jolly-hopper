@@ -150,12 +150,20 @@ public final class SecureCookieFile: @unchecked Sendable {
 
     /// Cookies without scope metadata (raw Cookie header, extracted tokens) stay host-only:
     /// they never reach the parent domain or sibling subdomains.
-    private static func addHostOnlyCookie(
-        to map: inout [CookieKey: CookieEntry], host: String, name: String, value: String, isSecure: Bool, expiry: Int
-    ) {
-        map[CookieKey(domain: host.lowercased(), path: "/", name: name)] = CookieEntry(
-            domain: host, includeSubdomains: false, path: "/", isSecure: isSecure, expiry: expiry, name: name, value: value
+    private static func hostOnlyCookie(
+        host: String, name: String, value: String, isSecure: Bool, expiry: Int
+    ) -> (key: CookieKey, entry: CookieEntry) {
+        let key = CookieKey(domain: host.lowercased(), path: "/", name: name)
+        let entry = CookieEntry(
+            domain: host,
+            includeSubdomains: false,
+            path: "/",
+            isSecure: isSecure,
+            expiry: expiry,
+            name: name,
+            value: value
         )
+        return (key, entry)
     }
 
     /// Creates and validates a new `SecureCookieFile` with 0o600 permissions.
@@ -194,7 +202,10 @@ public final class SecureCookieFile: @unchecked Sendable {
                     let key = sanitizeCookieToken(parts[0].trimmingCharacters(in: .whitespacesAndNewlines))
                     let value = sanitizeCookieToken(parts[1].trimmingCharacters(in: .whitespacesAndNewlines))
                     if !key.isEmpty && !value.isEmpty {
-                        Self.addHostOnlyCookie(to: &cookieMap, host: hostOnlyDomain, name: key, value: value, isSecure: requireSecureTransport, expiry: defaultExpiry)
+                        let hostOnly = Self.hostOnlyCookie(
+                    host: hostOnlyDomain, name: key, value: value, isSecure: requireSecureTransport, expiry: defaultExpiry
+                )
+                cookieMap[hostOnly.key] = hostOnly.entry
                     }
                 }
             }
@@ -237,7 +248,10 @@ public final class SecureCookieFile: @unchecked Sendable {
             let key = sanitizeCookieToken(cookie.name.trimmingCharacters(in: .whitespacesAndNewlines))
             let value = sanitizeCookieToken(cookie.value.trimmingCharacters(in: .whitespacesAndNewlines))
             if !key.isEmpty && !value.isEmpty {
-                Self.addHostOnlyCookie(to: &cookieMap, host: hostOnlyDomain, name: key, value: value, isSecure: requireSecureTransport, expiry: defaultExpiry)
+                let hostOnly = Self.hostOnlyCookie(
+                    host: hostOnlyDomain, name: key, value: value, isSecure: requireSecureTransport, expiry: defaultExpiry
+                )
+                cookieMap[hostOnly.key] = hostOnly.entry
             }
         }
 
