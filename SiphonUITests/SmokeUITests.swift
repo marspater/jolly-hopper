@@ -26,6 +26,15 @@ final class SmokeUITests: XCTestCase {
         app.descendants(matching: .any)[identifier].firstMatch
     }
 
+    /// The first click on a window that is not yet key only activates it, so allow a retry.
+    private func select(_ tab: XCUIElement) -> Bool {
+        for _ in 0..<3 {
+            tab.click()
+            if tab.wait(for: \.isSelected, toEqual: true, timeout: 3) { return true }
+        }
+        return false
+    }
+
     /// The queue is only reachable from the sidebar, which starts hidden.
     private func openQueue(in app: XCUIApplication) {
         let queued = element("sidebar-queued", in: app)
@@ -65,11 +74,8 @@ final class SmokeUITests: XCTestCase {
         app.typeKey(",", modifierFlags: .command)
         let advanced = element("settings-tab-advanced", in: app)
         XCTAssertTrue(advanced.waitForExistence(timeout: 10))
-        advanced.click()
-        XCTAssertTrue(advanced.wait(for: \.isSelected, toEqual: true, timeout: 10))
-        let about = element("settings-tab-about", in: app)
-        about.click()
-        XCTAssertTrue(about.wait(for: \.isSelected, toEqual: true, timeout: 10))
+        XCTAssertTrue(select(advanced), app.debugDescription)
+        XCTAssertTrue(select(element("settings-tab-about", in: app)), app.debugDescription)
     }
 
     func testRemovingSeededQueueItem() throws {
