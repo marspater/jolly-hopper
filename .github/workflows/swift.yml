@@ -174,6 +174,13 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+      - name: Capture real app state (before)
+        id: real-state-before
+        run: |
+          { defaults read com.marspater.siphon 2>/dev/null || echo "defaults: absent"
+            ls -lART "$HOME/Library/Application Support/Siphon" 2>/dev/null || echo "Application Support: absent"
+          } > "$RUNNER_TEMP/real-state-before.txt"
+
       - name: UI tests (Debug)
         run: |
           xcodebuild test \
@@ -188,10 +195,55 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO
 
+      - name: Verify real app state is unchanged
+        # Covers the defaults and Application Support locations from #607.
+        # The third location, the TCC record, cannot be read in CI.
+        if: ${{ !cancelled() && steps.real-state-before.outcome == 'success' }}
+        run: |
+          { defaults read com.marspater.siphon 2>/dev/null || echo "defaults: absent"
+            ls -lART "$HOME/Library/Application Support/Siphon" 2>/dev/null || echo "Application Support: absent"
+          } > "$RUNNER_TEMP/real-state-after.txt"
+          if ! diff -u "$RUNNER_TEMP/real-state-before.txt" "$RUNNER_TEMP/real-state-after.txt"; then
+            echo "::error::UI tests changed the real app state"
+            exit 1
+          fi
+
       - name: Upload test results
         if: ${{ always() }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: xcresult-ui
+          path: ${{ runner.temp }}/results/*.xcresult
+          retention-days: 7
+
+  performance:
+    # Opt-in: proves the Performance plan runs. Baselines match one local machine class only.
+    if: ${{ github.event_name == 'workflow_dispatch' }}
+    runs-on: macos-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Performance tests (Debug)
+        run: |
+          xcodebuild test \
+            -project Siphon.xcodeproj \
+            -scheme Siphon \
+            -testPlan Performance \
+            -destination 'platform=macOS' \
+            -configuration Debug \
+            -resultBundlePath "$RUNNER_TEMP/results/performance.xcresult" \
+            MACOSX_DEPLOYMENT_TARGET=15.0 \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Upload test results
+        if: ${{ always() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: xcresult-performance
           path: ${{ runner.temp }}/results/*.xcresult
           retention-days: 7
