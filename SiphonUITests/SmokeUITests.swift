@@ -8,7 +8,7 @@ final class SmokeUITests: XCTestCase {
     override func setUp() async throws {
         continueAfterFailure = false
         root = FileManager.default.temporaryDirectory.appendingPathComponent("SiphonUITests-\(UUID().uuidString)", isDirectory: true)
-        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: root.appendingPathComponent("Library/Preferences", isDirectory: true), withIntermediateDirectories: true)
     }
 
     override func tearDown() async throws {
@@ -18,12 +18,24 @@ final class SmokeUITests: XCTestCase {
     private func launch() -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments += ["--siphon-ui-test-root", root.path, "-ApplePersistenceIgnoreState", "YES"]
+        // AppKit saves window and split-view geometry straight to the standard domain, which
+        // the launch argument cannot redirect. These move that domain under the root.
+        app.launchEnvironment["CFFIXED_USER_HOME"] = root.path
+        app.launchEnvironment["__CFPREFERENCES_AVOID_DAEMON"] = "1"
         app.launch()
         return app
     }
 
     private func element(_ identifier: String, in app: XCUIApplication) -> XCUIElement {
         app.descendants(matching: .any)[identifier].firstMatch
+    }
+
+    /// The queue is only reachable from the sidebar, which starts hidden.
+    private func openQueue(in app: XCUIApplication) {
+        let queued = element("sidebar-queued", in: app)
+        if !queued.exists { element("sidebar-toggle", in: app).click() }
+        XCTAssertTrue(queued.waitForExistence(timeout: 10))
+        queued.click()
     }
 
     private func seedQueue(status: String) throws {
@@ -58,7 +70,8 @@ final class SmokeUITests: XCTestCase {
         let advanced = element("settings-tab-advanced", in: app)
         XCTAssertTrue(advanced.waitForExistence(timeout: 10))
         advanced.click()
-        XCTAssertTrue(app.buttons["view-debug-logs"].waitForExistence(timeout: 10))
+        // The form only exposes visible rows, so check one at the top of the tab.
+        XCTAssertTrue(app.staticTexts["SponsorBlock"].waitForExistence(timeout: 10))
         let about = element("settings-tab-about", in: app)
         about.click()
         XCTAssertTrue(app.staticTexts["marspater"].waitForExistence(timeout: 10))
@@ -67,9 +80,8 @@ final class SmokeUITests: XCTestCase {
     func testRemovingSeededQueueItem() throws {
         try seedQueue(status: "paused")
         let app = launch()
-        let segment = element("status-segment-queued", in: app)
-        XCTAssertTrue(segment.waitForExistence(timeout: 15))
-        segment.click()
+        XCTAssertTrue(app.windows.firstMatch.waitForExistence(timeout: 15))
+        openQueue(in: app)
         let title = element("queue-row-title", in: app)
         XCTAssertTrue(title.waitForExistence(timeout: 10))
         element("row-more", in: app).click()
@@ -89,7 +101,7 @@ final class SmokeUITests: XCTestCase {
         XCTAssertTrue(pause.waitForExistence(timeout: 10))
         pause.click()
 
-        element("status-segment-queued", in: app).click()
+        openQueue(in: app)
         let resume = element("row-resume", in: app)
         XCTAssertTrue(resume.waitForExistence(timeout: 10))
         resume.click()
