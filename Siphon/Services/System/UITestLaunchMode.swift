@@ -1,4 +1,4 @@
-import Foundation
+import AppKit
 import SiphonCore
 
 /// `--siphon-ui-test-root <dir>` redirects state to a temporary directory for UI tests.
@@ -30,6 +30,29 @@ enum UITestLaunchMode {
 
     /// The store for preferences: the suite in this mode, otherwise `.standard`.
     static var storage: UserDefaults { defaults ?? .standard }
+
+    /// AppKit saves window and split-view geometry straight to the standard domain, and
+    /// SwiftUI gives every scene an autosave name, so a suite cannot redirect those writes.
+    static func disableAppKitAutosave() {
+        #if DEBUG
+        guard isActive else { return }
+        let setFrameName: @convention(block) (NSWindow, NSWindow.FrameAutosaveName) -> Bool = { _, _ in true }
+        let saveFrame: @convention(block) (NSWindow, NSWindow.FrameAutosaveName) -> Void = { _, _ in }
+        let setSplitName: @convention(block) (NSSplitView, NSSplitView.AutosaveName?) -> Void = { _, _ in }
+        replace(#selector(NSWindow.setFrameAutosaveName(_:)), on: NSWindow.self, with: setFrameName)
+        replace(#selector(NSWindow.saveFrame(usingName:)), on: NSWindow.self, with: saveFrame)
+        replace(#selector(setter: NSSplitView.autosaveName), on: NSSplitView.self, with: setSplitName)
+        #endif
+    }
+
+    #if DEBUG
+    private static func replace(_ selector: Selector, on type: AnyClass, with block: Any) {
+        guard let method = class_getInstanceMethod(type, selector) else {
+            fatalError("UI test mode cannot stop autosave: \(selector) is missing")
+        }
+        method_setImplementation(method, imp_implementationWithBlock(block))
+    }
+    #endif
 
     /// Adds the jobs in `<root>/queue_seed.json`, an array of `{"url", "title", "status"}`.
     @MainActor

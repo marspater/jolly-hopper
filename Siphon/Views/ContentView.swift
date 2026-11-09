@@ -12,7 +12,6 @@ struct MainWindowConfigurator: NSViewRepresentable {
             guard let window = view.window else { return }
             window.identifier = NSUserInterfaceItemIdentifier("SiphonMainWindow")
             if UITestLaunchMode.isActive {
-                window.setFrameAutosaveName("")
                 window.isRestorable = false
             }
             window.titleVisibility = .hidden

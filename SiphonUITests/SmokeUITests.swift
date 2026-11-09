@@ -8,7 +8,7 @@ final class SmokeUITests: XCTestCase {
     override func setUp() async throws {
         continueAfterFailure = false
         root = FileManager.default.temporaryDirectory.appendingPathComponent("SiphonUITests-\(UUID().uuidString)", isDirectory: true)
-        try FileManager.default.createDirectory(at: root.appendingPathComponent("Library/Preferences", isDirectory: true), withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
     }
 
     override func tearDown() async throws {
@@ -18,10 +18,6 @@ final class SmokeUITests: XCTestCase {
     private func launch() -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments += ["--siphon-ui-test-root", root.path, "-ApplePersistenceIgnoreState", "YES"]
-        // AppKit saves window and split-view geometry straight to the standard domain, which
-        // the launch argument cannot redirect. These move that domain under the root.
-        app.launchEnvironment["CFFIXED_USER_HOME"] = root.path
-        app.launchEnvironment["__CFPREFERENCES_AVOID_DAEMON"] = "1"
         app.launch()
         return app
     }
@@ -70,8 +66,8 @@ final class SmokeUITests: XCTestCase {
         let advanced = element("settings-tab-advanced", in: app)
         XCTAssertTrue(advanced.waitForExistence(timeout: 10))
         advanced.click()
-        // The form only exposes visible rows, so check one at the top of the tab.
-        XCTAssertTrue(app.staticTexts["SponsorBlock"].waitForExistence(timeout: 10))
+        // The form only exposes visible rows, so check one near the top of the tab.
+        XCTAssertTrue(app.buttons["update-ytdlp-now"].waitForExistence(timeout: 10))
         let about = element("settings-tab-about", in: app)
         about.click()
         XCTAssertTrue(app.staticTexts["marspater"].waitForExistence(timeout: 10))
@@ -84,7 +80,7 @@ final class SmokeUITests: XCTestCase {
         openQueue(in: app)
         let title = element("queue-row-title", in: app)
         XCTAssertTrue(title.waitForExistence(timeout: 10))
-        element("row-more", in: app).click()
+        title.rightClick()
         let remove = app.menuItems.matching(NSPredicate(format: "identifier == 'row-remove' OR title == 'Remove'")).firstMatch
         XCTAssertTrue(remove.waitForExistence(timeout: 5))
         remove.click()
