@@ -6758,7 +6758,7 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertEqual(try String(contentsOf: source, encoding: .utf8), "HEVC output")
         let conversion = try XCTUnwrap(commands.value.first { $0.first?.hasSuffix("ffmpeg") == true })
         #if arch(arm64)
-        let expectsVideoToolbox = YtdlpService.hasHardwareEncoder(kCMVideoCodecType_HEVC)
+        let expectsVideoToolbox = await Task.detached { YtdlpService.hasHardwareEncoder(kCMVideoCodecType_HEVC) }.value
         #else
         let expectsVideoToolbox = false
         #endif
@@ -6839,12 +6839,12 @@ final class YtdlpServiceTests: XCTestCase {
         }
     }
 
-    func testVideoConversionSetsExplicitRateControl() {
+    func testVideoConversionSetsExplicitRateControl() async {
         var options = DownloadOptions.default
         options.fileType = .mp4
         #if arch(arm64)
-        let h264 = YtdlpService.hasHardwareEncoder(kCMVideoCodecType_H264) ? ("-q:v", "80") : ("-crf", "18")
-        let h265 = YtdlpService.hasHardwareEncoder(kCMVideoCodecType_HEVC) ? ("-q:v", "80") : ("-crf", "20")
+        let h264 = await Task.detached { YtdlpService.hasHardwareEncoder(kCMVideoCodecType_H264) }.value ? ("-q:v", "80") : ("-crf", "18")
+        let h265 = await Task.detached { YtdlpService.hasHardwareEncoder(kCMVideoCodecType_HEVC) }.value ? ("-q:v", "80") : ("-crf", "20")
         #else
         let h264 = ("-crf", "18"), h265 = ("-crf", "20")
         #endif
@@ -6861,7 +6861,7 @@ final class YtdlpServiceTests: XCTestCase {
         options.fileType = .webm
         cases.append(("WebM SDR", options, ("-crf", "24")))
         for (label, options, (flag, value)) in cases {
-            let args = YtdlpService.videoConversionArguments(options: options, toneMap: options.hdrAction == .convertToSDR)
+            let args = await Task.detached { YtdlpService.videoConversionArguments(options: options, toneMap: options.hdrAction == .convertToSDR) }.value
             XCTAssertEqual(args.firstIndex(of: flag).map { args[$0 + 1] }, value, "\(label): explicit rate control")
             XCTAssertFalse(args.contains("-strict"), "\(label): stable encoders need no experimental flag")
             if args.contains("libvpx-vp9") {
