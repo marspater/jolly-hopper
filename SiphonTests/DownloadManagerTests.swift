@@ -41,7 +41,7 @@ final class DownloadManagerTests: XCTestCase {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: root) }
-        let manager = DownloadManager(recoveryFileURL: root.appendingPathComponent("recovery.json"))
+        let manager = DownloadManager.forTesting(recoveryFileURL: root.appendingPathComponent("recovery.json"))
         defer { manager.shutdown() }
         var options = DownloadOptions.default
         options.saveFolder = root
@@ -72,7 +72,7 @@ final class DownloadManagerTests: XCTestCase {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: root) }
-        let manager = DownloadManager(recoveryFileURL: root.appendingPathComponent("recovery.json"))
+        let manager = DownloadManager.forTesting(recoveryFileURL: root.appendingPathComponent("recovery.json"))
         defer { manager.shutdown() }
         manager.ytdlpService.isUpdating = true // hold jobs in the queue
         let titles = ["Paused", "Done", "Q1", "Q2", "Q3"]
@@ -1590,7 +1590,7 @@ final class NotificationServiceTests: XCTestCase {
 
         let storeURL = root.appendingPathComponent("recovery.json")
         let store = QueueRecoveryStore(fileURL: storeURL)
-        let manager = DownloadManager(recoveryFileURL: storeURL)
+        let manager = DownloadManager.forTesting(recoveryFileURL: storeURL)
 
         let interrupted = Download(url: "https://example.com/interrupted", options: .default, title: "Interrupted Job")
         interrupted.status = .downloading
@@ -1618,7 +1618,7 @@ final class NotificationServiceTests: XCTestCase {
 
         let storeURL = root.appendingPathComponent("recovery.json")
         let store = QueueRecoveryStore(fileURL: storeURL)
-        let manager = DownloadManager(recoveryFileURL: storeURL)
+        let manager = DownloadManager.forTesting(recoveryFileURL: storeURL)
 
         let interrupted = Download(url: "https://example.com/interrupted", options: .default, title: "Interrupted Job")
         interrupted.status = .downloading

@@ -73,6 +73,26 @@ Skips in this run:
 
 `ProcessLifecycleTests` skips one test without `siphon-pgrp` (`Needs siphon-pgrp to own a process group`). It did not skip here because the build phase produced the helper. A few other tests skip conditionally on perl, codesign, Reduce Motion, network, a JS runtime or missing sources.
 
+### Counts and parallel run after the SiphonCore move (#591, #597, #598)
+
+The per-class table above is the #585 snapshot and stays as measured. Counts on 9 November 2026, branch `mars/xm-607-ui-isolation`:
+
+| Bundle | XCTest | Swift Testing | Total | How counted |
+| --- | ---: | ---: | ---: | --- |
+| SiphonCoreTests (not hosted) | 118 | 1 | 119 | Run: 117 passed, 0 failed. The `Unit` plan skips the 2 `SiphonPerformanceTests`. |
+| SiphonTests (hosted) | 716 | 6 | 722 | Source count of no-argument `func test...()` and `@Test`, not run. |
+| SiphonUITests | 9 | 0 | 9 | Source count, not run. |
+
+`DownloadTests` is split: the 18 tests that need only SiphonCore are now `SiphonCoreTests/DownloadModelTests.swift`, and the 9 that need `YtdlpService`, `LanguageService`, `DownloadRowView` or `MenuBarView` stay hosted.
+
+Swift Testing is in `SupportedBrowserTests` (1, SiphonCoreTests), `BrowserUtilsTests` (4) and `PreviewFixturesTests` (2), both in SiphonTests. Result bundles report 121 passed runs for the 117 SiphonCoreTests tests because `SupportedBrowserTests` is parameterized and counts each of its 5 arguments.
+
+| Measurement | Wall clock | Notes |
+| --- | --- | --- |
+| SiphonCoreTests, Debug, parallel | 2 s | One run on this machine, 4 `xctest` worker processes, load average about 3. |
+
+I timed it the same way as #585, with `date +%s` around `xcodebuild test -testPlan Unit -only-testing:SiphonCoreTests`, so the figure has one-second resolution. The build was already up to date, so it contains almost no compile time, and the result bundle puts the test run itself at 1.5 s. It is not a like-for-like comparison with the 136 s hosted suite above, which ran 827 tests and included a build and an app launch.
+
 ## Static analysis (#587)
 
 | Tool | What it checks today | Xcode overlap | Decision |
@@ -148,3 +168,7 @@ Trigger to revisit: someone runs the hosted suite on a build using native ad hoc
 **Retired.** I removed `.swiftlint.yml` because nothing reads it. No workflow runs SwiftLint directly, and Codacy runs it on every PR with its own rule set: with the file present, Codacy still flagged rules the file disables. For the same reason the `.codacy.yml` engine switch does not stop SwiftLint.
 
 Trigger to revisit: moving lint out of Codacy into a pinned CI step.
+
+## Integration test plan environment (#609)
+
+`Integration.xctestplan` does not declare `SIPHON_CONVERSION_FFMPEG_DIR` or the `SIPHON_HLS_*` variables. The tests skip only when a variable is unset, so an empty value declared in the plan would make them run without a path instead of skipping. The variables still reach the tests through `TEST_RUNNER_`-prefixed environment variables, as in the `conversion` job in `.github/workflows/swift.yml`.
