@@ -980,12 +980,8 @@ struct WhatsNewSheetView: View {
     ContentView().previewEnvironment(downloads: PreviewFixtures.mixedQueue).preferredColorScheme(.dark)
 }
 
-#Preview("Recovery prompt") {
-    let manager = PreviewFixtures.manager()
-    manager.showQueueRecoveryAlert = true
-    manager.recoverableJobsCount = 2
-    return ContentView().previewEnvironment(manager: manager)
-}
+// No recovery-prompt preview: presenting an alert crashes the preview host on macOS 27.2.
+// SmokeUITests.testSeededRecoveryFileShowsPrompt covers that prompt.
 
 #Preview("Update available") {
     let checker = PreviewFixtures.updateChecker()
