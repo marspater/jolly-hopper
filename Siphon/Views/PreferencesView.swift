@@ -3,10 +3,10 @@ import AppKit
 import SiphonCore
 
 #if DEBUG
-#Preview("General") { PreferencesView(initialTab: .general).previewEnvironment() }
-#Preview("Download") { PreferencesView(initialTab: .download).previewEnvironment() }
-#Preview("Advanced") { PreferencesView(initialTab: .advanced).previewEnvironment() }
-#Preview("About") { PreferencesView(initialTab: .about).previewEnvironment() }
+#Preview("General") { PreferencesView(initialTab: .general, userDefaults: PreviewFixtures.defaults).previewEnvironment() }
+#Preview("Download") { PreferencesView(initialTab: .download, userDefaults: PreviewFixtures.defaults).previewEnvironment() }
+#Preview("Advanced") { PreferencesView(initialTab: .advanced, userDefaults: PreviewFixtures.defaults).previewEnvironment() }
+#Preview("About") { PreferencesView(initialTab: .about, userDefaults: PreviewFixtures.defaults).previewEnvironment() }
 #endif
 
 struct PreferencesView: View {
@@ -96,8 +96,11 @@ struct PreferencesView: View {
 
     @State private var selectedTab: PreferenceTab
 
-    init(initialTab: PreferenceTab = .general) {
+    private let userDefaults: UserDefaults
+
+    init(initialTab: PreferenceTab = .general, userDefaults: UserDefaults = UITestLaunchMode.storage) {
         _selectedTab = State(initialValue: initialTab)
+        self.userDefaults = userDefaults
     }
 
     @Environment(\.dismiss) var dismiss
@@ -168,7 +171,7 @@ struct PreferencesView: View {
             showUpdateRestartAlert = updateChecker.needsRestart
             SiphonTheme.applyTheme(theme)
             previousLanguage = languageService.selectedLanguage
-            customPresets = CustomPreset.loadAll(from: UITestLaunchMode.storage)
+            customPresets = CustomPreset.loadAll(from: userDefaults)
             hasFullDiskAccess = YtdlpService.hasFullDiskAccess
             isLaunchAtLoginEnabled = LoginItemHelper.shared.isEnabled
             Task {
@@ -953,7 +956,7 @@ struct PreferencesView: View {
             customPresets.append(preset)
         }
 
-        CustomPreset.saveAll(customPresets, to: UITestLaunchMode.storage)
+        CustomPreset.saveAll(customPresets, to: userDefaults)
         resetPresetForm()
         showCreatePresetSheet = false
     }
@@ -963,7 +966,7 @@ struct PreferencesView: View {
             selectedCustomPresetIdString = ""
         }
         customPresets.removeAll { $0.id == preset.id }
-        CustomPreset.saveAll(customPresets, to: UITestLaunchMode.storage)
+        CustomPreset.saveAll(customPresets, to: userDefaults)
     }
 
     private func resetFormatToDefaults() {

@@ -4,7 +4,6 @@
 //
 
 import XCTest
-@testable import Siphon
 @testable import SiphonCore
 
 @MainActor
@@ -276,6 +275,4 @@ final class DownloadHistoryStoreTests: XCTestCase {
         XCTAssertEqual(HistoricDownload(download: collided).scratchDirectoryPath, scratch.path,
                        "Overwrite or New Name resumes the paused attempt's partial data")
     }
-
 }
-

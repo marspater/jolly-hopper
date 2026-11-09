@@ -6,18 +6,20 @@
 import Foundation
 import SiphonCore
 
-@MainActor
-final class DownloadHistoryStore {
+@preconcurrency @MainActor
+public final class DownloadHistoryStore {
     private let userDefaults: UserDefaults
+    private let log: CoreLogSink
     private let historyKey: String
-    static let maxHistoryCount = 500
+    public static let maxHistoryCount = 500
 
-    init(userDefaults: UserDefaults = .standard, historyKey: String = UserDefaultsKeys.downloadHistory) {
+    public init(userDefaults: UserDefaults = .standard, historyKey: String = UserDefaultsKeys.downloadHistory, log: @escaping CoreLogSink = CoreLog.unified) {
+        self.log = log
         self.userDefaults = userDefaults
         self.historyKey = historyKey
     }
 
-    func loadHistory() -> [HistoricDownload] {
+    public func loadHistory() -> [HistoricDownload] {
         guard let data = userDefaults.data(forKey: historyKey) else { return [] }
         let decoder = JSONDecoder()
         // Fast path: Attempt direct batch decoding of valid history arrays.
@@ -43,31 +45,31 @@ final class DownloadHistoryStore {
                 decoded.append(item)
             }
             if skippedCount > 0 {
-                LoggerService.shared.log("Skipped invalid download history entries while restoring history.", level: .warning)
+                log("Skipped invalid download history entries while restoring history.", .warning)
                 do {
                     let repairedData = try JSONEncoder().encode(decoded)
                     userDefaults.set(repairedData, forKey: historyKey)
                 } catch {
-                    LoggerService.shared.log("Failed to persist repaired download history: \(error.localizedDescription)", level: .error)
+                    log("Failed to persist repaired download history: \(error.localizedDescription)", .error)
                 }
             }
             return decoded
         } catch {
-            LoggerService.shared.log("Failed to restore download history: \(error.localizedDescription)", level: .error)
+            log("Failed to restore download history: \(error.localizedDescription)", .error)
             return []
         }
     }
 
-    func saveHistory(_ history: [HistoricDownload]) {
+    public func saveHistory(_ history: [HistoricDownload]) {
         do {
             let encoded = try JSONEncoder().encode(history)
             userDefaults.set(encoded, forKey: historyKey)
         } catch {
-            LoggerService.shared.log("Failed to encode download history: \(error.localizedDescription)", level: .error)
+            log("Failed to encode download history: \(error.localizedDescription)", .error)
         }
     }
 
-    func addToHistory(_ download: Download, history: inout [HistoricDownload], skipSave: Bool = false) {
+    public func addToHistory(_ download: Download, history: inout [HistoricDownload], skipSave: Bool = false) {
         let historic = HistoricDownload(download: download)
 
         // Upsert: remove existing if present
@@ -93,7 +95,7 @@ final class DownloadHistoryStore {
         }
     }
 
-    static func restoreDownloads(from history: [HistoricDownload], existingDownloads: [Download]) -> [Download] {
+    public static func restoreDownloads(from history: [HistoricDownload], existingDownloads: [Download]) -> [Download] {
         // History is stored oldest-first and `downloads` is in queue (arrival)
         // order, so restore chronologically: new jobs append after it.
         let restored = history.map { $0.toDownload() }

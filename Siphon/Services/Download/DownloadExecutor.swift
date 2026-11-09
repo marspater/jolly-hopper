@@ -369,7 +369,7 @@ final class DownloadExecutor: ObservableObject {
             }
             let saveFolder = download.options.saveFolder
             Task.detached(priority: .utility) {
-                ScratchDirectoryPolicy.purgeAbandonedSiblingTemps(in: saveFolder)
+                ScratchDirectoryPolicy.purgeAbandonedSiblingTemps(in: saveFolder, log: LoggerService.coreSink)
             }
 
             // The .downloading transition persists recovery state. Allocate the

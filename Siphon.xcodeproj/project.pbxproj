@@ -61,7 +61,6 @@
 		E0001093 /* ProcessLifecycleState.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000093 /* ProcessLifecycleState.swift */; };
 		E0001094 /* ProcessLifecycleTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000094 /* ProcessLifecycleTests.swift */; };
 		E0001095 /* DownloadHistoryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000095 /* DownloadHistoryStore.swift */; };
-		E0001096 /* DownloadHistoryStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000096 /* DownloadHistoryStoreTests.swift */; };
 		E0001097 /* ReleaseNotesService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000097 /* ReleaseNotesService.swift */; };
 		E0001098 /* ReleaseNotesServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000098 /* ReleaseNotesServiceTests.swift */; };
 		E0001099 /* DependencyUpdateCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0000099 /* DependencyUpdateCoordinator.swift */; };
@@ -115,6 +114,13 @@
 		E1001063 /* LaunchPerformanceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1000063 /* LaunchPerformanceTests.swift */; };
 		E1001070 /* siphon-pgrp.c in Sources */ = {isa = PBXBuildFile; fileRef = E0000070 /* siphon-pgrp.c */; };
 		E1001071 /* siphon-pgrp in Copy Helpers */ = {isa = PBXBuildFile; fileRef = E1000070 /* siphon-pgrp */; };
+		E1001080 /* MediaFileRules.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1000080 /* MediaFileRules.swift */; };
+		E1001081 /* SupportedBrowser.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1000081 /* SupportedBrowser.swift */; };
+		E1001082 /* CoreLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1000082 /* CoreLog.swift */; };
+		E1001083 /* DownloadQueueTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1000083 /* DownloadQueueTests.swift */; };
+		E1001084 /* QueueRecoveryStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1000084 /* QueueRecoveryStoreTests.swift */; };
+		E1001085 /* DownloadHistoryStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1000085 /* DownloadHistoryStoreTests.swift */; };
+		E1001086 /* SupportedBrowserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1000086 /* SupportedBrowserTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -175,7 +181,6 @@
 		E0000093 /* ProcessLifecycleState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProcessLifecycleState.swift; sourceTree = "<group>"; };
 		E0000094 /* ProcessLifecycleTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProcessLifecycleTests.swift; sourceTree = "<group>"; };
 		E0000095 /* DownloadHistoryStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DownloadHistoryStore.swift; sourceTree = "<group>"; };
-		E0000096 /* DownloadHistoryStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DownloadHistoryStoreTests.swift; sourceTree = "<group>"; };
 		E0000097 /* ReleaseNotesService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReleaseNotesService.swift; sourceTree = "<group>"; };
 		E0000098 /* ReleaseNotesServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReleaseNotesServiceTests.swift; sourceTree = "<group>"; };
 		E0000099 /* DependencyUpdateCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DependencyUpdateCoordinator.swift; sourceTree = "<group>"; };
@@ -230,6 +235,13 @@
 		E1000062 /* SiphonHostedPerformanceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SiphonHostedPerformanceTests.swift; sourceTree = "<group>"; };
 		E1000063 /* LaunchPerformanceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaunchPerformanceTests.swift; sourceTree = "<group>"; };
 		E1000070 /* siphon-pgrp */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = "siphon-pgrp"; sourceTree = BUILT_PRODUCTS_DIR; };
+		E1000080 /* MediaFileRules.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaFileRules.swift; sourceTree = "<group>"; };
+		E1000081 /* SupportedBrowser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SupportedBrowser.swift; sourceTree = "<group>"; };
+		E1000082 /* CoreLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoreLog.swift; sourceTree = "<group>"; };
+		E1000083 /* DownloadQueueTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DownloadQueueTests.swift; sourceTree = "<group>"; };
+		E1000084 /* QueueRecoveryStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QueueRecoveryStoreTests.swift; sourceTree = "<group>"; };
+		E1000085 /* DownloadHistoryStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DownloadHistoryStoreTests.swift; sourceTree = "<group>"; };
+		E1000086 /* SupportedBrowserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SupportedBrowserTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -327,7 +339,6 @@
 				E0000048 /* CustomPresetTests.swift */,
 				E0000049 /* DownloadTests.swift */,
 				E0000094 /* ProcessLifecycleTests.swift */,
-				E0000096 /* DownloadHistoryStoreTests.swift */,
 				E0000098 /* ReleaseNotesServiceTests.swift */,
 				E000009A /* DependencyUpdateCoordinatorTests.swift */,
 				E000009C /* DownloadQueueTests.swift */,
@@ -360,7 +371,6 @@
 			isa = PBXGroup;
 			children = (
 				E1000014 /* DownloadOptionsLocalization.swift */,
-				E0000003 /* Download.swift */,
 				E0000093 /* ProcessLifecycleState.swift */,
 				E00000A0 /* NavigationItem.swift */,
 				E00000A1 /* AppState.swift */,
@@ -395,13 +405,10 @@
 			isa = PBXGroup;
 			children = (
 				E0000005 /* DownloadManager.swift */,
-				E000009B /* DownloadQueue.swift */,
 				E000009D /* DownloadExecutor.swift */,
-				E0000095 /* DownloadHistoryStore.swift */,
 				E0000008 /* YtdlpProcessRunner.swift */,
 				E0000004 /* YtdlpService.swift */,
 				E0000099 /* DependencyUpdateCoordinator.swift */,
-				E00000B0 /* QueueRecoveryStore.swift */,
 				E00000B3 /* EgressProxyServer.swift */,
 			);
 			path = Download;
@@ -510,6 +517,13 @@
 		E1003001 /* SiphonCore */ = {
 			isa = PBXGroup;
 			children = (
+				E1000082 /* CoreLog.swift */,
+				E1000081 /* SupportedBrowser.swift */,
+				E1000080 /* MediaFileRules.swift */,
+				E00000B0 /* QueueRecoveryStore.swift */,
+				E0000095 /* DownloadHistoryStore.swift */,
+				E000009B /* DownloadQueue.swift */,
+				E0000003 /* Download.swift */,
 				E1000060 /* Signposts.swift */,
 				E1000013 /* DownloadModels.swift */,
 				E1F00006 /* MediaOptions.swift */,
@@ -527,6 +541,10 @@
 		E1003002 /* SiphonCoreTests */ = {
 			isa = PBXGroup;
 			children = (
+				E1000086 /* SupportedBrowserTests.swift */,
+				E1000085 /* DownloadHistoryStoreTests.swift */,
+				E1000084 /* QueueRecoveryStoreTests.swift */,
+				E1000083 /* DownloadQueueTests.swift */,
 				E1000061 /* SiphonPerformanceTests.swift */,
 				E1000015 /* LogSanitizerTests.swift */,
 				E0000041 /* MediaInfoTests.swift */,
@@ -783,7 +801,6 @@
 				E1001014 /* DownloadOptionsLocalization.swift in Sources */,
 				E0001092 /* ImageUtilities.swift in Sources */,
 				E0001050 /* Font+Geist.swift in Sources */,
-				E0001003 /* Download.swift in Sources */,
 				E0001028 /* View+Compatibility.swift in Sources */,
 				E0001001 /* SiphonApp.swift in Sources */,
 				E0001002 /* ContentView.swift in Sources */,
@@ -808,10 +825,8 @@
 				E0001034 /* DebugLogView.swift in Sources */,
 				E0001035 /* DownloadDiagnosticsView.swift in Sources */,
 				E0001093 /* ProcessLifecycleState.swift in Sources */,
-				E0001095 /* DownloadHistoryStore.swift in Sources */,
 				E0001097 /* ReleaseNotesService.swift in Sources */,
 				E0001099 /* DependencyUpdateCoordinator.swift in Sources */,
-				E000109B /* DownloadQueue.swift in Sources */,
 				E000109D /* DownloadExecutor.swift in Sources */,
 				E00010A0 /* NavigationItem.swift in Sources */,
 				E00010A1 /* AppState.swift in Sources */,
@@ -828,7 +843,6 @@
 				E00010AD /* HeroDropURLView.swift in Sources */,
 				E00010AE /* RecentDownloadRowView.swift in Sources */,
 				E00010AF /* RadiantSiphonLogoView.swift in Sources */,
-				E00010B0 /* QueueRecoveryStore.swift in Sources */,
 				E00010B3 /* EgressProxyServer.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -850,7 +864,6 @@
 				E0001048 /* CustomPresetTests.swift in Sources */,
 				E0001049 /* DownloadTests.swift in Sources */,
 				E0001094 /* ProcessLifecycleTests.swift in Sources */,
-				E0001096 /* DownloadHistoryStoreTests.swift in Sources */,
 				E0001098 /* ReleaseNotesServiceTests.swift in Sources */,
 				E000109A /* DependencyUpdateCoordinatorTests.swift in Sources */,
 				E000109C /* DownloadQueueTests.swift in Sources */,
@@ -869,6 +882,13 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				E1001082 /* CoreLog.swift in Sources */,
+				E1001081 /* SupportedBrowser.swift in Sources */,
+				E1001080 /* MediaFileRules.swift in Sources */,
+				E00010B0 /* QueueRecoveryStore.swift in Sources */,
+				E0001095 /* DownloadHistoryStore.swift in Sources */,
+				E000109B /* DownloadQueue.swift in Sources */,
+				E0001003 /* Download.swift in Sources */,
 				E1001060 /* Signposts.swift in Sources */,
 				E1001013 /* DownloadModels.swift in Sources */,
 				E1F01006 /* MediaOptions.swift in Sources */,
@@ -886,6 +906,10 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				E1001086 /* SupportedBrowserTests.swift in Sources */,
+				E1001085 /* DownloadHistoryStoreTests.swift in Sources */,
+				E1001084 /* QueueRecoveryStoreTests.swift in Sources */,
+				E1001083 /* DownloadQueueTests.swift in Sources */,
 				E1001061 /* SiphonPerformanceTests.swift in Sources */,
 				E1001015 /* LogSanitizerTests.swift in Sources */,
 				E0001041 /* MediaInfoTests.swift in Sources */,

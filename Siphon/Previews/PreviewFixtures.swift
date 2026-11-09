@@ -32,6 +32,8 @@ enum PreviewFixtures {
             userDefaults: defaults,
             recoveryFileURL: recoveryFileURL()
         )
+        manager.ytdlpService.version = DependencyChecksums.ytdlpVersion
+        manager.ytdlpService.updateYtdlpHandler = { DependencyChecksums.ytdlpVersion }
         manager.downloads = downloads
         return manager
     }

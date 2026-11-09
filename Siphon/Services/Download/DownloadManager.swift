@@ -48,15 +48,15 @@ class DownloadManager: ObservableObject {
     }
 
     init(
-        historyStore: DownloadHistoryStore = DownloadHistoryStore(),
-        queue: DownloadQueue = DownloadQueue(),
+        historyStore: DownloadHistoryStore? = nil,
+        queue: DownloadQueue? = nil,
         userDefaults: UserDefaults = .standard,
         recoveryFileURL: URL = DownloadManager.defaultRecoveryFileURL
     ) {
-        self.historyStore = historyStore
-        self.queue = queue
+        self.historyStore = historyStore ?? DownloadHistoryStore(userDefaults: userDefaults, log: LoggerService.coreSink)
+        self.queue = queue ?? DownloadQueue(userDefaults: userDefaults)
         self.userDefaults = userDefaults
-        self.recoveryStore = QueueRecoveryStore(fileURL: recoveryFileURL)
+        self.recoveryStore = QueueRecoveryStore(fileURL: recoveryFileURL, log: LoggerService.coreSink)
         self.executor = DownloadExecutor(ytdlpService: ytdlpService)
         self.executor.delegate = self
 
@@ -212,7 +212,7 @@ class DownloadManager: ObservableObject {
         guard !NotificationService.isRunningTests, !recoveryStore.hasUnsupportedSchemaSnapshot else { return }
         let kept = Set((downloads + pendingRecoveryJobs).compactMap { $0.scratchDirectory?.lastPathComponent })
         Task.detached(priority: .utility) {
-            ScratchDirectoryPolicy.purgeAbandoned(keeping: kept)
+            ScratchDirectoryPolicy.purgeAbandoned(keeping: kept, log: LoggerService.coreSink)
         }
     }
 

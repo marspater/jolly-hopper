@@ -1,5 +1,6 @@
 import Testing
 @testable import Siphon
+@testable import SiphonCore
 
 extension Tag {
     @Tag static var smoke: Self

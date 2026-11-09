@@ -1287,10 +1287,10 @@ final class QueueAndErrorUXTests: XCTestCase {
     }
 
     func testWhatsNewOnlyShowsOnFirstRunOrUpdate() async {
-        let appState = AppState()
+        let appState = AppState.forTesting()
         let languageService = LanguageService()
         let testVersion = appState.appVersion
-        let userDefaults = UserDefaults.standard
+        let userDefaults = TestState.defaults
 
         userDefaults.set(testVersion, forKey: UserDefaultsKeys.lastSeenVersion)
         appState.showWhatsNew = false

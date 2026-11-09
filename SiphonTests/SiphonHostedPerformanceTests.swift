@@ -27,4 +27,18 @@ final class SiphonHostedPerformanceTests: XCTestCase {
             _ = store.loadInterruptedJobs()
         }
     }
+
+    /// The other #612 intervals need a real download, so they are read from a trace.
+    func testRecoveryLoadSignpost() throws {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("SiphonPerf-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: url) }
+        let records = (0..<1_000).map { QueueRecoveryRecord(download: Download(url: "https://example.com/\($0)", options: .default)) }
+        try JSONEncoder().encode(QueueRecoverySnapshot(jobs: records)).write(to: url)
+        let manager = DownloadManager.forTesting(recoveryFileURL: url)
+        defer { manager.shutdown() }
+        let metric = XCTOSSignpostMetric(subsystem: "com.marspater.siphon", category: "Pipeline", name: "Recovery load")
+        measure(metrics: [metric, XCTClockMetric()]) {
+            manager.checkQueueRecovery()
+        }
+    }
 }

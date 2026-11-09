@@ -11,7 +11,8 @@ struct PreviewFixturesTests {
 
         let state = PreviewFixtures.appState()
         #expect(state.urlSession !== URLSession.shared)
-        _ = PreviewFixtures.manager(downloads: PreviewFixtures.lifecycle.map(\.1))
+        let manager = PreviewFixtures.manager(downloads: PreviewFixtures.lifecycle.map(\.1))
+        #expect(manager.ytdlpService.updateYtdlpHandler != nil)
         _ = PreviewFixtures.history
         _ = PreviewFixtures.mixedQueue
         #expect(PreviewFixtures.playlistInfo.playlist != nil)

@@ -4,6 +4,7 @@
 //
 
 import SwiftUI
+import SiphonCore
 
 struct RecentDownloadRowView: View {
     @ObservedObject var download: Download

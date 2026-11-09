@@ -1,5 +1,6 @@
 import SwiftUI
 import QuickLookUI
+import SiphonCore
 
 final class QuickLookPreviewHelper: NSObject, QLPreviewPanelDataSource, QLPreviewPanelDelegate, @unchecked Sendable {
     static let shared = QuickLookPreviewHelper()

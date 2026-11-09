@@ -6,51 +6,51 @@
 import Foundation
 import SiphonCore
 
-@MainActor
-final class DownloadQueue: ObservableObject {
-    private(set) var reservedDownloadSlots: Set<UUID> = []
-    private(set) var reservedOutputPaths: Set<String> = []
+@preconcurrency @MainActor
+public final class DownloadQueue: ObservableObject {
+    public private(set) var reservedDownloadSlots: Set<UUID> = []
+    public private(set) var reservedOutputPaths: Set<String> = []
     private let userDefaults: UserDefaults
 
-    var maxConcurrentDownloads: Int {
+    public var maxConcurrentDownloads: Int {
         let val = userDefaults.integer(forKey: UserDefaultsKeys.maxConcurrentDownloads)
         return val > 0 ? val : 3
     }
 
-    var activeSlotCount: Int {
+    public var activeSlotCount: Int {
         reservedDownloadSlots.count
     }
 
-    var availableSlots: Int {
+    public var availableSlots: Int {
         max(0, maxConcurrentDownloads - reservedDownloadSlots.count)
     }
 
-    init(userDefaults: UserDefaults = .standard) {
+    public init(userDefaults: UserDefaults = .standard) {
         self.userDefaults = userDefaults
     }
 
     // MARK: - Slot Management
 
-    func isSlotReserved(for id: UUID) -> Bool {
+    public func isSlotReserved(for id: UUID) -> Bool {
         reservedDownloadSlots.contains(id)
     }
 
     @discardableResult
-    func reserveSlot(for id: UUID) -> Bool {
+    public func reserveSlot(for id: UUID) -> Bool {
         reservedDownloadSlots.insert(id).inserted
     }
 
-    func releaseSlot(for id: UUID) {
+    public func releaseSlot(for id: UUID) {
         reservedDownloadSlots.remove(id)
     }
 
-    func clearReservedSlots() {
+    public func clearReservedSlots() {
         reservedDownloadSlots.removeAll()
     }
 
     /// Selects the next queued downloads that can be started within the available concurrency limit,
     /// and reserves their slots atomically.
-    func scheduleNextDownloads(from downloads: [Download]) -> [Download] {
+    public func scheduleNextDownloads(from downloads: [Download]) -> [Download] {
         let available = availableSlots
         guard available > 0 else { return [] }
 
@@ -65,7 +65,7 @@ final class DownloadQueue: ObservableObject {
 
     // MARK: - Output Path Planning & Reservation
 
-    nonisolated static func reservationKey(for path: String) -> String {
+    public nonisolated static func reservationKey(for path: String) -> String {
         canonicalFileURL(URL(fileURLWithPath: path))
             .path
             .precomposedStringWithCanonicalMapping
@@ -75,25 +75,25 @@ final class DownloadQueue: ObservableObject {
     /// Resolves symlinks in the parent folder, which exists, so a symlinked save
     /// folder and its target name the same file. The file itself usually does
     /// not exist yet, and resolving a missing path leaves it unchanged.
-    nonisolated static func canonicalFileURL(_ file: URL) -> URL {
+    public nonisolated static func canonicalFileURL(_ file: URL) -> URL {
         let standardized = file.standardizedFileURL
         return standardized.deletingLastPathComponent().resolvingSymlinksInPath()
             .appendingPathComponent(standardized.lastPathComponent)
     }
 
-    nonisolated static func filenameCollisionKey(_ value: String) -> String {
+    public nonisolated static func filenameCollisionKey(_ value: String) -> String {
         value.precomposedStringWithCanonicalMapping.lowercased()
     }
 
     /// Collision keys (full filename) of the finished media files in `folder`.
-    nonisolated static func existingMediaFileKeys(
+    public nonisolated static func existingMediaFileKeys(
         in folder: URL,
         fileManager: FileManager = .default
     ) -> Set<String> {
         let files = (try? fileManager.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)) ?? []
         // Bolt Performance Optimization: Stream elements directly using lazy.compactMap to eliminate intermediate Array allocation before Set construction
         return Set(files.lazy.compactMap { file in
-            YtdlpService.isMediaFilePath(file.path) ? Self.filenameCollisionKey(file.lastPathComponent) : nil
+            MediaFileRules.isMediaFilePath(file.path) ? Self.filenameCollisionKey(file.lastPathComponent) : nil
         })
     }
 
@@ -102,7 +102,7 @@ final class DownloadQueue: ObservableObject {
     /// check) leaves them there; resuming must reuse them, not report a collision.
     /// A file counts only while it is still the one recorded: deleted or
     /// replaced (another job's output under the same name) it is a collision.
-    nonisolated static func ownedOutputKeys(_ files: [URL: Int], in folder: URL) -> Set<String> {
+    public nonisolated static func ownedOutputKeys(_ files: [URL: Int], in folder: URL) -> Set<String> {
         let folderPath = folder.standardizedFileURL.resolvingSymlinksInPath().path
         return Set(files.lazy
             .filter { file, number in
@@ -112,7 +112,7 @@ final class DownloadQueue: ObservableObject {
     }
 
     /// The file system number (inode) of a regular file, or nil.
-    nonisolated static func fileNumber(of file: URL) -> Int? {
+    public nonisolated static func fileNumber(of file: URL) -> Int? {
         guard let attributes = try? FileManager.default.attributesOfItem(atPath: file.path),
               attributes[.type] as? FileAttributeType == .typeRegular else { return nil }
         return (attributes[.systemFileNumber] as? NSNumber)?.intValue
@@ -123,7 +123,7 @@ final class DownloadQueue: ObservableObject {
     /// extension. A video job keeps the source container when yt-dlp does not
     /// merge, so it collides with a video file of that name in any container,
     /// but never with audio: `Song.mp3` does not block `Song.mp4`.
-    nonisolated static func mediaFileCollides(
+    public nonisolated static func mediaFileCollides(
         baseName: String,
         options: DownloadOptions,
         existingMediaFileKeys: Set<String>
@@ -134,7 +134,7 @@ final class DownloadQueue: ObservableObject {
     }
 
     /// The file on disk that makes `mediaFileCollides` true, if any.
-    nonisolated static func collidingMediaFile(
+    public nonisolated static func collidingMediaFile(
         baseName: String,
         options: DownloadOptions,
         in folder: URL,
@@ -144,14 +144,14 @@ final class DownloadQueue: ObservableObject {
         let keys = Set(collisionExtensions(for: options).lazy.map { Self.filenameCollisionKey("\(baseName).\($0)") })
         let files = (try? fileManager.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)) ?? []
         return files.first {
-            YtdlpService.isMediaFilePath($0.path) && keys.contains(Self.filenameCollisionKey($0.lastPathComponent))
+            MediaFileRules.isMediaFilePath($0.path) && keys.contains(Self.filenameCollisionKey($0.lastPathComponent))
         }
     }
 
     private nonisolated static func collisionExtensions(for options: DownloadOptions) -> Set<String> {
         options.fileType.isVideo
-            ? YtdlpService.videoMediaExtensions
-            : [YtdlpService.resolvedOutputFileExtension(for: options)]
+            ? MediaFileRules.videoMediaExtensions
+            : [MediaFileRules.resolvedOutputFileExtension(for: options)]
     }
 
     /// Other jobs' reservations block a name by the same rule as files on
@@ -162,14 +162,14 @@ final class DownloadQueue: ObservableObject {
         }
     }
 
-    func planUniqueOutputPath(
+    public func planUniqueOutputPath(
         for download: Download,
         forceIncrement: Bool = false,
         fileManager: FileManager = .default
     ) -> (resolvedBaseName: String, candidatePath: String) {
-        let sanitizedBase = YtdlpService.sanitizeFilename(download.requestedBaseName)
+        let sanitizedBase = MediaFileRules.sanitizeFilename(download.requestedBaseName)
         let folder = download.options.saveFolder
-        let ext = YtdlpService.resolvedOutputFileExtension(for: download.options)
+        let ext = MediaFileRules.resolvedOutputFileExtension(for: download.options)
 
         let ownedFiles = Self.ownedOutputKeys(download.ownedOutputFiles, in: folder)
         let existingFiles = Self.existingMediaFileKeys(in: folder, fileManager: fileManager).subtracting(ownedFiles)
@@ -213,7 +213,7 @@ final class DownloadQueue: ObservableObject {
     }
 
     @discardableResult
-    func reserveUniqueOutputPath(
+    public func reserveUniqueOutputPath(
         for download: Download,
         forceIncrement: Bool = false,
         fileManager: FileManager = .default
@@ -230,19 +230,19 @@ final class DownloadQueue: ObservableObject {
         return (candidateName, candidatePath)
     }
 
-    func reserveOutputPath(_ path: String) {
+    public func reserveOutputPath(_ path: String) {
         reservedOutputPaths.insert(Self.reservationKey(for: path))
     }
 
-    func unreserveOutputPath(_ path: String) {
+    public func unreserveOutputPath(_ path: String) {
         reservedOutputPaths.remove(Self.reservationKey(for: path))
     }
 
-    func isPathReserved(_ path: String) -> Bool {
+    public func isPathReserved(_ path: String) -> Bool {
         reservedOutputPaths.contains(Self.reservationKey(for: path))
     }
 
-    func clearReservedOutputPaths() {
+    public func clearReservedOutputPaths() {
         reservedOutputPaths.removeAll()
     }
 
@@ -250,12 +250,12 @@ final class DownloadQueue: ObservableObject {
 
     /// Rows shown on the Queue tab. Up/Down reorder relative to these only, so
     /// a move never swaps with a hidden active, finished, or failed download.
-    static func isQueueTabMember(_ download: Download) -> Bool {
+    public static func isQueueTabMember(_ download: Download) -> Bool {
         download.status == .queued || download.status == .paused
     }
 
     @discardableResult
-    func moveUp(download: Download, in downloads: inout [Download]) -> Bool {
+    public func moveUp(download: Download, in downloads: inout [Download]) -> Bool {
         guard let index = downloads.firstIndex(where: { $0.id == download.id }),
               let neighbor = downloads[..<index].lastIndex(where: Self.isQueueTabMember) else { return false }
         downloads.swapAt(index, neighbor)
@@ -263,25 +263,25 @@ final class DownloadQueue: ObservableObject {
     }
 
     @discardableResult
-    func moveDown(download: Download, in downloads: inout [Download]) -> Bool {
+    public func moveDown(download: Download, in downloads: inout [Download]) -> Bool {
         guard let index = downloads.firstIndex(where: { $0.id == download.id }),
               let neighbor = downloads[(index + 1)...].firstIndex(where: Self.isQueueTabMember) else { return false }
         downloads.swapAt(index, neighbor)
         return true
     }
 
-    func canMoveUp(download: Download, in downloads: [Download]) -> Bool {
+    public func canMoveUp(download: Download, in downloads: [Download]) -> Bool {
         guard let index = downloads.firstIndex(where: { $0.id == download.id }) else { return false }
         return downloads[..<index].contains(where: Self.isQueueTabMember)
     }
 
-    func canMoveDown(download: Download, in downloads: [Download]) -> Bool {
+    public func canMoveDown(download: Download, in downloads: [Download]) -> Bool {
         guard let index = downloads.firstIndex(where: { $0.id == download.id }) else { return false }
         return downloads[(index + 1)...].contains(where: Self.isQueueTabMember)
     }
 
     @discardableResult
-    func moveToTop(download: Download, in downloads: inout [Download]) -> Bool {
+    public func moveToTop(download: Download, in downloads: inout [Download]) -> Bool {
         guard let index = downloads.firstIndex(where: { $0.id == download.id }), index > 0 else { return false }
         let item = downloads.remove(at: index)
         downloads.insert(item, at: 0)
@@ -289,7 +289,7 @@ final class DownloadQueue: ObservableObject {
     }
 
     @discardableResult
-    func moveToBottom(download: Download, in downloads: inout [Download]) -> Bool {
+    public func moveToBottom(download: Download, in downloads: inout [Download]) -> Bool {
         guard let index = downloads.firstIndex(where: { $0.id == download.id }), index < downloads.count - 1 else { return false }
         let item = downloads.remove(at: index)
         downloads.append(item)

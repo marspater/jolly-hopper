@@ -6,6 +6,7 @@
 import Foundation
 import Combine
 import Darwin
+import SiphonCore
 
 public enum ExternalDownloadTargetPolicy {
     public static func isAllowed(_ url: URL) -> Bool {
@@ -419,11 +420,8 @@ public final class AppState: ObservableObject {
     }
 
     public static func normalizedBrowserCookieSource(_ raw: String?) -> String? {
-        guard let raw, !UITestLaunchMode.isActive else { return nil }
-        let browser = raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        // A Helium handoff reads Helium only; "chromium-based" searches every Chromium browser.
-        if browser == "helium" { return browser }
-        return SupportedBrowser.allowedRawValues.contains(browser) ? browser : nil
+        guard !UITestLaunchMode.isActive else { return nil }
+        return SupportedBrowser.normalizedCookieSource(raw)
     }
 
     private struct BrowserOrigin: Equatable {

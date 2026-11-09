@@ -240,6 +240,19 @@ class LoggerService: ObservableObject {
         }
     }
 
+    /// Hands log lines from SiphonCore to the app's logger.
+    nonisolated static let coreSink: CoreLogSink = { message, level in
+        let mapped: LogLevel
+        if level == .error {
+            mapped = .error
+        } else if level == .warning {
+            mapped = .warning
+        } else {
+            mapped = .info
+        }
+        Task { @MainActor in LoggerService.shared.log(message, level: mapped) }
+    }
+
     enum LogCategory: String {
         case downloads, network, subprocess, update, recovery, general
         case interface = "ui"

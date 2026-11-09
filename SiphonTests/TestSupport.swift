@@ -1,5 +1,6 @@
 import Foundation
 @testable import Siphon
+@testable import SiphonCore
 
 /// Defaults and recovery file that hosted tests use instead of the user's real ones.
 enum TestState {
@@ -13,14 +14,25 @@ enum TestState {
         .appendingPathComponent("SiphonTests-\(UUID().uuidString)-queue_recovery.json")
 }
 
+extension AppState {
+    /// Keeps the last-seen version out of the real defaults domain.
+    @MainActor
+    static func forTesting() -> AppState {
+        AppState(
+            releaseNotesService: ReleaseNotesService(userDefaults: TestState.defaults),
+            dependencyCoordinator: DependencyUpdateCoordinator()
+        )
+    }
+}
+
 extension DownloadManager {
     @MainActor
-    static func forTesting() -> DownloadManager {
+    static func forTesting(recoveryFileURL: URL = TestState.recoveryFileURL) -> DownloadManager {
         DownloadManager(
             historyStore: DownloadHistoryStore(userDefaults: TestState.defaults),
             queue: DownloadQueue(userDefaults: TestState.defaults),
             userDefaults: TestState.defaults,
-            recoveryFileURL: TestState.recoveryFileURL
+            recoveryFileURL: recoveryFileURL
         )
     }
 }
