@@ -188,7 +188,17 @@ describe('Siphon Companion Server', () => {
 
   test('malformed or injected Host header returns 400 without crashing the server', async () => {
     const addr = server.address();
-    const invalidHosts = ['%', 'evil.com@localhost', 'localhost/path', 'localhost?query', 'localhost#fragment', 'localhost bad'];
+    const invalidHosts = [
+      '%',
+      'evil.com@localhost',
+      'evil.com\\localhost',
+      'evil.com\\@localhost',
+      'localhost\\path',
+      'localhost/path',
+      'localhost?query',
+      'localhost#fragment',
+      'localhost bad'
+    ];
 
     for (const hostHeader of invalidHosts) {
       const result = await new Promise((resolve, reject) => {

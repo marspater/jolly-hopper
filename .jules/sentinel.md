@@ -44,3 +44,8 @@
 **Vulnerability:** Companion server `parseRequestUrl` checked `startsWith('//')` but did not reject paths starting with `/\`, allowing backslash-prefixed request targets (e.g., `/\evil.com/health`) to be normalized by WHATWG URL parser as an authority override (`http://evil.com/health`).
 **Learning:** WHATWG URL parser treats `\` as `/` in special schemes (`http://`), interpreting `/\` as a protocol-relative authority delimiter when resolved against a base URL, allowing host spoofing and URL parsing confusion.
 **Prevention:** Explicitly reject request targets starting with `/\` (e.g. `req.url.startsWith('/\\')`) in HTTP request target parsers.
+
+## 2026-11-04 - Reject Backslashes in HTTP Host Header Validation
+**Vulnerability:** Companion server `INVALID_HOST_PATTERN` checked for `[/@?#\s]` but permitted backslashes (`\`), allowing backslash-injected Host headers (e.g. `Host: evil.com\localhost`) to be interpreted by WHATWG URL parser as path separators and redirecting the parsed URL authority to the attacker host (`http://evil.com/health`).
+**Learning:** WHATWG URL parser standardizes `\` as `/` within authority components of special schemes (`http://`). When constructing `new URL(req.url, 'http://' + host)`, a backslash before the legitimate hostname causes WHATWG to terminate authority parsing at `\` and treat the remainder as a pathname component, yielding authority spoofing.
+**Prevention:** Include `\\` in invalid host character validation patterns (e.g. `/[/@?#\s\\]/`) to reject backslash-containing Host headers with `400 Bad Request`.
