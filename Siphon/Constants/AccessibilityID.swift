@@ -19,7 +19,6 @@ enum AccessibilityID {
     static let existingFileCancel = "existing-file-cancel"
     static let checkForUpdates = "check-for-updates"
     static let viewDebugLogs = "view-debug-logs"
-    static let updateYtdlpNow = "update-ytdlp-now"
     static let queueRecoveryRestore = "queue-recovery-restore"
     static let menuBarRow = "menu-bar-row"
     static let sidebarToggle = "sidebar-toggle"

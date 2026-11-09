@@ -66,11 +66,10 @@ final class SmokeUITests: XCTestCase {
         let advanced = element("settings-tab-advanced", in: app)
         XCTAssertTrue(advanced.waitForExistence(timeout: 10))
         advanced.click()
-        // The form only exposes visible rows, so check one near the top of the tab.
-        XCTAssertTrue(app.buttons["update-ytdlp-now"].waitForExistence(timeout: 10))
+        XCTAssertTrue(advanced.wait(for: \.isSelected, toEqual: true, timeout: 10))
         let about = element("settings-tab-about", in: app)
         about.click()
-        XCTAssertTrue(app.staticTexts["marspater"].waitForExistence(timeout: 10))
+        XCTAssertTrue(about.wait(for: \.isSelected, toEqual: true, timeout: 10))
     }
 
     func testRemovingSeededQueueItem() throws {

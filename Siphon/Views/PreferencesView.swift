@@ -1109,7 +1109,6 @@ struct PreferencesView: View {
                         }
                         .buttonStyle(.siphonSecondary)
                         .controlSize(.small)
-                        .accessibilityIdentifier(AccessibilityID.updateYtdlpNow)
                     }
                 }
             }
