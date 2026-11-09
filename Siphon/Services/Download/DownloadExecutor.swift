@@ -97,7 +97,7 @@ final class DownloadEventCoalescer: Sendable {
     /// Delivers everything pending. Call on the main thread in production so
     /// delivery stays ordered with the executor's status transitions.
     func flushRemaining() {
-        let (p, lines) = state.withLock { state -> (PendingProgress?, [String]) in
+        let (progress, lines) = state.withLock { state -> (PendingProgress?, [String]) in
             state.drainScheduled = false
             let pending = (state.pendingProgress, state.pendingLogLines)
             state.pendingProgress = nil
@@ -108,8 +108,8 @@ final class DownloadEventCoalescer: Sendable {
             return pending
         }
 
-        if p != nil || !lines.isEmpty {
-            onFlush(p?.progress, p?.speed, p?.eta, lines)
+        if progress != nil || !lines.isEmpty {
+            onFlush(progress?.progress, progress?.speed, progress?.eta, lines)
         }
     }
 }

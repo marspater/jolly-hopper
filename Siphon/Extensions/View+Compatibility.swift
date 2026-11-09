@@ -1839,17 +1839,3 @@ extension Section where Parent == Text, Footer == EmptyView, Content: View {
         self.init(content: content, header: { Text(title).font(font) })
     }
 }
-
-#if os(macOS)
-extension NSApplication {
-    /// Cooperative activation on macOS 27. Older systems keep the forced call,
-    /// so their window-raising behavior does not change.
-    func bringToFront() {
-        if #available(macOS 27.0, *) {
-            activate()
-        } else {
-            activate(ignoringOtherApps: true)
-        }
-    }
-}
-#endif

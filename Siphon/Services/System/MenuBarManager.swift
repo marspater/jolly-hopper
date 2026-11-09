@@ -126,17 +126,29 @@ class MenuBarManager: NSObject {
 
 @available(macOS 27.0, *)
 extension MenuBarManager: @MainActor NSStatusItemExpandedInterfaceDelegate, NSPopoverDelegate {
-    func statusItem(_ statusItem: NSStatusItem, didBegin session: NSStatusItemExpandedInterfaceSession) {
+    func statusItem(_ statusItem: NSStatusItem, didBegin _: NSStatusItemExpandedInterfaceSession) {
         if let button = statusItem.button { showPopover(from: button) }
     }
 
-    func statusItemDidEndExpandedInterfaceSession(_ statusItem: NSStatusItem, animated: Bool) {
+    func statusItemDidEndExpandedInterfaceSession(_: NSStatusItem, animated _: Bool) {
         closePopover()
     }
 
     /// The popover also closes by itself (a click elsewhere, `closePopover()`);
     /// the menu bar must be told, or the item stays in its expanded state.
-    func popoverDidClose(_ notification: Notification) {
+    func popoverDidClose(_: Notification) {
         statusItem?.expandedInterfaceSession?.cancel()
+    }
+}
+
+extension NSApplication {
+    /// Cooperative activation on macOS 27. Older systems keep the forced call,
+    /// so their window-raising behavior does not change.
+    func bringToFront() {
+        if #available(macOS 27.0, *) {
+            activate()
+        } else {
+            activate(ignoringOtherApps: true)
+        }
     }
 }
