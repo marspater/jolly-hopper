@@ -48,13 +48,13 @@ class DownloadManager: ObservableObject {
     }
 
     init(
-        historyStore: DownloadHistoryStore = DownloadHistoryStore(log: LoggerService.coreSink),
-        queue: DownloadQueue = DownloadQueue(),
+        historyStore: DownloadHistoryStore? = nil,
+        queue: DownloadQueue? = nil,
         userDefaults: UserDefaults = .standard,
         recoveryFileURL: URL = DownloadManager.defaultRecoveryFileURL
     ) {
-        self.historyStore = historyStore
-        self.queue = queue
+        self.historyStore = historyStore ?? DownloadHistoryStore(userDefaults: userDefaults, log: LoggerService.coreSink)
+        self.queue = queue ?? DownloadQueue(userDefaults: userDefaults)
         self.userDefaults = userDefaults
         self.recoveryStore = QueueRecoveryStore(fileURL: recoveryFileURL, log: LoggerService.coreSink)
         self.executor = DownloadExecutor(ytdlpService: ytdlpService)
