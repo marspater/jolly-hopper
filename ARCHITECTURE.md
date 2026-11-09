@@ -2,6 +2,23 @@
 
 This document records the runtime ownership boundaries and lifecycle guarantees that are easy to break accidentally in a downloader. It is intentionally narrower than a full code tour.
 
+## Modules and targets
+
+| Target | Kind | Holds |
+| --- | --- | --- |
+| `Siphon` | App | UI, `AppState`, download execution, yt-dlp integration, the egress proxy, cookies, app updates |
+| `SiphonCore` | Static framework | Download model and options, media value types and format ranking, `DownloadQueue`, `QueueRecoveryStore`, `DownloadHistoryStore`, `DownloadURLValidator`, `LogSanitizer`, `Signposts`, `UserDefaultsKeys` |
+| `siphon-pgrp` | Command-line tool | Process-group helper, copied into `Contents/Helpers/` |
+| `SiphonTests` | Unit tests, hosted in the app | App behaviour, including process, proxy and updater tests |
+| `SiphonCoreTests` | Unit tests, not hosted | `SiphonCore` only; runs in parallel |
+| `SiphonUITests` | UI tests | Smoke and launch-performance tests against a temporary state root |
+
+Dependencies point one way: the app imports `SiphonCore`, and `SiphonCore` imports only Foundation, Combine and `os`, never AppKit, SwiftUI or WebKit. Core code logs through an injected `CoreLogSink`, which defaults to `CoreLog.unified` and is `LoggerService.coreSink` in the app.
+
+The updater trust root (`UpdateVerifier`), `SecureCookieFile` and `EgressProxyServer` stay in the app on purpose. See `docs/xcode-migration-baseline.md`.
+
+The browser extensions and the `server/` companion service are outside the Xcode project.
+
 ## Runtime ownership
 
 ```mermaid
@@ -20,13 +37,22 @@ flowchart TD
     DownloadManager --> Recovery[QueueRecoveryStore]
     DownloadManager --> Executor[DownloadExecutor]
     Executor --> Ytdlp[YtdlpService facade]
+    Ytdlp --> Proxy[EgressProxyServer]
     Ytdlp --> Runner[YtdlpProcessRunner]
-    Runner --> Tools[yt-dlp / FFmpeg / FFprobe]
+    Runner --> Pgrp[siphon-pgrp]
+    Pgrp --> Tools[yt-dlp / FFmpeg / FFprobe]
+    Tools --> Proxy
 
     AppState --> ReleaseNotes[ReleaseNotesService]
     AppState --> DependencyUpdates[DependencyUpdateCoordinator]
     DependencyUpdates --> Ytdlp
+
+    UpdateChecker --> UpdateDownloader
+    UpdateChecker --> UpdateVerifier
+    UpdateChecker --> UpdateInstaller
 ```
+
+`DownloadQueue`, `QueueRecoveryStore` and the history store live in `SiphonCore`. The other boxes are in the app.
 
 ### Application state
 
@@ -41,6 +67,8 @@ flowchart TD
 Stopping or pausing a download requests cancellation. It does not mean the underlying task or process has finished. Executor ownership remains active until `executeDownload` unwinds and its cleanup runs.
 
 The normal cleanup path releases the queue slot, removes task/controller ownership, releases the reserved output path, cleans owned temporary files when appropriate, and notifies the manager that execution finished.
+
+`YtdlpProcessRunner` launches each tool through `siphon-pgrp`, which makes the tool the leader of its own process group, so cancellation can stop the whole tree without touching Siphon's group. Signals are sent only while the PID still has the start time first recorded for it, so a reused PID is never hit. Because a tool's group outlives a crashed app, startup reaps managed tools that launchd has adopted (`reapOrphanedProcesses`).
 
 ### Durable queue recovery
 
@@ -72,6 +100,8 @@ yt-dlp replacement is serialized against download execution:
 
 This prevents a binary replacement from racing with executor-owned work while still allowing downloads submitted during an update to remain queued.
 
+Siphon runs only the pinned, SHA-256-verified yt-dlp from `DependencyChecksums`. Callers get it from `YtdlpService.resolvedYtdlpBinary` and do not build binary paths themselves.
+
 ### Terminal shutdown
 
 `DownloadManager.shutdown()` is terminal for that manager instance. It disables future queue admission before requesting executor cancellation and clearing queue reservations.
@@ -84,7 +114,7 @@ Browser extensions enter through `SiphonApp.handleIncomingURL`. The custom URL i
 
 The proxy only sees HTTP(S), so a resolver that builds a stream URL from a site's API response must parse and validate it before yt-dlp runs. It accepts https only, on the site's own CDN host (an exact match, not a substring), with no embedded credentials. Stream URLs reused from cached metadata go through the same check.
 
-The proxy rejects bare carriage returns and Unicode header separators, resolves each target once, validates every returned numeric address, and connects to that validated snapshot. Custom yt-dlp executables inherit the boundary by their resolved path even when renamed. Thumbnail fetches also use the public-network proxy, including view tasks outside a download's task-local scope; Finder icons reuse the thumbnail already downloaded by the service. Proxy shutdown retires its cached URLSession, and the route cache has a fixed size limit.
+The proxy rejects bare carriage returns and Unicode header separators, resolves each target once, validates every returned numeric address, and connects to that validated snapshot. The boundary recognises the yt-dlp executable by its resolved path, whatever the file is called. Thumbnail fetches also use the public-network proxy, including view tasks outside a download's task-local scope; Finder icons reuse the thumbnail already downloaded by the service. Proxy shutdown retires its cached URLSession, and the route cache has a fixed size limit.
 
 Fast-download deep links hand their sanitized browser identifier and user agent straight to the job; only the Add Download sheet path stores deep-link state in `AppState`, and its external-target marker is cleared when the sheet closes, not when credentials are consumed.
 
@@ -104,6 +134,12 @@ The installer copies and verifies a complete replacement beside the installed ap
 
 `YtdlpService` remains the public facade for extraction, site-specific handling, dependency paths, and download orchestration. Splitting its site/runtime responsibilities is deliberately postponed; callers should continue to depend on the facade rather than reaching into implementation details.
 
+WebKit-backed resolvers run one session per site at a time (`withExclusiveWebKitSession`), and each egress route has its own website data store, because a store's proxy applies to the whole store.
+
+## Logging
+
+`LoggerService` sanitizes every message before it reaches the in-memory buffer, the log file or `os.Logger`, and core code uses the same `LogSanitizer`. The `os.Logger` output is public so Console can show it, which is why raw messages must never go to it. `Signposts` and `MergeSignpost` mark pipeline intervals for Instruments with static names only, never URLs or titles.
+
 ## Validation
 
 The canonical macOS test command is:
@@ -112,6 +148,7 @@ The canonical macOS test command is:
 xcodebuild test \
   -project Siphon.xcodeproj \
   -scheme Siphon \
+  -testPlan All \
   -destination 'platform=macOS' \
   -configuration Debug \
   MACOSX_DEPLOYMENT_TARGET=15.0 \
@@ -119,3 +156,5 @@ xcodebuild test \
   CODE_SIGNING_REQUIRED=NO \
   CODE_SIGNING_ALLOWED=NO
 ```
+
+The other test plans and the scripting checks are listed in `AGENTS.md`.

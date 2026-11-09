@@ -105,8 +105,6 @@ public final class DownloadProcessController: @unchecked Sendable {
         guard !targets.isEmpty else { return [] }
         let uid = getuid()
         var reaped: [pid_t] = []
-        // ponytail: matches the managed and bundled tools only. A user-provided
-        // yt-dlp path is skipped, since the user may run that binary on their own.
         for pid in childPIDs(of: 1) {
             var info = proc_bsdinfo()
             let size = Int32(MemoryLayout<proc_bsdinfo>.size)

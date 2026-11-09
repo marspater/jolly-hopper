@@ -382,23 +382,6 @@ public final class AppState: ObservableObject {
         }
     }
 
-    /// Re-resolves the user's yt-dlp after its path setting changes.
-    /// Returns false, leaving yt-dlp untouched, while a download is running so one job
-    /// can never mix two yt-dlp builds.
-    @discardableResult
-    func reloadYtdlp(using ytdlpService: YtdlpService, activeExecutionCount: Int) async -> Bool {
-        guard activeExecutionCount == 0, !ytdlpService.isUpdating else { return false }
-        // Hold the queue like an update does: a job admitted while the path
-        // changes would start on one build and continue on another.
-        ytdlpService.isUpdating = true
-        defer { ytdlpService.isUpdating = false }
-        await ytdlpService.findYtdlp()
-        await ytdlpService.getVersion()
-        dependencyCoordinator.version = ytdlpService.version
-        ytdlpVersion = ytdlpService.version
-        return true
-    }
-
     func updateYtdlp(
         using ytdlpService: YtdlpService,
         activeExecutionCount: Int,
