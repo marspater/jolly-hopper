@@ -37,8 +37,12 @@ enum UITestLaunchMode {
         #if DEBUG
         guard isActive else { return }
         let setFrameName: @convention(block) (NSWindow, NSWindow.FrameAutosaveName) -> Bool = { _, _ in true }
-        let saveFrame: @convention(block) (NSWindow, NSWindow.FrameAutosaveName) -> Void = { _, _ in }
-        let setSplitName: @convention(block) (NSSplitView, NSSplitView.AutosaveName?) -> Void = { _, _ in }
+        let saveFrame: @convention(block) (NSWindow, NSWindow.FrameAutosaveName) -> Void = { _, _ in
+            // Intentionally empty: the frame must not be saved in this mode.
+        }
+        let setSplitName: @convention(block) (NSSplitView, NSSplitView.AutosaveName?) -> Void = { _, _ in
+            // Intentionally empty: without a name the divider positions are not saved.
+        }
         replace(#selector(NSWindow.setFrameAutosaveName(_:)), on: NSWindow.self, with: setFrameName)
         replace(#selector(NSWindow.saveFrame(usingName:)), on: NSWindow.self, with: saveFrame)
         replace(#selector(setter: NSSplitView.autosaveName), on: NSSplitView.self, with: setSplitName)
