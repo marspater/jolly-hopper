@@ -1,4 +1,5 @@
 import Foundation
+import Testing
 @testable import Siphon
 @testable import SiphonCore
 
@@ -34,5 +35,34 @@ extension DownloadManager {
             userDefaults: TestState.defaults,
             recoveryFileURL: recoveryFileURL
         )
+    }
+}
+
+@MainActor
+struct HostedTestStorageIsolationTests {
+    @Test func hostedTestsHaveSeparateBundleIdentityAndPreferences() {
+        #expect(Bundle.main.bundleIdentifier == UITestLaunchMode.testBundleIdentifier)
+
+        let key = "isolated-host-only-\(UUID().uuidString)"
+        let installedDomainName = "com.marspater.siphon"
+        let installedBefore = UserDefaults.standard
+            .persistentDomain(forName: installedDomainName)?[key] as? String
+
+        UserDefaults.standard.set("test fixture", forKey: key)
+        defer { UserDefaults.standard.removeObject(forKey: key) }
+
+        #expect(UserDefaults.standard.string(forKey: key) == "test fixture")
+        let installedAfter = UserDefaults.standard
+            .persistentDomain(forName: installedDomainName)?[key] as? String
+        #expect(installedAfter == installedBefore)
+    }
+
+    @Test func hostedRecoveryAndLogsUseSeparateTemporaryDirectory() {
+        let root = UITestLaunchMode.isolatedRoot
+        #expect(root != nil)
+        let recoveryFile = DownloadManager.defaultRecoveryFileURL
+        #expect(recoveryFile.standardizedFileURL != QueueRecoveryStore.defaultFileURL.standardizedFileURL)
+        #expect(recoveryFile.deletingLastPathComponent().standardizedFileURL == root?.standardizedFileURL)
+        #expect(LoggerService.shared.logFileURL.deletingLastPathComponent().standardizedFileURL == root?.standardizedFileURL)
     }
 }
