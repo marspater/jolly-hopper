@@ -129,7 +129,7 @@ final class NotificationService: NSObject, @unchecked Sendable, UNUserNotificati
         try process.run()
         do {
             // Drain the entire pipe to avoid blocking the child, but retain only a
-            // bounded diagnostic tail so a failing helper cannot exhaust memory.
+            // bounded diagnostic prefix so a failing helper cannot exhaust memory.
             let captureLimit = 16 * 1024
             var captured = Data()
             while let chunk = try pipe.fileHandleForReading.read(upToCount: 4 * 1024), !chunk.isEmpty {
