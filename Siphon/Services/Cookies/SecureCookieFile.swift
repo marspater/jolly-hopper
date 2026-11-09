@@ -120,7 +120,8 @@ public final class SecureCookieFile: @unchecked Sendable {
 
     // MARK: - Factory & Scoped API
 
-    private static let rootPath = "/"
+    /// Netscape cookie-file root path (U+002F); a cookie scope, not a filesystem path.
+    private static let rootPath = "\u{2F}"
 
     private struct CookieKey: Hashable {
         let domain: String
