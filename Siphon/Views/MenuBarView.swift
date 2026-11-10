@@ -102,11 +102,11 @@ struct MenuBarView: View {
                     url = ""
                 } label: {
                     Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 12))
+                        .font(.system(size: 12, weight: .semibold))
                         .foregroundColor(.secondary)
                         .accessibilityHidden(true)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.siphonIcon(size: 20))
                 .help(languageService.s("clear"))
                 .accessibilityLabel(languageService.s("clear"))
                 .transition(.opacity)
@@ -122,12 +122,12 @@ struct MenuBarView: View {
                 }
             } label: {
                 Image(systemName: pasteFeedback.isShowing ? "checkmark" : "doc.on.clipboard")
-                    .font(.system(size: 12))
+                    .font(.system(size: 12, weight: .semibold))
                     .contentTransition(.symbolEffect(.replace))
                     .foregroundColor(pasteFeedback.isShowing ? SiphonTheme.statusCompletedText : .secondary)
                     .accessibilityHidden(true)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.siphonIcon(size: 20))
             .help(languageService.s("paste_from_clipboard"))
             .accessibilityLabel(pasteFeedback.isShowing ? languageService.s("pasted") : languageService.s("paste_from_clipboard"))
         }
