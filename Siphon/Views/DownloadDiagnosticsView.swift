@@ -148,7 +148,7 @@ struct DownloadDiagnosticsView: View {
         }
     }
 
-    /// Nothing fills `diagnostics.httpRetries`, so count yt-dlp's "Retrying" lines in the log.
+    // Nothing fills `diagnostics.httpRetries`, so count yt-dlp's "Retrying" lines in the log.
     // ponytail: log keeps only its last ~25-50 KB, so very long runs can undercount.
     private var httpRetryCount: Int {
         // yt-dlp writes "Retrying (1/10)" and "Retrying fragment 3 (1/10)"; Siphon's own

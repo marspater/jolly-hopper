@@ -424,25 +424,25 @@ public final class UpdateInstaller: Sendable {
     /// The kernel drops the lock when the owning process exits, so a crashed
     /// install's image reads as unowned while a live install's does not.
     private static func lockUpdateImage(imagePath: String) -> Int32 {
-        let fd = open(updateImageLockPath(imagePath: imagePath), O_RDWR | O_CREAT | O_CLOEXEC, 0o600)
-        if fd >= 0, flock(fd, LOCK_EX | LOCK_NB) != 0 {
-            close(fd)
+        let descriptor = open(updateImageLockPath(imagePath: imagePath), O_RDWR | O_CREAT | O_CLOEXEC, 0o600)
+        if descriptor >= 0, flock(descriptor, LOCK_EX | LOCK_NB) != 0 {
+            close(descriptor)
             return -1
         }
-        return fd
+        return descriptor
     }
 
-    private static func unlockUpdateImage(_ fd: Int32, imagePath: String) {
-        guard fd >= 0 else { return }
+    private static func unlockUpdateImage(_ descriptor: Int32, imagePath: String) {
+        guard descriptor >= 0 else { return }
         unlink(updateImageLockPath(imagePath: imagePath))
-        close(fd)
+        close(descriptor)
     }
 
     private static func isUpdateImageInUse(imagePath: String) -> Bool {
-        let fd = open(updateImageLockPath(imagePath: imagePath), O_RDONLY | O_CLOEXEC)
-        guard fd >= 0 else { return false }
-        defer { close(fd) }
-        return flock(fd, LOCK_SH | LOCK_NB) != 0
+        let descriptor = open(updateImageLockPath(imagePath: imagePath), O_RDONLY | O_CLOEXEC)
+        guard descriptor >= 0 else { return false }
+        defer { close(descriptor) }
+        return flock(descriptor, LOCK_SH | LOCK_NB) != 0
     }
 
     static func staleUpdateMountPoints(hdiutilInfo: Data, stagedPrefix: String) -> [String] {
