@@ -64,7 +64,6 @@ struct PreferencesView: View {
     @State private var hasFullDiskAccess = false
     // LoginItemHelper is not observable; mirror it so toggling redraws the dependent row.
     @State private var isLaunchAtLoginEnabled = false
-    @State private var isCheckingPermission: Bool = false
     @State private var permissionCheckMessage: String?
     @State private var isClearingAllSites: Bool = false
     @State private var showAllSitesClearedFeedback: Bool = false
@@ -142,7 +141,6 @@ struct PreferencesView: View {
             .animation(SiphonAnimation.fluidSpring, value: selectedTab)
         }
         .padding(.horizontal, SiphonTheme.spacing16)
-        .padding(.bottom, SiphonTheme.spacing16)
         .frame(minWidth: 500, idealWidth: 520, maxWidth: 620, minHeight: 670, idealHeight: 686, maxHeight: 780)
         .siphonAdaptiveRendering()
         .siphonWindowBackground()
@@ -162,6 +160,8 @@ struct PreferencesView: View {
         }
         .onChange(of: showMenuBarIcon) { _, visible in
             MenuBarManager.shared.setVisible(visible)
+            // Background launch relies on the menu bar icon as the way back in.
+            if !visible { startInBackground = false }
         }
         .onChange(of: updateChecker.needsRestart) { _, ready in
             showUpdateRestartAlert = ready
@@ -173,8 +173,8 @@ struct PreferencesView: View {
             customPresets = CustomPreset.loadAll(from: userDefaults)
             hasFullDiskAccess = YtdlpService.hasFullDiskAccess
             isLaunchAtLoginEnabled = LoginItemHelper.shared.isEnabled
-            // The row is hidden without a login item, so a stale "on" could never be undone.
-            if !isLaunchAtLoginEnabled { startInBackground = false }
+            // The row is hidden without a login item or menu bar icon, so a stale "on" could never be undone.
+            if !isLaunchAtLoginEnabled || !showMenuBarIcon { startInBackground = false }
             Task {
                 await BrowserUtils.shared.clearCache()
                 installedBrowsers = await BrowserUtils.shared.getInstalledBrowsers()
@@ -252,13 +252,13 @@ struct PreferencesView: View {
                         // Start in background only makes sense for login launches.
                         if !isLaunchAtLoginEnabled { startInBackground = false }
                     }
-                ))
+                ).animation(SiphonAnimation.fluidSpring))
                 .labelsHidden()
                 .toggleStyle(.switch)
                 .accessibilityLabel(languageService.s("launch_at_login"))
             }
 
-            if isLaunchAtLoginEnabled {
+            if isLaunchAtLoginEnabled && showMenuBarIcon {
                 HStack {
                     VStack(alignment: .leading, spacing: 3) {
                         Text(languageService.s("start_in_background"))
@@ -273,7 +273,7 @@ struct PreferencesView: View {
                         .toggleStyle(.switch)
                         .accessibilityLabel(languageService.s("start_in_background"))
                 }
-                .padding(.leading, 12)
+                .padding(.leading, SiphonTheme.spacing12)
             }
 
             HStack {
@@ -404,12 +404,7 @@ struct PreferencesView: View {
                             .font(.siphonStandardMedium)
                             .foregroundColor(.primary)
 
-                        Text("v\(updateChecker.currentVersion)")
-                            .font(.siphonMetadataMonoSemibold)
-                            .foregroundColor(.secondary)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(Capsule().fill(Color.primary.opacity(SiphonTheme.Opacity.fillPill)))
+                        SiphonTagBadge(text: "v\(updateChecker.currentVersion)", tintColor: .secondary, isMonospaced: true)
                     }
 
                     if let latestVersion = updateChecker.latestVersion, updateChecker.hasUpdate {
@@ -521,6 +516,7 @@ struct PreferencesView: View {
                     }
                 }
                 .buttonStyle(.siphonPrimary)
+                .controlSize(.small)
             }
         }
     }
@@ -794,12 +790,12 @@ struct PreferencesView: View {
     private var presetFormatSection: some View {
         Section(siphonHeader: languageService.s("format_settings")) {
             SiphonMenuPicker(
-                languageService.s("file_type"), selection: $presetFileType,
+                languageService.s("file_type_short"), selection: $presetFileType,
                 options: MediaFileType.allCases.map { type in (value: type, title: type.rawValue) }
             )
 
             SiphonMenuPicker(
-                languageService.s("video_quality"), selection: $presetVideoResolution,
+                languageService.s("video_quality_short"), selection: $presetVideoResolution,
                 options: presetFilteredResolutions.map { res in (value: res, title: res.title(lang: languageService)) }
             )
         }
@@ -986,7 +982,7 @@ struct PreferencesView: View {
 
     private var advancedTab: some View {
         Form {
-            Section(siphonHeader: "SponsorBlock") {
+            Section(siphonHeader: languageService.s("sponsorblock")) {
                 Toggle(languageService.s("sponsorblock_desc"), isOn: $sponsorBlock)
             }
 
@@ -1043,7 +1039,7 @@ struct PreferencesView: View {
                             .foregroundColor(.secondary)
                     }
                 } else if downloadManager.activeExecutionCount > 0 {
-                    Text(languageService.s("ytdlp_update_blocked_active"))
+                    Text(languageService.s("ytdlp_update_unavailable_message"))
                         .font(.siphonMetadata)
                         .foregroundColor(.secondary)
                         .lineLimit(2)
@@ -1131,11 +1127,19 @@ struct PreferencesView: View {
                 .siphonCallout(tint: SiphonTheme.statusCompleted)
                 .frame(maxWidth: .infinity, alignment: .center)
             } else {
-                Text(languageService.s("safari_warning"))
-                    .font(.siphonMetadata)
-                    .foregroundColor(SiphonTheme.statusQueuedText)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                HStack(alignment: .top, spacing: 6) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundColor(SiphonTheme.statusQueuedText)
+                        .font(.siphonMetadata)
+                        .accessibilityHidden(true)
+                    Text(languageService.s("safari_warning"))
+                        .font(.siphonMetadata)
+                        .foregroundColor(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(8)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .siphonCallout(tint: SiphonTheme.statusQueued)
 
                 HStack(spacing: 8) {
                     Button(languageService.s("open_system_settings")) {
@@ -1146,21 +1150,12 @@ struct PreferencesView: View {
                     .buttonStyle(.siphonPrimary)
                     .controlSize(.small)
 
-                    Button {
+                    Button(languageService.s("check_permission")) {
                         performPermissionCheck()
-                    } label: {
-                        HStack(spacing: 4) {
-                            if isCheckingPermission {
-                                ProgressView()
-                                    .controlSize(.mini)
-                            }
-                            Text(languageService.s("check_permission"))
-                        }
                     }
                     .buttonStyle(.siphonSecondary)
                     .controlSize(.small)
                     .tint(nil)
-                    .disabled(isCheckingPermission)
 
                     Button(languageService.s("restart_siphon")) {
                         restartSiphon()
@@ -1182,13 +1177,11 @@ struct PreferencesView: View {
     }
 
     private func performPermissionCheck() {
-        isCheckingPermission = true
         let granted = YtdlpService.hasFullDiskAccess
         hasFullDiskAccess = granted
         if granted {
             downloadManager.ytdlpService.resetCookieDenial(for: "safari")
         }
-        isCheckingPermission = false
         withAnimation(SiphonAnimation.snappySpring) {
             if granted {
                 permissionCheckMessage = languageService.s("safari_fda_granted_feedback")
@@ -1416,7 +1409,8 @@ struct PreferencesView: View {
             }
             .frame(maxWidth: .infinity, alignment: .center)
             .padding(.top, 8)
-            .padding(.bottom, 12)
+            // The window no longer pads the bottom, so the footer keeps its own inset.
+            .padding(.bottom, 12 + SiphonTheme.spacing16)
         }
     }
 

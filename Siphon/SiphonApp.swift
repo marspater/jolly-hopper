@@ -151,7 +151,7 @@ struct SiphonApp: App {
                 }
                 .keyboardShortcut(",", modifiers: .command)
 
-                Button(languageService.s("ytdlp_update")) {
+                Button(languageService.s("update_ytdlp")) {
                     Task {
                         await appState.updateYtdlp(
                             using: downloadManager.ytdlpService,

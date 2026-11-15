@@ -51,13 +51,14 @@ struct DownloadListView: View {
                 emptyState
             } else {
                 ScrollView {
-                    LazyVStack(spacing: 12) {
+                    LazyVStack(spacing: SiphonTheme.spacing12) {
                         header
                         ForEach(downloads) { download in
                             DownloadRowView(download: download, showStop: showStop)
                         }
                     }
-                    .padding()
+                    .padding(.horizontal, SiphonTheme.spacing24)
+                    .padding(.vertical, SiphonTheme.spacing12)
                 }
                 .onScrollPhaseChange { _, phase in
                     scrollActivity.isScrolling = phase != .idle
@@ -160,6 +161,7 @@ struct DownloadRowView: View {
 
                                     if let speed = download.speed, !speed.isEmpty {
                                         Text("•")
+                                            .font(.siphonMetadata)
                                             .foregroundColor(.primary)
                                         Text(speed)
                                             .font(.siphonMetadataMonoMedium)
@@ -168,6 +170,7 @@ struct DownloadRowView: View {
 
                                     if let eta = download.eta, !eta.isEmpty {
                                         Text("•")
+                                            .font(.siphonMetadata)
                                             .foregroundColor(.primary)
                                         Text("~\(eta)")
                                             .font(.siphonMetadataMonoMedium)
@@ -184,8 +187,8 @@ struct DownloadRowView: View {
                             statusBadge
 
                             if download.status == .paused && download.progress > 0 {
-                                Text("\(Int(download.progress * 100))%")
-                                    .font(.siphonMetadataMonoSemibold)
+                                Text("\(Int(max(0.0, min(1.0, download.progress)) * 100))%")
+                                    .font(.siphonSecondaryMonoSemibold)
                                     .foregroundColor(SiphonTheme.statusForeground(for: .paused, colorScheme: colorScheme))
                             }
 
@@ -195,6 +198,11 @@ struct DownloadRowView: View {
                                     .foregroundColor(.secondary)
                                     .help(languageService.s("file_missing_help"))
                             }
+                        }
+
+                        // Conflict choices get their own line so they never cover the title.
+                        if download.status == .fileExists {
+                            fileExistsActions
                         }
                     }
                 }
@@ -317,7 +325,7 @@ struct DownloadRowView: View {
                     HStack(spacing: 8) {
                         switch info.actionType {
                         case .fixInSettings:
-                            Button {
+                            Button(languageService.s("fix_signin_error")) {
                                 PreferencesWindowManager.shared.showPreferencesWindow(
                                     languageService: languageService,
                                     updateChecker: updateChecker,
@@ -325,19 +333,13 @@ struct DownloadRowView: View {
                                     appState: appState,
                                     initialTab: .advanced
                                 )
-                            } label: {
-                                Text(languageService.s("fix_signin_error"))
-                                    .font(.siphonMetadataSemibold)
                             }
                             .buttonStyle(.siphonPrimary)
                             .controlSize(.small)
 
                         case .retry:
-                            Button {
+                            Button(languageService.s("retry")) {
                                 downloadManager.retryDownload(download)
-                            } label: {
-                                Text(languageService.s("retry"))
-                                    .font(.siphonMetadataSemibold)
                             }
                             .buttonStyle(.siphonSecondary)
                             .controlSize(.small)
@@ -345,21 +347,19 @@ struct DownloadRowView: View {
                             .disabled(download.requiresAdvancedArgumentsReview)
 
                         case .changeFolder:
-                            Button {
+                            Button(languageService.s("change_folder")) {
                                 // Retry keeps the job's own folder, so changing the
                                 // default folder in Settings would not help this job.
                                 let panel = NSOpenPanel()
                                 panel.canChooseDirectories = true
                                 panel.canChooseFiles = false
                                 panel.canCreateDirectories = true
+                                panel.prompt = languageService.s("save")
                                 panel.directoryURL = download.options.saveFolder
                                 if panel.runModal() == .OK, let folder = panel.url {
                                     download.options.saveFolder = folder
                                     downloadManager.retryDownload(download)
                                 }
-                            } label: {
-                                Text(languageService.s("change_folder"))
-                                    .font(.siphonMetadataSemibold)
                             }
                             .buttonStyle(.siphonSecondary)
                             .controlSize(.small)
@@ -652,16 +652,16 @@ struct FileThumbnailView: View {
     /// The trailing "More Actions" menu shared by every row state.
     private func moreActionsMenu<Items: View>(@ViewBuilder _ items: () -> Items) -> some View {
         Menu(content: items) {
+            // Not accessibilityHidden: a button-style Menu takes its AX element
+            // from the label, so hiding it drops the whole control.
             Image(systemName: "ellipsis.circle")
                 .font(.system(size: 17, weight: .regular))
                 .foregroundColor(.secondary)
-                .frame(width: 28, height: 28)
-                .contentShape(Rectangle())
-                .accessibilityHidden(true)
         }
-        // A plain button menu draws the label as authored (secondary), not accent-tinted.
+        // The icon style draws the label as authored (secondary, not accent-tinted)
+        // and gives the same hover and press feedback as the row's other icon buttons.
         .menuStyle(.button)
-        .buttonStyle(.plain)
+        .buttonStyle(.siphonIcon(size: 28))
         .menuIndicator(.hidden)
         .help(languageService.s("more_actions"))
         .accessibilityLabel(languageService.s("more_actions"))
@@ -836,7 +836,7 @@ struct FileThumbnailView: View {
                 Button {
                     downloadManager.pauseDownload(download)
                 } label: {
-                    Image(systemName: "pause.circle")
+                    Image(systemName: "pause.circle.fill")
                         .font(.system(size: 18, weight: .semibold))
                         .accessibilityHidden(true)
                 }
@@ -984,44 +984,8 @@ struct FileThumbnailView: View {
                 }
             }
 
-            // FileExists state
+            // FileExists state: Reveal + More menu; the conflict choices sit under the badge.
             if download.status == .fileExists {
-                Button {
-                    downloadManager.resumeWithOverwrite(download)
-                } label: {
-                    HStack(spacing: 4) {
-                        Image(systemName: "square.and.arrow.down.on.square.fill")
-                            .font(.system(size: 13))
-                            .accessibilityHidden(true)
-                        Text(languageService.s("overwrite"))
-                            .font(.siphonMetadataMedium)
-                    }
-                    .foregroundColor(SiphonTheme.statusForeground(for: .queued, colorScheme: colorScheme))
-                }
-                .disabled(download.requiresAdvancedArgumentsReview)
-                .buttonStyle(.siphonGhost)
-                .help(languageService.s("overwrite"))
-                .accessibilityLabel(languageService.s("overwrite"))
-                .accessibilityIdentifier(AccessibilityID.rowOverwrite)
-
-                Button {
-                    downloadManager.resumeWithNewName(download)
-                } label: {
-                    HStack(spacing: 4) {
-                        Image(systemName: "plus.square.on.square.fill")
-                            .font(.system(size: 13))
-                            .accessibilityHidden(true)
-                        Text(languageService.s("download_new_name"))
-                            .font(.siphonMetadataMedium)
-                    }
-                    .foregroundColor(SiphonTheme.accentText)
-                }
-                .disabled(download.requiresAdvancedArgumentsReview)
-                .buttonStyle(.siphonGhost)
-                .help(languageService.s("download_new_name"))
-                .accessibilityLabel(languageService.s("download_new_name"))
-                .accessibilityIdentifier(AccessibilityID.rowNewName)
-
                 Button {
                     downloadManager.revealExistingFile(for: download)
                 } label: {
@@ -1034,7 +998,87 @@ struct FileThumbnailView: View {
                 .help(languageService.s("reveal_in_finder"))
                 .accessibilityLabel(languageService.s("reveal_in_finder"))
                 .accessibilityIdentifier(AccessibilityID.rowRevealExisting)
+
+                moreActionsMenu {
+                    Button {
+                        downloadManager.resumeWithOverwrite(download)
+                    } label: {
+                        Label(languageService.s("overwrite"), systemImage: "square.and.arrow.down.on.square.fill")
+                    }
+                    .disabled(download.requiresAdvancedArgumentsReview)
+
+                    Button {
+                        downloadManager.resumeWithNewName(download)
+                    } label: {
+                        Label(languageService.s("download_new_name"), systemImage: "plus.square.on.square.fill")
+                    }
+                    .disabled(download.requiresAdvancedArgumentsReview)
+
+                    Button {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(download.url, forType: .string)
+                    } label: {
+                        Label(languageService.s("copy_url"), systemImage: "link")
+                    }
+
+                    Button {
+                        downloadManager.stopDownload(download)
+                    } label: {
+                        Label(languageService.s("stop"), systemImage: "stop.fill")
+                    }
+                    .accessibilityIdentifier(AccessibilityID.rowCancel)
+
+                    Divider()
+
+                    Button(role: .destructive) {
+                        downloadManager.removeDownload(download)
+                    } label: {
+                        Label(languageService.s("remove"), systemImage: "trash")
+                    }
+                    .accessibilityIdentifier(AccessibilityID.rowRemove)
+                }
             }
+        }
+    }
+
+    /// Overwrite / Download with new name for a `.fileExists` row.
+    private var fileExistsActions: some View {
+        HStack(spacing: SiphonTheme.spacing6) {
+            Button {
+                downloadManager.resumeWithOverwrite(download)
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: "square.and.arrow.down.on.square.fill")
+                        .font(.system(size: 13))
+                        .accessibilityHidden(true)
+                    Text(languageService.s("overwrite"))
+                        .font(.siphonMetadataMedium)
+                }
+                .foregroundColor(SiphonTheme.statusForeground(for: .queued, colorScheme: colorScheme))
+            }
+            .disabled(download.requiresAdvancedArgumentsReview)
+            .buttonStyle(.siphonGhost)
+            .help(languageService.s("overwrite"))
+            .accessibilityLabel(languageService.s("overwrite"))
+            .accessibilityIdentifier(AccessibilityID.rowOverwrite)
+
+            Button {
+                downloadManager.resumeWithNewName(download)
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: "plus.square.on.square.fill")
+                        .font(.system(size: 13))
+                        .accessibilityHidden(true)
+                    Text(languageService.s("download_new_name"))
+                        .font(.siphonMetadataMedium)
+                }
+                .foregroundColor(SiphonTheme.accentText)
+            }
+            .disabled(download.requiresAdvancedArgumentsReview)
+            .buttonStyle(.siphonGhost)
+            .help(languageService.s("download_new_name"))
+            .accessibilityLabel(languageService.s("download_new_name"))
+            .accessibilityIdentifier(AccessibilityID.rowNewName)
         }
     }
 
@@ -1232,21 +1276,26 @@ struct FileThumbnailView: View {
         .accessibilityIdentifier(AccessibilityID.rowRemove)
     }
 
+    private var logEntryCountText: String {
+        let count = download.log.split(whereSeparator: \.isNewline).count
+        return count == 1 ? languageService.s("log_entry_count_one") : String(format: languageService.s("log_entry_count"), count)
+    }
+
     private var logSheet: some View {
         VStack(spacing: 0) {
             // Header
             HStack(spacing: SiphonTheme.spacing12) {
                 Image(systemName: "terminal.fill")
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(.system(size: 18, weight: .semibold))
                     .foregroundColor(SiphonTheme.accentText)
                     .accessibilityHidden(true)
 
                 Text(languageService.s("download_log"))
-                    .font(.siphonHeadline)
+                    .font(.siphonWindowTitle)
 
                 if !download.log.isEmpty {
                     SiphonTagBadge(
-                        text: "\(download.log.split(whereSeparator: \.isNewline).count) \(languageService.s("entries"))",
+                        text: logEntryCountText,
                         tintColor: .secondary,
                         isMonospaced: true
                     )
@@ -1260,8 +1309,8 @@ struct FileThumbnailView: View {
 
             // Log Console Container
             ZStack {
-                SiphonTheme.cardBackground(cornerRadius: SiphonTheme.radiusControl)
-                    .overlay(SiphonTheme.cardBorder(cornerRadius: SiphonTheme.radiusControl))
+                SiphonTheme.cardBackground(cornerRadius: SiphonTheme.radiusCard)
+                    .overlay(SiphonTheme.cardBorder(cornerRadius: SiphonTheme.radiusCard))
 
                 ReadOnlyLogView(
                     text: download.log.isEmpty ? languageService.s("no_log") : LoggerService.sanitizedDiagnosticExport(download.log),
