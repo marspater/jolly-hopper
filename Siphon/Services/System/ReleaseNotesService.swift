@@ -86,29 +86,41 @@ final class ReleaseNotesService {
 
                 guard !cleanTitle.isEmpty && !cleanDesc.isEmpty else { continue }
 
-                let lower = cleanTitle.lowercased() + " " + cleanDesc.lowercased()
-                let icon: String
-                if lower.contains("font") || lower.contains("typography") || lower.contains("rebrand") || lower.contains("geist") {
-                    icon = "textformat"
-                } else if lower.contains("glass") || lower.contains("translucen") || lower.contains("material") || lower.split(whereSeparator: { !$0.isLetter }).contains("ui") || lower.contains("layout") {
-                    icon = "macwindow"
-                } else if lower.contains("anti-bot") || lower.contains("stream") || lower.contains("engine") || lower.contains("download") || lower.contains("speed") {
-                    icon = "bolt.fill"
-                } else if lower.contains("menu bar") || lower.contains("status bar") || lower.contains("menubar") {
-                    icon = "menubar.rectangle"
-                } else if lower.contains("security") || lower.contains("cookie") || lower.contains("privacy") || lower.contains("sandbox") {
-                    icon = "shield.checkerboard"
-                } else if lower.contains("accessib") || lower.contains("voiceover") || lower.contains("tooltip") || lower.contains("optim") {
-                    icon = "accessibility"
-                } else {
-                    icon = "sparkles"
-                }
+                let icon = Self.icon(title: cleanTitle, description: cleanDesc)
 
                 features.append(ReleaseFeature(icon: icon, title: cleanTitle, description: cleanDesc))
             }
         }
 
         return features.isEmpty ? Self.defaultFeatures : features
+    }
+
+    /// Most specific topic first. Release notes mention downloads almost everywhere, so
+    /// the title decides when it can and the description is only a fallback.
+    private static let iconRules: [(keywords: [String], icon: String)] = [
+        (["proxy", "network", "boundary", "egress", "redirect"], "network.badge.shield.half.filled"),
+        (["signed", "signature", "manifest", "update", "updater"], "checkmark.seal.fill"),
+        (["pinned", "sha-256", "verified", "yt-dlp", "ffmpeg", "dependenc"], "checkmark.shield"),
+        (["cookie", "privacy", "security", "sandbox", "credential", "keychain"], "shield.checkerboard"),
+        (["font", "typography", "geist"], "textformat"),
+        (["app icon", "icon composer", "rebrand", "logo"], "app.badge"),
+        (["play", "pause", "resume", "playback"], "play.circle"),
+        (["list", "order", "sort", "queue", "move up", "move down"], "list.bullet.rectangle"),
+        (["menu bar", "menubar", "status bar"], "menubar.rectangle"),
+        (["accessib", "voiceover", "contrast"], "accessibility"),
+        (["window", "glass", "translucen", "material", "layout", "motion", "palette", "calm"], "macwindow"),
+        (["speed", "faster", "performance", "anti-bot", "stream", "engine", "optim"], "bolt.fill"),
+        (["fix", "crash", "bug", "stability"], "wrench.and.screwdriver")
+    ]
+
+    static func icon(title: String, description: String) -> String {
+        func match(_ text: String) -> String? {
+            // Keywords match at a word start, so "play" skips "display" and "order" skips "border".
+            let normalized = " " + String(text.lowercased().map { $0.isLetter || $0.isNumber || $0 == "-" ? $0 : " " })
+            if normalized.contains(" ui ") || normalized.hasSuffix(" ui") { return "macwindow" }
+            return iconRules.first { $0.keywords.contains { normalized.contains(" " + $0) } }?.icon
+        }
+        return match(title) ?? match(description) ?? "sparkles"
     }
 
     func sanitizeReleaseNotes(_ text: String) -> String {

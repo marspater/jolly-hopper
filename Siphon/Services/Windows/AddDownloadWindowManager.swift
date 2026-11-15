@@ -61,8 +61,9 @@ final class AddDownloadWindowManager: NSObject, NSWindowDelegate {
         NSApp.bringToFront()
     }
 
-    /// Header, URL card and footer, below the title bar.
-    nonisolated static let compactHeight: CGFloat = 230
+    /// Header, divider, URL card with spacing20 padding above and below,
+    /// divider and footer, below the title bar: 122 pt chrome + 126 pt content.
+    nonisolated static let compactHeight: CGFloat = 248
 
     /// One frame update owns both the form height and the advanced pane width.
     /// Use absolute content height so intermediate viewport sizes cannot add

@@ -27,7 +27,9 @@ struct DebugLogView: View {
                     .font(.siphonWindowTitle)
 
                 SiphonTagBadge(
-                    text: "\(logger.logs.count) \(languageService.s("entries"))",
+                    text: logger.logs.count == 1
+                        ? languageService.s("log_entry_count_one")
+                        : String(format: languageService.s("log_entry_count"), logger.logs.count),
                     tintColor: .secondary,
                     isMonospaced: true
                 )

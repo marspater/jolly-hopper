@@ -202,11 +202,11 @@ struct HeroDropURLView: View {
                             feedback.clear()
                         } label: {
                             Image(systemName: "xmark.circle.fill")
-                                .font(.system(size: 12))
+                                .font(.system(size: 12, weight: .semibold))
                                 .foregroundColor(.secondary)
                                 .accessibilityHidden(true)
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.siphonIcon(size: 20))
                         .help(languageService.s("clear"))
                         .accessibilityLabel(languageService.s("clear"))
                         .transition(.opacity)

@@ -1184,10 +1184,15 @@ public struct SiphonSecondaryButtonStyle: ButtonStyle {
         self.cornerRadius = cornerRadius
     }
 
+    /// Disabled buttons give no hover feedback, matching the primary style.
+    private var hovered: Bool { isHovered && isEnabled }
+
     private func buttonScale(isPressed: Bool) -> CGFloat {
-        if isPressed {
+        if !isEnabled {
+            return 1.0
+        } else if isPressed {
             return 0.97
-        } else if isHovered {
+        } else if hovered {
             return 1.018
         } else {
             return 1.0
@@ -1201,10 +1206,10 @@ public struct SiphonSecondaryButtonStyle: ButtonStyle {
             .frame(minHeight: isCompact ? 14 : 18, alignment: .center)
             .padding(.horizontal, isCompact ? SiphonTheme.spacing10 : SiphonTheme.spacing14)
             .padding(.vertical, isCompact ? 3 : 6)
-            .background(SiphonTheme.controlBackground(cornerRadius: cornerRadius, isHovered: isHovered))
+            .background(SiphonTheme.controlBackground(cornerRadius: cornerRadius, isHovered: hovered))
             .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
             .overlay(
-                SiphonTheme.controlBorder(cornerRadius: cornerRadius, isHovered: isHovered)
+                SiphonTheme.controlBorder(cornerRadius: cornerRadius, isHovered: hovered)
             )
             .siphonMotionScale(buttonScale(isPressed: configuration.isPressed))
             .animation(SiphonAnimation.buttonPressSpring, value: configuration.isPressed)
@@ -1224,21 +1229,24 @@ public struct SiphonGhostButtonStyle: ButtonStyle {
         self.cornerRadius = cornerRadius
     }
 
+    /// Disabled buttons give no hover feedback, matching the primary style.
+    private var hovered: Bool { isHovered && isEnabled }
+
     public func makeBody(configuration: Configuration) -> some View {
         let showBorders = renderingCapabilities.increaseContrast
         configuration.label
             .font(.siphonSecondaryMedium)
-            .foregroundColor(isHovered ? .primary : .secondary)
+            .foregroundColor(hovered ? .primary : .secondary)
             .frame(minHeight: 16, alignment: .center)
             .padding(.horizontal, SiphonTheme.spacing10)
             .padding(.vertical, 5)
             .background(
                 RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    .fill(Color.primary.opacity(isHovered ? SiphonTheme.Opacity.fillGhostHover : 0.0))
+                    .fill(Color.primary.opacity(hovered ? SiphonTheme.Opacity.fillGhostHover : 0.0))
             )
             .overlay(
                 RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    .stroke(Color.secondary.opacity(showBorders ? 0.65 : 0.0), lineWidth: 1)
+                    .strokeBorder(Color.primary.opacity(showBorders ? SiphonTheme.Opacity.borderIncreaseContrast : 0.0), lineWidth: 1)
             )
             .siphonMotionScale(configuration.isPressed ? 0.97 : 1.0)
             .animation(SiphonAnimation.buttonPressSpring, value: configuration.isPressed)
@@ -1258,10 +1266,15 @@ public struct SiphonIconButtonStyle: ButtonStyle {
         self.size = size
     }
 
+    /// Disabled buttons give no hover feedback, matching the primary style.
+    private var hovered: Bool { isHovered && isEnabled }
+
     private func buttonScale(isPressed: Bool) -> CGFloat {
-        if isPressed {
+        if !isEnabled {
+            return 1.0
+        } else if isPressed {
             return 0.92
-        } else if isHovered {
+        } else if hovered {
             return 1.06
         } else {
             return 1.0
@@ -1274,11 +1287,11 @@ public struct SiphonIconButtonStyle: ButtonStyle {
             .frame(width: size, height: size)
             .background(
                 Circle()
-                    .fill(Color.primary.opacity(isHovered ? SiphonTheme.Opacity.fillGhostHover : 0.0))
+                    .fill(Color.primary.opacity(hovered ? SiphonTheme.Opacity.fillGhostHover : 0.0))
             )
             .overlay(
                 Circle()
-                    .stroke(Color.secondary.opacity(showBorders ? 0.65 : 0.0), lineWidth: 1)
+                    .strokeBorder(Color.primary.opacity(showBorders ? SiphonTheme.Opacity.borderIncreaseContrast : 0.0), lineWidth: 1)
             )
             .siphonMotionScale(buttonScale(isPressed: configuration.isPressed))
             .animation(SiphonAnimation.buttonPressSpring, value: configuration.isPressed)
@@ -1599,7 +1612,7 @@ struct SiphonStatusBadge: View {
                 Image(systemName: "checkmark.circle.fill")
                     .font(.system(size: 11, weight: .semibold))
             case .failed:
-                Image(systemName: "xmark.circle.fill")
+                Image(systemName: "exclamationmark.circle.fill")
                     .font(.system(size: 11, weight: .semibold))
             case .stopped:
                 Image(systemName: "stop.circle.fill")
@@ -1611,7 +1624,7 @@ struct SiphonStatusBadge: View {
                 Image(systemName: "pause.circle.fill")
                     .font(.system(size: 11, weight: .semibold))
             case .fileExists:
-                Image(systemName: "exclamationmark.circle.fill")
+                Image(systemName: "doc.on.doc.fill")
                     .font(.system(size: 11, weight: .semibold))
             }
 

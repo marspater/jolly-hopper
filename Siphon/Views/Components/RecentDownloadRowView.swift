@@ -107,7 +107,10 @@ struct RecentDownloadRowView: View {
     @ViewBuilder
     private var fileThumbnail: some View {
         if let filePath = download.primaryFilePath, primaryFileIsPresent != false {
-            DownloadRowView.FileThumbnailView(fileURL: filePath, isHDR: false)
+            DownloadRowView.FileThumbnailView(
+                fileURL: filePath,
+                isHDR: download.diagnostics.hdrSummary != nil || download.mediaInfo?.firstHDRSummary != nil
+            )
                 .frame(width: 54, height: 36)
         } else {
             Image(systemName: "play.rectangle.fill")
@@ -141,7 +144,7 @@ struct RecentDownloadRowView: View {
         .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusSmall, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: SiphonTheme.radiusSmall, style: .continuous)
-                .stroke(Color.primary.opacity(SiphonTheme.Opacity.borderRest), lineWidth: 0.5)
+                .stroke(Color.primary.opacity(SiphonTheme.Opacity.borderHairline), lineWidth: 1)
         )
         .accessibilityHidden(true)
     }
@@ -273,6 +276,7 @@ struct RecentDownloadRowView: View {
                 }
             } label: {
                 Image(systemName: "exclamationmark.triangle")
+                    .font(.system(size: 14))
                     .foregroundStyle(SiphonTheme.statusQueuedText)
                     .accessibilityHidden(true)
             }
@@ -344,7 +348,8 @@ struct RecentDownloadRowView: View {
             }
             .buttonStyle(.siphonIcon(size: 24))
             .help(languageService.s("remove_from_history"))
-            .accessibilityLabel(languageService.s("remove_from_history"))
+            .accessibilityLabel(languageService.s("remove_from_history_short"))
+            .accessibilityHint(languageService.s("remove_from_history"))
         } else {
             Color.clear.accessibilityHidden(true)
         }
