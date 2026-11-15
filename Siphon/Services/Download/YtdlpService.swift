@@ -8071,6 +8071,10 @@ public struct DownloadResult: Sendable {
                 // Encryption may be declared only in a child playlist, not the master.
                 args.append("--check-formats")
             }
+        } else if parsedHost == "reddit.com" || parsedHost.hasSuffix(".reddit.com") || parsedHost == "redd.it" || parsedHost.hasSuffix(".redd.it") {
+            // Reddit posts hand off to the embedded host's extractor (RedGifs,
+            // Imgur, YouTube). A reddit.com Referer on that host's media request
+            // makes the RedGifs CDN answer 403, and Reddit's own video needs none.
         } else if let components = URLComponents(string: url), let host = components.host, !host.isEmpty, !host.contains("\r"), !host.contains("\n") {
             // Universal Referer and Origin auto-injection for anti-hotlinking CDN protection
             let scheme = components.scheme ?? "https"

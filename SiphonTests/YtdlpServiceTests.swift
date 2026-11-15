@@ -5719,6 +5719,33 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertEqual(attemptsBox.value, 2)
     }
 
+    func testRedditDownloadOmitsPageRefererButOtherHostsKeepIt() async throws {
+        service.ytdlpPath = URL(fileURLWithPath: "/usr/local/bin/yt-dlp")
+        let capturedArgsBox = TestBox<[String]>([])
+        service.processRunner = MockYtdlpProcessRunner(mockDownload: { args in
+            capturedArgsBox.value = args
+            return "[download] Destination: /tmp/mock.mp4\n"
+        })
+
+        _ = try await service.download(
+            url: "https://www.reddit.com/r/videos/comments/abc123/sample_post/",
+            options: .default,
+            onProgress: { _, _, _ in },
+            onOutput: { _ in }
+        )
+        XCTAssertFalse(capturedArgsBox.value.contains { $0.hasPrefix("Referer:") || $0.hasPrefix("Origin:") },
+                       "Embedded hosts such as RedGifs reject a reddit.com Referer with HTTP 403")
+
+        _ = try await service.download(
+            url: "https://videos.example/watch/123",
+            options: .default,
+            onProgress: { _, _, _ in },
+            onOutput: { _ in }
+        )
+        XCTAssertTrue(capturedArgsBox.value.contains("Referer:https://videos.example/"))
+        XCTAssertTrue(capturedArgsBox.value.contains("Origin:https://videos.example"))
+    }
+
     func testPornhubOmitsGenericImpersonateArgument() async throws {
         service.ytdlpPath = URL(fileURLWithPath: "/usr/local/bin/yt-dlp")
         let capturedArgsBox = TestBox<[String]>([])
