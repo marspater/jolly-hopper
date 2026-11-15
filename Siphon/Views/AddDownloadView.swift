@@ -1333,7 +1333,8 @@ struct AddDownloadView: View {
                                     Text(languageService.s("languages"))
                                     Spacer()
                                     if selectedSubtitleLangs.isEmpty {
-                                        Text(languageService.s("none"))
+                                        // Download falls back to a language, so name that one rather than "None".
+                                        Text(fallbackSubtitleLanguageName)
                                     } else if selectedSubtitleLangs.count == 1 {
                                         Text(languageService.s("subtitles_selected_one"))
                                     } else {
@@ -1984,6 +1985,11 @@ struct AddDownloadView: View {
         if !preferred.isEmpty, available.isEmpty || available.contains(where: { $0.id == preferred }) { return [preferred] }
         if available.contains(where: { $0.id == "en" }) { return ["en"] }
         return [available.map(\.id).sorted().first ?? "en"]
+    }
+
+    private var fallbackSubtitleLanguageName: String {
+        let code = Self.resolvedSubtitleLanguages(selected: [], preferred: presetSubtitleLanguage, available: availableSubtitles).first ?? "en"
+        return availableSubtitles.first { $0.id == code }?.name ?? code
     }
 
     static func batchSubtitleCodes(_ text: String) -> [String] {
