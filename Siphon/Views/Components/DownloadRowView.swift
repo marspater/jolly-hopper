@@ -203,6 +203,8 @@ struct DownloadRowView: View {
                         // Conflict choices get their own line so they never cover the title.
                         if download.status == .fileExists {
                             fileExistsActions
+                                // Cancel the ghost buttons' inner padding so the first label lines up with the badge.
+                                .padding(.leading, -SiphonTheme.spacing10)
                         }
                     }
                 }
@@ -310,6 +312,8 @@ struct DownloadRowView: View {
                             .font(.siphonStandardSemibold)
                             .foregroundColor(SiphonTheme.statusForeground(for: .failed, colorScheme: colorScheme))
                             .lineLimit(1)
+                            // The headline is the status itself: the description gives way first.
+                            .layoutPriority(2)
 
                         Text("—")
                             .foregroundColor(SiphonTheme.statusForeground(for: .failed, colorScheme: colorScheme).opacity(0.55))

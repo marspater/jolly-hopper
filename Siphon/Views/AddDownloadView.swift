@@ -258,9 +258,9 @@ struct AddDownloadView: View {
                     .accessibilityAddTraits(.isHeader)
                 optionalSettingsContent
             }
-            .padding(SiphonTheme.spacing16)
+            .padding(SiphonTheme.spacing20)
             .frame(maxWidth: .infinity)
-            .frame(minHeight: max(advancedPaneContainerHeight, scrollContentHeight), alignment: .center)
+            .frame(minHeight: max(advancedPaneContainerHeight, scrollContentHeight), alignment: .top)
             .opacity(advancedPaneOpacity)
             .offset(x: reduceMotion ? 0 : (1 - advancedPaneOpacity) * SiphonTheme.spacing16)
             .onAppear {
@@ -475,7 +475,7 @@ struct AddDownloadView: View {
                     } label: {
                         Text(languageService.s("clear"))
                             .font(.siphonSecondaryMedium)
-                            .foregroundColor(SiphonTheme.statusFailedText)
+                            .foregroundColor(batchUrlsText.isEmpty ? .secondary : SiphonTheme.statusFailedText)
                     }
                     .buttonStyle(.siphonSecondary)
                     .disabled(batchUrlsText.isEmpty)
