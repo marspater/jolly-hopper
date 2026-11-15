@@ -141,6 +141,10 @@ public final class UpdateInstaller: Sendable {
         let ext = packageURL.pathExtension.lowercased()
 
         if ext == "dmg" {
+            // Held until this branch ends so another instance's stale-image
+            // sweep never detaches an image this install is still copying from.
+            let imageLock = Self.lockUpdateImage(imagePath: packageURL.path)
+            defer { Self.unlockUpdateImage(imageLock, imagePath: packageURL.path) }
             let mountPoint = try mountDMG(dmgURL: packageURL)
             mountedMountPoint = mountPoint
             let mountURL = URL(fileURLWithPath: mountPoint)
@@ -298,12 +302,7 @@ public final class UpdateInstaller: Sendable {
             try verify(currentAppURL)
             if retainBackup {
                 preserveBackup = true
-                // Bundle dates otherwise describe the old installation, not retention order.
-                do {
-                    try fileManager.setAttributes([.modificationDate: Date()], ofItemAtPath: backupURL.path)
-                } catch {
-                    Self.log("Could not date the recovery bundle: \(error.localizedDescription)", level: .warning)
-                }
+                stampRecoveryDate(backupURL, fileManager: fileManager)
                 Self.log("Previous app bundle retained for restart/recovery at \(backupURL.path).", level: .info)
             }
         } catch {
@@ -314,12 +313,24 @@ public final class UpdateInstaller: Sendable {
                     try exchange(currentAppURL, backupURL)
                 } catch {
                     preserveBackup = true
+                    // Newest date keeps the launch-time prune from deleting the only original copy.
+                    stampRecoveryDate(backupURL, fileManager: fileManager)
                     throw UpdateInstallError.rollbackFailed(
                         "Replacement failed: \(replacementError.localizedDescription). Rollback failed: \(error.localizedDescription). Original bundle retained at \(backupURL.path)."
                     )
                 }
             }
             throw UpdateInstallError.replacementFailed("Failed to replace application: \(replacementError.localizedDescription)")
+        }
+    }
+
+    /// Bundle dates otherwise describe the old installation, not retention order,
+    /// and `pruneRecoveryBackups` keeps only the newest recovery bundle.
+    private static func stampRecoveryDate(_ backupURL: URL, fileManager: FileManager) {
+        do {
+            try fileManager.setAttributes([.modificationDate: Date()], ofItemAtPath: backupURL.path)
+        } catch {
+            Self.log("Could not date the recovery bundle: \(error.localizedDescription)", level: .warning)
         }
     }
 
@@ -403,6 +414,37 @@ public final class UpdateInstaller: Sendable {
         }
     }
 
+    /// Lock file in this user's temporary folder, keyed by image name, so a
+    /// user-supplied package never gets a sibling file written next to it.
+    private static func updateImageLockPath(imagePath: String) -> String {
+        FileManager.default.temporaryDirectory
+            .appendingPathComponent("\((imagePath as NSString).lastPathComponent).lock").path
+    }
+
+    /// The kernel drops the lock when the owning process exits, so a crashed
+    /// install's image reads as unowned while a live install's does not.
+    private static func lockUpdateImage(imagePath: String) -> Int32 {
+        let fd = open(updateImageLockPath(imagePath: imagePath), O_RDWR | O_CREAT | O_CLOEXEC, 0o600)
+        if fd >= 0, flock(fd, LOCK_EX | LOCK_NB) != 0 {
+            close(fd)
+            return -1
+        }
+        return fd
+    }
+
+    private static func unlockUpdateImage(_ fd: Int32, imagePath: String) {
+        guard fd >= 0 else { return }
+        unlink(updateImageLockPath(imagePath: imagePath))
+        close(fd)
+    }
+
+    private static func isUpdateImageInUse(imagePath: String) -> Bool {
+        let fd = open(updateImageLockPath(imagePath: imagePath), O_RDONLY | O_CLOEXEC)
+        guard fd >= 0 else { return false }
+        defer { close(fd) }
+        return flock(fd, LOCK_SH | LOCK_NB) != 0
+    }
+
     static func staleUpdateMountPoints(hdiutilInfo: Data, stagedPrefix: String) -> [String] {
         // hdiutil reports /private/var/...; the temporary directory URL may omit /private.
         func normalized(_ path: String) -> String { path.hasPrefix("/private/") ? String(path.dropFirst(8)) : path }
@@ -410,7 +452,10 @@ public final class UpdateInstaller: Sendable {
               let images = plist["images"] as? [[String: Any]] else { return [] }
         let prefix = normalized(stagedPrefix)
         return images
-            .filter { normalized($0["image-path"] as? String ?? "").hasPrefix(prefix) }
+            .filter {
+                let imagePath = $0["image-path"] as? String ?? ""
+                return normalized(imagePath).hasPrefix(prefix) && !isUpdateImageInUse(imagePath: imagePath)
+            }
             .flatMap { ($0["system-entities"] as? [[String: Any]] ?? []).compactMap { $0["mount-point"] as? String } }
     }
 

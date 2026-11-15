@@ -112,8 +112,8 @@ public final class SecureCookieFile: @unchecked Sendable {
         defer { try? handle.close() }
 
         let headerData = (try? handle.read(upToCount: 64)) ?? Data()
-        guard let headerStr = String(data: headerData, encoding: .utf8),
-              headerStr.contains("# Netscape HTTP Cookie File") else {
+        // Lenient decode: the 64-byte window can end mid-character in the first cookie line.
+        guard String(decoding: headerData, as: UTF8.self).contains("# Netscape HTTP Cookie File") else {
             throw SecureCookieError.invalidFormat(fileURL)
         }
     }

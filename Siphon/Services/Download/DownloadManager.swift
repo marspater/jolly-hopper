@@ -236,6 +236,7 @@ class DownloadManager: ObservableObject {
         for job in jobsToRecover {
             job.status = job.requiresAdvancedArgumentsReview ? .paused : .queued
             job.errorMessage = nil
+            job.hasPartialFailure = false
             if let existingIndex = downloads.firstIndex(where: { $0.id == job.id }) {
                 // History may contain a stale copy of the same job. Recovery is
                 // authoritative because it carries resumable scratch state and

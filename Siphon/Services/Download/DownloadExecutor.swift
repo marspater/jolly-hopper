@@ -493,7 +493,7 @@ final class DownloadExecutor: ObservableObject {
             // Keep finished playlist entries, but don't report the job as a clean success.
             download.hasPartialFailure = downloadResult.partialFailure != nil
             download.errorMessage = downloadResult.partialFailure
-            download.diagnostics.exitStatus = download.hasPartialFailure ? "Completed with failed items" : "Completed (0)"
+            download.diagnostics.exitStatus = LanguageService.s(download.hasPartialFailure ? "diag_exit_partial" : "diag_exit_completed")
             delegate?.executorDidUpdateStatus(for: download, to: download.hasPartialFailure ? .failed : .completed)
             if !download.hasPartialFailure { download.progress = 1.0 }
 
@@ -522,7 +522,7 @@ final class DownloadExecutor: ObservableObject {
             eventCoalescer?.flushRemaining()
             if download.status == .stopped || download.status == .paused || Task.isCancelled {
                 LoggerService.shared.log("Download stopped or paused by user (\(LoggerService.sanitizeURLForLog(download.url)))", level: .info)
-                download.diagnostics.exitStatus = "Stopped by user"
+                download.diagnostics.exitStatus = LanguageService.s("diag_exit_stopped")
                 if download.status == .stopped {
                     if download.title.isEmpty || download.title == Download.fetchingPlaceholder {
                         download.title = download.displayTitle
@@ -534,7 +534,7 @@ final class DownloadExecutor: ObservableObject {
             if download.title.isEmpty || download.title == Download.fetchingPlaceholder {
                 download.title = download.displayTitle
             }
-            download.diagnostics.exitStatus = "Failed: \(error.localizedDescription)"
+            download.diagnostics.exitStatus = String(format: LanguageService.s("diag_exit_failed_reason"), error.localizedDescription)
             delegate?.executorDidUpdateStatus(for: download, to: .failed)
             delegate?.executorDidRequestBroadcast()
 
@@ -572,7 +572,7 @@ final class DownloadExecutor: ObservableObject {
             if download.title.isEmpty || download.title == Download.fetchingPlaceholder {
                 download.title = download.displayTitle
             }
-            download.diagnostics.exitStatus = "Failed: \(error.localizedDescription)"
+            download.diagnostics.exitStatus = String(format: LanguageService.s("diag_exit_failed_reason"), error.localizedDescription)
             delegate?.executorDidUpdateStatus(for: download, to: .failed)
             delegate?.executorDidRequestBroadcast()
 
@@ -647,7 +647,7 @@ final class DownloadExecutor: ObservableObject {
         suppressNotification: Bool = false,
         skipSaveAndBroadcast: Bool = false
     ) {
-        guard download.status == .downloading || download.status == .fetching || download.status == .processing || download.status == .queued || download.status == .paused else {
+        guard download.status == .downloading || download.status == .fetching || download.status == .processing || download.status == .queued || download.status == .paused || download.status == .fileExists else {
             return
         }
         let previousStatus = download.status
@@ -669,7 +669,7 @@ final class DownloadExecutor: ObservableObject {
         }
         delegate?.executorDidRequestAddToHistory(download, skipSave: skipSaveAndBroadcast)
 
-        if activeTasks[download.id] == nil && (previousStatus == .queued || previousStatus == .paused) {
+        if activeTasks[download.id] == nil && (previousStatus == .queued || previousStatus == .paused || previousStatus == .fileExists) {
             Self.cleanupTemporaryFiles(for: download)
         }
 

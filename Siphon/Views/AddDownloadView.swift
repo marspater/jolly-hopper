@@ -73,6 +73,8 @@ struct AddDownloadView: View {
 
     @State private var showFileExistsAlert: Bool = false
     @State private var isCheckingExistingFile: Bool = false
+    /// Identifies the running existing-file check, so a cancelled one cannot clear a newer check's flag.
+    @State private var existingFileCheckToken: UUID?
     @State private var pendingDownloadOptions: DownloadOptions?
     @State private var existingFilePath: String = ""
 
@@ -321,6 +323,7 @@ struct AddDownloadView: View {
         // finishing it would queue the new URL under the old name.
         existingFileCheckTask?.cancel()
         existingFileCheckTask = nil
+        existingFileCheckToken = nil
         isCheckingExistingFile = false
         pendingDownloadOptions = nil
         showFileExistsAlert = false
@@ -1247,7 +1250,9 @@ struct AddDownloadView: View {
 
                 VStack(alignment: .leading, spacing: SiphonTheme.spacing8) {
                     Toggle(languageService.s("download_subtitles"), isOn: $downloadSubtitles.animation(SiphonAnimation.fluidSpring))
-                        .disabled(inputMode == .single && availableSubtitles.isEmpty)
+                        // Stay switchable while on: a preset or a previous URL can leave it on
+                        // for a video with no subtitles, and the user must be able to turn it off.
+                        .disabled(inputMode == .single && availableSubtitles.isEmpty && !downloadSubtitles)
 
                     if inputMode == .batch && downloadSubtitles {
                         TextField(languageService.s("subtitle_language_codes"), text: $batchSubtitleLanguages)
@@ -1795,8 +1800,15 @@ struct AddDownloadView: View {
                 // The check is async; a second click meanwhile would queue the job twice.
                 guard !isCheckingExistingFile else { return }
                 isCheckingExistingFile = true
+                let token = UUID()
+                existingFileCheckToken = token
                 existingFileCheckTask = Task {
-                    defer { isCheckingExistingFile = false }
+                    defer {
+                        if existingFileCheckToken == token {
+                            isCheckingExistingFile = false
+                            existingFileCheckToken = nil
+                        }
+                    }
                     let fileExists = await Task.detached { [folder, options] in
                         DownloadQueue.mediaFileCollides(
                             baseName: safeName,

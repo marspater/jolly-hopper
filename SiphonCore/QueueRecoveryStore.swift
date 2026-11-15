@@ -50,7 +50,7 @@ public struct QueueRecoveryRecord: Codable, Identifiable, Sendable {
             ScratchDirectoryPolicy.isOwned($0) ? $0.path : nil
         }
         self.ownedOutputFiles = Download.encodeOwnedOutputFiles(download.ownedOutputFiles)
-        self.thumbnailURL = download.thumbnailURL
+        self.thumbnailURL = download.thumbnailURL.flatMap(HistoricDownload.persistableThumbnailURL)
         self.duration = download.duration
         self.errorMessage = download.errorMessage.map {
             LogSanitizer.sanitizeLogContentForExport(LogSanitizer.sanitizeDiagnosticText($0))
@@ -156,7 +156,9 @@ public final class QueueRecoveryStore {
 
     @discardableResult
     public func persist(activeJobs: [Download]) -> Bool {
-        if hasUnsupportedSchemaSnapshot && !activeJobs.isEmpty {
+        if hasUnsupportedSchemaSnapshot {
+            // Keep the newer-schema snapshot until real jobs replace it, as markCleanShutdown does.
+            guard !activeJobs.isEmpty else { return true }
             hasUnsupportedSchemaSnapshot = false
         }
         let records = activeJobs.map { QueueRecoveryRecord(download: $0) }
