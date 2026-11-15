@@ -143,7 +143,11 @@ struct DownloadDiagnosticsView: View {
             return languageService.s("diag_exit_completed")
         case .failed:
             return languageService.s("diag_exit_failed")
-        default:
+        case .stopped, .paused:
+            return languageService.s("diag_exit_stopped")
+        case .queued, .fileExists:
+            return languageService.s("diag_not_available")
+        case .downloading, .fetching, .processing:
             return languageService.s("diag_exit_running")
         }
     }
@@ -246,16 +250,13 @@ struct DownloadDiagnosticsView: View {
 
                     Text(LoggerService.sanitizedDiagnosticExport(cmd))
                         .font(.siphonMetadataMono)
-                        .foregroundColor(.primary.opacity(0.85))
+                        .foregroundColor(.primary)
                         .textSelection(.enabled)
                         .padding(10)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .background(Color.primary.opacity(SiphonTheme.Opacity.fillPill))
                         .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusSmall, style: .continuous))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: SiphonTheme.radiusSmall, style: .continuous)
-                                .stroke(Color.primary.opacity(SiphonTheme.Opacity.borderHairline), lineWidth: 1)
-                        )
+                        .overlay(SiphonTheme.cardBorder(cornerRadius: SiphonTheme.radiusSmall))
                 }
             }
 
@@ -312,18 +313,15 @@ struct DownloadDiagnosticsView: View {
                 ScrollView {
                     Text(filteredLogs)
                         .font(.siphonMetadataMono)
-                        .foregroundColor(.primary.opacity(0.85))
+                        .foregroundColor(.primary)
                         .textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(10)
                 }
                 .frame(minHeight: 180, maxHeight: 240)
-                .background(Color.primary.opacity(SiphonTheme.Opacity.fillCard))
+                .background(Color.primary.opacity(SiphonTheme.Opacity.fillPill))
                 .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusSmall, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: SiphonTheme.radiusSmall, style: .continuous)
-                        .stroke(Color.primary.opacity(SiphonTheme.Opacity.borderHairline), lineWidth: 1)
-                )
+                .overlay(SiphonTheme.cardBorder(cornerRadius: SiphonTheme.radiusSmall))
             }
         }
     }
@@ -405,7 +403,14 @@ struct DownloadDiagnosticsView: View {
                 .textCase(.uppercase)
 
             VStack(spacing: 0) {
-                content()
+                Group(subviews: content()) { rows in
+                    ForEach(rows) { row in
+                        row
+                        if row.id != rows.last?.id {
+                            SiphonTheme.subtleDivider
+                        }
+                    }
+                }
             }
             .background(SiphonTheme.cardBackground(cornerRadius: SiphonTheme.radiusCard))
             .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusCard, style: .continuous))
@@ -415,7 +420,7 @@ struct DownloadDiagnosticsView: View {
 
     @ViewBuilder
     private func diagnosticRow(label: String, value: String, isMonospace: Bool = false) -> some View {
-        HStack(alignment: .top) {
+        HStack(alignment: .firstTextBaseline) {
             Text(label)
                 .font(.siphonSecondary)
                 .foregroundColor(.secondary)
@@ -431,10 +436,6 @@ struct DownloadDiagnosticsView: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
-        .overlay(
-            SiphonTheme.subtleDivider,
-            alignment: .bottom
-        )
     }
 
     private var filteredLogs: String {

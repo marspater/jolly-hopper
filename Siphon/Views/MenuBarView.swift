@@ -337,7 +337,7 @@ struct MenuBarView: View {
                         .font(.system(size: 11, weight: .semibold))
                         .accessibilityHidden(true)
                     Text(languageService.s("quit"))
-                        .font(.siphonMetadataSemibold)
+                        .font(.siphonMetadataMedium)
                         .lineLimit(1)
                 }
                 .lineLimit(1)
@@ -345,7 +345,12 @@ struct MenuBarView: View {
                 .foregroundColor(SiphonTheme.statusFailedText)
                 .padding(.horizontal, SiphonTheme.spacing10)
                 .frame(height: 28)
-                .background(SiphonTheme.statusFailed.opacity(isQuitHovered ? SiphonTheme.Opacity.fillPillHover + SiphonTheme.Opacity.tintBadge : SiphonTheme.Opacity.tintBadge))
+                .background(
+                    SiphonTheme.tintedPillBackground(
+                        tint: SiphonTheme.statusFailed,
+                        opacity: isQuitHovered ? SiphonTheme.Opacity.fillPillHover + SiphonTheme.Opacity.tintBadge : SiphonTheme.Opacity.tintBadge
+                    )
+                )
                 .clipShape(Capsule())
                 .overlay(
                     Capsule()

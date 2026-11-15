@@ -174,7 +174,7 @@ struct AddDownloadView: View {
                     }
                 }
                 .accessibilityIdentifier(AccessibilityID.existingFileOverwrite)
-                Button(languageService.s("add_number"), action: downloadWithUniqueFilename)
+                Button(languageService.s("download_new_name"), action: downloadWithUniqueFilename)
                     .accessibilityIdentifier(AccessibilityID.existingFileNewName)
                 Button(languageService.s("cancel"), role: .cancel) { pendingDownloadOptions = nil }
                     .accessibilityIdentifier(AccessibilityID.existingFileCancel)
@@ -405,7 +405,8 @@ struct AddDownloadView: View {
                 ]
             )
         }
-        .padding()
+        .padding(.horizontal, SiphonTheme.spacing20)
+        .padding(.vertical, SiphonTheme.spacing16)
     }
 
     private var batchSection: some View {
@@ -415,6 +416,7 @@ struct AddDownloadView: View {
                     HStack(spacing: 6) {
                         Image(systemName: "list.bullet.rectangle.portrait.fill")
                             .font(.siphonStandardSemibold)
+                            .frame(width: 18, alignment: .center)
                             .foregroundColor(SiphonTheme.accentText)
                             .accessibilityHidden(true)
                         Text(languageService.s("paste_multiple_urls"))
@@ -435,7 +437,7 @@ struct AddDownloadView: View {
 
                 ZStack(alignment: .topLeading) {
                     if batchUrlsText.isEmpty {
-                        Text("https://example.com/video1\nhttps://example.com/video2\n...")
+                        Text(verbatim: "https://example.com/video1\nhttps://example.com/video2\n…")
                             .font(.siphonSecondaryMono)
                             .foregroundColor(Color(nsColor: .placeholderTextColor))
                             .padding(.horizontal, SiphonTheme.spacing10)
@@ -473,7 +475,7 @@ struct AddDownloadView: View {
                     } label: {
                         Text(languageService.s("clear"))
                             .font(.siphonSecondaryMedium)
-                            .foregroundColor(batchUrlsText.isEmpty ? .secondary : SiphonTheme.statusFailedText)
+                            .foregroundColor(SiphonTheme.statusFailedText)
                     }
                     .buttonStyle(.siphonSecondary)
                     .disabled(batchUrlsText.isEmpty)
@@ -623,6 +625,7 @@ struct AddDownloadView: View {
             HStack(spacing: 6) {
                 Image(systemName: "link")
                     .font(.siphonStandardSemibold)
+                    .frame(width: 18, alignment: .center)
                     .foregroundColor(SiphonTheme.accentText)
                     .accessibilityHidden(true)
                 Text(languageService.s("video_url"))
@@ -673,9 +676,9 @@ struct AddDownloadView: View {
                         pasteFeedback.show(languageService.s("paste"), isSuccess: true, duration: 1.5)
                     }
                 } label: {
-                    HStack(spacing: SiphonTheme.spacing4) {
+                    HStack(spacing: SiphonTheme.spacing6) {
                         Image(systemName: pasteFeedback.isShowing ? "checkmark" : "doc.on.clipboard")
-                            .font(.system(size: 12, weight: .medium))
+                            .font(.system(size: 12, weight: .semibold))
                             .contentTransition(.symbolEffect(.replace))
                             .accessibilityHidden(true)
                         Text(languageService.s("paste"))
@@ -699,7 +702,7 @@ struct AddDownloadView: View {
                                 SiphonSpinner(size: 11, color: .secondary, lineWidth: 2)
                             } else {
                                 Image(systemName: "arrow.right")
-                                    .font(.system(size: 11, weight: .bold))
+                                    .font(.system(size: 11, weight: .semibold))
                             }
                         }
                         .frame(width: 12, height: 12)
@@ -765,7 +768,7 @@ struct AddDownloadView: View {
 
             Spacer(minLength: SiphonTheme.spacing8)
         }
-        .padding()
+        .padding(SiphonTheme.spacing14)
         .background(
             SiphonTheme.cardBackground(cornerRadius: SiphonTheme.radiusCard)
         )
@@ -788,14 +791,22 @@ struct AddDownloadView: View {
                 Button(languageService.s("load_playlist")) { loadPlaylist() }.buttonStyle(.siphonSecondary).tint(nil)
             }
         }
-        .padding()
+        .padding(SiphonTheme.spacing14)
         .siphonCallout(tint: SiphonTheme.accent, cornerRadius: SiphonTheme.radiusCard)
     }
 
     private var playlistSelectorSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text(languageService.s("entire_playlist")).font(.siphonPrimarySemibold)
+                HStack(spacing: 6) {
+                    Image(systemName: "list.bullet")
+                        .font(.siphonStandardSemibold)
+                        .frame(width: 18, alignment: .center)
+                        .foregroundColor(SiphonTheme.accentText)
+                        .accessibilityHidden(true)
+                    Text(languageService.s("playlist_items"))
+                        .font(.siphonPrimarySemibold)
+                }
                 Spacer()
                 Button(languageService.s("single_video")) {
                     withAnimation(SiphonAnimation.fluidSpring) {
@@ -866,7 +877,7 @@ struct AddDownloadView: View {
             }
             .frame(height: 250)
         }
-        .padding()
+        .padding(SiphonTheme.spacing14)
         .background(
             SiphonTheme.cardBackground(cornerRadius: SiphonTheme.radiusCard)
         )
@@ -883,6 +894,7 @@ struct AddDownloadView: View {
                 HStack(spacing: 6) {
                     Image(systemName: "slider.horizontal.3")
                         .font(.siphonStandardSemibold)
+                        .frame(width: 18, alignment: .center)
                         .foregroundColor(SiphonTheme.accentText)
                         .accessibilityHidden(true)
                     Text(languageService.s("format_and_quality"))
@@ -987,8 +999,8 @@ struct AddDownloadView: View {
                     ],
                     fillsWidth: true
                 )
-                VStack(alignment: .leading, spacing: 5) {
-                    Text(languageService.s("file_type"))
+                VStack(alignment: .leading, spacing: SiphonTheme.spacing6) {
+                    Text(languageService.s("file_type_short"))
                         .font(.siphonMetadataMedium)
                         .foregroundColor(.secondary)
                     SiphonMenuPicker(
@@ -998,10 +1010,10 @@ struct AddDownloadView: View {
                             .map { type in (value: type, title: type.rawValue) }
                     )
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .accessibilityLabel(languageService.s("file_type"))
+                    .accessibilityLabel(languageService.s("file_type_short"))
                 }
 
-                VStack(alignment: .leading, spacing: 5) {
+                VStack(alignment: .leading, spacing: SiphonTheme.spacing6) {
                     Text(isVideoTab ? languageService.s("quality") : languageService.s("audio_quality"))
                         .font(.siphonMetadataMedium)
                         .foregroundColor(.secondary)
@@ -1120,9 +1132,10 @@ struct AddDownloadView: View {
             HStack(spacing: 6) {
                 Image(systemName: "folder.fill")
                     .font(.siphonStandardSemibold)
+                    .frame(width: 18, alignment: .center)
                     .foregroundColor(SiphonTheme.accentText)
                     .accessibilityHidden(true)
-                Text(languageService.s("save_folder"))
+                Text(languageService.s("save_folder_short"))
                     .font(.siphonPrimarySemibold)
             }
 
@@ -1222,6 +1235,7 @@ struct AddDownloadView: View {
                         .accessibilityHidden(true)
 
                     TextField(languageService.s("custom_filename_hint"), text: $customFilename)
+                        .accessibilityLabel(languageService.s("custom_filename"))
                         .focused($focusedField, equals: .filename)
                         .font(.siphonSecondary)
                         .textFieldStyle(.plain)
@@ -1319,7 +1333,7 @@ struct AddDownloadView: View {
                                     Text(languageService.s("languages"))
                                     Spacer()
                                     if selectedSubtitleLangs.isEmpty {
-                                        Text(languageService.s("select"))
+                                        Text(languageService.s("none"))
                                     } else if selectedSubtitleLangs.count == 1 {
                                         Text(languageService.s("subtitles_selected_one"))
                                     } else {
@@ -1505,7 +1519,6 @@ struct AddDownloadView: View {
                             }
                         } label: {
                             Text(languageService.s("open_system_settings"))
-                                .font(.siphonMetadataSemibold)
                         }
                         .buttonStyle(.siphonPrimary)
                         .controlSize(.small)
@@ -1520,7 +1533,6 @@ struct AddDownloadView: View {
                             )
                         } label: {
                             Text(languageService.s("settings"))
-                                .font(.siphonMetadataSemibold)
                         }
                         .buttonStyle(.siphonSecondary)
                         .controlSize(.small)
@@ -1536,7 +1548,6 @@ struct AddDownloadView: View {
                             )
                         } label: {
                             Text(languageService.s("settings"))
-                                .font(.siphonMetadataSemibold)
                         }
                         .buttonStyle(.siphonPrimary)
                         .controlSize(.small)
@@ -1551,10 +1562,9 @@ struct AddDownloadView: View {
                 }
             }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
+        .padding(SiphonTheme.spacing14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .siphonCallout(tint: SiphonTheme.statusFailed)
+        .siphonCallout(tint: SiphonTheme.statusFailed, cornerRadius: SiphonTheme.radiusCard)
     }
 
     private var footer: some View {
@@ -1603,7 +1613,8 @@ struct AddDownloadView: View {
                 .keyboardShortcut(.return)
             }
         }
-        .padding()
+        .padding(.horizontal, SiphonTheme.spacing20)
+        .padding(.vertical, SiphonTheme.spacing16)
     }
 
     private func fetchInfo(debounce: Bool = false) {

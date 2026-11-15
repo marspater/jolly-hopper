@@ -221,6 +221,7 @@ struct ContentView: View {
     private var mainLayout: some View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
             SidebarView()
+                .siphonSidebarWidth()
                 // The system toggle lives in the sidebar's toolbar section, which
                 // starts near zero width while the sidebar animates open. At narrow
                 // window sizes AppKit briefly moves it into the "»" overflow menu.
@@ -293,9 +294,9 @@ struct ContentView: View {
                 appState.showAddDownloadSheet = true
             } label: {
                 Label(languageService.s("new_download"), systemImage: "plus")
-                    .help(languageService.s("new_download"))
-                    .accessibilityLabel(languageService.s("new_download"))
             }
+            .help(languageService.s("new_download"))
+            .accessibilityLabel(languageService.s("new_download"))
         }
     }
 }
@@ -331,7 +332,6 @@ struct SidebarView: View {
             }
             .listStyle(.sidebar)
         }
-        .siphonSidebarWidth()
         .safeAreaInset(edge: .bottom) {
             VStack(spacing: SiphonTheme.spacing10) {
                 SponsorView()
@@ -348,6 +348,7 @@ struct SidebarView: View {
                         Image(systemName: "gear")
                             .font(.system(size: 13, weight: .medium))
                             .foregroundColor(.secondary)
+                            .frame(width: 16)
                             .accessibilityHidden(true)
                         Text(languageService.s("settings"))
                             .font(.siphonStandardMedium)
@@ -362,7 +363,7 @@ struct SidebarView: View {
                     .padding(.vertical, SiphonTheme.spacing8)
                     .siphonInteractiveGlass(cornerRadius: SiphonTheme.radiusControl)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.bouncy(scale: 0.97, hover: 1.015))
                 .padding(.horizontal, SiphonTheme.spacing8)
                 .help(languageService.s("settings"))
                 .accessibilityElement(children: .combine)
@@ -442,7 +443,13 @@ extension SidebarView {
 extension View {
     @ViewBuilder
     func siphonSidebarWidth() -> some View {
-        self.navigationSplitViewColumnWidth(min: 200, ideal: 220)
+        // The sidebar starts hidden, and AppKit opens a never-shown column at its own
+        // default (~144 pt) without consulting the column width. The frame minimum is a
+        // hard layout constraint, so the first reveal already fits "Recent downloads"
+        // and the "Video Downloader" subtitle on one line.
+        self
+            .frame(minWidth: 236, idealWidth: 240)
+            .navigationSplitViewColumnWidth(min: 236, ideal: 240)
     }
 }
 
@@ -840,8 +847,6 @@ struct StatusSegmentButton: View {
 
 struct SponsorView: View {
     @EnvironmentObject var languageService: LanguageService
-    @Environment(\.colorScheme) var colorScheme
-    @State private var isHovered = false
 
     var body: some View {
         Button {
@@ -853,9 +858,10 @@ struct SponsorView: View {
                 Image(systemName: "star.fill")
                     .foregroundColor(SiphonTheme.statusQueuedText)
                     .font(.system(size: 11, weight: .semibold))
+                    .frame(width: 16)
                     .accessibilityHidden(true)
                 Text(languageService.s("star_github"))
-                    .font(.siphonSecondaryMedium)
+                    .font(.siphonStandardMedium)
                     .foregroundColor(.primary)
                 Spacer()
                 Image(systemName: "arrow.up.right")
@@ -865,24 +871,13 @@ struct SponsorView: View {
             }
             .padding(.horizontal, SiphonTheme.spacing12)
             .padding(.vertical, SiphonTheme.spacing8)
-            .background(
-                SiphonTheme.controlBackground(cornerRadius: SiphonTheme.radiusControl, isHovered: isHovered)
-            )
-            .clipShape(RoundedRectangle(cornerRadius: SiphonTheme.radiusControl, style: .continuous))
-            .overlay(
-                SiphonTheme.controlBorder(cornerRadius: SiphonTheme.radiusControl, isHovered: isHovered)
-            )
+            .siphonInteractiveGlass(cornerRadius: SiphonTheme.radiusControl)
         }
         .buttonStyle(.bouncy(scale: 0.97, hover: 1.015))
         .padding(.horizontal, SiphonTheme.spacing8)
         .help(languageService.s("star_github"))
         .accessibilityElement(children: .combine)
         .accessibilityLabel(languageService.s("star_github"))
-        .onHover { hovering in
-            withAnimation(SiphonAnimation.hoverSpring) {
-                isHovered = hovering
-            }
-        }
     }
 }
 
@@ -896,14 +891,11 @@ struct WhatsNewSheetView: View {
             // Header - Clean, non-redundant title and version pill
             VStack(spacing: 8) {
                 HStack(spacing: 8) {
-                    Text(languageService.s("whats_new_badge"))
-                        .font(.siphonMicroSemibold)
-                        .tracking(1.2)
-                        .foregroundColor(SiphonTheme.accentText)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 3)
-                        .background(SiphonTheme.accent.opacity(SiphonTheme.Opacity.tintBadge))
-                        .clipShape(Capsule())
+                    SiphonTagBadge(
+                        text: languageService.s("whats_new_badge"),
+                        tintColor: SiphonTheme.accentText
+                    )
+                    .tracking(1.2)
 
                     SiphonTagBadge(
                         text: "v\(appState.appVersion)",
@@ -952,10 +944,8 @@ struct WhatsNewSheetView: View {
                 } label: {
                     HStack(spacing: 6) {
                         Image(systemName: "arrow.up.right.square")
-                            .font(.system(size: 12))
                             .accessibilityHidden(true)
                         Text(languageService.s("view_on_github"))
-                            .font(.siphonSecondaryMedium)
                     }
                 }
                 .buttonStyle(.siphonSecondary)
@@ -970,11 +960,10 @@ struct WhatsNewSheetView: View {
                     dismiss()
                 } label: {
                     Text(languageService.s("continue"))
-                        .font(.siphonStandardSemibold)
                         .frame(minWidth: 100)
                 }
                 .buttonStyle(.siphonPrimary)
-                .keyboardShortcut(.defaultAction)
+                .keyboardShortcut(.cancelAction)
             }
             .padding(.horizontal, SiphonTheme.spacing24)
             .padding(.vertical, SiphonTheme.spacing16)
@@ -1046,12 +1035,9 @@ private struct FeatureCardRow: View {
 
             Spacer(minLength: 0)
         }
-        .padding(12)
-        .background(
-            RoundedRectangle(cornerRadius: SiphonTheme.radiusControl, style: .continuous)
-                .fill(Color.primary.opacity(SiphonTheme.Opacity.fillCard))
-        )
-        .overlay(SiphonTheme.cardBorder(cornerRadius: SiphonTheme.radiusControl))
+        .padding(SiphonTheme.spacing12)
+        .background(SiphonTheme.cardBackground())
+        .overlay(SiphonTheme.cardBorder())
         .accessibilityElement(children: .combine)
     }
 }

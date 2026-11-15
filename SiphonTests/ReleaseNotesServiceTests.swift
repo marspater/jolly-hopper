@@ -69,7 +69,22 @@ final class ReleaseNotesServiceTests: XCTestCase {
         """
 
         let features = service.parseReleaseFeatures(from: markdown)
-        XCTAssertEqual(features.map(\.icon), ["bolt.fill", "macwindow"])
+        XCTAssertEqual(features.map(\.icon), ["checkmark.shield", "macwindow"])
+    }
+
+    func testIconsFollowTheTitleBeforeTheDescription() {
+        let service = ReleaseNotesService(userDefaults: testDefaults)
+        let markdown = """
+        - **Public-network boundary:** Downloads started from a browser extension run through a local proxy.
+        - **Calmer main window:** The status strip only animates while downloading.
+        - **Predictable lists:** Downloads stay in arrival order.
+        - **Play and pause from Home:** Double-click a finished download to play it.
+        - **New app icon:** A layered Icon Composer icon with default, dark, and mono variants.
+        """
+
+        XCTAssertEqual(service.parseReleaseFeatures(from: markdown).map(\.icon), [
+            "network.badge.shield.half.filled", "macwindow", "list.bullet.rectangle", "play.circle", "app.badge"
+        ])
     }
 
     func testCheckAndFetchWhatsNewFirstRun() async {
