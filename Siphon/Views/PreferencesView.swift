@@ -173,6 +173,8 @@ struct PreferencesView: View {
             customPresets = CustomPreset.loadAll(from: userDefaults)
             hasFullDiskAccess = YtdlpService.hasFullDiskAccess
             isLaunchAtLoginEnabled = LoginItemHelper.shared.isEnabled
+            // The row is hidden without a login item, so a stale "on" could never be undone.
+            if !isLaunchAtLoginEnabled { startInBackground = false }
             Task {
                 await BrowserUtils.shared.clearCache()
                 installedBrowsers = await BrowserUtils.shared.getInstalledBrowsers()
@@ -247,6 +249,8 @@ struct PreferencesView: View {
                     set: {
                         LoginItemHelper.shared.setEnabled($0)
                         isLaunchAtLoginEnabled = LoginItemHelper.shared.isEnabled
+                        // Start in background only makes sense for login launches.
+                        if !isLaunchAtLoginEnabled { startInBackground = false }
                     }
                 ))
                 .labelsHidden()

@@ -423,6 +423,9 @@ class DownloadManager: ObservableObject {
         download.errorMessage = nil
         download.log = ""
         download.mediaInfo = nil
+        // The previous attempt's outcome must not label this one. Finished
+        // playlist entries stay in filePaths: those files are still on disk.
+        download.hasPartialFailure = false
         // A file left by the failed or stopped attempt may be the broken result;
         // only a resumed pause may reuse it.
         download.ownedOutputFiles = [:]
@@ -442,6 +445,7 @@ class DownloadManager: ObservableObject {
         download.options.forceOverwrite = false
         download.errorMessage = nil
         download.mediaInfo = nil
+        download.hasPartialFailure = false
         updateStatus(for: download, to: .queued)
         addToHistory(download)
         objectWillChange.send()

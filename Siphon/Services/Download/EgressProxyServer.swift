@@ -556,13 +556,9 @@ public final class EgressProxyServer: @unchecked Sendable {
     }
 
     private func forwardBody(client: NWConnection, upstream: NWConnection, remaining: Int) {
-        guard remaining > 0 else {
-            upstream.send(content: nil, contentContext: .finalMessage, isComplete: true,
-                          completion: .contentProcessed { error in
-                if error != nil { client.cancel(); upstream.cancel() }
-            })
-            return
-        }
+        // Keep upstream's write side open once the body is sent: `Connection: close`
+        // already ends the exchange, and nginx/Go treat a request-side FIN as a client abort.
+        guard remaining > 0 else { return }
         client.receive(minimumIncompleteLength: 1, maximumLength: min(65536, remaining)) { [weak self] content, _, isComplete, error in
             guard let self, error == nil, let content, !content.isEmpty else {
                 client.cancel()

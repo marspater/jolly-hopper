@@ -7574,9 +7574,13 @@ public struct DownloadResult: Sendable {
         browserCookieSource: String? = nil
     ) -> Error {
         let errString = "\(error)"
-        let lowerErr = (usesBrowserTransport(url)
-            ? errString.replacingOccurrences(of: #"https?://[^\s\"]+"#, with: "[URL]", options: .regularExpression)
-            : errString).lowercased()
+        // Keyword checks must not match the video's own URL or slug: yt-dlp
+        // prefixes errors with "[extractor] <id>:", and the generic id is the
+        // page slug (e.g. "gym-challenge-1403" would read as a 403 challenge).
+        let lowerErr = errString
+            .replacingOccurrences(of: #"https?://[^\s\"]+"#, with: "[URL]", options: .regularExpression)
+            .replacingOccurrences(of: #"(\[[\w:-]+\]) [^\s:]+:"#, with: "$1 [id]:", options: .regularExpression)
+            .lowercased()
         let configuredBrowser = Self.validatedBrowserCookieSource(browserCookieSource) ?? configuredBrowserCookieSource()
 
         if (configuredBrowser == "safari" || configuredBrowser == nil) && isSafariPermissionError(errString) {
@@ -7646,11 +7650,14 @@ public struct DownloadResult: Sendable {
         }
 
         if isGFFURL(url) {
-            if lowerErr.containsAny(Self.cloudflareErrorKeywords) || lowerErr.containsAny(Self.accessDeniedErrorKeywords) {
+            if lowerErr.containsAny(Self.cloudflareErrorKeywords) {
                 return YtdlpError.cloudflareBlocked
             }
             if Self.isVideoUnavailableError(lowerErr) {
                 return YtdlpError.downloadFailed("This video is unavailable, private, or has been removed.")
+            }
+            if lowerErr.containsAny(Self.accessDeniedErrorKeywords) {
+                return YtdlpError.cloudflareBlocked
             }
             return error
         }
@@ -8112,8 +8119,11 @@ public struct DownloadResult: Sendable {
             return false
         }
         // A permission error alone can be the save folder, not the browser's cookie store.
-        let namesCookieStore = lower.contains("cookie") || lower.contains("safari")
-        return (namesCookieStore && (lower.contains("operation not permitted") || lower.contains("errno 1"))) ||
+        // The error carries the output path, so a title such as "Cookie Recipe" must not
+        // count: name the store by its file (Chromium "Cookies", Firefox cookies.sqlite).
+        let namesCookieStore = lower.range(of: #"cookies\.sqlite|[/\\]cookies(['"\\]|$)"#,
+                                           options: .regularExpression) != nil
+        return (namesCookieStore && (lower.contains("operation not permitted") || lower.contains("[errno 1]"))) ||
                lower.contains("cookies.binarycookies") ||
                (lower.contains("could not find") && lower.contains("cookies database")) ||
                lower.contains("failed to decrypt") ||
@@ -8122,9 +8132,11 @@ public struct DownloadResult: Sendable {
 
     private func isSafariPermissionError(_ errorOutput: String) -> Bool {
         let lower = errorOutput.lowercased()
-        guard lower.contains("safari") || lower.contains("cookies.binarycookies") else { return false }
+        // Only Safari's cookie file proves it: "safari" can come from the output path,
+        // and a save-folder denial must not disable Safari cookies for every site.
+        guard lower.contains("cookies.binarycookies") else { return false }
         return lower.contains("operation not permitted") ||
-               lower.contains("errno 1") ||
+               lower.contains("[errno 1]") ||
                lower.contains("permission denied")
     }
 

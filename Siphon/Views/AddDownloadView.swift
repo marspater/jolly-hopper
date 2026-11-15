@@ -161,6 +161,9 @@ struct AddDownloadView: View {
                 if downloadSubtitles { selectDefaultSubtitleLanguages() }
             }
             .onChange(of: urlInput) { _, newValue in resetForURL(newValue) }
+            // A stream picked for one media type is wrong for the other (video-only into
+            // audio extraction, audio-only into a video container).
+            .onChange(of: isVideoTab) { _, _ in selectedFormatId = nil }
             .onChange(of: appState.urlToDownload) { _, newURL in acceptExternalURL(newURL) }
             .alert(languageService.s("file_exists_title"), isPresented: $showFileExistsAlert) {
                 Button(languageService.s("overwrite"), role: .destructive) {
@@ -314,6 +317,13 @@ struct AddDownloadView: View {
         fetchTask?.cancel()
         // A playlist load for the previous URL must not land on the new one.
         playlistTask?.cancel()
+        // A pending existing-file check or Overwrite prompt belongs to the old URL;
+        // finishing it would queue the new URL under the old name.
+        existingFileCheckTask?.cancel()
+        existingFileCheckTask = nil
+        isCheckingExistingFile = false
+        pendingDownloadOptions = nil
+        showFileExistsAlert = false
         isLoadingPlaylist = false
         showPlaylistSelector = false
         downloadMode = .single
